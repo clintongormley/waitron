@@ -2791,7 +2791,7 @@ export class PrepStationsScreen extends LitElement {
               }}
             >
               ${
-                this.readOnly
+                this.readOnly || this.tab !== "stations"
                   ? nothing
                   : html`<div slot="actions">
                       <wt-button @click=${() => this.#openStation()} data-test="new-station"

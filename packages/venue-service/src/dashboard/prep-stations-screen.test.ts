@@ -14,9 +14,12 @@ registerIcons({
   grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",
 });
 const hosts: HTMLElement[] = [];
+// The screen opens on the tab its URL names, so each test starts from the page's own URL.
+const startUrl = location.href;
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
+  history.replaceState(null, "", startUrl);
 });
 const view: PrepStationsView = {
   routing: {
@@ -1803,6 +1806,58 @@ it.each([
     expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
   },
 );
+
+it("shows New station on the Stations tab alone, and no action on the other tabs", async () => {
+  setLocale("en");
+  history.replaceState(null, "", "/manage/prep-stations");
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  for (const [key, actions] of [
+    ["stations", ["new-station"]],
+    ["routing", []],
+    ["watchers", []],
+    ["settings", []],
+    ["stations", ["new-station"]],
+  ] as const) {
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
+    await settle(el);
+    expect(tabs.value).toBe(key);
+    expect(
+      [...tabs.querySelectorAll('[slot="actions"] [data-test]')].map((a) =>
+        a.getAttribute("data-test"),
+      ),
+      key,
+    ).toEqual(actions);
+  }
+});
+
+it("at 390 px in Spanish, the tab row fades its cut end and keeps the selected tab whole", async () => {
+  setLocale("es");
+  history.replaceState(null, "", "/manage/prep-stations");
+  const el = await mount(api());
+  el.parentElement!.style.width = "390px";
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  const strip = tabs.shadowRoot!.querySelector<HTMLElement>("[role=tablist]")!;
+  const bounds = strip.getBoundingClientRect();
+  const selected = tabs
+    .shadowRoot!.querySelector('[aria-selected="true"]')!
+    .getBoundingClientRect();
+  expect(tabs.value).toBe("stations");
+  expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+  expect(tabs.dataset.overflow).toBe("end");
+  expect(getComputedStyle(strip).maskImage).not.toBe("none");
+  expect(selected.left).toBeGreaterThanOrEqual(bounds.left - 1);
+  expect(selected.right).toBeLessThanOrEqual(
+    bounds.right - parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6")) + 1,
+  );
+  expect(q(el, '[data-test="new-station"]')!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    bounds.right - 1,
+  );
+});
 
 it.each([
   { locale: "en", theme: "light", width: 390 },

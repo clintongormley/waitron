@@ -6,7 +6,12 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
-afterEach(cleanup);
+// The screen opens on the tab its URL names, so each test starts from the page's own URL.
+const startUrl = location.href;
+afterEach(() => {
+  cleanup();
+  history.replaceState(null, "", startUrl);
+});
 const empty = {
   routing: {
     periods: [],

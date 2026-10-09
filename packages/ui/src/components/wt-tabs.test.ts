@@ -328,6 +328,24 @@ test("a selected tab wider than the strip shows its start, cut where the action 
   expect(strip.right).toBeLessThanOrEqual(action.left + 1);
 });
 
+test.each(["ltr", "rtl"] as const)(
+  "%s, a selected tab wider than a strip set in from the page's edge still shows its start",
+  async (dir) => {
+    const el = await wideAction(300);
+    host.dir = dir;
+    host.style.marginInline = "40px";
+    el.value = "routes";
+    await el.updateComplete;
+    await frames();
+    const strip = tablist(el).getBoundingClientRect();
+    const tab = buttons(el)[2]!.getBoundingClientRect();
+    expect(strip.left).toBeGreaterThanOrEqual(40);
+    expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
+    if (dir === "ltr") expect(Math.abs(tab.left - strip.left)).toBeLessThanOrEqual(1);
+    else expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+  },
+);
+
 test("right to left, a selected tab wider than the strip shows its start at the strip's right edge", async () => {
   const el = await wideAction(300);
   host.dir = "rtl";
@@ -718,3 +736,187 @@ test("a marked tab is drawn in the primary text colour, selected or not", async 
   expect(getComputedStyle(unselected!).color).toBe("rgb(10, 20, 30)");
   expect(getComputedStyle(plain!).color).toBe("rgb(90, 90, 90)");
 });
+
+/** Resolves once the strip has delivered its next scroll event, which the strip handles first. */
+async function scrollStrip(el: WtTabs, to: number): Promise<void> {
+  const strip = tablist(el);
+  const scrolled = new Promise((resolve) =>
+    strip.addEventListener("scroll", resolve, { once: true }),
+  );
+  strip.scrollLeft = to;
+  await scrolled;
+}
+/** Resolves once a ResizeObserver made after the component's has seen the strip at `width`. */
+async function resizeStrip(el: WtTabs, width: string): Promise<void> {
+  const strip = tablist(el);
+  const before = strip.getBoundingClientRect().width;
+  await new Promise<void>((resolve) => {
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry!.contentRect.width === before) return;
+      observer.disconnect();
+      resolve();
+    });
+    observer.observe(strip);
+    host.style.width = width;
+  });
+}
+function maxScroll(el: WtTabs): number {
+  return tablist(el).scrollWidth - tablist(el).clientWidth;
+}
+
+function padding(el: WtTabs): number {
+  return parseFloat(getComputedStyle(tablist(el)).paddingInlineStart);
+}
+
+test("a strip narrower than its tabs reports end at its start, both once a tab is cut at each end, start at its end", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  await frames();
+  expect(maxScroll(el)).toBeGreaterThan(4 * padding(el));
+  expect(el.dataset.overflow).toBe("end");
+  await scrollStrip(el, padding(el));
+  expect(el.dataset.overflow).toBe("end");
+  await scrollStrip(el, padding(el) + 1);
+  expect(el.dataset.overflow).toBe("both");
+  await scrollStrip(el, maxScroll(el) - padding(el) - 1);
+  expect(el.dataset.overflow).toBe("both");
+  await scrollStrip(el, maxScroll(el) - padding(el));
+  expect(el.dataset.overflow).toBe("start");
+  await scrollStrip(el, maxScroll(el));
+  expect(el.dataset.overflow).toBe("start");
+  await scrollStrip(el, 0);
+  expect(el.dataset.overflow).toBe("end");
+});
+
+test("a strip its tabs fit reports no overflow, and stops reporting it when widened", async () => {
+  const el = await setup();
+  host.style.width = "900px";
+  await frames();
+  expect(maxScroll(el)).toBe(0);
+  expect(el.hasAttribute("data-overflow")).toBe(false);
+  await resizeStrip(el, "220px");
+  expect(el.dataset.overflow).toBe("end");
+  await resizeStrip(el, "900px");
+  expect(el.hasAttribute("data-overflow")).toBe(false);
+});
+
+test("reports overflow again when its tabs change at the same width, and none once they are gone", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  await frames();
+  expect(el.dataset.overflow).toBe("end");
+  el.items = [items[0]!];
+  await el.updateComplete;
+  expect(el.hasAttribute("data-overflow")).toBe(false);
+  el.items = items;
+  await el.updateComplete;
+  expect(el.dataset.overflow).toBe("end");
+  el.items = [];
+  await el.updateComplete;
+  expect(el.hasAttribute("data-overflow")).toBe(false);
+});
+
+test("a strip opened on its last tab reports the cut at its start", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  expect(Math.abs(tablist(el).scrollLeft)).toBeGreaterThan(0);
+  expect(el.dataset.overflow).toBe("start");
+});
+
+test("right to left, the strip reports end at its start and start at its far end", async () => {
+  const el = await setup();
+  host.dir = "rtl";
+  host.style.width = "220px";
+  await frames();
+  expect(tablist(el).scrollLeft).toBe(0);
+  expect(el.dataset.overflow).toBe("end");
+  await scrollStrip(el, -padding(el) - 1);
+  expect(el.dataset.overflow).toBe("both");
+  await scrollStrip(el, -maxScroll(el));
+  expect(el.dataset.overflow).toBe("start");
+});
+
+function fade(el: WtTabs): string {
+  return getComputedStyle(tablist(el)).maskImage;
+}
+
+test("fades only the cut end of the strip, over the space-6 token", async () => {
+  const el = await setup();
+  host.style.setProperty("--wt-space-6", "13px");
+  host.style.width = "900px";
+  await frames();
+  expect(fade(el)).toBe("none");
+  await resizeStrip(el, "220px");
+  expect(fade(el)).toBe(
+    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(247, 247, 248) 0px, rgb(247, 247, 248) calc(100% - 13px), rgba(0, 0, 0, 0) 100%)",
+  );
+  await scrollStrip(el, padding(el) + 1);
+  expect(fade(el)).toBe(
+    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(247, 247, 248) 13px, rgb(247, 247, 248) calc(100% - 13px), rgba(0, 0, 0, 0) 100%)",
+  );
+  await scrollStrip(el, maxScroll(el));
+  expect(fade(el)).toBe(
+    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(247, 247, 248) 13px, rgb(247, 247, 248) 100%, rgba(0, 0, 0, 0) 100%)",
+  );
+});
+
+test("right to left, the fade runs from the right, where the strip starts", async () => {
+  const el = await setup();
+  host.dir = "rtl";
+  host.style.width = "220px";
+  await frames();
+  expect(el.dataset.overflow).toBe("end");
+  expect(fade(el)).toMatch(/^linear-gradient\(to left, /);
+});
+
+test("a marked tab keeps its colour under the fade, which masks the strip and not the tab", async () => {
+  const el = await setup();
+  host.style.setProperty("--wt-color-primary-text", "rgb(10, 20, 30)");
+  host.style.width = "220px";
+  el.items = [items[0]!, items[1]!, { ...items[2]!, marked: "unpublished changes" }];
+  await el.updateComplete;
+  await frames();
+  expect(el.dataset.overflow).toBe("end");
+  const marked = buttons(el)[2]!;
+  expect(getComputedStyle(marked).color).toBe("rgb(10, 20, 30)");
+  expect(getComputedStyle(marked).maskImage).toBe("none");
+  expect(getComputedStyle(marked).opacity).toBe("1");
+  expect(fade(el)).not.toBe("none");
+});
+
+function fadeWidth(el: WtTabs): number {
+  return parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6"));
+}
+/** The selected tab lies clear of each faded end, so no part of it is drawn faint. */
+function expectSelectedClearOfFade(el: WtTabs) {
+  expectSelectedInView(el);
+  const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
+  const strip = tablist(el).getBoundingClientRect();
+  const box = selected.getBoundingClientRect();
+  const rtl = getComputedStyle(tablist(el)).direction === "rtl";
+  const overflow = el.dataset.overflow ?? "";
+  const leftCut = ["both", rtl ? "end" : "start"].includes(overflow);
+  const rightCut = ["both", rtl ? "start" : "end"].includes(overflow);
+  if (leftCut) expect(box.left).toBeGreaterThanOrEqual(strip.left + fadeWidth(el) - 1);
+  if (rightCut) expect(box.right).toBeLessThanOrEqual(strip.right - fadeWidth(el) + 1);
+}
+
+test.each(["ltr", "rtl"] as const)(
+  "%s, a selected middle tab stops clear of the fade, leaving its neighbours under it",
+  async (dir) => {
+    const el = await setup();
+    host.dir = dir;
+    host.style.width = "260px";
+    await frames();
+    for (const key of ["menus", "status", "routes", "menus"]) {
+      el.value = key;
+      await el.updateComplete;
+      await frames();
+      expectSelectedClearOfFade(el);
+    }
+    expect(el.dataset.overflow).toBe("both");
+  },
+);
