@@ -453,7 +453,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const live = [...queues.keys()];
         const now = new Date();
         const states = await VENUE_SERVICE.stationStates(tx, cfg, now);
-        const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live);
+        const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live, {
+          withSwitchedOff: true,
+        });
         const shown = [];
         for (const { id, name, available, switchedOff } of slots) {
           if (!available && !switchedOff) {

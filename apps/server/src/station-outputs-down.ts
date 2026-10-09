@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import type { LocationId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
 export interface DownPrinter {
@@ -33,11 +33,18 @@ export const WAITING_WINDOW_MS = 60 * 60 * 1000;
 
 const laterDocument = alias(printJobs, "d");
 
+/** With `withSwitchedOff`, a station switched off on its own page keeps its printers, as a
+ *  station screen still shows its waiting dishes (owner 2026-10-09). */
+export interface PrintersDownOptions {
+  withSwitchedOff?: boolean;
+}
+
 export function stationPrintersDownQuery(
   tx: Transaction,
   locationId: string,
   now: Date,
   stationIds?: readonly string[],
+  options: PrintersDownOptions = {},
 ) {
   return tx
     .select({
@@ -54,7 +61,7 @@ export function stationPrintersDownQuery(
     .where(
       and(
         eq(kitchenStations.locationId, locationId),
-        eq(kitchenStations.active, true),
+        options.withSwitchedOff === true ? undefined : eq(kitchenStations.active, true),
         stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),
         eq(printers.active, true),
         inArray(printJobs.status, ["queued", "printing", "failed"]),
@@ -75,9 +82,10 @@ export async function stationPrintersDown(
   locationId: string,
   now: Date,
   stationIds?: readonly string[],
+  options: PrintersDownOptions = {},
 ): Promise<DownPrinter[]> {
   if (stationIds?.length === 0) return [];
-  const rows = await stationPrintersDownQuery(tx, locationId, now, stationIds);
+  const rows = await stationPrintersDownQuery(tx, locationId, now, stationIds, options);
   return rows.map((r) => ({ ...r, since: r.since! }));
 }
 
@@ -122,9 +130,7 @@ export async function stationScreensDark(
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
   const screens = await VENUE_SERVICE.readStationScreens(
     tx,
-    {
-      locationId: venueLocationId as LocationId,
-    },
+    { locationId: brandLocationId(venueLocationId) },
     { withSwitchedOff: true },
   );
   if (screens.length === 0) return [];

@@ -1173,6 +1173,32 @@ describe("Device API — the device-guarded routes", () => {
       expect(queued(done!)).toEqual([]);
     });
 
+    it("keeps its printers-down line with its waiting dishes", async () => {
+      const { venue, app, fria, items } = await seed();
+      const printerId = await seedPrinter(venue.cfg);
+      await suite.db.insert(stationPrinters).values({ stationId: fria, printerId });
+      await suite.db.insert(printJobs).values({
+        locationId: venue.cfg.locationId,
+        printerId,
+        payload: Uint8Array.of(1),
+        status: "failed",
+        attempts: 5,
+        createdAt: "2026-10-02T18:00:00.000Z",
+      });
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const printersDown = async () =>
+        ((await read(app, jar)) as (Entry & { printersDown?: { printerId: string }[] })[]).find(
+          (entry) => entry.id === fria,
+        );
+      expect((await printersDown())!.printersDown).toMatchObject([{ printerId }]);
+
+      await switchStationOff(fria);
+
+      const off = await printersDown();
+      expect(off).toMatchObject({ switchedOff: true, printersDown: [{ printerId }] });
+      expect(queued(off!)).toEqual([items[1]]);
+    });
+
     it("sends one a narrowing took with no queue, and refuses its dish and its notice", async () => {
       const { venue, app, fria, items, notice } = await seed();
       const { jar, profileId } = await enrolStationScreen(app, venue, [
