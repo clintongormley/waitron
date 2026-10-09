@@ -29,9 +29,12 @@ their full text.
   slice 6. Lane E's build follows slice 6 Part A before
   slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
-  in two pull requests — combined tickets on shared printers, period choices in routing cells and
-  the station editor after slice 1; station hours, fallbacks and the tester removed, with each
-  station's worked-out times, after slices 2 and 3 — with its open decisions at its top.
+  revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
+  requests that can both start now that slices 1, 2 and 3 Part A have landed: Part A — combined
+  tickets on shared printers, period choices in routing cells, the station editor, and the
+  "Where is this made?" tester and the Stations tab's live kitchen numbers removed; Part B —
+  station hours and fallbacks removed, closing a station with open dishes asks what to do with
+  them, and each station's worked-out times. Its new decisions 29–37 wait for the owner.
   Slice 6's plan is written ahead of lane D (A366-6p, 2026-10-08): [slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md),
   in three pull requests — the department list and page, "How orders start" and the service
   settings shared by departments and zones, now (it needs slice 1 only); each zone's closed times
