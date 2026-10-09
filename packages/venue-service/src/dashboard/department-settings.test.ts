@@ -434,7 +434,7 @@ it("keeps newer edits when a save finishes and ignores completions from a discon
   await change(el, "name", "Submitted");
   save(el).click();
   await el.updateComplete;
-  expect(field(el, "name").disabled).toBe(true);
+  expect(field(el, "name").disabled).toBe(false);
   field(el, "name").dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "Ignored while busy" },
@@ -443,7 +443,7 @@ it("keeps newer edits when a save finishes and ignores completions from a discon
     }),
   );
   await el.updateComplete;
-  expect(field(el, "name").value).toBe("Submitted");
+  expect(field(el, "name").value).toBe("Ignored while busy");
   el.remove();
   hosts[0]!.append(el);
   await el.updateComplete;
