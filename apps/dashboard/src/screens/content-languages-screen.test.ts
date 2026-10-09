@@ -1199,22 +1199,20 @@ it.each([
       getContentLanguageRules: vi
         .fn()
         .mockResolvedValue({ required: [language], official: [language, "es"] }),
-      getContentTranslationGaps: vi
-        .fn()
-        .mockResolvedValue([
-          {
-            language,
-            gaps: [
-              {
-                kind: "product",
-                id: "p",
-                staffName: "STAFF",
-                defaultName: "DEFAULT",
-                reason: "absent",
-              },
-            ],
-          },
-        ]),
+      getContentTranslationGaps: vi.fn().mockResolvedValue([
+        {
+          language,
+          gaps: [
+            {
+              kind: "product",
+              id: "p",
+              staffName: "STAFF",
+              defaultName: "DEFAULT",
+              reason: "absent",
+            },
+          ],
+        },
+      ]),
     }),
   );
   await vi.waitFor(() => expect(q(el, `[data-test="required-gaps-${language}"]`)).not.toBeNull());
