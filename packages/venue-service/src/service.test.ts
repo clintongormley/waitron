@@ -39,6 +39,7 @@ describe("VENUE_SERVICE", () => {
       "findOrderContext",
       "findOrderModes",
       "findOrderZones",
+      "followsEveryStation",
       "getOrderContext",
       "keepPeriodOpen",
       "keepZoneOpen",

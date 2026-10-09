@@ -1484,26 +1484,32 @@ export interface EquipmentChange {
   takeOver?: boolean;
 }
 
+/** A station the display works: available, or switched off on its own page and still holding the
+ * dishes waiting there (owner 2026-10-09). */
+export interface DeviceWorkedStation {
+  id: string;
+  name: string;
+  available: boolean;
+  switchedOff?: boolean;
+  today: {
+    open: boolean;
+    isDefault: boolean;
+    byHand: Station["byHand"];
+    sendsTo: { id: string; name: string } | null;
+    why: Station["why"];
+  };
+  queue: StationQueueGroup[];
+  notices: KitchenNotice[];
+  printersDown: StationPrinterDown[];
+}
+
 /** `GET /api/device/station-screen` success — the display's stations in display order. A station a
- * narrowing took, or one switched off, comes back with no queue. */
+ * narrowing took comes back with no queue; one switched off on its own page keeps its queue. */
 export interface DeviceStationScreen {
   stations: (
-    | {
-        id: string;
-        name: string;
-        available: true;
-        today: {
-          open: boolean;
-          isDefault: boolean;
-          byHand: Station["byHand"];
-          sendsTo: { id: string; name: string } | null;
-          why: Station["why"];
-        };
-        queue: StationQueueGroup[];
-        notices: KitchenNotice[];
-        printersDown: StationPrinterDown[];
-      }
-    | { id: string; name: string; available: false }
+    | (DeviceWorkedStation & { available: true })
+    | (DeviceWorkedStation & { available: false; switchedOff: true })
+    | { id: string; name: string; available: false; switchedOff: false }
   )[];
 }
 

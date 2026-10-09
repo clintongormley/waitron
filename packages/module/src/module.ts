@@ -448,6 +448,9 @@ export interface ScreenSlot {
   readonly id: string;
   readonly name: string;
   readonly available: boolean;
+  /** Unavailable only because it was switched off on its own page, not taken by a narrowing: a
+   *  station screen still shows its waiting dishes (owner 2026-10-09). */
+  readonly switchedOff: boolean;
 }
 
 export interface ResolvedKitchenScreen {
@@ -799,6 +802,14 @@ export interface VenueServiceContribution {
     deviceId: string,
     zoneId: string | null,
   ): Promise<void>;
+  /** Whether the device's `kind` screen and its profile's both list every station; false for a
+   *  device with no such screen. */
+  followsEveryStation(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    deviceId: string,
+    kind: KitchenScreenKind,
+  ): Promise<boolean>;
   /** Each active kitchen display running a station screen, with the stations it shows now; with
    *  `withSwitchedOff`, also the switched-off ones its explicit list names (never "every"'s, never
    *  one a narrowing took). */

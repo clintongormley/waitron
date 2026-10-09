@@ -2668,7 +2668,7 @@ describe("TillApi", () => {
             { printerId: "pr-1", printerName: "Cocina", since: "2026-08-17T10:00:00.000Z" },
           ],
         },
-        { id: "st-2", name: "Deli", available: false },
+        { id: "st-2", name: "Deli", available: false, switchedOff: false },
       ],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(screen));

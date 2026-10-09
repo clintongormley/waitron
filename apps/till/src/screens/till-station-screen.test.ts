@@ -1094,7 +1094,40 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     notices,
     printersDown: [] as { printerId: string; printerName: string; since: string }[],
   });
-  const gone = (id: string, name: string) => ({ id, name, available: false as const });
+  const gone = (id: string, name: string) => ({
+    id,
+    name,
+    available: false as const,
+    switchedOff: false as const,
+  });
+  /** A station switched off on its own page, still holding the dishes waiting there. */
+  const switchedOff = (
+    id: string,
+    name: string,
+    queue: StationQueueGroup[],
+    notices: KitchenNotice[] = [],
+  ) => ({
+    ...available(id, name, queue, notices),
+    available: false as const,
+    switchedOff: true as const,
+    today: {
+      open: false,
+      isDefault: false,
+      byHand: null,
+      sendsTo: null,
+      why: "switched_off" as const,
+    },
+  });
+  const deliQueue: StationQueueGroup[] = [
+    {
+      ...cocinaQueue[0]!,
+      orderId: "wo-3",
+      orderNumber: 7,
+      queuedAt: "2026-08-17T09:30:00.000Z",
+      items: [{ ...cocinaQueue[0]!.items[0]!, id: "ti-3", workingOrderLineId: "wol-3" }],
+    },
+  ];
+  const deliNotice: KitchenNotice = { ...cocinaNotice, id: "kn-deli", stationId: "st-deli" };
 
   async function mountDevice(screen: DeviceStationScreen, overrides: Record<string, unknown> = {}) {
     const api = {
@@ -1212,6 +1245,83 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       "This station is no longer available: Deli",
     );
     expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(1);
+  });
+
+  describe("a station switched off on its own page (owner 2026-10-09)", () => {
+    it("shows its line and then the dishes still waiting there, which bump", async () => {
+      const { el, api } = await mountDevice({
+        stations: [
+          available("st-1", "Cocina", cocinaQueue),
+          switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+        ],
+      });
+      const deli = sections(el)[1]!;
+      expect(deli.dataset.deviceStation).toBe("st-deli");
+      const line = deli.querySelector("[data-station-unavailable]")!;
+      expect(line.textContent!.trim()).toBe("This station is no longer available: Deli");
+      const queue = sectionQueue(deli)!;
+      expect(queue.groups).toEqual(deliQueue);
+      expect(queue.notices).toEqual([deliNotice]);
+      expect(queue.stationId).toBe("st-deli");
+      expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      queue.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-3", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
+    });
+
+    it("as the only station, keeps its toggles and its dish until the queue is empty, then guides", async () => {
+      const { el, api } = await mountDevice({
+        stations: [switchedOff("st-deli", "Deli", deliQueue)],
+      });
+      expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+      const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      expect(queue.groups).toEqual(deliQueue);
+      vi.mocked(api.getDeviceStationScreen).mockResolvedValue({
+        stations: [switchedOff("st-deli", "Deli", [])],
+      });
+      queue.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-3", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
+      expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(1);
+    });
+
+    it("acknowledging its notice goes through the device route and removes it", async () => {
+      const { el, api } = await mountDevice(
+        {
+          stations: [
+            available("st-1", "Cocina", cocinaQueue),
+            switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+          ],
+        },
+        { deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined) },
+      );
+      sectionQueue(sections(el)[1]!)!.dispatchEvent(
+        new CustomEvent("acknowledge-notice", {
+          detail: { noticeId: "kn-deli" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAcknowledgeKitchenNotice).toHaveBeenCalledWith("kn-deli");
+      expect(sectionQueue(sections(el)[1]!)!.notices).toEqual([]);
+    });
   });
 
   it("reads the line in Spanish", async () => {
@@ -1412,6 +1522,37 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       const queue = el.shadowRoot!.querySelector("till-station-queue")!;
       for (const line of lines)
         expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("merged takes in a switched-off station's waiting dishes, labelled, under its line", async () => {
+      const { el, api } = await mountFor("dev-1", {
+        stations: [
+          available("st-1", "Cocina", cocinaQueue, [cocinaNotice]),
+          switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+          available("st-2", "Barra", barraOlder),
+        ],
+      });
+      await merge(el);
+      const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      expect(queue.groups.map((group) => [group.orderId, group.stationId])).toEqual([
+        ["wo-2", "st-2"],
+        ["wo-3", "st-deli"],
+        ["wo-1", "st-1"],
+      ]);
+      expect(queue.stationNames!.get("st-deli")).toBe("Deli");
+      expect(queue.notices.map((notice) => notice.id)).toEqual(["kn-cocina", "kn-deli"]);
+      const line = el.shadowRoot!.querySelector("[data-station-unavailable]")!;
+      expect(line.textContent!.trim()).toBe("This station is no longer available: Deli");
+      expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      queue.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-3", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
     });
 
     it("a whole-ticket bump in merged advances that order's lines at its own station", async () => {

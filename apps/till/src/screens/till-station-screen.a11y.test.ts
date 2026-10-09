@@ -424,6 +424,51 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
+    it("has no violations with a station switched off on its own page still holding its dishes", async () => {
+      const today = (why: "open" | "switched_off") => ({
+        open: why === "open",
+        isDefault: false,
+        byHand: null,
+        sendsTo: null,
+        why,
+      });
+      const api = deviceStubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: today("open"),
+              queue: groups,
+              notices: [],
+              printersDown: [],
+            },
+            {
+              id: "st-deli",
+              name: "Deli",
+              available: false,
+              switchedOff: true,
+              today: today("switched_off"),
+              queue: groups,
+              notices,
+              printersDown: [],
+            },
+          ],
+        }),
+      });
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api, deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      const deli = el.shadowRoot!.querySelector('[data-device-station="st-deli"]')!;
+      expect(deli.querySelector("[data-station-unavailable]")).not.toBeNull();
+      expect(deli.querySelector("till-station-queue")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+
     it("has no violations with no station left available", async () => {
       const api = deviceStubApi({
         getDeviceStationScreen: vi.fn().mockResolvedValue({

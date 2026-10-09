@@ -47,7 +47,18 @@ const READ_LIMIT_MS = 25_000;
 
 const viewKey = (deviceId: string): string => `waitron.stationScreenView.${deviceId}`;
 
-type AvailableStation = Extract<DeviceStationScreen["stations"][number], { available: true }>;
+type DeviceStation = DeviceStationScreen["stations"][number];
+type WorkedStation = Extract<DeviceStation, { queue: StationQueueGroup[] }>;
+
+/** A station whose queue the display works: available, or switched off on its own page. */
+const worked = (station: DeviceStation): station is WorkedStation =>
+  station.available || station.switchedOff;
+
+/** Whether a station's section draws its queue: available, or switched off with work still waiting
+ *  there (owner 2026-10-09). */
+const drawsQueue = (station: DeviceStation): station is WorkedStation =>
+  station.available ||
+  (worked(station) && (station.queue.length > 0 || station.notices.length > 0));
 
 /**
  * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue
@@ -420,9 +431,9 @@ export class TillStationScreen extends LitElement {
   }
 
   #adoptDeviceStation({ stations }: DeviceStationScreen): void {
-    this.#forgetUnlisted(stations.flatMap((station) => (station.available ? station.notices : [])));
+    this.#forgetUnlisted(stations.flatMap((station) => (worked(station) ? station.notices : [])));
     this.deviceStations = stations.map((station) =>
-      station.available
+      worked(station)
         ? {
             ...station,
             printersDown: station.printersDown ?? [],
@@ -534,7 +545,7 @@ export class TillStationScreen extends LitElement {
     to: Exclude<TicketState, "queued">,
   ): Promise<void> {
     const station = this.deviceStations.find((candidate) => candidate.id === stationId);
-    if (station?.available !== true) return;
+    if (station === undefined || !worked(station)) return;
     const group = station.queue.find((candidate) => candidate.orderId === orderId);
     if (group === undefined) return;
     for (const item of group.items) {
@@ -632,7 +643,7 @@ export class TillStationScreen extends LitElement {
     this.#acknowledged.add(noticeId);
     this.notices = this.notices.filter((notice) => notice.id !== noticeId);
     this.deviceStations = this.deviceStations.map((station) =>
-      station.available ? { ...station, notices: this.#unacknowledged(station.notices) } : station,
+      worked(station) ? { ...station, notices: this.#unacknowledged(station.notices) } : station,
     );
   }
 
@@ -664,7 +675,7 @@ export class TillStationScreen extends LitElement {
   #renderDevice(): TemplateResult {
     const [only] = this.deviceStations;
     const several = this.deviceStations.length > 1;
-    if (this.deviceStations.length > 0 && !this.deviceStations.some((s) => s.available))
+    if (this.deviceStations.length > 0 && !this.deviceStations.some(drawsQueue))
       return this.#renderQueueSurface({
         showBack: false,
         showViews: false,
@@ -682,10 +693,11 @@ export class TillStationScreen extends LitElement {
 
   #mergedBody(): TemplateResult {
     const available = this.deviceStations.filter(
-      (station): station is AvailableStation => station.available,
+      (station): station is WorkedStation & { available: true } => station.available,
     );
+    const drawn = this.deviceStations.filter(drawsQueue);
     // A stable sort, so two orders queued at the same moment keep their stations' order.
-    const queue: MergedQueueGroup[] = available
+    const queue: MergedQueueGroup[] = drawn
       .flatMap((station) => station.queue.map((group) => ({ ...group, stationId: station.id })))
       .sort((a, b) => Date.parse(a.queuedAt) - Date.parse(b.queuedAt));
     return html`${available.map(
@@ -702,12 +714,14 @@ export class TillStationScreen extends LitElement {
       ${this.deviceStations.map((station) =>
         station.available
           ? this.#printersDown(station.printersDown, station.name)
-          : this.#unavailable(station.name),
+          : html`${this.#unavailable(station.name)}${
+              drawsQueue(station) ? this.#printersDown(station.printersDown, station.name) : nothing
+            }`,
       )}
       <till-station-queue
         .groups=${queue}
-        .notices=${available.flatMap((station) => station.notices)}
-        .stationNames=${new Map(available.map((station) => [station.id, station.name]))}
+        .notices=${drawn.flatMap((station) => station.notices)}
+        .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
         .view=${this.view}
         .bumpMode=${this.bumpMode}
         .fireControl=${this.fireControl}
@@ -716,7 +730,7 @@ export class TillStationScreen extends LitElement {
   }
 
   /** The station's state today, and closing or reopening it for today. */
-  #today(station: AvailableStation): TemplateResult {
+  #today(station: WorkedStation): TemplateResult {
     const { today } = station;
     return html`<till-station-today
       .api=${this.api}
@@ -745,23 +759,22 @@ export class TillStationScreen extends LitElement {
     </p>`;
   }
 
-  #deviceSection(station: DeviceStationScreen["stations"][number]): TemplateResult {
-    return station.available
-      ? html`<section
-          class="device-station"
-          data-device-station=${station.id}
-          aria-label=${station.name}
-        >
-          <h2 class="station-name">${station.name}</h2>
-          ${this.#today(station)} ${this.#queue(true, station)}
-        </section>`
-      : html`<section
-          class="device-station"
-          data-device-station=${station.id}
-          aria-label=${station.name}
-        >
-          ${this.#unavailable(station.name)}
-        </section>`;
+  #deviceSection(station: DeviceStation): TemplateResult {
+    return html`<section
+      class="device-station"
+      data-device-station=${station.id}
+      aria-label=${station.name}
+    >
+      ${
+        station.available
+          ? html`<h2 class="station-name">${station.name}</h2>
+              ${this.#today(station)} ${this.#queue(true, station)}`
+          : drawsQueue(station)
+            ? html`${this.#unavailable(station.name)} ${this.#today(station)}
+              ${this.#queue(true, station)}`
+            : this.#unavailable(station.name)
+      }
+    </section>`;
   }
 
   #renderQueueSurface(opts: {

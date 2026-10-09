@@ -24,6 +24,7 @@ import {
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
   checkProfileKitchenScreens,
+  followsEveryStation,
   narrowDeviceKitchenScreens,
   readDeviceKitchenScreens,
   readDevicesKitchenScreens,
@@ -685,7 +686,7 @@ describe("the kitchen screens a device chooses", () => {
       {
         kind: "pass",
         available: true,
-        stations: [{ id: venue.cold, name: "Cold", available: true }],
+        stations: [{ id: venue.cold, name: "Cold", available: true, switchedOff: false }],
         zones: null,
       },
     ]);
@@ -725,7 +726,12 @@ describe("the kitchen screens a device chooses", () => {
 });
 
 describe("what a device's kitchen screens show", () => {
-  const slot = (id: string, name: string, available = true) => ({ id, name, available });
+  const slot = (id: string, name: string, available = true, switchedOff = false) => ({
+    id,
+    name,
+    available,
+    switchedOff,
+  });
 
   it("shows an every device the profile's stations in display order, its removals in their places", async () => {
     const venue = await seedVenue();
@@ -786,8 +792,8 @@ describe("what a device's kitchen screens show", () => {
       {
         kind: "pass",
         available: true,
-        stations: [slot(venue.cold, "Cold", false), slot(venue.grill, "Grill")],
-        zones: [slot(venue.dining, "Dining room", false)],
+        stations: [slot(venue.cold, "Cold", false, true), slot(venue.grill, "Grill")],
+        zones: [slot(venue.dining, "Dining room", false, true)],
       },
     ]);
     await off(true);
@@ -797,6 +803,46 @@ describe("what a device's kitchen screens show", () => {
         available: true,
         stations: [slot(venue.cold, "Cold"), slot(venue.grill, "Grill")],
         zones: [slot(venue.dining, "Dining room")],
+      },
+    ]);
+  });
+
+  it("tells a station or zone switched off on its own page from one a narrowing took", async () => {
+    const venue = await seedVenue();
+    const till = await seedDevice(venue, venue.till, "Till");
+    await choose(venue, till, venue.till, [
+      {
+        kind: "pass",
+        stationIds: [venue.cold, venue.pastry],
+        zoneIds: [venue.dining, venue.counter],
+      },
+    ]);
+    await recordRemoval(till, "pass", { stationId: venue.grill });
+    await recordRemoval(till, "pass", { stationId: venue.pastry });
+    await recordRemoval(till, "pass", { zoneId: venue.terrace });
+    await recordRemoval(till, "pass", { zoneId: venue.counter });
+    await db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(inArray(kitchenStations.id, [venue.cold, venue.pastry]));
+    await db
+      .update(floorZones)
+      .set({ active: false })
+      .where(inArray(floorZones.id, [venue.dining, venue.counter]));
+    await expect(shown(venue, till)).resolves.toEqual([
+      {
+        kind: "pass",
+        available: true,
+        stations: [
+          slot(venue.cold, "Cold", false, true),
+          slot(venue.grill, "Grill", false),
+          slot(venue.pastry, "Pastry", false),
+        ],
+        zones: [
+          slot(venue.terrace, "Terrace", false),
+          slot(venue.dining, "Dining room", false, true),
+          slot(venue.counter, "Counter", false),
+        ],
       },
     ]);
   });
@@ -1031,6 +1077,31 @@ describe("an order's zone checked against a device's pass screen", () => {
   });
 });
 
+describe("whether a device's kitchen screen follows every station", () => {
+  it("is true only when the device's list and its profile's are both every", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { station: every, pass: every });
+    const open = await seedDevice(venue, venue.kds, "Open");
+    const listed = await seedDevice(venue, venue.kds, "Listed");
+    const bounded = await seedDevice(venue, venue.till, "Till");
+    await choose(venue, open, venue.kds, [{ kind: "station", ...every }]);
+    await choose(venue, listed, venue.kds, [
+      { kind: "station", stationIds: [venue.grill], zoneIds: null },
+    ]);
+    await set(venue, venue.till, {
+      station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
+    });
+    await choose(venue, bounded, venue.till, [{ kind: "station", ...every }]);
+    const follows = (deviceId: string, kind: DeviceKitchenScreen["kind"] = "station") =>
+      scoped((tx) => followsEveryStation(tx, venue.cfg, deviceId, kind));
+    expect(await follows(open)).toBe(true);
+    expect(await follows(listed)).toBe(false);
+    expect(await follows(bounded)).toBe(false);
+    expect(await follows(open, "pass")).toBe(false);
+    expect(await follows(randomUUID())).toBe(false);
+  });
+});
+
 describe("the station screens kitchen displays run", () => {
   it("lists each active kitchen display's shown stations, never a till's", async () => {
     const venue = await seedVenue();
@@ -1131,7 +1202,12 @@ describe("the station screens of several kitchen displays", () => {
 });
 
 describe("a profile save narrowing its devices", () => {
-  const slot = (id: string, name: string, available = true) => ({ id, name, available });
+  const slot = (id: string, name: string, available = true, switchedOff = false) => ({
+    id,
+    name,
+    available,
+    switchedOff,
+  });
   const named = (id: string, name: string) => ({ id, name });
   const lost = (
     deviceId: string,

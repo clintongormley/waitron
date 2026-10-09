@@ -545,6 +545,7 @@ function slots(
       id: place.id,
       name: place.name,
       available: place.active && !removed.has(place.id),
+      switchedOff: !place.active && !removed.has(place.id),
     }));
 }
 
@@ -854,6 +855,24 @@ export async function assertPassScreenZone(
   if (!pass.zones.some((zone) => zone.available && zone.id === zoneId)) {
     throw new AppError("kitchen_screen.zone_not_allowed", { zoneId });
   }
+}
+
+/** Whether the device's `kind` screen and its profile's both list every station, so a station
+ *  switched off since drops out of the read rather than showing as no longer available. */
+export async function followsEveryStation(
+  tx: Transaction,
+  cfg: VenueScope,
+  deviceId: string,
+  kind: KitchenScreenKind,
+): Promise<boolean> {
+  const [device] = await tx
+    .select({ profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.locationId, cfg.locationId)));
+  if (device === undefined) return false;
+  const chosen = (await readChoices(tx, [deviceId])).get(deviceId)!.get(kind);
+  const bound = (await readStored(tx, cfg, device.profileId)).get(device.profileId)?.[kind];
+  return chosen?.stationIds === null && (bound?.stationIds ?? null) === null;
 }
 
 /** Each active kitchen display running a station screen, with the stations it shows now; with

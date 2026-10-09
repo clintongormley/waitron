@@ -2,9 +2,15 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  kitchenStations,
+  ticketItems,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorizeManager,
@@ -58,10 +64,15 @@ import {
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
-import { advanceTicketItem, listStationQueues, type TicketState } from "./working-order.js";
+import {
+  advanceTicketItem,
+  listStationQueues,
+  type StationQueueGroup,
+  type TicketState,
+} from "./working-order.js";
 import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { KitchenScreenKind, ResolvedKitchenScreen } from "@waitron/module";
+import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@waitron/module";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
@@ -438,15 +449,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const cfg = requestCfg(deps.cfg, device);
       const stations = await withTransaction(deps.db, async (tx) => {
         const screen = await stationScreenOf(tx, c, deps.cfg, device);
-        const live = [...availableStations(screen)];
+        const { slots, queues } = await stationScreenSlots(tx, deps.cfg, device, screen);
+        const live = [...queues.keys()];
         const now = new Date();
         const states = await VENUE_SERVICE.stationStates(tx, cfg, now);
-        const queues = await listStationQueues(tx, live);
         const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live);
         const shown = [];
-        for (const { id, name, available } of screen.stations) {
-          if (!available) {
-            shown.push({ id, name, available });
+        for (const { id, name, available, switchedOff } of slots) {
+          if (!available && !switchedOff) {
+            shown.push({ id, name, available, switchedOff });
             continue;
           }
           const state = states.get(id);
@@ -456,6 +467,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             id,
             name,
             available,
+            ...(available ? {} : { switchedOff }),
             today: {
               open: state.open,
               isDefault: state.isDefault,
@@ -485,14 +497,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
       await withTransaction(deps.db, async (tx) => {
-        const shown = availableStations(await stationScreenOf(tx, c, deps.cfg, device));
+        const screen = await stationScreenOf(tx, c, deps.cfg, device);
         assertProfileAction(device, "prepare-orders");
         if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
         const [notice] = await tx
           .select({ stationId: kitchenNotices.stationId })
           .from(kitchenNotices)
           .where(eq(kitchenNotices.id, id));
-        if (notice === undefined || !shown.has(notice.stationId))
+        if (
+          notice === undefined ||
+          !(await worksStation(tx, deps.cfg, device, screen, notice.stationId))
+        )
           throw new AppError("kitchen_notice.not_found", { noticeId: id });
         await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId: notice.stationId });
       });
@@ -516,14 +531,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
-        const shown = availableStations(await stationScreenOf(tx, c, deps.cfg, device));
+        const screen = await stationScreenOf(tx, c, deps.cfg, device);
         // `advanceTicketItem` NEVER checks the station, so the station guard is the route's job.
         // An unknown item is left to the verb → `ticket.invalid_transition`.
         const [item] = await tx
           .select({ stationId: ticketItems.stationId })
           .from(ticketItems)
           .where(eq(ticketItems.id, id));
-        if (item !== undefined && !shown.has(item.stationId)) {
+        if (
+          item !== undefined &&
+          !(await worksStation(tx, deps.cfg, device, screen, item.stationId))
+        ) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
         await advanceTicketItem(tx, cfg, id, to);
@@ -823,6 +841,64 @@ async function kitchenScreenOf(
   return { screen, personId };
 }
 
-function availableStations(screen: ResolvedKitchenScreen): ReadonlySet<string> {
-  return new Set(screen.stations.filter((slot) => slot.available).map((slot) => slot.id));
+/**
+ * What a kitchen display's station screen lists, in display order, and the queue of each station
+ * it works: an available one, or one switched off on its own page, whose waiting dishes stay until
+ * done (owner 2026-10-09). A station a narrowing took is listed with no queue. When the device's
+ * list and its profile's are both every, a switched-off station is listed only while dishes wait.
+ */
+async function stationScreenSlots(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId">,
+  device: DeviceBinding,
+  screen: ResolvedKitchenScreen,
+): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
+  const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
+  if (!(await VENUE_SERVICE.followsEveryStation(tx, cfg, device.deviceId, "station"))) {
+    const queues = await listStationQueues(
+      tx,
+      screen.stations.filter(worked).map((slot) => slot.id),
+    );
+    return { slots: [...screen.stations], queues };
+  }
+  const listed = new Map(screen.stations.map((slot) => [slot.id, slot]));
+  const everyStation = await stationsHere(tx, cfg);
+  const off = everyStation.filter((station) => !station.active && !listed.has(station.id));
+  const queues = await listStationQueues(tx, [
+    ...screen.stations.filter(worked).map((slot) => slot.id),
+    ...off.map((station) => station.id),
+  ]);
+  for (const station of off) if (queues.get(station.id)!.length === 0) queues.delete(station.id);
+  const slots = everyStation.flatMap(({ id, name }): ScreenSlot[] => {
+    const slot = listed.get(id);
+    if (slot !== undefined) return [slot];
+    return queues.has(id) ? [{ id, name, available: false, switchedOff: true }] : [];
+  });
+  return { slots, queues };
+}
+
+/** Whether the station screen may start, ready and acknowledge work at `stationId`: as
+ *  {@link stationScreenSlots} lists it with a queue. */
+async function worksStation(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId">,
+  device: DeviceBinding,
+  screen: ResolvedKitchenScreen,
+  stationId: string,
+): Promise<boolean> {
+  const slot = screen.stations.find((candidate) => candidate.id === stationId);
+  if (slot !== undefined) return slot.available || slot.switchedOff;
+  if (!(await VENUE_SERVICE.followsEveryStation(tx, cfg, device.deviceId, "station"))) return false;
+  const station = (await stationsHere(tx, cfg)).find((candidate) => candidate.id === stationId);
+  if (station === undefined || station.active) return false;
+  return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;
+}
+
+/** The location's stations, switched off ones too, in display order. */
+function stationsHere(tx: Transaction, cfg: Pick<TillConfig, "locationId">) {
+  return tx
+    .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.locationId, cfg.locationId))
+    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
 }

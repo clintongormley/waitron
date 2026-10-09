@@ -1060,7 +1060,12 @@ describe("Device API — the device-guarded routes", () => {
       }),
     );
     const after = await read();
-    expect(after.stations[1]).toEqual({ id: fria!.id, name: "Fría", available: false });
+    expect(after.stations[1]).toEqual({
+      id: fria!.id,
+      name: "Fría",
+      available: false,
+      switchedOff: false,
+    });
     expect(after.stations.map((s) => [s.id, s.available])).toEqual([
       [venue.defaultStationId, true],
       [fria!.id, false],
@@ -1073,6 +1078,141 @@ describe("Device API — the device-guarded routes", () => {
     expect(narrowed.status).toBe(403);
     expect(await narrowed.json()).toMatchObject({
       error: { code: "device.forbidden_station", params: { stationId: fria!.id } },
+    });
+  });
+
+  describe("a station switched off on its own page keeps its waiting dishes (owner 2026-10-09)", () => {
+    type Entry = {
+      id: string;
+      name: string;
+      available: boolean;
+      switchedOff?: boolean;
+      today?: { why: string };
+      queue?: { items: { id: string }[] }[];
+      notices?: { id: string }[];
+    };
+    const queued = (entry: Entry) =>
+      entry.queue?.flatMap((group) => group.items.map((item) => item.id));
+
+    /** A dish at Grill (the default station) and one, with a void notice, at Fría. */
+    async function seed() {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const fria = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+      );
+      const { orderId, items } = await fireOrder(venue);
+      await moveItemToStation(items[1]!, fria.id);
+      await withTransaction(suite.db, async (tx) => {
+        const { rows } = await tx.execute<{ id: string }>(sql`
+          select id from working_order_lines where working_order_id = ${orderId} order by line_no`);
+        await VENUE_SERVICE.recordKitchenNotices(
+          tx,
+          venue.cfg,
+          orderId,
+          [
+            {
+              workingOrderLineId: rows[1]!.id,
+              stationId: fria.id,
+              quantity: decimal("1"),
+              wasStarted: false,
+            },
+          ],
+          "void",
+        );
+      });
+      const notice = (
+        await withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+        )
+      )[0]!.id;
+      return { venue, app, fria: fria.id, orderId, items, notice };
+    }
+
+    const read = async (app: Hono, jar: string) => {
+      const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { stations: Entry[] }).stations;
+    };
+    const advance = (app: Hono, jar: string, item: string, to: string) =>
+      send(app, "POST", `/api/device/ticket-items/${item}/advance`, { cookie: jar, body: { to } });
+    const acknowledge = (app: Hono, jar: string, notice: string) =>
+      send(app, "POST", `/api/device/kitchen-notices/${notice}/acknowledge`, { cookie: jar });
+
+    it("sends it with its queue, notices and today, and its dish and notice can still be worked", async () => {
+      const { venue, app, fria, orderId, items, notice } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      await switchStationOff(fria);
+
+      const [, off] = await read(app, jar);
+      expect(off).toMatchObject({
+        id: fria,
+        name: "Fría",
+        available: false,
+        switchedOff: true,
+        today: { why: "switched_off" },
+        notices: [{ id: notice }],
+      });
+      expect(queued(off!)).toEqual([items[1]]);
+      expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+      expect((await advance(app, jar, items[1]!, "ready")).status).toBe(204);
+      expect((await acknowledge(app, jar, notice)).status).toBe(204);
+
+      await suite.db.execute(
+        sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${orderId}`,
+      );
+      const [, done] = await read(app, jar);
+      expect(done).toMatchObject({ id: fria, available: false, switchedOff: true, notices: [] });
+      expect(queued(done!)).toEqual([]);
+    });
+
+    it("sends one a narrowing took with no queue, and refuses its dish and its notice", async () => {
+      const { venue, app, fria, items, notice } = await seed();
+      const { jar, profileId } = await enrolStationScreen(app, venue, [
+        venue.defaultStationId,
+        fria,
+      ]);
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          station: { stationIds: [venue.defaultStationId], zoneIds: null },
+        }),
+      );
+      const [, taken] = await read(app, jar);
+      expect(taken).toEqual({ id: fria, name: "Fría", available: false, switchedOff: false });
+      const refused = await advance(app, jar, items[1]!, "preparing");
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "device.forbidden_station", params: { stationId: fria } },
+      });
+      const ack = await acknowledge(app, jar, notice);
+      expect(ack.status).toBe(404);
+      expect(await ack.json()).toMatchObject({ error: { code: "kitchen_notice.not_found" } });
+    });
+
+    it("lists it on an every-station screen under an every-station profile only while dishes wait there", async () => {
+      const { venue, app, fria, orderId, items } = await seed();
+      const postre = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Postre", isDefault: false }),
+      );
+      const { jar } = await enrolStationScreen(app, venue, null);
+      await switchStationOff(fria);
+      await switchStationOff(postre.id);
+
+      const waiting = await read(app, jar);
+      expect(waiting.map((entry) => entry.id)).not.toContain(postre.id);
+      const off = waiting.find((entry) => entry.id === fria);
+      expect(off).toMatchObject({ name: "Fría", available: false, switchedOff: true });
+      expect(queued(off!)).toEqual([items[1]]);
+      expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+
+      await suite.db.execute(
+        sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${orderId}`,
+      );
+      const done = await read(app, jar);
+      expect(done.map((entry) => entry.id)).toEqual([venue.defaultStationId]);
+      const after = await advance(app, jar, items[1]!, "ready");
+      expect(after.status).toBe(403);
+      expect(await after.json()).toMatchObject({ error: { code: "device.forbidden_station" } });
     });
   });
 
@@ -1122,7 +1262,14 @@ describe("Device API — the device-guarded routes", () => {
       {
         kind: "station",
         available: true,
-        stations: [{ id: venue.defaultStationId, name: expect.any(String), available: false }],
+        stations: [
+          {
+            id: venue.defaultStationId,
+            name: expect.any(String),
+            available: false,
+            switchedOff: false,
+          },
+        ],
         zones: null,
       },
     ]);
@@ -1866,7 +2013,14 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         {
           kind: "station",
           available: true,
-          stations: [{ id: venue.defaultStationId, name: expect.any(String), available: true }],
+          stations: [
+            {
+              id: venue.defaultStationId,
+              name: expect.any(String),
+              available: true,
+              switchedOff: false,
+            },
+          ],
           zones: null,
         },
       ]);
@@ -2086,7 +2240,9 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       expect(expected).toMatchObject([
         {
           kind: "station",
-          stations: expect.arrayContaining([{ id: grill, name: "Grill", available: false }]),
+          stations: expect.arrayContaining([
+            { id: grill, name: "Grill", available: false, switchedOff: false },
+          ]),
         },
       ]);
 
@@ -3470,7 +3626,14 @@ describe("a device's approved profiles and switching its active one", () => {
         {
           kind: "station",
           available: true,
-          stations: [{ id: venue.defaultStationId, name: expect.any(String), available: false }],
+          stations: [
+            {
+              id: venue.defaultStationId,
+              name: expect.any(String),
+              available: false,
+              switchedOff: false,
+            },
+          ],
           zones: null,
         },
       ]);

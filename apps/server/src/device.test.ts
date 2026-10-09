@@ -256,8 +256,8 @@ describe("accepting a device writes its kitchen screens", () => {
         kind: "station",
         available: true,
         stations: [
-          { id: stationId, name: "Cocina", available: true },
-          { id: grill.id, name: "Plancha", available: true },
+          { id: stationId, name: "Cocina", available: true, switchedOff: false },
+          { id: grill.id, name: "Plancha", available: true, switchedOff: false },
         ],
         zones: null,
       },
@@ -319,12 +319,12 @@ describe("accepting a device writes its kitchen screens", () => {
       {
         kind: "station",
         available: true,
-        stations: [{ id: stationId, name: "Cocina", available: true }],
+        stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },
     ]);
     expect((await shown(cfg, second.deviceId))[0]?.stations).toEqual([
-      { id: grill.id, name: "Plancha", available: true },
+      { id: grill.id, name: "Plancha", available: true, switchedOff: false },
     ]);
   });
 
@@ -340,7 +340,7 @@ describe("accepting a device writes its kitchen screens", () => {
       {
         kind: "pass",
         available: true,
-        stations: [{ id: expect.any(String), name: "Cocina", available: true }],
+        stations: [{ id: expect.any(String), name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },
     ]);
