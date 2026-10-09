@@ -1523,8 +1523,9 @@ export class MenusScreen extends LitElement {
   }
 
   /** Moves one member into another list of the menu, as the bulk Move does, and opens that list so
-   * the moved row is drawn. Its paths are checked when it is sent, not when it is queued, since a
-   * change that lands while it waits can take either list off the menu. */
+   * the moved row is drawn while the menu on screen still has it there. Its paths are checked when
+   * it is sent: while it waits, a change can move either list or take it off the menu, or the
+   * person can open another menu. */
   #moveInto(from: string[], memberId: string, to: string[], position: number | undefined): void {
     const menuId = this.menuId;
     // `#targetAt` falls back to an ancestor for a path that no longer leads anywhere.

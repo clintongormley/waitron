@@ -994,8 +994,8 @@ pointer drag starts from the grip only, with Products' ghost and gap (the shared
 section the menu owns, a release puts the member at the end of that section; the row's first cell
 is marked `part="drop-target"` and no gap is drawn. Over any other row, or the top or bottom
 quarter of that one, the gap shows beside the row. Beside a sibling the release reorders the
-list as before (`wt-member-move`), with the gap before a sibling above the member and after one
-below it. Beside a row of another list it moves the member into that list at that place
+list (`wt-member-move`), with the gap before a sibling above the member and after the last drawn
+row of one below it. Beside a row of another list it moves the member into that list at that place
 (`wt-member-move-into`), with the gap before the row while the pointer is in its upper half and
 after its last drawn row while in its lower half. Nothing is offered — no gap, no mark, and a
 release sends nothing — over the dragged row or anything drawn inside it, over a list inside a
@@ -1010,11 +1010,13 @@ list already holds the same product or section; at the top level it does nothing
 these two keys moves a product no longer in the catalogue. Each key
 announces the move, and the grip lists the four keys in `aria-keyshortcuts`. A move into another
 list sends the same request as Move to section… (`moveMembersInto`), so a moved product keeps the
-menu's price for it. The screen then reads the menu again and opens the destination so the moved
-row is drawn; after ArrowLeft or ArrowRight, focus goes to the moved row's grip, or back to the old
+menu's price for it. The screen then reads the menu again and, while the menu on screen still has the
+destination where it was, opens it so the moved row is drawn; otherwise the member error line says
+the move was saved but another change took the destination away; after ArrowLeft or ArrowRight, focus goes to the moved row's grip, or back to the old
 grip when no such row is drawn. A refusal shows in the tab's member error line, naming the
-destination list when it is not the list on screen, and the menu is read again; a move whose list
-another change has taken off the menu sends nothing and reads the menu again. When a window
+destination list when it is not the list on screen, and the menu is read again; a move whose source or
+destination list another change has moved or taken off the menu by the time it is sent, or one
+still waiting when another menu is opened, sends nothing and reads the menu again. When a window
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
 the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
 member; at the top level, which has no row, to the toolbar's Add menu, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,

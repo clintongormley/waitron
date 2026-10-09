@@ -491,8 +491,8 @@ export class MenuStructureTable extends LitElement {
   }
 
   /** What a release over the row `over` would do. A closed or empty section the menu owns takes the
-   * member at its end over its middle half; elsewhere a row offers the place beside it in its own list, by
-   * the pointer's half. Branches are compared by whole member ids: `m-fav` does not hold
+   * member at its end over its middle half; elsewhere a sibling offers its own place in the list,
+   * and a row of another list the place beside it by the pointer's half. Branches are compared by whole member ids: `m-fav` does not hold
    * `m-fav-drinks`. */
   #targetFor(dragged: string, over: string): Drop | undefined {
     const row = this.#movable(dragged);
@@ -517,7 +517,6 @@ export class MenuStructureTable extends LitElement {
     return { kind: "beside", key: over, side: height < 0.5 ? "before" : "after" };
   }
 
-  /** Whether the products this table holds include `ref`'s product. */
   #known(ref: MemberRef): boolean {
     return ref.kind === "section" || this.#productById.has(ref.productId);
   }
