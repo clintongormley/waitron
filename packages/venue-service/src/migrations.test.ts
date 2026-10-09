@@ -139,6 +139,22 @@ async function indexesOf(
   return out;
 }
 
+describe("retired service-style storage", () => {
+  it.each([
+    {
+      statement: sql`update departments set default_service_mode = 'prepay'`,
+      column: "default_service_mode",
+    },
+    {
+      statement: sql`update zone_service_policies set service_mode = 'prepay'`,
+      column: "service_mode",
+    },
+  ])("refuses a write to the retired $column column", async ({ statement, column }) => {
+    const refused = await captureError(() => withTransaction(db, (tx) => tx.execute(statement)));
+    expect(engineErrorMessage(refused)).toContain(`no such column: ${column}`);
+  });
+});
+
 describe("the venue-service migration set carries no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const carrying: string[] = [];
