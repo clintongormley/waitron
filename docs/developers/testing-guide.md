@@ -1164,7 +1164,7 @@ that browser action. The handlers then called `preventDefault`, and the printer 
 observed that the actual keydown was cancelled and the warning stayed open until a subsequent
 answer.
 
-On 2026-10-06 the printer and Settings suites passed 37 cases together. In an independently
+In W69's run the printer and Settings suites passed 37 cases together. In an independently
 installed candidate, removing the printer cancellation failed its native case while a pristine form
 still closed directly. A preceding deletion survived when the test asserted only the visible
 warning, so timing alone does not guard the cancellation. The inline printer editor and its suite

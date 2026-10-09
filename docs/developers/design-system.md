@@ -3113,9 +3113,11 @@ the strip shows its start). When the tabs overflow, the strip fades each cut end
 `--wt-space-6`, so a person sees that it scrolls: `wt-tabs` sets `data-overflow` (`start`, `end`
 or `both`) from the scroll position, and a mask draws the fade. A selected tab stops clear of a
 faded end that has another tab beyond it, and where the room beside the selected tab is short the
-fade narrows to at most half of it, so that tab is never drawn faint (the "fades only the cut end",
-"a selected middle tab stops clear of the fade" and "the fade narrows to leave that tab clear"
-cases in `packages/ui/src/components/wt-tabs.test.ts`). Hidden panels
+fade narrows to at most half of it, so that tab is not drawn faint after the strip brings it into
+view. A scroll by hand only redraws the fades (`wt-tabs` handles `scroll` with its overflow check
+alone), so it can leave the selected tab under one (the
+"fades only the cut end", "a selected middle tab stops clear of the fade" and "the fade narrows to
+leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hidden panels
 remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 

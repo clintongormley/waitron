@@ -1495,7 +1495,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Spanish and nested routing-grid labels split mid-word at 390 px** — the grid breaks words with
   `overflow-wrap: anywhere` and sets no `hyphens`
   (`packages/venue-service/src/dashboard/routing-grid.ts`); hyphenating would need `hyphens: auto`
-  and a page `lang`, which the dashboard does not set (`apps/dashboard/index.html`). Left open by
+  and a `lang` on the grid or an element above it, and the dashboard sets none
+  (`apps/dashboard/index.html`'s `<html>` has none). Left open by
   A366 slice 4 Part A.
 
 - **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
