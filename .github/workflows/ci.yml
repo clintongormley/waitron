@@ -758,7 +758,8 @@ jobs:
   # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
   #
   # Six shards: a shard cannot finish before its slowest file, src/bill-payments.test.ts (about
-  # 175 s), so more shards would not shorten the server's jobs until that file gets faster.
+  # 175 s), so more shards would shorten the server's slowest job by at most the ~20 s of other
+  # files beside it (run 37956067661).
   #
   # The dedicated runners also let apps/server run in SEVERAL workers (apps/server/vitest.config.ts's
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`

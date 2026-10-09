@@ -1278,8 +1278,9 @@ wired in fails the hook, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
-the three named below; wired, the root project is green. Since A441 (2026-10-09) a fourth,
-`scripts/root-scope-consumers.test.mjs`, fails for a new member with a `test:coverage` script until
+the three named below; wired, the root project is green. Since A441 (2026-10-09) a fourth and a fifth,
+`scripts/root-scope-consumers.test.mjs` and the vitest-file-progress command-line case in
+`scripts/changed-packages.test.mjs`, fail for a new member with a `test:coverage` script until
 the member is added to the `scripts/vitest-file-progress.mjs` entry of `ROOT_SCOPE_CONSUMERS` in
 `scripts/changed-scope.mjs` (read from the guard, not measured). The three:
 

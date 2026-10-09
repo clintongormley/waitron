@@ -320,9 +320,11 @@ null, empty or blank. Lane D RUNNER §7 bars this campaign from editing the rule
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
-- **The package suites' databases stay on the runner's disk.** Measured in A441 (#1477, run
-  37945937673): with `TMPDIR=/dev/shm` the server shards and `apps/server/src/bill-payments.test.ts`
-  took the same time, so the runner's disk is not what makes them slow.
+- **The package suites' databases stay on the runner's disk.** With `TMPDIR=/dev/shm` on
+  every database test job (A441, #1477: run 37945937673 against main run 37938947421, one run each),
+  no job's time moved consistently: the server shards took 219, 330 and 424 s against 297, 273 and
+  438 s, and `apps/server/src/bill-payments.test.ts` 175.8 s against 174.6 s. The root suites were
+  not measured.
 
 **The development stack:**
 

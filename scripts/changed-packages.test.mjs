@@ -8,6 +8,7 @@ import {
   scriptRunCheck,
   workspacePackages,
 } from "./changed-packages.mjs";
+import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.mjs";
 
 const ROOT = "/repo";
 
@@ -744,22 +745,21 @@ describe("the CLI", () => {
   });
 
   // Pinned against the real workspace rather than a copied list: every member that has tests.
-  it("selects every real member with tests when scripts/vitest-file-progress.mjs changes", () => {
-    const listed = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
-      encoding: "utf8",
-      cwd: repoRoot,
-    });
-    expect(listed.status).toBe(0);
-    const tested = workspacePackages(listed.stdout, repoRoot)
-      .map(({ name }) => name)
-      .filter((name) => !PACKAGES_WITHOUT_TESTS.includes(name))
-      .sort();
-    expect(tested).toContain("@waitron/shared");
+  it(
+    "selects every real member with tests when scripts/vitest-file-progress.mjs changes",
+    () => {
+      const tested = workspaceMembers()
+        .map(({ name }) => name)
+        .filter((name) => !PACKAGES_WITHOUT_TESTS.includes(name))
+        .sort();
+      expect(tested).toContain("@waitron/shared");
 
-    expect(run("scripts/vitest-file-progress.mjs\n").stdout).toBe(
-      `code=true\nscope=packages\npackages=${tested.join(" ")}\nroot=true\ndeploy=false\n`,
-    );
-  });
+      expect(run("scripts/vitest-file-progress.mjs\n").stdout).toBe(
+        `code=true\nscope=packages\npackages=${tested.join(" ")}\nroot=true\ndeploy=false\n`,
+      );
+    },
+    PNPM_LS_SPAWN_TIMEOUT_MS + 30_000,
+  );
 
   it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
     expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(

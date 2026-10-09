@@ -184,7 +184,7 @@ hook, or how tests are scheduled:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
-- **Adding a workspace package fails root guards until it is named in the shard lists and in `ROOT_SCOPE_CONSUMERS`**, and
+- **Adding a workspace package fails root guards until it is named in the shard lists and, for a package with tests, in `ROOT_SCOPE_CONSUMERS`' `vitest-file-progress.mjs` entry**, and
   one of them CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
   and reads like a broken checkout.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides

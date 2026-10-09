@@ -7,7 +7,7 @@ name: Mutation testing
 # 05:17:07) — which predates both Stryker 10 and the 2026-09-20 tests, so it is
 # indicative rather than current, and the direction either change moved it has not
 # been measured. Either way it does not belong gating merges the way ci.yml's
-# `test:coverage` shards do: it doesn't tell you "did I break something,"
+# coverage jobs do: it doesn't tell you "did I break something,"
 # it tells you "how good are my tests," which is a slower-moving signal worth
 # reviewing periodically rather than blocking merges on. Scheduled weekly, plus
 # on-demand via workflow_dispatch so it can be run against a specific branch

@@ -255,6 +255,19 @@ function artifactUploadBase(body) {
   return line === undefined ? undefined : /name: (\S+?)-\$\{\{/.exec(line)?.[1];
 }
 
+/** The non-comment lines of the step uploading the matrix-named blob artifact, or undefined. */
+function artifactUploadStep(body) {
+  const named = body.findIndex((line) =>
+    /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
+  );
+  if (named === -1) return undefined;
+  const start = body.findLastIndex((line, index) => index < named && /^ {6}- /.test(line));
+  const next = body.findIndex((line, index) => index > named && /^ {6}- /.test(line));
+  return body
+    .slice(start, next === -1 ? body.length : next)
+    .filter((line) => !line.trim().startsWith("#"));
+}
+
 /** The blob artifact's base name from a `download-artifact` `pattern: <base>-*`. */
 function artifactDownloadBase(body) {
   const line = body.find((candidate) => /^ {10}pattern: \S+-\*\s*$/.test(candidate));
@@ -1261,6 +1274,19 @@ describe("the sharded jobs", () => {
       expect(upload, `${shard.id} uploads no matrix-named blob artifact`).toBeDefined();
       expect(download, `${merge.id} downloads no *-pattern blob artifact`).toBeDefined();
       expect(upload).toBe(download);
+    }
+  });
+
+  // No shard job checks that its package has a test:shard script to run, so a shard that ran
+  // nothing writes no blob and only a failing upload turns it red.
+  it("fail a shard whose blob upload finds no file", () => {
+    for (const shard of shardedJobs) {
+      const step = artifactUploadStep(shard.body);
+      expect(step, `${shard.id} uploads no matrix-named blob artifact`).toBeDefined();
+      expect(
+        step.map((line) => line.trim()),
+        shard.id,
+      ).toContain("if-no-files-found: error");
     }
   });
 
