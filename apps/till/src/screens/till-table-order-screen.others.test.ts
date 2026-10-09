@@ -279,7 +279,11 @@ describe("till-table-order-screen: Take over draft", () => {
     await el.updateComplete;
     takeOverButton(panels(el)[0]!).click();
     await el.updateComplete;
+    const closed = new Promise((resolve) =>
+      dialog(el).addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(dialog(el).open).toBe(false));
     expect(heard).toHaveBeenCalledOnce();
   });

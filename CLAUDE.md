@@ -184,7 +184,7 @@ hook, or how tests are scheduled:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
-- **Adding a workspace package fails root guards until it is named in the shard lists and, for a package with tests, in `ROOT_SCOPE_CONSUMERS`' `vitest-file-progress.mjs` entry**, and
+- **Adding a workspace package fails root guards until it is named in the shard lists**, and
   one of them CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
   and reads like a broken checkout.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
@@ -664,6 +664,11 @@ browser test** — most of these rules exist because a test passed while proving
   with the request's generation, or an old read blocks the reopened dialog.
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first**, or it stalls on its own paused `requestAnimationFrame`.
+- **A browser test that checks something a screen does on a dialog's `wt-close` waits for that event
+  first, never for `vi.waitFor`'s one second alone.** `wt-dialog` sends it only when Chromium reports the
+  native close, which Chromium queues for the next rendered frame. Cost: a devices-screen test failed
+  A441's CI (#1477). Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-waits-for-a-dialogs-close-event-not-a-timer).
 - **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
   answered — never by a fixed sleep.** Cost: the Payments screen's reader-status tests failed CI on
   a late grant, fixed twice — W59 (#1168), then A320 (#1342). Nothing guards it. Receipt:

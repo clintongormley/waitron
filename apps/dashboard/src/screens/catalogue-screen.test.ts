@@ -24,7 +24,12 @@ import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -899,7 +904,9 @@ describe("catalogue-screen", () => {
     await el.updateComplete;
     emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
     await vi.waitFor(() => expect(step(el).open).toBe(true));
+    const closed = dialogClosed(step(el));
     step(el).shadowRoot!.querySelector<HTMLElement>('[data-test="skip"]')!.click();
+    await closed;
     await vi.waitFor(() => expect(step(el).open).toBe(false));
     await afterDialogCloses(el);
     expect(table.shadowRoot!.activeElement).toBe(
@@ -915,7 +922,9 @@ describe("catalogue-screen", () => {
     const table = await productTable(el);
     table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product-c1"]')!.click();
     await el.updateComplete;
+    const closed = dialogClosed(editor(el));
     emit(editor(el), "wt-cancel", {});
+    await closed;
     await vi.waitFor(() => expect(editor(el).open).toBe(false));
     await afterDialogCloses(el);
     expect(table.shadowRoot!.activeElement).toBe(
@@ -1226,7 +1235,14 @@ describe("catalogue-screen", () => {
         (form: HTMLElement) =>
           form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click(),
       ],
-      ["Escape", () => userEvent.keyboard("{Escape}")],
+      [
+        "Escape",
+        async (form: HTMLElement) => {
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+          await userEvent.keyboard("{Escape}");
+          await closed;
+        },
+      ],
     ])(
       "goes back to the row after %s closes the list's form, even when the editor draws the row enabled again only after the form has shut",
       async (_, close) => {
@@ -1541,7 +1557,9 @@ describe("catalogue-screen", () => {
     let cancels = 0;
     form.addEventListener("wt-cancel", () => cancels++);
 
+    const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(cancels).toBe(1));
     await flush(el);
     await closeReportsDelivered();
@@ -1587,7 +1605,14 @@ describe("catalogue-screen", () => {
         (form: HTMLElement) =>
           form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click(),
       ],
-      ["Escape", () => userEvent.keyboard("{Escape}")],
+      [
+        "Escape",
+        async (form: HTMLElement) => {
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+          await userEvent.keyboard("{Escape}");
+          await closed;
+        },
+      ],
     ])("goes back to Add unit after %s closes it", async (_, close) => {
       const el = await mountWithProduct(stubApi());
       const form = await openUnitForm(el);
@@ -1612,7 +1637,14 @@ describe("catalogue-screen", () => {
         (form: HTMLElement) =>
           form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click(),
       ],
-      ["Escape", () => userEvent.keyboard("{Escape}")],
+      [
+        "Escape",
+        async (form: HTMLElement) => {
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+          await userEvent.keyboard("{Escape}");
+          await closed;
+        },
+      ],
     ])(
       "goes back to Add unit after %s closes it, even when the editor draws it enabled again only after the form has shut",
       async (_, close) => {
@@ -2325,7 +2357,9 @@ describe("catalogue-screen", () => {
       const confirmation = () =>
         courseList(el)!.shadowRoot!.querySelector('[data-test="delete-course-modal"]');
       await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+      const closed = dialogClosed(confirmation()!);
       await userEvent.keyboard("{Escape}");
+      await closed;
       await vi.waitFor(() => expect(confirmation()).toBeNull());
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
@@ -2349,7 +2383,9 @@ describe("catalogue-screen", () => {
       expect(coursesWindow(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k1");
       // Escape still closes it, dropping the refused name.
+      const closed = dialogClosed(coursesWindow(el));
       await userEvent.keyboard("{Escape}");
+      await closed;
       await vi.waitFor(() => expect(editor(el).childOpen).toBe(false));
       await flush(el);
       expect(coursesWindow(el).open).toBe(false);
@@ -2461,7 +2497,9 @@ describe("catalogue-screen", () => {
       await addCourse(el, "Postres");
       let closes = 0;
       coursesWindow(el).addEventListener("wt-close", () => closes++);
+      const closed = dialogClosed(coursesWindow(el));
       await userEvent.keyboard("{Escape}");
+      await closed;
       await vi.waitFor(() => expect(closes).toBe(1));
       await flush(el);
       await flush(el);
@@ -2481,7 +2519,14 @@ describe("catalogue-screen", () => {
         (el: CatalogueScreen) =>
           el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!.click(),
       ],
-      ["Escape", () => userEvent.keyboard("{Escape}")],
+      [
+        "Escape",
+        async (el: CatalogueScreen) => {
+          const closed = dialogClosed(coursesWindow(el));
+          await userEvent.keyboard("{Escape}");
+          await closed;
+        },
+      ],
     ])("goes back to the course box after %s closes it", async (_, close) => {
       const el = await openCourses(courseApi(), "k1");
       await done(el);

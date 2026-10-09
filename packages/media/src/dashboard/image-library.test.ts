@@ -979,6 +979,9 @@ for (const [locale, label] of [
 function openDialog(): HTMLDialogElement {
   return el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
 }
+function dialogClosed(dialog: Element): Promise<unknown> {
+  return new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -1047,7 +1050,9 @@ it("ignores Escape while a save is in flight and honours it once the save has se
   save.reject({ code: "image.invalid_metadata" });
   await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
   (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement).focus();
+  const closed = dialogClosed(el.shadowRoot!.querySelector("wt-modal")!);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
   expect(client.updateImage).toHaveBeenCalledOnce();
 });
@@ -1293,7 +1298,9 @@ it("dismisses an idle delete confirmation with Escape, without deleting", async 
     expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
   );
   (el.shadowRoot!.querySelector("wt-modal wt-button[slot=cancel]") as HTMLElement).focus();
+  const closed = dialogClosed(el.shadowRoot!.querySelector("wt-modal")!);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
   expect(client.deleteImage).not.toHaveBeenCalled();
 });
@@ -1883,7 +1890,9 @@ it.each([
     "Escape",
     async () => {
       viewer()!.querySelector<HTMLElement>("[data-test=close-preview]")!.focus();
+      const closed = dialogClosed(viewer()!);
       await userEvent.keyboard("{Escape}");
+      await closed;
     },
   ],
   [
@@ -1943,7 +1952,9 @@ it("keeps an enclosing picker open when the preview is closed with Escape", asyn
   thumbnail().click();
   await openedViewer();
   viewer()!.querySelector<HTMLElement>("[data-test=close-preview]")!.focus();
+  const closed = dialogClosed(viewer()!);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await previewClosed();
   expect(enclosingClose).not.toHaveBeenCalled();
 });

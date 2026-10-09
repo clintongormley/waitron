@@ -61,6 +61,10 @@ async function edit(library: HTMLElement, value: string) {
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await (library as HTMLElementTagNameMap["dashboard-image-library"]).updateComplete;
 }
+function editorClosed(library: HTMLElement): Promise<unknown> {
+  const modal = library.shadowRoot!.querySelector("wt-modal")!;
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
 function cancel(library: HTMLElement) {
   library.shadowRoot!.querySelector<HTMLElement>("wt-modal wt-button[slot=cancel]")!.click();
 }
@@ -94,9 +98,11 @@ for (const route of ["cancel", "escape"] as const) {
     expect(
       library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
     ).toBe("Pan editado");
+    const closed = editorClosed(library);
     cancel(library);
     await question();
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await closed;
     await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
     expect(app.leave.coordinator.isDirty()).toBe(false);
     expect(app.client.updateImage).not.toHaveBeenCalled();
@@ -109,7 +115,9 @@ it("Image names reverted to their trimmed starting values close without a questi
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await edit(library, " Pan ");
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  const closed = editorClosed(library);
   cancel(library);
+  await closed;
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect((await question()).open).toBe(false);
 });
@@ -132,7 +140,9 @@ it("Upload protects a selected opaque File and becomes clean when cleared", asyn
   file(library, null);
   await library.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  const closed = editorClosed(library);
   cancel(library);
+  await closed;
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(app.client.uploadImage).not.toHaveBeenCalled();
   expect(app.client.deleteImage).not.toHaveBeenCalled();
@@ -291,7 +301,9 @@ it("a successful Image write commits submitted values while preserving newer inp
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(save.variant).toBe("secondary");
   expect(save.disabled).toBe(true);
+  const closed = editorClosed(library);
   cancel(library);
+  await closed;
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect((await question()).open).toBe(false);
 });

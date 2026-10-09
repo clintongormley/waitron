@@ -4,7 +4,7 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
@@ -1190,6 +1190,13 @@ async function colorChooser(el: CatalogueBrowser) {
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return form;
 }
+function chooserCloseReported(el: CatalogueBrowser): Promise<unknown> {
+  return dialogClosed(
+    el
+      .shadowRoot!.querySelector("dashboard-category-color-form")!
+      .shadowRoot!.querySelector("wt-modal")!,
+  );
+}
 function chooserClosed(el: CatalogueBrowser) {
   return !el.shadowRoot!.querySelector("dashboard-category-color-form")!.open;
 }
@@ -1282,7 +1289,9 @@ it("sends nothing when a row's colour chooser is left with Esc or Cancel", async
   const el = await mountBrowser();
   await menuAction(el, "color-d");
   await colorChooser(el);
+  const closed = chooserCloseReported(el);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   await menuAction(el, "color-d");
   (await colorChooser(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
@@ -1301,7 +1310,9 @@ it("opens an uncoloured category's chooser on No colour, not the colour it inher
     form.shadowRoot!.querySelector(`[data-color="${color}"]`)!.getAttribute("aria-checked");
   expect(checked("")).toBe("true");
   expect(checked("#b12525")).toBe("false");
+  const closed = chooserCloseReported(el);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(el.api.updateCategory).not.toHaveBeenCalled();
   await menuAction(el, "color-b");
@@ -1436,7 +1447,9 @@ it("hands the cursor back to a new category's box, its name kept, when its colou
   await userEvent.keyboard("Juice");
   await userEvent.click(await boxSquare(el));
   await colorChooser(el);
+  const closed = chooserCloseReported(el);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(await nameBox(el)).toBe(box);
   expect(box.value).toBe("Juice");

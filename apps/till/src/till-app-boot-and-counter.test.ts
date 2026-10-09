@@ -3664,7 +3664,13 @@ describe("department transfers across operator lifetimes", () => {
     await openTransfers(el);
     transferRoot(el)!.querySelector<HTMLElement>("[data-incoming=request-1] [data-view]")!.click();
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    const closed = new Promise((resolve) =>
+      transferRoot(el)!
+        .querySelector("wt-dialog")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     transferRoot(el)!.querySelector<HTMLElement>("[data-close-transfers]")!.click();
+    await closed;
     await vi.waitFor(() => expect(transferRoot(el)?.querySelector("wt-dialog")).toBeNull());
     expect(read.mock.calls[0]![1].signal.aborted).toBe(true);
     await openTransfers(el);

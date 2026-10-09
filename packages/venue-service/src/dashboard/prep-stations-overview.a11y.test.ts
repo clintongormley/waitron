@@ -160,7 +160,13 @@ it.each([
       await page.screenshot({
         path: `__screenshots__/look/overview-${locale}-${theme}-${width}-details.png`,
       });
+      const closed = new Promise((resolve) =>
+        health
+          .shadowRoot!.querySelector("wt-modal")!
+          .addEventListener("wt-close", resolve, { once: true }),
+      );
       await userEvent.keyboard("{Escape}");
+      await closed;
       await vi.waitFor(() => expect(health.shadowRoot!.querySelector("wt-modal")).toBeNull());
     } finally {
       document.body.style.background = previous.background;

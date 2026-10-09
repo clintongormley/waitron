@@ -515,7 +515,8 @@ describe("ci.yml's job graph", () => {
   });
 });
 
-const NEEDS_STEP = "Fail unless every needed job succeeded or was skipped";
+const NEEDS_STEP =
+  "Fail unless every needed job succeeded or was skipped, and no selected package's merge job was skipped";
 const JOBS_API_STEP = "Fail unless GitHub's jobs API reports every needed job succeeded or skipped";
 
 /**
@@ -654,6 +655,79 @@ describe("the `ci` aggregate's verdict", () => {
       expect(status, String(needs)).toBe(JQ_REFUSED);
       expect(output, String(needs)).toContain(message);
     }
+  });
+
+  const ciMergeJobs = mergeJobs.map(({ id, body }) => ({
+    id,
+    gate: gatesRead(body).find((name) => name !== "code"),
+    pkg: packageRunning(body, "test:merge"),
+  }));
+
+  /** Every job `ci` needs, succeeded, with `changes` carrying `outputs` and `merge` skipped. */
+  const scoped = (outputs, merge, mergeResult = "skipped") => {
+    const needs = Object.fromEntries(
+      needsOf(job("ci").body).map((id) => [id, { result: "success", outputs: {} }]),
+    );
+    needs.changes.outputs = outputs;
+    needs[merge].result = mergeResult;
+    return needs;
+  };
+
+  it("fails when a selected package's coverage merge job was skipped, naming the package", () => {
+    expect(ciMergeJobs.length).toBeGreaterThan(0);
+    for (const { id, gate, pkg } of ciMergeJobs) {
+      const { status, output } = runVerdict(scoped({ code: "true", [gate]: "true" }, id));
+      expect(status, id).toBe(JQ_REFUSED);
+      expect(output, id).toContain(`${id}: skipped`);
+      expect(output, id).toContain(
+        `${pkg} was selected but its coverage merge job ${id} was skipped`,
+      );
+    }
+  });
+
+  it("passes a skipped merge job whose package was not selected, or when no code changed", () => {
+    for (const { id, gate } of ciMergeJobs) {
+      for (const outputs of [
+        { code: "true", [gate]: "false" },
+        { code: "false", [gate]: "true" },
+        {},
+      ]) {
+        expect(runVerdict(scoped(outputs, id)).status, `${id} ${JSON.stringify(outputs)}`).toBe(0);
+      }
+    }
+  });
+
+  it("passes a selected package whose merge job succeeded", () => {
+    for (const { id, gate } of ciMergeJobs) {
+      expect(runVerdict(scoped({ code: "true", [gate]: "true" }, id, "success")).status, id).toBe(
+        0,
+      );
+    }
+  });
+
+  it("lets a failed job's message win over a skipped merge job's", () => {
+    const [{ id, gate }] = ciMergeJobs;
+    const needs = scoped({ code: "true", [gate]: "true" }, id);
+    needs.lint.result = "failure";
+    const { status, output } = runVerdict(needs);
+    expect(status).toBe(JQ_REFUSED);
+    expect(output).toContain("not succeeded or skipped: lint");
+    expect(output).not.toContain("was selected but");
+  });
+
+  // Reads ci.yml and the step's jq as TEXT: each `-merge` job's gate and package, against the
+  // step's table; the cases above prove by running it that the table is what the step reads.
+  it("names every coverage merge job in ci.yml, with the gate and package that job reads", () => {
+    const mergeIds = jobs.map(({ id }) => id).filter((id) => id.endsWith("-merge"));
+    expect(ciMergeJobs.map(({ id }) => id).sort()).toEqual(mergeIds.sort());
+    const table = [
+      ...ciVerdictStep().script.matchAll(
+        /^\s*"([a-z-]+-merge)": \{ gate: "([a-z_]+)", package: "([^"]+)" \},?$/gm,
+      ),
+    ].map(([, id, gate, pkg]) => ({ id, gate, pkg }));
+    const byId = (a, b) => a.id.localeCompare(b.id);
+    expect(table.sort(byId)).toEqual([...ciMergeJobs].sort(byId));
+    for (const { id } of table) expect(needsOf(job("ci").body)).toContain(id);
   });
 });
 

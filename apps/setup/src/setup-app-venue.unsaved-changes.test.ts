@@ -339,7 +339,13 @@ describe("setup venue unsaved changes", () => {
     await userEvent.fill(input, "Native venue edit");
     await userEvent.click(page.getByRole("button", { name: "Back", exact: true }));
     await expect.poll(() => warning(el).open).toBe(true);
+    const closed = new Promise((resolve) =>
+      warning(el)
+        .shadowRoot!.querySelector("wt-modal")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await expect.poll(() => warning(el).open).toBe(false);
     expect((el as unknown as State).screen).toBe("venue");
     expect(input.value).toBe("Native venue edit");

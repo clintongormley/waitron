@@ -98,7 +98,12 @@ describe("booking Save follows its draft", () => {
     el.open = true;
     await el.updateComplete;
     await buttonState(el, true, "secondary");
-    el.shadowRoot!.querySelector("wt-dialog")!.requestClose("cancel");
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("wt-close", resolve, { once: true }),
+    );
+    dialog.requestClose("cancel");
+    await closed;
     await expect.poll(() => el.open).toBe(false);
   });
 });

@@ -24,24 +24,23 @@ const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
 
 /**
  * The repository's own machinery. Code — a wrong classifier breaks every gating decision — but it
- * gives the root Vitest project work and gives no package any, unless ROOT_SCOPE_CONSUMERS lists it.
+ * gives the root Vitest project work and gives no package any, unless ROOT_SCOPE_CONSUMERS or
+ * GLOBAL_ROOT_FILES lists it.
  * ROOT-ONLY, like INERT_ROOT_PREFIXES: `packages/db/scripts/x.ts` is that package's.
  */
 const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
 
 /**
  * Root-scope files a workspace member depends on, each mapped to the member DIRECTORIES that depend
- * on it: a member file reads it, the ci.yml job that tests the member runs it first (the
- * `test-server-stream` job's two binary installers), or that job's test command loads it as a
- * Vitest reporter (`vitest-file-progress.mjs`). A change to one selects those members as well as the
- * root project. Without an entry, root scope emits `code=false` and ci.yml runs neither
+ * on it: a member file reads it, or the ci.yml job that tests the member runs it first (the
+ * `test-server-stream` job's two binary installers). A change to one selects those members as well
+ * as the root project. Without an entry, root scope emits `code=false` and ci.yml runs neither
  * `bundle-smoke` nor any member's build or tests.
  *
  * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a root `scripts/` file is named
- * by a member file through a relative path, run by a line starting `node scripts/` in a ci.yml
- * job that tests a member through one quoted `pnpm --filter`, or named by a `--reporter=` flag on
- * a ci.yml test command, and is not listed here for that member — or when an entry here is none
- * of these. Weaker than its name in the ways its header states —
+ * by a member file through a relative path, or run by a line starting `node scripts/` in a ci.yml
+ * job that tests a member through one quoted `pnpm --filter`, and is not listed here for that
+ * member — or when an entry here is neither. Weaker than its name in the ways its header states —
  * it reads member files and ci.yml as text, so among other gaps a path built from parts, or a
  * script fed from a pipe in ci.yml, is invisible to it.
  */
@@ -55,68 +54,26 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
   [
-    "scripts/vitest-file-progress.mjs",
-    [
-      "apps/dashboard",
-      "apps/print-agent",
-      "apps/server",
-      "apps/setup",
-      "apps/till",
-      "packages/adjustments",
-      "packages/bookings",
-      "packages/catalogue",
-      "packages/composition",
-      "packages/core",
-      "packages/country",
-      "packages/country-es",
-      "packages/country-gb",
-      "packages/country-packs",
-      "packages/credentials",
-      "packages/dashboard-kit",
-      "packages/dashboard-modules",
-      "packages/db",
-      "packages/diagnostics",
-      "packages/fiscal",
-      "packages/fiscal-none",
-      "packages/fiscal-verifactu",
-      "packages/identity",
-      "packages/layouts",
-      "packages/media",
-      "packages/membership",
-      "packages/migrations",
-      "packages/module",
-      "packages/payments",
-      "packages/payments-stripe",
-      "packages/payments-sumup",
-      "packages/print-agent",
-      "packages/printing",
-      "packages/provisioning",
-      "packages/purchasing",
-      "packages/recipes",
-      "packages/reporting",
-      "packages/scheduler",
-      "packages/server-kit",
-      "packages/shared",
-      "packages/store",
-      "packages/stream",
-      "packages/sync-enrolment",
-      "packages/tunnel",
-      "packages/ui",
-      "packages/ui-core",
-      "packages/venue-service",
-      "packages/workforce",
-      "packages/workforce-es",
-    ],
-  ],
-  [
     "scripts/vitest-shard-coverage-merge.mjs",
     ["apps/dashboard", "apps/till", "packages/venue-service"],
   ],
 ]);
 
 /**
+ * Root-scope files whose change runs everything. A ci.yml test command loads each as a Vitest
+ * `--reporter=`, so every tested member depends on it and a list of them would need every new
+ * package added by hand. `scripts/root-scope-consumers.test.mjs` fails when a `--reporter=` script
+ * in ci.yml is missing here, when a file here is no such reporter, or when one is also in
+ * ROOT_SCOPE_CONSUMERS. Weaker than its name: it reads ci.yml as text, counts only a `--reporter=`
+ * flag on a `pnpm … test:shard` or `test:coverage` line, and never reads a reporter set in a
+ * package's own config.
+ */
+export const GLOBAL_ROOT_FILES = ["scripts/vitest-file-progress.mjs"];
+
+/**
  * True for a path under ROOT_SCOPE_PREFIXES. For the files ROOT_SCOPE_CONSUMERS lists,
- * scopeForPaths also selects the members listed against them.
+ * scopeForPaths also selects the members listed against them; a file GLOBAL_ROOT_FILES lists runs
+ * everything.
  *
  * The other root config — the lockfile, the root manifests, `tsconfig*.json`, the lint and format
  * config, `vitest.config.ts` — is deliberately not here: each can change what every package builds,

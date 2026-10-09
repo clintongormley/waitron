@@ -1002,7 +1002,11 @@ describe("adding shortcuts on the Home page tab", () => {
     await vi.waitFor(() => expect(addWindow(el).open).toBe(false));
     await openAdd(el, "section");
     combobox(el).focus();
+    const closed = new Promise((resolve) =>
+      addWindow(el).addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(addWindow(el).open).toBe(false));
     expect(writeCalls(client)).toEqual([]);
   });

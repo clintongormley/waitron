@@ -1085,6 +1085,25 @@ the page's own callbacks that still holds its lock. That wait moves to the next 
 from #1342's review: it counts only this page's own lock holders, so a lock another page held and
 never gave back would keep `flush` waiting until the test's timeout.
 
+## A browser test waits for a dialog's close event, not a timer
+
+`wt-dialog` (`packages/ui/src/components/wt-dialog.ts`) sends `wt-close` only from the browser's own
+native `close` event, and many screens act on `wt-close`: a cancel reported to the server, a dialog
+removed, a form reset. Chromium queues that native event for the next rendered frame
+(`ScheduleCloseEvent` calls `EnqueueAnimationFrameEvent`, `html_dialog_element.cc:454-458` at tag
+153.0.8010.12, the build Playwright 1.63 ships). A441 (#1477) measured it in the
+`mcr.microsoft.com/playwright:v1.63.0-noble` image with frame production under manual control: with
+no frame sent, a closed dialog's close event had not fired after 1.5 s while timers kept running;
+one frame later it fired.
+
+So a test that clicks Cancel or presses Escape on such a dialog, and then gives `vi.waitFor` its default one second
+to see the effect is betting on the runner producing a frame in time. One such test in
+`apps/dashboard/src/screens/devices-screen.test.ts` failed A441's CI with "Number of calls: 0", and
+holding the Pair dialog's close back 1.2 s reproduced it. A452 changed such tests to wait for the
+dialog's `wt-close` first, with their assertions unchanged; `wt-dialog` itself was left alone by the
+owner's decision (2026-10-09, A452: fix the tests, not the dialog). Holding the Pair dialog's native close back 1.5 s, the old wait failed and the new
+one passed after 1617 ms. Nothing guards the rule across suites.
+
 ## The mouse cursor belongs to the shared page, so a hover outlives the test — and the file — that moved it.
 
 In browser mode every test file in a worker runs in its own iframe but shares ONE browser page, and

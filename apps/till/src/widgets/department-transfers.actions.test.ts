@@ -218,7 +218,13 @@ it("a never-answering table read is bounded and closing the dialog aborts it", a
     closes++;
     el.open = false;
   });
+  const closed = new Promise((resolve) =>
+    el
+      .shadowRoot!.querySelector("wt-dialog")!
+      .addEventListener("wt-close", resolve, { once: true }),
+  );
   click(el, "[data-close-transfers]");
+  await closed;
   await vi.waitFor(() => expect(closes).toBe(1));
   expect(tableSignal?.aborted).toBe(true);
 });

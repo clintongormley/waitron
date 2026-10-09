@@ -2,13 +2,14 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ROOT_SCOPE_CONSUMERS } from "./changed-scope.mjs";
+import { GLOBAL_ROOT_FILES, ROOT_SCOPE_CONSUMERS } from "./changed-scope.mjs";
 import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.mjs";
 
 // Holds ROOT_SCOPE_CONSUMERS (scripts/changed-scope.mjs) to the tree in both directions: a member
 // file that names a root `scripts/` file by relative path is listed there, and so is a root
-// `scripts/` file a ci.yml job runs before testing a member, or loads as a Vitest reporter in the
-// command that tests it; every listed pair is one of the three.
+// `scripts/` file a ci.yml job runs before testing a member; every listed pair is one of the two.
+// A root `scripts/` file a ci.yml test command loads as a Vitest reporter is held to
+// GLOBAL_ROOT_FILES instead, and must not be in ROOT_SCOPE_CONSUMERS.
 //
 // The member-file half is weaker than its name: it reads TEXT, so a path assembled from parts
 // (`join(root, "scripts", x)`) is invisible to it; it reads tracked files only, and skips Markdown,
@@ -30,12 +31,8 @@ import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.
 //
 // The reporter half is weaker than its name as well: it reads ci.yml as TEXT, and counts a script
 // only in a `--reporter=` flag naming `scripts/<file>` (bare or under `$GITHUB_WORKSPACE/`) on a
-// line, continuations joined, that starts `pnpm` and names `test:shard` or `test:coverage`. A
-// command's members are its literal quoted `--filter "<name>"` values; for a `pnpm "$@"` command
-// they are not read from what the shell builds but DERIVED: every member declaring `test:coverage`
-// that none of the job's literal `!` filters removes, which is the global-scope selection
-// scripts/ci-workflow.test.mjs checks with the real `pnpm ls`. It never reads a reporter set in a
-// package's vitest config or package.json script.
+// line, continuations joined, that starts `pnpm` and names `test:shard` or `test:coverage`. It
+// never reads a reporter set in a package's vitest config or package.json script.
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = join(REPO_ROOT, ".github", "workflows", "ci.yml");
@@ -135,7 +132,6 @@ function ciRunReaders(text, members) {
 
 const TEST_COMMAND = /^pnpm .*\btest:(?:shard|coverage)\b/;
 const REPORTER_SCRIPT = /--reporter="?(?:\$GITHUB_WORKSPACE\/)?(scripts\/[\w./-]+?)"?(?=\s|$)/g;
-const LITERAL_FILTER = /--filter "([^"$]+)"/g;
 
 /** A job's shell lines with full-line comments dropped and `\` continuations joined. */
 function logicalLines(job) {
@@ -148,61 +144,18 @@ function logicalLines(job) {
 }
 
 /**
- * `{ file: memberDirs[] }` of every root `scripts/` file a ci.yml test command loads as a Vitest
- * reporter (`--reporter=` naming `scripts/<file>`, bare or under `$GITHUB_WORKSPACE/`), attributed
- * to the members that command tests: its literal quoted `--filter "<name>"` values, or, for a
- * `pnpm "$@"` command (the light shards, whose filters a loop builds), every member in
- * `withTestCoverage` that none of the job's literal `--filter "!<name>"` lines removes — what pnpm
- * selects on a global scope, which scripts/ci-workflow.test.mjs checks against the real `pnpm ls`.
+ * Every root `scripts/` file a ci.yml test command loads as a Vitest reporter (`--reporter=`
+ * naming `scripts/<file>`, bare or under `$GITHUB_WORKSPACE/`), sorted.
  */
-function ciReporterReaders(text, members, withTestCoverage) {
-  const readers = new Map();
+function ciReporterScripts(text) {
+  const scripts = new Set();
   for (const job of workflowJobs(text)) {
-    const lines = logicalLines(job);
-    const removed = new Set(
-      lines.flatMap((line) =>
-        [...line.matchAll(LITERAL_FILTER)]
-          .map(([, name]) => name)
-          .filter((name) => name.startsWith("!"))
-          .map((name) => name.slice(1)),
-      ),
-    );
-    for (const line of lines) {
+    for (const line of logicalLines(job)) {
       if (!TEST_COMMAND.test(line) || line.includes(" runnable ")) continue;
-      const scripts = [...line.matchAll(REPORTER_SCRIPT)].map(([, script]) => script);
-      const named = [...line.matchAll(LITERAL_FILTER)]
-        .map(([, name]) => name)
-        .filter((name) => !name.startsWith("!"));
-      const names =
-        named.length > 0
-          ? named
-          : line.includes('"$@"')
-            ? withTestCoverage.filter((name) => !removed.has(name))
-            : [];
-      const dirs = names.flatMap(
-        (name) => members.find((member) => member.name === name)?.dir ?? [],
-      );
-      for (const script of scripts) {
-        for (const dir of dirs) {
-          if (!readers.has(script)) readers.set(script, new Set());
-          readers.get(script).add(dir);
-        }
-      }
+      for (const [, script] of line.matchAll(REPORTER_SCRIPT)) scripts.add(script);
     }
   }
-  return sortedListing(readers);
-}
-
-/** The names of the members whose package.json declares a `test:coverage` script. */
-function membersWithTestCoverage(members) {
-  return members
-    .filter(
-      ({ dir }) =>
-        JSON.parse(readFileSync(join(REPO_ROOT, dir, "package.json"), "utf8")).scripts?.[
-          "test:coverage"
-        ] !== undefined,
-    )
-    .map(({ name }) => name);
+  return [...scripts].sort();
 }
 
 /** Two `{ file: memberDirs[] }` listings merged, in the order sortedListing gives. */
@@ -255,19 +208,24 @@ describe("ROOT_SCOPE_CONSUMERS", () => {
         rootScriptReaders(trackedMemberFiles(members), members, (path) =>
           existsSync(join(REPO_ROOT, path)),
         ),
-        unionListing(
-          ciRunReaders(readFileSync(CI_WORKFLOW, "utf8"), members),
-          ciReporterReaders(
-            readFileSync(CI_WORKFLOW, "utf8"),
-            members,
-            membersWithTestCoverage(members),
-          ),
-        ),
+        ciRunReaders(readFileSync(CI_WORKFLOW, "utf8"), members),
       );
       expect(readers).toEqual(sortedListing(ROOT_SCOPE_CONSUMERS));
     },
     REAL_TREE_TEST_TIMEOUT_MS,
   );
+});
+
+describe("GLOBAL_ROOT_FILES", () => {
+  it("lists exactly the root scripts/ files a ci.yml test command loads as a reporter", () => {
+    const reporters = ciReporterScripts(readFileSync(CI_WORKFLOW, "utf8"));
+    expect(reporters, "guards against a vacuous pass over no reporters").not.toEqual([]);
+    expect(reporters).toEqual([...GLOBAL_ROOT_FILES].sort());
+  });
+
+  it("keeps a file that runs everything out of ROOT_SCOPE_CONSUMERS", () => {
+    expect(GLOBAL_ROOT_FILES.filter((file) => ROOT_SCOPE_CONSUMERS.has(file))).toEqual([]);
+  });
 });
 
 describe("REAL_TREE_TEST_TIMEOUT_MS", () => {
@@ -444,19 +402,12 @@ describe("ciRunReaders", () => {
   });
 });
 
-describe("ciReporterReaders", () => {
-  const members = [
-    { name: "@waitron/server", dir: "apps/server" },
-    { name: "@waitron/till", dir: "apps/till" },
-    { name: "@waitron/shared", dir: "packages/shared" },
-    { name: "@waitron/bench", dir: "bench/x" },
-  ];
-  const withTestCoverage = ["@waitron/server", "@waitron/till", "@waitron/shared"];
+describe("ciReporterScripts", () => {
   const workflow = (...jobLines) =>
     ["on:", "  push:", "    branches: [main]", "jobs:", ...jobLines, ""].join("\n");
   const progress = '--reporter="$GITHUB_WORKSPACE/scripts/progress.mjs"';
 
-  it("attributes a reporter to each member its test command names, across a continued line", () => {
+  it("reads a reporter on a test command, across a continued line", () => {
     const text = workflow(
       "  test-ui:",
       "    steps:",
@@ -464,25 +415,20 @@ describe("ciReporterReaders", () => {
       '          pnpm --filter "@waitron/server" --filter "@waitron/till" test:coverage \\',
       `            --reporter=default ${progress}`,
     );
-    expect(ciReporterReaders(text, members, withTestCoverage)).toEqual(
-      new Map([["scripts/progress.mjs", ["apps/server", "apps/till"]]]),
-    );
+    expect(ciReporterScripts(text)).toEqual(["scripts/progress.mjs"]);
   });
 
-  it("attributes a computed selection to the members with tests its `!` filters leave", () => {
+  it("reads a reporter on a computed selection's test command, and a bare scripts/ path", () => {
     const text = workflow(
       "  test-light:",
       "    steps:",
       "      - run: |",
-      '          set -- "$@" --filter "...$pkg"',
-      '          set -- "$@" --filter "!@waitron/server"',
       '          pnpm "$@" ls --depth -1 --json \\',
       "            | node scripts/changed-packages.mjs runnable test:coverage",
       `          pnpm "$@" --no-sort test:coverage --reporter=default ${progress}`,
+      "          pnpm -r test:shard --reporter=scripts/other.mjs",
     );
-    expect(ciReporterReaders(text, members, withTestCoverage)).toEqual(
-      new Map([["scripts/progress.mjs", ["apps/till", "packages/shared"]]]),
-    );
+    expect(ciReporterScripts(text)).toEqual(["scripts/other.mjs", "scripts/progress.mjs"]);
   });
 
   it("counts neither a commented-out reporter nor one on a command that runs no tests", () => {
@@ -494,16 +440,7 @@ describe("ciReporterReaders", () => {
       `          pnpm --filter "@waitron/server" build ${progress}`,
       '          pnpm --filter "@waitron/server" test:shard',
     );
-    expect(ciReporterReaders(text, members, withTestCoverage)).toEqual(new Map());
-  });
-
-  it("attributes a reporter to nobody when its test command selects no member it can read", () => {
-    const text = workflow(
-      "  test-x:",
-      "    steps:",
-      `      - run: pnpm -r test:coverage ${progress}`,
-    );
-    expect(ciReporterReaders(text, members, withTestCoverage)).toEqual(new Map());
+    expect(ciReporterScripts(text)).toEqual([]);
   });
 });
 

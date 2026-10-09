@@ -4,7 +4,12 @@ import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, TranslationPage } from "../api/client.js";
 import { t, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+} from "./test-helpers.js";
 import "./content-translations-dialog.js";
 
 const result: TranslationPage = {
@@ -105,7 +110,9 @@ for (const route of ["close", "escape"] as const) {
     expect(form.open).toBe(true);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
     await question(app);
+    const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
     warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await closed;
     await vi.waitFor(() => expect(app.closed).toBe(1));
     await closeReportsDelivered();
     expect(app.closed).toBe(1);
@@ -123,7 +130,9 @@ it("translation edit/revert compares normalized values and removes the unload wa
   const reverted = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(reverted);
   expect(reverted.defaultPrevented).toBe(false);
+  const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await closed;
   await vi.waitFor(() => expect(app.closed).toBe(1));
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });

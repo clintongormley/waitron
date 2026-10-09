@@ -69,7 +69,13 @@ describe("till-bill-choice-dialog", () => {
     const el = await mountDialog();
     const seen = captured(el);
 
+    const closed = new Promise((resolve) =>
+      el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
 
     await vi.waitFor(() => expect(seen.cancelled).toBe(1));
     expect(seen.chose).toEqual([]);

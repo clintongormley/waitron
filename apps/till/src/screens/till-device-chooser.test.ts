@@ -158,7 +158,13 @@ describe("till-device-chooser", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-setup-new]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
+    const closed = new Promise((resolve) =>
+      el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull());
     expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
     expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();

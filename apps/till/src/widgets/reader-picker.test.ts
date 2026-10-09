@@ -117,7 +117,13 @@ describe("till-reader-picker", () => {
     const cancelled = vi.fn();
     el.addEventListener("reader-chosen", chosen);
     el.addEventListener("reader-picker-cancel", cancelled);
+    const closed = new Promise((resolve) =>
+      el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(cancelled).toHaveBeenCalledOnce());
     expect(chosen).not.toHaveBeenCalled();
   });

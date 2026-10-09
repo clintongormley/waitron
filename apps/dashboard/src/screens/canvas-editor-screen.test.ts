@@ -1249,7 +1249,11 @@ describe("canvas editor edge paths", () => {
     $(el, "[data-test=create]")!.click();
     await el.updateComplete;
     expect(dialog().open).toBe(true);
+    const closed = new Promise((resolve) =>
+      dialog().addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(dialog().open).toBe(false));
     await el.updateComplete;
     $(el, "[data-test=create]")!.click();

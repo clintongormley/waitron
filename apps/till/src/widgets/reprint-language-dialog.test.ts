@@ -119,7 +119,13 @@ describe("till-reprint-language-dialog", () => {
     const seen = captured(el);
 
     button(el, "cancel").click();
+    const closed = new Promise((resolve) =>
+      el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
 
     await vi.waitFor(() => expect(seen.cancelled).toBe(2));
     expect(seen.chose).toEqual([]);

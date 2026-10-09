@@ -72,7 +72,7 @@ describe("isInertPath", () => {
 describe("isRootScopePath", () => {
   // The repository's own machinery. It is CODE — isInertPath says so — but it gives the ROOT Vitest
   // project work and gives no package any CI work; the files a member depends on are in
-  // ROOT_SCOPE_CONSUMERS.
+  // ROOT_SCOPE_CONSUMERS, and the ones every package's tests load in GLOBAL_ROOT_FILES.
   it.each([
     "scripts/changed-scope.mjs",
     "scripts/english-only.test.ts",

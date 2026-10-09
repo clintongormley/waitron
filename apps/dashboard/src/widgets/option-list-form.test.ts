@@ -2,7 +2,12 @@ import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+} from "./test-helpers.js";
 import { formMessageOf, middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-option-list-form`.
@@ -1092,7 +1097,9 @@ it("sends one wt-cancel when its dialog is dismissed with Escape while the form 
   let cancels = 0;
   host.addEventListener("wt-cancel", () => cancels++);
 
+  const closed = modalClosed(el);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(cancels).toBe(1));
   await closeReportsDelivered();
 
@@ -1279,6 +1286,10 @@ it("ignores a drag whose row was removed mid-gesture, leaving the save's message
 // ---------------------------------------------------------------------------
 // The option editor stacked over the list
 
+function modalClosed(form: OptionListForm | OptionLabelForm): Promise<unknown> {
+  return dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+}
+
 function dialogOf(form: OptionListForm | OptionLabelForm): HTMLDialogElement {
   return form.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
 }
@@ -1304,7 +1315,9 @@ it("closes only the option editor on Escape, and puts focus back on that row's a
   host.addEventListener("wt-cancel", () => cancels++);
   const actions = await openByHand(el, 1);
 
+  const closed = modalClosed(editor(el));
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(editor(el).open).toBe(false));
   await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(false));
 
@@ -1336,7 +1349,9 @@ it("puts focus back on the option's name when the editor its name opened closes"
   await editor(el).updateComplete;
   await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(true));
 
+  const closed = modalClosed(editor(el));
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(false));
 
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(nameButton(el, 1)));

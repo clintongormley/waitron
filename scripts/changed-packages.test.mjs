@@ -1,14 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PACKAGES_WITHOUT_TESTS, ROOT_SCOPE_CONSUMERS, classify } from "./changed-scope.mjs";
+import { PACKAGES_WITHOUT_TESTS, classify } from "./changed-scope.mjs";
 import {
   formatScope,
   scopeForPaths,
   scriptRunCheck,
   workspacePackages,
 } from "./changed-packages.mjs";
-import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.mjs";
 
 const ROOT = "/repo";
 
@@ -253,16 +252,24 @@ describe("scopeForPaths", () => {
       });
     });
 
-    // Every tested member loads it, so the fixture names each member by its directory: a
-    // hand-written list here would be a second copy of ROOT_SCOPE_CONSUMERS' own.
-    it("selects every member whose CI test command loads scripts/vitest-file-progress.mjs", () => {
-      const dirs = [...new Set([...ROOT_SCOPE_CONSUMERS.values()].flat())];
-      const everyMember = workspacePackages(ls(...dirs.map((dir) => member(dir, dir))), ROOT);
-      const scope = scopeForPaths(["scripts/vitest-file-progress.mjs"], workspace(everyMember));
-      expect(scope).toMatchObject({ kind: "packages", root: true });
-      expect(scope.packages).toEqual(
-        expect.arrayContaining(["apps/server", "apps/till", "packages/shared"]),
-      );
+    // Every member's CI test command loads it as a Vitest reporter, so a change to it runs
+    // everything rather than a hand-kept list of members.
+    it("runs everything when scripts/vitest-file-progress.mjs changes, alone or beside a package", () => {
+      for (const paths of [
+        ["scripts/vitest-file-progress.mjs"],
+        ["scripts/vitest-file-progress.mjs", "packages/db/src/y.ts"],
+        ["packages/db/src/y.ts", "scripts/vitest-file-progress.mjs", "scripts/bundle-node.mjs"],
+      ]) {
+        const scope = scopeForPaths(paths, workspace(consumers));
+        expect(scope, paths.join(" ")).toEqual({
+          kind: "global",
+          packages: [],
+          root: true,
+          deploy: paths.includes("scripts/bundle-node.mjs"),
+          reason:
+            "scripts/vitest-file-progress.mjs is loaded by every package's tests — running everything",
+        });
+      }
     });
 
     it("still gives any other scripts/ file root scope alone", () => {
@@ -542,9 +549,9 @@ describe("formatScope", () => {
     expect(classify(paths).code).toBe(expected);
   });
 
-  // The one place the two part company. A root path ROOT_SCOPE_CONSUMERS does not list IS code —
-  // `isInertPath` says so, and it can break the repo-level suite — but gives no `code`-gated job in
-  // ci.yml anything to do.
+  // The one place the two part company. A root path neither ROOT_SCOPE_CONSUMERS nor
+  // GLOBAL_ROOT_FILES lists IS code — `isInertPath` says so, and it can break the repo-level suite —
+  // but gives no `code`-gated job in ci.yml anything to do.
   it("emits code=false for a root-only push, where classify says code", () => {
     expect(classify([".husky/pre-push"]).code).toBe(true);
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace())).split("\n")[0]).toBe(
@@ -744,22 +751,11 @@ describe("the CLI", () => {
     );
   });
 
-  // Pinned against the real workspace rather than a copied list: every member that has tests.
-  it(
-    "selects every real member with tests when scripts/vitest-file-progress.mjs changes",
-    () => {
-      const tested = workspaceMembers()
-        .map(({ name }) => name)
-        .filter((name) => !PACKAGES_WITHOUT_TESTS.includes(name))
-        .sort();
-      expect(tested).toContain("@waitron/shared");
-
-      expect(run("scripts/vitest-file-progress.mjs\n").stdout).toBe(
-        `code=true\nscope=packages\npackages=${tested.join(" ")}\nroot=true\ndeploy=false\n`,
-      );
-    },
-    PNPM_LS_SPAWN_TIMEOUT_MS + 30_000,
-  );
+  it("runs everything when scripts/vitest-file-progress.mjs changes", () => {
+    expect(run("scripts/vitest-file-progress.mjs\n").stdout).toBe(
+      "code=true\nscope=global\npackages=\nroot=true\ndeploy=false\n",
+    );
+  });
 
   it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
     expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(

@@ -3030,7 +3030,7 @@ The hook checks commit sign-offs first and stops at a failed check with a comman
 
 A documentation-only push stops after formatting. Repository machinery changes (`scripts/`,
 `.husky/`, `.github/`) stop after the root guards, unless they touch a file `ROOT_SCOPE_CONSUMERS`
-lists. Shared configuration or an unknown push range selects all workspace typechecks. Deleting
+or `GLOBAL_ROOT_FILES` lists. Shared configuration, a file `GLOBAL_ROOT_FILES` lists, or an unknown push range selects all workspace typechecks. Deleting
 branches without updating any ref skips the hook. Package browser and database suites run in CI
 rather than in the hook.
 
