@@ -112,25 +112,64 @@ const rowLabels = (el: RoutingGrid) =>
   bodyRows(el).map((row) => row.querySelector("th")!.textContent!.replace(/\s+/g, " ").trim());
 const cell = (el: RoutingGrid, row: string, zone: string) =>
   root(el).querySelector<HTMLElement>(`td[data-row="${row}"][data-zone="${zone}"]`)!;
-type Combo = HTMLElement & { value: string; updateComplete: Promise<unknown> };
+type Combo = HTMLElementTagNameMap["wt-combobox"];
+type Editor = HTMLElementTagNameMap["routing-cell-editor"];
+/** The cell's button; `null` where the cell draws none. */
 const combo = (el: RoutingGrid, row: string, zone: string) =>
-  cell(el, row, zone).querySelector<Combo>('wt-combobox[name="routing-target"]');
-const trigger = (box: Combo) => box.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
-/** The text the shared field actually draws on its closed trigger, and whether it is muted. */
-const shown = (box: Combo) => {
-  const value = trigger(box).querySelector(".value")!;
-  return { text: value.textContent!.trim(), muted: value.classList.contains("placeholder") };
+  cell(el, row, zone).querySelector<HTMLButtonElement>('button[data-test="routing-cell"]');
+const trigger = (box: HTMLButtonElement) => box;
+/** The station the cell's button draws, and whether it is drawn as inherited. */
+const shown = (box: HTMLButtonElement) => {
+  const value = box.querySelector(".station")!;
+  return { text: value.textContent!.trim(), muted: value.classList.contains("inherited") };
 };
-const optionLabels = (box: Combo) =>
-  [...box.shadowRoot!.querySelectorAll('[role="option"]')].map((o) => o.textContent!.trim());
+const editorOf = (el: RoutingGrid) => root(el).querySelector<Editor>("routing-cell-editor");
+const field = (editor: Editor, name: string) =>
+  editor.shadowRoot!.querySelector<Combo>(`wt-combobox[name="${name}"]`)!;
+const editorButton = (editor: Editor, test: string) =>
+  editor.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`);
+/** The labels "Any other time" offers in the editor the cell opens. */
+const optionLabels = (box: Combo) => box.options.map((option) => option.label);
 
-async function choose(box: Combo, label: string): Promise<void> {
-  await userEvent.click(trigger(box));
-  const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (o) => o.textContent!.trim() === label,
-  )!;
-  await userEvent.click(option);
-  await box.updateComplete;
+async function openEditor(el: RoutingGrid, box: HTMLButtonElement): Promise<Editor> {
+  box.click();
+  await el.updateComplete;
+  const editor = editorOf(el)!;
+  await editor.updateComplete;
+  return editor;
+}
+
+async function pick(editor: Editor, name: string, label: string): Promise<void> {
+  const box = field(editor, name);
+  const option = box.options.find((o) => o.label === label)!;
+  box.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: option.value },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await editor.updateComplete;
+}
+
+/** The refusal drawn under a cell's button. */
+const errorOf = (el: RoutingGrid, row: string, zone: string) =>
+  cell(el, row, zone).querySelector('[data-test="cell-error"]')?.textContent!.trim() ?? "";
+const carryingErrors = (el: RoutingGrid) =>
+  [...root(el).querySelectorAll<HTMLElement>('td:has([data-test="cell-error"])')].map(
+    (td) => `${td.dataset.row}|${td.dataset.zone}`,
+  );
+
+/** Opens the cell's editor and saves `label` as its station, or presses Clear setting. */
+async function choose(el: RoutingGrid, box: HTMLButtonElement, label: string): Promise<void> {
+  const editor = await openEditor(el, box);
+  if (label === "Clear setting") {
+    editorButton(editor, "clear-cell")!.click();
+  } else {
+    await pick(editor, "target", label);
+    editorButton(editor, "save-cell")!.click();
+  }
+  await el.updateComplete;
 }
 
 describe("venue-routing-grid", () => {
@@ -235,18 +274,14 @@ describe("venue-routing-grid", () => {
     );
   });
 
-  it("the first option clears, then active stations, then No preparation; an inactive saved station is described, not offered", async () => {
+  it("the editor offers active stations, then No preparation, and no Clear for an inherited cell; an inactive saved station is described, not offered", async () => {
     const { el } = await mount();
     root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
     await el.updateComplete;
-    const box = combo(el, "p:cola", "every")!;
-    expect(optionLabels(box)).toEqual([
-      "Clear setting",
-      "Kitchen",
-      "Bar",
-      "Terrace bar",
-      "No preparation",
-    ]);
+    const editor = await openEditor(el, combo(el, "p:cola", "every")!);
+    const box = field(editor, "target");
+    expect(editorButton(editor, "clear-cell")).toBeNull();
+    expect(optionLabels(box)).toEqual(["Kitchen", "Bar", "Terrace bar", "No preparation"]);
     expect(optionLabels(box).join()).not.toContain("Old kitchen");
     const food = cell(el, "c:food", "inside");
     const old = combo(el, "c:food", "inside")!;
@@ -265,28 +300,24 @@ describe("venue-routing-grid", () => {
     const old = combo(el, "c:food", "inside")!;
     // Muted means no saved cell; this cell has one.
     expect(shown(old)).toEqual({ text: "Old kitchen (Disabled)", muted: false });
-    expect(old.value).toBe("station:old");
-    await userEvent.click(trigger(old));
-    const rows = [...old.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
-    const state = rows.map((row) => [
-      row.textContent!.trim(),
-      row.getAttribute("aria-selected"),
-      row.getAttribute("aria-disabled"),
+    expect(old.dataset.target).toBe("station:old");
+    const editor = await openEditor(el, old);
+    const box = field(editor, "target");
+    expect(box.value).toBe("station:old");
+    expect(
+      box.options.map((option) => [option.label, option.value === box.value, !!option.disabled]),
+    ).toEqual([
+      ["Kitchen", false, false],
+      ["Bar", false, false],
+      ["Terrace bar", false, false],
+      ["Old kitchen (Disabled)", true, true],
+      ["No preparation", false, false],
     ]);
-    expect(state).toEqual([
-      ["Clear setting", "false", null],
-      ["Kitchen", "false", null],
-      ["Bar", "false", null],
-      ["Terrace bar", "false", null],
-      ["Old kitchen (Disabled)", "true", "true"],
-      ["No preparation", "false", null],
-    ]);
-    // A real pointer refuses an aria-disabled row outright, so press it directly, and by keyboard.
-    rows[4]!.click();
-    await userEvent.keyboard("{Enter}");
+    // Saving the disabled station again is not a change, so nothing is sent.
+    editorButton(editor, "save-cell")!.click();
     await el.updateComplete;
     expect(emitted.changes).toEqual([]);
-    expect(old.value).toBe("station:old");
+    expect(old.dataset.target).toBe("station:old");
     expect(shown(old)).toEqual({ text: "Old kitchen (Disabled)", muted: false });
   });
 
@@ -304,8 +335,8 @@ describe("venue-routing-grid", () => {
       zoneId: "inside",
     };
     const { el, emitted } = await mount();
-    await choose(combo(el, "c:food", "inside")!, "Clear setting");
-    await choose(combo(el, "c:food", "inside")!, "Bar");
+    await choose(el, combo(el, "c:food", "inside")!, "Clear setting");
+    await choose(el, combo(el, "c:food", "inside")!, "Bar");
     expect(emitted.changes).toEqual([
       { address, target: null },
       { address, target: { kind: "station", stationId: "bar" } },
@@ -381,22 +412,24 @@ describe("venue-routing-grid", () => {
       el.pending = (event as CustomEvent<NonNullable<RoutingGrid["pending"]>>).detail;
     });
     const drinks = combo(el, "c:drinks", "every")!;
-    await choose(drinks, "Clear setting");
+    await choose(el, drinks, "Clear setting");
     expect(emitted.changes).toEqual([
       { address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null }, target: null },
     ]);
     // While the clear is pending, the field shows what the row would inherit once cleared.
     await el.updateComplete;
     expect(shown(drinks)).toEqual({ text: "Kitchen", muted: true });
-    expect(drinks.value).toBe("");
+    expect(drinks.dataset.target).toBe("");
 
     const bread = combo(el, "p:bread", "inside")!;
-    await choose(bread, "No preparation");
+    await choose(el, bread, "No preparation");
     await el.updateComplete;
     expect(shown(bread)).toEqual({ text: "No preparation", muted: false });
     // One pending choice at a time: Drinks is back to its saved value.
     expect(shown(drinks)).toEqual({ text: "Bar", muted: false });
-    await choose(bread, "Bar");
+    // The editor waits while its choice is pending; the host settles it first.
+    el.pending = null;
+    await choose(el, bread, "Bar");
     expect(emitted.changes.slice(1)).toEqual([
       {
         address: { row: { kind: "product", productId: "bread" }, zoneId: "inside" },
@@ -409,18 +442,18 @@ describe("venue-routing-grid", () => {
     ]);
     await el.updateComplete;
     expect(shown(bread)).toEqual({ text: "Bar", muted: false });
-    expect(bread.value).toBe("station:bar");
+    expect(bread.dataset.target).toBe("station:bar");
   });
 
   it("after a choice the field shows the saved value again unless the host sets it pending", async () => {
     const { el, emitted } = await mount();
     const model = el.model!;
     const drinks = combo(el, "c:drinks", "every")!;
-    await choose(drinks, "Clear setting");
+    await choose(el, drinks, "Clear setting");
     expect(emitted.changes).toHaveLength(1);
     await el.updateComplete;
     expect(shown(drinks)).toEqual({ text: "Bar", muted: false });
-    expect(drinks.value).toBe("station:bar");
+    expect(drinks.dataset.target).toBe("station:bar");
 
     // A cancelled preview: the host clears pending and hands back the very same model.
     el.pending = { address: emitted.changes[0]!.address, target: null };
@@ -430,7 +463,7 @@ describe("venue-routing-grid", () => {
     el.model = model;
     await el.updateComplete;
     expect(shown(drinks)).toEqual({ text: "Bar", muted: false });
-    expect(drinks.value).toBe("station:bar");
+    expect(drinks.dataset.target).toBe("station:bar");
   });
 
   it("a pending choice survives a refresh that replaces the model, and only at its own address", async () => {
@@ -456,21 +489,19 @@ describe("venue-routing-grid", () => {
   it("removing a zone destroys its open editor instead of handing it to the neighbouring zone", async () => {
     const { el, emitted } = await mount();
     const box = combo(el, "c:drinks", "terrace")!;
-    const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-    await userEvent.click(trigger(box));
-    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+    const editor = await openEditor(el, box);
+    await pick(editor, "target", "Kitchen");
     el.model = routing({ zones: [{ id: "inside", name: "Inside", departmentId: null }] });
     await el.updateComplete;
     expect(box.isConnected).toBe(false);
+    expect(editor.isConnected).toBe(false);
+    expect(editorOf(el)).toBeNull();
     expect(combo(el, "c:drinks", "inside")).not.toBe(box);
     expect(root(el).querySelector('td[data-zone="terrace"]')).toBeNull();
     const headers = [...root(el).querySelectorAll("thead th")].map((th) => th.textContent!.trim());
     expect(headers).toEqual(["Category or product", "Every zone", "Inside"]);
-    // A pick in the departed editor reaches nobody.
-    const kitchen = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (option) => option.textContent!.trim() === "Kitchen",
-    )!;
-    kitchen.click();
+    // A save in the departed editor reaches nobody.
+    editorButton(editor, "save-cell")!.click();
     await el.updateComplete;
     expect(emitted.changes).toEqual([]);
   });
@@ -479,53 +510,63 @@ describe("venue-routing-grid", () => {
     const { el } = await mount();
     const outside = el.parentElement!;
     const heard: string[] = [];
-    for (const name of ["routing-cell-change", "routing-make-default", "wt-change"]) {
+    for (const name of [
+      "routing-cell-change",
+      "routing-make-default",
+      "wt-change",
+      "routing-cell-save",
+      "routing-cell-clear",
+      "routing-cell-cancel",
+    ]) {
       outside.addEventListener(name, () => heard.push(name));
     }
-    await choose(combo(el, "c:drinks", "every")!, "Kitchen");
-    await choose(combo(el, "all", "every")!, "Bar");
+    await choose(el, combo(el, "c:drinks", "every")!, "Kitchen");
+    await choose(el, combo(el, "all", "every")!, "Bar");
     expect(heard).toEqual(["routing-cell-change", "routing-make-default"]);
   });
 
   it("choosing the value already saved emits nothing", async () => {
     const { el, emitted } = await mount();
-    await choose(combo(el, "c:drinks", "every")!, "Bar");
+    await choose(el, combo(el, "c:drinks", "every")!, "Bar");
     expect(emitted.changes).toEqual([]);
   });
 
-  it("Enter/Space opens, Escape cancels and restores focus", async () => {
+  it("Enter/Space opens the editor, Escape cancels it and restores focus", async () => {
     const { el, emitted } = await mount();
-    const box = combo(el, "c:drinks", "every")!;
-    const button = trigger(box);
-    const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const button = combo(el, "c:drinks", "every")!;
     button.focus();
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
-    await userEvent.keyboard("{ArrowDown}");
+    await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
+    await editorOf(el)!.updateComplete;
     await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
-    expect(box.shadowRoot!.activeElement).toBe(button);
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    await vi.waitFor(() => expect(root(el).activeElement).toBe(button));
     await userEvent.keyboard(" ");
-    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+    await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
+    await editorOf(el)!.updateComplete;
     await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
-    expect(box.shadowRoot!.activeElement).toBe(button);
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    await vi.waitFor(() => expect(root(el).activeElement).toBe(button));
     expect(emitted.changes).toEqual([]);
-    expect(shown(box)).toEqual({ text: "Bar", muted: false });
+    expect(shown(button)).toEqual({ text: "Bar", muted: false });
   });
 
   it("All × Every zone: Make default choices with canMakeDefault; read-only explanation without; repair message when no active default", async () => {
     const { el, emitted } = await mount();
     const box = combo(el, "all", "every")!;
     expect(shown(box)).toEqual({ text: "Kitchen", muted: false });
-    expect(optionLabels(box)).toEqual(["Kitchen", "Bar", "Terrace bar"]);
-    await choose(box, "Bar");
+    expect(optionLabels(field(await openEditor(el, box), "target"))).toEqual([
+      "Kitchen",
+      "Bar",
+      "Terrace bar",
+    ]);
+    await choose(el, box, "Bar");
     expect(emitted.defaults).toEqual([{ stationId: "bar" }]);
     expect(emitted.changes).toEqual([]);
 
     const readOnly = await mount(routing({ canMakeDefault: false }));
     const fixed = cell(readOnly.el, "all", "every");
-    expect(fixed.querySelector("wt-combobox")).toBeNull();
+    expect(fixed.querySelector("button")).toBeNull();
     expect(fixed.textContent!.replace(/\s+/g, " ").trim()).toBe(
       "Kitchen Kitchen (default) — as an extra, follows its dish Only someone who can configure the venue can change the default station.",
     );
@@ -536,13 +577,17 @@ describe("venue-routing-grid", () => {
       "No default prep station is active. Choose one so items with no other setting have a station to go to.",
     );
     const choices = combo(repair.el, "all", "every")!;
-    expect(optionLabels(choices)).toEqual(["Kitchen", "Bar", "Terrace bar"]);
-    await choose(choices, "Terrace bar");
+    expect(optionLabels(field(await openEditor(repair.el, choices), "target"))).toEqual([
+      "Kitchen",
+      "Bar",
+      "Terrace bar",
+    ]);
+    await choose(repair.el, choices, "Terrace bar");
     expect(repair.emitted.defaults).toEqual([{ stationId: "tbar" }]);
 
     const stuck = await mount(routing({ defaultStationId: null, canMakeDefault: false }));
     const none = cell(stuck.el, "all", "every");
-    expect(none.querySelector("wt-combobox")).toBeNull();
+    expect(none.querySelector("button")).toBeNull();
     expect(none.querySelector('[data-test="default-repair"]')).not.toBeNull();
     expect(none.textContent).toContain(
       "Only someone who can configure the venue can change the default station.",
@@ -554,16 +599,13 @@ describe("venue-routing-grid", () => {
     const address: CellAddress = { row: { kind: "category", categoryId: "drinks" }, zoneId: null };
     const { el, emitted } = await mount(routing(), { refusal: { address, message } });
     const box = combo(el, "c:drinks", "every")!;
-    expect(box.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(message);
+    expect(errorOf(el, "c:drinks", "every")).toBe(message);
     const actions = root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
     expect(actions.error).toBe(`Drinks, Every zone: ${message}`);
-    // Nowhere else: only one field and the bottom message carry it.
-    const carrying = [...root(el).querySelectorAll<Combo>("wt-combobox")].filter(
-      (other) => (other as unknown as { error: string }).error !== "",
-    );
-    expect(carrying).toEqual([box]);
+    // Nowhere else: only one cell and the bottom message carry it.
+    expect(carryingErrors(el)).toEqual(["c:drinks|every"]);
     expect(trigger(box).disabled).toBe(false);
-    await choose(box, "Kitchen");
+    await choose(el, box, "Kitchen");
     expect(emitted.changes).toEqual([
       { address, target: { kind: "station", stationId: "kitchen" } },
     ]);
@@ -571,7 +613,7 @@ describe("venue-routing-grid", () => {
     el.refusal = null;
     await el.updateComplete;
     expect(actions.error).toBe("");
-    expect((box as unknown as { error: string }).error).toBe("");
+    expect(errorOf(el, "c:drinks", "every")).toBe("");
   });
 
   it("the No category heading heads its own row group and nothing above it", async () => {
@@ -628,19 +670,15 @@ describe("venue-routing-grid", () => {
     // An uncategorised product inherits the No category cell.
     expect(shown(combo(el, "p:bread", "inside")!)).toEqual({ text: "Bar", muted: true });
     const every = combo(el, "no_category", "every")!;
-    await userEvent.click(trigger(every));
-    expect(optionLabels(every)).toEqual([
-      "Clear setting",
+    const editor = await openEditor(el, every);
+    expect(editorButton(editor, "clear-cell")).toBeNull();
+    expect(optionLabels(field(editor, "target"))).toEqual([
       "Kitchen",
       "Bar",
       "Terrace bar",
       "No preparation",
     ]);
-    const option = [...every.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (o) => o.textContent!.trim() === "No preparation",
-    )!;
-    await userEvent.click(option);
-    await every.updateComplete;
+    await choose(el, every, "No preparation");
     expect(emitted.changes).toEqual([
       {
         address: { row: { kind: "no_category" }, zoneId: null },
@@ -648,7 +686,7 @@ describe("venue-routing-grid", () => {
       },
     ]);
     expect(emitted.defaults).toEqual([]);
-    expect(heading.querySelector("button")).toBeNull();
+    expect(heading.querySelector("th button")).toBeNull();
     expect(heading.querySelector("th")!.textContent!.trim()).toBe("No category");
     // Every editor in the grid addresses a real row: All, No category, a category or a product.
     for (const td of root(el).querySelectorAll<HTMLElement>("td[data-row]")) {
@@ -673,7 +711,7 @@ describe("venue-routing-grid", () => {
     );
     expect(rowLabels(el).slice(-1)).toEqual(["No category"]);
     expect(shown(combo(el, "no_category", "inside")!)).toEqual({ text: "Bar", muted: false });
-    await choose(combo(el, "no_category", "inside")!, "Clear setting");
+    await choose(el, combo(el, "no_category", "inside")!, "Clear setting");
     expect(emitted.changes).toEqual([
       { address: { row: { kind: "no_category" }, zoneId: "inside" }, target: null },
     ]);
@@ -688,13 +726,9 @@ describe("venue-routing-grid", () => {
     const { el } = await mount(routing(), { refusal: { address, message: "Refused." } });
     const actions = root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
     expect(actions.error).toBe(text);
-    const box = combo(el, "no_category", "inside")!;
-    expect(box.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe("Refused.");
-    expect((combo(el, "all", "inside") as unknown as { error: string }).error).toBe("");
-    const carrying = [...root(el).querySelectorAll<Combo>("wt-combobox")].filter(
-      (other) => (other as unknown as { error: string }).error !== "",
-    );
-    expect(carrying).toEqual([box]);
+    expect(errorOf(el, "no_category", "inside")).toBe("Refused.");
+    expect(errorOf(el, "all", "inside")).toBe("");
+    expect(carryingErrors(el)).toEqual(["no_category|inside"]);
   });
 
   /** No category × Every zone goes to the Bar; All categories × Terrace is No preparation. */

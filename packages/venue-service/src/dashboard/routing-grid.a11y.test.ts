@@ -160,12 +160,14 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       await el.updateComplete;
     }
     if (state.open) {
-      const box = el.shadowRoot!.querySelector(`${state.open} wt-combobox[name="routing-target"]`)!;
-      const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-      box.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+      el.shadowRoot!.querySelector<HTMLButtonElement>(
+        `${state.open} button[data-test="routing-cell"]`,
+      )!.click();
       await vi.waitFor(() => {
-        if (!popup.matches(":popover-open")) throw new Error("the editor did not open");
+        if (!el.shadowRoot!.querySelector("routing-cell-editor")?.open)
+          throw new Error("the editor did not open");
       });
+      await el.shadowRoot!.querySelector("routing-cell-editor")!.updateComplete;
     }
     for (const [selector, carries] of Object.entries(state.notes ?? {})) {
       const note = el.shadowRoot!.querySelector(`${selector} [data-test="extra-note"]`);

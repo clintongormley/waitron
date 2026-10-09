@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
@@ -264,10 +264,31 @@ async function routingGrid(el: PrepStationsScreen) {
   await grid?.updateComplete;
   return grid;
 }
-const gridCombo = (grid: HTMLElement, row: string, zone: string) =>
-  grid.shadowRoot!.querySelector<WtCombobox>(
-    `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
-  );
+/** What a routing cell draws: its button's target and accessible name, and its refusal. */
+function gridCombo(grid: HTMLElement, row: string, zone: string) {
+  const td = () =>
+    grid.shadowRoot!.querySelector<HTMLElement>(`td[data-row="${row}"][data-zone="${zone}"]`)!;
+  const button = () => td().querySelector<HTMLButtonElement>('button[data-test="routing-cell"]');
+  if (button() === null) return null;
+  return {
+    button: () => button()!,
+    get value() {
+      return button()!.dataset.target!;
+    },
+    get label() {
+      return button()!.getAttribute("aria-label")!;
+    },
+    get error() {
+      return td().querySelector('[data-test="cell-error"]')?.textContent!.trim() ?? "";
+    },
+    get shown() {
+      return button()!.querySelector(".station")!.textContent!.trim();
+    },
+    get updateComplete() {
+      return (grid as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    },
+  };
+}
 
 it.each([
   ['wt-switch[name="showsRestOfOrder"]', ""],
@@ -4637,22 +4658,38 @@ describe("Routing grid", () => {
       "venue-routing-grid",
     )!;
   const cellCombo = (el: PrepStationsScreen, row: string, zone: string) =>
-    gridOf(el).shadowRoot!.querySelector<WtCombobox>(
-      `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
-    )!;
-  const shownText = (box: WtCombobox) =>
-    box.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
+    gridCombo(gridOf(el), row, zone)!;
+  const shownText = (box: ReturnType<typeof cellCombo>) => box.shown;
   const formActions = (el: PrepStationsScreen) =>
     gridOf(el).shadowRoot!.querySelector<
       HTMLElement & { error: string; updateComplete: Promise<unknown> }
     >("wt-form-actions")!;
+  const cellEditor = (el: PrepStationsScreen) =>
+    gridOf(el).shadowRoot!.querySelector<HTMLElementTagNameMap["routing-cell-editor"]>(
+      "routing-cell-editor",
+    );
+  /** Opens the cell's editor and saves `label` as its station, or presses Clear setting. */
   async function chooseCell(el: PrepStationsScreen, row: string, zone: string, label: string) {
-    const box = cellCombo(el, row, zone);
-    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-    const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (o) => o.textContent!.trim() === label,
-    )!;
-    await userEvent.click(option);
+    cellCombo(el, row, zone).button().click();
+    await gridOf(el).updateComplete;
+    const editor = cellEditor(el)!;
+    await editor.updateComplete;
+    const press = (test: string) =>
+      editor.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+    if (label === "Clear setting") press("clear-cell");
+    else {
+      const box = editor.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="target"]')!;
+      const option = box.options.find((o) => o.label === label)!;
+      box.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: option.value },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await editor.updateComplete;
+      press("save-cell");
+    }
     await settle(el);
   }
 
@@ -5236,8 +5273,8 @@ describe("Routing grid", () => {
   };
   const shownTargets = (el: PrepStationsScreen) =>
     [
-      ...gridOf(el).shadowRoot!.querySelectorAll<WtCombobox>('wt-combobox[name="routing-target"]'),
-    ].map((box) => box.value);
+      ...gridOf(el).shadowRoot!.querySelectorAll<HTMLElement>('button[data-test="routing-cell"]'),
+    ].map((box) => box.dataset.target);
   it.each([
     {
       what: "category",
