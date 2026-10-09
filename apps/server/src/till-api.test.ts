@@ -3547,7 +3547,13 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       active: boolean;
     }[];
     expect(zones.map((z) => z.name)).toContain("Comedor");
-    expect(zones).toContainEqual({ id: zoneId, name: "Comedor", displayOrder: 0, active: true });
+    expect(zones).toContainEqual({
+      id: zoneId,
+      name: "Comedor",
+      displayOrder: 0,
+      active: true,
+      closed: false,
+    });
 
     // Read this table's occupancy row out of the state read.
     const stateOf = async () => {
