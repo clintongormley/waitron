@@ -96,11 +96,11 @@ instead of three, and for configuration pages that are only about configuration.
 | Working screen | A kitchen screen with buttons: a station screen or a pass screen. Any device can run one. |
 | Station screen | A working screen showing some prep stations' queues, with buttons to start, ready and finish dishes. |
 | Pass screen | A working screen showing the pass queue for some stations and zones, with Done on each dish; with the profile's "Run the pass", also Fire, Ready and Away. |
-| Monitor | A view-only kitchen screen with no buttons, such as a wall screen showing the pass queue. The pass monitor is the first; kitchen displays only. |
+| Monitor | A view-only kitchen screen with no buttons, such as a wall screen showing the pass queue. The pass monitor is the first; any device whose profile offers it may run one (owner, 2026-10-09). |
 
 _(2026-10-08: "Monitor" narrowed to view-only screens and the kitchen screen entries added, from the
 owner's answers to the slice 5 plan; the earlier entry called every kitchen screen a monitor. See
-§9.4.)_
+§9.4. 2026-10-09: the owner opened the pass monitor to every kind of device.)_
 
 A terrace that closes earlier than the bar is a **zone**, not a department: as a department its
 tabs could only reach the bar's till by transfer, its staff would be walled off, and its periods
@@ -283,7 +283,10 @@ Watchers tabs go.
 _(2026-10-08: revised to the owner's answers to the slice 5 plan,
 [2026-10-08-a366-slice-5-monitors.md](../plans/2026-10-08-a366-slice-5-monitors.md), which holds
 the detail. The earlier text called every kitchen screen a monitor, kept them to one kind of
-device, and made "Run the pass" a profile action.)_
+device, and made "Run the pass" a profile action. Revised again 2026-10-09 to the owner's later
+answers: any profile may offer a pass monitor; adding a station back to a profile gives it back to
+a device still showing it as no longer available; a switched-off station keeps its waiting dishes
+on a station screen.)_
 
 Watchers go. A **device profile** says which kitchen screens its devices may run and what each may
 show:
@@ -293,7 +296,9 @@ show:
   and which zones. Whether Fire, Ready and Away show is a setting of the profile's screens, "Run
   the pass"; the server keeps checking the action each one takes (taking orders, preparing,
   handing over).
-- **Pass monitor** (view-only, no buttons): which stations and which zones. Kitchen displays only.
+- **Pass monitor** (view-only, no buttons): which stations and which zones. Any profile may offer
+  it (owner, 2026-10-09); it shows what the till's "All stations" pass board shows, limited to
+  those stations and zones. On a till or handheld it is the Pass screen.
 
 **Any device can run a station or pass screen.** A kitchen display runs exactly one kitchen screen,
 with nobody signed in: the device is the one acting. A till's or handheld's choice narrows its
@@ -305,8 +310,12 @@ A **device** picks its profile, then its kitchen screen, then its stations and z
 the profile allows. Narrowing a profile is allowed: each device using it loses what was removed
 and remembers what it lost, the dashboard says which devices changed, and the device shows "This
 station is no longer available: Deli" in that station's place until someone chooses its stations
-again; adding the station back to the profile does not bring it back to the device. Today a device
-binds exactly one station or watcher. Floor plan and sales monitors are later work.
+again. Adding the station back to the profile gives it back to a device still showing that line,
+and the line clears; a device where someone has chosen since is not switched back, and the station
+is simply offered again (owner, 2026-10-09). A station switched off on its own page shows the same
+line on a kitchen display's station screen, with the dishes still waiting there below it until
+they are done; new work goes elsewhere (owner, 2026-10-09). Today a device binds exactly one
+station or watcher. Floor plan and sales monitors are later work.
 
 ## 10. Live controls
 
