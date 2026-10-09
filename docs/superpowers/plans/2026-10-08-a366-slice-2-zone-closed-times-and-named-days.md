@@ -1362,3 +1362,22 @@ cases; venue-service node passed 1441, and the unedited fiscal pair passed 20. R
 and the skipped cases are listed in Lane D receipts `receipts/a366-2/task28-report.md`.
 No new visual check was made for the seeded content. Task 29, whole-branch reviews, the push
 hook, current-head CI and authorised landing remain.
+
+
+## Task 29 reviewed checkpoint (2026-10-09)
+
+Task 29 is complete at signed correction `363ad9d1c3c6a395248fcafcacab550dc9e2c800`.
+The task review and scoped correction review approve spec compliance and quality. The Calendar
+keeps local coverage independent of official-country coverage in both renderers, and English and
+Spanish guidance permits own holidays without a resolved holiday address. The documentation
+describes named days and zone closures, including transfer admission and existing work.
+
+The Calendar reproduction failed seven checks before the correction; the final focused file
+passed 64. The installed deletion control failed four checks and passed four after restoration.
+The closed-zone reprint probe passed one case through the real route. Eight final native captures
+cover English and Spanish, both themes, and 1280/390 CSS widths. Earlier incomplete or inconsistent
+captures, runtime notices and test-check inventories remain in Lane D Task 29 receipts.
+
+Tasks 1–29 are reviewed and complete. The final matrix, necessary rebase and migration
+regeneration, two Claude whole-branch reviews, the normal push hook, current-head CI and authorised
+landing remain. The slice requires a venue reset; no venue was reset in this task.
