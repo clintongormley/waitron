@@ -42,12 +42,36 @@ order" (`docs/backlog.md`, till area; no detail file).
 4. **The dialog is the existing one.** Its dish name is the row's scope (`#12 Mesa 4`, as the row's
    other buttons' labels use), and its current station is the station every named dish shares, or
    none when they are at different stations.
-5. **After the answer** (moved or refused) the till reads the waiting list again, and the station
-   card, as a hand-over does. A refusal shows in the dialog the way the table's move shows one; the
-   string `move_station.refused.working_order.already_collected` exists already.
-6. Button: `wt-button` `variant="secondary"`, `data-waiting-move-station`, text and aria-label from
-   `table.move_station` ("Move to station…" / "Cambiar de estación…") plus the row's scope in the
-   aria-label. No new strings expected.
+5. **After the answer** (moved or refused) the till reads the station card and then the waiting
+   list again, as a hand-over does, but with refresh messages of its own (`refresh.*_after_hand_over`
+   describes a hand-over; add `refresh.station_after_move` and `refresh.waiting_after_move`, or reuse
+   a generic `refresh.*` key if one exists).
+6. **Refusals.** The move is all or nothing: one started dish refuses the whole request
+   (`ticket.already_started`, `station-move.ts`). The table's refusal strings speak of "this dish",
+   which would read as if the others moved. Add whole-order wordings, EN and ES, for every refusal
+   code the route can answer whose existing string names a single dish (at least
+   `ticket.already_started`; check `move_station.refused.*` one by one). After a refusal the list is
+   read again: when the row is still there with dishes that can move, the dialog stays open showing
+   the refusal; when it is gone or has nothing left to move, the dialog closes and the refusal shows
+   in the till's message line.
+7. **Button**: `wt-button` `variant="secondary"`, `data-waiting-move-station`, text and aria-label
+   from `table.move_station` ("Move to station…" / "Cambiar de estación…") plus the row's scope in the
+   aria-label. **Drawn only when the device's profile allows `take-orders`** (the route requires it;
+   the held-orders card asks for no capability, `apps/till/src/card-contract.ts`): pass it down the
+   way the card grid passes other capabilities, and test both cases. If Hand over is already gated on
+   its own action, follow the same pattern.
+8. **The till keeps a third kind of move.** `movingStation` today holds one `lineId` and a `counter`
+   flag, checks `#orderVisit`, and reloads the table's lines after a non-counter move. Add a third
+   kind (for example `kind: "table" | "counter" | "waiting"`), checked against the operator's session
+   and the opening token only. When a station is chosen, the line ids are taken from the CURRENT
+   `counterWaiting` row, not from the moment the dialog opened; if the row is gone or has nothing to
+   move, the dialog closes without sending. Table and counter-basket moves keep their behaviour.
+9. **At most 100 dishes per request** (the route refuses more, `till-api.ts`). The till sends the
+   first 100 by the order the server lists them; any left over are still listed after the re-read, so
+   a second press moves them. Tested with 101.
+10. **Extras with a kitchen record of their own stay where they are** when their dish moves: that is
+   today's route behaviour (`station-move.test.ts`, "moves a dish without moving its split-off chips
+   at another station") and the table screen's too. Not a defect of this item.
 
 ## Task (one implementer)
 
@@ -70,8 +94,12 @@ Work test-first in `/Users/clintongormley/workspace/worktrees/waitron-feat-move-
 4. **App.** Failing tests first (the till-app suite that already drives the waiting list, e.g.
    `apps/till/src/till-app-boot-and-counter.test.ts`): pressing the button loads the stations and
    opens the move dialog headed with the row's scope; choosing a station calls `moveDishStation`
-   once with the order id and every movable line id; the waiting list is read again afterwards; a
-   refusal (`working_order.already_collected`) shows in the dialog and the list is read again.
+   once with the order id and every movable line id taken from the list as it is at that moment; the
+   station card and the waiting list are read again afterwards; a refusal whose row still has
+   dishes keeps the dialog open with the whole-order wording; a refusal whose row has gone closes it
+   and shows the message line; a row that vanished before the choice sends nothing; 101 movable
+   dishes send 100; a profile without `take-orders` draws no button; a session change while the
+   stations load opens nothing.
    Keep the table and counter-basket move paths unchanged (their existing tests must pass
    unedited).
 5. **Look.** Mount the waiting list (or the counter screen) with a paid row carrying a movable dish
@@ -82,7 +110,10 @@ Work test-first in `/Users/clintongormley/workspace/worktrees/waitron-feat-move-
 
 Checks to run: `pnpm --filter @waitron/server exec vitest run src/counter-handover.test.ts
 src/station-move.test.ts src/till-api.station-move.test.ts`, `pnpm --filter @waitron/till exec
-vitest run src/widgets/counter-waiting src/till-app-boot-and-counter.test.ts` plus any suite you
-changed, `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/till typecheck`,
+vitest run src/widgets/counter-waiting src/widgets/card-grid src/till-app-boot-and-counter.test.ts
+src/till-app-table-service.test.ts src/till-app-counter-adjustments.test.ts src/api/client.test.ts
+src/i18n` plus any suite you changed (fixtures that build a waiting row live at least in
+`till-app.test.ts`, `till-app-counter-cancel-credit.test.ts`, `api/client.test.ts`, `card-grid.test.ts`,
+`till-app.a11y.test.ts` and the `counter-waiting` tests), `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/till typecheck`,
 `pnpm format:check`, `pnpm lint`. Prove each new check by deleting the code it guards and watching
 it fail.
