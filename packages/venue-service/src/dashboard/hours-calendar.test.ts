@@ -1465,7 +1465,8 @@ describe("Opening hours named month", () => {
               unsupported_country: "No hay zonas de festivos para este país.",
             };
       for (const [readiness, message] of Object.entries(explanations)) {
-        const request = vi.fn(async (_path: string, _method?: string) => {
+        const request = vi.fn(async (path: string, method?: string) => {
+          if (method === "PUT") throw new Error(`Unexpected area write: ${path}`);
           const model = namedModel();
           Object.assign(model.area, { readiness });
           if (readiness !== "missing_city") model.area.options = [];
