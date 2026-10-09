@@ -2086,6 +2086,7 @@ it("creates a section at the menu's top level from the toolbar's Add ⋮, and gi
   expect(modal(el, "new-section").heading).toBe(
     t("menus.new_section_heading").replace("{list}", "Lunch Menu"),
   );
+  expect(modal(el, "new-section").heading).toBe("Añadir sección a Lunch Menu");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -9431,7 +9432,7 @@ describe("review fix: menu details opening", () => {
     );
   });
   it.each(["answer", "failure"] as const)(
-    "ignores an obsolete rename %s after New menu",
+    "ignores an obsolete rename %s after Add menu",
     async (outcome) => {
       const pending = deferred<MenuStructure>();
       const client = api({ getMenuStructure: vi.fn(() => pending.promise) });

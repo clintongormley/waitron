@@ -712,7 +712,7 @@ export const en = {
   "table.transfer_confirm": "Transfer",
   "table.transfer_no_lines": "No items to transfer",
   "table.split_pick_lines": "Choose items for this bill",
-  "table.split_confirm": "Create bill",
+  "table.split_confirm": "Add bill",
   "table.confirm_different_people_title": "Separate bills for different people?",
   "table.confirm_different_people":
     "Confirm that the resulting bills belong to different people. A bill over €3,000 needs a full invoice unless it is genuinely shared between people.",
@@ -1838,7 +1838,7 @@ export const es: Record<StringKey, string> = {
   "table.transfer_confirm": "Transferir",
   "table.transfer_no_lines": "No hay artículos para transferir",
   "table.split_pick_lines": "Elige artículos para esta cuenta",
-  "table.split_confirm": "Crear cuenta",
+  "table.split_confirm": "Añadir cuenta",
   "table.confirm_different_people_title": "¿Cuentas separadas para distintas personas?",
   "table.confirm_different_people":
     "Confirma que las cuentas resultantes pertenecen a personas distintas. Una cuenta superior a 3000 € necesita una factura completa salvo que se comparta realmente entre varias personas.",

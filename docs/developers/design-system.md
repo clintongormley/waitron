@@ -1668,7 +1668,7 @@ naming a shown field sits beside its department or zone, with the generic messag
 A dirty draft keeps its original department, zone and named-day facts through background reads
 and reconnect.
 
-A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
+A form that saves opens with its primary action (Save, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
 `primary`; undoing the change back to the opened values makes it quiet and disabled again (owner
 decision, 2026-10-07, A331). "Changed" is the draft scope's `isDirty()`, never a second comparison
@@ -1754,7 +1754,7 @@ and nothing guards it across screens:
   Delete dialog and the image picker act on what is selected rather than save a draft, so they keep
   their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
-- batch 3a: the floor plan's table rows and Add table; the service-status rows and Create; the
+- batch 3a: the floor plan's table rows and Add table; the service-status rows and Add; the
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
@@ -1825,7 +1825,7 @@ their existing validation and retry behavior. See the
 [Batch 4a classifications](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a)
 for each provider call path.
 
-Preparation stations' screen-owned Save editors follow the rule too (A331 batch 4d): New and
+Preparation stations' screen-owned Save editors follow the rule too (A331 batch 4d): Add and
 Rename station, station printers, watcher Rename/follows/zones/pass/printers, and Settings
 rest/fallback/timing. An unchanged Settings fallback opens no confirmation; an edited fallback
 keeps its two presses. Routing Confirm and station service operations remain actions;
@@ -2230,7 +2230,7 @@ customer-facing name in the venue's default content language, show the record's 
 placeholder (on a variant, the variant's Name); a blank customer-facing name in any other language
 shows the default language's customer-facing name, or Name while that is blank too. Each follows the
 field it copies as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`).
-The menu section form, which is also a menu's Create and Rename form
+The menu section form, which is also a menu's Add and Rename form
 (`apps/dashboard/src/widgets/section-details-form.ts`), hints its blank customer-facing names the
 same way, with its first field (Internal name on a section, Name on a menu) in place of Name; it has
 no kitchen name.
@@ -2787,8 +2787,8 @@ rather than assuming this composition applies unchanged.
   this station)" (A366-4A).
 - **An action label starts with a verb** (owner, 2026-10-09, A443): Add, Delete, Move, Remove, Save. A
   button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
-  — "Add" is a verb like "Delete"; "New" is an adjective. A dialog heading is not an action label:
-  a create dialog may still be headed "New unit".
+  — "Add" is a verb like "Delete"; "New" is an adjective. A create action never says "Create" /
+  "Crear", and the dialog it opens is headed "Add …" to match it (owner, 2026-10-09, A450).
 
 ## Event discipline
 
@@ -3067,7 +3067,7 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Station hours named days
 
-Station hours offers Week and Named days. Create, copy or delete a named day through the links
+Station hours offers Week and Named days. Add, copy or delete a named day through the links
 in Named days to Opening hours → Calendar. You see one-off days from the venue’s yesterday
 onward; repeating days follow each station’s standard week. Edit shows the stored date and name
 as text and saves station cells with the day’s other fields unchanged. A stored whole-venue closure
@@ -3153,7 +3153,7 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
 - **Named days.** A `wt-data-table` of one-off named days from yesterday onward, with prep station
   columns; a value kept from the standard week is muted. Edit changes station cells only; the date
   and name are text, and the save carries the stored kind, repeat, own-hours, closure
-  values unchanged. A whole-venue closure keeps the station cells locked. Create, copy and delete
+  values unchanged. A whole-venue closure keeps the station cells locked. Add, copy and delete
   lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
 
 - **Calendar.** Add, edit, copy and delete named days here. The editor asks for Holiday or
@@ -3242,7 +3242,7 @@ facts and existing refresh error. Recovery supplies the new count. After a stale
 hide the old document while reading its replacement. Changing the dashboard interface language
 rebuilds its screen, so that separate operation reads the preview again.
 
-If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
+If a tab has an Add action, put it in the `actions` slot for the selected tab. This
 places the action at the end of the tab row, outside the tab list's accessibility role, and keeps it
 there on the tabs' line at every width: never let the row wrap the action onto a line of its own
 (owner, 2026-10-08, A424). The tab strip takes the rest of the row and scrolls sideways beside the
@@ -3264,12 +3264,12 @@ each section the menu owns (the "the Structure tree" cases in
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
 hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it
 needs the icon that means "more options here," not "open navigation" (see "Icons" below) — with a
-label that identifies the row, such as `Actions: Restaurant`. On a page without tabs, put Create in
+label that identifies the row, such as `Actions: Restaurant`. On a page without tabs, put Add in
 a menu beside the table heading. Some lists, Menus, Staff and Units among them, instead put a text
 button that creates one, such as "Add menu", in the heading's row at its trailing edge (Menus at
 the owner's request, W79, 2026-10-04); Menus' button moves under the heading, still at the trailing
 edge, when it does not fit. Put Edit, Delete or domain-specific actions in each row's menu. A
-screen may instead offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus`
+screen may instead offer Add as a round icon-only `wt-button` (`shape="round"` with the `plus`
 icon and an `aria-label`) beside the heading — but **no screen does today**, and no dashboard
 control uses `shape="round"` at all, so read this as a permission rather than a pattern with a home.
 The menu uses a native popover: clicking outside or pressing Escape closes it. Clicking an action

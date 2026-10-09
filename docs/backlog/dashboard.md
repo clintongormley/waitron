@@ -592,7 +592,7 @@ batch 7b's re-run inventories done; batch 4b (Departments and zones) built. One 
 slice 7 stays open, below.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
-then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
+then "this should be global". A form that saves opens with its main action (Save, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
 pressable, and undoing the change turns it quiet and disabled again. "Changed" is what the form's
 unsaved-changes tracking (W69) already says, not a comparison written per screen. The rule, and

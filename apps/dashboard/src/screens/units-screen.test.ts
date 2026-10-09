@@ -203,7 +203,12 @@ describe("units-screen", () => {
     expect(button.textContent!.trim()).toBe("Añadir unidad");
     button.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("dashboard-unit-form")!.open).toBe(true);
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    expect(form.open).toBe(true);
+    await form.updateComplete;
+    expect(form.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
+      "Añadir unidad",
+    );
   });
 
   it("draws no create button in the table once units exist", async () => {
@@ -432,7 +437,7 @@ describe("units-screen", () => {
     expect(form.open).toBe(false);
   });
 
-  /** Opens New unit, submits it and lets the stubbed refusal land. */
+  /** Opens Add unit, submits it and lets the stubbed refusal land. */
   async function refusedCreate(refusal: unknown) {
     const createUnit = vi.fn().mockRejectedValue(refusal);
     const el = await mount(stubApi({ createUnit }));

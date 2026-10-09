@@ -1172,7 +1172,7 @@ Task 2 (#825) the cancel path checks `assertPartyBillOpen` (today in `applyAdjus
 `apps/server/src/adjustments-apply.ts`, which replaced `voidTabLine` in B11a), which lets through
 an open bill that belongs to a party whether or not a table points at it, and a split check carries
 its party. **Decided (owner, 2026-09-26):** a check
-gets no Void; a change of mind between "Create bill" and paying was covered by the till merging the
+gets no Void; a change of mind between "Add bill" and paying was covered by the till merging the
 check back. Since table actions Task 10 the till no longer merges it back on its own; a change of
 mind is undone by Merge bills on the party's table screen, by hand. **Next action:** the owner
 decides whether that still covers the no-Void decision.

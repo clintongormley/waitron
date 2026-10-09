@@ -16,7 +16,7 @@ const en = {
   "booking.add": "Add booking",
   "booking.empty": "No bookings for this day.",
   "booking.date": "Date",
-  "booking.new": "New booking",
+  "booking.new": "Add booking",
   "booking.edit": "Edit booking",
   "booking.time": "Time",
   "booking.party_size": "Party size",
@@ -33,7 +33,7 @@ const en = {
   "booking.no_show": "No-show",
   "booking.cancel": "Cancel",
   "action.save": "Save",
-  "action.create": "Create",
+  "action.create": "Add",
   "action.edit": "Edit",
 } as const;
 
@@ -43,7 +43,7 @@ const es: Record<keyof typeof en, string> = {
   "booking.add": "Añadir reserva",
   "booking.empty": "No hay reservas para este día.",
   "booking.date": "Fecha",
-  "booking.new": "Nueva reserva",
+  "booking.new": "Añadir reserva",
   "booking.edit": "Editar reserva",
   "booking.time": "Hora",
   "booking.party_size": "Comensales",
@@ -60,7 +60,7 @@ const es: Record<keyof typeof en, string> = {
   "booking.no_show": "No presentada",
   "booking.cancel": "Cancelar",
   "action.save": "Guardar",
-  "action.create": "Crear",
+  "action.create": "Añadir",
   "action.edit": "Editar",
 };
 
