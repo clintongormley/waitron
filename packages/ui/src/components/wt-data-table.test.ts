@@ -730,7 +730,13 @@ const treeRows: TreeRow[] = [
   { id: "drinks", parent: null, name: "Drinks" },
 ];
 const treeColumns: DataTableColumn<TreeRow>[] = [
-  { key: "name", label: "Name", cell: (r) => r.name, sortValue: (r) => r.name },
+  {
+    key: "name",
+    label: "Name",
+    cell: (r) => r.name,
+    sortValue: (r) => r.name,
+    searchValue: (r) => r.name,
+  },
 ];
 function treeKeys(el: WtDataTable<TreeRow>): (string | null)[] {
   return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
@@ -1855,6 +1861,149 @@ test("the selection cell is a grid cell in a tree and carries no role in a plain
   expect(tree.shadowRoot!.querySelector("td.select")!.getAttribute("role")).toBe("gridcell");
 });
 
+type Drink = { id: string; name: string; category: string };
+const drinks: Drink[] = [
+  { id: "virgin", name: "Virgin Mary", category: "Mocktails" },
+  { id: "ginger", name: "Ginger Ale", category: "Mixers" },
+  { id: "tonic-gin", name: "Tonic Gin", category: "Cocktails" },
+  { id: "gt", name: "Gin & Tónic", category: "Cocktails" },
+  { id: "gin", name: "Gin", category: "Spirits" },
+];
+async function drinksTable(props: Partial<WtDataTable<Drink>> = {}) {
+  const el = (await mount(
+    '<wt-data-table aria-label="Drinks"></wt-data-table>',
+  )) as WtDataTable<Drink>;
+  Object.assign(el, {
+    rows: drinks,
+    rowKey: (r: Drink) => r.id,
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (r: Drink) => r.name,
+        sortValue: (r: Drink) => r.name,
+        searchValue: (r: Drink) => r.name,
+      },
+      {
+        key: "category",
+        label: "Category",
+        cell: (r: Drink) => r.category,
+        searchValue: (r: Drink) => r.category,
+      },
+    ],
+    sortKey: "name",
+    sortDirection: "ascending",
+    ...props,
+  });
+  await el.updateComplete;
+  return el;
+}
+const keys = (el: WtDataTable<Drink>) =>
+  [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-row-key"));
+
+test("a search lists the closest matches first, ahead of the column sort", async () => {
+  const el = await drinksTable({ searchTerm: "gin" });
+  expect(keys(el)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["gin", "gt", "ginger", "tonic-gin", "virgin"]);
+});
+
+test("a search ranks a table with no sort column", async () => {
+  const el = await drinksTable({ searchTerm: "gin", sortKey: "" });
+  expect(keys(el)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
+});
+
+test("a row group still comes before the closest match", async () => {
+  const el = await drinksTable({
+    searchTerm: "gin",
+    rowGroup: (r: Drink) => (r.id === "virgin" ? 0 : 1),
+  });
+  expect(keys(el)).toEqual(["virgin", "gin", "gt", "tonic-gin", "ginger"]);
+});
+
+test("a search finds every word in any order, across columns, ignoring accents", async () => {
+  // Both are Cocktails; "cocktails" is whole in each one's second part, so the shorter row wins.
+  const el = await drinksTable({ searchTerm: "tonic cocktails" });
+  expect(keys(el)).toEqual(["tonic-gin", "gt"]);
+  el.searchTerm = "tonic mixers";
+  await el.updateComplete;
+  expect(keys(el)).toEqual([]);
+  el.searchTerm = "COCKTAILS tonic gin";
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["gt", "tonic-gin"]);
+});
+
+test("a word followed by a space must be a whole word", async () => {
+  const el = await drinksTable({ searchTerm: "gin " });
+  expect(keys(el)).toEqual(["gin", "gt", "tonic-gin"]);
+});
+
+test("a column with only a sort value is not searched", async () => {
+  const el = await drinksTable({
+    searchTerm: "spirits",
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (r: Drink) => r.name,
+        sortValue: (r: Drink) => r.name,
+        searchValue: (r: Drink) => r.name,
+      },
+      {
+        key: "category",
+        label: "Category",
+        cell: (r: Drink) => r.category,
+        sortValue: (r: Drink) => r.category,
+      },
+    ],
+  });
+  expect(keys(el)).toEqual([]);
+});
+
+test("a search reads the columns given now, not the ones it was first given", async () => {
+  const el = await drinksTable({ searchTerm: "spirits" });
+  expect(keys(el)).toEqual(["gin"]);
+  el.columns = el.columns.slice(0, 1);
+  await el.updateComplete;
+  expect(keys(el)).toEqual([]);
+});
+
+test("a search reads a row again when the rows are given again", async () => {
+  const rum = { id: "rum", name: "Gin", category: "Spirits" };
+  const el = await drinksTable({ rows: [rum], searchTerm: "rum" });
+  expect(keys(el)).toEqual([]);
+  rum.name = "Rum";
+  el.rows = [rum];
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["rum"]);
+});
+
+test("a search of only punctuation shows no rows", async () => {
+  const el = await drinksTable({ searchTerm: "&" });
+  expect(keys(el)).toEqual([]);
+});
+
+test("the search box ranks too, and keeps a trailing space", async () => {
+  const el = await drinksTable({ searchable: true });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "gin ";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["gin", "gt", "tonic-gin"]);
+});
+
+test("a heading clicked during a search applies once the search is cleared", async () => {
+  const el = await drinksTable({ searchTerm: "gin" });
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button.sort[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(el.sortDirection).toBe("descending");
+  expect(keys(el)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["virgin", "tonic-gin", "ginger", "gt", "gin"]);
+});
+
 test("searchable renders a search box that narrows rows", async () => {
   const el = await table({
     searchable: true,
@@ -1911,16 +2060,20 @@ test("noMatchesMessage shows when a search excludes every row", async () => {
   expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
 });
 
-test("search matches a column that exposes only a sortValue", async () => {
+test("search does not match a column that exposes only a sortValue", async () => {
   const el = await table({
     searchable: true,
     columns: [
-      { key: "name", label: "Name", cell: (r: Row) => r.name },
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
       { key: "count", label: "Count", cell: (r: Row) => r.count, sortValue: (r: Row) => r.count },
     ],
   });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
   input.value = "10";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowText(el)).toEqual([]);
+  input.value = "ada";
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
   expect(rowText(el)).toEqual(["Ada10"]);
@@ -4504,7 +4657,7 @@ test("the fixed first column keeps sorting a tree's siblings", async () => {
 test("search still reads a hidden column", async () => {
   const el = await table({ columns: choosable, searchable: true });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
-  input.value = "extra-a";
+  input.value = "extra-a ";
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
   expect(rowText(el)).toEqual(["Ada10"]);
@@ -5663,7 +5816,10 @@ test("shownKeys lists the rows the search and filters leave, including those a c
 });
 
 test("shownKeys lists a flat table's rows the search leaves, in the order they are drawn", async () => {
-  const el = await table({ rows: [...rows, { id: "c", name: "Adam", count: 1 }] });
+  const el = await table({
+    rows: [...rows, { id: "c", name: "Adam", count: 1 }],
+    columns: [{ ...columns[0]!, searchValue: (row: Row) => row.name }, ...columns.slice(1)],
+  });
   expect(el.shownKeys()).toEqual(["b", "a", "c"]);
   el.sortKey = "name";
   await el.updateComplete;
@@ -5812,6 +5968,7 @@ test("while searching, a row under a match that the filters drop stays out", asy
       label: "Name",
       cell: (row) => row.name,
       sortValue: (row) => row.name,
+      searchValue: (row) => row.name,
       filter: {
         label: "Kind",
         allLabel: "Any kind",
@@ -5958,6 +6115,7 @@ test("while searching, a row that matches or sits under a match is not marked an
         key: "name",
         label: "Name",
         sortValue: (row) => row.name,
+        searchValue: (row) => row.name,
         cell: (row, context) => {
           seen[row.id] = context.ancestorOnly;
           return row.name;

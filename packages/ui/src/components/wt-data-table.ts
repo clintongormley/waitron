@@ -1,5 +1,11 @@
 import { DragEdgeScroll } from "../drag-edge-scroll.js";
-import { createLabelComparator } from "@waitron/shared";
+import {
+  compareSearchRanks,
+  createLabelComparator,
+  foldForSearch,
+  textSearch,
+  type SearchRank,
+} from "@waitron/shared";
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -1040,6 +1046,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("rows") || changed.has("columns")) this.#folded = new Map();
     if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
       this.#releaseColumnWidths();
     if (
@@ -1540,7 +1547,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const visible = this.#visibleRows();
     return this.rowParent
       ? this.#treeVisible(visible).rows
-      : this.#sortedRows(visible, this.#sortColumn(this.#shownColumns()));
+      : this.#sortedRows(visible, this.#sortColumn(this.#shownColumns()), this.#ranks);
   }
 
   #emitSelection(next: string[]): void {
@@ -1602,9 +1609,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     rows: readonly Row[],
     column: DataTableColumn<Row> | undefined,
     indexOf: ReadonlyMap<Row, number>,
+    ranks: ReadonlyMap<Row, SearchRank> | undefined,
   ): Row[] {
     const group = this.rowGroup;
-    if (column?.sortValue === undefined && group === undefined) return [...rows];
+    if (column?.sortValue === undefined && group === undefined && ranks === undefined)
+      return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
     const compareLabels = createLabelComparator();
     return [...rows]
@@ -1612,10 +1621,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
         row,
         index: indexOf.get(row)!,
         group: group?.(row) ?? 0,
+        rank: ranks?.get(row),
         value: column?.sortValue?.(row),
       }))
       .sort((left, right) => {
         if (left.group !== right.group) return left.group - right.group;
+        const ranked =
+          left.rank === undefined || right.rank === undefined
+            ? 0
+            : compareSearchRanks(left.rank, right.rank);
+        if (ranked !== 0) return ranked;
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
         if (right.value == null) return -1;
@@ -1628,26 +1643,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
-  #searchHaystack(row: Row): string {
-    return this.columns
-      .map((column) =>
-        column.searchValue
-          ? column.searchValue(row)
-          : column.sortValue
-            ? String(column.sortValue(row) ?? "")
-            : "",
-      )
-      .join(" ")
-      .toLocaleLowerCase();
+  /** Replaced whenever `rows` or `columns` changes, so typing does not fold every row again. A
+   * `Map`, not a `WeakMap`: `Row` is unconstrained and may be a primitive. */
+  #folded = new Map<Row, readonly string[]>();
+  /** Set by `#visibleRows` for the sort that follows it; undefined while no search is typed. */
+  #ranks: ReadonlyMap<Row, SearchRank> | undefined;
+
+  #searchParts(row: Row): readonly string[] {
+    let parts = this.#folded.get(row);
+    if (parts === undefined) {
+      parts = this.columns.flatMap((column) =>
+        column.searchValue ? [foldForSearch(column.searchValue(row))] : [],
+      );
+      this.#folded.set(row, parts);
+    }
+    return parts;
   }
 
-  #term(): string {
-    return (this.searchable ? this.searchText : this.searchTerm).trim().toLocaleLowerCase();
-  }
-
-  #passesSearch(row: Row): boolean {
-    const term = this.#term();
-    return term === "" || this.#searchHaystack(row).includes(term);
+  #search() {
+    return textSearch(this.searchable ? this.searchText : this.searchTerm);
   }
 
   #activeFilters(): ActiveFilter<Row>[] {
@@ -1668,7 +1682,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #visibleRows(): readonly Row[] {
     const active = this.#activeFilters();
-    return this.rows.filter((row) => this.#passesFilters(row, active) && this.#passesSearch(row));
+    const filtered = this.rows.filter((row) => this.#passesFilters(row, active));
+    const search = this.#search();
+    if (search === undefined) {
+      this.#ranks = undefined;
+      return filtered;
+    }
+    const ranks = new Map<Row, SearchRank>();
+    for (const row of filtered) {
+      const rank = search.rank(this.#searchParts(row));
+      if (rank !== undefined) ranks.set(row, rank);
+    }
+    this.#ranks = ranks;
+    return filtered.filter((row) => ranks.has(row));
   }
 
   /** A hidden column sorts nothing, though `sortKey` still names it for when it is shown again. */
@@ -1676,10 +1702,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return shown.find((column) => column.key === this.sortKey && column.sortValue !== undefined);
   }
 
-  #sortedRows(rows: readonly Row[], column: DataTableColumn<Row> | undefined): Row[] {
+  #sortedRows(
+    rows: readonly Row[],
+    column: DataTableColumn<Row> | undefined,
+    ranks: ReadonlyMap<Row, SearchRank> | undefined,
+  ): Row[] {
     const indexOf = new Map<Row, number>();
     rows.forEach((row, index) => indexOf.set(row, index));
-    return this.#sortByColumn(rows, column, indexOf);
+    return this.#sortByColumn(rows, column, indexOf, ranks);
   }
 
   /** In tree mode a match's ancestors stay, so it is not shown as a false top-level row. With
@@ -1711,7 +1741,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         parentKey = parent ? parentOf(parent) : null;
       }
     });
-    const searching = this.searchOpensPath && this.#term() !== "";
+    const searching = this.searchOpensPath && this.#search() !== undefined;
     const below = new Set<string>();
     if (searching) {
       const active = this.#activeFilters();
@@ -1765,7 +1795,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const siblings =
         parent !== undefined && this.rowKeepsChildOrder(parent)
           ? children
-          : this.#sortByColumn(children, column, indexOf);
+          : this.#sortByColumn(children, column, indexOf, undefined);
       for (const row of siblings) {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
@@ -1866,7 +1896,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const position = new Map(this.rows.map((row, index) => [row, index]));
       return [...rows].sort((a, b) => (position.get(a) ?? -1) - (position.get(b) ?? -1));
     }
-    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()));
+    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()), undefined);
   }
 
   /** Opens every closed branch above the row with this key, then scrolls the row into view. */
@@ -2437,7 +2467,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
-      const sorted = this.#sortedRows(visible, sortColumn);
+      const sorted = this.#sortedRows(visible, sortColumn, this.#ranks);
       const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
         this.rowSelectable(row) ? [this.rowKey(row, index)] : [],
