@@ -605,7 +605,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             ...(alternatives.get(row.id) ?? []).map((profile) => profile.id),
           ],
           equipment: equipment.get(row.id) ?? [],
-          kitchenScreens: kitchenScreens.get(row.id) ?? [],
+          kitchenScreens: kitchenScreens.get(row.id)!,
         })),
       );
     }),

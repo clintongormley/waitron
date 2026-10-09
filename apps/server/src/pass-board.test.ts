@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createStation } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -109,6 +109,64 @@ async function terraceVenue() {
   });
   return { v, grill, bar, terrace, outside, inside, counterId };
 }
+
+/** Caña at a Bar station in a Starters course, Burger at a Grill station in a Mains course; a
+ *  fired counter order of both, and a seated party that sent each in a group of its own. */
+async function twoSectionVenue() {
+  const v = await setupPartyVenue(suite.db);
+  const grill = await inTx(v, async (tx) => {
+    const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
+    const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
+    await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
+    await routeProductTo(tx, v.cfg, v.productId("Caña"), bar);
+    const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
+    await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
+    const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
+    await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
+    return grill;
+  });
+  const counterId = randomUUID();
+  await inTx(v, async (tx) => {
+    await createOpenOrder(
+      tx,
+      v.cfg,
+      counterId,
+      v.counter.toOfferLines([
+        { productId: v.productId("Caña"), quantity: "1" },
+        { productId: v.productId("Burger"), quantity: "1" },
+      ]),
+      null,
+      { zoneId: v.counter.zoneId },
+    );
+    const lines = await tx
+      .select(fireableLineColumns)
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, counterId));
+    await fireLines(tx, v.cfg, counterId, lines);
+  });
+  const party = await seat(v, await v.table("Two groups"));
+  await orderForParty(v, party.partyId, ["Burger"], party.tabId);
+  await orderForParty(v, party.partyId, ["Caña"], party.tabId);
+  return { v, grill, counterId, party };
+}
+
+type Sections = {
+  orders: {
+    orderId: string;
+    courses: { courseName: string | null; items: { name: string }[] }[];
+    groups: { items: { name: string }[] }[];
+  }[];
+};
+const sections = (board: Sections) =>
+  Object.fromEntries(
+    board.orders.map((o) => [
+      o.orderId,
+      {
+        courses: o.courses.map((c) => [c.courseName, c.items.map((i) => i.name)]),
+        groups: o.groups.map((g) => g.items.map((i) => i.name)),
+      },
+    ]),
+  );
 
 describe("passSees", () => {
   it("sees a dish only at a listed station and in a listed zone; a dish in no zone only under every zone", () => {
@@ -242,6 +300,57 @@ describe("pass screen", () => {
     expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, other!, EVERY))).sort()).toEqual(
       [...itemIds].sort(),
     );
+  });
+});
+
+describe("a pass's sections", () => {
+  it("a pass screen leaves out a course or group holding no dish it shows", async () => {
+    const { v, grill, counterId, party } = await twoSectionVenue();
+    const [device] = await passDevices(v, 1);
+    const read = () =>
+      inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, { stationIds: [grill], zoneIds: null }));
+    expect(sections(await read())).toEqual({
+      [counterId]: { courses: [["Mains", ["BURG"]]], groups: [] },
+      [party.tabId]: { courses: [], groups: [["BURG"]] },
+    });
+    const everything = sections(await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY)));
+    expect(everything[counterId]!.courses).toEqual([
+      ["Starters", ["CANA"]],
+      ["Mains", ["BURG"]],
+    ]);
+    expect(everything[party.tabId]!.groups).toEqual([["BURG"], ["CANA"]]);
+  });
+
+  it("a pass monitor leaves out a course or group holding no dish in its scope", async () => {
+    const { v, grill, counterId, party } = await twoSectionVenue();
+    const board = await inTx(v, (tx) =>
+      listPassMonitor(tx, v.cfg, { stationIds: [grill], zoneIds: null }),
+    );
+    expect(sections(board)).toEqual({
+      [counterId]: { courses: [["Mains", ["BURG"]]], groups: [] },
+      [party.tabId]: { courses: [], groups: [["BURG"]] },
+    });
+  });
+});
+
+describe("markPassItems", () => {
+  it("writes and refuses nothing for an id that names no dish", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [device] = await passDevices(v, 1);
+    for (const done of [true, false]) {
+      await inTx(v, (tx) =>
+        markPassItems(
+          tx,
+          v.cfg,
+          { deviceId: device!, personId: null },
+          { stationIds: null, zoneIds: [v.counter.zoneId] },
+          [randomUUID()],
+          done,
+          new Date(),
+        ),
+      );
+    }
+    expect(await inTx(v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
   });
 });
 

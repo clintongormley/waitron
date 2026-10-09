@@ -83,7 +83,7 @@ export async function listPassScreen(
       : null;
   };
   return {
-    orders: orders.flatMap((order) =>
+    orders: orders.map((order) =>
       withSections(
         order,
         order.courses.flatMap((part) => section(part) ?? []),
@@ -110,7 +110,7 @@ export async function listPassMonitor(
     return items.some((item) => item.awayAt === null) ? { ...part, items } : null;
   };
   return {
-    orders: orders.flatMap((order) =>
+    orders: orders.map((order) =>
       withSections(
         order,
         order.courses.flatMap((part) => section(part) ?? []),
@@ -131,7 +131,6 @@ export async function markPassItems(
   done: boolean,
   at: Date,
 ): Promise<void> {
-  if (!ticketItemIds.length) return;
   const rows = await tx
     .select({
       id: ticketItems.id,
@@ -239,7 +238,7 @@ async function scopedItems(
   ];
   const zones = await orderWatchZones(tx, cfg, distinctOrders);
   return candidates.filter((item) =>
-    passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId) ?? null }),
+    passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
   );
 }
 
@@ -247,15 +246,12 @@ function withSections<C extends ExpoCourse, G extends ExpoGroup>(
   order: ExpoOrder,
   courses: C[],
   groups: G[],
-): (Omit<ExpoOrder, "courses" | "groups"> & { courses: C[]; groups: G[] })[] {
-  if (!courses.length && !groups.length) return [];
+): Omit<ExpoOrder, "courses" | "groups"> & { courses: C[]; groups: G[] } {
   const visible = [...courses, ...groups].flatMap((part) => part.items);
-  return [
-    {
-      ...order,
-      courses,
-      groups,
-      worstBand: worstBand(visible.filter((item) => item.awayAt === null).map((item) => item.band)),
-    },
-  ];
+  return {
+    ...order,
+    courses,
+    groups,
+    worstBand: worstBand(visible.filter((item) => item.awayAt === null).map((item) => item.band)),
+  };
 }

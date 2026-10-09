@@ -3190,6 +3190,22 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(t.profileId);
     });
 
+    it("lists a device's active profile first, then each approved alternative", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const [a, b] = [await seedProfile("till"), await seedProfile("till")];
+      await approve(app, venue, t.deviceId, [a, b]);
+      const listed = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(listed.status).toBe(200);
+      const rows = (await listed.json()) as { id: string; approvedProfileIds: string[] }[];
+      const [first, ...rest] = rows.find((r) => r.id === t.deviceId)!.approvedProfileIds;
+      expect(first).toBe(t.profileId);
+      expect(rest.sort()).toEqual([a, b].sort());
+    });
+
     it("an edit without approvedProfileIds leaves the approved set alone", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
