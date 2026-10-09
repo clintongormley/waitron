@@ -4293,6 +4293,30 @@ describe("a refresh during a drag", () => {
     expect(drops).toEqual([]);
   });
 
+  it("tints and rings every cell of the category a drop would go into, the pinned ⋮ cell included", async () => {
+    const { el, root } = await mountTree();
+    press(nameOf(root, "bread"), "pointerdown");
+    press(nameOf(root, "folder:f"), "pointermove");
+    await el.updateComplete;
+    const look = (key: string) =>
+      [...root.querySelectorAll(`tr[data-row-key="${key}"] > td`)].map((cell) => {
+        const style = getComputedStyle(cell);
+        return { background: style.backgroundColor, shadow: style.boxShadow };
+      });
+    const target = look("folder:f");
+    const unmarked = look("folder:d");
+    expect(target.length).toBeGreaterThan(2);
+    expect(target.length).toBe(unmarked.length);
+    for (const [index, cell] of target.entries()) {
+      expect(cell.background).not.toBe(unmarked[index]!.background);
+      expect(cell.shadow).not.toBe(unmarked[index]!.shadow);
+      expect(cell.shadow).toContain("inset");
+    }
+    press(document.body, "pointercancel", nameOf(root, "folder:f"));
+    await el.updateComplete;
+    expect(look("folder:f")).toEqual(look("folder:d"));
+  });
+
   it("sends nothing when released after a refresh removed the category it would drop into, and the next drag still drops", async () => {
     const { el, root } = await mountTree();
     const { drops } = watch(el);

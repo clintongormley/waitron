@@ -168,6 +168,7 @@ export class WtRowActions extends LitElement {
     return html`
       <button
         type="button"
+        part="trigger"
         aria-label=${this.label}
         aria-expanded=${this.expanded}
         popovertarget="actions"

@@ -20,6 +20,7 @@ import {
   lastShownRow,
   markDragging,
   markGap,
+  markInto,
   placeDragGhost,
   shownRow,
   treeDragStyles,
@@ -117,6 +118,11 @@ export class MenuStructureTable extends LitElement {
     css`
       :host {
         display: block;
+      }
+      /* Drawn like the toolbar's icon buttons (iconButtonStyles). */
+      [data-test="toolbar-adds"]::part(trigger) {
+        border: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -548,8 +554,7 @@ export class MenuStructureTable extends LitElement {
     const drag = this.#drag;
     if (!drag?.active) return;
     markDragging(shownRow(root, drag.key));
-    if (this.#target?.kind === "into")
-      shownRow(root, this.#target.key)?.querySelector("td")?.part.add("drop-target");
+    if (this.#target?.kind === "into") markInto(shownRow(root, this.#target.key));
     const gap = this.#gap(drag.key);
     if (gap) markGap(root, gap);
   }

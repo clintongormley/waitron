@@ -2536,7 +2536,7 @@ export class MenusScreen extends LitElement {
       >
       <wt-button
         data-test="selection-move"
-        variant=${count > 0 ? "primary" : "secondary"}
+        variant="secondary"
         .disabled=${count === 0 || this.busy}
         @click=${() => {
           if (count === 0 || this.busy) return;

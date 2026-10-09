@@ -403,6 +403,8 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     at(table.shadowRoot!.querySelector('[part~="product-cell"]')!, "pointerdown");
     at(over, "pointermove");
     await el.updateComplete;
+    const cells = [...table.shadowRoot!.querySelectorAll('tr[data-row-key="folder:drinks"] > td')];
+    expect(cells.every((cell) => cell.part.contains("drop-into"))).toBe(true);
     await expectNoA11yViolations(host);
     at(over, "pointercancel");
   });

@@ -38,6 +38,7 @@ import {
   lastShownRow,
   markDragging,
   markGap,
+  markInto,
   placeDragGhost,
   shownRow,
   treeDragStyles,
@@ -601,7 +602,7 @@ export class ProductList extends LitElement {
     if (!this.#pointerDrag?.active) return;
     for (const key of this.#dragged) markDragging(shownRow(root, key));
     if (this.#target === undefined) return;
-    shownRow(root, this.#target)?.querySelector("td")?.part.add("drop-target");
+    markInto(shownRow(root, this.#target));
     const gap = this.#gap(this.#target);
     if (gap) markGap(root, gap);
   }

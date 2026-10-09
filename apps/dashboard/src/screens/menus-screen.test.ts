@@ -4038,6 +4038,23 @@ describe("the Structure tree", () => {
 
     const grips = (el: MenusScreen) => allInStructure(el, '[data-test^="drag-"]');
 
+    it("draws the toolbar's plus with the same border as Reorder beside it", async () => {
+      const el = await mountLunch();
+      await settleStructure(el);
+      const adds = structure(el).shadowRoot!.querySelector('[data-test="toolbar-adds"]')!;
+      const plus = getComputedStyle(adds.shadowRoot!.querySelector("button")!);
+      const reorder = getComputedStyle(reorderToggle(el));
+      const border = (style: CSSStyleDeclaration) =>
+        ["Top", "Right", "Bottom", "Left"].map((side) =>
+          ["Width", "Style", "Color"].map((part) =>
+            style.getPropertyValue(`border-${side.toLowerCase()}-${part.toLowerCase()}`),
+          ),
+        );
+      expect(border(reorder)[0]).toEqual(["1px", "solid", expect.any(String)]);
+      expect(border(plus)).toEqual(border(reorder));
+      expect(plus.borderRadius).toBe(reorder.borderRadius);
+    });
+
     it("starts with no grip on any row and the Reorder toggle not pressed", async () => {
       const el = await mountLunch();
       await toggleRow(el, "m-drinks");
@@ -4359,7 +4376,7 @@ describe("the Structure tree", () => {
       await openRemove(el);
       const dialog = modal(el, "remove-selected");
       expect(dialog.getAttribute("size")).toBe("compact");
-      expect(dialog.getAttribute("heading")).toBe("Remove 2 items from their sections?");
+      expect(dialog.getAttribute("heading")).toBe("Remove 2 items?");
       expect(
         [...dialog.querySelectorAll('[data-test="remove-selected-items"] li')].map(text),
       ).toEqual(["Burger, from Lunch Menu", "Lemonade, from Drinks"]);
@@ -4393,15 +4410,22 @@ describe("the Structure tree", () => {
       await pressSelect(el);
       await tick(el, "m-burger");
       await openRemove(el);
-      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
-        "Remove 1 item from its section?",
-      );
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 1 item?");
       setLocale("es");
       el.requestUpdate();
       await el.updateComplete;
-      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
-        "¿Quitar 1 elemento de su sección?",
-      );
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("¿Quitar 1 elemento?");
+    });
+
+    it("asks in Spanish how many items to remove", async () => {
+      setLocale("es");
+      const el = await mountLunch();
+      await toggleRow(el, "m-drinks");
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await tick(el, "m-drinks/m-lemonade");
+      await openRemove(el);
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("¿Quitar 2 elementos?");
     });
 
     it("keeps the dialog open with the refusal's message, holding Cancel while the request is out", async () => {
@@ -4560,7 +4584,7 @@ describe("the Structure tree", () => {
       expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
       await openRemove(el);
       const dialog = modal(el, "remove-selected");
-      expect(dialog.getAttribute("heading")).toBe("Remove 1 item from its section?");
+      expect(dialog.getAttribute("heading")).toBe("Remove 1 item?");
       expect(
         [...dialog.querySelectorAll('[data-test="remove-selected-items"] li')].map(text),
       ).toEqual(["Lemonade, from Drinks"]);
@@ -4669,17 +4693,13 @@ describe("the Structure tree", () => {
       await tick(el, "m-burger");
       await tick(el, "m-fav/m-fav-lemonade");
       await openRemove(el);
-      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
-        "Remove 2 items from their sections?",
-      );
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 2 items?");
 
       const [, drinks, favourites] = lunchNodes();
       client.getMenuStructure.mockResolvedValue(lunchWith([drinks!, favourites!]));
       live.invalidate([{ type: "section_members" }]);
       await vi.waitFor(() =>
-        expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
-          "Remove 1 item from its section?",
-        ),
+        expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 1 item?"),
       );
       expect(
         [
@@ -4781,18 +4801,14 @@ describe("the Structure tree", () => {
       await tick(el, "m-burger");
       await tick(el, "m-drinks/m-lemonade");
       await openRemove(el);
-      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
-        "Remove 2 items from their sections?",
-      );
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 2 items?");
 
       client.listLibraryProducts.mockResolvedValue(
         products.map((each) => (each.id === "p-burger" ? { ...each, available: false } : each)),
       );
       live.invalidate([{ type: "products" }]);
       await vi.waitFor(() =>
-        expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
-          "Remove 1 item from its section?",
-        ),
+        expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 1 item?"),
       );
       await settleStructure(el);
       expect(rowOf(el, "m-burger")).toBeNull();
@@ -4825,7 +4841,7 @@ describe("the Structure tree", () => {
       expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
     });
 
-    it("keeps Remove red and Move primary, both disabled, while a bulk remove is being sent", async () => {
+    it("keeps Remove red and Move secondary, both disabled, while a bulk remove is being sent", async () => {
       const removing = deferred<void>();
       const client = api({ removeSectionMembers: vi.fn(() => removing.promise) });
       const el = await mountLunch(client);
@@ -4839,7 +4855,7 @@ describe("the Structure tree", () => {
       expect(removeButton(el).disabled).toBe(true);
       expect(removeButton(el).variant).toBe("danger");
       expect(move.disabled).toBe(true);
-      expect(move.variant).toBe("primary");
+      expect(move.variant).toBe("secondary");
       removing.resolve();
       await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(false));
     });
@@ -4922,7 +4938,7 @@ describe("the Structure tree", () => {
         await el.updateComplete;
       }
 
-      it("sits before Remove, quiet and disabled until something is selected", async () => {
+      it("sits before Remove, disabled until something is selected and secondary throughout", async () => {
         const el = await mountLunch();
         await pressSelect(el);
         expect(moveButton(el).nextElementSibling).toBe(removeButton(el));
@@ -4934,7 +4950,7 @@ describe("the Structure tree", () => {
         expect(modal(el, "move-selected").open).toBe(false);
         await tick(el, "m-drinks");
         expect(moveButton(el).disabled).toBe(false);
-        expect(moveButton(el).variant).toBe("primary");
+        expect(moveButton(el).variant).toBe("secondary");
       });
 
       it("moves products from two lists in one request, in tree order, then opens the destination", async () => {
@@ -5195,13 +5211,13 @@ describe("the Structure tree", () => {
     focused: string;
   }[] = [
     {
-      name: "New section here, cancelled",
+      name: "Add section, cancelled",
       open: (el) => rowAction(el, "m-drinks", "new-section"),
       close: closeSectionForm,
       focused: "m-drinks",
     },
     {
-      name: "New section here, saved",
+      name: "Add section, saved",
       open: (el) => rowAction(el, "m-drinks", "new-section"),
       close: async (el, client) => {
         type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
@@ -5213,7 +5229,7 @@ describe("the Structure tree", () => {
       focused: "m-drinks",
     },
     {
-      name: "New section here, refused and then cancelled",
+      name: "Add section, refused and then cancelled",
       client: () =>
         api({ createSectionIn: vi.fn().mockRejectedValue({ code: "menu_section.invalid" }) }),
       open: (el) => rowAction(el, "m-drinks", "new-section"),
