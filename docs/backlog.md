@@ -4235,7 +4235,24 @@ the tree. What remains, largest first:
 - **A419 dashboard CI stall remains unexplained (#1474).** Run `37932573955` left
   `catalogue-screen.test.ts` unfinished; local focused and full-package runs and diagnostic
   CI `37936013331` completed. No repair was established. Next: if it recurs, retain per-test
-  progress and locate the waiting operation before changing the browser harness.
+  progress and locate the waiting operation before changing the browser harness. Since A441 every
+  test job prints each file's start and end and, every 60 s, the files still running
+  (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
+  output.
+
+- **Seven tests in `apps/server/src/bill-payments.test.ts` take 16–27 s each in CI** — about 150 s of
+  the file's 175 s, and the floor under the six server shards (A441, #1477). In a Linux container
+  with four CPUs they take about 2 s each, with or without a reachable DNS server, and the file 37 s
+  with coverage; so they are CPU-heavy whole-table reads and comparisons that slow down under CI's
+  four workers, not a disk or network wait. Next: narrow what they read, or move them to a file of
+  their own, after lane E's departments slice (which edits the file) lands.
+
+- **Nine places in `apps/dashboard/src/screens/devices-screen.test.ts` click the Pair dialog's Cancel
+  and then wait up to one second for an effect.** Chromium reports a dialog closing only with its
+  next rendered frame, which a busy CI runner can hold back longer than that; one such test failed
+  in A441's CI (#1477) and now waits for the dialog's `wt-close` instead. Other suites that wait for
+  an effect after a dialog closes are probably exposed the same way. Fixing it once in `wt-dialog`
+  would change when every dialog reports closing, so it is an owner decision; no action queued.
 
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
