@@ -1017,6 +1017,7 @@ describe("venue-routing-grid", () => {
       });
       expect([...own.rowProductIds].sort()).toEqual(["cola", "mojito"]);
       expect(own.zoneDepartmentId).toBeNull();
+      expect(own.zoneWithoutDepartment).toBe(false);
       expect(own.isDefaultCell).toBe(false);
       expect(own.periods).toEqual([lunch, staff]);
       expect(own.stations).toEqual(el.model!.stations);
@@ -1031,6 +1032,7 @@ describe("venue-routing-grid", () => {
       });
       expect(cola.rowProductIds).toEqual(["cola"]);
       expect(cola.zoneDepartmentId).toBe("dining");
+      expect(cola.zoneWithoutDepartment).toBe(false);
 
       const burger = await openEditor(el, combo(el, "p:burger", "terrace")!);
       expect(burger.cell!.inheritedFrom).toBe("Every zone");
@@ -1042,6 +1044,7 @@ describe("venue-routing-grid", () => {
       const all = await openEditor(el, combo(el, "all", "inside")!);
       expect([...all.rowProductIds].sort()).toEqual(["bread", "burger", "cola", "mojito"]);
       expect(all.zoneDepartmentId).toBeNull();
+      expect(all.zoneWithoutDepartment).toBe(true);
 
       const fallback = await openEditor(el, combo(el, "all", "every")!);
       expect(fallback.isDefaultCell).toBe(true);

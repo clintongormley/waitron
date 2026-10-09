@@ -3270,6 +3270,37 @@ describe("saving a cell's period choices", () => {
       ]);
     }));
 
+  it("refuses a cell with period lines at a zone that serves no department, writing nothing", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      const [garden] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Garden" })
+        .returning();
+      const address: CellAddress = { row: categoryRow(f.cocktails), zoneId: garden!.id };
+      for (const write of [
+        () =>
+          setRoutingCell(tx, f.cfg, address, station(f.upstairs), [
+            line(f.lunch, station(f.downstairs)),
+          ]),
+        () =>
+          previewRoutingChange(tx, f.cfg, {
+            kind: "cell",
+            address,
+            target: station(f.upstairs),
+            periods: [line(f.lunch, station(f.downstairs))],
+          }),
+      ])
+        await expect(write()).rejects.toMatchObject({
+          code: "service_zone.not_found",
+          params: { zoneId: garden!.id },
+        });
+      expect(await storedLines(tx)).toEqual([]);
+      expect(
+        await tx.select().from(routingCells).where(eq(routingCells.zoneId, garden!.id)),
+      ).toEqual([]);
+    }));
+
   it("keeps a cell's lines when a save leaves them out, and clears them with an empty list", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);

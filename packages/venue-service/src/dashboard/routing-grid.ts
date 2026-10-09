@@ -642,6 +642,7 @@ export class RoutingGrid extends LitElement {
       .stations=${model.stations}
       .rowProductIds=${this.#rowProductIds(address.row)}
       .zoneDepartmentId=${zoneDepartmentId}
+      .zoneWithoutDepartment=${address.zoneId !== null && zoneDepartmentId === null}
       .isDefaultCell=${isDefault}
       .refusal=${this.#refusalFor(address, isDefault)}
       @routing-cell-save=${(event: CustomEvent<RoutingCellSave>) => {

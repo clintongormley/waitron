@@ -43,13 +43,17 @@ async function mount(
   cell: Partial<RoutingCellEditorCell> = {},
   options: {
     zoneDepartmentId?: string | null;
+    zoneWithoutDepartment?: boolean;
     isDefaultCell?: boolean;
     rowProductIds?: string[];
   } = {},
 ) {
   const el = document.createElement("routing-cell-editor");
   el.cell = {
-    address: { row: cocktails, zoneId: options.zoneDepartmentId ? "terrace" : null },
+    address: {
+      row: cocktails,
+      zoneId: options.zoneDepartmentId || options.zoneWithoutDepartment ? "terrace" : null,
+    },
     label: "Cocktails, Terrace",
     target: up,
     ...cell,
@@ -58,6 +62,7 @@ async function mount(
   el.stations = STATIONS;
   el.rowProductIds = options.rowProductIds ?? ["mojito", "daiquiri"];
   el.zoneDepartmentId = options.zoneDepartmentId ?? null;
+  el.zoneWithoutDepartment = options.zoneWithoutDepartment ?? false;
   el.isDefaultCell = options.isDefaultCell ?? false;
   el.open = true;
   applyTokens(el);
@@ -400,6 +405,21 @@ it("a Terrace cell inheriting two departments' Lunches keeps only its department
   const saves = events(el, "routing-cell-save");
   await click(el, "save-cell");
   expect(saves).toEqual([{ target: up, periods: [{ periodId: "lunch", target: down }] }]);
+});
+
+it("offers a zone that serves no department no period lines, and copies none it inherits", async () => {
+  const el = await mount(
+    { inheritedFrom: "Every zone", periods: [{ periodId: "lunch", target: down }] },
+    { zoneWithoutDepartment: true },
+  );
+  expect(button(el, "add-line")).toBeNull();
+  expect(linePeriods(el)).toEqual([]);
+  expect(one(el, "[data-test=not-copied]")!.textContent!.trim()).toBe(
+    "Not copied: Lunch (Dining) — another department's",
+  );
+  const saves = events(el, "routing-cell-save");
+  await click(el, "save-cell");
+  expect(saves).toEqual([{ target: up, periods: [] }]);
 });
 
 it("leaves out an inherited period whose menus dropped the row's products", async () => {

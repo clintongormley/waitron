@@ -119,6 +119,8 @@ export class RoutingCellEditor extends LitElement {
   @property({ attribute: false }) rowProductIds: readonly string[] = [];
   /** The zone column's department; null for Every zone. */
   @property({ attribute: false }) zoneDepartmentId: string | null = null;
+  /** A zone column whose zone serves no department: routing there reads no period line. */
+  @property({ type: Boolean }) zoneWithoutDepartment = false;
   @property({ type: Boolean }) isDefaultCell = false;
   /** `message`, when given, is shown at the bottom for a refusal no line takes. */
   @property({ attribute: false }) refusal?: {
@@ -208,6 +210,7 @@ export class RoutingCellEditor extends LitElement {
   }
 
   private inColumn(period: RoutingPeriod): boolean {
+    if (this.zoneWithoutDepartment) return false;
     return this.zoneDepartmentId === null || period.departmentId === this.zoneDepartmentId;
   }
 
@@ -556,7 +559,7 @@ export class RoutingCellEditor extends LitElement {
             }}
           ></wt-combobox>
           ${
-            this.isDefaultCell
+            this.isDefaultCell || this.zoneWithoutDepartment
               ? nothing
               : html`<wt-button
                   class="add"
