@@ -482,7 +482,6 @@ describe("clearProvisionFixture", () => {
         {
           date: "2026-12-24",
           name: "Christmas Eve",
-          colour: "amber",
           closeWholeVenue: false,
           cells: [
             { subject: restaurant, cell: lunch() },

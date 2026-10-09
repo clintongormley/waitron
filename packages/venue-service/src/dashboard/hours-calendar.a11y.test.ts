@@ -25,14 +25,13 @@ afterEach(async () => {
   await page.viewport(1280, 800);
 });
 
-/** One special date in each palette colour, 12 to 17 October, and a whole-venue closure on the 19th. */
+/** Named days of both kinds, 12 to 17 October, and a whole-venue closure on the 19th. */
 const SPECIALS: SpecialDate[] = [
   ...CALENDAR_COLOURS.map((colour, index) => ({
     id: colour,
     date: addDays("2026-10-12", index),
     name: `${colour} day`,
-    colour,
-    kind: "working_day" as const,
+    kind: index % 2 === 0 ? ("holiday" as const) : ("working_day" as const),
     repeats: false,
     ownHours: false,
     closeWholeVenue: false,
@@ -41,7 +40,6 @@ const SPECIALS: SpecialDate[] = [
     id: "shut",
     date: "2026-10-19",
     name: "Staff day off",
-    colour: "red",
     kind: "working_day",
     repeats: false,
     ownHours: false,
@@ -63,7 +61,11 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
       tone:
         specialDate?.closeWholeVenue || date === "2026-10-26"
           ? "closed"
-          : (specialDate?.colour ?? "standard"),
+          : specialDate === null
+            ? "standard"
+            : specialDate.kind === "holiday"
+              ? "purple"
+              : "blue",
     });
   }
   return {
@@ -180,7 +182,7 @@ async function open(el: HoursCalendar, date: LocalDate) {
 }
 
 const states: Record<string, (theme: "light" | "dark") => Promise<HoursCalendar>> = {
-  "the month, every palette colour, Closed dates, a holiday and today, nothing chosen": (theme) =>
+  "the month, both named-day kinds, Closed dates, a holiday and today, nothing chosen": (theme) =>
     mount(theme),
   "a special date's panel with an inherited value": async (theme) => {
     const el = await mount(theme);

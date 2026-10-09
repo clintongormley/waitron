@@ -63,7 +63,6 @@ const FIESTA = {
   id: "fiesta",
   date: "2026-10-12",
   name: "Fiesta Nacional",
-  colour: "red" as const,
   kind: "working_day" as const,
   repeats: false,
   ownHours: false,
@@ -73,7 +72,6 @@ const STAFF = {
   id: "staff",
   date: "2026-10-13",
   name: "Staff day off",
-  colour: "grey" as const,
   kind: "working_day" as const,
   repeats: false,
   ownHours: false,
@@ -85,7 +83,7 @@ function model(): HoursModel {
     date,
     specialDate,
     holidays: [],
-    tone: specialDate?.colour ?? "standard",
+    tone: specialDate === null ? "standard" : specialDate.kind === "holiday" ? "purple" : "blue",
   });
   return {
     timeZone: "Europe/Madrid",
@@ -1014,13 +1012,13 @@ describe("Hours: special dates", () => {
     expect(listRows(el).map((row) => row.slice(0, 6))).toEqual([
       [
         "Mon, 12 Oct 2026",
-        "Fiesta Nacional Red",
+        "Fiesta Nacional Blue",
         "12:00–23:00",
         "Closed",
         "Always open",
         "Standard hours: 17:00–23:00",
       ],
-      ["Tue, 13 Oct 2026", "Staff day off Grey", "Closed", "Closed", "Always open", "Closed"],
+      ["Tue, 13 Oct 2026", "Staff day off Blue", "Closed", "Closed", "Always open", "Closed"],
     ]);
     expect(rowOf(el, "Fiesta").querySelector('[part~="inherited"]')).not.toBeNull();
     expect(rowOf(el, "Staff").querySelector('[part~="inherited"]')).toBeNull();
@@ -1068,7 +1066,6 @@ describe("Hours: special dates", () => {
         {
           date: "2026-10-12",
           name: "Fiesta Nacional",
-          colour: "red",
           kind: "working_day",
           repeats: false,
           ownHours: false,
@@ -1130,7 +1127,6 @@ describe("Hours: special dates", () => {
         {
           date: "2026-10-12",
           name: "Fiesta Nacional",
-          colour: "red",
           kind: "working_day",
           repeats: false,
           ownHours: false,
@@ -1210,7 +1206,6 @@ describe("Hours: special dates", () => {
           {
             date: back[which],
             name: "Fiesta Nacional",
-            colour: "red",
             kind: "working_day",
             repeats: false,
             ownHours: false,
@@ -1298,7 +1293,6 @@ describe("Hours: special dates", () => {
       id: "far",
       date: "2028-12-25",
       name: "Christmas 2028",
-      colour: "green" as const,
       kind: "working_day" as const,
       repeats: false,
       ownHours: false,
@@ -1313,9 +1307,9 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await listTable(el).updateComplete;
     expect(listRows(el).map((row) => row.slice(0, 2))).toEqual([
-      ["Mon, 12 Oct 2026", "Fiesta Nacional Red"],
-      ["Tue, 13 Oct 2026", "Staff day off Grey"],
-      ["Mon, 25 Dec 2028", "Christmas 2028 Green"],
+      ["Mon, 12 Oct 2026", "Fiesta Nacional Blue"],
+      ["Tue, 13 Oct 2026", "Staff day off Blue"],
+      ["Mon, 25 Dec 2028", "Christmas 2028 Blue"],
     ]);
     await menuAction(el, rowOf(el, "Christmas 2028"), "edit-date");
     expect(text(modal(el)!.querySelector('[data-test="named-day-date"]'))).toBe("Mon, 25 Dec 2028");
@@ -1328,7 +1322,6 @@ describe("Hours: special dates", () => {
         {
           date: "2028-12-25",
           name: "Christmas 2028",
-          colour: "green",
           kind: "working_day",
           repeats: false,
           ownHours: false,
@@ -1516,7 +1509,7 @@ describe("Hours: special dates", () => {
     await listTable(el).updateComplete;
     expect(listRows(el)[0]!.slice(0, 6)).toEqual([
       "lun, 12 oct 2026",
-      "Fiesta Nacional Rojo",
+      "Fiesta Nacional Azul",
       "12:00–23:00",
       "Cerrado",
       "Siempre abierta",
@@ -1549,7 +1542,7 @@ describe("Hours: named-day live reads", () => {
       const before = calls("GET").length;
       await click(el, saveButton(el));
       await vi.waitFor(() => expect(modal(el)).toBeNull());
-      await vi.waitFor(() => expect(listRows(el)[0]![1]).toBe("Fiesta renamed Red"));
+      await vi.waitFor(() => expect(listRows(el)[0]![1]).toBe("Fiesta renamed Blue"));
       await settle(el);
       const reads = calls("GET")
         .slice(before)
@@ -1558,7 +1551,7 @@ describe("Hours: named-day live reads", () => {
       expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(0);
       await selectTab(el, "dates");
       await listTable(el).updateComplete;
-      expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Red"]);
+      expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Blue"]);
     } finally {
       connection.stop();
       vi.useRealTimers();
@@ -1586,7 +1579,7 @@ describe("Hours: named-day live reads", () => {
           data: JSON.stringify([{ type: "special_dates" }, { type: "special_date_hours" }]),
         }),
       );
-      await vi.waitFor(() => expect(listRows(el)[0]![1]).toBe("Fiesta renamed Red"));
+      await vi.waitFor(() => expect(listRows(el)[0]![1]).toBe("Fiesta renamed Blue"));
       await settle(el);
       const reads = calls("GET")
         .slice(before)
@@ -1634,7 +1627,7 @@ describe("Hours: named-day live reads", () => {
     await listTable(el).updateComplete;
     const swatch = rowOf(el, "Fiesta").querySelector<HTMLElement>('[part~="colour-swatch"]')!;
     const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-palette-red)";
+    probe.style.color = "var(--wt-color-palette-blue)";
     el.shadowRoot!.append(probe);
     expect(getComputedStyle(swatch).backgroundColor).toBe(getComputedStyle(probe).color);
     probe.remove();
@@ -1779,7 +1772,6 @@ it.each([false, true])(
         {
           date: "2026-10-12",
           name: "  Fiesta Nacional  ",
-          colour: "red",
           kind: "holiday",
           repeats: false,
           ownHours,
@@ -1812,8 +1804,8 @@ it.each(["en", "es"] as const)(
     await listTable(el).updateComplete;
     expect(listRows(el).map((row) => row[1])).toEqual(
       locale === "en"
-        ? ["Fiesta Nacional Red", "Staff day off Grey", "Yesterday Red"]
-        : ["Fiesta Nacional Rojo", "Staff day off Gris", "Yesterday Rojo"],
+        ? ["Fiesta Nacional Blue", "Staff day off Blue", "Yesterday Blue"]
+        : ["Fiesta Nacional Azul", "Staff day off Azul", "Yesterday Azul"],
     );
     expect(text(el.shadowRoot!.querySelector('[data-test="repeating-days-note"]'))).toBe(
       locale === "en"

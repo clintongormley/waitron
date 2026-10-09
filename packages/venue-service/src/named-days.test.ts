@@ -106,7 +106,6 @@ async function day(
         locationId: f.cfg.locationId,
         date,
         name: "Navidad",
-        colour: "purple",
         ...overrides,
       })
       .returning();
@@ -188,7 +187,7 @@ describe("departments and calendar follow named days", () => {
   });
   it("ignores a retained empty dated row when own hours is off, in resolver and calendar", async () => {
     const f = await fixture();
-    const row = await day(f, "2026-12-25");
+    const row = await day(f, "2026-12-25", { kind: "holiday" });
     await dated(f, row.id);
     expect((await service(f, "2026-12-25T12:00:00Z")).periodId).toBe(f.period);
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.other));

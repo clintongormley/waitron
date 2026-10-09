@@ -42,7 +42,6 @@ const FIESTA: SpecialDate = {
   id: "fiesta",
   date: "2026-10-12",
   name: "Fiesta Nacional",
-  colour: "red",
   kind: "working_day" as const,
   repeats: false,
   ownHours: false,
@@ -52,7 +51,6 @@ const STAFF: SpecialDate = {
   id: "staff",
   date: "2026-10-13",
   name: "Staff day off",
-  colour: "grey",
   kind: "working_day" as const,
   repeats: false,
   ownHours: false,
@@ -62,7 +60,6 @@ const AUTUMN: SpecialDate = {
   id: "autumn",
   date: "2026-11-20",
   name: "Late autumn",
-  colour: "green",
   kind: "working_day" as const,
   repeats: false,
   ownHours: false,
@@ -291,6 +288,25 @@ describe("Hours calendar: the month", () => {
     expect(dayButton(el, "2026-10-07").getAttribute("aria-label")).toBe(
       "Wednesday, 7 October 2026, Today",
     );
+  });
+
+  it("paints a holiday named day purple", async () => {
+    const { api } = server({
+      edit(model) {
+        model.specialDates = model.specialDates.map((date) =>
+          date.id === "fiesta" ? { ...date, kind: "holiday" } : date,
+        );
+        model.days = model.days.map((day) =>
+          day.specialDate?.id === "fiesta"
+            ? { ...day, specialDate: { ...day.specialDate, kind: "holiday" } }
+            : day,
+        );
+      },
+    });
+    const el = await mount(api);
+    const label = day(el, "2026-10-12").querySelector<HTMLElement>('[data-test="special-name"]')!;
+    expect(getComputedStyle(label).backgroundColor).toBe(token(el, "--wt-color-palette-purple"));
+    expect(getComputedStyle(label).color).toBe(token(el, "--wt-color-on-palette-purple"));
   });
 
   it("names each special date in its own colour, and paints the reserved standard and Closed colours", async () => {

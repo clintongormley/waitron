@@ -731,7 +731,6 @@ const choice = async (v: Venue, zoneId: string, at: Date) => {
 const dateInput = (date: string, overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
   date,
   name: "Navidad",
-  colour: "red",
   closeWholeVenue: false,
   cells: [],
   ...overrides,
@@ -2659,7 +2658,7 @@ describe("department service periods", () => {
     const other = await venue({ timetable: false });
     const date = await makeDate(v, FRIDAY);
     await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT));
-    await db.update(specialDates).set({ colour: "red" }).where(eq(specialDates.id, date.id));
+    await db.update(specialDates).set({ kind: "holiday" }).where(eq(specialDates.id, date.id));
     await db.update(menuPeriods).set({ colour: "blue" }).where(eq(menuPeriods.id, v.lunch));
     await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
@@ -2743,7 +2742,7 @@ describe("department service periods", () => {
     });
     expect(model.namedDays).toEqual([
       {
-        kind: "working_day",
+        kind: "holiday",
         repeats: false,
         ownHours: true,
         hasStationHours: false,

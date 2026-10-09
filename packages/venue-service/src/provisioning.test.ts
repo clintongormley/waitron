@@ -330,7 +330,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         {
           date: "2026-12-25",
           name: "Christmas",
-          colour: "red",
           closeWholeVenue: false,
           cells: [{ subject, cell: { mode: "closed", periods: [] } }],
         },
@@ -433,7 +432,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       name: "Corpus Christi",
       kind: "holiday",
     });
-    expect(await stored()).toEqual({ geographies: 0, entries: 0 });
+    expect(await stored()).toEqual({ geographies: 0, entries: 1 });
   });
 
   describe("the venue's ordering profiles", () => {

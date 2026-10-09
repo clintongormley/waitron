@@ -137,7 +137,6 @@ describe("station-hours calendar follows department service periods", () => {
         {
           date: "2026-10-20",
           name: "Retained hours",
-          colour: "red",
           closeWholeVenue: false,
           cells: [],
         },
@@ -161,7 +160,6 @@ describe("station-hours calendar follows department service periods", () => {
         {
           date: "2026-10-19",
           name: "Closed Monday",
-          colour: "green",
           closeWholeVenue: false,
           cells: [],
         },
@@ -176,7 +174,6 @@ describe("station-hours calendar follows department service periods", () => {
         {
           date: "2026-10-26",
           name: "Normal Monday",
-          colour: "purple",
           closeWholeVenue: false,
           cells: [],
         },
@@ -198,7 +195,7 @@ describe("station-hours calendar follows department service periods", () => {
           tx,
           f.cfg,
           null,
-          { date, name: "Special Tuesday", colour: "blue", closeWholeVenue, cells: [] },
+          { date, name: "Special Tuesday", closeWholeVenue, cells: [] },
           at,
         );
         await tx

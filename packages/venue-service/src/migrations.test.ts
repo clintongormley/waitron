@@ -461,8 +461,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into zone_service_policies (zone_id, location_id, department_id)
       values (${v.zoneId}, ${v.locationId}, ${v.departmentId})`);
     const dateId = randomUUID();
-    await db.execute(sql`insert into special_dates (id, location_id, date, name, colour)
-      values (${dateId}, ${v.locationId}, '2026-12-25', 'Christmas', 'red')`);
+    await db.execute(sql`insert into special_dates (id, location_id, date, name)
+      values (${dateId}, ${v.locationId}, '2026-12-25', 'Christmas')`);
     return { ...v, dateId };
   }
 
@@ -483,8 +483,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       const error = await captureError(() =>
         db.transaction((tx) =>
           tx.execute(sql`insert into special_dates
-      (id, location_id, date, name, colour, repeat_on, kind)
-      values (${randomUUID()}, ${v.locationId}, ${date}, 'Named day', 'red', ${repeatOn}, ${kind})`),
+      (id, location_id, date, name, repeat_on, kind)
+      values (${randomUUID()}, ${v.locationId}, ${date}, 'Named day', ${repeatOn}, ${kind})`),
         ),
       );
       expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -494,18 +494,47 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   it("refuses two repeating named days on the same month and day in one venue", async () => {
     const v = await venue();
-    await db.execute(sql`insert into special_dates (id, location_id, date, name, colour, repeat_on)
-      values (${randomUUID()}, ${v.locationId}, '2026-12-25', 'First', 'red', '12-25')`);
+    await db.execute(sql`insert into special_dates (id, location_id, date, name, repeat_on)
+      values (${randomUUID()}, ${v.locationId}, '2026-12-25', 'First', '12-25')`);
     const error = await captureError(() =>
       db.transaction((tx) =>
         tx.execute(sql`insert into special_dates
-      (id, location_id, date, name, colour, repeat_on)
-      values (${randomUUID()}, ${v.locationId}, '2027-12-25', 'Second', 'red', '12-25')`),
+      (id, location_id, date, name, repeat_on)
+      values (${randomUUID()}, ${v.locationId}, '2027-12-25', 'Second', '12-25')`),
       ),
     );
     expect(engineErrorMessage(error)).toContain(
       "UNIQUE constraint failed: special_dates.location_id, special_dates.repeat_on",
     );
+  });
+
+  it("allows the same repeating day in different venues and distinct one-off days in one venue", async () => {
+    const first = await venue();
+    const second = await venue();
+    for (const locationId of [first.locationId, second.locationId])
+      await db.execute(sql`insert into special_dates (id, location_id, date, name, repeat_on)
+        values (${randomUUID()}, ${locationId}, '2026-12-25', 'Repeating', '12-25')`);
+    for (const date of ["2026-12-26", "2026-12-27"])
+      await db.execute(sql`insert into special_dates (id, location_id, date, name)
+        values (${randomUUID()}, ${first.locationId}, ${date}, 'One-off')`);
+    expect(
+      (
+        await db.execute(
+          sql`select date, repeat_on from special_dates where location_id = ${first.locationId} order by date`,
+        )
+      ).rows,
+    ).toEqual([
+      { date: "2026-12-25", repeat_on: "12-25" },
+      { date: "2026-12-26", repeat_on: null },
+      { date: "2026-12-27", repeat_on: null },
+    ]);
+    expect(
+      (
+        await db.execute(
+          sql`select date, repeat_on from special_dates where location_id = ${second.locationId}`,
+        )
+      ).rows,
+    ).toEqual([{ date: "2026-12-25", repeat_on: "12-25" }]);
   });
 
   it("defaults a named day to the normal week without a repeat", async () => {

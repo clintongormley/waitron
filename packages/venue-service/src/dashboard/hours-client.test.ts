@@ -33,7 +33,15 @@ async function settled(): Promise<void> {
 
 describe("HoursApi writes", () => {
   it("sends each write to its route and returns what the server saved", async () => {
-    const saved = { id: "d1", date: "2030-10-15", name: "Party", colour: "red" };
+    const saved = {
+      id: "d1",
+      date: "2030-10-15",
+      name: "Party",
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
+      closeWholeVenue: false,
+    };
     const request = vi.fn(async (path: string, method: string) =>
       method === "POST" && path.endsWith("/duplicate")
         ? [saved]
@@ -47,7 +55,6 @@ describe("HoursApi writes", () => {
     const input: SpecialDateInput = {
       date: "2030-10-15",
       name: "Party",
-      colour: "red",
       closeWholeVenue: false,
       cells: [],
     };

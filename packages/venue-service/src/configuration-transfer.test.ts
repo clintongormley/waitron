@@ -1794,9 +1794,7 @@ describe("service-period configuration", () => {
     "checks skipped endpoints on the next calendar morning (%s %s–%s)",
     (date, startsAt, endsAt, dayCutover, field) => {
       const t = tables();
-      t.special_dates = [
-        { id: "spring", date, name: "Spring", colour: "red", close_whole_venue: 0 },
-      ];
+      t.special_dates = [{ id: "spring", date, name: "Spring", close_whole_venue: 0 }];
       t.menu_day_timetables![0]!.weekday = null;
       t.menu_day_timetables![0]!.special_date_id = "spring";
       t.menu_slots![0]!.starts_at = startsAt;
@@ -1808,9 +1806,7 @@ describe("service-period configuration", () => {
   );
   it("checks a start exactly at changeover on the business date", () => {
     const t = tables();
-    t.special_dates = [
-      { id: "spring", date: "2027-03-27", name: "Spring", colour: "red", close_whole_venue: 0 },
-    ];
+    t.special_dates = [{ id: "spring", date: "2027-03-27", name: "Spring", close_whole_venue: 0 }];
     t.menu_day_timetables![0]!.weekday = null;
     t.menu_day_timetables![0]!.special_date_id = "spring";
     t.menu_slots![0]!.starts_at = "02:30:00";

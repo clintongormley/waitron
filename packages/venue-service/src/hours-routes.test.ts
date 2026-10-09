@@ -135,7 +135,7 @@ async function fixture(): Promise<Fixture> {
       tx,
       { locationId: locationId(other!.id) },
       null,
-      { date: "2030-10-15", name: "Elsewhere", colour: "red", closeWholeVenue: false, cells: [] },
+      { date: "2030-10-15", name: "Elsewhere", closeWholeVenue: false, cells: [] },
       new Date(),
     );
     const person = async (role: "manager" | "supervisor" | "staff") => {
@@ -248,7 +248,6 @@ const unsetWeek = (): WeekDay[] =>
 const input = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
   date: "2030-10-15",
   name: "Staff party",
-  colour: "purple",
   closeWholeVenue: false,
   cells: [],
   ...overrides,
@@ -323,7 +322,6 @@ describe("reading Hours", () => {
             id: party.id,
             date: "2030-10-15",
             name: "Staff party",
-            colour: "blue",
             closeWholeVenue: false,
           },
           holidays: [],
@@ -339,7 +337,6 @@ describe("reading Hours", () => {
           id: party.id,
           date: "2030-10-15",
           name: "Staff party",
-          colour: "blue",
           closeWholeVenue: false,
         },
       ],
@@ -431,7 +428,7 @@ describe("reading Hours", () => {
       );
       return period;
     });
-    const special = await createDate(fx, input({ date: "2030-10-14", colour: "green", cells: [] }));
+    const special = await createDate(fx, input({ date: "2030-10-14", cells: [] }));
     await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
     await withTransaction(db, (tx) =>
       saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date()),
@@ -569,7 +566,6 @@ describe("writing Hours", () => {
       id: expect.any(String),
       date: "2030-10-15",
       name: "Staff party",
-      colour: "blue",
       closeWholeVenue: false,
     });
 
@@ -580,12 +576,11 @@ describe("writing Hours", () => {
       fx.manager,
       input({
         name: "Team dinner",
-        colour: "blue",
         cells: [{ subject: fx.bar, cell: { mode: "all_day", periods: [] } }],
       }),
     );
     expect(edited.status).toBe(200);
-    expect(await edited.json()).toEqual({ ...date, name: "Team dinner", colour: "blue" });
+    expect(await edited.json()).toEqual({ ...date, name: "Team dinner" });
 
     const copied = await send(fx, "POST", `/special-dates/${date.id}/duplicate`, fx.manager, {
       dates: ["2030-10-22", "2030-10-29"],
@@ -593,8 +588,8 @@ describe("writing Hours", () => {
     expect(copied.status).toBe(201);
     const copies = (await copied.json()) as SpecialDate[];
     expect(copies).toEqual([
-      { ...date, id: expect.any(String), date: "2030-10-22", name: "Team dinner", colour: "blue" },
-      { ...date, id: expect.any(String), date: "2030-10-29", name: "Team dinner", colour: "blue" },
+      { ...date, id: expect.any(String), date: "2030-10-22", name: "Team dinner" },
+      { ...date, id: expect.any(String), date: "2030-10-29", name: "Team dinner" },
     ]);
     expect(new Set([date.id, ...copies.map((copy) => copy.id)]).size).toBe(3);
     expect(
@@ -1078,7 +1073,7 @@ describe("named-day HTTP writes", () => {
   it("returns recurring named-day metadata and refuses a later clashing occurrence", async () => {
     const fx = await fixture();
     const created = await send(fx, "POST", "/special-dates", fx.manager, {
-      ...input({ date: "2030-12-25", colour: "green" }),
+      ...input({ date: "2030-12-25" }),
       kind: "holiday",
       repeats: true,
       ownHours: true,
@@ -1089,7 +1084,6 @@ describe("named-day HTTP writes", () => {
       kind: "holiday",
       repeats: true,
       ownHours: true,
-      colour: "red",
     });
     await refused(
       await send(fx, "POST", "/special-dates", fx.manager, input({ date: "2031-12-25" })),

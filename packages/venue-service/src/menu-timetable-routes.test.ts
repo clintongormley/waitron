@@ -107,7 +107,6 @@ async function routed() {
         {
           date: "2030-12-25",
           name: "Navidad",
-          colour: "red",
           closeWholeVenue: false,
           ownHours: true,
           cells: [],

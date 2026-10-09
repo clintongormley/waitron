@@ -182,7 +182,12 @@ async function moveTo(cfg: VenueScope, address: Address) {
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
-async function seedRetired(tx: Transaction, cfg: VenueScope, date: string, name: string) {
+async function seedRetainedGeographyWithWorkingDay(
+  tx: Transaction,
+  cfg: VenueScope,
+  date: string,
+  name: string,
+) {
   await tx
     .insert(holidayGeographies)
     .values({
@@ -193,7 +198,9 @@ async function seedRetired(tx: Transaction, cfg: VenueScope, date: string, name:
       cityKey: "villa real",
     })
     .returning();
-  await tx.insert(specialDates).values({ locationId: cfg.locationId, date, name, kind: "holiday" });
+  await tx
+    .insert(specialDates)
+    .values({ locationId: cfg.locationId, date, name, kind: "working_day" });
 }
 
 async function stored() {
@@ -274,9 +281,9 @@ describe("reading a venue's holidays", () => {
     });
   });
 
-  it("ignores retained local entries in facts, coverage and sources", async () => {
+  it("keeps a working named day and retained geography out of holiday facts, coverage and sources", async () => {
     const cfg = await venue();
-    await run((tx) => seedRetired(tx, cfg, "2026-01-01", "Fiesta mayor"));
+    await run((tx) => seedRetainedGeographyWithWorkingDay(tx, cfg, "2026-01-01", "Fiesta mayor"));
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-01-01"));
     expect(read.facts).toEqual([
       {
@@ -307,7 +314,6 @@ describe("reading a venue's holidays", () => {
         date: "2026-03-19",
         name: "Our holiday",
         kind: "holiday",
-        colour: "purple",
       }),
     );
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-12-01", "2027-01-31"));
@@ -488,7 +494,6 @@ describe("an address that does not resolve", () => {
         date: "2026-03-19",
         name: "Our holiday",
         kind: "holiday",
-        colour: "purple",
       }),
     );
     const read = await run((tx) => store.readHolidays(tx, cfg, ...year));
@@ -506,7 +511,7 @@ describe("an address that does not resolve", () => {
 
   it("returns no local facts for a matching geography once its country has no holiday capability", async () => {
     const cfg = await venue({ country: "ZY" });
-    await run((tx) => seedRetired(tx, cfg, "2026-03-19", "Retired"));
+    await run((tx) => seedRetainedGeographyWithWorkingDay(tx, cfg, "2026-03-19", "Retired"));
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-12-31"));
     expect(read).toEqual({
       facts: [],
@@ -676,7 +681,7 @@ describe("transactions and other callers", () => {
         tx,
         cfg,
         null,
-        { date: "2026-05-01", name: "Labour", colour: "red", closeWholeVenue: true, cells: [] },
+        { date: "2026-05-01", name: "Labour", closeWholeVenue: true, cells: [] },
         new Date("2026-04-01T10:00:00Z"),
       ),
     );
@@ -691,7 +696,7 @@ describe("transactions and other callers", () => {
         tx,
         cfg,
         null,
-        { date: "2026-01-01", name: "New Year", colour: "red", closeWholeVenue: true, cells: [] },
+        { date: "2026-01-01", name: "New Year", closeWholeVenue: true, cells: [] },
         new Date("2025-12-01T10:00:00Z"),
       ),
     );
@@ -802,7 +807,6 @@ describe("own named holidays contribute yearly owner coverage", () => {
         locationId: cfg.locationId,
         date: "2026-12-25",
         name: "Town holiday",
-        colour: "purple",
         kind: "holiday",
         repeatOn: "12-25",
       }),
@@ -836,14 +840,12 @@ describe("own named holidays contribute yearly owner coverage", () => {
           locationId: cfg.locationId,
           date: "2026-12-25",
           name: "Party",
-          colour: "blue",
           kind: "working_day",
         },
         {
           locationId: other.locationId,
           date: "2026-12-25",
           name: "Foreign holiday",
-          colour: "purple",
           kind: "holiday",
         },
       ]),
@@ -862,7 +864,6 @@ it("counts own holidays even when the public-holiday address cannot resolve", as
       locationId: cfg.locationId,
       date: "2026-12-25",
       name: "Our holiday",
-      colour: "purple",
       kind: "holiday",
     }),
   );

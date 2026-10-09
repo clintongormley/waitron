@@ -4512,7 +4512,7 @@ describe("public holidays in a configuration transfer", () => {
     return {
       geographies: geographies.rows,
       entries: entries.rows.map((row) => ({
-        city: city.get(row.location_id),
+        city: city.get(row.location_id)?.trim().toLowerCase(),
         date: row.date,
         name: row.name,
       })),
@@ -4597,6 +4597,7 @@ describe("public holidays in a configuration transfer", () => {
         area_key: "aran",
       },
     ]);
+    expect(expected.entries).toEqual([{ city: "madrid", date: "2026-01-06", name: "Reyes" }]);
     expect(await holidaysByCity(targetSuite.db)).toEqual(expected);
 
     const sourceIds = new Set(transferred.tables.holiday_geographies!.map((row) => row.id));
@@ -4632,9 +4633,25 @@ describe("public holidays in a configuration transfer", () => {
       }),
     ]);
     expect(inMadrid.aran.facts).toEqual([]);
-    const special = await targetSuite.db.execute<{ name: string; close_whole_venue: number }>(sql`
-      select name, close_whole_venue from special_dates where date = '2026-01-06'`);
-    expect(special.rows).toEqual([{ name: "Reyes", close_whole_venue: 1 }]);
+    const special = await targetSuite.db.execute<{
+      id: string;
+      location_id: string;
+      name: string;
+      close_whole_venue: number;
+    }>(sql`
+      select id, location_id, name, close_whole_venue from special_dates where date = '2026-01-06'`);
+    expect(special.rows).toEqual([
+      {
+        id: expect.any(String),
+        location_id: target.locationId,
+        name: "Reyes",
+        close_whole_venue: 1,
+      },
+    ]);
+    expect(special.rows[0]!.id).toMatch(UUID);
+    expect(transferred.tables.special_dates!.map((row) => row.id)).not.toContain(
+      special.rows[0]!.id,
+    );
 
     await moveTo(targetSuite.db, target, "Lleida", "Vielha e Mijaran");
     const inVielha = await read();

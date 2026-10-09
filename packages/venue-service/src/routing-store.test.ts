@@ -2733,7 +2733,6 @@ describe("hours from special dates", () => {
       {
         date,
         name: `Closed ${date}`,
-        colour: "red",
         closeWholeVenue: false,
         cells: [
           { subject: { kind: "station", id: stationId }, cell: { mode: "closed", periods: [] } },
@@ -2860,7 +2859,6 @@ describe("routing on repeating named days", () => {
         locationId: f.cfg.locationId,
         date: "2026-12-25",
         name: "Navidad",
-        colour: "red",
         repeatOn: "12-25",
         closeWholeVenue: true,
       });

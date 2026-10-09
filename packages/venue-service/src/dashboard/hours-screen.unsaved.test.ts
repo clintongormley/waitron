@@ -613,7 +613,6 @@ const specialModel: HoursModel = {
       id: "fiesta",
       date: "2026-10-12",
       name: "Fiesta",
-      colour: "red",
       kind: "working_day",
       repeats: false,
       ownHours: false,

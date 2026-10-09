@@ -122,7 +122,6 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
         {
           date: "2030-10-15",
           name: "Party",
-          colour: "red",
           closeWholeVenue: false,
           cells: [
             { subject: deli, cell: { mode: "closed", periods: [] } },
