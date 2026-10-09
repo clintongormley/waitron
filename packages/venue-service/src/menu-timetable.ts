@@ -28,7 +28,7 @@ import type {
   MenuSlot,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDates, specialDateHours } from "./schema/hours.js";
 import { namedDaysOn } from "./named-days.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
@@ -894,7 +894,6 @@ export async function readOpeningHoursModel(
       id: specialDates.id,
       date: specialDates.date,
       name: specialDates.name,
-      colour: specialDates.colour,
       kind: specialDates.kind,
       repeatOn: specialDates.repeatOn,
       ownHours: specialDates.ownHours,
@@ -919,7 +918,21 @@ export async function readOpeningHoursModel(
       ),
     )
     .orderBy(asc(specialDates.date));
-  const dates = dateRows.map(({ repeatOn, ...row }) => ({ ...row, repeats: repeatOn !== null }));
+  const stationRows = await tx
+    .select({ specialDateId: specialDateHours.specialDateId })
+    .from(specialDateHours)
+    .where(
+      inArray(
+        specialDateHours.specialDateId,
+        dateRows.map(({ id }) => id),
+      ),
+    );
+  const stationDays = new Set(stationRows.map(({ specialDateId }) => specialDateId));
+  const dates = dateRows.map(({ repeatOn, ...row }) => ({
+    ...row,
+    repeats: repeatOn !== null,
+    hasStationHours: stationDays.has(row.id),
+  }));
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
     .from(catalogues)
@@ -934,7 +947,7 @@ export async function readOpeningHoursModel(
       ...menu,
       includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
     })),
-    specialDates: dates,
+    namedDays: dates,
     departments: departmentRows.map((department) => {
       const days = timetables.filter((row) => row.departmentId === department.id);
       return {

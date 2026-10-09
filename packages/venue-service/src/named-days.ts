@@ -1,10 +1,16 @@
 import { and, asc, eq, inArray, lte, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import { readLocationClock } from "@waitron/reporting";
+import { venueLocalMoment } from "./hours-clock.js";
+import { readCalendarDays, type HolidayReader } from "./hours.js";
+import { readHolidays, readLocalHolidayModel } from "./holidays.js";
+import type { NamedDaysModel, NamedDay } from "./holiday-types.js";
+export type { NamedDaysModel, NamedDay, NamedCalendarDay } from "./holiday-types.js";
 import { rangeDates } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { occursOn, repeatKey, type NamedDayKind } from "./named-day-rules.js";
 import type { VenueScope } from "./operations.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDateHours, specialDates } from "./schema/hours.js";
 
 export interface NamedDayOccurrence {
   id: string;
@@ -67,4 +73,82 @@ export async function namedDaysBetween(
   to: LocalDate,
 ): Promise<NamedDayOccurrence[]> {
   return [...(await namedDaysOn(tx, cfg, rangeDates(from, to))).values()];
+}
+
+export async function readNamedDaysModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  from: LocalDate,
+  to: LocalDate,
+  at: Date,
+  holidays?: HolidayReader,
+): Promise<NamedDaysModel> {
+  const dates = rangeDates(from, to);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
+  const read = await readHolidays(tx, cfg, from, to);
+  const local = await readLocalHolidayModel(tx, cfg);
+  const named = await namedDaysOn(tx, cfg, dates);
+  const stationRows = await tx
+    .select({ id: specialDateHours.specialDateId })
+    .from(specialDateHours)
+    .innerJoin(specialDates, eq(specialDates.id, specialDateHours.specialDateId))
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        inArray(
+          specialDates.id,
+          [...named.values()].map(({ id }) => id),
+        ),
+      ),
+    );
+  const stationDays = new Set(stationRows.map(({ id }) => id));
+  const days = await readCalendarDays(tx, cfg, from, to, holidays ?? (async () => read.facts));
+  return {
+    timeZone: clock.timeZone,
+    dayCutover: clock.dayCutover,
+    civilDate,
+    clockReadable: civilDate !== null,
+    days: days.map((day) => {
+      const occurrence = named.get(day.date);
+      const namedDay: NamedDay | null =
+        occurrence === undefined
+          ? null
+          : {
+              id: occurrence.id,
+              date: occurrence.storedDate,
+              name: occurrence.name,
+              kind: occurrence.kind,
+              repeats: occurrence.repeats,
+              ownHours: occurrence.ownHours,
+              closeWholeVenue: occurrence.closeWholeVenue,
+              hasStationHours: stationDays.has(occurrence.id),
+            };
+      const closed = day.tone === "closed";
+      return {
+        date: day.date,
+        namedDay,
+        holidays: day.holidays,
+        tone: day.holidays.some(({ scope }) => scope !== "local")
+          ? "public_holiday"
+          : namedDay?.kind === "holiday"
+            ? "own_holiday"
+            : namedDay !== null
+              ? "working_day"
+              : closed
+                ? "closed"
+                : "standard",
+        ownHours: namedDay?.ownHours ?? false,
+        closed,
+      };
+    }),
+    holidayCoverage: read.coverage,
+    holidaySources: read.sources,
+    area: {
+      options: local.areaOptions,
+      required: local.areaRequired,
+      chosen: local.geographies.find(({ matchesVenue }) => matchesVenue)?.areaKey ?? null,
+    },
+    localHolidaysPerYear: local.localEntryLimit,
+  };
 }

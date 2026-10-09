@@ -1221,3 +1221,83 @@ describe("storage", () => {
     expect((await stored()).entries).toMatchObject([{ date: "2026-03-19" }]);
   });
 });
+
+describe("own named holidays contribute yearly owner coverage", () => {
+  it("counts repeats for the whole year without a geography and leaves facts unchanged", async () => {
+    const cfg = await venue();
+    await run((tx) =>
+      tx.insert(specialDates).values({
+        locationId: cfg.locationId,
+        date: "2026-12-25",
+        name: "Town holiday",
+        colour: "purple",
+        kind: "holiday",
+        repeatOn: "12-25",
+      }),
+    );
+    const read = await run((tx) => store.readHolidays(tx, cfg, "2027-01-01", "2027-01-01"));
+    expect(read.coverage[0]!.local).toBe("owner_entered");
+    expect(read.facts.map(({ name }) => name)).toEqual(["New Year"]);
+    expect(
+      read.coverage[0]!.sourceIds.every((id) => read.sources.some((source) => source.id === id)),
+    ).toBe(true);
+    expect(read.sources.filter(({ kind }) => kind === "owner")).toHaveLength(1);
+    expect(
+      (await run((tx) => store.readHolidays(tx, cfg, "2025-01-01", "2025-01-01"))).coverage[0]!
+        .local,
+    ).toBe("none_entered");
+    expect(
+      await run((tx) =>
+        tx
+          .select()
+          .from(holidayGeographies)
+          .where(eq(holidayGeographies.locationId, cfg.locationId)),
+      ),
+    ).toEqual([]);
+  });
+  it("ignores another venue's own holidays and named working days", async () => {
+    const cfg = await venue();
+    const other = await venue();
+    await run((tx) =>
+      tx.insert(specialDates).values([
+        {
+          locationId: cfg.locationId,
+          date: "2026-12-25",
+          name: "Party",
+          colour: "blue",
+          kind: "working_day",
+        },
+        {
+          locationId: other.locationId,
+          date: "2026-12-25",
+          name: "Foreign holiday",
+          colour: "purple",
+          kind: "holiday",
+        },
+      ]),
+    );
+    expect(
+      (await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-01-01"))).coverage[0]!
+        .local,
+    ).toBe("none_entered");
+  });
+});
+
+it("counts own holidays even when the public-holiday address cannot resolve", async () => {
+  const cfg = await venue({ country: "XY", province: null, city: null });
+  await run((tx) =>
+    tx.insert(specialDates).values({
+      locationId: cfg.locationId,
+      date: "2026-12-25",
+      name: "Our holiday",
+      colour: "purple",
+      kind: "holiday",
+    }),
+  );
+  const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-01-01"));
+  expect(read.coverage[0]).toMatchObject({
+    nationalRegional: "unsupported_country",
+    local: "owner_entered",
+  });
+  expect(read.facts).toEqual([]);
+});

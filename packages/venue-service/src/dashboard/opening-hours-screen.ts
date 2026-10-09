@@ -173,11 +173,11 @@ export class OpeningHoursScreen extends LitElement {
     else proceed();
   }
   private selectedSpecialDate() {
-    const dates = this.model?.specialDates ?? [];
+    const dates = this.model?.namedDays ?? [];
     return dates.find((date) => date.id === this.specialDateId) ?? dates[0];
   }
   private weekChooser() {
-    const dates = this.model!.specialDates;
+    const dates = this.model!.namedDays;
     const special = this.selectedSpecialDate();
     return html`<div class="chooser">
       <wt-combobox

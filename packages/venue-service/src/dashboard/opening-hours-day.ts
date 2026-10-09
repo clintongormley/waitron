@@ -1,3 +1,4 @@
+import { occursOn } from "../named-day-rules.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -123,7 +124,7 @@ export class OpeningHoursDay extends LitElement {
   private baseline: Draft = {};
   private source?: OpeningHoursModel;
   private contextDepartments: readonly Department[] = [];
-  private contextSpecial?: OpeningHoursModel["specialDates"][number];
+  private contextSpecial?: OpeningHoursModel["namedDays"][number];
   private generation = {};
   override connectedCallback() {
     super.connectedCallback();
@@ -173,7 +174,7 @@ export class OpeningHoursDay extends LitElement {
   }
   private seed(): Draft {
     this.contextDepartments = this.model.departments.filter((department) => department.active);
-    this.contextSpecial = this.model.specialDates.find((special) => special.date === this.date);
+    this.contextSpecial = this.model.namedDays.find((special) => occursOn(special, this.date));
     if (!this.date) return {};
     const special = this.special(),
       weekday = weekdayOf(this.date);

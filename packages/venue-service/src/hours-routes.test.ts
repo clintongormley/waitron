@@ -1111,3 +1111,75 @@ describe("named-day HTTP writes", () => {
     },
   );
 });
+
+describe("named-days Calendar route", () => {
+  it("returns the venue-scoped model for a venue viewer", async () => {
+    const fx = await fixture();
+    const day = await createDate(
+      fx,
+      input({ kind: "holiday", repeats: true, closeWholeVenue: true }),
+    );
+    const response = await send(
+      fx,
+      "GET",
+      "/named-days?from=2031-10-15&to=2031-10-16",
+      fx.supervisor,
+    );
+    expect(response.status).toBe(200);
+    const model = await response.json();
+    expect(model.days).toEqual([
+      {
+        date: "2031-10-15",
+        namedDay: {
+          id: day.id,
+          date: "2030-10-15",
+          name: "Staff party",
+          kind: "holiday",
+          repeats: true,
+          ownHours: false,
+          closeWholeVenue: true,
+          hasStationHours: false,
+        },
+        holidays: [],
+        tone: "own_holiday",
+        ownHours: false,
+        closed: true,
+      },
+      {
+        date: "2031-10-16",
+        namedDay: null,
+        holidays: [],
+        tone: "standard",
+        ownHours: false,
+        closed: false,
+      },
+    ]);
+  });
+  it("requires the existing venue view authorization", async () => {
+    const fx = await fixture();
+    await refused(
+      await send(fx, "GET", "/named-days?from=2030-10-15&to=2030-10-15", fx.staff),
+      403,
+      { code: "authorization.not_permitted" },
+    );
+    await refused(
+      await send(fx, "GET", "/named-days?from=2030-10-15&to=2030-10-15", undefined),
+      401,
+      { code: "management_session.required" },
+    );
+  });
+  it("refuses missing, malformed, reversed and overlong ranges", async () => {
+    const fx = await fixture();
+    for (const [query, field] of [
+      ["", "from"],
+      ["from=2030-02-30&to=2030-03-01", "from"],
+      ["from=2030-10-16&to=2030-10-15", "to"],
+      ["from=2030-01-01&to=2031-01-02", "to"],
+    ]) {
+      await refused(await send(fx, "GET", `/named-days?${query}`, fx.supervisor), 400, {
+        code: "hours.invalid",
+        params: { field },
+      });
+    }
+  });
+});

@@ -100,7 +100,7 @@ export class OpeningHoursWeek extends LitElement {
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
-  @property({ attribute: false }) specialDate?: OpeningHoursModel["specialDates"][number];
+  @property({ attribute: false }) specialDate?: OpeningHoursModel["namedDays"][number];
   @state() private following = false;
   @property({ type: Boolean }) readOnly = false;
   @state() private draft: MenuWeekDay[] = [];

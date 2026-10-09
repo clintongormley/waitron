@@ -961,7 +961,7 @@ Live query `named-days`: `special_dates`, `special_date_hours`, `menu_day_timeta
 `menu_slots`, `departments`, `tenants`, `locations`, `holiday_geographies`. The existing
 `readHolidays` callers keep working until Task 26 removes the local entries.
 
-- [ ] Steps: failing tests (a public holiday and a working day on one date: tone
+- [x] Steps: failing tests (a public holiday and a working day on one date: tone
   `public_holiday`, both names — fails today: no such read; a repeating own holiday in a later year;
   own-hours mark; a closed public holiday keeps its tone and `closed: true`; coverage
   `owner_entered` for a year holding an own holiday and no local entry, and `none_entered` for a

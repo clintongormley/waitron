@@ -27,6 +27,8 @@ import {
   type HolidayReader,
   type SpecialDateParticipant,
 } from "./hours.js";
+import { occursOn } from "./named-day-rules.js";
+import { specialDates } from "./schema/hours.js";
 import type { VenueScope } from "./operations.js";
 import { holidayGeographies, localHolidays } from "./schema/holidays.js";
 import "./errors.js";
@@ -198,10 +200,27 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
           sourceId: ownerSourceId(entry.geographyId),
         });
 
+    const ownHolidays = await tx
+      .select({ date: specialDates.date, repeatOn: specialDates.repeatOn })
+      .from(specialDates)
+      .where(
+        and(
+          eq(specialDates.locationId, cfg.locationId),
+          eq(specialDates.kind, "holiday"),
+          lte(specialDates.date, yearEnd(lastYear)),
+        ),
+      );
+    const namedSourceId = `owner:named-days:${cfg.locationId}`;
     const coverage: HolidayCoverage[] = [];
     for (let year = firstYear; year <= lastYear; year++) {
       const ofYear = shipped.get(year);
       const entered = entries.some(({ date }) => yearOf(date) === year);
+      const ownEntered = ownHolidays.some(({ date, repeatOn }) =>
+        occursOn(
+          { date, repeats: repeatOn !== null },
+          `${String(year).padStart(4, "0")}-${date.slice(5)}`,
+        ),
+      );
       coverage.push({
         year,
         country: address.country,
@@ -209,8 +228,9 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
         regionCode: ofYear?.regionCode ?? null,
         nationalRegional:
           calendar === undefined ? "unsupported_country" : (ofYear?.state ?? "unknown_region"),
-        local:
-          address.key === null
+        local: ownEntered
+          ? "owner_entered"
+          : address.key === null
             ? "address_unresolved"
             : calendar === undefined
               ? "unsupported_country"
@@ -218,7 +238,11 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
                 ? "owner_entered"
                 : "none_entered",
         dataVersion: ofYear?.dataVersion ?? null,
-        sourceIds: [...(ofYear?.sourceIds ?? []), ...(entered ? [ownerSourceId(current!.id)] : [])],
+        sourceIds: [
+          ...(ofYear?.sourceIds ?? []),
+          ...(entered ? [ownerSourceId(current!.id)] : []),
+          ...(ownEntered ? [namedSourceId] : []),
+        ],
       });
     }
 
@@ -237,6 +261,14 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
         id: ownerSourceId(current.id),
         kind: "owner",
         title: current.city,
+        url: null,
+        sha256: null,
+      });
+    if (referenced.has(namedSourceId))
+      sources.push({
+        id: namedSourceId,
+        kind: "owner",
+        title: "Venue's own holidays",
         url: null,
         sha256: null,
       });

@@ -1,4 +1,5 @@
 // Public-holiday types and constants only, safe to import in the browser.
+import type { NamedDayKind } from "./named-day-rules.js";
 import type { HolidayFact, LocalDate } from "./hours-types.js";
 
 /** The longest local holiday name, in Unicode code points, after trimming. */
@@ -56,4 +57,38 @@ export interface LocalHolidayModel {
   areaRequired: boolean;
   geographies: readonly HolidayGeography[];
   entries: readonly LocalHoliday[];
+}
+
+export interface NamedDay {
+  id: string;
+  date: LocalDate;
+  name: string;
+  kind: NamedDayKind;
+  repeats: boolean;
+  ownHours: boolean;
+  closeWholeVenue: boolean;
+  hasStationHours: boolean;
+}
+export interface NamedCalendarDay {
+  date: LocalDate;
+  namedDay: NamedDay | null;
+  holidays: readonly HolidayFact[];
+  tone: "public_holiday" | "own_holiday" | "working_day" | "closed" | "standard";
+  ownHours: boolean;
+  closed: boolean;
+}
+export interface NamedDaysModel {
+  timeZone: string;
+  dayCutover: string;
+  civilDate: LocalDate | null;
+  clockReadable: boolean;
+  days: readonly NamedCalendarDay[];
+  holidayCoverage: readonly HolidayCoverage[];
+  holidaySources: readonly HolidaySource[];
+  area: {
+    options: readonly { key: string; name: string }[];
+    required: boolean;
+    chosen: string | null;
+  };
+  localHolidaysPerYear: number;
 }

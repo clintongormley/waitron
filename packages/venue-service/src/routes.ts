@@ -272,6 +272,8 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
   };
 }
 
+import { readNamedDaysModel } from "./named-days.js";
+
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gatedAs = <T>(
@@ -306,6 +308,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             const model = await readHoursModel(tx, ctx.cfg, from, to, at, async () => read.facts);
             return { ...model, holidayCoverage: read.coverage, holidaySources: read.sources };
           }),
+        );
+      }),
+    );
+
+    app.get("/management-api/venue-service/named-days", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const from = c.req.query("from") ?? "";
+        const to = c.req.query("to") ?? "";
+        const at = new Date();
+        return c.json(
+          await viewed(sessionId, (tx) => readNamedDaysModel(tx, ctx.cfg, from, to, at)),
         );
       }),
     );

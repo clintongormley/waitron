@@ -24,7 +24,7 @@ export class OpeningHoursAll extends LitElement {
   ];
   @property({ attribute: false }) departments: OpeningHoursModel["departments"] = [];
   @property() dayCutover = "06:00";
-  @property({ attribute: false }) specialDate?: OpeningHoursModel["specialDates"][number];
+  @property({ attribute: false }) specialDate?: OpeningHoursModel["namedDays"][number];
   override render() {
     const departments = this.departments.filter((department) => department.active);
     const weekdays = this.specialDate ? [weekdayOf(this.specialDate.date)] : [1, 2, 3, 4, 5, 6, 0];
