@@ -12,7 +12,11 @@ function names(params: unknown, key: string): string[] {
   });
 }
 
-export function refusalText(code: string, params: unknown): string {
+export function refusalText(
+  code: string,
+  params: unknown,
+  options: { includeSingleProduct?: boolean } = {},
+): string {
   const sentence = codeMessage(code);
   if (code === "product.offered_as_extra") {
     const lists = names(params, "extraLists");
@@ -23,7 +27,9 @@ export function refusalText(code: string, params: unknown): string {
   const menus = names(params, "menus");
   return (
     sentence +
-    (products.length > 1 ? ` ${t("product.refusal_products")}: ${products.join(", ")}.` : "") +
+    (products.length && (products.length > 1 || options.includeSingleProduct)
+      ? ` ${t("product.refusal_products")}: ${products.join(", ")}.`
+      : "") +
     (menus.length ? ` ${t("product.refusal_menus")}: ${menus.join(", ")}.` : "")
   );
 }

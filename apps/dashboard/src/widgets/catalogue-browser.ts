@@ -414,6 +414,7 @@ export class CatalogueBrowser extends LitElement {
       this.operationError = refusalText(
         codeOf(error),
         (error as { params?: unknown } | null)?.params,
+        { includeSingleProduct: this.operationSelection.categoryIds.length > 0 },
       );
     } finally {
       this.operationBusy = false;

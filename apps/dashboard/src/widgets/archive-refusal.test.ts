@@ -31,6 +31,20 @@ describe.each([
     );
   });
 
+  it("names a single affected product when the caller requests it", () => {
+    setLocale(locale!);
+    expect(
+      refusalText(
+        "product.on_live_menu",
+        {
+          products: [{ id: "a", name: "A" }],
+          menus: [{ id: "d", name: "Dinner" }],
+        },
+        { includeSingleProduct: true },
+      ),
+    ).toBe(`${codeMessage("product.on_live_menu")} ${productsLabel}: A. ${menusLabel}: Dinner.`);
+  });
+
   it("keeps the extras-list refusal and leaves unrelated codes alone", () => {
     setLocale(locale!);
     const params = {
@@ -56,6 +70,9 @@ describe.each([
     expect(refusalText("product.on_live_menu", params)).toBe(codeMessage("product.on_live_menu"));
     expect(refusalText("product.offered_as_extra", params)).toBe(
       codeMessage("product.offered_as_extra"),
+    );
+    expect(refusalText("product.on_live_menu", params, { includeSingleProduct: true })).toBe(
+      codeMessage("product.on_live_menu"),
     );
   });
 });

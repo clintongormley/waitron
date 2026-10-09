@@ -4295,3 +4295,34 @@ it.each(["products", "category"])(
     ).toBeNull();
   },
 );
+
+it.each([
+  ["en", "Products", "Menus"],
+  ["es", "Productos", "Menús"],
+])(
+  "names the single product blocking a category archive (%s)",
+  async (locale, productsLabel, menusLabel) => {
+    setLocale(locale!);
+    const el = await mountBrowser();
+    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValue({
+      code: "product.on_live_menu",
+      params: {
+        products: [{ id: "cola", name: "Cola" }],
+        menus: [{ id: "dinner", name: "Dinner" }],
+      },
+    });
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+    );
+    el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+    await el.updateComplete;
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(dialog(el)!.querySelector("[role=alert]")!.textContent).toBe(
+        `${codeMessage("product.on_live_menu")} ${productsLabel}: Cola. ${menusLabel}: Dinner.`,
+      ),
+    );
+  },
+);
