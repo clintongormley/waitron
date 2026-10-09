@@ -349,3 +349,61 @@ it.each(["answer", "refusal"])(
     expect(calls).toHaveLength(2);
   },
 );
+
+it("a failed manager list keeps the endpoint and lets staff retry approval", async () => {
+  let managerReads = 0;
+  let writes = 0;
+  const { el, calls } = await mount({}, (path, init) =>
+    path.endsWith("authorizers")
+      ? ++managerReads === 1
+        ? refusal("time_zone.unreadable")
+        : json([{ personId: "ana", displayName: "Ana" }])
+      : init.method === "PUT"
+        ? ++writes < 3
+          ? refusal("authorization.not_permitted")
+          : new Response(null, { status: 204 })
+        : json({ period }),
+  );
+  act(el);
+  const d = await dialog(el);
+  await save(d);
+  await expect.poll(() => d.refusal).toBe("time_zone.unreadable");
+  await d.updateComplete;
+  expect(d.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+    "The venue's clock cannot be read",
+  );
+  expect(d.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
+  expect(d.shadowRoot!.querySelector("wt-button[data-submit]")!.disabled).toBe(false);
+  d.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+    .not.toBeNull();
+  const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+  await pin.updateComplete;
+  pin.dispatchEvent(
+    new CustomEvent("override-confirm", { detail: { personId: "ana", pin: "1234" } }),
+  );
+  await expect.poll(() => el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
+  expect(managerReads).toBe(2);
+  expect(calls.filter((call) => call.method === "PUT").map((call) => call.body)).toEqual([
+    { periodId: "lunch", until: "14:30" },
+    { periodId: "lunch", until: "14:30" },
+    { periodId: "lunch", until: "14:30", override: { personId: "ana", pin: "1234" } },
+  ]);
+});
+it("closing the editor re-enables its control and reads fresh choices on reopening", async () => {
+  const { el, calls } = await mount();
+  act(el);
+  const d = await dialog(el);
+  d.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await expect.poll(() => el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-button[data-action]")!.disabled).toBe(false);
+  act(el);
+  const reopened = await dialog(el);
+  expect(reopened).not.toBe(d);
+  expect(reopened.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  expect(calls).toEqual([
+    { path: "/api/service-zones/zone%20%2F1/keep-open", method: "GET", body: null },
+    { path: "/api/service-zones/zone%20%2F1/keep-open", method: "GET", body: null },
+  ]);
+});
