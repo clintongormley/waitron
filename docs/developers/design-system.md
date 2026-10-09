@@ -993,13 +993,14 @@ pointer drag starts from the grip only, with Products' ghost and gap (the shared
 `apps/dashboard/src/widgets/tree-drag.ts`). Over the middle half of the row of a closed or empty
 section the menu owns, a release puts the member at the end of that section; the row's first cell
 is marked `part="drop-target"` and no gap is drawn. Over any other row, or the top or bottom
-quarter of that one, the gap shows beside the row: before it while the pointer is in the row's
-upper half, after its last drawn row while in its lower half. Beside a sibling the release
-reorders the list as before (`wt-member-move`); beside a row of another list it moves the member
-into that list at that place (`wt-member-move-into`). Nothing is offered — no gap, no mark, and a
+quarter of that one, the gap shows beside the row. Beside a sibling the release reorders the
+list as before (`wt-member-move`), with the gap before a sibling above the member and after one
+below it. Beside a row of another list it moves the member into that list at that place
+(`wt-member-move-into`), with the gap before the row while the pointer is in its upper half and
+after its last drawn row while in its lower half. Nothing is offered — no gap, no mark, and a
 release sends nothing — over the dragged row or anything drawn inside it, over a list inside a
-dragged section wherever that list is drawn, over a row inside an included menu, over a list that
-already holds the same product or section, over the dragged member's own list where it is drawn in
+dragged section wherever that list is drawn, over a row inside an included menu, over another list
+that already holds the same product or section, over the dragged member's own list where it is drawn in
 another place, and, for a product no longer in the catalogue, anywhere but beside its siblings. On
 a grip, ArrowUp and ArrowDown move the member one place within its own list. ArrowRight moves it to
 the end of the sibling drawn directly above it, when that sibling is a section the menu owns that
