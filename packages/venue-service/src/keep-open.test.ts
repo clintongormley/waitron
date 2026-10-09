@@ -130,8 +130,9 @@ describe("keeping a period open today", () => {
         endsAt: "14:00",
         running: true,
         extendedUntil: null,
+        dayEndsAt: "06:00",
         choices,
-        next: { name: "Afternoon", startsAt: "14:00" },
+        next: { name: "Afternoon", startsAt: "14:00", endsAt: "19:00" },
       },
     });
   });
@@ -342,3 +343,41 @@ it.each([
     expect(await rows(f)).toMatchObject([{ endsAt: `${until}:00` }]);
   }
 });
+
+it("reports the real non-quarter service-day endpoint", async () => {
+  const f = await fixture();
+  await run((tx) =>
+    tx.update(locations).set({ dayCutover: "05:50:00" }).where(eq(locations.id, f.cfg.locationId)),
+  );
+  const result = await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("13:50")));
+  expect(result.period).toMatchObject({ dayEndsAt: "05:50" });
+  expect(result.period!.choices.at(-1)).toBe("05:45");
+});
+it.each([
+  ["15:00", "19:00"],
+  ["15:15", "15:00"],
+])(
+  "reports the next period's contiguous end when the second run starts at %s",
+  async (secondStart, expectedEnd) => {
+    const f = await fixture({ afternoon: true });
+    await run((tx) =>
+      replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" },
+            { periodId: f.afternoon, startsAt: "14:00", endsAt: "15:00" },
+            { periodId: f.afternoon, startsAt: secondStart, endsAt: "19:00" },
+          ],
+        })),
+        at("12:00"),
+      ),
+    );
+    expect(
+      (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("13:50")))).period!.next,
+    ).toEqual({ name: "Afternoon", startsAt: "14:00", endsAt: expectedEnd });
+  },
+);

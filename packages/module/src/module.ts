@@ -331,8 +331,9 @@ export interface KeepOpenSubject {
   endsAt: string;
   running: boolean;
   extendedUntil: string | null;
+  dayEndsAt: string;
   choices: readonly string[];
-  next: { name: string; startsAt: string } | null;
+  next: { name: string; startsAt: string; endsAt: string } | null;
 }
 
 export interface StationTodayState {

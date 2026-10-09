@@ -12,7 +12,16 @@ class KeepOpenLeaveApp extends LitElement {
   confirmed: unknown[] = [];
   override render() {
     return html`<till-keep-open-dialog
-        .period=${{ id: "lunch", name: "Lunch", endsAt: "14:00", running: true, extendedUntil: null, choices: ["14:15", "14:30", "05:00"], next: null }}
+        .period=${{
+          id: "lunch",
+          name: "Lunch",
+          endsAt: "14:00",
+          running: true,
+          extendedUntil: null,
+          dayEndsAt: "05:00",
+          choices: ["14:15", "14:30", "05:00"],
+          next: null,
+        }}
         @close=${() => this.closes++}
         @keep-open-confirm=${(e: CustomEvent) => this.confirmed.push(e.detail)}
       ></till-keep-open-dialog

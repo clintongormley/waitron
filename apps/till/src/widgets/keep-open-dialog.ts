@@ -117,10 +117,13 @@ export class TillKeepOpenDialog extends LitElement {
     const p = this.period!,
       next = p.next;
     if (!next || !this.selected) return null;
-    if (this.selected === p.choices.at(-1))
+    const clockMinute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+    const serviceMinute = (time: string) =>
+      (clockMinute(time) - clockMinute(p.dayEndsAt) + 1440) % 1440;
+    const selected = serviceMinute(this.selected) || 1440;
+    if (selected >= (serviceMinute(next.endsAt) || 1440))
       return t("keep_open.drops").replace("{next}", () => next.name);
-    const nextIndex = p.choices.indexOf(next.startsAt);
-    if (nextIndex >= p.choices.indexOf(this.selected)) return null;
+    if (selected <= serviceMinute(next.startsAt)) return null;
     return t("keep_open.delays")
       .replace("{next}", () => next.name)
       .replace("{time}", () => this.selected)
@@ -155,7 +158,7 @@ export class TillKeepOpenDialog extends LitElement {
           required
           search="never"
           label=${t("keep_open.until")}
-          .options=${p.choices.map((value, index) => ({ value, label: index === p.choices.length - 1 ? t("keep_open.end_of_day").replace("{time}", () => value) : value }))}
+          .options=${p.choices.map((value) => ({ value, label: value === p.dayEndsAt ? t("keep_open.end_of_day").replace("{time}", () => value) : value }))}
           .value=${this.selected}
           .disabled=${this.busy}
           .error=${fieldError}

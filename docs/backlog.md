@@ -1259,7 +1259,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
   APPROVED 2026-10-07; remaining work is slices 2, 3, and 4–7.** Zone closed times
   and named days remain in slice 2; keeping a zone open later remains in slice 3 Part B.
-  Slice 3 Part A is built on its branch; final review corrections and approval remain.
+  Slice 3 Part A is built and its review corrections are applied. The station-summary wording
+  decision remains before push checks, CI and landing.
   Station-hours and fallback retirement, period routing, combined tickets, monitors, department
   pages and department receipts remain in slices 4–7.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)

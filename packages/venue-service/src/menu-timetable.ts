@@ -390,7 +390,7 @@ export async function departmentDay(
   };
 }
 
-function serviceRuns(ranges: readonly ServiceRange[]): ServiceRange[] {
+export function serviceRuns(ranges: readonly ServiceRange[]): ServiceRange[] {
   const runs: ServiceRange[] = [];
   for (const range of ranges) {
     const last = runs.at(-1);

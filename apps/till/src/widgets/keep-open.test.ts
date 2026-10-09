@@ -20,6 +20,7 @@ const period = {
   endsAt: "14:00",
   running: true,
   extendedUntil: null,
+  dayEndsAt: "05:00",
   choices: ["14:15", "14:30", "05:00"],
   next: null,
 };

@@ -28,7 +28,7 @@ their full text.
   receipt with translated subtitle and footer, then the department page's Receipt tab after
   slice 6. Lane E's build waits for its slice 3 Part A to land, then slice 6 Part A, before
   slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
-  Slice 3 Part A is built on its branch; final review corrections and approval remain.
+  Slice 3 Part A is built and its review corrections are applied. Push checks, CI and landing remain.
   Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
   in two pull requests — keeping a period open and closing a station for today after slice 1, keeping
   a zone open after slice 2 — with its open decisions at its top.

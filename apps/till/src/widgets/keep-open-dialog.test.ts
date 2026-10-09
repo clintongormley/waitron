@@ -11,8 +11,9 @@ const period = {
   endsAt: "14:00",
   running: true,
   extendedUntil: null,
+  dayEndsAt: "05:00",
   choices: ["14:15", "14:30", "19:00", "19:15", "05:00"],
-  next: { name: "Dinner", startsAt: "19:00" },
+  next: { name: "Dinner", startsAt: "19:00", endsAt: "23:00" },
 };
 async function mount(props: Partial<TillKeepOpenDialog> = {}) {
   const { el } = await mountWidget<TillKeepOpenDialog>("till-keep-open-dialog", {
@@ -65,7 +66,7 @@ it("orders next-period times through midnight using the offered sequence", async
       ...period,
       endsAt: "23:00",
       choices: ["23:15", "00:00", "00:30", "01:00", "05:00"],
-      next: { name: "Late service", startsAt: "00:30" },
+      next: { name: "Late service", startsAt: "00:30", endsAt: "03:00" },
     },
   });
   await choose(el, "00:00");
@@ -151,7 +152,11 @@ it("localizes the choices, effect and refusal in Spanish", async () => {
   try {
     setLocale("es");
     const el = await mount({
-      period: { ...period, name: "Comida", next: { name: "Cena", startsAt: "19:00" } },
+      period: {
+        ...period,
+        name: "Comida",
+        next: { name: "Cena", startsAt: "19:00", endsAt: "23:00" },
+      },
       refusal: "period_extension.not_allowed",
     });
     await choose(el, "05:00");
@@ -162,6 +167,63 @@ it("localizes the choices, effect and refusal in Spanish", async () => {
     expect(el.shadowRoot!.querySelector("wt-combobox")!.options.at(-1)!.label).toBe(
       "Fin del día (05:00)",
     );
+  } finally {
+    setLocale("en");
+  }
+});
+
+it.each(["19:00", "20:00"])(
+  "says the next period will not run when extending until %s",
+  async (until) => {
+    const el = await mount({
+      period: {
+        ...period,
+        dayEndsAt: "05:00",
+        choices: ["14:15", "14:30", "19:00", "20:00", "05:00"],
+        next: { name: "Afternoon", startsAt: "14:00", endsAt: "19:00" },
+      },
+    });
+    await choose(el, until);
+    expect(el.shadowRoot!.querySelector("[data-delay]")!.textContent).toBe(
+      "Afternoon will not run today.",
+    );
+  },
+);
+it("labels a last available quarter before the actual day end as its clock time", async () => {
+  const el = await mount({
+    period: { ...period, dayEndsAt: "05:50", choices: ["14:15", "14:30", "05:45"], next: null },
+  });
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.options.at(-1)!.label).toBe("05:45");
+});
+it.each([
+  ["00:30", "Late service will start at 00:30 instead of 23:30."],
+  ["01:00", "Late service will not run today."],
+])("uses the next period's end across midnight for %s", async (until, expected) => {
+  const el = await mount({
+    period: {
+      ...period,
+      dayEndsAt: "05:00",
+      choices: ["23:15", "23:30", "00:30", "01:00", "05:00"],
+      next: { name: "Late service", startsAt: "23:30", endsAt: "01:00" },
+    },
+  });
+  await choose(el, until);
+  expect(el.shadowRoot!.querySelector("[data-delay]")!.textContent).toBe(expected);
+});
+it("explains a cancelled next period and non-quarter day end in Spanish", async () => {
+  try {
+    setLocale("es");
+    const el = await mount({
+      period: {
+        ...period,
+        dayEndsAt: "05:50",
+        choices: ["14:15", "19:00", "05:45"],
+        next: { name: "Cena", startsAt: "14:00", endsAt: "19:00" },
+      },
+    });
+    await choose(el, "19:00");
+    expect(el.shadowRoot!.querySelector("[data-delay]")!.textContent).toBe("Hoy no habrá Cena.");
+    expect(el.shadowRoot!.querySelector("wt-combobox")!.options.at(-1)!.label).toBe("05:45");
   } finally {
     setLocale("en");
   }

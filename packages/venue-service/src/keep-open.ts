@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import type { KeepOpenSubject } from "@waitron/module";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { departmentDay, keepOpenSubject } from "./menu-timetable.js";
+import { departmentDay, keepOpenSubject, serviceRuns } from "./menu-timetable.js";
 import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import {
@@ -67,7 +67,7 @@ export async function readKeepOpen(
     if (!clockTimeSkipped(c.moment.businessDay, time, c.clock.dayCutover, c.clock.timeZone, true))
       choices.push(time);
   }
-  const next = c.day.ranges.find(
+  const next = serviceRuns(c.day.ranges).find(
     (range) =>
       range.periodId !== c.subject!.periodId &&
       rangeSpan(range, c.clock.dayCutover).start >=
@@ -82,6 +82,7 @@ export async function readKeepOpen(
       endsAt: c.subject.endsAt,
       running: c.subject.running,
       extendedUntil: c.subject.extendedUntil,
+      dayEndsAt: c.clock.dayCutover,
       choices,
       next:
         next === undefined
@@ -89,6 +90,7 @@ export async function readKeepOpen(
           : {
               name: c.day.periods.find((period) => period.id === next.periodId)!.name,
               startsAt: next.startsAt,
+              endsAt: next.endsAt,
             },
     },
   };
