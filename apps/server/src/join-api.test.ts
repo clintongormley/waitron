@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { personRole, roleHasPermission } from "@waitron/identity";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mountJoinApi } from "./join-api.js";
@@ -143,7 +143,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
     profileId: profile!.id,
     kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
   });
-  expect(notOffered.status).toBe(403);
+  expect(notOffered.status).toBe(400);
   expect(await notOffered.json()).toMatchObject({
     error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
   });
@@ -159,4 +159,56 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
   expect(shown).toMatchObject([
     { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
   ]);
+});
+
+it("join approval refuses a zone the profile's pass screen does not offer with kitchen_screen.zone_not_allowed 400", async () => {
+  const venue = await setupVenue(suite.db);
+  const app = new Hono();
+  const pairingMode = createPairingMode();
+  const { holdId } = pairingMode.open();
+  mountJoinApi(
+    app,
+    { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
+    () => {},
+  );
+  const [offered, other] = await suite.db
+    .insert(floorZones)
+    .values([
+      { locationId: venue.cfg.locationId, name: "Terraza" },
+      { locationId: venue.cfg.locationId, name: "Barra" },
+    ])
+    .returning({ id: floorZones.id });
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: "Pass KDS", formFactor: "kds", capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+      pass: { stationIds: null, zoneIds: [offered!.id] },
+    }),
+  );
+  const made = await withTransaction(suite.db, (tx) =>
+    createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" }),
+  );
+  const send = (verb: "check" | "accept", body: unknown) =>
+    app.request(`/management-api/device-join-requests/${made.joinId}/${verb}`, {
+      method: "POST",
+      headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  expect(
+    (await send("check", { choice: made.verificationNumber, holdId, createdAt: made.createdAt }))
+      .status,
+  ).toBe(204);
+
+  const refused = await send("accept", {
+    name: "Pase",
+    profileId: profile!.id,
+    kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: [other!.id] }],
+  });
+
+  expect(refused.status).toBe(400);
+  expect(await refused.json()).toMatchObject({
+    error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: other!.id } },
+  });
 });

@@ -121,7 +121,7 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
 /**
  * CLIENT faults only: a non-AppError becomes an opaque `server.internal` 500, and a code absent here
  * takes the boundary's 400 default. A code this surface does not throw itself is mapped to the status
- * its own surface gives it, so a code has one status wherever it is answered.
+ * its own surface gives it.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
@@ -143,8 +143,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "join_request.not_found": 404,
   "kitchen_screen.required": 400,
   "kitchen_screen.invalid": 400,
-  "kitchen_screen.not_allowed": 403,
-  "kitchen_screen.zone_not_allowed": 403,
+  "kitchen_screen.not_allowed": 400,
+  "kitchen_screen.zone_not_allowed": 400,
   // A conflict the operator resolves by renaming the device.
   "device.name_taken": 409,
   "device.binding_invalid": 400,
@@ -164,8 +164,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "kitchen_notice.not_found": 404,
 };
 
-/** The pass levers run the till's Fire, Ready and Away, so they answer its codes as the till does. */
-export const LEVER_STATUS: Record<string, ContentfulStatusCode> = { ...TILL_STATUS, ...STATUS };
+/**
+ * The pass levers run the till's Fire, Ready and Away, so they answer its codes as the till does.
+ * On a lever the two kitchen-screen codes mean the calling device may not act on that order: 403.
+ */
+export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
+  ...TILL_STATUS,
+  ...STATUS,
+  "kitchen_screen.not_allowed": 403,
+  "kitchen_screen.zone_not_allowed": 403,
+};
 
 const run = createErrorBoundary(STATUS, "device.failed");
 

@@ -47,10 +47,7 @@ export interface JoinApiDeps {
   deviceAddress: string;
 }
 
-/**
- * The accept-time faults of a device's kitchen screens carry the SAME statuses `device-api.ts`
- * gives them, so a code answered by both surfaces has one status everywhere.
- */
+/** The accept-time faults of a device's kitchen screens carry the SAME statuses `device-api.ts` gives them. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   // Unknown, already decided, or (on a per-surface route) the other kind's ask. On the device accept
   // route a device id this login holds no live claim on answers `join_request.unclaimed` instead,
@@ -59,8 +56,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_mismatch": 400,
   "kitchen_screen.required": 400,
   "kitchen_screen.invalid": 400,
-  "kitchen_screen.not_allowed": 403,
-  "kitchen_screen.zone_not_allowed": 403,
+  "kitchen_screen.not_allowed": 400,
+  "kitchen_screen.zone_not_allowed": 400,
   "device.name_taken": 409,
   "device.binding_invalid": 400,
   "device_profile.not_found": 404,
