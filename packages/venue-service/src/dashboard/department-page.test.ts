@@ -160,6 +160,23 @@ it("always puts the parent trail above the one h1 even for one department", asyn
     nav.compareDocumentPosition(root.querySelector("h1")!) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
+it.each(["settings", "zones"] as const)(
+  "%s leaves opening-hours editing on its separate page",
+  async (tab) => {
+    await mount();
+    el.view = tab;
+    await el.updateComplete;
+    const roots: ShadowRoot[] = [el.shadowRoot!];
+    for (const root of roots) {
+      expect(root.querySelector('[data-test="hours"]')).toBeNull();
+      expect(root.querySelector('[data-test="hours-actions"]')).toBeNull();
+      expect(root.querySelector('[data-test="new-hours"]')).toBeNull();
+      for (const node of root.querySelectorAll<HTMLElement>("*")) {
+        if (node.shadowRoot) roots.push(node.shadowRoot);
+      }
+    }
+  },
+);
 it("leaves modifier clicks on the parent link to the browser", async () => {
   await mount();
   const link = el.shadowRoot!.querySelector("nav a")!;
@@ -253,3 +270,37 @@ it("renders no department editor for an unknown id", async () => {
   expect(el.shadowRoot!.querySelector("h1")).toBeNull();
   expect(el.shadowRoot!.querySelector("department-settings")).toBeNull();
 });
+
+it.each(["plain", "ctrlKey", "metaKey", "shiftKey", "altKey"])(
+  "an Opening hours %s click remains a browser link outside the application shell",
+  async (modifier) => {
+    const view = structuredClone(model);
+    view.readiness = [
+      { code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" },
+    ];
+    await mount(view);
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=setup] a")!;
+    const before = location.href;
+    let prevented: boolean | undefined;
+    el.addEventListener(
+      "click",
+      (event) => {
+        prevented = event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    link.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        ...(modifier === "plain" ? {} : { [modifier]: true }),
+      }),
+    );
+    expect(prevented).toBe(false);
+    expect(location.href).toBe(before);
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/department/d1");
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  },
+);

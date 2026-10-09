@@ -366,3 +366,27 @@ describe("department list", () => {
     },
   );
 });
+
+it("a disabled parent's assigned zones never become unassigned actions", async () => {
+  const el = await setup({
+    ...model,
+    departments: model.departments.map((d) => ({ ...d, active: false })),
+    floorZones: [...model.floorZones, { id: "disabled-unassigned", name: "Unused", active: false }],
+    readiness: [
+      { code: "zone.department_missing", zoneId: "disabled-unassigned", zoneName: "Unused" },
+    ],
+  });
+  const line = find(el, "[data-test=unassigned-zones]")!;
+  expect(line).not.toBeNull();
+  expect(line.textContent).toContain("Unused");
+  expect(line.textContent).not.toContain("Dining room");
+  expect(line.textContent).not.toContain("Bar");
+  expect(line.querySelector("[data-test=enable-zone]")).toBeNull();
+  expect(line.querySelector("[data-test=disable-zone]")).toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("[data-test=add-department]")).toHaveLength(1);
+});
+it("the Spanish empty department list says why it has no rows", async () => {
+  setLocale("es");
+  const el = await setup({ ...model, departments: [] });
+  expect(table(el).shadowRoot!.textContent).toContain("Todavía no hay departamentos.");
+});

@@ -493,3 +493,74 @@ it.each([
     }
   },
 );
+
+it.each([
+  ["paidWhen", "ticket_then_pay"],
+  ["collectionNumber", "numbered"],
+  ["receiptPrintMode", "on_request"],
+] as const)(
+  "a refused zone %s clears back to inheritance without another write",
+  async (name, changed) => {
+    await mount("z3");
+    el.model = { ...el.model!, salePolicies: { ...el.model!.salePolicies, zones: [] } };
+    await el.updateComplete;
+    const writes: unknown[] = [];
+    el.api = new VenueServiceApi((async (path, method, body) => {
+      writes.push({ path, method, body });
+      throw new Error("offline");
+    }) as DashboardRequest);
+    await fields().updateComplete;
+    const box = fields().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      `wt-combobox[name=${name}]`,
+    )!;
+    await chooseOption(box, changed);
+    await el.updateComplete;
+    button("save-zone").click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+      .toBe("The change could not be saved.");
+    expect(box.value).toBe(changed);
+    expect(writes).toEqual([
+      {
+        path: "/management-api/venue-service/zones/z3/service-settings",
+        method: "PUT",
+        body: {
+          orderStart: null,
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+          [name]: changed,
+        },
+      },
+    ]);
+    await chooseOption(box, "");
+    await el.updateComplete;
+    button("save-zone").click();
+    await el.updateComplete;
+    expect(box.value).toBe("");
+    expect(box.placeholder).not.toBe("");
+    expect(writes).toHaveLength(1);
+    expect(button("save-zone").disabled).toBe(true);
+    expect(button("save-zone").variant).toBe("secondary");
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+  },
+);
+
+it("zone menus retain Rename under a disabled parent, call the command Disable, and omit receipt-only details", async () => {
+  await mount();
+  expect(button("disable-zone").textContent!.trim()).toBe("Disable");
+  expect(el.shadowRoot!.querySelector("wt-row-actions")!.textContent).not.toContain("Remove");
+  expect(el.shadowRoot!.querySelector("[name=printTradingName]")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Casa");
+  expect(el.shadowRoot!.textContent).not.toContain("Every zone");
+  el.model = {
+    ...el.model!,
+    departments: el.model!.departments.map((d) => ({ ...d, active: false })),
+    zones: el.model!.zones.map((z) => ({ ...z, active: false })),
+  };
+  await el.updateComplete;
+  expect(button("rename-zone").disabled).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-test=enable-zone]")).toBeNull();
+  expect(button("zone-z2").textContent).toContain("(Disabled)");
+  expect(button("zone-z2").textContent).not.toContain("Inactive");
+});

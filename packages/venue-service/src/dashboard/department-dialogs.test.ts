@@ -1100,3 +1100,107 @@ it.each(dialogs.slice(6))(
     ]);
   },
 );
+
+it("Disable department sends once while pending and keeps a refused confirmation available", async () => {
+  let reject!: (error: Error) => void;
+  const pending = new Promise<void>((_, no) => {
+    reject = no;
+  });
+  const { el, request } = await mount(
+    dialogs[6]!,
+    vi.fn(async (_path: string, method?: string) => {
+      if (method === "GET") return { zones: [] };
+      await pending;
+    }),
+  );
+  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Disable Restaurant?");
+  expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([]);
+  const button = save(el);
+  button.click();
+  button.click();
+  await el.updateComplete;
+  expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([
+    ["/management-api/venue-service/departments/d1", "DELETE"],
+  ]);
+  expect(button.disabled).toBe(true);
+  await button.updateComplete;
+  expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
+  reject(new Error("write failed"));
+  await expect.poll(() => bottom(el)).toBe("The change could not be saved.");
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  expect(button.disabled).toBe(false);
+  await button.updateComplete;
+  expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
+});
+
+it("the Move department picker's search and empty result are Spanish", async () => {
+  setLocale("es");
+  const { el } = await mount(dialogs[4]!);
+  const box = field(el, "departmentId") as unknown as HTMLElementTagNameMap["wt-combobox"];
+  expect([box.searchPlaceholder, box.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+});
+
+it("a refused Add zone keeps its exact submitted department and name", async () => {
+  const { el, request } = await mount(
+    dialogs[2]!,
+    vi.fn(async () => {
+      throw { code: "zone.name_taken" };
+    }),
+  );
+  await change(el, "name", "Patio");
+  save(el).click();
+  await expect.poll(() => field(el, "name").error).toBe("A zone with this name already exists.");
+  expect(request.mock.calls).toEqual([
+    ["/management-api/venue-service/zones", "POST", { name: "Patio", departmentId: "d1" }],
+  ]);
+  expect(field(el, "name").value).toBe("Patio");
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(save(el).disabled).toBe(false);
+});
+it("a missing zone keeps its Spanish Rename draft and exact attempted name", async () => {
+  setLocale("es");
+  const { el, request } = await mount(
+    dialogs[3]!,
+    vi.fn(async () => {
+      throw { code: "zone.not_found" };
+    }),
+  );
+  await change(el, "name", "Jardín");
+  save(el).click();
+  await expect.poll(() => bottom(el)).toBe("No se pudo guardar el cambio.");
+  expect(request.mock.calls).toEqual([["/management-api/zones/z1", "PATCH", { name: "Jardín" }]]);
+  expect(field(el, "name").value).toBe("Jardín");
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(save(el).disabled).toBe(false);
+});
+it.each(["en", "es"])(
+  "zone Disable names its impact before writing and retains a missing-zone refusal in %s",
+  async (locale) => {
+    setLocale(locale);
+    const { el, request } = await mount(
+      dialogs[7]!,
+      vi.fn(async (_path: string, method?: string) => {
+        if (method === "GET") return { zones: [{ id: "z1", name: "Patio", activeTableCount: 2 }] };
+        throw { code: "zone.not_found" };
+      }),
+    );
+    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+      locale === "en" ? "Disable Patio?" : "¿Deshabilitar Patio?",
+    );
+    expect(save(el).textContent!.trim()).toBe(locale === "en" ? "Disable" : "Deshabilitar");
+    expect(el.shadowRoot!.textContent).toMatch(
+      locale === "en" ? /Patio: 2 active tables/ : /Patio: 2 mesas activas/,
+    );
+    expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([]);
+    save(el).click();
+    await expect
+      .poll(() => bottom(el))
+      .toBe(locale === "en" ? "The change could not be saved." : "No se pudo guardar el cambio.");
+    expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([
+      ["/management-api/zones/z1", "DELETE"],
+    ]);
+    expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+    expect(save(el).disabled).toBe(false);
+  },
+);

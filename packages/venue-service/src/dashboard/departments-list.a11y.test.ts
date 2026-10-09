@@ -12,7 +12,7 @@ afterEach(() => {
   sessionStorage.clear();
 });
 describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
-  it.each(["empty", "ready", "issues", "setup", "menu"])("%s", async (state) => {
+  it.each(["empty", "ready", "issues", "setup", "menu", "disabled-menu"])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
       "<departments-list></departments-list>",
@@ -27,7 +27,7 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
                 id: "d1",
                 name: "Restaurant",
                 tradingName: "Casa Delgado",
-                active: state !== "issues",
+                active: state !== "issues" && state !== "disabled-menu",
                 defaultServiceMode: "table_tab",
               },
             ],
@@ -53,10 +53,12 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const table = el.shadowRoot?.querySelector("wt-data-table");
     expect(table, "the list is rendered for accessibility scanning").toBeTruthy();
-    if (state === "menu") {
+    if (state === "menu" || state === "disabled-menu") {
       const menu = table!.shadowRoot!.querySelector("wt-row-actions")!;
       menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
       await menu.updateComplete;
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      if (state === "disabled-menu") expect(menu.textContent).toContain("Enable");
     }
     await expectNoA11yViolations(host);
   });

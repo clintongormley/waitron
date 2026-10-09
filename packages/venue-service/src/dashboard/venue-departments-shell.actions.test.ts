@@ -295,6 +295,68 @@ it("Cancel returns focus to the real Add zone button", async () => {
   await expect.poll(() => el.dialog).toBeUndefined();
   await expect.poll(() => zones.shadowRoot!.activeElement).toBe(opener);
 });
+it.each([0, 2])("adding a zone returns focus to Add with %i prior zones", async (count) => {
+  const model = view();
+  model.zones = model.zones.slice(0, count);
+  model.floorZones = model.floorZones.slice(0, count);
+  const { shell, loaded, request } = await mount(
+    "/manage/venue-operations/department/d1/view/zones",
+    model,
+  );
+  const zones = shell.shadowRoot!.querySelector("department-zones")!;
+  await zones.updateComplete;
+  const opener = zones.shadowRoot!.querySelector<HTMLElement>("[data-test=add-zone]")!;
+  const next = structuredClone(model);
+  next.zones.push({ ...view().zones[0]!, id: "new", name: "Garden" });
+  next.floorZones.push({ id: "new", name: "Garden", active: true });
+  loaded(next);
+  opener.click();
+  const el = await dialogs(shell);
+  await saveName(el, "Garden");
+  await expect.poll(() => el.dialog).toBeUndefined();
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/venue-operations/department/d1/view/zones/zone/new");
+  await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+  expect(request.mock.calls.filter((call) => call[1] === "POST")).toEqual([
+    ["/management-api/venue-service/zones", "POST", { name: "Garden", departmentId: "d1" }],
+  ]);
+  await expect.poll(() => zones.shadowRoot!.activeElement).toBe(opener);
+});
+it("zone Enable closes its real popover before the request completes", async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const model = view();
+  model.zones[0]!.active = false;
+  model.floorZones[0]!.active = false;
+  const { shell, request } = await mount(
+    "/manage/venue-operations/department/d1/view/zones/zone/z1",
+    model,
+    pending,
+  );
+  const zones = shell.shadowRoot!.querySelector("department-zones")!;
+  await zones.updateComplete;
+  const action = zones.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-zone]")!;
+  const menu = action.closest("wt-row-actions")!;
+  await menu.updateComplete;
+  const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  try {
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(action);
+    await expect
+      .poll(() => request.mock.calls.filter((call) => call[1] === "PATCH").length)
+      .toBe(1);
+    expect(request).toHaveBeenCalledWith("/management-api/zones/z1", "PATCH", { active: true });
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(shell.shadowRoot!.querySelector("department-dialogs")!.dialog).toBeUndefined();
+  } finally {
+    release();
+    await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+  }
+});
 it.each(["cancel", "save"] as const)(
   "Rename %s restores the department row-menu trigger",
   async (ending) => {

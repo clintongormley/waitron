@@ -402,6 +402,8 @@ export class DepartmentDialogs extends LitElement {
                     label=${t("venue.department")}
                     required
                     search="never"
+                    searchPlaceholder=${t("venue.combobox_search")}
+                    noResultsLabel=${t("venue.combobox_no_results")}
                     .value=${this.draft.departmentId}
                     .options=${this.choices}
                     .error=${errors.departmentId ?? ""}

@@ -165,6 +165,7 @@ export class VenueDepartmentsShell extends LitElement {
     const dialog = this.dialog;
     const opener = this.#opener;
     const path = location.pathname;
+    let focusPath = path;
     this.busy = true;
     await this.#closeDialog();
     const refreshed = await this.#refresh(generation);
@@ -178,12 +179,13 @@ export class VenueDepartmentsShell extends LitElement {
         const selected =
           zone?.id ?? this.model.zones.find((row) => row.departmentId === this.departmentId)?.id;
         await this.#navigate({ view: "zones", zone: selected ?? null }, true);
+        focusPath = location.pathname;
       }
     }
     if (this.#current(generation)) {
       this.busy = false;
       await this.updateComplete;
-      if (this.#current(generation) && location.pathname === path)
+      if (this.#current(generation) && location.pathname === focusPath)
         await this.#returnFocus(opener, dialog);
     }
   }

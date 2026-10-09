@@ -320,6 +320,7 @@ export class DepartmentZones extends LitElement {
                   this.draft = copy(e.detail.value);
                   this.refused = refused;
                   this.scope?.changed();
+                  if (saveActionState(this.scope).unchanged) this.failure = "";
                 }}
               ></dashboard-service-settings-fields>
               <wt-form-actions

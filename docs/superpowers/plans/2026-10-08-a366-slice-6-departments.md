@@ -1769,3 +1769,31 @@ Next: complete the semantic retirement inventory, switch the public wrapper, rem
 the staged create spy and verify mounted public navigation and LOOK. A13–A15, two
 completed Claude reviews, normal push hook, current-head CI and authorised landing
 remain. Do not repeat the pending-input diagnosis or ask for the settled exception.
+
+
+### Implementation checkpoint: A10 retained-behavior audit fixes (2026-10-09)
+
+The early semantic audit identified missing checks on replacement screens. Added
+native/browser assertions reproduced lost Add-zone focus after URL selection,
+missing receipt search, English Move labels in Spanish, blank trading-name validation
+and stale generic refusal messages after returning to saved values. Minimal fixes
+followed the observed failures. Added checks also carry exact refused zone requests,
+Disable confirmation and impact wording, native print-trading-name outcomes, browser
+ownership of Opening hours links, raw-event containment, disabled-parent assignment,
+Rename availability and inherited-versus-explicit colours. Accessibility scans now
+include an open disabled-row menu, asserted invalid fields and desktop localized
+missing-period warnings.
+
+The affected replacement suites passed 448 tests in 15 files. A later run passed
+316 tests in six files, including all four unchanged legacy suites, the shell suite
+and the corrected page shadow-root checks. Package type checking, scoped lint,
+formatting and diff checks passed. Independently installed deletion controls failed
+for focus (two cases), required trading name (one), stale generic refusal (six) and
+missing receipt search (two); restored source passed the selected eleven cases.
+Existing expect expressions remain present; that comparison does not establish
+behavioral equivalence. The public wrapper and four legacy suites remain unchanged.
+
+Receipts and the detailed old-to-new audit delta stay in Lane E's
+`receipts/a366-6a/a10-switch/`. This is not retirement approval or public LOOK.
+Next reconcile the late/drafts inventory with subsequent carried tests, complete
+A10's public switch and mounted public checks, then A13–A15 and branch gates.

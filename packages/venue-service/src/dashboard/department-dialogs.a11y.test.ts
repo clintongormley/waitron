@@ -72,6 +72,7 @@ describe.each(["light", "dark"] as const)("department dialogs (%s)", (theme) => 
     await expectNoA11yViolations(host);
   });
   it.each(["invalid", "refused", "clash", "busy"])("name field %s", async (state) => {
+    setLocale("en");
     const el = (await mountThemed(
       "<department-dialogs></department-dialogs>",
       theme,
@@ -99,6 +100,14 @@ describe.each(["light", "dark"] as const)("department dialogs (%s)", (theme) => 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
+    if (state === "invalid") {
+      expect(box.error).toBe("This field is required.");
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+        "Correct the highlighted fields to continue.",
+      );
+      await box.updateComplete;
+      expect(box.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+    }
     await expectNoA11yViolations(host);
   });
 });

@@ -177,6 +177,21 @@ it.each(fields)(
     expect(box(el, field).shadowRoot!.querySelector(".value.placeholder")).not.toBeNull();
   },
 );
+it.each(["light", "dark"] as const)(
+  "inherited values stay muted while an explicit choice uses the text colour in %s",
+  async (theme) => {
+    const el = await mount(inherited, department);
+    el.setAttribute("data-theme", theme);
+    const value = (field: keyof ServiceSettingsValue) =>
+      box(el, field).shadowRoot!.querySelector<HTMLElement>(".value")!;
+    const muted = getComputedStyle(value("collectionNumber")).color;
+    expect(getComputedStyle(value("receiptPrintMode")).color).toBe(muted);
+    expect(getComputedStyle(value("paidWhen")).color).toBe(muted);
+    await choose(el, "paidWhen", "ticket_then_pay");
+    expect(getComputedStyle(value("paidWhen")).color).not.toBe(muted);
+    expect(getComputedStyle(value("receiptPrintMode")).color).toBe(muted);
+  },
+);
 it.each([
   ["numbered", "Print"],
   ["none", "Don't print"],

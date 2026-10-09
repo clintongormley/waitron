@@ -316,9 +316,13 @@ export class DepartmentSettings extends LitElement {
     this.refused = refused;
     if (field === "name") this.clash = undefined;
     this.scope?.changed();
+    if (saveActionState(this.scope).unchanged) this.failure = "";
   }
   private get errors(): Partial<Record<Field, string>> {
-    return this.draft?.name.trim() ? {} : { name: t("venue.field_required") };
+    return {
+      ...(this.draft?.name.trim() ? {} : { name: t("venue.field_required") }),
+      ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
+    };
   }
   private fieldRefusal(error: unknown) {
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
@@ -547,6 +551,7 @@ export class DepartmentSettings extends LitElement {
         <wt-input
           name="tradingName"
           label=${t("venue.trading_name")}
+          required
           .value=${draft.tradingName}
           error=${errors.tradingName ?? ""}
           ?disabled=${disabled}

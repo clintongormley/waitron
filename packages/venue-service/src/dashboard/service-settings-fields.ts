@@ -65,7 +65,9 @@ export class ServiceSettingsFields extends LitElement {
     return html`<wt-combobox
       name=${field}
       label=${label}
-      search="never"
+      search=${field === "receiptPrintMode" ? "always" : "never"}
+      searchPlaceholder=${t("venue.combobox_search")}
+      noResultsLabel=${t("venue.combobox_no_results")}
       .options=${following ? [{ value: "", label: t("venue.clear") }, ...options] : options}
       .value=${this.value[field] ?? ""}
       .placeholder=${placeholder}
