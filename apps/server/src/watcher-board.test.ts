@@ -277,7 +277,7 @@ describe("watcher board", () => {
     );
     expect(
       await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, v.cfg, [presentedParty.tabId])),
-    ).toEqual(new Map([[presentedParty.tabId, terrace]]));
+    ).toEqual(new Map([[presentedParty.tabId, v.tables.zoneId]]));
     expect((await read(runner)).orders).toEqual([]);
   });
 
