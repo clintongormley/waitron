@@ -24,7 +24,6 @@ const empty = {
   categories: [],
   zones: [],
   products: [],
-  testProducts: [],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -208,6 +207,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         "venue-routing-grid",
       )!;
       await grid.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
       if (state === "grid-disabled-target")
         expect(grid.shadowRoot!.querySelector('[data-test="disabled-target"]')).not.toBeNull();
       if (state === "grid-preview" || state === "grid-refusal") {

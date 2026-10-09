@@ -77,7 +77,6 @@ const view: PrepStationsView = {
   ],
   zones: [],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -107,13 +106,6 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
       };
     }),
     preview: vi.fn().mockResolvedValue([]),
-    explain: vi.fn().mockResolvedValue({
-      route: null,
-      decidedBy: null,
-      fallbacks: [],
-      noReplacement: false,
-      stations: [],
-    }),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     deactivateStation: vi.fn(),
@@ -1784,6 +1776,20 @@ it.each(["tickets", "watchers", "settings"])(
     expect(q(el, '[data-test="station-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
   },
 );
+
+it("opens Routing from an old tester link that names it, and its next tab change writes no tester segment", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager");
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.value).toBe("routing");
+  expect(await routingGrid(el)).not.toBeNull();
+  expect(q(el, '[data-test="route-tester"]')).toBeNull();
+  tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="watchers"]')!.click();
+  await settle(el);
+  expect(tabs.value).toBe("watchers");
+  expect(location.pathname).toBe("/manage/prep-stations/view/watchers");
+});
 
 it("opens Stations from an old tester link that names no tab, and restores panels on Back without adding history entries", async () => {
   history.replaceState(null, "", "/manage/prep-stations/test/bread");

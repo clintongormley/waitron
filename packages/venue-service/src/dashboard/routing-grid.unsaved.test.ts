@@ -65,7 +65,6 @@ const view: PrepStationsView = {
   ],
   zones: [{ id: "terrace", name: "Terrace" }],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],

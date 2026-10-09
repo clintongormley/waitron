@@ -56,7 +56,6 @@ const view: PrepStationsView = {
   categories: [],
   zones: [],
   products: [],
-  testProducts: [],
   printers: [],
   stationPrinters: [],
   devices: [],

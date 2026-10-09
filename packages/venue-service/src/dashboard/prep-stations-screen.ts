@@ -22,7 +22,6 @@ import {
   pointerElementsAt,
 } from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
-import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -40,18 +39,11 @@ import {
   targetKey,
   type CellAddress,
   type RouteTarget,
-  type RouteExplanation,
   type RoutingModel,
   type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { format, formatDate } from "./hours-view.js";
-import {
-  decisionSentence,
-  extraSentence,
-  fallbackSentences,
-  type ExplanationNames,
-} from "./routing-explanation.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
@@ -61,7 +53,7 @@ import type {
   StationHealthSnapshot,
   WatcherInput,
 } from "./routing-client.js";
-import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
+import { watchersOfStation, type WatcherView } from "./watchers-seen.js";
 import "./routing-grid.js";
 import { rowInModel } from "./routing-grid-model.js";
 import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
@@ -194,28 +186,6 @@ export class PrepStationsScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      .tester-when {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: end;
-        gap: var(--wt-space-2);
-      }
-      .tester-when label {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      .tester-when wt-combobox {
-        min-height: var(--wt-tap-min);
-      }
-      .tester-when wt-input {
-        min-height: var(--wt-tap-min);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        padding-inline: var(--wt-space-2);
-        font: inherit;
-      }
       .cards {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-field-max-width)), 1fr));
       }
@@ -280,17 +250,6 @@ export class PrepStationsScreen extends LitElement {
   #readErrorShown = false;
   @state() private busy = false;
   @state() private stationAttempted = false;
-  @state() private testProduct = "";
-  @state() private testExtras: string[] = [];
-  @state() private testZone = "";
-  @state() private testWhen = "now";
-  @state() private testWeekday = 0;
-  @state() private testTime = "12:00";
-  @state() private testDate = "";
-  /** The server refused the chosen time because the clocks skip it on the chosen date. */
-  @state() private testTimeSkipped = false;
-  @state() private explanation?: RouteExplanation;
-  @state() private testError = "";
   @state() private stationAction?: StationAction;
   @state() private stationActionError = "";
   @state() private stationFieldError = "";
@@ -308,27 +267,21 @@ export class PrepStationsScreen extends LitElement {
   @state() private health?: StationHealthSnapshot;
   #healthTimer?: ReturnType<typeof setInterval>;
   #routingTimer?: ReturnType<typeof setInterval>;
-  #testRequest = 0;
   readonly #url = new UrlStateController(
     this,
     () => {
       if (this.#url.read("dashboard") !== "prep-stations") return;
-      this.testProduct = this.readOnly ? "" : (this.#url.read("test") ?? "");
       const requested = this.#url.read("view");
       this.tab =
         (this.readOnly ? (["stations"] as const) : PREP_TABS).find((tab) => tab === requested) ??
-        (requested === null && this.testProduct ? "routing" : "stations");
+        "stations";
       if (this.tab !== requested)
-        this.#url.write(
-          { dashboard: "prep-stations", view: this.tab, ...(this.readOnly ? { test: null } : {}) },
-          true,
-        );
-      void this.#explain();
+        this.#url.write({ dashboard: "prep-stations", view: this.tab }, true);
     },
     {
       basePath: "/manage",
       primary: "dashboard",
-      children: { "*": { view: "view", test: "test" } },
+      children: { "*": { view: "view" } },
     },
   );
   /** A cell choice whose route-change preview is open. */
@@ -791,9 +744,8 @@ export class PrepStationsScreen extends LitElement {
     if (changedState.has("tab")) this.cellRefusal = null;
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
-      this.testProduct = "";
       if (this.#url.read("dashboard") === "prep-stations")
-        this.#url.write({ dashboard: "prep-stations", view: "stations", test: null }, true);
+        this.#url.write({ dashboard: "prep-stations", view: "stations" }, true);
     }
   }
   override connectedCallback() {
@@ -910,7 +862,6 @@ export class PrepStationsScreen extends LitElement {
           ) {
             this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
           }
-          if (this.testProduct) void this.#explain(true);
         },
       );
     } catch {
@@ -1436,247 +1387,6 @@ export class PrepStationsScreen extends LitElement {
       if (this.isConnected && (identity === this.#stationIdentity || !this.editor))
         this.busy = false;
     }
-  }
-  /** `passive` when a read, not the person, asked: an unattended tester must not keep a session. */
-  async #explain(passive = false) {
-    const api = passive ? (this.api.background ?? this.api) : this.api;
-    const request = ++this.#testRequest;
-    this.explanation = undefined;
-    this.testError = "";
-    this.testTimeSkipped = false;
-    if (
-      !this.testProduct ||
-      (this.testWhen !== "now" && !this.testTime) ||
-      (this.testWhen === "date" && !this.testDate)
-    )
-      return;
-    const moment =
-      this.testWhen === "now"
-        ? undefined
-        : this.testWhen === "date"
-          ? {
-              civilDate: this.testDate,
-              weekday: new Date(`${this.testDate}T00:00:00Z`).getUTCDay(),
-              timeOfDay: this.testTime,
-            }
-          : { weekday: this.testWeekday, timeOfDay: this.testTime };
-    try {
-      const explanation = this.testExtras.length
-        ? await api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
-        : moment
-          ? await api.explain(this.testProduct, this.testZone || null, moment)
-          : await api.explain(this.testProduct, this.testZone || null);
-      if (request === this.#testRequest) this.explanation = explanation;
-    } catch (error) {
-      if (request !== this.#testRequest) return;
-      const field = (error as { params?: { field?: string } } | undefined)?.params?.field;
-      if (codeOf(error) === "management.request_invalid" && field === "time")
-        this.testTimeSkipped = true;
-      else this.testError = t("prep.test_error");
-    }
-  }
-  #testStationName(id: string): string {
-    return (
-      this.explanation?.stations.find((station) => station.id === id)?.name ?? this.#stationName(id)
-    );
-  }
-  #testNames(): ExplanationNames {
-    const named = (rows: readonly { id: string; name: string }[] | undefined, id: string) =>
-      rows?.find((row) => row.id === id)?.name ?? id;
-    return {
-      station: (id) => this.#testStationName(id),
-      product: (id) =>
-        named([...(this.view?.testProducts ?? []), ...(this.view?.products ?? [])], id),
-      category: (id) => this.#path(id),
-      zone: (id) => named(this.view?.zones, id),
-    };
-  }
-  #tester() {
-    const explanation = this.explanation;
-    return html`<wt-card data-test="route-tester">
-      <h2>${t("prep.test_title")}</h2>
-      <div class="form">
-        <wt-combobox
-          data-test="test-product"
-          name="product"
-          label=${t("prep.test_product")}
-          placeholder=${t("prep.test_choose_product")}
-          .value=${this.testProduct}
-          .options=${this.view?.testProducts.map((product) => ({ value: product.id, label: product.name })) ?? []}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.testProduct = event.detail.value;
-            this.#url.write({ dashboard: "prep-stations", test: this.testProduct || null });
-            void this.#explain();
-          }}
-        ></wt-combobox>
-        <div>
-          <wt-combobox
-            data-test="test-extra"
-            name="extra"
-            label=${t("prep.test_extras_chosen")}
-            placeholder=${t("prep.test_choose_extra")}
-            .value=${""}
-            .options=${this.view?.testProducts.filter((product) => !this.testExtras.includes(product.id)).map((product) => ({ value: product.id, label: product.name })) ?? []}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              const id = event.detail.value;
-              if (id && !this.testExtras.includes(id)) {
-                this.testExtras = [...this.testExtras, id];
-                void this.#explain();
-              }
-            }}
-          ></wt-combobox>
-          <div class="item">
-            ${this.testExtras.map(
-              (id) =>
-                html`<span class="chip"
-                  >${this.view?.testProducts.find((product) => product.id === id)?.name ?? id}
-                  <wt-button
-                    size="sm"
-                    variant="secondary"
-                    data-test=${`remove-extra-${id}`}
-                    aria-label=${format("prep.test_remove_extra", { name: this.view?.testProducts.find((product) => product.id === id)?.name ?? id })}
-                    @click=${() => {
-                      this.testExtras = this.testExtras.filter((extraId) => extraId !== id);
-                      void this.#explain();
-                    }}
-                    >×</wt-button
-                  ></span
-                >`,
-            )}
-          </div>
-        </div>
-        <wt-combobox
-          data-test="test-zone"
-          name="zone"
-          label=${t("prep.service_zone")}
-          placeholder=${t("prep.test_no_zone")}
-          .value=${this.testZone}
-          .options=${[{ value: "", label: t("prep.test_no_zone") }, ...(this.view?.zones.filter((zone) => zone.active !== false).map((zone) => ({ value: zone.id, label: zone.name })) ?? [])]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.testZone = event.detail.value;
-            void this.#explain();
-          }}
-        ></wt-combobox>
-      </div>
-      <div class="tester-when">
-        <wt-combobox
-          name="when"
-          data-test="test-when"
-          label=${t("prep.test_when")}
-          .value=${this.testWhen}
-          .options=${[
-            { value: "now", label: t("prep.test_now") },
-            { value: "at", label: t("prep.test_at") },
-            { value: "date", label: t("prep.test_on_date") },
-          ]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.testWhen = event.detail.value;
-            void this.#explain();
-          }}
-        >
-        </wt-combobox>
-        ${
-          this.testWhen === "at"
-            ? html`
-                <wt-combobox
-                  name="weekday"
-                  data-test="test-weekday"
-                  label=${t("prep.weekday")}
-                  .value=${String(this.testWeekday)}
-                  .options=${[0, 1, 2, 3, 4, 5, 6].map((day) => ({ value: String(day), label: t(`venue.day.${day}` as "venue.day.0") }))}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    this.testWeekday = Number(event.detail.value);
-                    void this.#explain();
-                  }}
-                >
-                </wt-combobox>
-              `
-            : nothing
-        }
-        ${
-          this.testWhen === "date"
-            ? html`
-                <div>
-                  <wt-input
-                    name="date"
-                    data-test="test-date"
-                    type="date"
-                    label=${t("prep.test_date")}
-                    required
-                    .value=${live(this.testDate)}
-                    aria-invalid=${!this.testDate}
-                    .invalid=${!this.testDate}
-                    aria-describedby="test-date-error"
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      this.testDate = event.detail.value;
-                      void this.#explain();
-                    }}
-                  ></wt-input>
-                  <span id="test-date-error" class="error"
-                    >${!this.testDate ? t("prep.test_date_required") : nothing}</span
-                  >
-                </div>
-              `
-            : nothing
-        }
-        ${
-          this.testWhen !== "now"
-            ? html`
-                <div>
-                  <wt-input
-                    name="time"
-                    data-test="test-time"
-                    type="time"
-                    label=${t("prep.test_time")}
-                    required
-                    .value=${live(this.testTime)}
-                    aria-invalid=${!this.testTime || this.testTimeSkipped}
-                    .invalid=${!this.testTime || this.testTimeSkipped}
-                    aria-describedby="test-time-error"
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      this.testTime = event.detail.value;
-                      void this.#explain();
-                    }}
-                  ></wt-input>
-                  <span id="test-time-error" class="error"
-                    >${
-                      !this.testTime
-                        ? t("prep.test_time_required")
-                        : this.testTimeSkipped
-                          ? t("prep.test_time_skipped")
-                          : nothing
-                    }</span
-                  >
-                </div>
-              `
-            : nothing
-        }
-      </div>
-      <div data-test="test-answer" aria-live="polite">
-        ${this.testError ? html`<p class="error" role="alert">${this.testError}</p>` : nothing}
-        ${explanation?.clockReadable === false ? html`<p>${t("prep.test_clock_unreadable")}</p>` : nothing}
-        ${explanation ? fallbackSentences(explanation, this.#testNames()).map((sentence) => html`<p>${sentence}</p>`) : nothing}
-        ${explanation?.route === null && explanation.decidedBy === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
-        ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
-        ${
-          explanation?.route?.kind === "station"
-            ? (() => {
-                const watching = watchersSeeing(
-                  this.view?.watchers ?? [],
-                  explanation.route.stationId,
-                  this.testZone || null,
-                );
-                return html`<p>
-                  ${watching.length ? format("watchers.watched_by", { list: watching.map((watcher) => watcher.name).join(", ") }) : t("watchers.none_follow")}
-                </p>`;
-              })()
-            : nothing
-        }
-        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${decisionSentence(explanation, this.#testNames())}</p>` : nothing}
-        ${explanation?.extrasWaitOnDish && this.testExtras.length ? html`<p>${t("prep.test_extras_wait")}</p>` : nothing}
-        ${explanation?.extras?.map((extra) => html`<p>${extraSentence(extra, explanation, this.#testNames())}</p>`)}
-      </div>
-    </wt-card>`;
   }
   #times(id: string): StationTimes | undefined {
     return this.view?.routing.stationTimes.find((row) => row.stationId === id);
@@ -3356,7 +3066,6 @@ export class PrepStationsScreen extends LitElement {
                 this.readOnly
                   ? nothing
                   : html`<div slot="routing">
-                        ${this.#tester()}
                         <venue-routing-grid
                           .model=${view.routing}
                           .pending=${this.cellChoice}

@@ -1,9 +1,8 @@
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
-import type { RouteTarget, RoutingModel, RouteExplanation } from "../routing.js";
+import type { RouteTarget, RoutingModel } from "../routing.js";
 import type { CellAddress, RoutingChange, RoutingMove, RoutingView } from "../routing-types.js";
-import type { RoutingMoment } from "../routing.js";
 import type { WatcherView } from "./watchers-seen.js";
 
 export interface OutputsDown {
@@ -65,7 +64,6 @@ export interface PrepStationsView {
   categories: { id: string; name: string; parentId: string | null }[];
   zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
-  testProducts: { id: string; name: string }[];
   printers: { id: string; name: string; active?: boolean; watcherId?: string | null }[];
   stationPrinters: { stationId: string; printerId: string }[];
   devices: {
@@ -79,12 +77,6 @@ export interface PrepStationsView {
   /** The active watchers. Only the Watchers tab lists `disabledWatchers` as well. */
   watchers: WatcherView[];
   disabledWatchers: WatcherView[];
-}
-interface ListedProduct {
-  id: string;
-  name: string;
-  active: boolean;
-  variants: { id: string; name: string; active: boolean }[];
 }
 export type StationInput = {
   name: string;
@@ -137,7 +129,6 @@ export class PrepStationsApi {
         categories: [],
         zones: [],
         products: [],
-        testProducts: [],
         printers: [],
         stationPrinters: [],
         devices: [],
@@ -151,7 +142,7 @@ export class PrepStationsApi {
         this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
         this.#read<PrepStationsView["categories"]>("/management-api/categories"),
         this.#read<PrepStationsView["zones"]>("/management-api/zones"),
-        this.#read<ListedProduct[]>("/management-api/products"),
+        this.#read<PrepStationsView["products"]>("/management-api/products"),
         this.#read<PrepStationsView["printers"]>("/management-api/printers"),
         this.#read<PrepStationsView["devices"]>("/management-api/devices"),
         this.#read<WatcherView[]>("/management-api/watchers?includeDisabled=true"),
@@ -171,16 +162,6 @@ export class PrepStationsApi {
       categories,
       zones,
       products: products.map(({ id, name }) => ({ id, name })),
-      testProducts: products.flatMap((product) =>
-        product.active === false
-          ? []
-          : [
-              { id: product.id, name: product.name },
-              ...(product.variants ?? [])
-                .filter((variant) => variant.active !== false)
-                .map((variant) => ({ id: variant.id, name: `${product.name} · ${variant.name}` })),
-            ],
-      ),
       printers,
       stationPrinters,
       devices,
@@ -194,21 +175,6 @@ export class PrepStationsApi {
       "POST",
       change,
     );
-  }
-  explain(
-    productId: string,
-    zoneId: string | null,
-    moment?: RoutingMoment,
-    extraProductIds: readonly string[] = [],
-  ): Promise<RouteExplanation> {
-    const query = new URLSearchParams({ productId, zoneId: zoneId ?? "" });
-    for (const id of extraProductIds) query.append("extraId", id);
-    if (moment) {
-      if (moment.civilDate === undefined) query.set("weekday", String(moment.weekday));
-      else query.set("date", moment.civilDate);
-      query.set("time", moment.timeOfDay);
-    }
-    return this.#read<RouteExplanation>(`/management-api/venue-service/routing/explain?${query}`);
   }
   async createStation(input: StationInput): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);
