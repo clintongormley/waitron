@@ -1291,3 +1291,37 @@ golden fixtures and inmutabilidad unedited, run normal signed-off commit/push ho
 for package suites/coverage on current-head CI. Never bypass a failing guard or hook. Part A's pull request's first line is the
 venue-reset line under "Venue reset"; it lists the changed test checks and the fixtures that
 changed how they set the service style. Then update the backlog's A366 entry with what remains.
+
+
+### Implementation checkpoint — Task A9 (2026-10-09)
+
+The standalone `department-zones` component is built. It takes `model`, `api`,
+`departmentId` and `zone`; it emits `zone-change` with `{ zoneId }`, `add-zone` with
+`{ departmentId }`, Rename/Move/Disable/Enable events with `{ zoneId }`, and `saved`
+with `{ zoneId }`. Task A10 still owns screen composition, URL updates, dialogs,
+permissions, refresh failures and focus return. The existing policy-tree Enable
+route assertions remain unchanged until that integration.
+
+Observed checks: the initial eight rendering and four draft cases failed before the
+component existed; native error rendering, busy action guards and refusal focus
+also failed before their fixes. The final focused seven-file run passed 84 tests;
+four root UI/document guard files passed 46 tests. The standalone source's focused
+coverage was 99.34/95.68/100/100 (statements/branches/functions/lines); package-wide
+coverage remains a current-head CI gate. Five installed deletion controls failed
+for leave protection, parent-active Enable gating, read-only changes, reconnect
+baseline and stale-save completion; restored browser cases passed 20 tests.
+
+The look pass used the dashboard's registered icons, English and Spanish, both
+themes, and CSS viewport widths 1280 and 390. Saved captures are scaled to 922 and
+281 pixels respectively. This is a standalone view, not dashboard integration.
+
+Ruling: no implicit Enter submission is installed on this tab because every field
+is a choice; `submitOnEnter` accepts only native single-line text inputs
+(`packages/ui-core/src/submit-on-enter.ts`). Choice Enter leaves the draft intact;
+Save submits it. Cost if wrong: revise keyboard handling if a text field is added.
+Task-start's brief extractor rejected the alphanumeric A9 heading; the exact A9
+section was read directly and the original base retained.
+
+Task A9 was executed inline. Its whole-branch Claude reviews remain in the final
+finish-branch gate; no independent task-review approval is claimed here. The
+previous tasks' deferred fixture-duplication and framework-warning findings remain.
