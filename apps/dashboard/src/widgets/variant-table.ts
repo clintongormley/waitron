@@ -24,7 +24,7 @@ export const EACH_CHOICE = "__each__";
  * not an administrative collection to sort and search.
  *
  * The host owns the variants. Every row action leaves as an event carrying the row's INDEX, which
- * is the same index in the array the host handed over — hidden Inactive rows included.
+ * is the same index in the array the host handed over — archived rows included.
  *
  * The name shown is the STAFF name. The customer-facing name belongs to a receipt or a menu.
  */
@@ -211,14 +211,12 @@ export class VariantTable extends LitElement {
   /** A problem with one row, keyed by that row's index in `variants`. The host validates; this
    * only shows what it reports, beside the row it belongs to. */
   @property({ attribute: false }) errors: Record<number, string> = {};
-  /** Whether Inactive variants are on screen. The host owns it, but the table sets it itself, and
-   * says so with `wt-show-inactive`, when a row that must be seen would otherwise be hidden. */
-  @property({ type: Boolean }) showInactive = false;
+  @property({ attribute: false }) archivedIds: ReadonlySet<string> = new Set();
   /** Every row in list order, hidden ones included. A reorder rewrites this before the host
    * confirms it. */
   @state() private rows: VariantRow[] = [];
   #nextKey = 0;
-  /** The row whose Disable, Remove or Enable was just chosen. The host hands that variant back as a new
+  /** The row whose Archive, Remove or Keep was just chosen. The host hands that variant back as a new
    * object, which re-keys the row and destroys the control holding focus, so focus is put back once
    * the new variants arrive. */
   #refocus: number | null = null;
@@ -252,7 +250,7 @@ export class VariantTable extends LitElement {
   }
 
   #shows(variant: ProductEditorVariant): boolean {
-    return this.showInactive || variant.active;
+    return variant.id === undefined || !this.archivedIds.has(variant.id);
   }
 
   #visible(): VariantRow[] {
@@ -260,18 +258,7 @@ export class VariantTable extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    const added = changed.has("variants") ? this.#rekey() : [];
-    if (!changed.has("variants") && !changed.has("errors")) return;
-    // A reported problem, or a variant just added, must never sit on a hidden row: the person would
-    // be told something is wrong, or that they added a row, and see nothing.
-    const hidden = this.rows.some(
-      (row, index) =>
-        !this.#shows(row.variant) &&
-        (this.errors[index] !== undefined || (added.includes(row) && row.variant.id === undefined)),
-    );
-    if (!hidden) return;
-    this.showInactive = true;
-    this.#emit("wt-show-inactive", { show: true });
+    if (changed.has("variants")) this.#rekey();
   }
 
   override updated(changed: PropertyValues<this>): void {
@@ -381,7 +368,7 @@ export class VariantTable extends LitElement {
           variant.active
             ? nothing
             : html`<span class="muted" data-test=${`inactive-${index}`}
-                >${t("product.variant_disabled_badge")}</span
+                >${t("product.variant_archive_pending_badge")}</span
               >`
         }
         ${
@@ -426,10 +413,10 @@ export class VariantTable extends LitElement {
                   "remove",
                   index,
                   // A variant never saved has no row to keep, so it is really removed.
-                  t(variant.id === undefined ? "action.remove" : "product.disable"),
+                  t(variant.id === undefined ? "action.remove" : "product.archive"),
                   "danger",
                 )
-              : this.#action("restore", index, t("product.enable"), "secondary")
+              : this.#action("restore", index, t("product.keep_variant"), "secondary")
           }</wt-row-actions
         >
       </td>

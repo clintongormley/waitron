@@ -429,8 +429,6 @@ export class ProductEditor extends LitElement {
   @state() private variantOpen = false;
   /** Which variant the variant window is editing, or null while it is adding a new one. */
   @state() private variantIndex: number | null = null;
-  /** Whether the variants table shows the Inactive variants as well. */
-  @state() private showInactive = false;
   /** Whether the Pricing fold starts open: on a product never saved, whose price and VAT are still
    * being set. Read once per product, so a fold the person closes stays closed. */
   #pricingStartsOpen = false;
@@ -508,7 +506,6 @@ export class ProductEditor extends LitElement {
       this.unitPickerOpen = false;
       this.variantOpen = false;
       this.variantIndex = null;
-      this.showInactive = false;
       this.#pricingStartsOpen = !this.value?.id;
       this.#variantProblems = new Map();
       if (this.open && this.initialField === "image") this.#focusField = this.initialField;
@@ -873,12 +870,10 @@ export class ProductEditor extends LitElement {
     const now = deepActiveElement();
     if (now === before) find()?.focus();
   }
-  /** `restore` also makes an Inactive product Active again. Nothing else on the form changes
-   * `active`, so a plain Save of an Inactive product keeps it Inactive. */
-  private save(event: Event, restore = false) {
+  private save(event: Event) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
-    if (!restore && saveActionState(this.#draftScope).unchanged) return;
+    if (saveActionState(this.#draftScope).unchanged) return;
     const errors = this.validate();
     if (this.attempted && Object.keys(errors).length) return;
     this.attempted = true;
@@ -889,12 +884,12 @@ export class ProductEditor extends LitElement {
       return;
     }
     this.submitted = true;
-    const value = this.submissionValue(this.currentValue, restore);
+    const value = this.submissionValue(this.currentValue);
     this.dispatchEvent(
       new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
     );
   }
-  private submissionValue(draft: ProductEditorDraft, restore = false): ProductEditorDraft {
+  private submissionValue(draft: ProductEditorDraft): ProductEditorDraft {
     const value = structuredClone(draft);
     delete value.inherited;
     if (draft.inherited != null) {
@@ -904,7 +899,6 @@ export class ProductEditor extends LitElement {
       value.unitId = null;
       value.color = null;
     }
-    if (restore) value.active = true;
     value.name = value.name.trim();
     value.kitchenName = value.kitchenName?.trim() || null;
     value.customerName = blankToNull(value.customerName);
@@ -1009,17 +1003,17 @@ export class ProductEditor extends LitElement {
       opener.scrollTop;
   }
 
-  /** After a Disable or Remove: a table left with no row on screen cannot keep the focus itself, so
-   * it goes to what follows it — Show disabled while hidden variants remain, Add variant when none
-   * do. */
   private async focusAfterRemove(): Promise<void> {
-    const { variants } = this.draft;
-    if (variants.length && (this.showInactive || variants.some((variant) => variant.active)))
+    if (
+      this.draft.variants.some(
+        (variant) =>
+          variant.id === undefined ||
+          !(this.value?.variants ?? []).some((saved) => saved.id === variant.id && !saved.active),
+      )
+    )
       return;
     await this.updateComplete;
-    this.shadowRoot!.querySelector<HTMLElement>(
-      variants.length ? "[data-test=show-inactive]" : "[data-test=add-variant]",
-    )?.focus();
+    this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")?.focus();
   }
 
   private closeVariant(): void {
@@ -1594,7 +1588,6 @@ export class ProductEditor extends LitElement {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
     const unsaved = this.value !== null && !sameValue(this.draft, this.value);
     const { variants } = this.draft;
-    const inactive = variants.filter((variant) => !variant.active).length;
     return html`<div class="group" data-section="variants">
       ${
         variants.length
@@ -1606,11 +1599,7 @@ export class ProductEditor extends LitElement {
                 .busy=${this.suspended}
                 .openBlocked=${unsaved}
                 .errors=${this.#rowsNow}
-                .showInactive=${this.showInactive}
-                @wt-show-inactive=${(event: Event) => {
-                  event.stopPropagation();
-                  this.showInactive = true;
-                }}
+                .archivedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}
                 @wt-unit-click=${(event: Event) => {
                   event.stopPropagation();
                   this.openUnits("heading");
@@ -1652,8 +1641,6 @@ export class ProductEditor extends LitElement {
                 @wt-remove=${(event: CustomEvent<{ index: number }>) => {
                   event.stopPropagation();
                   const { index } = event.detail;
-                  // Disable switches a saved variant off; one never saved has no row to keep, so
-                  // Remove simply drops it from the draft.
                   if (this.draft.variants[index]?.id === undefined)
                     this.change(
                       "variants",
@@ -1680,26 +1667,6 @@ export class ProductEditor extends LitElement {
           @click=${this.addVariant}
           >${t("editor.add_variant")}</wt-button
         >
-        ${
-          inactive
-            ? html`<wt-button
-                class="link"
-                variant="ghost"
-                data-test="show-inactive"
-                @click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.showInactive = !this.showInactive;
-                }}
-                >${
-                  this.showInactive
-                    ? t("editor.hide_disabled")
-                    : inactive === 1
-                      ? t("editor.show_disabled_one")
-                      : t("editor.show_disabled").replace("{count}", String(inactive))
-                }</wt-button
-              >`
-            : nothing
-        }
       </div>
     </div>`;
   }
@@ -1901,15 +1868,7 @@ export class ProductEditor extends LitElement {
         }}
       >
         <div class="form">
-          ${this.renderCategories()}
-          ${
-            this.draft.active
-              ? nothing
-              : html`<p class="notice" data-test="inactive-notice">
-                  ${t("product.disabled_notice")}
-                </p>`
-          }
-          ${keyed(this.generation, this.renderName(fields))}
+          ${this.renderCategories()} ${keyed(this.generation, this.renderName(fields))}
           ${this.inherited ? nothing : this.renderColor()}
           <div class="group" data-section="available">
             ${switchField(
@@ -1934,19 +1893,6 @@ export class ProductEditor extends LitElement {
             @click=${this.cancel}
             >${t("action.cancel")}</wt-button
           >
-          ${
-            this.draft.active
-              ? nothing
-              : html`<wt-button
-                  slot="secondary"
-                  variant="secondary"
-                  data-test="restore"
-                  .loading=${this.busy}
-                  ?disabled=${this.suspended || invalid}
-                  @click=${(event: Event) => this.save(event, true)}
-                  >${t("product.enable")}</wt-button
-                >`
-          }
           <wt-button
             data-test="save"
             variant=${saveAction.variant}

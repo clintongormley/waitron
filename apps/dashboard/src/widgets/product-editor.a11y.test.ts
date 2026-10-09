@@ -46,6 +46,7 @@ const variants: ProductEditorDraft = {
   ...coffee,
   variants: [
     {
+      id: "small",
       name: "Small",
       customerName: { en: "Small cup" },
       kitchenName: "SM",
@@ -301,9 +302,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       );
     }
     if (state === "inactive") {
-      // Without this the scan could pass on an editor that never drew the notice and Restore.
-      expect(el.shadowRoot!.querySelector("[data-test=restore]")).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")).not.toBeNull();
+      // The retired controls must stay absent in this state.
+      expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")).toBeNull();
     }
     if (state === "modifiers") {
       // Without this the scan could pass on an editor whose Modifiers table never rendered a row.
@@ -318,13 +319,17 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       expect(form.open).toBe(true);
     }
     if (state === "variants") {
-      // Every status at once, so the scan covers an Inactive row and a row priced by its hint.
+      // Stage an archive so the scan includes Keep and an inherited price.
       const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
       await table.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-inactive]")!.click();
+      table.dispatchEvent(
+        new CustomEvent("wt-remove", { detail: { index: 0 }, bubbles: true, composed: true }),
+      );
       await el.updateComplete;
       await table.updateComplete;
-      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(3);
+      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(2);
+      expect(table.shadowRoot!.querySelector("[data-test=restore-0]")).not.toBeNull();
+      expect(table.shadowRoot!.querySelector("[data-test=row-2]")).toBeNull();
     }
     if (state === "open-sections" || state === "variant-page") {
       for (const name of ["kitchen", "descriptors", "nutrition"]) {

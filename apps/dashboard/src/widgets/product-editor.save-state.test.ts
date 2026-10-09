@@ -164,18 +164,13 @@ it("an existing product with every field filled opens with Save quiet and disabl
   expect(submit).not.toHaveBeenCalled();
 });
 
-it("an inactive product opens with Save quiet and disabled, and Enable still saves", async () => {
+it("an inactive product opens with Save quiet and disabled and no Enable", async () => {
   const el = await mount({ ...full, active: false });
   const submit = submissions(el);
   expect(await saveState(el)).toEqual(quiet);
-  const restore = button(el, "restore");
-  expect(restore.disabled).toBe(false);
-  expect(restore.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
   await press(el);
   expect(submit).not.toHaveBeenCalled();
-  await press(el, "restore");
-  expect(submit).toHaveBeenCalledOnce();
-  expect(submit.mock.calls[0]![0].detail.value.active).toBe(true);
 });
 
 it("a variant's own page opens with Save quiet and disabled", async () => {
@@ -257,11 +252,20 @@ it("a press that reaches Save's handler on an untouched new product marks no fie
   ).toBe("");
 });
 
-it("Enable on an untouched inactive product reaches its handler and saves", async () => {
-  const el = await mount({ ...full, active: false });
+it("Archive then Keep on a saved variant returns Save to quiet without submitting", async () => {
+  const el = await mount(full);
   const submit = submissions(el);
-  button(el, "restore").click();
+  const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+  table.dispatchEvent(
+    new CustomEvent("wt-remove", { detail: { index: 0 }, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
-  expect(submit).toHaveBeenCalledOnce();
-  expect(submit.mock.calls[0]![0].detail.value.active).toBe(true);
+  expect(await saveState(el)).toEqual(ready);
+  table.dispatchEvent(
+    new CustomEvent("wt-restore", { detail: { index: 0 }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(await saveState(el)).toEqual(quiet);
+  await press(el);
+  expect(submit).not.toHaveBeenCalled();
 });
