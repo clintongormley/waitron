@@ -989,7 +989,7 @@ station cells unchanged (decision 9). Refusals: `special_date.date_taken` under 
 in Station hours first."); others at the bottom. A331 save rule; `{ savableAtOpen: true }` when
 opened by "Give this date its own hours".
 
-- [ ] Steps: failing tests (Save without a name marks Name — fails today because the element does
+- [x] Steps: failing tests (Save without a name marks Name — fails today because the element does
   not exist; each refusal's placement; leap-year hint; the every-year note; closure hides hours;
   unchanged Save quiet and disabled; reconnect; axe in both themes); watch them fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/named-day-editor.test.ts src/dashboard/named-day-editor.unsaved.test.ts src/dashboard/named-day-editor.a11y.test.ts`);

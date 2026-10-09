@@ -1,6 +1,24 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "named.new": "New named day",
+  "named.edit": "Edit named day",
+  "named.date": "Date",
+  "named.kind": "Kind",
+  "named.holiday": "Holiday",
+  "named.working_day": "Working day",
+  "named.repeats": "Repeats every year",
+  "named.leap": "Repeats only in leap years",
+  "named.close": "Close the whole venue",
+  "named.hours": "Hours",
+  "named.week": "Keeps the normal week's hours",
+  "named.own": "Has its own hours",
+  "named.every_year": "This changes the day every year",
+  "named.date_required": "Enter a valid date.",
+  "named.date_taken": "A named day already falls on this date.",
+  "named.field_refused": "Check this field.",
+  "named.station_hours": "This day has station hours. Remove them in Station hours first.",
+
   "opening.title": "Opening hours",
   "opening.all_departments": "All departments",
   "opening.zone_placeholder": "{name}: closed times",
@@ -679,6 +697,25 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "named.new": "Nuevo día con nombre",
+  "named.edit": "Editar día con nombre",
+  "named.date": "Fecha",
+  "named.kind": "Tipo",
+  "named.holiday": "Festivo",
+  "named.working_day": "Día laborable",
+  "named.repeats": "Se repite cada año",
+  "named.leap": "Se repite solo en años bisiestos",
+  "named.close": "Cerrar todo el local",
+  "named.hours": "Horario",
+  "named.week": "Mantiene el horario de la semana normal",
+  "named.own": "Tiene su propio horario",
+  "named.every_year": "Esto cambia el día cada año",
+  "named.date_required": "Introduce una fecha válida.",
+  "named.date_taken": "Ya hay un día con nombre en esta fecha.",
+  "named.field_refused": "Revisa este campo.",
+  "named.station_hours":
+    "Este día tiene horarios de estaciones. Elimínalos primero en Horarios de estaciones.",
+
   "opening.title": "Horario de apertura",
   "opening.all_departments": "Todos los departamentos",
   "opening.zone_placeholder": "{name}: horarios de cierre",
