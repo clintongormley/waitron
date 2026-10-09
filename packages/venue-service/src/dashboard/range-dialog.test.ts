@@ -165,7 +165,7 @@ it("refuses manual overlap with neighbouring ranges but allows touching endpoint
   save(el).click();
   expect(results).toEqual([{ input: { startsAt: "08:45", endsAt: "10:00", periodId: "lunch" } }]);
 });
-it("returns from New period with the same times and stages the newly selected period", async () => {
+it("returns from Add period with the same times and stages the newly selected period", async () => {
   const el = await mount();
   const events: unknown[] = [];
   const results = writes(el);

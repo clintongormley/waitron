@@ -2519,7 +2519,7 @@ it("a health snapshot ahead of routing metadata leaves Today blank until the sta
   expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });
 
-it("opens the default Stations tab and places New station, the only create action, beside the tabs", async () => {
+it("opens the default Stations tab and places Add station, the only create action, beside the tabs", async () => {
   setLocale("en");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());

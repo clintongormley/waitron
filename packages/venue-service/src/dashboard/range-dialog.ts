@@ -243,7 +243,7 @@ export class RangeDialog extends LitElement {
                   required
                   search="never"
                   .value=${this.draft.periodId}
-                  .options=${[...this.periods.map((period) => ({ value: period.id, label: period.name })), { value: "new", label: t("opening.new_period"), action: true as const }]}
+                  .options=${[...this.periods.map((period) => ({ value: period.id, label: period.name })), { value: "new", label: t("opening.add_period"), action: true as const }]}
                   .error=${errors.periodId ?? ""}
                   ?disabled=${this.busy}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {

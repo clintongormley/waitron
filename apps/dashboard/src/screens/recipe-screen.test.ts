@@ -150,7 +150,7 @@ describe("recipe-screen", () => {
 
   // ── Ingredient authoring (list + form) ─────────────────────────────────────────────────────────
 
-  it("opens the ingredient form for a create when New ingredient is clicked", async () => {
+  it("opens the ingredient form for a create when Add ingredient is clicked", async () => {
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api: stubApi() });
     await flush(el);
 
