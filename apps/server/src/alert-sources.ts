@@ -19,11 +19,13 @@ import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
 import {
+  passScreensDark,
   stationPrintersDown,
   stationScreensDark,
   stationsWithWaitingDishes,
 } from "./station-outputs-down.js";
 import { FIRST_START_PENDING } from "./stream-host.js";
+import type { TillConfig } from "./till-config.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
@@ -366,6 +368,25 @@ export function stationOutputAlertSource(deps: {
         });
       }
       return alerts;
+    },
+  };
+}
+
+export function passScreenAlertSource(deps: { cfg: TillConfig }): AlertSource {
+  return {
+    area: "kitchen",
+    permission: "venue_service.manage",
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
+      return (await passScreensDark(tx, deps.cfg, now)).map((p) => ({
+        key: `kitchen_screen.pass_dark:${p.deviceId}`,
+        ...(p.kind === "pass"
+          ? { code: "kitchen_screen.pass_dark" }
+          : { code: "kitchen_screen.pass_monitor_dark" }),
+        params: { device: p.deviceName },
+        severity: "warning",
+        since: p.lastSeenAt ?? now.toISOString(),
+        screen: "devices",
+      }));
     },
   };
 }

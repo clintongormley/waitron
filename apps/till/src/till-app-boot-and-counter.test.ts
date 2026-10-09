@@ -485,6 +485,145 @@ describe("till-app session activity", () => {
     expect(grid.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
   });
 
+  describe("a Done refused because the device's screen changed", () => {
+    const passOrder = {
+      orderId: "wo-1",
+      orderNumber: 5,
+      openedMinutes: 3,
+      worstBand: "fresh",
+      groups: [],
+      courses: [
+        {
+          courseId: null,
+          courseName: null,
+          displayOrder: null,
+          fired: true,
+          away: false,
+          allReady: true,
+          items: [
+            {
+              id: "ti-0",
+              name: "Pan",
+              qty: "1.000",
+              stationName: "Barra",
+              state: "ready",
+              firedAt: "2026-08-17T10:00:00.000Z",
+              awayAt: null,
+              queuedAt: "2026-08-17T10:00:00.000Z",
+              thresholds: {
+                warmAfterMinutes: 5,
+                overdueAfterMinutes: 10,
+                forgottenAfterMinutes: 15,
+              },
+              band: "fresh",
+            },
+          ],
+        },
+      ],
+    };
+    const identity = (kind: KitchenScreenKind) => ({
+      deviceId: "kd-1",
+      name: "Pantalla Pase",
+      formFactor: "kds",
+      kitchenScreens: [kitchenScreen(kind)],
+    });
+    const stationBoard = {
+      stations: [
+        {
+          name: "Cocina",
+          available: true,
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          id: "st-1",
+          queue: [],
+          notices: [],
+          printersDown: [],
+        },
+      ],
+    };
+
+    async function pressDone(
+      locale: string,
+      now: KitchenScreenKind,
+      settle: (el: TillApp) => Promise<void> = async (el) => {
+        await flush(el);
+        await flush(el);
+      },
+    ) {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockResolvedValueOnce(identity("pass"))
+        .mockResolvedValue(identity(now));
+      const board = { orders: [passOrder], stations: [], zones: null };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale,
+          canvas: kdsCanvas,
+          capabilities: ["act-as-kds"],
+        }),
+        getDeviceIdentity,
+        getDevicePassScreen: vi.fn().mockResolvedValue(board),
+        getDeviceStationScreen: vi.fn().mockResolvedValue(stationBoard),
+        markDevicePassDone: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      grid()
+        .querySelector("till-expo-screen")!
+        .shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!
+        .click();
+      await settle(el);
+      return { el, grid, getDeviceIdentity };
+    }
+
+    it("opens the station screen at once, and says so", async () => {
+      const { grid, getDeviceIdentity } = await pressDone("en-GB", "station");
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(grid().querySelector("till-station-screen")).not.toBeNull();
+      expect(grid().querySelector("till-expo-screen")).toBeNull();
+      expect(grid().querySelector("[data-screen-switched]")!.textContent!.trim()).toBe(
+        "Now showing: Station screen",
+      );
+    });
+
+    it("says so in Spanish", async () => {
+      const { grid } = await pressDone("es-ES", "station");
+      expect(grid().querySelector("[data-screen-switched]")!.textContent!.trim()).toBe(
+        "Ahora muestra: Pantalla de estación",
+      );
+    });
+
+    it("says nothing when the re-boot opens a pass screen again", async () => {
+      const { grid, getDeviceIdentity } = await pressDone("en-GB", "pass");
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(grid().querySelector("till-expo-screen")).not.toBeNull();
+      expect(grid().querySelector("[data-screen-switched]")).toBeNull();
+    });
+
+    it("takes the line away after ten seconds", async () => {
+      try {
+        const { el, grid } = await pressDone("en-GB", "station", async (app) => {
+          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+          await vi.advanceTimersByTimeAsync(0);
+          await vi.advanceTimersByTimeAsync(0);
+          await app.updateComplete;
+        });
+        expect(grid().querySelector("[data-screen-switched]")).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(10_000);
+        await el.updateComplete;
+        expect(grid().querySelector("[data-screen-switched]")).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it.each(["pass", "pass_monitor"] as const)(
     "a refused %s re-boots to the line saying a narrowing took it",
     async (kind) => {

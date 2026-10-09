@@ -17,8 +17,7 @@ import "../screens/till-expo-screen.js";
 import "../screens/till-station-screen.js";
 import "../screens/till-table-order-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
-import type { KitchenScreenNotice } from "../kitchen-screen-notice.js";
-import "../kitchen-screen-notice.js";
+import { kitchenScreenSwitchedText, type KitchenScreenNotice } from "../kitchen-screen-notice.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
   BillBalance,
@@ -29,6 +28,7 @@ import type {
   DevicePassScreen,
   FloorZone,
   HeldOrderSummary,
+  KitchenScreenKind,
   OrderFlow,
   OrderGroup,
   PrintProblem,
@@ -139,6 +139,17 @@ export class TillCardGrid extends LitElement {
     .kitchen-screen p {
       margin: 0;
     }
+    .switched {
+      margin: var(--wt-space-4) var(--wt-space-4) 0;
+      padding: var(--wt-space-3);
+      border: 1px solid var(--wt-color-border);
+      border-radius: var(--wt-radius-md);
+      background: var(--wt-color-surface-raised);
+      color: var(--wt-color-text);
+      font-family: var(--wt-font-family);
+      font-size: var(--wt-font-size-lg);
+      font-weight: var(--wt-font-weight-bold);
+    }
   `;
 
   @property({ attribute: false }) tab?: TabDef;
@@ -194,6 +205,8 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) deviceName?: string;
   /** Shown on the kds-board card in place of a queue. */
   @property({ attribute: false }) kitchenScreenNotice?: KitchenScreenNotice;
+  /** Said above the kds-board card's board after a refused press switched it. */
+  @property({ attribute: false }) kitchenScreenSwitched?: KitchenScreenKind;
   @property({ attribute: false }) tabLines: TabLine[] = [];
   @property({ attribute: false }) tabGroups: OrderGroup[] = [];
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
@@ -323,6 +336,47 @@ export class TillCardGrid extends LitElement {
     </div>`;
   }
 
+  #kdsBoard(): TemplateResult {
+    if (this.kitchenScreenNotice !== undefined)
+      return html`<till-kitchen-screen-notice
+        class="kitchen-screen"
+        role="status"
+        .api=${this.api}
+        .notice=${this.kitchenScreenNotice}
+      ></till-kitchen-screen-notice>`;
+    if (this.initialDevicePassMonitor)
+      return html`<till-expo-screen
+        embedded
+        monitor
+        .api=${this.api}
+        .deviceMode=${this.deviceMode}
+        .deviceName=${this.deviceName}
+        .initialDevicePassMonitor=${this.initialDevicePassMonitor}
+      ></till-expo-screen>`;
+    // Self-fetching: it reads its own station list and queue. `stationQueue` is the prep-queue
+    // card's default-station data, not this display's station, so it is deliberately not passed.
+    return this.initialDevicePass
+      ? html`<till-expo-screen
+          embedded
+          .api=${this.api}
+          .fireControl=${this.fireControl}
+          .runsPass=${this.capabilities.includes("run-the-pass")}
+          .deviceMode=${this.deviceMode}
+          .deviceName=${this.deviceName}
+          .initialDevicePass=${this.initialDevicePass}
+        ></till-expo-screen>`
+      : html`<till-station-screen
+          embedded
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+          .deviceId=${this.deviceId}
+          .canMoveStation=${this.canMoveStation}
+        ></till-station-screen>`;
+  }
+
   /** Above the pay card, which {@link payHeld} holds: what the order still owes, and the offer to
    * take it as a bill payment. */
   #payRest(outstanding: string): TemplateResult {
@@ -431,44 +485,13 @@ export class TillCardGrid extends LitElement {
           .runsPass=${this.capabilities.includes("run-the-pass")}
         ></till-expo-screen>`;
       case "kds-board":
-        if (this.kitchenScreenNotice !== undefined)
-          return html`<till-kitchen-screen-notice
-            class="kitchen-screen"
-            role="status"
-            .api=${this.api}
-            .notice=${this.kitchenScreenNotice}
-          ></till-kitchen-screen-notice>`;
-        if (this.initialDevicePassMonitor)
-          return html`<till-expo-screen
-            embedded
-            monitor
-            .api=${this.api}
-            .deviceMode=${this.deviceMode}
-            .deviceName=${this.deviceName}
-            .initialDevicePassMonitor=${this.initialDevicePassMonitor}
-          ></till-expo-screen>`;
-        // Self-fetching: it reads its own station list and queue. `stationQueue` is the prep-queue
-        // card's default-station data, not this display's station, so it is deliberately not passed.
-        return this.initialDevicePass
-          ? html`<till-expo-screen
-              embedded
-              .api=${this.api}
-              .fireControl=${this.fireControl}
-              .runsPass=${this.capabilities.includes("run-the-pass")}
-              .deviceMode=${this.deviceMode}
-              .deviceName=${this.deviceName}
-              .initialDevicePass=${this.initialDevicePass}
-            ></till-expo-screen>`
-          : html`<till-station-screen
-              embedded
-              .api=${this.api}
-              .bumpMode=${this.bumpMode}
-              .fireControl=${this.fireControl}
-              .deviceMode=${this.deviceMode}
-              .initialDeviceStation=${this.initialDeviceStation}
-              .deviceId=${this.deviceId}
-              .canMoveStation=${this.canMoveStation}
-            ></till-station-screen>`;
+        return html`${
+          this.kitchenScreenSwitched === undefined
+            ? nothing
+            : html`<p class="switched" role="status" data-screen-switched>
+                ${kitchenScreenSwitchedText(this.kitchenScreenSwitched)}
+              </p>`
+        }${this.#kdsBoard()}`;
       case "table-order":
         // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
         // — so it is not passed.

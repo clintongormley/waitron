@@ -960,6 +960,44 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-b", "preparing");
     expect(api.advanceTicket).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["a bump", "line", "advance-ticket-item", { itemId: "ti-1", to: "preparing" }],
+    [
+      "a whole-ticket bump",
+      "ticket",
+      "advance-ticket",
+      { orderId: "wo-1", stationId: "st-dev", to: "preparing" },
+    ],
+  ] as const)(
+    "%s refused device.unauthorized asks at once to switch, naming the station screen",
+    async (_name, bumpMode, type, detail) => {
+      const switched = vi.fn();
+      document.addEventListener("kitchen-screen-changed", switched);
+      try {
+        const api = deviceApi({
+          deviceAdvance: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+        });
+        const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+          api,
+          deviceMode: true,
+          bumpMode,
+        });
+        await flush(el);
+        queueWidget(el)!.dispatchEvent(
+          new CustomEvent(type, { detail, bubbles: true, composed: true }),
+        );
+        await flush(el);
+        expect(switched).toHaveBeenCalledTimes(1);
+        expect((switched.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from).toBe(
+          "station",
+        );
+        expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
+      } finally {
+        document.removeEventListener("kitchen-screen-changed", switched);
+      }
+    },
+  );
 });
 
 describe("till-station-screen device-mode whole-ticket bump selection", () => {
@@ -2306,6 +2344,31 @@ describe("till-station-screen kitchen notices", () => {
       expect(api.deviceAcknowledgeKitchenNotice).toHaveBeenCalledWith("kn-changed");
       expect(api.acknowledgeKitchenNotice).not.toHaveBeenCalled();
       expect(noticeRows(el).map((row) => row.dataset.notice)).toEqual(["kn-void"]);
+    });
+
+    it("an Acknowledge refused device.unauthorized asks at once to switch", async () => {
+      const switched = vi.fn();
+      document.addEventListener("kitchen-screen-changed", switched);
+      try {
+        const api = deviceApi({
+          deviceAcknowledgeKitchenNotice: vi
+            .fn()
+            .mockRejectedValue({ code: "device.unauthorized" }),
+        });
+        const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+          api,
+          deviceMode: true,
+        });
+        await flush(el);
+        acknowledge(el, "kn-changed");
+        await flush(el);
+        expect(switched).toHaveBeenCalledTimes(1);
+        expect((switched.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from).toBe(
+          "station",
+        );
+      } finally {
+        document.removeEventListener("kitchen-screen-changed", switched);
+      }
     });
   });
 });
@@ -4385,6 +4448,26 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
   });
 
+  it("a move refused device.unauthorized asks at once to switch, and reads nothing", async () => {
+    const { el, api } = await mountMove(
+      {},
+      { deviceMoveDishStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }) },
+    );
+    const switched = vi.fn();
+    document.addEventListener("kitchen-screen-changed", switched);
+    try {
+      choose(await open(el), "st-2");
+      await expect.poll(() => switched.mock.calls.length).toBe(1);
+      await flush(el);
+    } finally {
+      document.removeEventListener("kitchen-screen-changed", switched);
+    }
+    expect((switched.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from).toBe(
+      "station",
+    );
+    expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
+  });
+
   it("a refusal with no code shows the general sentence", async () => {
     const { el } = await mountMove(
       {},
@@ -4531,21 +4614,22 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     },
   );
 
-  it("a station read refused device.unauthorized re-boots the device and shows no message", async () => {
+  it("a station read refused device.unauthorized asks at once to switch and shows no message", async () => {
     const { el } = await mountMove(
       {},
       { deviceStations: vi.fn().mockRejectedValue({ code: "device.unauthorized" }) },
     );
     const reboot = vi.fn();
-    document.addEventListener("device-unauthorized", reboot);
+    document.addEventListener("kitchen-screen-changed", reboot);
     try {
       moveButton(el)!.click();
       await expect.poll(() => reboot.mock.calls.length).toBe(1);
       await flush(el);
     } finally {
-      document.removeEventListener("device-unauthorized", reboot);
+      document.removeEventListener("kitchen-screen-changed", reboot);
     }
     expect(reboot).toHaveBeenCalledOnce();
+    expect((reboot.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from).toBe("station");
     expect(moveError(el)).toBeNull();
     expect(dialog(el)).toBeUndefined();
   });

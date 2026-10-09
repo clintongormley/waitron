@@ -270,6 +270,7 @@ export const en = {
   "kitchen_screen.none":
     "This screen has nothing to show yet. Ask a manager to choose a screen for it in Devices.",
   "kitchen_screen.unavailable": "This screen is no longer available: {screen}",
+  "kitchen_screen.switched": "Now showing: {screen}",
   "kitchen_screen.choose_again": "Ask a manager to choose its screens again in Devices.",
   "station.open": "Kitchen",
   "station.title": "Kitchen",
@@ -1422,6 +1423,7 @@ export const es: Record<StringKey, string> = {
   "kitchen_screen.none":
     "Esta pantalla aún no tiene nada que mostrar. Pide a un responsable que le elija una pantalla en Dispositivos.",
   "kitchen_screen.unavailable": "Esta pantalla ya no está disponible: {screen}",
+  "kitchen_screen.switched": "Ahora muestra: {screen}",
   "kitchen_screen.choose_again":
     "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",
   "station.open": "Cocina",

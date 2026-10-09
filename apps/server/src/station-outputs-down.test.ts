@@ -5,6 +5,7 @@ import {
   devices,
   deviceProfiles,
   kitchenStations,
+  passItemMarks,
   printJobs,
   printers,
   stationPrinters,
@@ -17,6 +18,7 @@ import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
 import {
   stationPrintersDown,
+  passScreensDark,
   stationPrintersDownQuery,
   stationScreensDark,
   stationsWithWaitingDishes,
@@ -27,7 +29,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
-import { stationOutputAlertSource } from "./alert-sources.js";
+import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
@@ -540,6 +542,255 @@ describe("station output status", () => {
         await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
       ).toEqual([]);
       expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+  });
+});
+
+describe("passScreensDark", () => {
+  const dark = "2026-10-02T18:02:00.000Z";
+
+  async function passFixture() {
+    const f = await setup();
+    const counter = await withTransaction(suite.db, (tx) => offerProducts(tx, f.venue.cfg));
+    const tables = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, f.venue.cfg, { zone: "tables" }),
+    );
+    return { ...f, counterZone: counter.zoneId, tablesZone: tables.zoneId };
+  }
+
+  async function passDevice(
+    f: Awaited<ReturnType<typeof passFixture>>,
+    kind: "pass" | "pass_monitor",
+    options: {
+      lastSeenAt?: string | null;
+      formFactor?: "kds" | "till";
+      zoneIds?: string[] | null;
+      label?: string;
+    } = {},
+  ) {
+    return kitchenScreenDevice(
+      {
+        locationId: f.venue.cfg.locationId,
+        deviceProfileId: await profile(options.formFactor ?? "kds"),
+        label: options.label ?? kind,
+        tokenHash: "hash",
+        lastSeenAt: options.lastSeenAt === undefined ? dark : options.lastSeenAt,
+      },
+      { kind, stationIds: null, zoneIds: options.zoneIds ?? [f.counterZone] },
+    );
+  }
+
+  const read = (f: Awaited<ReturnType<typeof passFixture>>) =>
+    withTransaction(suite.db, (tx) => passScreensDark(tx, f.venue.cfg, at));
+
+  it("lists a pass screen unseen for four minutes with a dish waiting in its zone", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const pass = await passDevice(f, "pass", { label: "Pase" });
+    expect(await read(f)).toEqual([
+      { deviceId: pass, deviceName: "Pase", kind: "pass", lastSeenAt: dark },
+    ]);
+  });
+
+  it("does not list a pass screen seen two minutes ago", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await passDevice(f, "pass", { lastSeenAt: "2026-10-02T18:04:00.000Z" });
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("lists a pass screen never seen", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const pass = await passDevice(f, "pass", { lastSeenAt: null });
+    expect(await read(f)).toEqual([
+      { deviceId: pass, deviceName: "pass", kind: "pass", lastSeenAt: null },
+    ]);
+  });
+
+  it("lists a pass monitor with kind pass_monitor", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const monitor = await passDevice(f, "pass_monitor", { label: "Monitor" });
+    expect(await read(f)).toEqual([
+      { deviceId: monitor, deviceName: "Monitor", kind: "pass_monitor", lastSeenAt: dark },
+    ]);
+  });
+
+  it("does not count a dish in another zone", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await passDevice(f, "pass", { zoneIds: [f.tablesZone] });
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not count a dish fired over an hour ago", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:05:00.000Z");
+    await passDevice(f, "pass");
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not count a held dish", async () => {
+    const f = await passFixture();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await suite.db
+      .update(ticketItems)
+      .set({ firedAt: null })
+      .where(eq(ticketItems.workingOrderId, orderId));
+    await passDevice(f, "pass");
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not count a dish made at the till", async () => {
+    const f = await passFixture();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await suite.db
+      .update(ticketItems)
+      .set({ madeHere: true })
+      .where(eq(ticketItems.workingOrderId, orderId));
+    await passDevice(f, "pass");
+    expect(await read(f)).toEqual([]);
+  });
+
+  it.each([
+    ["an abandoned", sql`status = 'abandoned'`],
+    ["a collected", sql`collected_at = '2026-10-02T18:00:00.000Z'`],
+  ])("does not count a dish of %s order", async (_, change) => {
+    const f = await passFixture();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await suite.db.execute(sql`update working_orders set ${change} where id = ${orderId}`);
+    await passDevice(f, "pass");
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not count, on a monitor, a dish already away", async () => {
+    const f = await passFixture();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await suite.db
+      .update(ticketItems)
+      .set({ awayAt: "2026-10-02T18:00:00.000Z" })
+      .where(eq(ticketItems.workingOrderId, orderId));
+    await passDevice(f, "pass_monitor");
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not count, on a pass screen, a served dish or one this device marked Done", async () => {
+    const f = await passFixture();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const pass = await passDevice(f, "pass", { label: "Pase" });
+    const other = await passDevice(f, "pass", { label: "Otro", lastSeenAt: at.toISOString() });
+    const [item] = await suite.db
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, orderId));
+    await suite.db.insert(passItemMarks).values({
+      deviceId: other,
+      ticketItemId: item!.id,
+      doneAt: "2026-10-02T18:00:00.000Z",
+    });
+    expect((await read(f)).map((row) => row.deviceId)).toEqual([pass]);
+    await suite.db.insert(passItemMarks).values({
+      deviceId: pass,
+      ticketItemId: item!.id,
+      doneAt: "2026-10-02T18:00:00.000Z",
+    });
+    expect(await read(f)).toEqual([]);
+    await suite.db.delete(passItemMarks);
+    await suite.db.execute(
+      sql`update working_order_lines set served_at = '2026-10-02T18:00:00.000Z' where working_order_id = ${orderId}`,
+    );
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("never lists a till with a pass screen", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await passDevice(f, "pass", { formFactor: "till" });
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not list a switched-off device", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const pass = await passDevice(f, "pass");
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, pass));
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not list a kitchen display running a station screen", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await stationScreenDevice({
+      locationId: f.venue.cfg.locationId,
+      stationId: f.grill,
+      deviceProfileId: await profile("kds"),
+      label: "Grill screen",
+      tokenHash: "hash",
+      lastSeenAt: dark,
+    });
+    expect(await read(f)).toEqual([]);
+  });
+
+  it("does not list a pass a narrowing took", async () => {
+    const f = await passFixture();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const pass = await passDevice(f, "pass");
+    const bare = await profile("kds");
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.narrowDeviceKitchenScreens(tx, f.venue.cfg, pass, bare),
+    );
+    await suite.db.update(devices).set({ deviceProfileId: bare }).where(eq(devices.id, pass));
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, pass),
+      ),
+    ).toMatchObject([{ kind: "pass", available: false }]);
+    expect(await read(f)).toEqual([]);
+  });
+
+  describe("passScreenAlertSource", () => {
+    const alerts = (f: Awaited<ReturnType<typeof passFixture>>) => {
+      const source = passScreenAlertSource({ cfg: f.venue.cfg });
+      return withTransaction(suite.db, (tx) => source.read({ tx, now: at }));
+    };
+
+    it("is a kitchen alert for venue_service.manage", async () => {
+      const f = await passFixture();
+      const source = passScreenAlertSource({ cfg: f.venue.cfg });
+      expect([source.area, source.permission]).toEqual(["kitchen", "venue_service.manage"]);
+    });
+
+    it("raises one warning for a dark pass screen with a dish waiting", async () => {
+      const f = await passFixture();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      const pass = await passDevice(f, "pass", { label: "Pase" });
+      expect(await alerts(f)).toEqual([
+        {
+          key: `kitchen_screen.pass_dark:${pass}`,
+          code: "kitchen_screen.pass_dark",
+          params: { device: "Pase" },
+          severity: "warning",
+          since: dark,
+          screen: "devices",
+        },
+      ]);
+    });
+
+    it("raises pass_monitor_dark for a monitor, since now when it was never seen", async () => {
+      const f = await passFixture();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      const monitor = await passDevice(f, "pass_monitor", { label: "Monitor", lastSeenAt: null });
+      expect(await alerts(f)).toEqual([
+        {
+          key: `kitchen_screen.pass_dark:${monitor}`,
+          code: "kitchen_screen.pass_monitor_dark",
+          params: { device: "Monitor" },
+          severity: "warning",
+          since: at.toISOString(),
+          screen: "devices",
+        },
+      ]);
     });
   });
 });

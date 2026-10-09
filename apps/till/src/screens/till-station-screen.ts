@@ -532,10 +532,26 @@ export class TillStationScreen extends LitElement {
   async #advance(call: () => Promise<void>): Promise<void> {
     try {
       await call();
-    } catch {
-      // Non-fatal — the reload reconciles the queue to server truth.
+    } catch (error) {
+      if (this.#switched(error)) return;
+      // Any other refusal: the reload reconciles the queue to server truth.
     }
     await this.#reload();
+  }
+
+  /** On a kitchen display, a press refused because the device no longer has this screen asks the
+   * app to re-read the device's choice now. */
+  #switched(error: unknown): boolean {
+    if (!this.deviceMode || (error as { code?: unknown } | null)?.code !== "device.unauthorized")
+      return false;
+    this.dispatchEvent(
+      new CustomEvent("kitchen-screen-changed", {
+        detail: { from: "station" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    return true;
   }
 
   async #onAdvanceTicketItem(event: Event): Promise<void> {
@@ -660,6 +676,7 @@ export class TillStationScreen extends LitElement {
         ? this.api.deviceAcknowledgeKitchenNotice(noticeId)
         : this.api.acknowledgeKitchenNotice(noticeId));
     } catch (error) {
+      if (this.#switched(error)) return;
       if ((error as { code?: string }).code !== "kitchen_notice.not_found") {
         this.acknowledgeFailed = true;
         return;
@@ -689,12 +706,8 @@ export class TillStationScreen extends LitElement {
       const stations = await this.api.deviceStations({ signal: limit.signal });
       this.moving = { ...detail, stations, busy: false, refusal: null };
     } catch (error) {
-      const code = (error as { code?: unknown }).code;
-      if (code === "device.unauthorized") {
-        this.dispatchEvent(
-          new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
-        );
-      } else {
+      if (!this.#switched(error)) {
+        const code = (error as { code?: unknown }).code;
         this.moveErrorCode = typeof code === "string" ? code : "server.internal";
       }
     } finally {
@@ -718,6 +731,10 @@ export class TillStationScreen extends LitElement {
       );
       if (this.moving === busy) this.moving = null;
     } catch (error) {
+      if (this.#switched(error)) {
+        if (this.moving === busy) this.moving = null;
+        return;
+      }
       const code = (error as { code?: unknown }).code;
       if (this.moving === busy)
         this.moving = { ...open, refusal: typeof code === "string" ? code : "server.internal" };

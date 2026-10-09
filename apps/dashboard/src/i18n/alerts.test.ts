@@ -29,6 +29,17 @@ it("explains station output failures in English and Spanish without promising re
   }
 });
 
+it("names a dark pass screen or monitor and points to the till's Pass view", () => {
+  for (const code of ["kitchen_screen.pass_dark", "kitchen_screen.pass_monitor_dark"]) {
+    const en = alertMessage(code, { device: "Front pass" }, "en");
+    const es = alertMessage(code, { device: "Front pass" }, "es");
+    expect(en, code).toContain("Front pass");
+    expect(es, code).toContain("Front pass");
+    expect(en, code).toContain("till's Pass view");
+    expect(es, code).toContain("vista de pase del TPV");
+  }
+});
+
 // The clock only raises this for a clock that reads earlier, so the number is never positive: a
 // backward step under a second is stored, and shown, as 0.
 it("reads a backwards clock jump correctly with its negative number", () => {

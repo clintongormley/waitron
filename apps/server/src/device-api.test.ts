@@ -7,6 +7,7 @@ import {
   deviceMadeHereStations,
   devices,
   deviceProfiles,
+  floorZones,
   kitchenStations,
   locations,
   printJobs,
@@ -2249,14 +2250,14 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       });
     });
 
-    it("answers kitchen_screen.not_allowed 403 for a kind the profile does not offer, and a malformed list 400", async () => {
+    it("answers kitchen_screen.not_allowed 400 for a kind the profile does not offer, and a malformed list 400", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId } = await narrowedKds(venue, app);
       const refused = await edit(app, venue.managerCookie, deviceId, {
         kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
       });
-      expect(refused.status).toBe(403);
+      expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject({
         error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
       });
@@ -2273,6 +2274,38 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
           error: { code: "management.request_invalid", params: { field: "kitchenScreens" } },
         });
       }
+    });
+
+    it("a PATCH naming a zone the profile's pass screen does not offer is kitchen_screen.zone_not_allowed 400", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const [offered, other] = await suite.db
+        .insert(floorZones)
+        .values([
+          { locationId: venue.cfg.locationId, name: "Terraza" },
+          { locationId: venue.cfg.locationId, name: "Barra" },
+        ])
+        .returning({ id: floorZones.id });
+      const profileId = await seedProfile("kds");
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          pass: { stationIds: null, zoneIds: [offered!.id] },
+        }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, {
+        name: "Pantalla Pase",
+        profileId,
+        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: [offered!.id] }],
+      });
+
+      const res = await edit(app, venue.managerCookie, deviceId, {
+        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: [other!.id] }],
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: other!.id } },
+      });
     });
 
     /** A kitchen display running a pass monitor on Cocina and Grill, both offered on its profile. */

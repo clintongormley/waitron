@@ -1,6 +1,6 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
@@ -198,6 +198,32 @@ describe("pass screen", () => {
       (await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, { stationIds: [], zoneIds: null })))
         .orders,
     ).toEqual([]);
+  });
+
+  it("neither a pass screen nor a pass monitor lists a dish made at the till, nor one of an abandoned or collected order", async () => {
+    const { v, outside, inside, counterId } = await terraceVenue();
+    const [device] = await passDevices(v, 1);
+    const orderIds = async () => ({
+      screen: (await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).orders
+        .map((o) => o.orderId)
+        .sort(),
+      monitor: (await inTx(v, (tx) => listPassMonitor(tx, v.cfg, EVERY))).orders
+        .map((o) => o.orderId)
+        .sort(),
+    });
+    const all = [outside.tabId, inside.tabId, counterId].sort();
+    expect(await orderIds()).toEqual({ screen: all, monitor: all });
+    await suite.db
+      .update(ticketItems)
+      .set({ madeHere: true })
+      .where(eq(ticketItems.workingOrderId, outside.tabId));
+    await suite.db.execute(
+      sql`update working_orders set status = 'abandoned' where id = ${inside.tabId}`,
+    );
+    await suite.db.execute(
+      sql`update working_orders set collected_at = '2026-10-02T18:00:00.000Z' where id = ${counterId}`,
+    );
+    expect(await orderIds()).toEqual({ screen: [], monitor: [] });
   });
 
   it("Done on one device leaves the dish on another, and undoing removes only that device's mark", async () => {

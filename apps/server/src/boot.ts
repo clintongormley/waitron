@@ -97,6 +97,7 @@ import {
   firstStartAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
+  passScreenAlertSource,
   printingAlertSource,
   stationOutputAlertSource,
 } from "./alert-sources.js";
@@ -1762,6 +1763,7 @@ async function bootServer(
       stationStates: (tx, at) =>
         VENUE_SERVICE.stationStates(tx, { locationId: till.locationId }, at),
     }),
+    passScreenAlertSource({ cfg: till }),
     batteryAlertSource({
       providers: CARD_PROVIDERS,
       runtimeDeps: cardRuntimeDeps,
