@@ -4,7 +4,11 @@ import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
 import { clockTime, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
+import {
+  kitchenScreenNoticeText,
+  lostSlotLine,
+  unavailableStyles,
+} from "../kitchen-screen-notice.js";
 import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
 import "../widgets/station-today.js";
@@ -70,6 +74,7 @@ const drawsQueue = (station: DeviceStation): station is WorkedStation =>
 export class TillStationScreen extends LitElement {
   static override styles = [
     baseStyles,
+    unavailableStyles,
     css`
       :host {
         display: block;
@@ -144,14 +149,6 @@ export class TillStationScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .unavailable {
-        margin: 0;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-text-muted);
-      }
-
       .choose-again {
         margin: 0;
       }
@@ -197,8 +194,10 @@ export class TillStationScreen extends LitElement {
   @state() private lostStations: ScreenSlot[] = [];
   /** A narrowing took the device's station screen itself. */
   @state() private stationScreenGone = false;
-  /** The device's choice could not be read, so every station shows until a refresh reads it. */
-  #choiceUnread = false;
+  /** A read of the device's choice has answered; until one does, every station shows. */
+  #choiceRead = false;
+  #choiceRequest = 0;
+  #appliedChoice = 0;
   /** The stations the device chose, or null when it shows every station. */
   #chosenIds: ReadonlySet<string> | null = null;
   /** Every station, chosen or not, so a closed station names where its dishes go. */
@@ -319,7 +318,8 @@ export class TillStationScreen extends LitElement {
     this.#refreshReads.add(read);
     try {
       if (this.deviceMode) await this.#loadDevice(read.signal);
-      else if (this.#choiceUnread) await this.#load(read.signal);
+      else if (!this.#choiceRead || this.stationScreenGone || this.lostStations.length > 0)
+        await this.#load(read.signal);
       else await this.#reload(read.signal, true);
     } finally {
       clearTimeout(limit);
@@ -361,22 +361,30 @@ export class TillStationScreen extends LitElement {
 
   /**
    * The picker lists the device's chosen stations, or every station when it has no choice; a choice
-   * a narrowing emptied lists none. Run again at a refresh while the choice is unread, keeping the
-   * open station when it is still listed.
+   * a narrowing emptied lists none. Run again at a refresh until a read of the choice answers, and
+   * while a narrowing's line shows, keeping the open station when it is still listed. Once a read
+   * has answered, a failed one keeps what it said.
    */
   async #load(signal?: AbortSignal): Promise<void> {
+    const request = ++this.#choiceRequest;
     const choice = this.#readStationChoice();
     try {
       const listed = await this.api.listStations();
       const screen = await choice;
-      this.#choiceUnread = screen === null;
-      const slots = screen?.stations ?? [];
-      const chosen = new Set(slots.filter((slot) => slot.available).map((slot) => slot.id));
-      this.#chosenIds = screen ? chosen : null;
+      if (request < this.#appliedChoice) return;
+      this.#appliedChoice = request;
+      if (screen !== null || !this.#choiceRead) {
+        this.#choiceRead = screen !== null;
+        const slots = screen?.stations ?? [];
+        this.#chosenIds = screen
+          ? new Set(slots.filter((slot) => slot.available).map((slot) => slot.id))
+          : null;
+        this.lostStations = slots.filter((slot) => !slot.available);
+        this.stationScreenGone = screen?.available === false;
+      }
+      const chosen = this.#chosenIds;
       this.allStations = listed;
-      this.stations = screen ? listed.filter((station) => chosen.has(station.id)) : listed;
-      this.lostStations = slots.filter((slot) => !slot.available);
-      this.stationScreenGone = screen?.available === false;
+      this.stations = chosen === null ? listed : listed.filter((station) => chosen.has(station.id));
       this.#stationsLoaded = true;
     } catch {
       this.stale = true;
@@ -755,7 +763,7 @@ export class TillStationScreen extends LitElement {
 
   #unavailable(name: string): TemplateResult {
     return html`<p class="unavailable" role="status" data-station-unavailable>
-      ${t("station.unavailable").replace("{name}", () => name)}
+      ${lostSlotLine("station", name)}
     </p>`;
   }
 

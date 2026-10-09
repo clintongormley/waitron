@@ -7,7 +7,11 @@ import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
+import {
+  kitchenScreenNoticeText,
+  lostSlotLine,
+  unavailableStyles,
+} from "../kitchen-screen-notice.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
 import { dishLine, snapshotDescriptionFor } from "../widgets/dish-format.js";
@@ -45,15 +49,13 @@ function nothingLeft(screen: Pick<DevicePassScreen, "stations" | "zones">): bool
 
 /** Stations in station order, then zones in zone order, as the server sends them. */
 function lostLines(screen: Pick<DevicePassScreen, "stations" | "zones">): string[] {
-  const line = (key: "station.unavailable" | "zone.unavailable", name: string) =>
-    t(key).replace("{name}", () => name);
   return [
     ...screen.stations
       .filter((slot) => !slot.available)
-      .map((slot) => line("station.unavailable", slot.name)),
+      .map((slot) => lostSlotLine("station", slot.name)),
     ...(screen.zones ?? [])
       .filter((slot) => !slot.available)
-      .map((slot) => line("zone.unavailable", slot.name)),
+      .map((slot) => lostSlotLine("zone", slot.name)),
   ];
 }
 
@@ -83,6 +85,7 @@ export class TillExpoScreen extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    unavailableStyles,
     css`
       :host {
         display: block;
@@ -116,14 +119,6 @@ export class TillExpoScreen extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-xl);
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .unavailable {
-        margin: 0;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-text-muted);
       }
 
       .empty {
@@ -485,8 +480,10 @@ export class TillExpoScreen extends LitElement {
   /** The pass screen's stations and zones a narrowing took, shown above the board. */
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
-  /** The device's choice could not be read, so All stations shows until a refresh reads it. */
-  #choiceUnread = false;
+  /** A read of the device's choice has answered; until one does, All stations shows. */
+  #choiceRead = false;
+  #choiceRequest = 0;
+  #appliedChoice = 0;
   @state() private doneErrorCode?: string;
   @state() private doneNotice?: { ids: string[]; dish: string };
   @state() private stale = false;
@@ -538,42 +535,51 @@ export class TillExpoScreen extends LitElement {
 
   /**
    * A failed read shows All stations, as a till did before a device could choose, and is read again
-   * at each refresh until it answers. A pass screen a narrowing took reads no board.
+   * at each refresh until one answers; after that a failed read keeps what the last one said. The
+   * choice is read again at each refresh while a narrowing has taken the pass screen, and when the
+   * board is refused `device.unauthorized` (`refused`), where an unchanged choice reads no board.
+   * True when the screen now follows a different choice.
    */
-  async #loadChoice(signal?: AbortSignal): Promise<void> {
+  async #loadChoice(signal?: AbortSignal, refused?: "pass" | "monitor"): Promise<boolean> {
+    const request = ++this.#choiceRequest;
     let pass;
+    let read = true;
     try {
       const { kitchenScreens } = await this.api.getDeviceIdentity();
       pass = kitchenScreens.find(
         (screen) => screen.kind === "pass" || screen.kind === "pass_monitor",
       );
-      this.#choiceUnread = false;
     } catch {
-      pass = undefined;
-      this.#choiceUnread = true;
+      read = false;
     }
-    if (!this.isConnected) return;
-    this.passGone = pass?.available === false;
-    this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";
-    const next = this.passGone
+    if (!this.isConnected || request < this.#appliedChoice || (!read && this.#choiceRead))
+      return false;
+    this.#appliedChoice = request;
+    this.#choiceRead ||= read;
+    const passGone = pass?.available === false;
+    const next = passGone
       ? null
       : pass === undefined
         ? "all"
         : pass.kind === "pass"
           ? "pass"
           : "monitor";
+    if (refused !== undefined && next === refused) return false;
+    this.passGone = passGone;
+    this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";
     if (next !== this.selected) {
       this.orders = [];
       this.lostLines = [];
       this.nothingLeft = false;
+      this.doneNotice = undefined;
     }
     this.selected = next;
-    await this.#reload(signal);
+    await this.#reload(signal, false, refused === undefined);
+    return true;
   }
 
   async #refresh(): Promise<void> {
-    const choosing = this.#choiceUnread;
-    if (!choosing && this.#boardId() === null) return;
+    const choosing = this.#followsChoice() && (!this.#choiceRead || this.selected === null);
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
@@ -585,12 +591,17 @@ export class TillExpoScreen extends LitElement {
     }
   }
 
+  /** A till's own Pass screen, which shows what its device chose. */
+  #followsChoice(): boolean {
+    return !this.embedded && !this.#onDevice();
+  }
+
   /**
    * A kitchen display's own read (`probe`: on connect and each refresh) refused
    * `device.unauthorized` emits `device-unauthorized`, so the app re-boots to what the device's
    * identity now says, as a station screen's does; any other failure keeps the last-known board.
    */
-  async #reload(signal?: AbortSignal, probe = false): Promise<void> {
+  async #reload(signal?: AbortSignal, probe = false, followChoice = true): Promise<void> {
     const boardId = this.#boardId();
     if (boardId === null) return;
     const request = ++this.#request;
@@ -610,15 +621,23 @@ export class TillExpoScreen extends LitElement {
       this.tableChanged = this.#tableChangedNext;
       this.#tableChangedNext = null;
     } catch (error) {
-      if (
-        probe &&
-        this.#onDevice() &&
-        (error as { code?: string } | null)?.code === "device.unauthorized"
-      ) {
+      const refused = (error as { code?: string } | null)?.code === "device.unauthorized";
+      if (probe && refused && this.#onDevice()) {
         this.dispatchEvent(
           new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
         );
-      } else if (request > this.#appliedRequest && this.#isCurrent(boardId)) this.stale = true;
+        return;
+      }
+      if (
+        refused &&
+        followChoice &&
+        boardId !== "all" &&
+        this.#followsChoice() &&
+        this.#isCurrent(boardId) &&
+        (await this.#loadChoice(signal, boardId))
+      )
+        return;
+      if (request > this.#appliedRequest && this.#isCurrent(boardId)) this.stale = true;
     }
   }
 

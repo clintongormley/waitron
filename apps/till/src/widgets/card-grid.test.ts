@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "./test-helpers.js";
@@ -6,8 +6,12 @@ import { t } from "../i18n/t.js";
 import "./card-grid.js";
 import type { TillCardGrid } from "./card-grid.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
+import type { KitchenScreenNotice } from "../kitchen-screen-notice.js";
 import type {
+  DeviceIdentity,
   DietProfile,
+  ResolvedKitchenScreen,
+  TillApi,
   HeldOrderSummary,
   Station,
   StationQueueGroup,
@@ -81,6 +85,139 @@ it("renders a kitchen display's pass monitor in the kitchen display card", async
   expect(screen!.embedded).toBe(true);
   expect(screen!.initialDevicePassMonitor).toBe(board);
   expect(screen!.deviceName).toBe("Pared del pase");
+});
+
+describe("a kitchen display's notice in place of a queue", () => {
+  const kitchenTab: TabDef = {
+    key: "kitchen",
+    title: "Kitchen",
+    columns: 24,
+    cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+  };
+  const identity = (kitchenScreens: ResolvedKitchenScreen[]): DeviceIdentity => ({
+    deviceId: "kd-1",
+    formFactor: "kds",
+    name: "Pantalla Pase",
+    kitchenScreens,
+  });
+  const passGone = identity([{ kind: "pass", available: false, stations: [], zones: null }]);
+  const passBack = identity([{ kind: "pass", available: true, stations: [], zones: null }]);
+
+  const listening: [string, EventListener][] = [];
+  const listen = (type: string) => {
+    const listener = vi.fn();
+    document.addEventListener(type, listener);
+    listening.push([type, listener]);
+    return listener;
+  };
+
+  async function mountNotice(
+    getDeviceIdentity: ReturnType<typeof vi.fn>,
+    kitchenScreenNotice: KitchenScreenNotice = { kind: "unavailable", screen: "pass" },
+  ) {
+    const changed = listen("kitchen-screen-changed");
+    const unauthorized = listen("device-unauthorized");
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: kitchenTab,
+      store: new WorkingOrderStore(),
+      capabilities: ["act-as-kds"],
+      deviceMode: true,
+      api: { getDeviceIdentity } as unknown as TillApi,
+      kitchenScreenNotice,
+    });
+    return { el, changed, unauthorized };
+  }
+
+  async function withFakeTimers(run: () => Promise<void>) {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await run();
+    } finally {
+      vi.useRealTimers();
+      for (const [type, listener] of listening.splice(0))
+        document.removeEventListener(type, listener);
+    }
+  }
+
+  it("reads the device's choice at each refresh and asks for a re-boot once its screen is offered again", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockResolvedValueOnce(passGone).mockResolvedValue(passBack);
+      const { el, changed } = await mountNotice(getDeviceIdentity);
+      expect(el.shadowRoot!.querySelector(".kitchen-screen-message")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    }));
+
+  it("asks for a re-boot when a different screen is chosen in place of the one taken", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockResolvedValue(
+          identity([{ kind: "station", available: false, stations: [], zones: null }]),
+        );
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("says the device was refused when the read answers device.unauthorized, and nothing for another failure", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockRejectedValue({ code: "device.unauthorized" });
+      const { changed, unauthorized } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(unauthorized).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    }));
+
+  it("with no screen chosen yet, waits for one and asks for a re-boot once it is chosen", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockResolvedValueOnce(identity([]))
+        .mockResolvedValue(passBack);
+      const { el, changed } = await mountNotice(getDeviceIdentity, { kind: "none" });
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("ignores an older read that answers after a newer one", () =>
+    withFakeTimers(async () => {
+      let answerLate: (value: DeviceIdentity) => void = () => {};
+      const getDeviceIdentity = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((resolve) => (answerLate = resolve)))
+        .mockResolvedValue(passGone);
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(30_000);
+      answerLate(passBack);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changed).not.toHaveBeenCalled();
+    }));
+
+  it("stops reading once it is taken off the page", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockResolvedValue(passGone);
+      const { el } = await mountNotice(getDeviceIdentity);
+      el.kitchenScreenNotice = undefined;
+      await el.updateComplete;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).not.toHaveBeenCalled();
+    }));
 });
 
 const counterTab: TabDef = {

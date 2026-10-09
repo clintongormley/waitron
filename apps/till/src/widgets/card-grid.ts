@@ -17,7 +17,8 @@ import "../screens/till-expo-screen.js";
 import "../screens/till-station-screen.js";
 import "../screens/till-table-order-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
-import { type KitchenScreenNotice, kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
+import type { KitchenScreenNotice } from "../kitchen-screen-notice.js";
+import "../kitchen-screen-notice.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
   BillBalance,
@@ -432,16 +433,12 @@ export class TillCardGrid extends LitElement {
         ></till-expo-screen>`;
       case "kds-board":
         if (this.kitchenScreenNotice !== undefined)
-          return html`<div class="kitchen-screen" role="status">
-            <p class="kitchen-screen-message">
-              ${kitchenScreenNoticeText(this.kitchenScreenNotice)}
-            </p>
-            ${
-              this.kitchenScreenNotice.kind === "unavailable"
-                ? html`<p data-choose-again>${t("kitchen_screen.choose_again")}</p>`
-                : nothing
-            }
-          </div>`;
+          return html`<till-kitchen-screen-notice
+            class="kitchen-screen"
+            role="status"
+            .api=${this.api}
+            .notice=${this.kitchenScreenNotice}
+          ></till-kitchen-screen-notice>`;
         if (this.initialDevicePassMonitor)
           return html`<till-expo-screen
             embedded

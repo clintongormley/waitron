@@ -500,6 +500,37 @@ describe("till-app session activity", () => {
     },
   );
 
+  it("re-boots from the line to the pass screen when its notice says the choice changed", async () => {
+    const board = { orders: [], stations: [], zones: null };
+    const passIdentity = (available: boolean) => ({
+      deviceId: "kd-1",
+      name: "Pantalla Pase",
+      formFactor: "kds",
+      kitchenScreens: [kitchenScreen("pass", available)],
+    });
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce(passIdentity(false))
+      .mockResolvedValue(passIdentity(true));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        locale: "en-GB",
+        canvas: kdsCanvas,
+        capabilities: ["act-as-kds"],
+      }),
+      getDeviceIdentity,
+      getDevicePassScreen: vi.fn().mockResolvedValue(board),
+    });
+    await flush(el);
+    const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+    emit(grid().querySelector("till-kitchen-screen-notice")!, "kitchen-screen-changed");
+    await flush(el);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    expect(grid().querySelector(".kitchen-screen-message")).toBeNull();
+    expect(grid().querySelector("till-expo-screen")).not.toBeNull();
+  });
+
   describe("a narrowing between the boot's identity read and its screen read", () => {
     const passIdentity = (available = true) => ({
       deviceId: "kd-1",

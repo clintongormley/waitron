@@ -809,6 +809,95 @@ describe("till-expo-screen", () => {
     }
   });
 
+  describe("at a till, the device's choice changing while the screen is open", () => {
+    const passScreen = (available: boolean) =>
+      identity([{ kind: "pass", available, stations: [], zones: null }]);
+    const passMonitor = identity([
+      { kind: "pass_monitor", available: true, stations: [], zones: null },
+    ]);
+    const refused = () => Object.assign(new Error("401"), { code: "device.unauthorized" });
+    const withFakeTimers = async (run: () => Promise<void>) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+      try {
+        await run();
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("shows the pass board again when the pass screen is given back while its line shows", () =>
+      withFakeTimers(async () => {
+        const api = passApi([threeCourseOrder], { available: false });
+        vi.mocked(api.getDeviceIdentity)
+          .mockResolvedValueOnce(passScreen(false))
+          .mockResolvedValue(passScreen(true));
+        const el = await mount({ api });
+        expect(el.shadowRoot!.querySelector("[data-unavailable]")).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(el.shadowRoot!.querySelector("[data-unavailable]")).toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+      }));
+
+    it("keeps its line when reading the choice again fails", () =>
+      withFakeTimers(async () => {
+        const api = passApi([threeCourseOrder], { available: false });
+        vi.mocked(api.getDeviceIdentity)
+          .mockResolvedValueOnce(passScreen(false))
+          .mockRejectedValue({ code: "server.internal" });
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(el.shadowRoot!.querySelector("[data-unavailable]")).not.toBeNull();
+        expect(api.getExpoQueue).not.toHaveBeenCalled();
+        expect(el.shadowRoot!.querySelector("[data-order]")).toBeNull();
+      }));
+
+    it("ignores an older choice read that answers after a newer one", () =>
+      withFakeTimers(async () => {
+        const api = passApi([threeCourseOrder], { available: false });
+        let answerLate: (value: DeviceIdentity) => void = () => {};
+        vi.mocked(api.getDeviceIdentity)
+          .mockResolvedValueOnce(passScreen(false))
+          .mockImplementationOnce(() => new Promise((resolve) => (answerLate = resolve)))
+          .mockResolvedValue(passScreen(true));
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(30_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+        answerLate(passScreen(false));
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-unavailable]")).toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+      }));
+
+    it("becomes the pass monitor when its pass board is refused and the choice is now a monitor", () =>
+      withFakeTimers(async () => {
+        const api = passApi(
+          [threeCourseOrder],
+          {},
+          {
+            getDevicePassMonitor: vi
+              .fn()
+              .mockResolvedValue({ orders: [threeCourseOrder], stations: [], zones: null }),
+          },
+        );
+        const el = await mount({ api });
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+        vi.mocked(api.getDeviceIdentity).mockResolvedValue(passMonitor);
+        vi.mocked(api.getDevicePassScreen).mockRejectedValue(refused());
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDevicePassMonitor).toHaveBeenCalledTimes(1);
+        expect(el.shadowRoot!.querySelector('[data-order="5"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".board button, .board wt-button")).toBeNull();
+        expect(el.shadowRoot!.querySelector(".stale[data-stale]")).toBeNull();
+      }));
+  });
+
   it("reports a refused Undo and keeps the dish Done", async () => {
     const previousLocale = currentLocale();
     setLocale("en-GB");

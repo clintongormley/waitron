@@ -8974,6 +8974,7 @@ export class TillApp extends LitElement {
         @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}
         @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}
+        @kitchen-screen-changed=${() => void this.#boot()}
         @switch-device=${() => void this.#onSwitchDevice()}
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
         @show-expo=${() => this.#requestLeave(() => this.#onShowExpo())}

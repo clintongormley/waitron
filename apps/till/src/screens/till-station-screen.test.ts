@@ -1877,6 +1877,100 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     }
   });
 
+  describe("given back while its line shows", () => {
+    const screenGone = identity([{ kind: "station", available: false, stations: [], zones: null }]);
+    const grillOnly = identity([stationScreen([{ id: "st-g", name: "Grill", available: true }])]);
+    const withFakeTimers = async (run: () => Promise<void>) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+      try {
+        await run();
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    const screenLine = (el: TillStationScreen) =>
+      el.shadowRoot!.querySelector("[data-unavailable]");
+
+    it("a station screen opens its station at the next refresh", () =>
+      withFakeTimers(async () => {
+        const { el, api } = await mountOperator(
+          vi.fn().mockResolvedValueOnce(screenGone).mockResolvedValue(grillOnly),
+        );
+        expect(screenLine(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(screenLine(el)).toBeNull();
+        expect(picks(el)).toEqual(["st-g"]);
+        expect(queueWidget(el)!.stationId).toBe("st-g");
+      }));
+
+    it("a narrowed station is listed again, and the open one stays open", () =>
+      withFakeTimers(async () => {
+        const { el } = await mountOperator(
+          vi
+            .fn()
+            .mockResolvedValueOnce(
+              identity([
+                stationScreen([
+                  { id: "st-g", name: "Grill", available: true },
+                  { id: "st-f", name: "Fryer", available: false },
+                ]),
+              ]),
+            )
+            .mockResolvedValue(
+              identity([
+                stationScreen([
+                  { id: "st-g", name: "Grill", available: true },
+                  { id: "st-f", name: "Fryer", available: true },
+                ]),
+              ]),
+            ),
+        );
+        expect(lines(el)).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(lines(el)).toEqual([]);
+        expect(picks(el)).toEqual(["st-g", "st-f"]);
+        expect(queueWidget(el)!.stationId).toBe("st-g");
+      }));
+
+    it("keeps its line when reading the choice again fails", () =>
+      withFakeTimers(async () => {
+        const { el, api } = await mountOperator(
+          vi
+            .fn()
+            .mockResolvedValueOnce(screenGone)
+            .mockRejectedValue(Object.assign(new Error("down"), { code: "server.internal" })),
+        );
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(screenLine(el)).not.toBeNull();
+        expect(picks(el)).toEqual([]);
+        expect(api.getStationQueue).not.toHaveBeenCalled();
+      }));
+
+    it("ignores an older choice read that answers after a newer one", () =>
+      withFakeTimers(async () => {
+        let answerLate: (value: DeviceIdentity) => void = () => {};
+        const { el } = await mountOperator(
+          vi
+            .fn()
+            .mockResolvedValueOnce(screenGone)
+            .mockImplementationOnce(() => new Promise((resolve) => (answerLate = resolve)))
+            .mockResolvedValue(grillOnly),
+        );
+        await vi.advanceTimersByTimeAsync(30_000);
+        await el.updateComplete;
+        expect(picks(el)).toEqual(["st-g"]);
+        answerLate(screenGone);
+        await flush(el);
+        expect(screenLine(el)).toBeNull();
+        expect(picks(el)).toEqual(["st-g"]);
+      }));
+  });
+
   it("a failed identity read shows every station, as before a choice existed", async () => {
     const { el, api } = await mountOperator(() =>
       Promise.reject(Object.assign(new Error("down"), { code: "server.internal" })),
