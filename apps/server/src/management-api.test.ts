@@ -2121,6 +2121,16 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }[];
   }
 
+  it("serves no station health read, while the down-outputs read stays", async () => {
+    const health = await req("/stations/health", { method: "GET" }, managerCookie);
+    expect(health.status).toBe(404);
+    const outputs = await req("/stations/outputs-down", { method: "GET" }, managerCookie);
+    expect(outputs.status).toBe(200);
+    expect(await outputs.json()).toEqual({
+      printersDown: expect.any(Array),
+      screensDark: expect.any(Array),
+    });
+  });
   it("lets supervisors load station metadata without granting station writes", async () => {
     const name = unique("Supervisor view");
     const id = await createStation(name);

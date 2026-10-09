@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
 import type { TillConfig } from "./till-config.js";
@@ -133,26 +133,17 @@ export async function stationsWithWaitingDishes(
   );
 }
 
-export type StationScreens = Awaited<ReturnType<typeof readStationScreensWithSwitchedOff>>;
-
-export function readStationScreensWithSwitchedOff(
-  tx: Transaction,
-  cfg: { locationId: LocationId },
-) {
-  return VENUE_SERVICE.readStationScreens(tx, cfg, { withSwitchedOff: true });
-}
-
-/** `screens`, when given, is {@link readStationScreensWithSwitchedOff}'s answer in this transaction. */
 export async function stationScreensDark(
   tx: Transaction,
   venueLocationId: string,
   now: Date,
-  screens?: StationScreens,
 ): Promise<DarkScreen[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
-  screens ??= await readStationScreensWithSwitchedOff(tx, {
-    locationId: brandLocationId(venueLocationId),
-  });
+  const screens = await VENUE_SERVICE.readStationScreens(
+    tx,
+    { locationId: brandLocationId(venueLocationId) },
+    { withSwitchedOff: true },
+  );
   if (screens.length === 0) return [];
   const seen = new Map(
     (
