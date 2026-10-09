@@ -5,6 +5,9 @@ import { batches } from "./batches.js";
 import type { MenuDocument } from "./menu-document-types.js";
 import { liveVersions } from "./menu-publication.js";
 import { menuScheduledPublications, menuVersions } from "./schema/publication.js";
+import { takeOffMenus, dropMenuPrices } from "./menu-removal.js";
+import { extraListItems } from "./schema/extras.js";
+import { readUpdatedName } from "./product-names.js";
 import "./errors.js";
 
 export interface HoldingMenu {
@@ -91,4 +94,52 @@ export async function assertOffPublishedMenus(
     products: [...holding.keys()].map((id) => ({ id, name: names.get(id)! })),
     menus: [...menus.values()].sort((a, b) => a.name.localeCompare(b.name)),
   });
+}
+
+export async function markInactive(tx: Transaction, ids: readonly string[]): Promise<void> {
+  for (const batch of batches(ids))
+    await tx
+      .update(products)
+      .set({ active: false, updatedAt: now() })
+      .where(inArray(products.id, batch));
+}
+
+export async function removeFromExtraLists(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<void> {
+  for (const batch of batches(productIds))
+    await tx.delete(extraListItems).where(inArray(extraListItems.productId, batch));
+}
+
+// A missing row retains the caller's own not-found behavior.
+export async function assertProductWritable(tx: Transaction, productId: string): Promise<void> {
+  const row = await readUpdatedName(tx, productId);
+  if (row !== undefined && (!row.active || row.parentActive === false))
+    throw new AppError("product.archived", { productId });
+}
+
+export async function archiveProducts(tx: Transaction, ids: readonly string[]): Promise<void> {
+  const named: { id: string; parentId: string | null; active: boolean }[] = [];
+  for (const batch of batches(ids))
+    named.push(
+      ...(await tx
+        .select({ id: products.id, parentId: products.parentId, active: products.active })
+        .from(products)
+        .where(inArray(products.id, batch))),
+    );
+  const dishes = named.filter((r) => r.active && r.parentId === null).map((r) => r.id);
+  const variants = new Set(named.filter((r) => r.active && r.parentId !== null).map((r) => r.id));
+  for (const batch of batches(dishes))
+    for (const variant of await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(and(inArray(products.parentId, batch), eq(products.active, true))))
+      variants.add(variant.id);
+  const all = [...dishes, ...variants];
+  await assertOffPublishedMenus(tx, all);
+  await markInactive(tx, all);
+  await removeFromExtraLists(tx, all);
+  await takeOffMenus(tx, dishes);
+  await dropMenuPrices(tx, [...variants]);
 }

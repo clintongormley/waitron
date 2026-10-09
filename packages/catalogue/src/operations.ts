@@ -36,7 +36,7 @@ import {
 import { batches } from "./batches.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
-import { dropMenuPrices, takeOffMenus } from "./menu-removal.js";
+import { archiveProducts } from "./archive.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -1123,7 +1123,11 @@ async function patchProduct(
   checkNames: boolean,
 ): Promise<void> {
   const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
-  const row = patch.active !== undefined || namesChange ? await readUpdatedName(tx, id) : undefined;
+  const row = await readUpdatedName(tx, id);
+  if (row !== undefined && (!row.active || row.parentActive === false))
+    throw new AppError("product.archived", { productId: id });
+  // Archive before writing the patch: archiving skips rows already inactive.
+  if (patch.active === false && row?.active === true) await archiveProducts(tx, [id]);
   if (patch.active === true && row?.parentId != null)
     await assertNotOfferedAsExtra(tx, row.parentId, "active");
   if (namesChange && row !== undefined)
@@ -1213,24 +1217,10 @@ async function patchProduct(
       allergens: allergens !== undefined,
       diet: dietOverride !== undefined,
     });
-  // Only a change from Active runs the removal: the editor resends `active` on every save.
-  if (patch.active === false && row?.active === true)
-    await (row.parentId === null ? takeOffMenus : dropMenuPrices)(tx, [id]);
 }
 
-/** For a product with no parent: sets it Inactive and takes it off every menu. */
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
-  await markInactive(tx, [id]);
-  await takeOffMenus(tx, [id]);
-}
-
-/** Sets the products Inactive and nothing else: the caller takes them off menus. */
-export async function markInactive(tx: Transaction, ids: readonly string[]): Promise<void> {
-  for (const batch of batches(ids))
-    await tx
-      .update(products)
-      .set({ active: false, updatedAt: now() })
-      .where(inArray(products.id, batch));
+  await archiveProducts(tx, [id]);
 }
 
 export async function assignCatalogueToLocation(

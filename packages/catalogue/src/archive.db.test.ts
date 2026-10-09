@@ -1,14 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { categories, products, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product } from "../test/menus-fixture.js";
-import { assertOffPublishedMenus, publishedMenusHolding } from "./archive.js";
+import {
+  archiveProducts,
+  assertProductWritable,
+  assertOffPublishedMenus,
+  publishedMenusHolding,
+} from "./archive.js";
 import { menuPublications } from "./schema/publication.js";
 import { addMember, removeMember } from "./sections.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { insertVersion, previewMenu, publishMenu } from "./menu-publication.js";
 import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
-import { deactivateCatalogue } from "./operations.js";
+import { eq } from "drizzle-orm";
+import { listProductVariants } from "./variants.js";
+import { readProductEditor, saveProductEditor } from "./product-editor.js";
+import { deleteCatalogueItems } from "./catalogue-items.js";
+import { extraListItems } from "./schema/extras.js";
+import { menuItems } from "./schema/menu.js";
+import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
+import { offerOf } from "../test/menus-fixture.js";
+import { sectionMembers } from "./schema/sections.js";
+import { deactivateCatalogue, deactivateProduct, updateProduct } from "./operations.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -190,5 +204,223 @@ describe("assertOffPublishedMenus", () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await app((tx) => assertOffPublishedMenus(tx, [f.burger]));
+  });
+});
+
+const archived = (productId: string) => ({ code: "product.archived", params: { productId } });
+const switchOff = (id: string) =>
+  app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, id)));
+const row = async (id: string) =>
+  (await app((tx) => tx.select().from(products).where(eq(products.id, id))))[0];
+const snapshot = () =>
+  app(async (tx) => ({
+    products: await tx.select().from(products),
+    categories: await tx.select().from(categories),
+    extras: await tx.select().from(extraListItems),
+    members: await tx.select().from(sectionMembers),
+    menuItems: await tx.select().from(menuItems),
+    variantPrices: await tx.select().from(menuItemVariantOverrides),
+  }));
+const blocked = (f: Awaited<ReturnType<typeof menusFixture>>) => ({
+  code: "product.on_live_menu",
+  params: {
+    products: [
+      { id: f.lemonade, name: "Lemonade" },
+      { id: f.large, name: "Large" },
+    ],
+    menus: [{ id: f.lunch, name: "Lunch Menu" }],
+  },
+});
+
+describe("archiving", () => {
+  it("archives a product and its variants and removes draft placements", async () => {
+    const f = await menusFixture(fx.db);
+    expect((await row(f.lemonade))!.active).toBe(true);
+    expect((await row(f.large))!.active).toBe(true);
+    expect(
+      await app((tx) =>
+        tx.select().from(sectionMembers).where(eq(sectionMembers.productId, f.lemonade)),
+      ),
+    ).toHaveLength(1);
+    await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
+    expect((await row(f.lemonade))!.active).toBe(false);
+    expect((await app((tx) => listProductVariants(tx, f.lemonade))).map((v) => v.active)).toEqual([
+      false,
+    ]);
+    expect(
+      await app((tx) =>
+        tx.select().from(sectionMembers).where(eq(sectionMembers.productId, f.lemonade)),
+      ),
+    ).toEqual([]);
+  });
+  it("takes an archived product out of extras lists", async () => {
+    const f = await menusFixture(fx.db);
+    expect(
+      await app((tx) =>
+        tx.select().from(extraListItems).where(eq(extraListItems.productId, f.extraLemon)),
+      ),
+    ).toHaveLength(1);
+    await app((tx) => deactivateProduct(tx, f.extraLemon));
+    expect((await row(f.extraLemon))!.active).toBe(false);
+    expect(
+      await app((tx) =>
+        tx.select().from(extraListItems).where(eq(extraListItems.productId, f.extraLemon)),
+      ),
+    ).toEqual([]);
+  });
+  it("refuses an archive with a simultaneous name edit without changing any state", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    const before = await snapshot();
+    await expect(
+      app((tx) => updateProduct(tx, f.lemonade, { name: "Renamed", active: false })),
+    ).rejects.toMatchObject(blocked(f));
+    expect(await snapshot()).toEqual(before);
+  });
+  it("refuses reactivation and any other edit of an archived product", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.burger, { active: false }));
+    const before = await row(f.burger);
+    for (const patch of [{ active: true }, { unitPrice: "9" }])
+      await expect(app((tx) => updateProduct(tx, f.burger, patch))).rejects.toMatchObject(
+        archived(f.burger),
+      );
+    expect(await row(f.burger)).toEqual(before);
+  });
+  it("refuses editing an active variant whose parent is archived", async () => {
+    const f = await menusFixture(fx.db);
+    await switchOff(f.lemonade);
+    const before = await row(f.large);
+    await expect(app((tx) => updateProduct(tx, f.large, { unitPrice: "3" }))).rejects.toMatchObject(
+      archived(f.large),
+    );
+    expect(await row(f.large)).toEqual(before);
+  });
+  it("refuses editor saves of an archived product", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.burger, { active: false }));
+    const value = await app((tx) => readProductEditor(tx, f.burger));
+    await expect(
+      app((tx) => saveProductEditor(tx, f.burger, f.dinner, { ...value, active: true }, "en")),
+    ).rejects.toMatchObject(archived(f.burger));
+    expect(await app((tx) => readProductEditor(tx, f.burger))).toEqual(value);
+  });
+  it("an archiving editor save leaves the other fields it carries unchanged", async () => {
+    const f = await menusFixture(fx.db);
+    const value = await app((tx) => readProductEditor(tx, f.lemonade));
+    await app((tx) =>
+      saveProductEditor(
+        tx,
+        f.lemonade,
+        f.dinner,
+        {
+          ...value,
+          active: false,
+          name: "Renamed",
+          variants: value.variants.map((v) => ({ ...v, name: `${v.name} x` })),
+        },
+        "en",
+      ),
+    );
+    const after = await app((tx) => readProductEditor(tx, f.lemonade));
+    expect(after).toEqual({
+      ...value,
+      active: false,
+      variants: value.variants.map((v) => ({ ...v, active: false })),
+    });
+  });
+  it("refuses a bulk folder deletion atomically when one contained family is live", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    const before = await snapshot();
+    await expect(
+      app((tx) =>
+        deleteCatalogueItems(tx, { productIds: [f.burger], categoryIds: [f.softDrinks] }, "delete"),
+      ),
+    ).rejects.toMatchObject({
+      code: "product.on_live_menu",
+      params: {
+        products: expect.arrayContaining([
+          { id: f.lemonade, name: "Lemonade" },
+          { id: f.large, name: "Large" },
+          { id: f.lager, name: "Lager" },
+          { id: f.soup, name: "Soup" },
+          { id: f.extraLemon, name: "Extra lemon" },
+        ]),
+        menus: [{ id: f.lunch, name: "Lunch Menu" }],
+      },
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+  it("a folder delete skips an already archived family still present on a live menu", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await switchOff(f.lemonade);
+    const before = await snapshot();
+    await app((tx) =>
+      deleteCatalogueItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up"),
+    );
+    expect(await snapshot()).toEqual(before);
+  });
+  it("preserves each caller's missing-product refusal", async () => {
+    const f = await menusFixture(fx.db);
+    const value = await app((tx) => readProductEditor(tx, f.burger));
+    await expect(
+      app((tx) => saveProductEditor(tx, "missing", f.dinner, value, "en")),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: "missing" } });
+    await expect(
+      app((tx) => deleteCatalogueItems(tx, { productIds: ["missing"], categoryIds: [] }, "delete")),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: "missing" } });
+  });
+});
+
+describe("archive path boundaries", () => {
+  it("archives a variant alone and removes its draft price without removing its parent", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await tx.insert(menuItemVariantOverrides).values({
+        menuItemId: await offerOf(tx, f.lunch, f.lemonade),
+        productId: f.lemonade,
+        variantId: f.large,
+        price: 450,
+      });
+    });
+    expect(await app((tx) => tx.select().from(menuItemVariantOverrides))).toHaveLength(1);
+    const parent = await row(f.lemonade);
+    await app((tx) => archiveProducts(tx, [f.large, f.large]));
+    expect((await row(f.large))!.active).toBe(false);
+    expect(await row(f.lemonade)).toEqual(parent);
+    expect(await app((tx) => tx.select().from(menuItemVariantOverrides))).toEqual([]);
+    expect(
+      await app((tx) =>
+        tx.select().from(sectionMembers).where(eq(sectionMembers.productId, f.lemonade)),
+      ),
+    ).toHaveLength(1);
+  });
+  it("the writable guard permits an active product and leaves missing rows to callers", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await assertProductWritable(tx, f.burger);
+      await assertProductWritable(tx, "missing");
+      await updateProduct(tx, f.burger, { name: "Cheeseburger" });
+    });
+    expect((await row(f.burger))!.name).toBe("Cheeseburger");
+    await app((tx) => updateProduct(tx, f.burger, { active: false }));
+    await expect(app((tx) => assertProductWritable(tx, f.burger))).rejects.toMatchObject(
+      archived(f.burger),
+    );
+    await switchOff(f.lemonade);
+    await expect(app((tx) => assertProductWritable(tx, f.large))).rejects.toMatchObject(
+      archived(f.large),
+    );
+  });
+  it("an empty or missing archive request writes nothing", async () => {
+    await menusFixture(fx.db);
+    const before = await snapshot();
+    await app(async (tx) => {
+      await archiveProducts(tx, []);
+      await archiveProducts(tx, ["missing"]);
+    });
+    expect(await snapshot()).toEqual(before);
   });
 });

@@ -12,8 +12,8 @@ import {
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
-import { productWithId } from "./variant-fallback.js";
-import { assertFamilyNamesFree, type StoredName } from "./product-names.js";
+import { archiveProducts } from "./archive.js";
+import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./product-names.js";
 import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
@@ -128,16 +128,10 @@ export async function saveProductEditor(
   let storedParentId: string | null = null;
   let stored: StoredName | null = null;
   if (productId !== null) {
-    const [product] = await tx
-      .select({
-        id: products.id,
-        parentId: products.parentId,
-        name: products.name,
-        active: products.active,
-      })
-      .from(products)
-      .where(productWithId(productId, "any"));
+    const product = await readUpdatedName(tx, productId);
     if (!product) throw new AppError("product.not_found", { productId });
+    if (!product.active || product.parentActive === false)
+      throw new AppError("product.archived", { productId });
     storedParentId = product.parentId;
     stored = product;
   }
@@ -145,11 +139,14 @@ export async function saveProductEditor(
   const value = parseProductEditorInput(input, { isVariant });
   if (value.parentId !== undefined && value.parentId !== storedParentId)
     throw new AppError("product.invalid", { field: "parentId" });
+  // Archiving preserves the stored details, rather than rewriting the editor's draft.
+  if (productId !== null && !value.active) {
+    await archiveProducts(tx, [productId]);
+    return readProductEditor(tx, productId);
+  }
   // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
   // must satisfy the default content language. A blank one is legal (it falls back to `name`), so
-  // only a supplied customer name is validated. A variant saved Inactive is skipped, as its
-  // product's save skips it (`writeProductVariants`), so removing it is never refused for its
-  // customer name; it is checked on every save as Active.
+  // only a supplied customer name is validated.
   const config = await readContentLanguages(tx, fallbackLanguage);
   if (value.customerName !== null && (!isVariant || value.active))
     assertContentTranslations([value.customerName], config);

@@ -5,8 +5,7 @@ import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
-import { takeOffMenus } from "./menu-removal.js";
-import { markInactive } from "./operations.js";
+import { archiveProducts } from "./archive.js";
 import { isTopLevelProduct } from "./variant-fallback.js";
 import "./errors.js";
 
@@ -144,8 +143,17 @@ export async function deleteCatalogueItems(
   const tree = await readTree(tx, selection);
   if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
   if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
-  await markInactive(tx, selection.productIds);
-  const deactivated = [...selection.productIds];
+  const reached = [...selection.productIds];
+  if (contents === "delete")
+    for (const batch of batches([
+      ...new Set(selection.categoryIds.flatMap((id) => tree.subtree(id))),
+    ]))
+      for (const row of await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(and(inArray(products.categoryId, batch), isTopLevelProduct)))
+        reached.push(row.id);
+  await archiveProducts(tx, reached);
   if (contents === "move_up") {
     for (const id of tree.byDepth(selection.categoryIds, "deepest"))
       await removeFolder(tx, id, tree.parent(id));
@@ -156,13 +164,6 @@ export async function deleteCatalogueItems(
       const parent = tree.parent(id);
       const subtree = tree.subtree(id);
       for (const batch of batches(subtree)) {
-        const inside = await tx
-          .select({ id: products.id })
-          .from(products)
-          .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
-        const ids = inside.map((product) => product.id);
-        await markInactive(tx, ids);
-        deactivated.push(...ids);
         await vacateCategories(tx, batch, parent);
       }
       for (const folder of tree.byDepth(subtree, "deepest")) {
@@ -171,7 +172,6 @@ export async function deleteCatalogueItems(
       }
     }
   }
-  await takeOffMenus(tx, deactivated);
 }
 
 /**
