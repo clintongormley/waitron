@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -18,6 +18,7 @@ beforeEach(() => {
   history.replaceState(null, "", "/manage/opening-hours/view/periods");
 });
 afterEach(() => {
+  vi.useRealTimers();
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
@@ -1135,4 +1136,84 @@ it("restores the Calendar month URL and writes month navigation without a depart
   history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await expect.poll(() => calendar!.shadowRoot?.textContent).not.toContain("Invalid Date");
+});
+
+describe("Calendar venue month fallback", () => {
+  function calendarModel(civilDate: string | null = "2026-10-31") {
+    return {
+      timeZone: "America/New_York",
+      dayCutover: "06:00",
+      civilDate,
+      clockReadable: civilDate !== null,
+      days: [],
+      holidayCoverage: [],
+      holidaySources: [],
+      area: { options: [], required: false, chosen: null },
+      localHolidaysPerYear: 2,
+    };
+  }
+  const heading = (el: Screen) =>
+    el.shadowRoot!.querySelector("hours-calendar")?.shadowRoot?.querySelector("[data-test=month]")
+      ?.textContent;
+  it("replaces the browser bootstrap month with the venue's month when no month is selected", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+    const reads: string[] = [];
+    const el = await mount((async (path: string) => {
+      if (path.includes("named-days?")) {
+        reads.push(path);
+        return calendarModel();
+      }
+      return model();
+    }) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("October 2026");
+    expect(reads[0]).toContain("from=2026-10-26&to=2026-12-06");
+    expect(reads.at(-1)).toContain("from=2026-09-28&to=2026-11-01");
+    expect(reads).toHaveLength(2);
+    expect(location.pathname).toBe("/manage/opening-hours/view/calendar");
+  });
+  it("uses the venue month after an invalid-month popstate", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02");
+    const el = await mount((async (path: string) =>
+      path.includes("named-days?") ? calendarModel() : model()) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("February 2027");
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => heading(el)).toContain("October 2026");
+  });
+  it("keeps a valid explicit month across later venue-date reads", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02");
+    let civilDate = "2026-10-31";
+    const el = await mount((async (path: string) =>
+      path.includes("named-days?") ? calendarModel(civilDate) : model()) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("February 2027");
+    civilDate = "2026-09-30";
+    el.api.namedDays.rereadWatches();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(heading(el)).toContain("February 2027");
+  });
+  it("keeps an operator's month choice when the venue's first readable date arrives", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+    let civilDate: string | null = null;
+    const el = await mount((async (path: string) =>
+      path.includes("named-days?") ? calendarModel(civilDate) : model()) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("November 2026");
+    el.shadowRoot!.querySelector("hours-calendar")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=next-month]")!
+      .click();
+    await expect.poll(() => heading(el)).toContain("December 2026");
+    civilDate = "2026-10-31";
+    el.api.namedDays.rereadWatches();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(heading(el)).toContain("December 2026");
+    expect(location.pathname).toBe("/manage/opening-hours/view/calendar/month/2026-12");
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => heading(el)).toContain("October 2026");
+  });
 });

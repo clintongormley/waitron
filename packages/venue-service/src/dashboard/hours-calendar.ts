@@ -344,7 +344,9 @@ export class HoursCalendar extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   /** The venue's date, which opens the calendar on its month; null while it cannot be read. */
   @property({ attribute: false }) today: LocalDate | null = null;
+  /** Empty keeps named mode on the venue date; a selected month survives later date reads. */
   @property() month: Month = "";
+  @state() private shownMonth: Month = "";
   @state() private model?: HoursModel;
   @state() private readError = "";
   @state() private selected: LocalDate | null = null;
@@ -354,13 +356,14 @@ export class HoursCalendar extends LitElement {
   #detach?: () => void;
   #connection = {};
   #watchedMonth = "";
+  #venueMonth?: Month;
   #days = new Map<LocalDate, CalendarDay>();
   /** A date to focus once the month that holds it has drawn. */
   #focusAfterRender?: LocalDate;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.month === "") this.month = (this.today ?? browserToday()).slice(0, 7);
+    this.shownMonth = this.month || this.#venueMonth || (this.today ?? browserToday()).slice(0, 7);
     this.#watch();
   }
 
@@ -374,13 +377,18 @@ export class HoursCalendar extends LitElement {
 
   #watch(): void {
     this.#detach?.();
-    this.#watchedMonth = this.month;
-    const dates = monthGrid(this.month);
+    this.#watchedMonth = this.shownMonth;
+    const dates = monthGrid(this.shownMonth);
     if (this.namedApi) {
       this.#detach = this.namedApi.watchNamedDays(
         dates[0]!,
         dates.at(-1)!,
         (model) => {
+          if (model.civilDate !== null) this.#venueMonth = model.civilDate.slice(0, 7);
+          if (this.month === "" && this.#venueMonth && this.shownMonth !== this.#venueMonth) {
+            this.#show(this.#venueMonth, undefined, false);
+            return;
+          }
           this.namedModel = model;
           this.readError = "";
         },
@@ -427,17 +435,18 @@ export class HoursCalendar extends LitElement {
     });
   }
 
-  #show(month: Month, focus?: LocalDate): void {
+  #show(month: Month, focus?: LocalDate, selected = true): void {
     this.#focusAfterRender = focus;
     if (focus !== undefined) this.focusDate = focus;
-    if (month === this.month) return;
-    this.month = month;
+    if (selected) this.month = month;
+    if (month === this.shownMonth) return;
+    this.shownMonth = month;
     this.model = undefined;
     this.namedModel = undefined;
     this.#days = new Map();
     if (this.selected !== null && !monthGrid(month).includes(this.selected)) this.selected = null;
     this.#watch();
-    if (this.namedApi)
+    if (this.namedApi && selected)
       this.dispatchEvent(
         new CustomEvent("calendar-month-change", {
           detail: { month },
@@ -449,8 +458,9 @@ export class HoursCalendar extends LitElement {
 
   protected override willUpdate(changes: PropertyValues): void {
     if (this.namedApi && changes.has("month")) {
-      if (this.month === "") this.month = (this.today ?? browserToday()).slice(0, 7);
-      if (this.#watchedMonth !== this.month) {
+      this.shownMonth =
+        this.month || this.#venueMonth || (this.today ?? browserToday()).slice(0, 7);
+      if (this.#watchedMonth !== this.shownMonth) {
         this.namedModel = undefined;
         this.readError = "";
         this.#watch();
@@ -494,7 +504,7 @@ export class HoursCalendar extends LitElement {
     if (step === undefined || date === undefined) return;
     event.preventDefault();
     const target = addDays(date, step);
-    if (monthGrid(this.month).includes(target)) {
+    if (monthGrid(this.shownMonth).includes(target)) {
       this.focusDate = target;
       this.#dayButton(target)?.focus();
     } else this.#show(target.slice(0, 7), target);
@@ -544,7 +554,7 @@ export class HoursCalendar extends LitElement {
 
   #day(date: LocalDate, stop: LocalDate) {
     const day = this.#dayOf(date);
-    const outside = !date.startsWith(this.month);
+    const outside = !date.startsWith(this.shownMonth);
     const today = date === (this.model?.civilDate ?? null);
     const words = this.#dayWords(day);
     const special = day.specialDate;
@@ -581,12 +591,12 @@ export class HoursCalendar extends LitElement {
   }
 
   #grid() {
-    const dates = monthGrid(this.month);
+    const dates = monthGrid(this.shownMonth);
     const today = this.model?.civilDate ?? null;
     const stop =
       [this.focusDate, this.selected, today].find(
         (date) => date !== null && dates.includes(date),
-      ) ?? dates.find((date) => date.startsWith(this.month))!;
+      ) ?? dates.find((date) => date.startsWith(this.shownMonth))!;
     const weeks = Array.from({ length: dates.length / 7 }, (_, row) =>
       dates.slice(row * 7, row * 7 + 7),
     );
@@ -749,7 +759,7 @@ export class HoursCalendar extends LitElement {
   #monthCoverage() {
     const model = this.model;
     if (model === undefined) return nothing;
-    const dates = monthGrid(this.month);
+    const dates = monthGrid(this.shownMonth);
     const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
     const lines = years
       .map((year) => [year, this.#coverage(model, year)] as const)
@@ -772,16 +782,16 @@ export class HoursCalendar extends LitElement {
         variant="secondary"
         data-test=${step < 0 ? "previous-month" : "next-month"}
         aria-label=${t(label)}
-        @click=${() => this.#show(addMonths(this.month, step))}
+        @click=${() => this.#show(addMonths(this.shownMonth, step))}
         >${glyph}</wt-button
       >`;
-    const dates = monthGrid(this.month);
+    const dates = monthGrid(this.shownMonth);
     const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
     return html`<div class="month">
       <div class="nav">
         ${nav(-1, "hours.calendar.previous_month", "‹")}
         <h2 id="month-heading" data-test="month" aria-live="polite">
-          ${formatUtc(`${this.month}-01`, { month: "long", year: "numeric" })}
+          ${formatUtc(`${this.shownMonth}-01`, { month: "long", year: "numeric" })}
         </h2>
         ${nav(1, "hours.calendar.next_month", "›")}
       </div>
@@ -828,14 +838,14 @@ export class HoursCalendar extends LitElement {
                           return html`<td
                             data-date=${date}
                             data-tone=${day?.tone ?? "standard"}
-                            ?data-outside=${!date.startsWith(this.month)}
+                            ?data-outside=${!date.startsWith(this.shownMonth)}
                           >
                             <div
                               class="day named-day"
                               aria-current=${date === model.civilDate ? "date" : nothing}
                             >
                               <span class="number"
-                                >${formatUtc(date, date.startsWith(this.month) ? { day: "numeric" } : { day: "numeric", month: "short" })}</span
+                                >${formatUtc(date, date.startsWith(this.shownMonth) ? { day: "numeric" } : { day: "numeric", month: "short" })}</span
                               >${day?.namedDay ? html`<span>${day.namedDay.name}</span>` : nothing}${day?.holidays.length ? html`<span>${holidayDateName([...day.holidays], date, "")}</span>` : nothing}${day?.closed ? html`<span>${t("hours.closed")}</span>` : nothing}${day?.ownHours ? html`<span class="own-hours"><wt-icon name="clock" size="sm"></wt-icon><span class="visually-hidden">${t("calendar.own_hours")}</span></span>` : nothing}
                             </div>
                           </td>`;
@@ -903,7 +913,7 @@ export class HoursCalendar extends LitElement {
         variant="ghost"
         data-test=${test}
         aria-label=${t(label)}
-        @click=${() => this.#show(addMonths(this.month, months))}
+        @click=${() => this.#show(addMonths(this.shownMonth, months))}
         >${glyph}</wt-button
       >`;
     const legend = (colour: string, label: Parameters<typeof t>[0]) =>
@@ -914,7 +924,7 @@ export class HoursCalendar extends LitElement {
           ${nav("previous-year", "hours.calendar.previous_year", "«", -12)}
           ${nav("previous-month", "hours.calendar.previous_month", "‹", -1)}
           <h2 id="month-heading" data-test="month" aria-live="polite">
-            ${formatUtc(`${this.month}-01`, { month: "long", year: "numeric" })}
+            ${formatUtc(`${this.shownMonth}-01`, { month: "long", year: "numeric" })}
           </h2>
           ${nav("next-month", "hours.calendar.next_month", "›", 1)}
           ${nav("next-year", "hours.calendar.next_year", "»", 12)}

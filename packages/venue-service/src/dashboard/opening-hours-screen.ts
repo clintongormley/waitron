@@ -507,11 +507,13 @@ export class OpeningHoursScreen extends LitElement {
                           .readOnly=${this.readOnly}
                           @calendar-month-change=${(event: CustomEvent<{ month: string }>) => {
                             event.stopPropagation();
-                            void this.url.write({
-                              dashboard: "opening-hours",
-                              view: "calendar",
-                              month: event.detail.month,
-                            });
+                            void Promise.resolve(
+                              this.url.write({
+                                dashboard: "opening-hours",
+                                view: "calendar",
+                                month: event.detail.month,
+                              }),
+                            ).then(() => this.followUrl());
                           }}
                         ></hours-calendar>`
                       : nothing
