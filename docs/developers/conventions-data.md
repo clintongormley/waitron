@@ -518,8 +518,17 @@ A closed zone refuses new service, new dish lines and quantity increases with `s
 including during a positive period end offset. `assertZoneTakesNewOrders` is called by
 `apps/server/src/table-actions.ts`, `working-order.ts` and `move-bill.ts`; the route cases in
 `apps/server/src/till-api.zone-closed.test.ts` check the resulting refusals. A move bringing an open
-bill or guests into that zone is refused. Notes, decreases and payment for existing orders remain
-possible, and a presented bill can move there while retaining its recorded service context.
+bill or guests into that zone is refused. Accepting a department transfer into it is also refused,
+before resolving the request or changing its bill (`acceptDepartmentTransfer` in
+`packages/venue-service/src/department-transfers.ts`; the closed-destination case in
+`packages/venue-service/src/department-transfers.test.ts`). Notes, decreases, payment and splitting
+existing bills or joined tables remain possible. Bills and guests can move within the closed zone
+or out to an open zone (`moveGuests` in `table-actions.ts`, `adoptZone` in `move-bill.ts`, and the
+split and same-zone/outbound cases in `till-api.zone-closed.test.ts`). A presented bill can move
+into the closed zone while retaining its recorded service context. Printing existing orders remains
+possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks profile zone access through
+`apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
+`apps/server/src/kitchen-print.ts`.
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order.ts` performs the zone check when adding lines, separately from its offer read.
 
