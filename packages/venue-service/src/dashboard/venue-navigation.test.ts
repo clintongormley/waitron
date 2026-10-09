@@ -64,7 +64,11 @@ describe("venue operations URL navigation", () => {
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const screen = await mount();
-    expect(screen.shadowRoot!.querySelector('[data-test="policy-tree"]')).not.toBeNull();
+    expect(
+      screen
+        .shadowRoot!.querySelector("venue-departments-shell")!
+        .shadowRoot!.querySelector("departments-list"),
+    ).not.toBeNull();
     expect(location.pathname).toBe("/manage/venue-operations");
     expect(location.search).toBe(query);
     expect(push).not.toHaveBeenCalled();
@@ -80,7 +84,11 @@ describe("venue operations URL navigation", () => {
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const screen = await mount();
-    expect(screen.shadowRoot!.querySelector('[data-test="policy-tree"]')).not.toBeNull();
+    expect(
+      screen
+        .shadowRoot!.querySelector("venue-departments-shell")!
+        .shadowRoot!.querySelector("departments-list"),
+    ).not.toBeNull();
     expect(location.href).toBe(before);
     expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();

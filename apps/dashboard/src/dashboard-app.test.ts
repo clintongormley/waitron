@@ -2,7 +2,7 @@ import { leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { html, type LitElement } from "lit";
+import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
@@ -3980,6 +3980,12 @@ describe("dashboard URL navigation", () => {
             routes: [],
             hours: [],
             readiness: [],
+            floorZones: [],
+            salePolicies: { departments: [], zones: [] },
+            kitchenTicketGrouping: "combined",
+            printHeldWork: false,
+            releaseReminderMinutes: null,
+            clearingWorkflow: false,
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -3991,7 +3997,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           el
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -4004,7 +4011,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           refreshed
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -4024,7 +4032,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           refreshed
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -4046,6 +4055,12 @@ describe("dashboard URL navigation", () => {
             routes: [],
             hours: [],
             readiness: [],
+            floorZones: [],
+            salePolicies: { departments: [], zones: [] },
+            kitchenTicketGrouping: "combined",
+            printHeldWork: false,
+            releaseReminderMinutes: null,
+            clearingWorkflow: false,
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -4074,7 +4089,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           el
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -7022,28 +7038,7 @@ describe("department list links inside dashboard capture", () => {
   );
 });
 
-describe("mounted staged department pages", () => {
-  beforeEach(async () => {
-    const loaders = import.meta.glob<{ VenueOperationsLoader: typeof LitElement }>(
-      "../../../packages/venue-service/src/dashboard/venue-operations-loader.ts",
-    );
-    const clients = import.meta.glob<{
-      VenueServiceApi: new (request: DashboardRequest, data?: LiveData) => unknown;
-    }>("../../../packages/venue-service/src/dashboard/client.ts");
-    const { VenueOperationsLoader } =
-      await loaders["../../../packages/venue-service/src/dashboard/venue-operations-loader.ts"]!();
-    const { VenueServiceApi } =
-      await clients["../../../packages/venue-service/src/dashboard/client.ts"]!();
-    if (!customElements.get("a10-mounted-departments"))
-      customElements.define("a10-mounted-departments", class extends VenueOperationsLoader {});
-    const contribution = DASHBOARD_MODULES.find((item) => item.module === "venue-service")!;
-    vi.spyOn(contribution, "create").mockImplementation((context) => {
-      const api = new VenueServiceApi(context.request, context.liveData);
-      return {
-        render: () => html`<a10-mounted-departments .api=${api}></a10-mounted-departments>`,
-      };
-    });
-  });
+describe("mounted public department pages", () => {
   afterEach(() => vi.restoreAllMocks());
   function deep(root: ParentNode, selector: string): HTMLElement | null {
     const own = root.querySelector<HTMLElement>(selector);
@@ -7150,7 +7145,7 @@ describe("mounted staged department pages", () => {
     await flush(app);
     return box;
   }
-  it("opens the staged list through the dashboard route and a department through its real name link", async () => {
+  it("opens the department list through the dashboard route and a department through its real name link", async () => {
     const app = await mountDepartments();
     await expect.poll(() => find(app, "departments-list")).not.toBeNull();
     expect(find(app, "departments-list")!.textContent).not.toContain("Ready for service");
