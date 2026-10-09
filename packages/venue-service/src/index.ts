@@ -2,6 +2,7 @@ import "./errors.js";
 
 export * from "./schema/index.js";
 export * from "./operations.js";
+export * from "./keep-open.js";
 export type { MenuUse } from "./errors.js";
 export {
   MENU_TIMETABLE_CALENDAR_PARTICIPANT,
@@ -25,7 +26,7 @@ export { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
 export { VENUE_SERVICE } from "./service.js";
 export { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 export { VENUE_SERVICE_ROUTES } from "./routes.js";
-export { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
+export { MANAGE_VENUE_SERVICE, VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 export { VENUE_SERVICE_ALERTS } from "./alerts.js";
 export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 export * from "./routing.js";

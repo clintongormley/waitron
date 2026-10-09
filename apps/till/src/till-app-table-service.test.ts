@@ -176,7 +176,7 @@ const till = {
 
 function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: floorZone.id,
@@ -560,8 +560,28 @@ describe("till-app table ordering: the table's menus", () => {
 
 it("moves a table dish with one submission id and reloads its current orders", async () => {
   const listStations = vi.fn().mockResolvedValue([
-    { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
-    { id: "kitchen", name: "Kitchen", displayOrder: 1, isDefault: true, active: true, open: true },
+    {
+      id: "bar",
+      name: "Bar",
+      displayOrder: 0,
+      isDefault: false,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "open" as const,
+    },
+    {
+      id: "kitchen",
+      name: "Kitchen",
+      displayOrder: 1,
+      isDefault: true,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "default" as const,
+    },
   ]);
   const moveDishStation = vi.fn().mockResolvedValue({
     revision: 1,
@@ -606,8 +626,28 @@ it("moves a table dish with one submission id and reloads its current orders", a
 
 describe("opening a table station move while its station list is pending", () => {
   const listed: Station[] = [
-    { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
-    { id: "kitchen", name: "Kitchen", displayOrder: 1, isDefault: true, active: true, open: true },
+    {
+      id: "bar",
+      name: "Bar",
+      displayOrder: 0,
+      isDefault: false,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "open" as const,
+    },
+    {
+      id: "kitchen",
+      name: "Kitchen",
+      displayOrder: 1,
+      isDefault: true,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "default" as const,
+    },
   ];
   const move = { workingOrderId: "wo-7", lineId: "line-1", name: "Café", stationId: "bar" };
 
@@ -721,6 +761,9 @@ it("clears a saved draft station missing from the station list", async () => {
         isDefault: true,
         active: true,
         open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default" as const,
       },
     ]),
   });
@@ -740,7 +783,17 @@ it("keeps the move dialog open with a raced start refusal and rereads the lines"
     moveDishStation,
     getTabLines,
     listStations: vi.fn().mockResolvedValue([
-      { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 0,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open" as const,
+      },
       {
         id: "kitchen",
         name: "Kitchen",
@@ -748,6 +801,9 @@ it("keeps the move dialog open with a raced start refusal and rereads the lines"
         isDefault: true,
         active: true,
         open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default" as const,
       },
     ]),
   });
@@ -785,7 +841,17 @@ it("reuses the submission id when a station move gets no answer", async () => {
     ...seatedFloor(),
     moveDishStation,
     listStations: vi.fn().mockResolvedValue([
-      { id: "bar", name: "Bar", displayOrder: 0, isDefault: false, active: true, open: true },
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 0,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open" as const,
+      },
       {
         id: "kitchen",
         name: "Kitchen",
@@ -793,6 +859,9 @@ it("reuses the submission id when a station move gets no answer", async () => {
         isDefault: true,
         active: true,
         open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default" as const,
       },
     ]),
   });
@@ -1183,8 +1252,28 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
   it("hands them to the table screen a handheld mounts as a card too", async () => {
     const stations: Station[] = [
-      { id: "bar", name: "Bar", displayOrder: 0, isDefault: true, active: true, open: true },
-      { id: "grill", name: "Grill", displayOrder: 1, isDefault: false, active: true, open: true },
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 0,
+        isDefault: true,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default" as const,
+      },
+      {
+        id: "grill",
+        name: "Grill",
+        displayOrder: 1,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open" as const,
+      },
     ];
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
@@ -2365,7 +2454,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const menuState = vi.fn(async (zoneId: string) => ({
-        service: { open: true, periodName: null },
+        service: { open: true, periodName: null, keepOpen: null },
         menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
           menuId: menu.id,
           versionId: menu.versionId,
@@ -2412,7 +2501,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
         .mockResolvedValueOnce(diningOffers)
         .mockResolvedValue(republished);
       const menuState = vi.fn(async (zoneId: string) => ({
-        service: { open: true, periodName: null },
+        service: { open: true, periodName: null, keepOpen: null },
         menus:
           zoneId === floorZone.id
             ? [{ menuId: "menu-dinner", versionId: "v2", orderable: true, sendable: true }]

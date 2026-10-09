@@ -1,6 +1,7 @@
 import { venueMomentAt } from "@waitron/reporting";
 import { isUuid } from "@waitron/shared";
 import { addDays, weekdayOf } from "./hours-rules.js";
+import { localTimeOccurrences } from "./hours-occurrences.js";
 import { invalidTimetable } from "./menu-timetable-rules.js";
 
 export interface ServiceRange {
@@ -96,4 +97,45 @@ export function rangeInForce(
 
 export function calendarDateOfTime(businessDay: string, time: string, cutover: string): string {
   return time < cutover ? addDays(businessDay, 1) : businessDay;
+}
+
+export type ServiceExtension = ServiceRange;
+
+export function withExtension(
+  ranges: readonly ServiceRange[],
+  extension: ServiceExtension | null,
+  cutover: string,
+): ServiceRange[] {
+  const result: ServiceRange[] = [];
+  const extended = extension === null ? null : rangeSpan(extension, cutover);
+  for (const range of ranges) {
+    const span = rangeSpan(range, cutover);
+    if (
+      extension === null ||
+      extended === null ||
+      span.end <= extended.start ||
+      span.start >= extended.end
+    ) {
+      result.push({ ...range });
+      continue;
+    }
+    if (span.start < extended.start) result.push({ ...range, endsAt: extension.startsAt });
+    if (span.end > extended.end) result.push({ ...range, startsAt: extension.endsAt });
+  }
+  if (extension !== null) result.push({ ...extension });
+  return result.sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
+}
+
+export function clockTimeSkipped(
+  businessDay: string,
+  time: string,
+  cutover: string,
+  timeZone: string,
+  asEnd: boolean,
+): boolean {
+  const date =
+    asEnd && time === cutover
+      ? addDays(businessDay, 1)
+      : calendarDateOfTime(businessDay, time, cutover);
+  return localTimeOccurrences(date, time, timeZone).length === 0;
 }

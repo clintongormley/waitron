@@ -1,3 +1,4 @@
+import type { MenuState } from "../api/client.js";
 import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -181,10 +182,12 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) editSentLines = true;
   @property({ attribute: false }) cancelOffer: number | null = null;
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
-  @property({ attribute: false }) service: { open: boolean; periodName: string | null } | null = {
+  @property({ attribute: false }) service: MenuState["service"] | null = {
     open: true,
     periodName: null,
+    keepOpen: null,
   };
+  @property() zoneId = "";
   @property() departmentName = "";
   @property() selectedMenuId = "";
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
@@ -420,6 +423,8 @@ export class TillCardGrid extends LitElement {
         // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
         // — so it is not passed.
         return html`<till-table-order-screen
+          .api=${this.api}
+          .zoneId=${this.zoneId}
           embedded
           .lines=${this.tabLines}
           .groups=${this.tabGroups}

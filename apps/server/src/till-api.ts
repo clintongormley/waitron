@@ -203,6 +203,8 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
+import { mountKeepOpenApi } from "./keep-open-api.js";
+import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
@@ -460,7 +462,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.no_default": 409,
   "station.no_replacement": 409,
   "station.not_found": 404,
+  "station.destination_invalid": 409,
+  "station.always_open": 409,
+  "time_zone.unreadable": 409,
+  "device.forbidden_station": 403,
   "kitchen_notice.not_found": 404,
+  "period_extension.invalid": 400,
+  "period_extension.not_allowed": 409,
   "service_zone.not_found": 404,
   // The request is sound; the device's profile may not work in that zone.
   "service_zone.not_allowed": 403,
@@ -1054,6 +1062,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
+  mountStationTodayApi(app, deps, log, run, pinThrottle);
+  mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
   mountBillLookupApi(app, deps, log, run);
   mountInvoiceLookupApi(app, deps, log, run);
@@ -1809,6 +1819,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return listed.map((station) => ({
           ...station,
           open: states.get(station.id)?.open ?? false,
+          byHand: states.get(station.id)?.byHand ?? null,
+          sendsTo: states.get(station.id)?.sendsTo ?? null,
+          why: states.get(station.id)?.why ?? "switched_off",
         }));
       });
       return c.json(stations);

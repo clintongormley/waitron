@@ -6,8 +6,28 @@ import type { TillStationScreen } from "./till-station-screen.js";
 import type { KitchenNotice, Station, StationQueueGroup, TillApi } from "../api/client.js";
 
 const stations: Station[] = [
-  { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true, open: true },
-  { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true, open: true },
+  {
+    id: "st-1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "default" as const,
+  },
+  {
+    id: "st-2",
+    name: "Barra",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "open" as const,
+  },
 ];
 
 // No fixture below injects `now`, so every ticket ages off the real wall clock against a `queuedAt` far
@@ -250,9 +270,21 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
 
 function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
-    getDeviceStation: vi
-      .fn()
-      .mockResolvedValue({ station: { id: "st-dev", queue: groups, notices: [] } }),
+    getDeviceStation: vi.fn().mockResolvedValue({
+      station: {
+        id: "st-dev",
+        name: "Grill",
+        today: {
+          open: true,
+          isDefault: false,
+          byHand: null,
+          sendsTo: null,
+          why: "open" as const,
+        },
+        queue: groups,
+        notices: [],
+      },
+    }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -272,9 +304,21 @@ describe.each(["light", "dark"] as const)(
     });
     it("has no violations with the bound station's notices above its queue", async () => {
       const api = deviceStubApi({
-        getDeviceStation: vi
-          .fn()
-          .mockResolvedValue({ station: { id: "st-dev", queue: groups, notices } }),
+        getDeviceStation: vi.fn().mockResolvedValue({
+          station: {
+            id: "st-dev",
+            name: "Grill",
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            queue: groups,
+            notices,
+          },
+        }),
       });
       const { el, host } = await mountWidget<TillStationScreen>(
         "till-station-screen",
@@ -298,7 +342,20 @@ describe.each(["light", "dark"] as const)("printer warning a11y (%s theme)", (th
       const api = deviceMode
         ? deviceStubApi({
             getDeviceStation: vi.fn().mockResolvedValue({
-              station: { id: "st-dev", queue: groups, notices: [], printersDown },
+              station: {
+                id: "st-dev",
+                name: "Grill",
+                today: {
+                  open: true,
+                  isDefault: false,
+                  byHand: null,
+                  sendsTo: null,
+                  why: "open" as const,
+                },
+                queue: groups,
+                notices: [],
+                printersDown,
+              },
             }),
           })
         : stubApi({
@@ -316,4 +373,100 @@ describe.each(["light", "dark"] as const)("printer warning a11y (%s theme)", (th
       await expectNoA11yViolations(host);
     },
   );
+});
+
+describe.each(["light", "dark"] as const)("operator station-today a11y (%s)", (theme) => {
+  it.each([false, true])("shows the picked station control (closed: %s)", async (closed) => {
+    const rows: Station[] = stations.map((row) =>
+      row.id !== "st-2"
+        ? row
+        : {
+            ...row,
+            open: !closed,
+            byHand: closed ? "closed" : null,
+            sendsTo: closed ? "st-1" : null,
+            why: closed ? "closed_by_hand" : "open",
+          },
+    );
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({ listStations: vi.fn().mockResolvedValue(rows) }),
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    const control = el.shadowRoot!.querySelector("till-station-today")!;
+    await control.updateComplete;
+    expect(control.shadowRoot!.querySelector("[data-action]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+  it("shows the close dialog above the queue", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({
+          stationToday: vi
+            .fn()
+            .mockResolvedValue({ destinations: [{ id: "st-1", name: "Cocina", isDefault: true }] }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    const control = el.shadowRoot!.querySelector("till-station-today")!;
+    await control.updateComplete;
+    control.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
+    await expect
+      .poll(() => control.shadowRoot!.querySelector("till-station-today-dialog"))
+      .not.toBeNull();
+    const dialog = control.shadowRoot!.querySelector("till-station-today-dialog")!;
+    await dialog.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+  it("shows the manager PIN step above the queue", async () => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({
+          listStations: vi.fn().mockResolvedValue(
+            stations.map((row) =>
+              row.id !== "st-2"
+                ? row
+                : {
+                    ...row,
+                    open: false,
+                    byHand: "closed",
+                    sendsTo: "st-1",
+                    why: "closed_by_hand",
+                  },
+            ),
+          ),
+          setStationToday: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+          serviceDayAuthorizers: vi
+            .fn()
+            .mockResolvedValue([{ personId: "manager", displayName: "Ana" }]),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    const control = el.shadowRoot!.querySelector("till-station-today")!;
+    await control.updateComplete;
+    control.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
+    await expect
+      .poll(() => control.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+      .not.toBeNull();
+    const dialog = control.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+    await dialog.updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await dialog.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });

@@ -29,6 +29,7 @@ import {
   type RoutingRules,
   type RoutingMoment,
   type StationTransition,
+  type StationStatus,
 } from "./routing.js";
 import { readLocationClock } from "@waitron/reporting";
 import {
@@ -53,7 +54,12 @@ import type {
 import { routingCells } from "./schema/routing.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
-import type { ExtraMakerOutcome, MakerOutcome, MakerResolver } from "@waitron/module";
+import type {
+  ExtraMakerOutcome,
+  MakerOutcome,
+  MakerResolver,
+  StationTodayState,
+} from "@waitron/module";
 export type { RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
 
 const storedTarget = (target: RouteTarget) => ({
@@ -214,6 +220,7 @@ async function clockAt(tx: Transaction, cfg: VenueScope, at: Date) {
  * and the dates whose special hours apply.
  */
 interface SnapshotScope {
+  ignoreToday?: true;
   businessDay: string | null;
   dates: { from: LocalDate; to: LocalDate } | null;
 }
@@ -264,7 +271,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
           .from(stationFallbacks)
           .where(inArray(stationFallbacks.stationId, stationIds));
   const dayStates =
-    stationIds.length === 0 || businessDay === null
+    stationIds.length === 0 || businessDay === null || scope.ignoreToday
       ? []
       : await tx
           .select()
@@ -279,6 +286,9 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
   const todayByStation = new Map(
     dayStates.map((row) => [row.stationId, row.open ? ("open" as const) : ("closed" as const)]),
   );
+  const destinationByStation = new Map(
+    dayStates.map((row) => [row.stationId, row.sendsToStationId]),
+  );
   const timing = new Map(
     stations.map((station) => [
       station.id,
@@ -286,6 +296,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
         ...schedules.get(station.id)!,
         fallbackId: fallbackByStation.get(station.id) ?? null,
         today: todayByStation.get(station.id) ?? null,
+        todaySendsTo: destinationByStation.get(station.id) ?? null,
       },
     ]),
   );
@@ -297,6 +308,17 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     timing,
   };
   return { rules, folders, stations };
+}
+
+export async function scheduledStationStatus(
+  tx: Transaction,
+  cfg: VenueScope,
+  stationId: string,
+  at: Date,
+): Promise<StationStatus> {
+  const { moment } = await clockAt(tx, cfg, at);
+  const { rules } = await snapshot(tx, cfg, { ...scopeAt(moment), ignoreToday: true });
+  return stationStatus(rules, stationId, moment);
 }
 
 export async function loadRoutingRules(
@@ -611,9 +633,7 @@ export async function routingAt(
 ): Promise<MakerResolver> {
   const { moment } = await clockAt(tx, cfg, at);
   const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
-  let stationNames:
-    | ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
-    | undefined;
+  let stationNames: ReadonlyMap<string, StationTodayState> | undefined;
   const productFacts = async (productIds: readonly string[]) => {
     const spellingByUuid = new Map<string, string>();
     for (const id of productIds) {
@@ -656,7 +676,7 @@ export async function routingAt(
             name: station.name,
             isDefault: station.isDefault,
             active: station.active,
-            open: stationStatus(rules, station.id, moment).open,
+            ...stationTodayState(rules, station.id, moment),
           },
         ]),
       ));
@@ -721,20 +741,36 @@ export async function resolveExtraMakers(
   return (await routingAt(tx, cfg, at)).extraMakers(zoneId, extras);
 }
 
+function stationTodayState(
+  rules: RoutingRules,
+  stationId: string,
+  moment: RoutingMoment | null,
+): Pick<StationTodayState, "open" | "byHand" | "sendsTo" | "why"> {
+  const status = stationStatus(rules, stationId, moment);
+  const why =
+    status.why === "in_hours" || status.why === "no_hours" || status.why === "time_not_applied"
+      ? "open"
+      : status.why;
+  return {
+    open: status.open,
+    byHand: rules.timing.get(stationId)?.today ?? null,
+    sendsTo: status.open ? null : closedSendsTo(rules, stationId, moment),
+    why,
+  };
+}
+
 export async function stationStates(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
-): Promise<
-  ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
-> {
+): Promise<ReadonlyMap<string, StationTodayState>> {
   const { moment } = await clockAt(tx, cfg, at);
   const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
   return new Map(
     stations.map((station) => [
       station.id,
       {
-        open: stationStatus(rules, station.id, moment).open,
+        ...stationTodayState(rules, station.id, moment),
         isDefault: station.isDefault,
         active: station.active,
         name: station.name,

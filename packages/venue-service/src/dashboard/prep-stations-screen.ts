@@ -70,7 +70,6 @@ import "./station-health-table.js";
 import { watcherInputErrors, type WatcherForm } from "./watcher-form.js";
 
 type StationAction =
-  | { kind: "today"; stationId: string; state: "open" | "closed" | null }
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
 
@@ -1699,19 +1698,7 @@ export class PrepStationsScreen extends LitElement {
     if (!station.active) return t("prep.health.disabled");
     if (!this.view?.routing.clockReadable) return t("prep.clock_unreadable");
     if (station.isDefault || times.status.why === "no_hours") return t("prep.always_open");
-    if (this.readOnly) return this.#stationStatus(station);
-    const state = times.today ? null : times.status.open ? "closed" : "open";
-    const action = state === null ? "schedule" : state === "closed" ? "close-today" : "open-today";
-    return html`<div part="today">
-      <span>${this.#stationStatus(station)}</span>
-      <wt-button
-        variant="secondary"
-        data-test=${`${action}-${station.id}`}
-        ?disabled=${this.busy}
-        @click=${() => this.#openStationAction({ kind: "today", stationId: station.id, state })}
-        >${t(state === null ? "prep.back_to_schedule" : state === "closed" ? "prep.close_today" : "prep.open_today")}</wt-button
-      >
-    </div>`;
+    return this.#stationStatus(station);
   }
   #fallbackOptions(id: string) {
     const stored = this.#times(id)?.fallbackStationId;
@@ -1798,7 +1785,6 @@ export class PrepStationsScreen extends LitElement {
     this.stationFieldError = "";
     let fallbackSaved = false;
     try {
-      if (action.kind === "today") await this.api.setStationToday(action.stationId, action.state);
       if (action.kind === "fallback" || action.kind === "switch_off") {
         const choice = action.choice || null;
         if (choice !== this.#times(action.stationId)?.fallbackStationId) {
@@ -3294,36 +3280,18 @@ export class PrepStationsScreen extends LitElement {
     const action = this.stationAction;
     if (!action) return nothing;
     const station = this.view?.stations.find((row) => row.id === action.stationId);
-    const times = this.#times(action.stationId);
     const identity = this.#stationActionIdentity;
     const current = () =>
       this.isConnected &&
       this.stationAction !== undefined &&
       identity === this.#stationActionIdentity;
-    const end = this.#todayEnd();
     const isFallback = action.kind === "fallback" || action.kind === "switch_off";
     const heading =
       action.kind === "switch_off"
         ? t("prep.disable")
         : action.kind === "fallback"
           ? t("prep.when_closed")
-          : action.kind === "switch_on"
-            ? t("prep.enable")
-            : action.kind === "today" && action.state === "closed"
-              ? t("prep.close_today")
-              : action.kind === "today" && action.state === "open"
-                ? t("prep.open_today")
-                : t("prep.back_to_schedule");
-    const todaySentence =
-      action.kind === "today" && action.state === "closed"
-        ? times?.closedSendsTo
-          ? format("prep.close_confirm", {
-              station: station?.name ?? action.stationId,
-              destination: this.#stationName(times.closedSendsTo),
-              ...end,
-            })
-          : format("prep.close_confirm_ask", { station: station?.name ?? action.stationId, ...end })
-        : "";
+          : t("prep.enable");
     return keyed(
       identity,
       html`<wt-modal
@@ -3338,7 +3306,6 @@ export class PrepStationsScreen extends LitElement {
           if (current() && event.target === event.currentTarget) this.#cancelStationAction();
         }}
       >
-        ${todaySentence ? html`<p>${todaySentence}</p>` : nothing}
         ${
           isFallback
             ? html`

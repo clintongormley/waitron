@@ -53,7 +53,7 @@ import {
 import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
-import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
+import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
   clearRoutingCell,
   explainRoute,
@@ -78,7 +78,7 @@ import type { LocalHolidayInput } from "./holiday-types.js";
 import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { CellAddress, RoutingChange } from "./routing-types.js";
-import { setStationFallback, setStationToday } from "./station-times.js";
+import { setStationFallback } from "./station-times.js";
 import {
   listDepartmentTransferProfiles,
   readDepartmentTransferSettings,
@@ -87,7 +87,6 @@ import {
 import "./errors.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 
-const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -106,6 +105,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "service_zone.not_found": 404,
   "department_menu.not_found": 404,
   "department_menu.in_use": 409,
+  "period_extension.invalid": 400,
+  "period_extension.not_allowed": 409,
   "menu_period.not_found": 404,
   "menu_period.in_use": 409,
   "menu_period.name_taken": 409,
@@ -116,6 +117,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "route.subject_not_found": 404,
   "route.station_inactive": 409,
   "station.not_found": 404,
+  "station.destination_invalid": 400,
   "station.fallback_loop": 409,
   "time_zone.unreadable": 409,
   "hours.invalid": 400,
@@ -561,26 +563,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             : requireBodyUuid(body.fallbackStationId, "fallbackStationId");
         await gated(sessionId, (tx) =>
           setStationFallback(tx, ctx.cfg, stationId, fallbackStationId),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/stations/:stationId/today", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        if (body.state !== "open" && body.state !== "closed" && body.state !== null)
-          throw new AppError("management.request_invalid", { field: "state" });
-        await gated(sessionId, (tx) =>
-          setStationToday(
-            tx,
-            ctx.cfg,
-            stationId,
-            body.state as "open" | "closed" | null,
-            new Date(),
-          ),
         );
         return c.body(null, 204);
       }),

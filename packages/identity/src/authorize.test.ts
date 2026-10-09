@@ -4,7 +4,9 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { authorize } from "./authorize.js";
+import { authorize, authorizeByPin } from "./authorize.js";
+import { registerModulePermissions } from "./permissions.js";
+import { checkPin } from "./credential.js";
 import { endSession, loginWithPin } from "./login.js";
 import { createPinThrottle } from "./pin-throttle.js";
 import { codeOf, openSession, refusalOf, seedPerson, seedSessionDevice } from "../test/fixtures.js";
@@ -249,5 +251,117 @@ describe("authorize with a limit on wrong override PINs", () => {
     expect(attempts.throttle.check).not.toHaveBeenCalled();
     expect(attempts.throttle.recordFailure).not.toHaveBeenCalled();
     expect(attempts.throttle.clear).not.toHaveBeenCalled();
+  });
+});
+
+describe("module permission authorization", () => {
+  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+
+  it("authorizes a module action through a manager override on a staff session", async () => {
+    const deviceId = await seedSessionDevice(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const managerId = await seedPerson(suite.db, "manager");
+    const sessionId = await openSession(suite.db, deviceId, staffId);
+    expect(
+      await run((tx) =>
+        authorize(tx, {
+          sessionId,
+          permission: "venue_service.manage",
+          override: { personId: managerId, pin: "1234" },
+        }),
+      ),
+    ).toEqual({ authorizedBy: managerId, permission: "venue_service.manage", viaOverride: true });
+  });
+
+  it("authorizes a manager PIN without any session, including a check taken ahead", async () => {
+    const managerId = await seedPerson(suite.db, "manager");
+    const checked = await checkPin(suite.db, managerId, "1234");
+    expect(
+      await run((tx) =>
+        authorizeByPin(
+          tx,
+          {
+            permission: "venue_service.manage",
+            override: { personId: managerId, pin: "1234", checked },
+          },
+          { throttle: createPinThrottle(), slot: "station:device" },
+        ),
+      ),
+    ).toEqual({
+      authorizedBy: managerId,
+      permission: "venue_service.manage",
+      viaOverride: true,
+    });
+  });
+
+  it("refuses a staff member's correct PIN for a manager module permission", async () => {
+    const staffId = await seedPerson(suite.db, "staff");
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          authorizeByPin(
+            tx,
+            {
+              permission: "venue_service.manage",
+              override: { personId: staffId, pin: "1234" },
+            },
+            { throttle: createPinThrottle(), slot: "station:device" },
+          ),
+        ),
+      ),
+    ).toBe("authorization.not_permitted");
+  });
+
+  it.each(["unknown", "pending", "suspended"] as const)(
+    "refuses a %s identity with pin.invalid",
+    async (status) => {
+      const personId =
+        status === "unknown" ? crypto.randomUUID() : await seedPerson(suite.db, "manager", status);
+      expect(
+        await codeOf(() =>
+          run((tx) =>
+            authorizeByPin(
+              tx,
+              {
+                permission: "venue_service.manage",
+                override: { personId, pin: "1234" },
+              },
+              { throttle: createPinThrottle(), slot: "station:device" },
+            ),
+          ),
+        ),
+      ).toBe("pin.invalid");
+    },
+  );
+
+  it("counts four wrong PINs, refuses the right PIN during the wait, and recovers after it", async () => {
+    const managerId = await seedPerson(suite.db, "manager");
+    let now = 1_000_000;
+    const attempts = { throttle: createPinThrottle({ now: () => now }), slot: "station:device" };
+    const call = (pin: string) =>
+      run((tx) =>
+        authorizeByPin(
+          tx,
+          {
+            permission: "venue_service.manage",
+            override: { personId: managerId, pin },
+          },
+          attempts,
+        ),
+      );
+    for (let n = 0; n < 4; n++) expect(await codeOf(() => call("9999"))).toBe("pin.invalid");
+    expect(await codeOf(() => call("1234"))).toBe("pin.throttled");
+    now += 31_000;
+    expect(await call("1234")).toEqual({
+      authorizedBy: managerId,
+      permission: "venue_service.manage",
+      viaOverride: true,
+    });
+    expect(await codeOf(() => call("9999"))).toBe("pin.invalid");
+    expect(await call("1234")).toEqual({
+      authorizedBy: managerId,
+      permission: "venue_service.manage",
+      viaOverride: true,
+    });
   });
 });

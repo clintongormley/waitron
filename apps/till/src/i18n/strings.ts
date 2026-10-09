@@ -2,6 +2,35 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "keep_open.line_until": "{period} · until {time}",
+  "keep_open.line_extended": "{period} · kept open until {time}",
+  "keep_open.button": "Keep {period} open later",
+  "keep_open.heading": "Keep {period} open later today",
+  "keep_open.ends": "{period} ends at {time} today.",
+  "keep_open.ended": "{period} ended at {time}.",
+  "keep_open.until": "Until",
+  "keep_open.end_of_day": "End of the day ({time})",
+  "keep_open.delays": "{next} will start at {time} instead of {scheduled}.",
+  "keep_open.drops": "{next} will not run today.",
+  "keep_open.save": "Keep open",
+  "keep_open.stop": "End the extension",
+
+  "station_today.open": "Open",
+  "station_today.closed_by_hand": "Closed for today. New dishes go to {station}.",
+  "station_today.opened_by_hand": "Opened for today.",
+  "station_today.out_of_hours": "Closed now (outside its hours). New dishes go to {station}.",
+  "station_today.out_of_hours_nowhere": "Closed now (outside its hours).",
+  "station_today.default": "Always open: this is the default station.",
+  "station_today.close": "Close for today",
+  "station_today.open_action": "Open for today",
+  "station_today.dialog_heading": "Close {station} for today",
+  "station_today.destination": "New dishes go to",
+  "station_today.default_choice": "{station} (default)",
+  "station_today.sent_stay":
+    "Dishes already sent stay on this screen. Dishes placed here by hand stay here too.",
+  "station_today.switched_off": "Switched off.",
+  "station_today.picker_closed": "{station} · Closed",
+
   "department_transfer.title": "Department transfers",
   "department_transfer.current_tab": "Current tab",
   "department_transfer.source_responsible":
@@ -1118,6 +1147,36 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "keep_open.line_until": "{period} · hasta las {time}",
+  "keep_open.line_extended": "{period} · horario ampliado hasta las {time}",
+  "keep_open.button": "Ampliar el horario de {period}",
+  "keep_open.heading": "Ampliar hoy el horario de {period}",
+  "keep_open.ends": "Hoy {period} termina a las {time}.",
+  "keep_open.ended": "{period} terminó a las {time}.",
+  "keep_open.until": "Hasta",
+  "keep_open.end_of_day": "Fin del día ({time})",
+  "keep_open.delays": "{next} empezará a las {time} en lugar de a las {scheduled}.",
+  "keep_open.drops": "Hoy no habrá {next}.",
+  "keep_open.save": "Ampliar",
+  "keep_open.stop": "Quitar la ampliación",
+
+  "station_today.open": "Abierta",
+  "station_today.closed_by_hand": "Cerrada por hoy. Los platos nuevos van a {station}.",
+  "station_today.opened_by_hand": "Abierta por hoy.",
+  "station_today.out_of_hours":
+    "Cerrada ahora (fuera de su horario). Los platos nuevos van a {station}.",
+  "station_today.out_of_hours_nowhere": "Cerrada ahora (fuera de su horario).",
+  "station_today.default": "Siempre abierta: es la estación predeterminada.",
+  "station_today.close": "Cerrar por hoy",
+  "station_today.open_action": "Abrir por hoy",
+  "station_today.dialog_heading": "Cerrar {station} por hoy",
+  "station_today.destination": "Los platos nuevos van a",
+  "station_today.default_choice": "{station} (predeterminada)",
+  "station_today.sent_stay":
+    "Los platos ya enviados se quedan en esta pantalla. Los platos asignados aquí a mano también se quedan.",
+  "station_today.switched_off": "Desactivada.",
+  "station_today.picker_closed": "{station} · Cerrada",
+
   "department_transfer.title": "Traspasos entre departamentos",
   "department_transfer.current_tab": "Cuenta actual",
   "department_transfer.source_responsible":

@@ -1156,6 +1156,36 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   open: boolean;
+  byHand: "open" | "closed" | null;
+  sendsTo: string | null;
+  why: "default" | "open" | "opened_by_hand" | "closed_by_hand" | "out_of_hours" | "switched_off";
+}
+
+export interface StationDestination {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+export interface KeepOpenPeriod {
+  id: string;
+  name: string;
+  endsAt: string;
+  running: boolean;
+  extendedUntil: string | null;
+  dayEndsAt: string;
+  choices: readonly string[];
+  next: { name: string; startsAt: string; endsAt: string } | null;
+}
+export interface PeriodExtensionWrite {
+  periodId: string;
+  until: string | null;
+  override?: { personId: string; pin: string };
+}
+
+export interface StationTodayWrite {
+  state: "open" | "closed";
+  sendsToStationId?: string;
+  override?: { personId: string; pin: string };
 }
 
 /**
@@ -1440,6 +1470,14 @@ export interface EquipmentChange {
 export interface DeviceStation {
   station: {
     id: string;
+    name: string;
+    today: {
+      open: boolean;
+      isDefault: boolean;
+      byHand: Station["byHand"];
+      sendsTo: { id: string; name: string } | null;
+      why: Station["why"];
+    };
     queue: StationQueueGroup[];
     notices: KitchenNotice[];
     printersDown: StationPrinterDown[];
@@ -2462,6 +2500,47 @@ export class TillApi {
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
   listStations(options: ReadOptions = {}): Promise<Station[]> {
     return this.#request<Station[]>("/api/stations", "GET", undefined, options.signal);
+  }
+
+  stationToday(stationId: string): Promise<{ destinations: StationDestination[] }> {
+    return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "GET");
+  }
+
+  setStationToday(stationId: string, body: StationTodayWrite): Promise<void> {
+    return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "PUT", body);
+  }
+
+  deviceStationToday(
+    stationId: string,
+  ): Promise<{ destinations: StationDestination[]; authorizers: StaffMember[] }> {
+    return this.#request(`/api/device/stations/${encodeURIComponent(stationId)}/today`, "GET");
+  }
+
+  deviceSetStationToday(
+    stationId: string,
+    body: Omit<StationTodayWrite, "override"> & { authorizer: { personId: string; pin: string } },
+  ): Promise<void> {
+    return this.#request(
+      `/api/device/stations/${encodeURIComponent(stationId)}/today`,
+      "PUT",
+      body,
+    );
+  }
+
+  keepOpen(zoneId: string): Promise<{ period: KeepOpenPeriod | null }> {
+    return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
+  }
+
+  keepPeriodOpen(zoneId: string, body: PeriodExtensionWrite): Promise<void> {
+    return this.#request(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/period-extension`,
+      "PUT",
+      body,
+    );
+  }
+
+  serviceDayAuthorizers(): Promise<StaffMember[]> {
+    return this.#request("/api/service-day/authorizers", "GET");
   }
 
   moveDishStation(

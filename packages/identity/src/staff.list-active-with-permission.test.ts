@@ -4,7 +4,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import type { PersonRoleValue } from "./permissions.js";
+import { registerModulePermissions, type PersonRoleValue } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
 import { persons } from "./schema/persons.js";
 import { listActivePersonsWithPermission } from "./staff.js";
@@ -52,4 +52,17 @@ describe("listActivePersonsWithPermission", () => {
     expect(ids.has(staff)).toBe(false);
     expect(ids.has(goneSup)).toBe(false);
   });
+});
+
+it("lists active managers for a registered module permission, excluding staff and suspended managers", async () => {
+  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  await seedTenant(suite.db);
+  const managerId = await seedPerson(suite.db, "Manager", "manager");
+  await seedPerson(suite.db, "Staff", "staff");
+  await seedPerson(suite.db, "Suspended", "manager", "suspended");
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      listActivePersonsWithPermission(tx, "venue_service.manage"),
+    ),
+  ).toEqual([{ personId: managerId, displayName: "Manager" }]);
 });

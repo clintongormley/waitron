@@ -7,8 +7,28 @@ import "./station-choice-dialog.js";
 import type { TillStationChoiceDialog } from "./station-choice-dialog.js";
 
 const stations: Station[] = [
-  { id: "grill", name: "Grill", displayOrder: 0, isDefault: true, active: true, open: true },
-  { id: "bar", name: "Upstairs bar", displayOrder: 1, isDefault: false, active: true, open: false },
+  {
+    id: "grill",
+    name: "Grill",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "default" as const,
+  },
+  {
+    id: "bar",
+    name: "Upstairs bar",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    open: false,
+    byHand: null,
+    sendsTo: null,
+    why: "out_of_hours" as const,
+  },
 ];
 
 afterEach(cleanupWidgets);

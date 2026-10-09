@@ -1166,6 +1166,125 @@ describe("fallbacks", () => {
   });
 });
 
+describe("today's chosen station destination", () => {
+  const rules: RoutingRules = {
+    ...base,
+    cells: cells([category("drinks"), null, station("grill")]),
+    activeStationIds: new Set(["grill", "bar", "pastry", "kitchen"]),
+    timing: new Map([
+      ["grill", { fallbackId: "pastry", hours: [], today: "closed", todaySendsTo: "bar" }],
+      ["bar", { fallbackId: null, hours: [], today: null }],
+    ]),
+  };
+
+  it("sends work to today's choice ahead of the configured fallback", () => {
+    expect(chooseMaker(rules, lager, null, at(FRI, "20:00"))).toEqual({
+      route: station("bar"),
+      decidedBy: decidedByCell(category("drinks"), null),
+      fallbacks: [{ stationId: "grill", why: "closed_by_hand" }],
+      noReplacement: false,
+    });
+    expect(closedSendsTo(rules, "grill", at(FRI, "20:00"))).toBe("bar");
+  });
+
+  it("continues through the chosen destination's scheduled fallback", () => {
+    const closedBar: RoutingRules = {
+      ...rules,
+      timing: new Map([
+        ...rules.timing,
+        [
+          "bar",
+          {
+            fallbackId: "pastry",
+            hours: [],
+            weekSet: true,
+            today: null,
+            todaySendsTo: "grill",
+          },
+        ],
+      ]),
+    };
+    expect(followFallbacks(closedBar, "grill", at(FRI, "20:00"))).toEqual({
+      stationId: "pastry",
+      steps: [
+        { stationId: "grill", why: "closed_by_hand" },
+        { stationId: "bar", why: "out_of_hours" },
+      ],
+    });
+    expect(closedSendsTo(closedBar, "grill", at(FRI, "20:00"))).toBe("pastry");
+  });
+
+  it("uses the active default when today's destination is switched off with no fallback", () => {
+    const off: RoutingRules = {
+      ...rules,
+      activeStationIds: new Set(["grill", "pastry", "kitchen"]),
+    };
+    expect(chooseMaker(off, lager, null, at(FRI, "20:00"))).toEqual({
+      route: station("kitchen"),
+      decidedBy: decidedByCell(category("drinks"), null),
+      fallbacks: [
+        { stationId: "grill", why: "closed_by_hand" },
+        { stationId: "bar", why: "switched_off" },
+      ],
+      noReplacement: false,
+    });
+    expect(closedSendsTo(off, "grill", at(FRI, "20:00"))).toBe("kitchen");
+  });
+
+  it("ends a cycle of today's destinations at the active default", () => {
+    const cycle: RoutingRules = {
+      ...rules,
+      timing: new Map([
+        ...rules.timing,
+        ["bar", { fallbackId: null, hours: [], today: "closed", todaySendsTo: "grill" }],
+      ]),
+    };
+    expect(followFallbacks(cycle, "grill", at(FRI, "20:00"))).toEqual({
+      stationId: "kitchen",
+      steps: [
+        { stationId: "grill", why: "closed_by_hand" },
+        { stationId: "bar", why: "closed_by_hand" },
+      ],
+    });
+  });
+
+  it.each([null, "kitchen"])(
+    "keeps a dead end when default %s is unavailable",
+    (defaultStationId) => {
+      const off: RoutingRules = {
+        ...rules,
+        defaultStationId,
+        activeStationIds: new Set(["grill", "pastry"]),
+      };
+      expect(chooseMaker(off, lager, null, at(FRI, "20:00"))).toMatchObject({
+        route: null,
+        noReplacement: true,
+      });
+      expect(closedSendsTo(off, "grill", at(FRI, "20:00"))).toBeNull();
+    },
+  );
+
+  it("keeps the configured fallback for a close without a destination", () => {
+    const legacy: RoutingRules = {
+      ...rules,
+      timing: new Map([
+        ...rules.timing,
+        ["grill", { fallbackId: "pastry", hours: [], today: "closed", todaySendsTo: null }],
+      ]),
+    };
+    expect(chooseMaker(legacy, lager, null, at(FRI, "20:00")).route).toEqual(station("pastry"));
+    expect(closedSendsTo(legacy, "grill", at(FRI, "20:00"))).toBe("pastry");
+  });
+
+  it("does not apply today's destination while the clock cannot be read", () => {
+    expect(chooseMaker(rules, lager, null, null)).toMatchObject({
+      route: station("grill"),
+      fallbacks: [],
+    });
+    expect(closedSendsTo(rules, "grill", null)).toBe("pastry");
+  });
+});
+
 const extrasRules: RoutingRules = {
   ...base,
   parentOf: new Map([

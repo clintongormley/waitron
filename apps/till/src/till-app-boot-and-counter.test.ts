@@ -109,7 +109,7 @@ function zoneOffers(
   defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,
 ): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId,
@@ -317,9 +317,22 @@ describe("till-app session activity", () => {
   });
 
   it("keeps an enrolled station screen on its station board", async () => {
-    const getDeviceStation = vi
-      .fn()
-      .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [], printersDown: [] } });
+    const getDeviceStation = vi.fn().mockResolvedValue({
+      station: {
+        id: "st-1",
+        name: "Pass",
+        today: {
+          open: true,
+          isDefault: true,
+          byHand: null,
+          sendsTo: null,
+          why: "default" as const,
+        },
+        queue: [],
+        notices: [],
+        printersDown: [],
+      },
+    });
     const getDeviceWatcher = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
     const { el } = await mountApp({
       getTill: vi
@@ -371,9 +384,22 @@ describe("till-app session activity", () => {
         watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
         orders: [],
       }),
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [], printersDown: [] } }),
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: {
+          id: "st-1",
+          name: "Pass",
+          today: {
+            open: true,
+            isDefault: true,
+            byHand: null,
+            sendsTo: null,
+            why: "default" as const,
+          },
+          queue: [],
+          notices: [],
+          printersDown: [],
+        },
+      }),
     });
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-card-grid")!, "enrolled");
@@ -794,7 +820,21 @@ describe("till-app boot interrupted by removal from the page", () => {
     await flush(el);
 
     host.removeChild(el);
-    resolveStation({ station: { id: "st-1", queue: [], notices: [] } });
+    resolveStation({
+      station: {
+        id: "st-1",
+        name: "Pass",
+        today: {
+          open: true,
+          isDefault: true,
+          byHand: null,
+          sendsTo: null,
+          why: "default" as const,
+        },
+        queue: [],
+        notices: [],
+      },
+    });
     await flush(el);
 
     expect(sa.configure).not.toHaveBeenCalled();

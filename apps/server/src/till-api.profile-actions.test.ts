@@ -83,6 +83,7 @@ import {
  * | POST /api/working-orders/:id/department-transfers         | take-orders                | department-transfer-api.test.ts: refuses request without the take-orders profile action |
  * | POST /api/department-transfers/:id/withdraw, /accept, /decline | take-orders             | department-transfer-api.test.ts: refuses <verb> without the take-orders profile action |
  * | POST /api/bills/:id/split, /merge, /transfer, /move       | take-orders                | take-orders           |
+ * | GET, PUT /api/device/stations/:stationId/today            | prepare-orders             | prepare-orders        |
  * | POST /api/device/ticket-items/:id/advance (display)       | prepare-orders             | prepare-orders        |
  * | POST /api/device/kitchen-notices/:id/acknowledge (display)| prepare-orders             | prepare-orders        |
  *
@@ -94,6 +95,12 @@ import {
  * checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
  * routes (choosing equipment is not printing, paying or opening the drawer); and table placement,
  * which needs `venue.configure`. Left ungated by decision, each with its reason:
+ * - `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
+ *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,
+ *   writes require `venue_service.manage` or a permitted PIN override;
+ * - `GET /api/service-zones/:zoneId/keep-open` and
+ *   `PUT /api/service-zones/:zoneId/period-extension`: the venue's day, session reads and
+ *   `venue_service.manage` or a permitted PIN for writes;
  * - the watcher "done" marks: each is the watcher's own record of what it has seen, not preparing
  *   or handing over. `/api/device/watcher/done` is made by the watcher's own display, which is
  *   allowed only `prepare-orders`; `/api/watchers/:id/done` by a person signed in on a till that
@@ -245,6 +252,8 @@ const handingOver = (method: string, path: string): Row => [
 ];
 
 const ROUTES: readonly Row[] = [
+  ["GET", `/api/device/stations/${id}/today`, "prepare-orders", forbidden("prepare-orders")],
+  preparing("PUT", `/api/device/stations/${id}/today`),
   ["POST", "/api/sales", "take-orders", forbidden("take-orders"), { lines: [] }],
   [
     "POST",
@@ -365,6 +374,7 @@ const ROUTES: readonly Row[] = [
 ];
 
 const sessions = new Map<ProfileAction, string>();
+const displayCookies = new Map<ProfileAction, string>();
 
 beforeAll(async () => {
   v = await setupPartyVenue(suite.db);
@@ -392,15 +402,22 @@ beforeAll(async () => {
     .values({ locationId: v.cfg.locationId, name: `Grill ${randomUUID()}` })
     .returning({ id: kitchenStations.id });
   stationId = station!.id;
-  for (const [, , lacking] of ROUTES) {
-    if (!sessions.has(lacking)) sessions.set(lacking, (await signIn(allBut(lacking))).cookie);
+  for (const [, path, lacking] of ROUTES) {
+    if (path.startsWith("/api/device/")) {
+      if (!displayCookies.has(lacking)) displayCookies.set(lacking, await display(allBut(lacking)));
+    } else if (!sessions.has(lacking)) {
+      sessions.set(lacking, (await signIn(allBut(lacking))).cookie);
+    }
   }
 }, 120_000);
 
 describe("each till route checks the profile action it needs", () => {
   for (const [method, path, lacking, expected, body] of ROUTES) {
     it(`refuses ${method} ${path.replaceAll(id, ":id")} without ${lacking}`, async () => {
-      const answer = await send(sessions.get(lacking)!, method, path, body);
+      const cookie = path.startsWith("/api/device/")
+        ? displayCookies.get(lacking)!
+        : sessions.get(lacking)!;
+      const answer = await send(cookie, method, path, body);
       expect({ status: answer.status, error: answer.body.error }).toEqual(expected);
     });
   }

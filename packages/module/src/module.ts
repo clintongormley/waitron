@@ -249,7 +249,7 @@ export interface ZoneMenu {
 /** What a zone sells: its active, published menus' live versions, each offer marked with its
  *  availability. */
 export interface ZoneOffers {
-  readonly service: { readonly open: boolean; readonly periodName: string | null };
+  readonly service: ZoneMenuState["service"];
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
@@ -265,7 +265,17 @@ export interface ZoneUnavailable {
 
 /** A zone's live menu versions, and what they hold that cannot be sold now. */
 export interface ZoneMenuState {
-  readonly service: { readonly open: boolean; readonly periodName: string | null };
+  readonly service: {
+    readonly open: boolean;
+    readonly periodName: string | null;
+    readonly keepOpen: {
+      readonly periodId: string;
+      readonly periodName: string;
+      readonly endsAt: string;
+      readonly running: boolean;
+      readonly extendedUntil: string | null;
+    } | null;
+  };
   readonly menus: readonly {
     readonly menuId: string;
     readonly versionId: string;
@@ -315,14 +325,34 @@ export type ExtraMakerOutcome =
       readonly why: "no_rule" | "no_preparation" | "no_replacement" | "same_station";
     };
 
+export interface KeepOpenSubject {
+  id: string;
+  name: string;
+  endsAt: string;
+  running: boolean;
+  extendedUntil: string | null;
+  dayEndsAt: string;
+  choices: readonly string[];
+  next: { name: string; startsAt: string; endsAt: string } | null;
+}
+
+export interface StationTodayState {
+  readonly open: boolean;
+  readonly isDefault: boolean;
+  readonly active: boolean;
+  readonly name: string;
+  readonly byHand: "open" | "closed" | null;
+  readonly sendsTo: string | null;
+  readonly why:
+    "default" | "open" | "opened_by_hand" | "closed_by_hand" | "out_of_hours" | "switched_off";
+}
+
 /** Rules and venue moment loaded once at `at`. Both questions use that snapshot and the
  *  transaction it was opened on. Use the resolver only inside that transaction. */
 export interface MakerResolver {
   readonly at: Date;
   /** Station states from this resolver's rules and moment, including switched-off stations. */
-  stations(): Promise<
-    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
-  >;
+  stations(): Promise<ReadonlyMap<string, StationTodayState>>;
   /** Answers for an order in `zoneId` (null: no service zone). An unknown zone throws
    *  `service_zone.not_found` before an unknown product throws `route.subject_not_found`.
    *  Keys preserve the first caller spelling of each product id. */
@@ -453,6 +483,19 @@ export interface VenueServiceContribution {
     sendableMenuIds: readonly string[];
     endedMenuIds: readonly string[];
   }>;
+  readKeepOpen(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at: Date,
+  ): Promise<{ period: KeepOpenSubject | null }>;
+  keepPeriodOpen(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    input: { periodId: string; until: string | null },
+    at: Date,
+  ): Promise<void>;
   resolveSalePolicy(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -497,9 +540,26 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     at: Date,
-  ): Promise<
-    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
-  >;
+  ): Promise<ReadonlyMap<string, StationTodayState>>;
+  stationDestinations(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+    at: Date,
+  ): Promise<readonly { id: string; name: string; isDefault: boolean }[]>;
+  closeStationForToday(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+    sendsToStationId: string,
+    at: Date,
+  ): Promise<void>;
+  openStationForToday(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+    at: Date,
+  ): Promise<void>;
   /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
   describeMakers(
     tx: Transaction,

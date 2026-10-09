@@ -47,6 +47,8 @@ declare module "@waitron/shared" {
     "department_menu.not_found": { departmentId: string; menuId: string };
     /** Removing a menu from a department's list that `uses` still name, every one of them. */
     "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
+    "period_extension.invalid": { field: "until"; reason: "step" | "not_later" | "clock_skips" };
+    "period_extension.not_allowed": { periodId: string };
     "menu_period.not_found": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
     "menu_period.invalid": {
@@ -88,6 +90,11 @@ declare module "@waitron/shared" {
     "service_zone.not_allowed": { zoneId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
+    "station.destination_invalid": {
+      stationId: string;
+      sendsToStationId: string;
+      reason: "self" | "unknown" | "inactive" | "closed";
+    };
     "station.fallback_loop": { stationId: string; fallbackStationId: string };
     "time_zone.unreadable": Record<string, never>;
     "device_profile.access_invalid": {

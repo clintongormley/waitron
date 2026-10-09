@@ -52,6 +52,24 @@
 > each part, re-read every line cited from the slice it waits on, and diff what that slice changed
 > after the commit read here.
 
+> **Implementation grounding, 2026-10-08 (Lane E, Part A).** Slice 1 landed in PR #1460 as
+> `685a6074b152eeb904a66cfac9f83e8f432196ab`; this branch starts at
+> `8d52162e3`. `git diff --name-only bdf64d9cd8b0a6527cc9110aa9a2b09988f608fd
+> 685a6074b152eeb904a66cfac9f83e8f432196ab -- packages/venue-service packages/module
+> packages/catalogue apps/till apps/server/src/till-api.ts scripts/schema-constraints.test.ts
+> scripts/migration-upgrade.test.ts` printed no paths. The S1 code cited below therefore matches
+> the landed tree for those paths; historical doc line numbers are not used to locate entries.
+> The owner's 21:55 answer in Lane C's questions approves all 19 decisions.
+> At start, slice 2 and slice 5 Part A have no worktree or open PR. Lane D instead has A432 in
+> `feat/period-end-offset`, including a venue-service migration numbered 0034 and changes to
+> period validation and contract types. Both branches proceed under the queue's overlap waiver;
+> whoever lands second regenerates any colliding migrations and keeps the extended end as the
+> reference for A432's offset. Lane A is working on menu structure; Lane B's venue forms are
+> outside Task A1. The read-only file inventory is retained in Lane E's local receipts.
+> Per the owner's 17:10 queue instruction, implementation runs focused checks and the explicit
+> migration/fiscal guards; mandatory package tests and coverage remain in CI. Part A is one PR;
+> Tasks B1–B4 belong to Lane D. The unattended runner authorises landing after green checks.
+
 **Goal:** during service, a manager keeps a period open later than planned ("Keep Lunch open until
 14:30 today") from the till, and, once zones have closed times, keeps a zone open later ("Keep the
 Terrace open until 01:30 today"). Staff close a prep station for the rest of the day, or open it,
@@ -505,14 +523,14 @@ The conditions most likely to bite a person that no single task's happy path exe
   (`department_id`, `business_day`); check `period_extensions_step_ck` written as
   `menu_slots_step_ck` (`:135-139`, S1).
 
-- [ ] **Step 1: Failing test** in `migrations.test.ts`: `period_extensions` in `TABLES`; a second
+- [x] **Step 1: Failing test** in `migrations.test.ts`: `period_extensions` in `TABLES`; a second
   row for one department and business day is refused by the database; a row at `14:10` is
   refused; a row naming one department and another department's period is refused; deleting the
   period deletes its row; `station_day_states` takes a row with `sends_to_station_id` naming a
   station, refuses one naming nothing, and refuses one naming its own station. Run
   `pnpm --filter @waitron/venue-service exec vitest run --project node src/migrations.test.ts`;
   expected: fails (no such table or column).
-- [ ] **Step 2: Schema, then generate — in two generations**, because the new check is expected to
+- [x] **Step 2: Schema, then generate — in two generations**, because the new check is expected to
   make drizzle rebuild `station_day_states` (believed: drizzle-kit for SQLite cannot add a CHECK
   with `ALTER TABLE`; Step 2b reads the SQL to confirm), and the 0.31.11 trap forbids a generation
   that rebuilds a table and adds a column to it (CLAUDE.md §3).
@@ -527,15 +545,15 @@ The conditions most likely to bite a person that no single task's happy path exe
     (`grep -rln 'REFERENCES \`station_day_states\`' packages/*/drizzle/` printed nothing at M), so
     no child is emptied, and the copy keeps every row; an old row's null destination passes the
     check. If 2b does not rebuild (drizzle wrote an `ALTER`), keep it as generated.
-- [ ] **Step 3: Classification** — `period_extensions` as `state`. Add the keys, index and check to
+- [x] **Step 3: Classification** — `period_extensions` as `state`. Add the keys, index and check to
   `scripts/schema-constraints.test.ts`; add the table to the fixture clear list; add
   `expect(names).not.toContain("period_extensions")` beside `service.test.ts:94` (M).
-- [ ] **Step 4: Run** Step 1's test, the package's node project, the server package (for the
+- [x] **Step 4: Run** Step 1's test, the package's node project, the server package (for the
   clear list), and
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts scripts/migration-upgrade.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts scripts/module-graph-honesty.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`. If the
   upgrade walk reports a casualty, STOP and report it: this slice promises no reset.
-- [ ] **Step 5: Commit** — `feat(venue-service): a station's destination today and period extensions (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): a station's destination today and period extensions (A366)`.
 
 ---
 
@@ -573,17 +591,17 @@ add a `{ ignoreToday?: true }` option to `snapshot`'s scope (`SnapshotScope :216
 `snapshot :235`, `routing-store.ts`, M) and export one reader from `routing-store.ts`
 (`scheduledStationStatus(tx, cfg, stationId, at)`) rather than a second status rule.
 
-- [ ] **Step 1: Failing tests:** closing Grill with Bar stores `open: false` and Bar; closing the
+- [x] **Step 1: Failing tests:** closing Grill with Bar stores `open: false` and Bar; closing the
   default station → `station.always_open`; closing Grill towards itself, towards a switched-off
   station and towards a station closed for today → `station.destination_invalid` with `self`,
   `inactive`, `closed`; `stationDestinations` for Grill lists the default first and leaves out
   Grill and a station closed for today; opening a station closed by hand inside its hours removes
   the row; opening one outside its hours stores "open"; an unreadable time zone refuses each
   writer. (Fails today: neither function exists.)
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/station-times.test.ts`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; see them pass;** the venue-service node project; typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): close a station for today with a destination (A366)`.
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/station-times.test.ts`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run; see them pass;** the venue-service node project; typecheck.
+- [x] **Step 5: Commit** — `feat(venue-service): close a station for today with a destination (A366)`.
 
 ---
 
@@ -622,7 +640,7 @@ passed a station closed by hand with a recorded destination and ends with no sta
 the default station if one is active (decision 9). `closedSendsTo` follows the same walk, so the
 dashboard's status sentence (`routing-store.ts:837`, M) names the chosen destination.
 
-- [ ] **Step 1: Failing tests:** in `routing.test.ts` — Grill closed by hand → Bar routes a Grill
+- [x] **Step 1: Failing tests:** in `routing.test.ts` — Grill closed by hand → Bar routes a Grill
   dish to Bar although Grill's fallback is Pastry; Grill → Bar with Bar out of hours follows Bar's
   fallback; Grill → Bar with Bar switched off and no fallback lands at the default station, not
   `noReplacement`; Grill closed by hand with no destination still follows Pastry (today's rule).
@@ -634,12 +652,12 @@ dashboard's status sentence (`routing-store.ts:837`, M) names the chosen destina
   incident is raised (pinning today's behaviour, which this slice keeps). (Fails today: the walk
   reads only `fallbackId`, `routing.ts:257`; the hand-placed case is expected to pass at once and
   is there so a later change to it is seen.)
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routing.test.ts src/routing-store.test.ts` and `pnpm --filter @waitron/server exec vitest run src/station-move.test.ts`.
-- [ ] **Step 3: Implement**, and add the three `StationTodayState` fields (`byHand`, `sendsTo`, `why`) wherever a test stub builds a `stationStates`
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routing.test.ts src/routing-store.test.ts` and `pnpm --filter @waitron/server exec vitest run src/station-move.test.ts`.
+- [x] **Step 3: Implement**, and add the three `StationTodayState` fields (`byHand`, `sendsTo`, `why`) wherever a test stub builds a `stationStates`
   value (`grep -rn "stationStates" apps packages`).
-- [ ] **Step 4: Run; see them pass;** the venue-service node project and the server package;
+- [x] **Step 4: Run; see them pass;** the venue-service node project and the server package;
   typecheck `@waitron/module`, `@waitron/venue-service`, `@waitron/server`.
-- [ ] **Step 5: Commit** — `feat(venue-service): a station closed for today sends its work where it was told (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): a station closed for today sends its work where it was told (A366)`.
 
 ---
 
@@ -690,7 +708,7 @@ export async function authorizeByPin(
 `authorizeByPin` uses `verifyThrottledCredential` (`packages/identity/src/credential.ts:83`, M) and
 `roleHasPermission`, as `authorize`'s override branch does (`authorize.ts:62-69`, M).
 
-- [ ] Steps: failing tests (a manager's PIN for `venue_service.manage` — registered as a
+- [x] Steps: failing tests (a manager's PIN for `venue_service.manage` — registered as a
   **literal**, `registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }])`,
   as `packages/identity/src/permissions.test.ts:131` (M) registers `booking.manage`, never by
   importing `VENUE_SERVICE_PERMISSIONS`: `@waitron/venue-service` depends on `@waitron/identity`

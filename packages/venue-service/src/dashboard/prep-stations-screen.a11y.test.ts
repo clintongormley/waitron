@@ -331,14 +331,12 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     "warnings",
     "fallback",
     "fallback-confirmation",
-    "close-confirmation",
     "switch-off",
     "inactive",
     "clock-unreadable",
     "opened-by-hand",
     "closed-by-hand",
     "no-replacement",
-    "refused-close",
     "refused-fallback",
     "refused-switch-off",
   ] as const)("checks %s", async (state) => {
@@ -428,15 +426,13 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
             {
               stationId: "bar",
               status: {
-                open: ["close-confirmation", "refused-close", "opened-by-hand"].includes(state),
+                open: state === "opened-by-hand",
                 why:
                   state === "opened-by-hand"
                     ? "opened_by_hand"
                     : state === "closed-by-hand"
                       ? "closed_by_hand"
-                      : ["close-confirmation", "refused-close"].includes(state)
-                        ? "in_hours"
-                        : "out_of_hours",
+                      : "out_of_hours",
               },
               hours: [
                 {
@@ -454,7 +450,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
           ],
         },
       }),
-      setStationToday: vi.fn().mockRejectedValue({ code: "time_zone.unreadable" }),
       setStationFallback: vi.fn().mockRejectedValue({ code: "station.fallback_loop" }),
       deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
     } as unknown as PrepStationsApi;
@@ -497,12 +492,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         expect(settingsQ('[data-test="settings-fallback-confirmation"]')).not.toBeNull();
       }
     }
-    const action =
-      state === "close-confirmation" || state === "refused-close"
-        ? "close-today"
-        : state === "switch-off" || state === "refused-switch-off"
-          ? "disable"
-          : null;
+    const action = state === "switch-off" || state === "refused-switch-off" ? "disable" : null;
     if (action) {
       const selector = `[data-test="${action}-bar"]`;
       const summary = el

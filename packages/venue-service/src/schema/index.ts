@@ -7,3 +7,4 @@ export * from "./hours.js";
 export * from "./holidays.js";
 export * from "./menus.js";
 export * from "./department-transfers.js";
+export * from "./period-extensions.js";

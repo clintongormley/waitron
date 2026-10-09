@@ -958,7 +958,17 @@ describe("GET /api/menu-state", () => {
     const v = await setupLunch();
     const v1 = await publish(v.menuId);
     expect(await state(v)).toEqual({
-      service: { open: true, periodName: "Always" },
+      service: {
+        open: true,
+        periodName: "Always",
+        keepOpen: {
+          periodId: expect.any(String),
+          periodName: "Always",
+          endsAt: "05:00",
+          running: true,
+          extendedUntil: null,
+        },
+      },
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: nothing,
       defaultMenuId: v.menuId,
@@ -968,7 +978,17 @@ describe("GET /api/menu-state", () => {
       withTransaction(suite.db, (tx) => updateProduct(tx, v.burger.productId, { available }));
     await setBurger(false);
     expect(await state(v)).toEqual({
-      service: { open: true, periodName: "Always" },
+      service: {
+        open: true,
+        periodName: "Always",
+        keepOpen: {
+          periodId: expect.any(String),
+          periodName: "Always",
+          endsAt: "05:00",
+          running: true,
+          extendedUntil: null,
+        },
+      },
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,

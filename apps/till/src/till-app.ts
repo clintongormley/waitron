@@ -977,6 +977,19 @@ function isReaderRefusal(error: unknown): boolean {
   return refused?.code === "device.forbidden_action" && refused.action === "pay";
 }
 
+function keepOpenMoved(
+  next: MenuStateAnswer["service"]["keepOpen"],
+  current: MenuStateAnswer["service"]["keepOpen"] | undefined,
+): boolean {
+  return (
+    next?.periodId !== current?.periodId ||
+    next?.periodName !== current?.periodName ||
+    next?.endsAt !== current?.endsAt ||
+    next?.running !== current?.running ||
+    next?.extendedUntil !== current?.extendedUntil
+  );
+}
+
 /**
  * Owns the one {@link WorkingOrderStore}, which belongs to the till and survives a change of operator,
  * and the one {@link TillApi}. Screens emit composed events; this element decides what happens next. A
@@ -2428,7 +2441,7 @@ export class TillApp extends LitElement {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
       this.#loadCounterOffers(
-        { offers: [], menus: [], service: { open: false, periodName: null } },
+        { offers: [], menus: [], service: { open: false, periodName: null, keepOpen: null } },
         false,
       );
       this.counterServiceZones = [];
@@ -2974,7 +2987,8 @@ export class TillApp extends LitElement {
       if (state.defaultMenuId !== undefined) this.#polledDefaults.set(zoneId, state.defaultMenuId);
       const serviceMoved =
         state.service.open !== this.counterService?.open ||
-        state.service.periodName !== this.counterService?.periodName;
+        state.service.periodName !== this.counterService?.periodName ||
+        keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen);
       const busy = this.submitting || this.parking || this.placing;
       if (
         (menusMoved(this.menus, state.menus) || serviceMoved) &&
@@ -2992,7 +3006,8 @@ export class TillApp extends LitElement {
       }
       const serviceMoved =
         state.service.open !== this.tableService?.open ||
-        state.service.periodName !== this.tableService?.periodName;
+        state.service.periodName !== this.tableService?.periodName ||
+        keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen);
       if (!menusMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
       else
         void this.#reloadTableOffers(zoneId).then((read) => {
@@ -4957,7 +4972,7 @@ export class TillApp extends LitElement {
         if (offerRequest !== this.#tableOfferRequest) return;
         this.#loadTableOffers(
           undefined,
-          { offers: [], menus: [], service: { open: false, periodName: null } },
+          { offers: [], menus: [], service: { open: false, periodName: null, keepOpen: null } },
           false,
         );
         this.tableSelectedCatalogueId = "";
@@ -4971,7 +4986,7 @@ export class TillApp extends LitElement {
     } else {
       this.#loadTableOffers(
         undefined,
-        { offers: [], menus: [], service: { open: false, periodName: null } },
+        { offers: [], menus: [], service: { open: false, periodName: null, keepOpen: null } },
         false,
       );
       this.tableSelectedCatalogueId = "";
@@ -8525,6 +8540,7 @@ export class TillApp extends LitElement {
       .initialDeviceStation=${this.initialDeviceStation}
       .initialDeviceWatcher=${this.initialDeviceWatcher}
       .menus=${tableTab ? this.tableMenus : this.menus}
+      .zoneId=${tableTab ? (this.#tableZoneId ?? "") : this.counterServiceZoneId}
       .service=${tableTab ? this.tableService : this.counterService}
       .departmentName=${tableTab ? this.tableDepartmentName : this.counterDepartmentName}
       .selectedMenuId=${tableTab ? this.tableSelectedCatalogueId : this.selectedCatalogueId}
@@ -8567,6 +8583,8 @@ export class TillApp extends LitElement {
       case "table-order": {
         const draft = this.#tableDraft();
         return html`<till-table-order-screen
+          .api=${this.api}
+          .zoneId=${this.#tableZoneId ?? ""}
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
@@ -8831,6 +8849,10 @@ export class TillApp extends LitElement {
         @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
           this.#selectDiet(e.detail.predicate)}
         @counter-zone-selected=${(event: Event) => void this.#onCounterZoneSelected(event)}
+        @keep-open-changed=${(e: CustomEvent<{ zoneId: string }>) => {
+          e.stopPropagation();
+          void this.#menuPoll.readNow(e.detail.zoneId);
+        }}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${

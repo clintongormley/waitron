@@ -594,7 +594,7 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
  */
 export async function listActivePersonsWithPermission(
   tx: Transaction,
-  permission: Permission,
+  permission: Permission | (string & {}),
 ): Promise<StaffListEntry[]> {
   return listActivePersonsWhose(tx, (role) => roleHasPermission(role, permission));
 }

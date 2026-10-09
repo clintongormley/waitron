@@ -1,3 +1,5 @@
+import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
+import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
@@ -375,6 +377,7 @@ export class TillTableOrderScreen extends LitElement {
       }
     `,
     baseStyles,
+    servicePeriodStyles,
     tableTargetStyles,
     css`
       :host {
@@ -1103,10 +1106,13 @@ export class TillTableOrderScreen extends LitElement {
    * still render its name whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
-  @property({ attribute: false }) service: { open: boolean; periodName: string | null } | null = {
+  @property({ attribute: false }) service: MenuState["service"] | null = {
     open: true,
     periodName: null,
+    keepOpen: null,
   };
+  @property({ attribute: false }) api?: TillApi;
+  @property() zoneId = "";
   @property() departmentName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
@@ -2812,16 +2818,15 @@ export class TillTableOrderScreen extends LitElement {
     if (this.service === null) return html`<div class="grid-region"></div>`;
     if (this.service?.open === false)
       return html`<div class="grid-region">
-        <p role="status" data-service-closed>
-          ${t("menu.department_closed").replace("{department}", () => this.departmentName)}
-        </p>
+        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
       </div>`;
     if (!this.menus.some((menu) => menu.orderable))
       return html`<div class="grid-region">
+        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
         <p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>
       </div>`;
     return html`<div class="grid-region">
-      ${this.service?.periodName == null ? nothing : html`<p role="status" data-service-period>${this.service?.periodName}</p>`}
+      ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
       <till-menu-switcher
         class="menu-switcher"
         .menus=${this.menus}

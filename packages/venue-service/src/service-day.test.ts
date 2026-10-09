@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   calendarDateOfTime,
+  clockTimeSkipped,
   minuteOfServiceDay,
   parseServiceDay,
   rangeInForce,
   rangeSpan,
   serviceMomentAt,
+  withExtension,
 } from "./service-day.js";
 
 const P = "00000000-0000-4000-8000-000000000001";
@@ -123,4 +125,59 @@ describe("service day", () => {
     expect(calendarDateOfTime("2026-12-31", "05:45", "06:00")).toBe("2027-01-01");
     expect(calendarDateOfTime("2026-03-28", "06:00", "06:00")).toBe("2026-03-28");
   });
+});
+
+describe("period extensions over the service day", () => {
+  const day = [lunch, { ...afternoon, endsAt: "19:00" }];
+  it("delays the next period while retaining the scheduled and extended runs", () => {
+    expect(
+      withExtension(day, { periodId: P, startsAt: "14:00", endsAt: "14:30" }, "06:00"),
+    ).toEqual([
+      lunch,
+      { periodId: P, startsAt: "14:00", endsAt: "14:30" },
+      { periodId: Q, startsAt: "14:30", endsAt: "19:00" },
+    ]);
+    expect(day).toEqual([lunch, { ...afternoon, endsAt: "19:00" }]);
+  });
+  it("drops a period wholly covered by the extension", () => {
+    expect(
+      withExtension(day, { periodId: P, startsAt: "14:00", endsAt: "20:00" }, "06:00"),
+    ).toEqual([lunch, { periodId: P, startsAt: "14:00", endsAt: "20:00" }]);
+  });
+  it("ends an overnight extension at the next changeover", () => {
+    expect(
+      withExtension(
+        [{ periodId: P, startsAt: "21:00", endsAt: "03:00" }],
+        { periodId: P, startsAt: "03:00", endsAt: "06:00" },
+        "06:00",
+      ),
+    ).toEqual([
+      { periodId: P, startsAt: "21:00", endsAt: "03:00" },
+      { periodId: P, startsAt: "03:00", endsAt: "06:00" },
+    ]);
+  });
+  it("cuts both sides of a range the extension lies inside", () => {
+    expect(
+      withExtension(
+        [{ periodId: Q, startsAt: "12:00", endsAt: "19:00" }],
+        { periodId: P, startsAt: "14:00", endsAt: "15:00" },
+        "06:00",
+      ),
+    ).toEqual([
+      { periodId: Q, startsAt: "12:00", endsAt: "14:00" },
+      { periodId: P, startsAt: "14:00", endsAt: "15:00" },
+      { periodId: Q, startsAt: "15:00", endsAt: "19:00" },
+    ]);
+  });
+  it("sorts an unchanged day and retains ranges outside the extension", () => {
+    expect(withExtension([...day].reverse(), null, "06:00")).toEqual(day);
+    expect(
+      withExtension(day, { periodId: P, startsAt: "20:00", endsAt: "21:00" }, "06:00"),
+    ).toEqual([...day, { periodId: P, startsAt: "20:00", endsAt: "21:00" }]);
+  });
+});
+
+it("dates an end at the changeover on the next calendar day when checking skipped times", () => {
+  expect(clockTimeSkipped("2027-03-27", "02:30", "02:30", "Europe/Madrid", true)).toBe(true);
+  expect(clockTimeSkipped("2027-03-27", "02:30", "02:30", "Europe/Madrid", false)).toBe(false);
 });

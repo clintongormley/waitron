@@ -24,7 +24,7 @@ export interface AuthzInput {
 }
 export interface Authorization {
   authorizedBy: string;
-  permission: Permission;
+  permission: Permission | (string & {});
   viaOverride: boolean;
 }
 
@@ -40,7 +40,7 @@ export interface Authorization {
  */
 export async function authorize(
   tx: Transaction,
-  args: { sessionId: string; permission: Permission; override?: Override },
+  args: { sessionId: string; permission: Permission | (string & {}); override?: Override },
   attempts?: PinAttempts,
 ): Promise<Authorization> {
   // `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so a session whose person
@@ -67,4 +67,17 @@ export async function authorize(
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
   return { authorizedBy: args.override.personId, permission: args.permission, viaOverride: true };
+}
+
+export async function authorizeByPin(
+  tx: Transaction,
+  args: { permission: Permission | (string & {}); override: Override },
+  attempts: PinAttempts,
+): Promise<Authorization> {
+  const { personId, pin, checked } = args.override;
+  const cred = await verifyThrottledCredential(tx, personId, pin, attempts, checked);
+  if (!roleHasPermission(cred.role, args.permission)) {
+    throw new AppError("authorization.not_permitted", { permission: args.permission });
+  }
+  return { authorizedBy: personId, permission: args.permission, viaOverride: true };
 }

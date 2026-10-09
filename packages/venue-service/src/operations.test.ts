@@ -813,7 +813,17 @@ describe("venue service routing", () => {
       const terrace = await listZoneOffers(tx, { locationId }, zone);
       expect({ ...terrace, menus: terrace.menus.map(versionOf) }).toEqual({
         defaultMenuId: menu.id,
-        service: { open: true, periodName: "Always" },
+        service: {
+          open: true,
+          periodName: "Always",
+          keepOpen: {
+            periodId: expect.any(String),
+            periodName: "Always",
+            endsAt: "06:00",
+            running: true,
+            extendedUntil: null,
+          },
+        },
         menus: [{ id: menu.id, name: "Terrace", isDefault: true, versionId }],
         offers: [],
       });
@@ -2326,7 +2336,17 @@ describe("zone offers from the published menus", () => {
       );
       await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
-        service: { open: true, periodName: "Always" },
+        service: {
+          open: true,
+          periodName: "Always",
+          keepOpen: {
+            periodId: expect.any(String),
+            periodName: "Always",
+            endsAt: "06:00",
+            running: true,
+            extendedUntil: null,
+          },
+        },
         menus: [],
         offers: [],
       });
@@ -2414,7 +2434,17 @@ describe("zone offers from the published menus", () => {
       // The bar sells All day alone.
       await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
-        service: { open: true, periodName: "Always" },
+        service: {
+          open: true,
+          periodName: "Always",
+          keepOpen: {
+            periodId: expect.any(String),
+            periodName: "Always",
+            endsAt: "06:00",
+            running: true,
+            extendedUntil: null,
+          },
+        },
         menus: [],
         offers: [],
       });
@@ -2440,7 +2470,7 @@ describe("zone offers from the published menus", () => {
     await expect(
       scoped((tx) => menuState(tx, { locationId: otherLocation }, venue.diningZone)),
     ).resolves.toEqual({
-      service: { open: false, periodName: null },
+      service: { open: false, periodName: null, keepOpen: null },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
     });
@@ -2455,7 +2485,17 @@ describe("zone offers from the published menus", () => {
       ];
       const before = await menuState(tx, venue.cfg, venue.diningZone);
       expect({ ...before, menus: before.menus.map(stateVersionOf) }).toEqual({
-        service: { open: true, periodName: "Always" },
+        service: {
+          open: true,
+          periodName: "Always",
+          keepOpen: {
+            periodId: expect.any(String),
+            periodName: "Always",
+            endsAt: "06:00",
+            running: true,
+            extendedUntil: null,
+          },
+        },
         menus,
         unavailable: { products: [], optionLabels: [] },
       });
@@ -2506,14 +2546,14 @@ describe("zone offers from the published menus", () => {
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.cfg, venue.diningZone);
-      expect(prepared).toHaveBeenCalledTimes(13);
+      expect(prepared).toHaveBeenCalledTimes(14);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
       });
       await expect(menuState(tx, venue.cfg, UNKNOWN_ID)).resolves.toEqual({
-        service: { open: false, periodName: null },
+        service: { open: false, periodName: null, keepOpen: null },
         menus: [],
         unavailable: { products: [], optionLabels: [] },
       });

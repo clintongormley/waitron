@@ -1,3 +1,4 @@
+import { readKeepOpen, keepPeriodOpen } from "./keep-open.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
   listDepartmentTransferDestinations,
@@ -18,6 +19,7 @@ import {
   routingAt,
   stationStates,
 } from "./routing-store.js";
+import { stationDestinations, closeStationForToday, openStationForToday } from "./station-times.js";
 import type { VenueServiceContribution } from "@waitron/module";
 import {
   assertPeriodEndOffsets,
@@ -91,6 +93,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listServiceZones,
   resolveZoneContext,
   resolveDepartmentService,
+  readKeepOpen,
+  keepPeriodOpen,
   resolveSalePolicy,
   recordSaleReceiptHeader,
   readSaleReceiptHeader,
@@ -98,6 +102,9 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveExtraMakers,
   routingAt,
   stationStates,
+  stationDestinations,
+  closeStationForToday,
+  openStationForToday,
   describeMakers,
   listZoneOffers,
   resolveDefaultMenu,

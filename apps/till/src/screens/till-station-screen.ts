@@ -6,6 +6,7 @@ import { clockTime, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
+import "../widgets/station-today.js";
 import type {
   BumpMode,
   FireControlMode,
@@ -145,6 +146,7 @@ export class TillStationScreen extends LitElement {
   @property({ type: Boolean }) embedded = false;
 
   @state() private stations: Station[] = [];
+  @state() private deviceStation?: DeviceStation["station"];
   @state() private activeStationId?: string;
   @state() private groups: StationQueueGroup[] = [];
   @state() private printersDown: StationPrinterDown[] = [];
@@ -233,7 +235,7 @@ export class TillStationScreen extends LitElement {
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
     try {
-      await (this.deviceMode ? this.#loadDevice(read.signal) : this.#reload(read.signal));
+      await (this.deviceMode ? this.#loadDevice(read.signal) : this.#reload(read.signal, true));
     } finally {
       clearTimeout(limit);
       this.#refreshReads.delete(read);
@@ -311,13 +313,14 @@ export class TillStationScreen extends LitElement {
 
   #adoptDeviceStation({ station }: DeviceStation): void {
     this.activeStationId = station.id;
+    this.deviceStation = station;
     this.groups = station.queue;
     this.printersDown = station.printersDown ?? [];
     this.#adoptNotices(station.notices);
     this.#readSucceeded();
   }
 
-  async #reload(signal?: AbortSignal): Promise<void> {
+  async #reload(signal?: AbortSignal, refreshStations = false): Promise<void> {
     if (this.deviceMode) {
       const request = ++this.#queueRequest;
       try {
@@ -331,10 +334,14 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId === undefined) return;
     const request = ++this.#queueRequest;
     try {
-      const { items, notices, printersDown } = await (signal === undefined
-        ? this.api.getStationQueue(this.activeStationId)
-        : this.api.getStationQueue(this.activeStationId, { signal }));
+      const [{ items, notices, printersDown }, stations] = await Promise.all([
+        signal === undefined
+          ? this.api.getStationQueue(this.activeStationId)
+          : this.api.getStationQueue(this.activeStationId, { signal }),
+        refreshStations ? this.api.listStations({ signal }) : Promise.resolve(this.stations),
+      ]);
       if (this.isConnected && this.#isNewest(request)) {
+        this.stations = stations;
         this.groups = items;
         this.printersDown = printersDown ?? [];
         this.#adoptNotices(notices);
@@ -516,7 +523,24 @@ export class TillStationScreen extends LitElement {
   }
 
   #renderDevice(): TemplateResult {
-    return this.#renderQueueSurface({ showBack: false, body: this.#queue(true) });
+    const bound = this.deviceStation;
+    const today = bound?.today;
+    return this.#renderQueueSurface({
+      showBack: false,
+      body: html`
+        <till-station-today
+          .api=${this.api}
+          .deviceMode=${true}
+          .station=${bound && today ? { id: bound.id, name: bound.name, active: today.why !== "switched_off", isDefault: today.isDefault, open: today.open, byHand: today.byHand, sendsTo: today.sendsTo?.id ?? null, why: today.why } : undefined}
+          .stations=${today?.sendsTo ? [today.sendsTo] : []}
+          @station-today-changed=${(event: Event) => {
+            event.stopPropagation();
+            void this.#reload();
+          }}
+        ></till-station-today>
+        ${this.#queue(true)}
+      `,
+    });
   }
 
   #renderQueueSurface(opts: { showBack: boolean; body: TemplateResult }): TemplateResult {
@@ -599,6 +623,15 @@ export class TillStationScreen extends LitElement {
       <nav class="picker" aria-label=${t("station.pick")}>
         ${this.stations.map((station) => this.#pick(station))}
       </nav>
+      <till-station-today
+        .api=${this.api}
+        .station=${this.stations.find((station) => station.id === this.activeStationId)}
+        .stations=${this.stations}
+        @station-today-changed=${(event: Event) => {
+          event.stopPropagation();
+          void this.#reload(undefined, true);
+        }}
+      ></till-station-today>
       ${this.#queue(false)}
     `;
   }
@@ -635,7 +668,11 @@ export class TillStationScreen extends LitElement {
       aria-pressed=${active ? "true" : "false"}
       @click=${() => void this.#selectStation(station.id)}
     >
-      ${station.name}
+      ${
+        station.open
+          ? station.name
+          : t("station_today.picker_closed").replace("{station}", () => station.name)
+      }
     </wt-button>`;
   }
 }

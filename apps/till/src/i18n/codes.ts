@@ -3,6 +3,27 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "period_extension.invalid": {
+    en: "Choose a later time, in 15-minute steps, before the end of the day.",
+    es: "Elige una hora posterior, en pasos de 15 minutos, antes del final del día.",
+  },
+  "period_extension.not_allowed": {
+    en: "Only the period running now, or the last one today, can be kept open.",
+    es: "Solo se puede ampliar el periodo en curso o el último de hoy.",
+  },
+  "station.destination_invalid": {
+    en: "That station cannot take the work now. Choose another.",
+    es: "Esa estación no puede recibir el trabajo ahora. Elige otra.",
+  },
+  "station.always_open": {
+    en: "The default station is always open.",
+    es: "La estación predeterminada siempre está abierta.",
+  },
+  "time_zone.unreadable": {
+    en: "The venue's clock cannot be read, so this cannot be changed now.",
+    es: "No se puede leer la hora del local, así que ahora no se puede cambiar.",
+  },
+
   "menu_period.not_running": {
     en: "That menu is not available in the current period.",
     es: "Esa carta no está disponible en el periodo actual.",
@@ -408,6 +429,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // tell an unapproved device something about the venue's state.
   // The two card reader paths (the counter's card collect and the bill pay dialog) show
   // `card_reader.not_set_up` for the reader's own `device.forbidden_action` (action `pay`).
+  "device.forbidden_station": {
+    en: "This device cannot use that station. Ask a manager to check its settings.",
+    es: "Este dispositivo no puede usar esa estación. Pide a un responsable que revise sus ajustes.",
+  },
   "device.forbidden_action": {
     en: "This device's profile doesn't allow that. Ask a manager to change it.",
     es: "El perfil de este dispositivo no lo permite. Pide a un responsable que lo modifique.",

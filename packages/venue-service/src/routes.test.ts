@@ -852,32 +852,19 @@ describe("venue service management routes", () => {
     ).toBeNull();
   });
 
-  it("saves and clears today's by-hand state and validates its value", async () => {
+  it("the retired dashboard station today route answers 404 without changing its state", async () => {
     const fx = await fixture();
     const path = `/management-api/venue-service/stations/${fx.stationId}/today`;
-    expect((await send(fx.app, "PUT", path, fx.managerCookie, { state: "closed" })).status).toBe(
-      204,
-    );
-    const model = (await (
-      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
-    ).json()) as { stationTimes: { stationId: string; today: string | null }[] };
-    expect(model.stationTimes.find((station) => station.stationId === fx.stationId)?.today).toBe(
-      "closed",
-    );
-    for (const state of [undefined, "unknown"]) {
-      const response = await send(
-        fx.app,
-        "PUT",
-        path,
-        fx.managerCookie,
-        state === undefined ? {} : { state },
-      );
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "state" } },
-      });
+    const read = async () =>
+      (await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)).json();
+    const before = await read();
+    for (const state of ["closed", "open", null, "unknown", undefined]) {
+      expect(
+        (await send(fx.app, "PUT", path, fx.managerCookie, state === undefined ? {} : { state }))
+          .status,
+      ).toBe(404);
     }
-    expect((await send(fx.app, "PUT", path, fx.managerCookie, { state: null })).status).toBe(204);
+    expect(await read()).toEqual(before);
   });
   it("edits a department in place", async () => {
     const fx = await fixture();
@@ -2516,7 +2503,7 @@ describe("read-only station overview", () => {
           { state: "closed" },
         )
       ).status,
-    ).toBe(403);
+    ).toBe(404);
   });
   it("refuses staff and unauthenticated overview reads while serving managers", async () => {
     const f = await fixture();

@@ -384,16 +384,11 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
 );
 
 it.each([
-  ["close-today-upstairs", "in_hours"],
-  ["open-today-upstairs", "out_of_hours"],
-  ["schedule-upstairs", "closed_by_hand"],
   ["default-upstairs", "in_hours"],
   ["switch-off-upstairs", "in_hours"],
   ["switch-on-retired", "in_hours"],
 ] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
-  const next = withUpstairs(why === "in_hours" ? { open: true, why } : { open: false, why }, {
-    today: why === "closed_by_hand" ? "closed" : null,
-  });
+  const next = withUpstairs({ open: true, why });
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
   next.routing.stations.push({ id: "retired", name: "Retired", active: false });
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
@@ -729,38 +724,6 @@ it.each([
   },
 );
 
-it("confirms a by-hand closure and clears it back to the schedule", async () => {
-  setLocale("en");
-  const a = api({
-    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-    setStationToday: vi.fn(),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="close-today-upstairs"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="station-action-modal"]')?.textContent).toContain(
-    "Upstairs bar's work goes to Bar until 06:00 tomorrow.",
-  );
-  expect(a.setStationToday).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(a.setStationToday).toHaveBeenCalledWith("upstairs", "closed");
-});
-
-it("shows no replacement in the confirmation when a closed station has no fallback", async () => {
-  setLocale("en");
-  const next = withUpstairs(
-    { open: true, why: "in_hours" },
-    { fallbackStationId: null, closedSendsTo: null },
-  );
-  next.routing.todayEnds = { timeOfDay: "06:00", tomorrow: false };
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-  q(el, '[data-test="close-today-upstairs"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="station-action-modal"]')?.textContent).toContain(
-    "the till will ask where to send its dishes, until 06:00 today.",
-  );
-});
 it("explains product and category cells, defaults and an unroutable product", async () => {
   setLocale("en");
   const a = api({
@@ -1879,44 +1842,6 @@ it("reports unreadable venue time on every Stations row", async () => {
       "Opening hours are not applied: the venue's time zone or day cutover cannot be read.",
     );
 });
-it.each(["open", null] as const)("saves the by-hand action %s", async (state) => {
-  const a = api({
-    load: vi
-      .fn()
-      .mockResolvedValue(
-        withUpstairs(
-          { open: false, why: state ? "out_of_hours" : "closed_by_hand" },
-          { today: state ? null : "closed" },
-        ),
-      ),
-    setStationToday: vi.fn(),
-  });
-  const el = await mount(a);
-  q(el, `[data-test="${state ? "open-today" : "schedule"}-upstairs"]`)!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(a.setStationToday).toHaveBeenCalledWith("upstairs", state);
-});
-it("shows a refused by-hand closure at the end of the dialog body and allows retry", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-    setStationToday: vi.fn().mockRejectedValue({ code: "time_zone.unreadable" }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="close-today-upstairs"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  const dialog = q(el, '[data-test="station-action-modal"]')!;
-  expect(dialog.querySelector('[role="alert"]')!.textContent).toContain("time zone");
-  expect(dialog.querySelector('[role="alert"]')!.nextElementSibling?.localName).toBe(
-    "wt-form-actions",
-  );
-  expect(
-    (q(el, '[data-test="confirm-station-action"]') as HTMLElement & { disabled: boolean }).disabled,
-  ).toBe(false);
-});
 it.each([
   [true, true, "bar", "", "While Upstairs bar is closed, its work will go to Bar."],
   [false, true, "bar", "", "That starts now."],
@@ -2269,51 +2194,6 @@ it("localizes the fallback search field in Spanish", async () => {
     "Buscar estaciones",
   );
 });
-
-it.each(["success", "refusal"] as const)(
-  "guards the pending close dialog against cancellation until %s",
-  async (outcome) => {
-    let resolve!: () => void;
-    let reject!: (reason: unknown) => void;
-    const pending = new Promise<void>((ok, no) => {
-      resolve = ok;
-      reject = no;
-    });
-    const a = api({
-      load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-      setStationToday: vi.fn(() => pending),
-    });
-    const el = await mount(a);
-    q(el, '[data-test="close-today-upstairs"]')!.click();
-    await settle(el);
-    q(el, '[data-test="confirm-station-action"]')!.click();
-    await settle(el);
-    const dialog = q(el, '[data-test="station-action-modal"]')!;
-    const cancel = dialog.querySelector<HTMLElement & { disabled: boolean }>(
-      'wt-button[slot="cancel"]',
-    )!;
-    expect(cancel.disabled).toBe(true);
-    cancel.click();
-    dialog.dispatchEvent(new CustomEvent("wt-close"));
-    q(el, '[data-test="disable-upstairs"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-test="station-action-modal"]')).toBe(dialog);
-    if (outcome === "refusal") reject({ code: "time_zone.unreadable" });
-    else resolve();
-    await settle(el);
-    if (outcome === "refusal") {
-      expect(
-        q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
-      ).toContain("time zone");
-      cancel.click();
-      await settle(el);
-    }
-    expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
-    q(el, '[data-test="disable-upstairs"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe("Disable");
-  },
-);
 
 it.each([
   [
@@ -2738,7 +2618,7 @@ it("replaces invalid tabs with Stations and ignores nested tab changes", async (
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
 });
 
-it("has no station hours section or editor, and keeps Today's schedule actions", async () => {
+it("has no station hours section, editor or Today actions", async () => {
   setLocale("en");
   const el = await mount(
     api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
@@ -2747,15 +2627,8 @@ it("has no station hours section or editor, and keeps Today's schedule actions",
   for (const id of ["bar", "upstairs"]) expect(q(el, `[data-test="edit-hours-${id}"]`)).toBeNull();
   expect(customElements.get("station-hours-form")).toBeUndefined();
   expect(el.shadowRoot!.textContent).not.toContain("Edit hours");
-  const close = healthRow(el, "upstairs").querySelector<HTMLElement>(
-    '[data-test="close-today-upstairs"]',
-  )!;
-  expect(close.textContent!.trim()).toBe("Close for today");
-  close.click();
-  await settle(el);
-  expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(
-    "Close for today",
-  );
+  expect(healthRow(el, "upstairs").querySelector('[data-test="close-today-upstairs"]')).toBeNull();
+  expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
   expect(el.shadowRoot!.querySelector("station-hours-form")).toBeNull();
 });
 
@@ -2779,14 +2652,12 @@ it("Today redraws the scheduled label when the next background read no longer ca
     expect(cell().textContent).toContain(
       "Closed now, closed by hand until 06:00 tomorrow. Its work goes to Bar.",
     );
-    expect(cell().querySelector('[data-test="schedule-upstairs"]')!.textContent!.trim()).toBe(
-      "Back to the schedule",
-    );
+    expect(cell().querySelector("wt-button")).toBeNull();
     await vi.advanceTimersByTimeAsync(60_000);
     await settle(el);
     expect(cell().textContent).toContain("Open until 01:00 tomorrow");
     expect(cell().querySelector('[data-test="schedule-upstairs"]')).toBeNull();
-    expect(cell().querySelector('[data-test="close-today-upstairs"]')).not.toBeNull();
+    expect(cell().querySelector('[data-test="close-today-upstairs"]')).toBeNull();
   } finally {
     vi.useRealTimers();
   }
@@ -2948,7 +2819,6 @@ async function mountToday(
         name: station.name,
       })),
     }),
-    setStationToday: vi.fn(),
     ...overrides,
   });
   return { a, el: await mount(a, theme) };
@@ -2962,35 +2832,9 @@ it("Today leaves default and unscheduled stations always open without a closure 
     expect(row.querySelectorAll("td")[1]!.querySelector("wt-button")).toBeNull();
   }
 });
-it.each([
-  ["open", { open: false, why: "out_of_hours" }, "open", "Open for today"],
-  ["close", { open: true, why: "in_hours" }, "closed", "Close for today"],
-] as const)(
-  "Today confirms a %s action on the selected station before writing",
-  async (action, status, state, label) => {
-    setLocale("en");
-    const { a, el } = await mountToday(
-      withUpstairs(status, {
-        hours: [{ weekday: 1, opensAt: "12:00", closesAt: "01:00" }],
-      }),
-    );
-    const button = healthSummary(el)!.querySelector<HTMLElement>(
-      `[data-test="${action}-today-upstairs"]`,
-    );
-    expect(button).not.toBeNull();
-    expect(button!.textContent!.trim()).toBe(label);
-    button!.click();
-    await settle(el);
-    expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(label);
-    expect(a.setStationToday).not.toHaveBeenCalled();
-    q(el, '[data-test="confirm-station-action"]')!.click();
-    await settle(el);
-    expect(a.setStationToday).toHaveBeenCalledExactlyOnceWith("upstairs", state);
-  },
-);
-it("Today names the effective fallback and returns a by-hand closure to the schedule", async () => {
+it("Today names the chosen destination without offering a schedule action", async () => {
   setLocale("en");
-  const { a, el } = await mountToday(
+  const { el } = await mountToday(
     withUpstairs(
       { open: false, why: "closed_by_hand" },
       {
@@ -3002,15 +2846,8 @@ it("Today names the effective fallback and returns a by-hand closure to the sche
   );
   const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
   expect(cell.textContent).toContain("Its work goes to Bar.");
-  const button = cell.querySelector<HTMLElement>('[data-test="schedule-upstairs"]');
-  expect(button).not.toBeNull();
-  expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
-  button!.click();
-  await settle(el);
-  expect(a.setStationToday).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(a.setStationToday).toHaveBeenCalledExactlyOnceWith("upstairs", null);
+  expect(cell.querySelector("wt-button")).toBeNull();
+  expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
 });
 it("Today offers no hours action for disabled stations or an unreadable venue clock", async () => {
   setLocale("en");
@@ -3025,37 +2862,6 @@ it("Today offers no hours action for disabled stations or an unreadable venue cl
   expect(cells[1]!.textContent!.trim()).toBe("Disabled");
   for (const cell of cells) expect(cell.querySelector("wt-button")).toBeNull();
 });
-it("Today keeps its confirmation and refusal after a write fails and allows a retry", async () => {
-  setLocale("en");
-  const { a, el } = await mountToday(
-    withUpstairs(
-      { open: true, why: "in_hours" },
-      {
-        hours: [{ weekday: 1, opensAt: "12:00", closesAt: "01:00" }],
-      },
-    ),
-    {
-      setStationToday: vi
-        .fn()
-        .mockRejectedValueOnce(new Error("offline"))
-        .mockResolvedValue(undefined),
-    },
-  );
-  const button = healthSummary(el)!.querySelector<HTMLElement>(
-    '[data-test="close-today-upstairs"]',
-  );
-  expect(button).not.toBeNull();
-  button!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="station-action-modal"]')!.textContent).toContain("could not be saved");
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(a.setStationToday).toHaveBeenCalledTimes(2);
-  expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
-});
-
 it.each([
   ["en", "light", 390],
   ["en", "dark", 390],
@@ -3065,7 +2871,7 @@ it.each([
   ["en", "dark", 1280],
   ["es", "light", 1280],
   ["es", "dark", 1280],
-] as const)("Today controls remain accessible in %s %s at %ipx", async (locale, theme, width) => {
+] as const)("Today status remains accessible in %s %s at %ipx", async (locale, theme, width) => {
   const previous = {
     width: window.innerWidth,
     height: window.innerHeight,
@@ -3074,6 +2880,7 @@ it.each([
   };
   try {
     await page.viewport(width, 900);
+    expect(window.innerWidth).toBe(width);
     setLocale(locale);
     history.replaceState(null, "", "/manage/prep-stations");
     const next = withUpstairs(
@@ -3098,18 +2905,29 @@ it.each([
     document.body.style.background = canvas;
     document.documentElement.style.background = canvas;
     const summary = healthSummary(el)!;
-    const close = summary.querySelector<HTMLElement>('[data-test="close-today-upstairs"]')!;
-    const schedule = summary.querySelector<HTMLElement>('[data-test="schedule-closed"]')!;
-    expect(close.textContent!.trim()).toBe(locale === "en" ? "Close for today" : "Cerrar por hoy");
-    expect(schedule.textContent!.trim()).toBe(
-      locale === "en" ? "Back to the schedule" : "Volver al horario",
+    expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
+    expect(summary.querySelector('[data-test="schedule-closed"]')).toBeNull();
+    expect(summary.textContent).toContain(
+      locale === "en" ? "Open until 01:00 tomorrow" : "Abierta hasta las 01:00 mañana",
+    );
+    expect(summary.textContent).toContain(
+      locale === "en" ? "Its work goes to Bar." : "Su trabajo va a Bar.",
     );
     expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-    expect(close.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     await expectNoA11yViolations(host);
-    await page.elementLocator(close).click();
-    await settle(el);
+    await page.screenshot({ path: `__screenshots__/a8-stations-${locale}-${theme}-${width}.png` });
+    const fallback = await openSettingsFallback(el);
+    expect(fallback.label).toBe(
+      locale === "en"
+        ? "Upstairs bar: Outside its hours, work goes to"
+        : "Upstairs bar: Fuera de su horario, el trabajo va a",
+    );
     await expectNoA11yViolations(host);
+    fallback.scrollIntoView({ block: "nearest", inline: "end" });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(fallback.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+    expect(fallback.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `__screenshots__/a8-settings-${locale}-${theme}-${width}.png` });
   } finally {
     document.body.style.background = previous.body;
     document.documentElement.style.background = previous.canvas;
@@ -3141,7 +2959,7 @@ it.each([
     expect(cell.textContent).toContain(expected);
     expect(
       cell.querySelector(`[data-test="${open ? "close" : "open"}-today-upstairs"]`),
-    ).not.toBeNull();
+    ).toBeNull();
   },
 );
 
@@ -3170,12 +2988,13 @@ it.each([false, true])(
         ...(live ? { liveData: new LiveData() } : {}),
         background: { load: backgroundLoad } as unknown as PrepStationsApi,
       });
-      expect(healthSummary(el)!.querySelector('[data-test="open-today-upstairs"]')).not.toBeNull();
+      expect(healthSummary(el)!.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
+      expect(healthSummary(el)!.textContent).toContain("Opens at 12:00");
       await vi.advanceTimersByTimeAsync(60_000);
       await settle(el);
       const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
       expect(cell.textContent).toContain("Open until 01:00 tomorrow");
-      expect(cell.querySelector('[data-test="close-today-upstairs"]')).not.toBeNull();
+      expect(cell.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
       expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
       el.remove();
       const count = backgroundLoad.mock.calls.length;
@@ -7156,3 +6975,19 @@ describe("Save follows changes", () => {
     await state(form.button(), false);
   });
 });
+
+it.each(["en", "es"] as const)(
+  "the configured fallback names outside-hours work in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(
+      api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
+    );
+    const combo = await openSettingsFallback(el);
+    expect(combo.label).toBe(
+      locale === "en"
+        ? "Upstairs bar: Outside its hours, work goes to"
+        : "Upstairs bar: Fuera de su horario, el trabajo va a",
+    );
+  },
+);

@@ -1257,14 +1257,20 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
-  stopping for the owner**. Slice 7's plan/spec apply the owner's 2026-10-08 receipt answers;
-  BUILD waits for same-lane 3A to land, then 6A, before 7A (two PRs; Part B depends on slice 6).
-  Opening hours and
-  the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
-  a department's day is time ranges each given a period, with last-order and leftover windows
-  set by its signed end offset. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
-  zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7.** Zone closed times
+  and named days remain in slice 2; keeping a zone open later remains in slice 3 Part B.
+  Station-hours and fallback retirement, period routing, combined tickets, monitors, department
+  pages and department receipts remain in slices 4–7. Slice 7's plan/spec apply the owner's
+  2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
+  [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+
+- **Sending grace after a period extension is replaced or expires** — decide whether a positive
+  end offset survives a later period's extension or the business-day changeover; two real-store
+  probes observed it ending with the replaced/expired row. The current one-row/today-only rule is
+  approved slice 3 decision 4. [Detail](backlog/service-periods.md#sending-grace-when-a-period-extension-is-replaced-or-expires)
+- **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
+  the authorising person's identity unstored. Decide whether to retain that identity before
+  adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-period-change)
 
 - **Changing the business-day start after saving service hours** — open review follow-up from
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
@@ -1317,10 +1323,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   untranslated in English; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
 
-- **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
-  calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
-  Take a manager's PIN as the cash drawer route does (`POST /api/drawer/open`,
-  `apps/server/src/till-api.ts`).
 
 ### The kitchen and preparation
 

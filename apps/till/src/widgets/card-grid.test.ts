@@ -405,8 +405,28 @@ describe("till-card-grid", () => {
   it("renders an embedded table-order screen for a table-order card", async () => {
     const store = new WorkingOrderStore();
     const stations: Station[] = [
-      { id: "bar", name: "Bar", displayOrder: 0, isDefault: true, active: true, open: true },
-      { id: "grill", name: "Grill", displayOrder: 1, isDefault: false, active: true, open: true },
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 0,
+        isDefault: true,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default" as const,
+      },
+      {
+        id: "grill",
+        name: "Grill",
+        displayOrder: 1,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open" as const,
+      },
     ];
     const groups = [
       {

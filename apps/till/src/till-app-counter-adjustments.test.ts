@@ -59,7 +59,7 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  service: { open: true, periodName: null },
+  service: { open: true, periodName: null, keepOpen: null },
   context: {
     departmentName: "Restaurant",
     zoneId: "zone-counter",
@@ -327,8 +327,28 @@ const offered = (el: TillApp) =>
   ).length;
 
 const stations = [
-  { id: "bar", name: "Bar", displayOrder: 1, isDefault: false, active: true, open: true },
-  { id: "grill", name: "Grill", displayOrder: 2, isDefault: true, active: true, open: true },
+  {
+    id: "bar",
+    name: "Bar",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "open" as const,
+  },
+  {
+    id: "grill",
+    name: "Grill",
+    displayOrder: 2,
+    isDefault: true,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "default" as const,
+  },
 ];
 
 beforeEach(() => setLocale("en"));

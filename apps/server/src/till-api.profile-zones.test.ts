@@ -68,6 +68,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | ------------------------------------------------------- | ---------------------- | ---------------------------------------------------- |
  * | GET  /api/default-service-zone/offers                   | profile start; list    | "starts at the profile's starting zone and lists..." |
  * | GET  /api/service-zones/:zoneId/offers                  | path zone              | refuses GET /api/service-zones/:zoneId/offers        |
+ * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses GET for a zone outside the profile department |
+ * | PUT  /api/service-zones/:zoneId/period-extension        | path zone              | till-api.keep-open.test.ts: refuses PUT for a zone outside the profile department |
  * | GET  /api/menu-state?zoneId                             | query zone; or start   | refuses GET /api/menu-state?zoneId                   |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
  * | POST /api/sales                                         | body zone; body order  | refuses POST /api/sales (zone), (order)              |
@@ -148,7 +150,9 @@ import { offerProducts } from "./testing/zone-offers.js";
  * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
  * any transaction.
  *
- * Not zone-gated: the session, staff, till, locale and product reads; the kitchen's station,
+ * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
+ * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
+ * reads; the kitchen's station,
  * notice, ticket-item, expo, watcher and `/api/orders/:id/stations/:sid/advance` routes, whose scope
  * is the device's station or watcher ("a kitchen display" below); and the drawer, the authorizer and reason lists,
  * `/api/statuses` and `GET/PUT /api/device/equipment`, which name no zone.

@@ -6,13 +6,14 @@ import { AppError } from "@waitron/shared";
 
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
-import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
-  calendarDateOfTime,
+  clockTimeSkipped,
   parseServiceDay,
   rangeInForce,
   rangeSpan,
   serviceMomentAt,
+  withExtension,
+  type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
 import type { SpecialDateParticipant } from "./hours.js";
@@ -30,6 +31,7 @@ import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } fro
 import { specialDates } from "./schema/hours.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
+import { periodExtensions } from "./schema/period-extensions.js";
 import "./errors.js";
 
 const wire = (time: string) => time.slice(0, 5);
@@ -157,15 +159,7 @@ function skippedSlot(
   if (clock.zone === null) return null;
   for (const [position, slot] of slots.entries())
     for (const end of ["startsAt", "endsAt"] as const)
-      if (
-        localTimeOccurrences(
-          end === "endsAt" && slot[end] === clock.cutover
-            ? addDays(date, 1)
-            : calendarDateOfTime(date, slot[end], clock.cutover),
-          slot[end],
-          clock.zone,
-        ).length === 0
-      )
+      if (clockTimeSkipped(date, slot[end], clock.cutover, clock.zone, end === "endsAt"))
         return { position, end };
   return null;
 }
@@ -284,15 +278,13 @@ async function assertCalendarEndOffsets(
   if (clash !== null) throw new AppError("hours.invalid", { field, date: clash.date });
 }
 
-export async function resolveDepartmentService(
+export async function departmentDay(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  at: Date,
-): Promise<DepartmentService> {
-  await assertDepartment(tx, cfg, departmentId);
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const moment = serviceMomentAt(at, clock);
+  moment: ServiceMoment | null,
+  clock: { dayCutover: string },
+) {
   const periods = await tx
     .select({
       id: menuPeriods.id,
@@ -308,31 +300,7 @@ export async function resolveDepartmentService(
     .from(menuPeriodStaffMenus)
     .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
-  const menusOf = (periodId: string): string[] => {
-    const period = periods.find((entry) => entry.id === periodId)!;
-    return [
-      period.menuId,
-      ...staff.filter((entry) => entry.periodId === periodId).map((entry) => entry.menuId),
-    ];
-  };
-  const closed: DepartmentService = {
-    departmentId,
-    open: false,
-    periodId: null,
-    periodName: null,
-    customerMenuId: null,
-    orderableMenuIds: [],
-    sendableMenuIds: [],
-    endedMenuIds: [],
-  };
-  if (moment === null)
-    return {
-      ...closed,
-      open: true,
-      orderableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
-      sendableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
-    };
-
+  if (moment === null) return { periods, staff, ranges: [], previousRanges: [], extension: null };
   const yesterday = addDays(moment.businessDay, -1);
   const dates = await tx
     .select({
@@ -392,13 +360,121 @@ export async function resolveDepartmentService(
           .sort(
             (a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start,
           );
-  const ranges = rangesOn(today?.id);
+  const [row] = await tx
+    .select({
+      periodId: periodExtensions.periodId,
+      startsAt: periodExtensions.startsAt,
+      endsAt: periodExtensions.endsAt,
+    })
+    .from(periodExtensions)
+    .where(
+      and(
+        eq(periodExtensions.departmentId, departmentId),
+        eq(periodExtensions.businessDay, moment.businessDay),
+      ),
+    );
+  const extension =
+    row === undefined
+      ? null
+      : {
+          periodId: row.periodId,
+          startsAt: wire(row.startsAt),
+          endsAt: wire(row.endsAt),
+        };
+  return {
+    periods,
+    staff,
+    ranges: rangesOn(today?.id),
+    previousRanges: rangesOn(previous?.id),
+    extension,
+  };
+}
+
+export function serviceRuns(ranges: readonly ServiceRange[]): ServiceRange[] {
+  const runs: ServiceRange[] = [];
+  for (const range of ranges) {
+    const last = runs.at(-1);
+    if (last?.periodId === range.periodId && last.endsAt === range.startsAt)
+      last.endsAt = range.endsAt;
+    else runs.push({ ...range });
+  }
+  return runs;
+}
+
+export function keepOpenSubject(
+  ranges: readonly ServiceRange[],
+  day: Awaited<ReturnType<typeof departmentDay>>,
+  moment: ServiceMoment | null,
+  cutover: string,
+): DepartmentService["keepOpen"] {
+  if (moment === null) return null;
+  const runs = serviceRuns(ranges);
+  const running = rangeInForce(runs, moment.minute, cutover);
+  const run =
+    running ??
+    runs
+      .slice()
+      .reverse()
+      .find((range) => rangeSpan(range, cutover).end <= moment.minute);
+  if (run === undefined) return null;
+  const period = day.periods.find((entry) => entry.id === run.periodId)!;
+  const extended = day.extension;
+  return {
+    periodId: period.id,
+    periodName: period.name,
+    endsAt: run.endsAt,
+    running: running !== null,
+    extendedUntil:
+      extended !== null && extended.periodId === run.periodId && extended.endsAt === run.endsAt
+        ? extended.endsAt
+        : null,
+  };
+}
+
+export async function resolveDepartmentService(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  at: Date,
+): Promise<DepartmentService> {
+  await assertDepartment(tx, cfg, departmentId);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  const day = await departmentDay(tx, cfg, departmentId, moment, clock);
+  const { periods, staff } = day;
+  const menusOf = (periodId: string): string[] => {
+    const period = periods.find((entry) => entry.id === periodId)!;
+    return [
+      period.menuId,
+      ...staff.filter((entry) => entry.periodId === periodId).map((entry) => entry.menuId),
+    ];
+  };
+  const closed: DepartmentService = {
+    departmentId,
+    open: false,
+    periodId: null,
+    periodName: null,
+    customerMenuId: null,
+    orderableMenuIds: [],
+    sendableMenuIds: [],
+    endedMenuIds: [],
+    keepOpen: null,
+  };
+  if (moment === null)
+    return {
+      ...closed,
+      open: true,
+      orderableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
+      sendableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
+    };
+
+  const ranges = withExtension(day.ranges, day.extension, clock.dayCutover);
   const running = rangeInForce(ranges, moment.minute, clock.dayCutover);
   const period =
     running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
   const occurrences = [
-    ...rangesOn(previous?.id).map((range) => ({ range, day: -1440 })),
-    ...ranges.map((range) => ({ range, day: 0 })),
+    ...day.previousRanges.map((range) => ({ range, day: -1440 })),
+    ...serviceRuns(ranges).map((range) => ({ range, day: 0 })),
   ];
   const eligibleMenus = (selection: boolean): string[] => [
     ...new Set(
@@ -415,7 +491,7 @@ export async function resolveDepartmentService(
   const orderableMenuIds = eligibleMenus(true);
   const sendableMenuIds = eligibleMenus(false);
   const ended = [
-    ...rangesOn(previous?.id),
+    ...day.previousRanges,
     ...ranges.filter((range) => rangeSpan(range, clock.dayCutover).end <= moment.minute),
   ];
   return {
@@ -426,6 +502,7 @@ export async function resolveDepartmentService(
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,
     sendableMenuIds,
+    keepOpen: keepOpenSubject(ranges, day, moment, clock.dayCutover),
     endedMenuIds: [...new Set(ended.flatMap((range) => menusOf(range.periodId)))].filter(
       (id) => !orderableMenuIds.includes(id),
     ),

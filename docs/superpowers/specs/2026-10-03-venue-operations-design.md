@@ -1,3 +1,7 @@
+> **2026-10-08 update:** A366 slice 3 removes the dashboard's today controls and write route.
+> The Today column keeps status and destination text. See the
+> [slice 3 plan](../plans/2026-10-08-a366-slice-3-station-controls.md#task-a8-dashboard--the-prep-stations-screen-loses-its-today-buttons).
+
 > **2026-10-06, A261 step 8:** Printing rules and the venue drawer policy are retired.
 > Manual opening always requires `cash.drawer` or a permitted supervisor PIN; receipt policy
 > belongs to departments and zones. The legacy location receipt/drawer columns are removed

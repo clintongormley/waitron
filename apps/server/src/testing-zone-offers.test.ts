@@ -11,7 +11,13 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { getOrderServiceContext, resolveZoneContext, listZoneOffers } from "@waitron/venue-service";
+import {
+  getOrderServiceContext,
+  resolveZoneContext,
+  listZoneOffers,
+  menuPeriods,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   assignCatalogueToLocation,
@@ -172,6 +178,14 @@ describe("offerProducts", () => {
       return offers;
     });
     await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const [savedPeriod] = await suite.db
+      .select({ id: menuPeriods.id })
+      .from(menuPeriods)
+      .innerJoin(
+        zoneServicePolicies,
+        eq(zoneServicePolicies.departmentId, menuPeriods.departmentId),
+      )
+      .where(eq(zoneServicePolicies.zoneId, first.zoneId));
     for (const hour of ["03", "15"]) {
       const served = await withTransaction(suite.db, (tx) =>
         listZoneOffers(tx, venue.cfg, first.zoneId, {
@@ -179,7 +193,17 @@ describe("offerProducts", () => {
         }),
       );
       expect(served.defaultMenuId).toBe(venue.catalogueId);
-      expect(served.service).toEqual({ open: true, periodName: "Always" });
+      expect(served.service).toEqual({
+        open: true,
+        periodName: "Always",
+        keepOpen: {
+          periodId: savedPeriod!.id,
+          periodName: "Always",
+          endsAt: "06:00",
+          running: true,
+          extendedUntil: null,
+        },
+      });
       expect(
         served.menus.map(({ id, orderable, audience }) => ({ id, orderable, audience })),
       ).toEqual([

@@ -4,7 +4,7 @@ import type { MenuState } from "../api/client.js";
 
 function state(versionId: string): MenuState {
   return {
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
     unavailable: { products: [], optionLabels: [] },
   };
@@ -170,4 +170,47 @@ describe("MenuStatePoll", () => {
     expect(read).not.toHaveBeenCalled();
     poll.stop();
   });
+});
+
+it("reads only the requested zone immediately and reports its answer without waiting for a tick", async () => {
+  const { read, reads } = pendingRead();
+  const onState = vi.fn();
+  const poll = new MenuStatePoll({ read, zones: () => ["counter", "terrace"], onState });
+  poll.start();
+  const done = poll.readNow("terrace");
+  expect(reads.map((r) => r.zoneId)).toEqual(["terrace"]);
+  reads[0]!.answer(state("v2"));
+  await done;
+  expect(onState.mock.calls).toEqual([["terrace", state("v2")]]);
+  poll.stop();
+});
+
+it("keeps the immediate result when an older periodic read answers afterwards", async () => {
+  const { read, reads } = pendingRead();
+  const onState = vi.fn();
+  const poll = new MenuStatePoll({ read, zones: () => ["counter"], onState });
+  poll.start();
+  vi.advanceTimersByTime(15_000);
+  const done = poll.readNow("counter");
+  reads[1]!.answer(state("v3"));
+  await done;
+  reads[0]!.answer(state("v2"));
+  await settle();
+  expect(onState.mock.calls).toEqual([["counter", state("v3")]]);
+  poll.stop();
+});
+
+it("ignores an immediate read after stop and does not start reads while stopped", async () => {
+  const { read, reads } = pendingRead();
+  const onState = vi.fn();
+  const poll = new MenuStatePoll({ read, zones: () => ["counter"], onState });
+  await poll.readNow("counter");
+  expect(reads).toEqual([]);
+  poll.start();
+  const done = poll.readNow("counter");
+  poll.stop();
+  reads[0]!.answer(state("v2"));
+  await done;
+  expect(reads[0]!.signal.aborted).toBe(true);
+  expect(onState).not.toHaveBeenCalled();
 });

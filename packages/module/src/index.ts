@@ -26,6 +26,8 @@ export type {
   MakerOutcome,
   ExtraMakerOutcome,
   MakerResolver,
+  StationTodayState,
+  KeepOpenSubject,
   ServiceMode,
   VenueServiceContribution,
   DepartmentTransfer,
