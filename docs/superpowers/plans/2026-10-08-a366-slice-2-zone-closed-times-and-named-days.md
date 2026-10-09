@@ -1286,7 +1286,7 @@ Lane D `receipts/a366-2/task27-*`; Tasks 28–29 and whole-branch gates remain.
 **Behaviour:** decision 23: after its sales, the seed gives the Terrace (`floor.ts:34`, M) a closed
 time from 23:00 to the changeover on every weekday.
 
-- [ ] Steps: failing test (the seeded Terrace week holds 23:00–06:00 on all seven days with an
+- [x] Steps: failing test (the seeded Terrace week holds 23:00–06:00 on all seven days with an
   explicit 06:00 fixture, and 23:00–05:00 with the existing demo's 05:00 changeover — fails
   today: no closed times are seeded; the step runs after the sales); watch it fail
   (`pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.test.ts`); implement; the
@@ -1351,3 +1351,14 @@ The original S1 citations above remain historical; find assertions by their text
 
 The queue's 2026-10-05 test-change decision governs changed assertions, and its authorisation
 for finish-branch and land-branch replaces the historical "owner lands it" instruction above.
+
+## Task 28 reviewed checkpoint (2026-10-09)
+
+Task 28 is complete at signed implementation `7164de81efd015f3d72bdbad7a4ab7a46a6a37be`,
+with the test-first commit `9cac78227dc4375ed0b78703d0778ffb1c4d484e`. The task review approved
+spec compliance and quality. The focused run passed 17 tests after the two added cases failed
+with missing closure rows. The server run passed 10127 tests and skipped six optional-binary
+cases; venue-service node passed 1441, and the unedited fiscal pair passed 20. Runtime warnings
+and the skipped cases are listed in Lane D receipts `receipts/a366-2/task28-report.md`.
+No new visual check was made for the seeded content. Task 29, whole-branch reviews, the push
+hook, current-head CI and authorised landing remain.
