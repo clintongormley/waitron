@@ -231,7 +231,9 @@ describe("product-list", () => {
     expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
     const cell = cellUnder(root, "mojito", "Made at");
     expect(cell.textContent).toContain("Cocktail bar · varies by service zone");
-    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/mojito");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe(
+      "/manage/prep-stations/view/routing",
+    );
   });
   it("leaves a product's cell blank, without a link, when the made-at read has no entry for it", async () => {
     setLocale("en");
@@ -271,7 +273,9 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     const cell = cellUnder(root, "bread", "Made at");
     expect(cell.textContent!.trim()).toBe("Nowhere");
-    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/bread");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe(
+      "/manage/prep-stations/view/routing",
+    );
   });
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
@@ -4187,7 +4191,9 @@ describe("a category's Made at", () => {
     );
     const cell = madeAtCell(root, "cola");
     expect(cell.textContent!.trim()).toBe("Kitchen · varies by service zone");
-    expect(cell.querySelector("a")!.getAttribute("href")).toBe("/manage/prep-stations/test/cola");
+    expect(cell.querySelector("a")!.getAttribute("href")).toBe(
+      "/manage/prep-stations/view/routing",
+    );
   });
 
   it("speaks Spanish", async () => {
