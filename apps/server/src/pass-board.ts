@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, inArray, isNull, ne, notExists, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, ne, notExists, type SQL } from "drizzle-orm";
 import { AppError, worstBand } from "@waitron/shared";
 import { passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -223,6 +223,54 @@ async function scopedItems(
   return candidates.filter((item) =>
     passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
   );
+}
+
+/** Every live kitchen dish fired at or after `firedSince`, with its order's watched zone when
+ *  `withZones`, else a null zone. */
+export async function firedPassDishes(
+  tx: Transaction,
+  cfg: TillConfig,
+  firedSince: string,
+  withZones: boolean,
+): Promise<
+  {
+    id: string;
+    stationId: string;
+    zoneId: string | null;
+    servedAt: string | null;
+    awayAt: string | null;
+  }[]
+> {
+  const rows = await tx
+    .select({
+      id: ticketItems.id,
+      orderId: workingOrders.id,
+      partyId: workingOrders.partyId,
+      deliveryTableId: workingOrders.deliveryTableId,
+      stationId: ticketItems.stationId,
+      servedAt: workingOrderLines.servedAt,
+      awayAt: ticketItems.awayAt,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(
+        eq(workingOrders.locationId, cfg.locationId),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
+        eq(ticketItems.madeHere, false),
+        gte(ticketItems.firedAt, firedSince),
+      ),
+    );
+  const zones = withZones ? await rowsWatchZones(tx, cfg, rows) : new Map<string, string>();
+  return rows.map(({ id, orderId, stationId, servedAt, awayAt }) => ({
+    id,
+    stationId,
+    zoneId: zones.get(orderId) ?? null,
+    servedAt,
+    awayAt,
+  }));
 }
 
 /** The watched zone of each order the rows belong to, each order asked about once. */
