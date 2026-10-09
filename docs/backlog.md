@@ -1116,13 +1116,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **In the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px** — left open
   by W70 (#1222): (978px of content in a 974px box), with or without the size attribute.
 
-- **Complete `catalogue-screen.a11y.test.ts`'s accessibility fixture and assert the native dialog
-  is open before its scan** — left open by W70a (#1265). W70a's visual probe copied
-  `catalogue-screen.a11y.test.ts`'s fixture and found that its product confirmation stayed closed:
-  the fixture supplies no `listMadeAt`, which `#reloadProducts` awaits before loading products.
-  Adding that method to the temporary probe and waiting for the product read opens the
-  confirmation. The existing suite was not changed by W70a.
-
 - **At phone width the "All products" default colour cannot be set** — left open by A332 (#1430):
   at phone width every swatch slot is hidden except a category's name box while it is being named,
   and a category's row menu has no colour item, so the default cannot be set on a phone (owner
@@ -2474,10 +2467,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   saves only through `#syncIfDirty` (`apps/till/src/till-app.ts`), and a label change does not count
   as a line edit. **Next action:** a way to save a label without re-sending the lines.
 
-- **The two `till-sale.test.ts` cases named "…gained an Active variant" pass with the variant left
-  Inactive.** **Next action:** give each an assertion that fails when the variant is Inactive, or
-  rename them to what they prove.
-
 - **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
   path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
   stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. **Next
@@ -3025,10 +3014,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   silently — or whether a guard over the write sites is enough.
   [Detail](backlog/dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
 
-- **Two owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
-  all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
-  hidden** — left open by W110c (#1271), part of W110 (#1255), "One word for 'switched off, kept for
-  the record' across the dashboard".
+- **Should an all-archived product selection show Archive greyed out rather than hidden?**
+  Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
 
 - The dashboard's `es-ES` module default still needs the flip the till got in #170; check the
   dashboard money formatter for the same "doesn't follow the UI locale" bug.
