@@ -1240,12 +1240,12 @@ the "Disabled note not muted" and #1462 Save-before-Cancel entries only when the
 behaviour is verified; narrow A331's batch 4b to what venue operations no longer holds), `docs/backlog/dashboard.md:110-119` (the Departments page's dialogs now ignore a close while
 busy — narrow the entry).
 
-- [ ] **Step 1:** use the retained A11 whole-task LOOK at the demo venue (`wa-wt demo <worktree>`): Departments lists
-  Restaurant and Deli; the Restaurant's Settings say Table service; its bar zones differ with
+- [x] **Step 1:** check the actual seeded dashboard in an isolated demo venue (`wa-wt demo <worktree>`): Departments lists
+  Restaurant and bar and Deli; the Restaurant's Settings say Table service; its bar zones differ with
   Counter service. Screenshots outside the repository.
-- [ ] **Step 2:** the docs; run `pnpm exec vitest run scripts/claude-md-pointers.test.ts` after any
+- [x] **Step 2:** the docs; run `pnpm exec vitest run scripts/claude-md-pointers.test.ts` after any
   path a doc names moved.
-- [ ] **Step 3: Commit** — `docs: departments and their service settings (A366)`.
+- [x] **Step 3: Commit** — `docs: departments and their service settings (A366)`.
 
 ---
 
@@ -1869,3 +1869,26 @@ A14's named checks. Local before/after inventory and logs are retained under Lan
 `receipts/a366-6a/a14-retirement/`; the captured-expression audit does not prove semantic
 equivalence or enumerate all parameter rows. A15, final branch reconciliation, both completed
 Claude reviews, the normal hook, current-head CI and authorised locked landing remain.
+
+
+### Implementation checkpoint: A15 documentation and seeded demo (2026-10-09)
+
+Task A15 updates the department list/page and address contract, inheritance placeholders,
+receipt modes, Cancel-before-Save footers, service-setting storage and recorded order-flow
+documentation. The disabled-note backlog entry is removed: the list's computed-colour case
+passed, and a browser-only inactive-zone probe matched the muted token. Busy-close and save-rule
+follow-ups are narrowed to the replacement dialogs/forms; the post-slice-7 audit stays open.
+
+The actual demo dashboard was started with `wa-wt demo` using a private `WA_WT_STATE`.
+It showed Restaurant and bar with table service, Deli with counter service and both bar zones
+with counter overrides. English/Spanish, light/dark and measured 390/1280 px captures cover
+the list, both departments' Settings, the Zones tab and a selected bar, including the scrollable
+form bottoms. Screenshots and the replayable harness stay outside the repository. The owned
+stack was stopped and the feature checkout's prior `.env` restored. No shared venue was reset.
+
+Focused checks passed: 431 browser behaviour cases, 99 accessibility cases, 19 demo-seed cases,
+232 policy/route cases, five documentation-pointer cases and 20 unedited fiscal cases. These
+are focused results, not package coverage or branch approval. Whole-branch reconciliation,
+two completed Claude run-it reviews, the normal push hook, current-head CI and authorised
+locked landing remain. Preserve the earlier changed-check inventories and Settings exception
+in the PR. Parts B/C and the future recorded-order split remain separate work.

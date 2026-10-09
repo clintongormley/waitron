@@ -50,7 +50,10 @@ their full text.
   renaming or moving. A13b also retires the writer inputs; A14 drops the old style columns.
   The synthetic-row upgrade walk refused the generated `0040_retire_service_style` at
   `DROP TABLE departments` with a foreign-key error, recorded by the walk's reset entry.
-  A15 and the branch reviews, normal hook and current-head CI remain. Parts B/C remain Lane D work after
+  The seeded demo shows Restaurant and bar with table service, Deli with counter service,
+  and the two bar zones overriding to counter service. A15 updates the service-setting
+  documentation and checks the actual dashboard at 390/1280 px in EN/ES and both themes.
+  The branch reviews, normal hook and current-head CI remain. Parts B/C remain Lane D work after
   slice 2/A429. Lane E's slice 7 follows 6A, with no current branch. The explicit overlap waiver
   permits independent slice 2/5 checkouts; whoever lands second reconciles source and regenerates
   migration clashes. No conversion of obsolete receipt data, only pre-live reset. The 6A branch has not landed.

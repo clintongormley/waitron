@@ -1327,13 +1327,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
   open, including advisor questions Q21, Q14, Q27 and Q22. [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
 
-- **The "Disabled" note a zone or department can show is not muted** — left open for the owner by
-  A301 (#1335, A261 step 2). A zone with no department shows its "Not configured" note apart from
-  its name, in the muted text colour. Left open for the owner: the "Disabled" note a zone or
-  department can show in the same place is not muted (it was not before A301 either), so the two
-  notes now look different. Slice 6A's standalone department list uses muted disabled notes;
-  its dashboard integration and the zone note remain to build.
-
 - **A rename refusal without a supplied name remains a database error, rather than returning an
   undefined name** — left open by A261-2d (#1274).
 

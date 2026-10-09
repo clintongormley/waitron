@@ -674,7 +674,7 @@ ni con tus filtros."), which every dashboard table passes as `noMatchesMessage`,
 with no search or filter today, so a filter added later is covered (owner, A177). The empty sentence
 stays the screen's own and reads "No <things> yet." ("No extras lists yet.", "Todavía no hay listas
 de extras."), except where the table lists the answer to a question rather than things made, such as
-the Alerts screen's "Nothing needs attention." The Departments and zones policy tree says
+the Alerts screen's "Nothing needs attention." The Departments list says
 "No departments yet." when empty. A screen that filters its rows before handing them to
 the table chooses the empty sentence itself, because the table cannot tell nothing made from nothing
 matching: the Orders screen's rows are always the result of its search and filters, so it passes
@@ -1690,7 +1690,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
   edit and new person forms, the variant, purchase and shift forms, the bookings form, the
-  product editor and the Departments and zones editor window (which takes its scope in `updated()`)
+  product editor and the department dialogs, Settings and zone settings
   do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
@@ -1701,7 +1701,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift and bookings forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
-  dialog, the Home page tab's shortcut picker and the Departments and zones editor window do this, each with an edit-first reconnect case. The recipe editor
+  dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
   extras picker and station dialogs keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
@@ -1770,11 +1770,11 @@ and nothing guards it across screens:
   made before removal and ask before discarding an edit made after reconnect; their cases are in
   `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`. Opening hours' normal week,
   a day, the period editor and the date range dialog follow it too;
-- batch 4b, Departments and zones: the editor window's Add department, Edit department, Add zone,
-  Configure zone and Transfers, and the inline department name, zone name and trading name editors,
-  whose Save and Cancel are `wt-button`s. The Disable confirmation has no draft and stays `danger`;
-  the tree's switches and choices write at once. See
-  [the Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
+- Departments: Add and Rename department, Add and Rename zone, Move and Add to department,
+  the Settings form (including transfers) and the selected zone's settings. Their sibling
+  `*.unsaved.test.ts` suites cover reconnect. Disable confirmations have no draft and stay `danger`.
+  Slice 6 replaces the inline editors described in
+  [the earlier Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
@@ -3358,8 +3358,12 @@ identifiers against its loaded data and permissions; a URL never establishes aut
 replacement history for defaults and invalid destinations, and push history for a new selection.
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
-Module management tabs use `/manage/<section>/view/<key>`. Departments and zones
-uses the single `/manage/venue-operations` page; old tab addresses are replaced with that URL. Venue settings
+Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
+at `/manage/venue-operations`. A department opens at
+`/manage/venue-operations/department/<id>` (Settings); its Zones tab adds `/view/zones`,
+and a selected zone adds `/zone/<id>`. The parent link returns to the list. Unknown
+departments show a missing-department message; a stale zone selection falls back to a visible zone.
+Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `receipts`, `tables`,
 `adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
@@ -3433,7 +3437,6 @@ accessible name is the full name either way. Its menu opens downwards. The paren
 page's language as `active` and decides what a pick means. A signed-in operator's choice uses the
 existing preference write; login, pairing and kitchen-display choices are local UI changes.
 
-
 ### Counter basket and payment space
 
 On the standard counter canvas, the menu sits beside a basket that scrolls within its own card.
@@ -3447,3 +3450,24 @@ controls that do not fit beside the dish name. Full invoice and Hold share a row
 modes. When Place is offered, it fills the row above them. The cash-at-till explanation spans the
 payment card. Cash, Card and Hold use the shared medium button size. The Chromium payment-mode
 cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those arrangements.
+
+### Departments and zones
+
+You open a department from the list, even when the venue has only one. Its page keeps a
+Departments parent link above the name and offers Settings and Zones tabs. Settings holds the
+name, trading name, service settings and transfers. Zones shows the department's zones and the
+selected zone's settings. The Receipt tab belongs to slice 7; Edit the receipt currently opens
+Venue settings' Receipts tab. Closed-times summaries and floor-plan previews remain separate work.
+
+How orders start chooses Table service or Counter service. Counter service has a separate
+paid-when choice and collection-ticket choice. Print a receipt offers Always (`auto`) or
+On request (`on_request`). A zone's empty choice follows its department: the placeholder
+contains only the inherited value, without a Follow prefix. Explicit choices remain overrides,
+even when equal to the department's value. Cancel precedes Save in the forms and dialogs.
+
+The list's disabled note and the Zones tab's disabled note use the muted text token.
+The list's row menus stay pinned at the end. The dialogs ignore Escape and close requests
+while their write is pending. Regression cases live in
+`packages/venue-service/src/dashboard/department-dialogs.test.ts`,
+`packages/venue-service/src/dashboard/departments-list.test.ts` and
+`packages/venue-service/src/dashboard/department-zones.test.ts`.

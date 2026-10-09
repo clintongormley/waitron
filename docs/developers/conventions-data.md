@@ -2234,7 +2234,6 @@ it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). 
 does with a stale directory beside a replaced `venue.db` was not measured. Nothing finds a new piece
 of code that lists tables or empties the folder and forgets either.
 
-
 ### Append-only declarations have two migration inputs
 
 On 2026-10-05, A261-2 added `sale_receipt_headers` with `appendOnly()` but initially omitted it from
@@ -2248,3 +2247,24 @@ After those fixes, `pnpm exec vitest run scripts/append-only-migration-sets.test
 `pnpm exec vitest run scripts/append-only-triggers.test.ts` passed 48. These runs exercised the
 exported-list comparison, the manifest comparison and the declared tables' update/delete refusals;
 they did not test every migration caller.
+
+## Department and zone service settings
+
+You choose how orders start separately from when a counter order is paid.
+`department_sale_policies.order_start` holds `table` or `counter`;
+`zone_sale_policies.order_start` is nullable, with null following the department.
+The same zone-first resolution applies to paid-when, collection tickets and receipt printing.
+Receipt printing holds `auto` or `on_request`; the old `never` value is retired.
+
+`resolveZoneContext` and the order-context writers in
+`packages/venue-service/src/operations.ts` work out an order's flow as `table_tab` for table
+service, otherwise its effective paid-when (`prepay` or `ticket_then_pay`). The order's recorded
+`order_service_contexts.service_mode` keeps those three values. Splitting the recorded fact
+is [future work](../backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts).
+
+A department's Rename changes only its name, and moving a zone changes only its department.
+Service settings are saved through their own routes. Real-row preservation checks are in
+`packages/venue-service/src/routes.test.ts`; order-flow checks are in
+`packages/venue-service/src/operations.test.ts` and
+`apps/server/src/till-api.service-periods.test.ts`. The old department and zone style columns
+are retired without data conversion; this pre-live change requires a venue reset.
