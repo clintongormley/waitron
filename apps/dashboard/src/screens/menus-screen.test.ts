@@ -9432,7 +9432,7 @@ describe("review fix: menu details opening", () => {
     );
   });
   it.each(["answer", "failure"] as const)(
-    "ignores an obsolete rename %s after New menu",
+    "ignores an obsolete rename %s after Add menu",
     async (outcome) => {
       const pending = deferred<MenuStructure>();
       const client = api({ getMenuStructure: vi.fn(() => pending.promise) });

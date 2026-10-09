@@ -190,7 +190,7 @@ const panel = (theme: "light" | "dark") => `
         <div class="row">
           <h3>Team</h3>
           <wt-row-actions label="Team actions">
-            <wt-button align="start" class="create-member">Create team member</wt-button>
+            <wt-button align="start" class="create-member">Add team member</wt-button>
           </wt-row-actions>
         </div>
         <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
@@ -220,7 +220,7 @@ const panel = (theme: "light" | "dark") => `
         <wt-button variant="primary" class="close-modal">Save</wt-button>
       </wt-form-actions>
     </wt-modal>
-    <wt-modal size="compact" class="member-modal" heading="Create team member">
+    <wt-modal size="compact" class="member-modal" heading="Add team member">
       <wt-form-error-summary heading="There is a problem with this form"></wt-form-error-summary>
       <wt-input name="member-name" label="Name" required autocomplete="name"></wt-input>
       <wt-form-actions slot="footer">
@@ -251,7 +251,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   let editing: { name: string; role: string } | undefined;
   const openMember = (row?: { name: string; role: string }) => {
     editing = row;
-    memberModal.heading = row ? "Edit team member" : "Create team member";
+    memberModal.heading = row ? "Edit team member" : "Add team member";
     nameInput.value = row?.name ?? "";
     nameInput.error = "";
     memberErrors.errors = [];

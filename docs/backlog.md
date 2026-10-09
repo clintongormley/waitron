@@ -2484,7 +2484,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   colour while disabled and waiting — … and two on the till. Owner, 2026-10-08: "b", draw them all
   quiet the same way. Left open by A416 (#1440), under A331 batch 2a.
 
-- **The canvas Create and Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow
+- **The canvas Add and Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow
   to show "A331 look canvas (copy)" whole** — seen and not changed. Left open by A331 batch 3b
   (#1415).
 
@@ -3104,7 +3104,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   look (2026-10-07), OPEN, unqueued — not checked against `main`. Screenshots:
   `~/waitron-campaign-c/a310-shots/`.
 
-- **`docs/developers/design-system.md` still says a list's Create action goes in a menu beside the
+- **`docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
   table heading**, while Menus, Staff and Units put a text Add button at the heading row's trailing
   edge; the doc only names the exceptions, and whether the rule itself changes is the owner's call.
   Left open by W79 (#1186).

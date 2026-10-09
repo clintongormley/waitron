@@ -437,7 +437,7 @@ describe("units-screen", () => {
     expect(form.open).toBe(false);
   });
 
-  /** Opens New unit, submits it and lets the stubbed refusal land. */
+  /** Opens Add unit, submits it and lets the stubbed refusal land. */
   async function refusedCreate(refusal: unknown) {
     const createUnit = vi.fn().mockRejectedValue(refusal);
     const el = await mount(stubApi({ createUnit }));

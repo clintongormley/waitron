@@ -8,7 +8,7 @@ const en = {
   "calendar.local_hint": "Towns have {count} local holidays a year: add yours as own holidays.",
   "calendar.area_required":
     "{year}: only official holidays for the whole province are shown until you choose the holiday area here.",
-  "named.add": "Add a named day",
+  "named.add": "Add named day",
   "named.give_own": "Give this date its own hours",
   "named.copy": "Copy to other dates",
   "named.copy_heading": "Copy {name} to other dates",
@@ -729,7 +729,7 @@ const es: Record<keyof typeof en, string> = {
     "Los municipios tienen {count} festivos locales al año: añade los tuyos como festivos propios.",
   "calendar.area_required":
     "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que elijas aquí la zona de festivos.",
-  "named.add": "Añadir un día con nombre",
+  "named.add": "Añadir día con nombre",
   "named.give_own": "Dar a esta fecha su propio horario",
   "named.copy": "Copiar a otras fechas",
   "named.copy_heading": "Copiar {name} a otras fechas",

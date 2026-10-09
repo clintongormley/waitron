@@ -6798,7 +6798,7 @@ describe("Save follows changes", () => {
       expect(button().isConnected).toBe(true);
     },
   );
-  it("New station disables a changed invalid draft until its local checks pass", async () => {
+  it("Add station disables a changed invalid draft until its local checks pass", async () => {
     const form = await openSave("create");
     await form.edit("New station");
     form
@@ -6821,7 +6821,7 @@ describe("Save follows changes", () => {
     await settle(form.el);
     await state(form.button(), true);
   });
-  it("New station keeps its validation summary until both invalid fields are fixed", async () => {
+  it("Add station keeps its validation summary until both invalid fields are fixed", async () => {
     setLocale("en");
     const form = await openSave("create");
     await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
@@ -6841,7 +6841,7 @@ describe("Save follows changes", () => {
     await state(form.button(), true);
     expect(form.a.createStation).not.toHaveBeenCalled();
   });
-  it("New station explains a field broken again after a validation attempt", async () => {
+  it("Add station explains a field broken again after a validation attempt", async () => {
     setLocale("en");
     const form = await openSave("create");
     await form.edit("New station");
