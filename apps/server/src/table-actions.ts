@@ -15,7 +15,12 @@ import {
 } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveDraftsToParty } from "./order-drafts.js";
-import { groupArrivingDishes, moveGroupsToParty, printHoldTickets } from "./order-groups.js";
+import {
+  groupArrivingDishes,
+  moveGroupsToParty,
+  printHoldTickets,
+  type Firer,
+} from "./order-groups.js";
 import {
   checkAndBumpParty,
   leaveForClearing,
@@ -256,7 +261,7 @@ export async function splitTable(
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
   const partyMain = await readMainBill(tx, partyId);
-  let firers: ReadonlyMap<string, string> = new Map();
+  let firers: ReadonlyMap<string, Firer> = new Map();
   if (billId !== null) {
     await refuseUnsplittableBill(tx, partyId, partyMain, billId);
     firers = await leaveParty(tx, billId);

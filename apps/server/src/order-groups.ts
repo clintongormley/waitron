@@ -773,7 +773,7 @@ export async function startGroup(
   partyId: string,
   release: GroupRelease,
   operatorId: string,
-  fired: { at: string; by: string } = { at: nowIso(), by: operatorId },
+  fired: { at: string; by: Firer } = { at: nowIso(), by: { personId: operatorId } },
 ): Promise<string> {
   const fire = release === "fire";
   const [group] = await tx
@@ -783,7 +783,8 @@ export async function startGroup(
       position: (await lastPosition(tx, partyId)) + 1,
       state: fire ? "fired" : "held",
       firedAt: fire ? fired.at : null,
-      firedBy: fire ? fired.by : null,
+      firedBy: fire && "personId" in fired.by ? fired.by.personId : null,
+      firedByDeviceId: fire && "deviceId" in fired.by ? fired.by.deviceId : null,
       submittedBy: operatorId,
     })
     .returning({ id: orderGroups.id });
@@ -1468,15 +1469,15 @@ export async function recordGroupEvent(
  * section with no course; and in a held group of its own only when no waiting dish has a course.
  * The groups follow the party's last one in firing order: fired, then held by course. An extras
  * line takes its dish's group. The fired group takes its earliest-fired dish's firing — its kitchen
- * item's, else its sent time — and, as its firer, who `firers` says fired that dish's group in the
- * party it left (by line id), else the operator. The caller has moved the party's revision on.
+ * item's, else its sent time — and, as its firer, the person or kitchen display `firers` says fired
+ * that dish's group in the party it left (by line id), else the operator. The caller has moved the party's revision on.
  */
 export async function groupArrivingDishes(
   tx: Transaction,
   partyId: string,
   billId: string,
   operatorId: string,
-  firers: ReadonlyMap<string, string>,
+  firers: ReadonlyMap<string, Firer>,
 ): Promise<{ fired: string | null; held: string[] }> {
   const dishes = await tx
     .select({
@@ -1535,15 +1536,15 @@ async function groupArrived(
   lines: readonly { id: string; ticketFiredAt: string | null; sentAt: string | null }[],
   release: GroupRelease,
   operatorId: string,
-  firers: ReadonlyMap<string, string>,
+  firers: ReadonlyMap<string, Firer>,
 ): Promise<string | null> {
   if (lines.length === 0) return null;
-  let fired: { at: string; by: string } | undefined;
+  let fired: { at: string; by: Firer } | undefined;
   if (release === "fire") {
     // A released dish ({@link isReleased}) has a fired kitchen item or, lacking one, a sent time.
     const at = (line: (typeof lines)[number]) => (line.ticketFiredAt ?? line.sentAt)!;
     const first = lines.reduce((earliest, line) => (at(line) < at(earliest) ? line : earliest));
-    fired = { at: at(first), by: firers.get(first.id) ?? operatorId };
+    fired = { at: at(first), by: firers.get(first.id) ?? { personId: operatorId } };
   }
   const groupId = await startGroup(tx, partyId, release, operatorId, fired);
   const ids = lines.map((line) => line.id);
