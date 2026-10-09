@@ -879,7 +879,7 @@ describe("venue-routing-grid", () => {
     const { el } = await mount();
     const scroller = root(el).querySelector<HTMLElement>('[data-test="grid-scroll"]')!;
     const first = root(el).querySelector("thead th")!.getBoundingClientRect().width;
-    expect(first).toBeLessThanOrEqual(140);
+    expect(first).toBeLessThanOrEqual(96);
     expect(first).toBeLessThan(scroller.clientWidth / 2);
     // A long label wraps instead of widening the column.
     const long = await mount(
@@ -893,7 +893,7 @@ describe("venue-routing-grid", () => {
     const label = [...root(long.el).querySelectorAll("tbody th")].find((th) =>
       th.textContent!.includes("A very long"),
     )!;
-    expect(label.getBoundingClientRect().width).toBeLessThanOrEqual(140);
+    expect(label.getBoundingClientRect().width).toBeLessThanOrEqual(96);
   });
 
   it("scrolls sideways at phone width with the row labels kept in view", async () => {
