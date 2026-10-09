@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2, 3, and 4–7, each planned then built without
+  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7, each planned then built without
   stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -26,12 +26,10 @@ their full text.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
   revised 2026-10-09 to the owner's receipt answers, in two pull requests: each department's
   receipt with translated subtitle and footer, then the department page's Receipt tab after
-  slice 6. Lane E's build waits for its slice 3 Part A to land, then slice 6 Part A, before
+  slice 6. Lane E's build follows slice 6 Part A before
   slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
-  Slice 3 Part A is built and its review corrections are applied. Push checks, CI and landing remain.
   Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
-  in two pull requests — keeping a period open and closing a station for today after slice 1, keeping
-  a zone open after slice 2 — with its open decisions at its top.
+  with keeping a zone open after slice 2 remaining in Part B.
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   in two pull requests — combined tickets on shared printers, period choices in routing cells and
   the station editor after slice 1; station hours, fallbacks and the tester removed, with each
@@ -48,7 +46,6 @@ The approved [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station
 leaves the authorising person unstored (decision 14). The station-day and period-extension rows
 hold the choice, but no person ID. Decide whether to retain that identity before adding a history
 view; this is separate from checking the manager's permission and PIN before a write.
-
 
 ## Sending grace when a period extension is replaced or expires
 
