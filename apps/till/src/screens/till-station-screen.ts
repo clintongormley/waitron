@@ -533,8 +533,8 @@ export class TillStationScreen extends LitElement {
     try {
       await call();
     } catch (error) {
-      // Any other refusal: the reload reconciles the queue to server truth.
       if (this.#switched(error)) return;
+      // Any other refusal: the reload reconciles the queue to server truth.
     }
     await this.#reload();
   }

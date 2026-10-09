@@ -2754,7 +2754,8 @@ export class TillApi {
    * A kitchen display's course levers → `POST /api/device/orders/:id/courses/:courseId/fire`,
    * `/ready` and `/away`. Kitchen displays only; each checks the device's profile action
    * (`device.forbidden_action`) and the order's zone against its pass screen
-   * (`kitchen_screen.zone_not_allowed`).
+   * (`kitchen_screen.zone_not_allowed`), and a device that no longer has a pass screen
+   * (`kitchen_screen.not_allowed`).
    */
   async fireDeviceCourse(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/fire`, "POST", {});

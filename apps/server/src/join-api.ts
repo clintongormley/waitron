@@ -47,7 +47,6 @@ export interface JoinApiDeps {
   deviceAddress: string;
 }
 
-/** The accept-time faults of a device's kitchen screens carry the SAME statuses `device-api.ts` gives them. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   // Unknown, already decided, or (on a per-surface route) the other kind's ask. On the device accept
   // route a device id this login holds no live claim on answers `join_request.unclaimed` instead,
