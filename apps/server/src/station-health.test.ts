@@ -257,6 +257,28 @@ describe("station health", () => {
     expect(await hasScreen()).toEqual([true, true]);
   });
 
+  it("reads the venue's station screens once for both the screen flags and the dark screens", async () => {
+    const f = await setup();
+    const { tabId } = await seat(f.v, await f.v.table("Dark"));
+    await order(f.v, tabId, "Burger");
+    await f.screen();
+    const screens = vi.spyOn(VENUE_SERVICE, "readStationScreens");
+    try {
+      const snapshot = await f.read();
+      expect(snapshot.stations.find((s) => s.id === f.station.id)!.hasScreen).toBe(true);
+      expect(snapshot.outputsDown.screensDark).toEqual([
+        {
+          stationId: f.station.id,
+          stationName: f.station.name,
+          lastSeenAt: "2026-10-05T17:50:00.000Z",
+        },
+      ]);
+      expect(screens).toHaveBeenCalledTimes(1);
+    } finally {
+      screens.mockRestore();
+    }
+  });
+
   it("excludes held, made-here, fully served, abandoned and collected dishes while an undelivered ticket keeps ageing", async () => {
     const f = await setup();
     const bills: string[] = [];
