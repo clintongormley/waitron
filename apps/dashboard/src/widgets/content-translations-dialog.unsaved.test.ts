@@ -4,7 +4,12 @@ import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, TranslationPage } from "../api/client.js";
 import { t, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+} from "./test-helpers.js";
 import "./content-translations-dialog.js";
 
 const result: TranslationPage = {
@@ -88,15 +93,6 @@ async function question(app: TranslationLeaveApp) {
   await warning.updateComplete;
   return warning;
 }
-/**
- * Resolves on the inner modal's `wt-close`, which the dialog's close report follows. Chromium sends
- * the native close only with a later rendered frame, which a busy runner can hold back past
- * `vi.waitFor`'s one second.
- */
-function modalClosed(form: Element): Promise<unknown> {
-  const modal = form.shadowRoot!.querySelector("wt-modal")!;
-  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
-}
 for (const route of ["close", "escape"] as const) {
   it(`translation ${route} retains the draft through Keep and closes once after Discard`, async () => {
     const { app, form } = await mount();
@@ -114,7 +110,7 @@ for (const route of ["close", "escape"] as const) {
     expect(form.open).toBe(true);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
     await question(app);
-    const closed = modalClosed(form);
+    const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
     warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await closed;
     await vi.waitFor(() => expect(app.closed).toBe(1));
@@ -134,7 +130,7 @@ it("translation edit/revert compares normalized values and removes the unload wa
   const reverted = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(reverted);
   expect(reverted.defaultPrevented).toBe(false);
-  const closed = modalClosed(form);
+  const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
   await closed;
   await vi.waitFor(() => expect(app.closed).toBe(1));

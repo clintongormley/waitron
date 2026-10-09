@@ -3,7 +3,7 @@ import { LeaveController, UrlStateController } from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption as pickOption,
   expectFiltersFirst,
@@ -334,20 +334,12 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
 }
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
 
-/**
- * Clicks a dialog's button and waits for the dialog's `wt-close`, which everything a screen does on
- * close follows. Chromium reports a native dialog's close only with its next rendered frame, which a
- * busy runner can hold back past `vi.waitFor`'s one second.
- */
 async function clickAndAwaitClose(
   el: PrintersScreen,
   modal: string,
   button: string,
 ): Promise<void> {
-  const dialog = q(el, `[data-test=${modal}]`)!;
-  const closed = new Promise((resolve) =>
-    dialog.addEventListener("wt-close", resolve, { once: true }),
-  );
+  const closed = dialogClosed(q(el, `[data-test=${modal}]`)!);
   q(el, `[data-test=${button}]`)!.click();
   await closed;
 }

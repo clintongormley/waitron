@@ -24,7 +24,12 @@ import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -288,14 +293,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 async function flush(el: CatalogueScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-}
-/**
- * Resolves on a dialog's `wt-close`, which everything the screen does on close follows. Chromium
- * sends the native close only with a later rendered frame, which a busy runner can hold back past
- * `vi.waitFor`'s one second.
- */
-function closeOf(dialog: Element): Promise<unknown> {
-  return new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
 }
 const editor = (el: CatalogueScreen): ProductEditor =>
   el.shadowRoot!.querySelector("dashboard-product-editor")!;
@@ -907,7 +904,7 @@ describe("catalogue-screen", () => {
     await el.updateComplete;
     emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
     await vi.waitFor(() => expect(step(el).open).toBe(true));
-    const closed = closeOf(step(el));
+    const closed = dialogClosed(step(el));
     step(el).shadowRoot!.querySelector<HTMLElement>('[data-test="skip"]')!.click();
     await closed;
     await vi.waitFor(() => expect(step(el).open).toBe(false));
@@ -925,7 +922,7 @@ describe("catalogue-screen", () => {
     const table = await productTable(el);
     table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product-c1"]')!.click();
     await el.updateComplete;
-    const closed = closeOf(editor(el));
+    const closed = dialogClosed(editor(el));
     emit(editor(el), "wt-cancel", {});
     await closed;
     await vi.waitFor(() => expect(editor(el).open).toBe(false));
@@ -1241,7 +1238,7 @@ describe("catalogue-screen", () => {
       [
         "Escape",
         async (form: HTMLElement) => {
-          const closed = closeOf(form.shadowRoot!.querySelector("wt-modal")!);
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
           await userEvent.keyboard("{Escape}");
           await closed;
         },
@@ -1560,7 +1557,7 @@ describe("catalogue-screen", () => {
     let cancels = 0;
     form.addEventListener("wt-cancel", () => cancels++);
 
-    const closed = closeOf(form.shadowRoot!.querySelector("wt-modal")!);
+    const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
     await userEvent.keyboard("{Escape}");
     await closed;
     await vi.waitFor(() => expect(cancels).toBe(1));
@@ -1611,7 +1608,7 @@ describe("catalogue-screen", () => {
       [
         "Escape",
         async (form: HTMLElement) => {
-          const closed = closeOf(form.shadowRoot!.querySelector("wt-modal")!);
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
           await userEvent.keyboard("{Escape}");
           await closed;
         },
@@ -1643,7 +1640,7 @@ describe("catalogue-screen", () => {
       [
         "Escape",
         async (form: HTMLElement) => {
-          const closed = closeOf(form.shadowRoot!.querySelector("wt-modal")!);
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
           await userEvent.keyboard("{Escape}");
           await closed;
         },
@@ -2360,7 +2357,7 @@ describe("catalogue-screen", () => {
       const confirmation = () =>
         courseList(el)!.shadowRoot!.querySelector('[data-test="delete-course-modal"]');
       await vi.waitFor(() => expect(confirmation()).not.toBeNull());
-      const closed = closeOf(confirmation()!);
+      const closed = dialogClosed(confirmation()!);
       await userEvent.keyboard("{Escape}");
       await closed;
       await vi.waitFor(() => expect(confirmation()).toBeNull());
@@ -2386,7 +2383,7 @@ describe("catalogue-screen", () => {
       expect(coursesWindow(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k1");
       // Escape still closes it, dropping the refused name.
-      const closed = closeOf(coursesWindow(el));
+      const closed = dialogClosed(coursesWindow(el));
       await userEvent.keyboard("{Escape}");
       await closed;
       await vi.waitFor(() => expect(editor(el).childOpen).toBe(false));
@@ -2500,7 +2497,7 @@ describe("catalogue-screen", () => {
       await addCourse(el, "Postres");
       let closes = 0;
       coursesWindow(el).addEventListener("wt-close", () => closes++);
-      const closed = closeOf(coursesWindow(el));
+      const closed = dialogClosed(coursesWindow(el));
       await userEvent.keyboard("{Escape}");
       await closed;
       await vi.waitFor(() => expect(closes).toBe(1));
@@ -2525,7 +2522,7 @@ describe("catalogue-screen", () => {
       [
         "Escape",
         async (el: CatalogueScreen) => {
-          const closed = closeOf(coursesWindow(el));
+          const closed = dialogClosed(coursesWindow(el));
           await userEvent.keyboard("{Escape}");
           await closed;
         },

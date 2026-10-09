@@ -3089,8 +3089,6 @@ describe("the editor's keyboard", () => {
     );
     await userEvent.keyboard("{Escape}");
     await closed;
-    // Escape closes the native dialog at once, but the modal leaves only when its close event
-    // arrives, which the HTML spec's dialog-closing steps queue as a later task.
     await vi.waitFor(() => expect(modal(el)).toBeNull());
     expect(api.createDepartment).not.toHaveBeenCalled();
   });

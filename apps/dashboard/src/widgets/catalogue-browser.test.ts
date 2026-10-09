@@ -4,7 +4,7 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
@@ -1190,16 +1190,12 @@ async function colorChooser(el: CatalogueBrowser) {
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return form;
 }
-/**
- * Resolves on the colour chooser's `wt-close`, which its cancel after Escape follows. Chromium sends
- * the native close only with a later rendered frame, which a busy runner can hold back past
- * `vi.waitFor`'s one second.
- */
 function chooserCloseReported(el: CatalogueBrowser): Promise<unknown> {
-  const modal = el
-    .shadowRoot!.querySelector("dashboard-category-color-form")!
-    .shadowRoot!.querySelector("wt-modal")!;
-  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+  return dialogClosed(
+    el
+      .shadowRoot!.querySelector("dashboard-category-color-form")!
+      .shadowRoot!.querySelector("wt-modal")!,
+  );
 }
 function chooserClosed(el: CatalogueBrowser) {
   return !el.shadowRoot!.querySelector("dashboard-category-color-form")!.open;

@@ -4800,8 +4800,8 @@ it.each(["cancel", "dismiss"])(
     );
     if (how === "cancel") (modal.querySelector('wt-button[slot="cancel"]') as HTMLElement).click();
     else modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-    await settle(el);
     await closed;
+    await settle(el);
     await vi.waitFor(() => expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull());
     expect(save).not.toHaveBeenCalled();
     watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();

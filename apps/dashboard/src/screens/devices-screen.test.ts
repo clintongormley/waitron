@@ -8,7 +8,12 @@ import {
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
@@ -314,16 +319,8 @@ async function flush(el: DevicesScreen): Promise<void> {
 
 const q = (el: DevicesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/**
- * Clicks a dialog's button and waits for the dialog's `wt-close`, which everything a screen does on
- * close follows. Chromium reports a native dialog's close only with its next rendered frame, which a
- * busy runner can hold back past `vi.waitFor`'s one second.
- */
 async function clickAndAwaitClose(el: DevicesScreen, modal: string, button: string): Promise<void> {
-  const dialog = q(el, `[data-test=${modal}]`)!;
-  const closed = new Promise((resolve) =>
-    dialog.addEventListener("wt-close", resolve, { once: true }),
-  );
+  const closed = dialogClosed(q(el, `[data-test=${modal}]`)!);
   q(el, `[data-test=${button}]`)!.click();
   await closed;
 }
@@ -3230,9 +3227,7 @@ describe("add a device", () => {
       if (dismissal === "close") await clickAndAwaitClose(el, "joined-modal", "joined-close");
       else {
         const modal = q(el, "[data-test=joined-modal]")!;
-        const closed = new Promise((resolve) =>
-          modal.addEventListener("wt-close", resolve, { once: true }),
-        );
+        const closed = dialogClosed(modal);
         modal.shadowRoot!.querySelector("dialog")!.focus();
         await userEvent.keyboard("{Escape}");
         await closed;

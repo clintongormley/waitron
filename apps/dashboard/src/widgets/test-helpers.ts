@@ -114,6 +114,15 @@ export async function closeReportsDelivered(): Promise<void> {
 }
 
 /**
+ * Resolves when `dialog` sends `wt-close`. `wt-dialog` sends it only once Chromium reports the
+ * native close, which Chromium queues for the next rendered frame, so a test checking what a close
+ * does waits for this rather than for `vi.waitFor`'s one second.
+ */
+export function dialogClosed(dialog: Element): Promise<unknown> {
+  return new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
+}
+
+/**
  * The RGBA values Chromium PAINTED at each viewport point, read from a screenshot of `frame`, which
  * must contain every point. A colour input's computed `backgroundColor`, and its swatch's, did not
  * change with the chosen colour, so these tests read the painted pixels instead.
