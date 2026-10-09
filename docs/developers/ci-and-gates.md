@@ -633,15 +633,20 @@ documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, 
 the changed packages and their dependents. A root file a member depends on is the exception —
 `scripts/bundle-node.mjs` and `scripts/dev-server-proxy.ts`, which member files read, and
 `scripts/setup-litestream.mjs` and `scripts/setup-s3-test-server.mjs`, which the `test-server-stream`
-job runs before testing `apps/server`: `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` selects
-those members, so its change is `code=true`. `scripts/root-scope-consumers.test.mjs` fails when a
-member file starts reading an unlisted one, when a ci.yml job starts running an unlisted one before
-a member's tests, or when a listed entry is neither. That guard is weaker than its name: it reads
+job runs before testing `apps/server`, and `scripts/vitest-file-progress.mjs`, which every test job
+loads as a reporter, so it selects every member with a `test:coverage` script:
+`ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` selects those members, so its change is
+`code=true`. `scripts/root-scope-consumers.test.mjs` fails when a member file starts reading an
+unlisted one, when a ci.yml job starts running an unlisted one before a member's tests or loading
+one as a reporter in a test command, or when a listed entry is none of these. That guard is weaker than its name: it reads
 text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
 is invisible to it, and a comment spelling the path counts as a reference; in ci.yml, and no other
 workflow, only a line starting `node scripts/…` counts, in a job that tests a member through one
 quoted `pnpm --filter "<name>" test:shard` or `test:coverage` — so a script fed from a pipe does
-not count, and a step an `if:` switches off does; and only root `scripts/` is scanned.
+not count, and a step an `if:` switches off does; a reporter counts only in a `--reporter=` flag
+on a `pnpm … test:shard` or `test:coverage` line, and for the light shards' `pnpm "$@"` command
+the members are derived (every member with `test:coverage` that the job's literal `!` filters do
+not remove), not read from what the shell builds; and only root `scripts/` is scanned.
 
 `lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
 project — so a regression in a skipped path is caught there only as far as the root suites
