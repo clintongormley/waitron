@@ -1,7 +1,8 @@
 /**
  * Formats kitchen tickets and correction slips into ESC/POS bytes. Pure: no state, no database.
  *
- * A station ticket lists its own printable items and may end with the rest of the order. A watcher
+ * A station ticket lists its own printable items and may end with the rest of the order. A ticket
+ * for several stations sharing a printer does the same with a section per station. A watcher
  * ticket groups the items it follows under their station names.
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
@@ -55,6 +56,14 @@ export type KitchenTicket = {
       orderNumber: string;
       firedAt: Date;
       items: KitchenTicketItem[];
+      alsoOnOrder?: { locale: string; items: OtherStationItem[] };
+    }
+  | {
+      scope: "stations";
+      stations: KitchenTicketStation[];
+      tableLabel: string;
+      orderNumber: string;
+      firedAt: Date;
       alsoOnOrder?: { locale: string; items: OtherStationItem[] };
     }
   | {
@@ -196,7 +205,13 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
 
   if (ticket.reprint === true) b.line("*** REPRINT ***");
   if (ticket.mark !== undefined) b.line(`*** ${ticket.mark} ***`);
-  text(ticket.scope === "station" ? ticket.stationName : ticket.watcherName);
+  text(
+    ticket.scope === "station"
+      ? ticket.stationName
+      : ticket.scope === "stations"
+        ? ticket.stations.map((station) => station.stationName).join(" · ")
+        : ticket.watcherName,
+  );
   text(ticket.tableLabel);
   text(ticket.orderNumber);
   b.line(hhmm(ticket.firedAt));
@@ -204,23 +219,23 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     text(`${kitchenWords(ticket.from.locale).from} ${ticket.from.stationName}`);
   if (onlyGroup !== undefined) b.line(`GROUP ${onlyGroup}`);
 
-  if (ticket.scope === "station") {
-    emitList(ticket.items);
-    if (ticket.alsoOnOrder !== undefined && ticket.alsoOnOrder.items.length > 0) {
-      const { heading, held } = alsoOnOrderWords(ticket.alsoOnOrder.locale);
-      text(`-- ${heading} --`);
-      for (const item of ticket.alsoOnOrder.items) {
-        const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
-        const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
-        for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
-          b.line(part);
-        }
-      }
-    }
-  } else {
+  if (ticket.scope === "station") emitList(ticket.items);
+  else {
     for (const station of ticket.stations) {
       text(station.stationName);
       emitList(station.items);
+    }
+  }
+  const alsoOnOrder = ticket.scope === "watcher" ? undefined : ticket.alsoOnOrder;
+  if (alsoOnOrder !== undefined && alsoOnOrder.items.length > 0) {
+    const { heading, held } = alsoOnOrderWords(alsoOnOrder.locale);
+    text(`-- ${heading} --`);
+    for (const item of alsoOnOrder.items) {
+      const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+      const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
+      for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
+        b.line(part);
+      }
     }
   }
 

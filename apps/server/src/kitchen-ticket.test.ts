@@ -352,6 +352,44 @@ describe("formatKitchenTicket", () => {
   });
 });
 
+describe("one ticket for several stations sharing a printer", () => {
+  it("names the stations in the header and prints a section per station, then the rest of the order", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          scope: "stations",
+          stations: [
+            { stationName: "Grill", items: [{ qty: 2, name: "Steak" }] },
+            { stationName: "Pastry", items: [{ qty: 1, name: "Tart" }] },
+          ],
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          alsoOnOrder: {
+            locale: "en-GB",
+            items: [{ qty: 1, name: "Salad", stationName: "Cold", held: false }],
+          },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "Grill · Pastry",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "Grill",
+      "2 x Steak",
+      "Pastry",
+      "1 x Tart",
+      "-- Also on this order (not for this",
+      "station) --",
+      "1 x Salad — Cold",
+      "",
+    ]);
+  });
+});
+
 describe("the rest of the order on a station's ticket", () => {
   const stationTicket = {
     scope: "station" as const,
