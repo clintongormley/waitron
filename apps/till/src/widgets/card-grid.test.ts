@@ -87,6 +87,33 @@ it("renders a kitchen display's pass monitor in the kitchen display card", async
   expect(screen!.deviceName).toBe("Pared del pase");
 });
 
+it.each([true, false])(
+  "tells a kitchen display's station screen whether it may offer Move to station (%s)",
+  async (canMoveStation) => {
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: {
+        key: "kitchen",
+        title: "Kitchen",
+        columns: 24,
+        cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+      },
+      store: new WorkingOrderStore(),
+      capabilities: ["act-as-kds"],
+      deviceMode: true,
+      canMoveStation,
+      initialDeviceStation: { stations: [] },
+      api: {
+        getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+      } as unknown as TillApi,
+    });
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { canMoveStation: boolean }>(
+        "till-station-screen",
+      )!.canMoveStation,
+    ).toBe(canMoveStation);
+  },
+);
+
 describe("a kitchen display's notice in place of a queue", () => {
   const kitchenTab: TabDef = {
     key: "kitchen",

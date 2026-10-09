@@ -76,7 +76,7 @@ import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { moveDishesToStation } from "./station-move.js";
+import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -141,7 +141,7 @@ import {
   unsentDishLines,
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
-import { listCourses, listStations } from "./kitchen.js";
+import { listCourses, listStationsToday } from "./kitchen.js";
 import {
   finishTable,
   markTableCleared,
@@ -574,6 +574,27 @@ function requireUuidId(
     throw new AppError(code, { workingOrderId: id });
   }
   return id;
+}
+
+/** The body of a move-station request on order `orderId`. */
+export function stationMoveRequest(
+  orderId: string,
+  body: Record<string, unknown>,
+): StationMoveRequest {
+  const submissionId = submissionIdOf(body);
+  if (
+    !Array.isArray(body.lineIds) ||
+    body.lineIds.length === 0 ||
+    body.lineIds.length > 100 ||
+    !body.lineIds.every((lineId) => typeof lineId === "string")
+  )
+    throw invalid("lineIds");
+  const lineIds = body.lineIds as string[];
+  for (const lineId of lineIds)
+    if (!isUuid(lineId)) throw new AppError("tab.line_not_found", { tabId: orderId, lineId });
+  if (typeof body.stationId !== "string" || !isUuid(body.stationId))
+    throw new AppError("station.not_found", { stationId: String(body.stationId) });
+  return { submissionId, lineIds, stationId: body.stationId };
 }
 
 /**
@@ -1809,22 +1830,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const stations = await withTransaction(deps.db, async (tx) => {
-        const listed = await listStations(tx, deps.cfg);
-        const states = await VENUE_SERVICE.stationStates(
-          tx,
-          { locationId: deps.cfg.locationId },
-          new Date(),
-        );
-        return listed.map((station) => ({
-          ...station,
-          open: states.get(station.id)?.open ?? false,
-          byHand: states.get(station.id)?.byHand ?? null,
-          sendsTo: states.get(station.id)?.sendsTo ?? null,
-          why: states.get(station.id)?.why ?? "switched_off",
-        }));
-      });
-      return c.json(stations);
+      return c.json(await withTransaction(deps.db, (tx) => listStationsToday(tx, deps.cfg)));
     }),
   );
 
@@ -2876,26 +2882,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      const submissionId = submissionIdOf(body);
-      if (
-        !Array.isArray(body.lineIds) ||
-        body.lineIds.length === 0 ||
-        body.lineIds.length > 100 ||
-        !body.lineIds.every((lineId) => typeof lineId === "string")
-      )
-        throw invalid("lineIds");
-      const lineIds = body.lineIds as string[];
-      for (const lineId of lineIds)
-        if (!isUuid(lineId)) throw new AppError("tab.line_not_found", { tabId: id, lineId });
-      if (typeof body.stationId !== "string" || !isUuid(body.stationId))
-        throw new AppError("station.not_found", { stationId: String(body.stationId) });
+      const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        return moveDishesToStation(tx, cfg, id, {
-          submissionId,
-          lineIds,
-          stationId: body.stationId as string,
+        return moveDishesToStation(tx, cfg, id, request, {
+          deviceId: session.deviceId,
+          personId: session.personId,
         });
       });
       return c.json(result);

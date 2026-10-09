@@ -45,6 +45,7 @@ import { deriveOptionSelections } from "./state/held-options.js";
 import {
   DRAFT_REFUSALS,
   DraftSync,
+  TABLE_REQUEST_LIMIT_MS,
   asRefusal,
   limited,
   pause,
@@ -302,13 +303,6 @@ registerIcons({
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
 });
 
-/**
- * How long the till waits on a request it bounds, its automatic resends included, before cancelling
- * it. It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus
- * `STACK_CAPTURE_MS`, `packages/store/src/venue-liveness.ts`), so a server whose main thread had
- * stopped when the wait began is killed before the till gives up.
- */
-const TABLE_REQUEST_LIMIT_MS = 150_000;
 /** The most dishes one move request may name (`POST /api/working-orders/:id/lines/move-station`). */
 const MOVE_STATION_MAX_LINES = 100;
 

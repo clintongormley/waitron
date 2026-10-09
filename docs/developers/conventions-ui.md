@@ -244,7 +244,7 @@ the server checks each at the route, never trusting the till's copy:
   top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
   refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
   route has no row.
-- **A kitchen display may only prepare, fire and hand over.** A `kds` profile is a shared display
+- **A kitchen display may only prepare, fire, move dishes and hand over.** A `kds` profile is a shared display
   with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
   every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
   list names, and with nobody signed in a till route that needs a session answers
@@ -252,7 +252,12 @@ the server checks each at the route, never trusting the till's copy:
   Ready and Away go through the device's own routes (`apps/server/src/device-levers.ts`), which
   serve only a kitchen display, check the action each one takes (Fire `take-orders`, Ready
   `prepare-orders`, Away `hand-over-orders`) and the order's zone against its pass screen, and a
-  Fire records the device as the one who fired. A new venue's default kitchen display profile holds
+  Fire records the device as the one who fired. Its station screen's Move to station goes through
+  `POST /api/device/working-orders/:id/lines/move-station` (`apps/server/src/device-api.ts`), which
+  serves only a kitchen display, checks `take-orders`, refuses a dish at a station its station
+  screen does not work (`device.forbidden_station`), and records the device, and the signed-in
+  person if any, in `ticket_item_moves`; the till's move route records its session's device and
+  person there too. A new venue's default kitchen display profile holds
   `take-orders` and `hand-over-orders` beside `prepare-orders` (`DEFAULT_PROFILE_CAPABILITIES`).
   Its station close/open controls use the device routes and require a manager's PIN with
   `venue_service.manage`; they also check the device's `prepare-orders` action and that its
@@ -278,7 +283,9 @@ the server checks each at the route, never trusting the till's copy:
   (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
   and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
   pass screen draws Fire, Ready and Away only when its profile has "Run the pass"
-  (`run-the-pass`, a screen setting, not an action). What reaches a station still comes from the
+  (`run-the-pass`, a screen setting, not an action). A kitchen display's station screen draws
+  Move to station on each waiting dish only when its profile has `take-orders`; a till's own
+  Station screen draws none (A439). What reaches a station still comes from the
   venue's routing. Saving a profile that no longer offers a screen, station or zone a device
   shows is allowed: the save names the devices it changed (`narrowedDevices`), each device records
   what it lost and shows it as no longer available until someone picks again, and adding it back

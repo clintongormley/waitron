@@ -91,10 +91,10 @@ instead of three, and for configuration pages that are only about configuration.
 | Normal week | A department's seven days. |
 | Named day | A date with a name: a public holiday, or one of the venue's own days. It may have its own hours. |
 | Prep station | Where a dish is made. It has no hours to set. |
-| Kitchen display | A device whose profile is a kitchen display's: a screen on a kitchen or pass wall, with nobody signed in. It runs exactly one kitchen screen: a station screen, a pass screen (whose Fire, Ready and Away appear only with the profile's "Run the pass") or a monitor. |
+| Kitchen display | A device whose profile is a kitchen display's: a screen on a kitchen or pass wall, with nobody signed in. It runs exactly one kitchen screen: a station screen (whose Move to station appears only with the profile's "Takes orders"), a pass screen (whose Fire, Ready and Away appear only with the profile's "Run the pass") or a monitor. |
 | Kitchen screen | What a device profile offers and a device chooses: a station screen, a pass screen or a pass monitor. |
 | Working screen | A kitchen screen with buttons: a station screen or a pass screen. Any device can run one. |
-| Station screen | A working screen showing some prep stations' queues, with buttons to start, ready and finish dishes. |
+| Station screen | A working screen showing some prep stations' queues, with buttons to start, ready and finish dishes; on a kitchen display, also Move to station on each waiting dish. |
 | Pass screen | A working screen showing the pass queue for some stations and zones, with Done on each dish; with the profile's "Run the pass", also Fire, Ready and Away. |
 | Monitor | A view-only kitchen screen with no buttons, such as a wall screen showing the pass queue. The pass monitor is the first; any device whose profile offers it may run one (owner, 2026-10-09). |
 
@@ -292,6 +292,9 @@ Watchers go. A **device profile** says which kitchen screens its devices may run
 show:
 
 - **Station screen** (a working screen; buttons to start, ready and finish dishes): which stations.
+  On a kitchen display whose profile has "Takes orders", each waiting dish (not an extra) also has
+  Move to station (2026-10-09, A439). The server refuses a dish at a station the screen does not
+  work, and records the device that moved it, and the person once one can sign in on a display.
 - **Pass screen** (a working screen; Done on each dish, and Fire, Ready and Away): which stations
   and which zones. Whether Fire, Ready and Away show is a setting of the profile's screens, "Run
   the pass"; the server keeps checking the action each one takes (taking orders, preparing,

@@ -12,6 +12,8 @@ import {
 import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
 import "../widgets/station-today.js";
+import "../widgets/station-choice-dialog.js";
+import { TABLE_REQUEST_LIMIT_MS, limited, resendUnanswered } from "../state/draft-sync.js";
 import type {
   BumpMode,
   FireControlMode,
@@ -53,6 +55,16 @@ const viewKey = (deviceId: string): string => `waitron.stationScreenView.${devic
 
 type DeviceStation = DeviceStationScreen["stations"][number];
 type WorkedStation = Extract<DeviceStation, { queue: StationQueueGroup[] }>;
+
+interface DishMove {
+  workingOrderId: string;
+  lineId: string;
+  name: string;
+  stationId: string | null;
+  stations: Station[];
+  busy: boolean;
+  refusal: string | null;
+}
 
 /** A station whose queue the display works: available, or switched off on its own page. */
 const worked = (station: DeviceStation): station is WorkedStation =>
@@ -188,6 +200,8 @@ export class TillStationScreen extends LitElement {
   @property({ attribute: false }) deviceId?: string;
   /** Mounted inside a card host, which supplies the header; the view toggle and the out-of-date banner stay. */
   @property({ type: Boolean }) embedded = false;
+  /** The device's profile allows Take orders; a kitchen display then offers Move on waiting dishes. */
+  @property({ type: Boolean }) canMoveStation = false;
 
   @state() private stations: Station[] = [];
   /** The device's chosen stations a narrowing took away, shown above the picker. */
@@ -219,6 +233,10 @@ export class TillStationScreen extends LitElement {
   /** The card whose group command was refused because its party changed since the queue was read:
    * shown by the next successful read, and gone at the one after. */
   @state() private tableChanged: string | null = null;
+  @state() private moving: DishMove | null = null;
+  /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
+  @state() private moveErrorCode?: string;
+  #moveOpening = false;
   #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
   #initialConsumed = false;
@@ -654,8 +672,84 @@ export class TillStationScreen extends LitElement {
     );
   }
 
+  #canMove(): boolean {
+    return this.deviceMode && this.canMoveStation;
+  }
+
+  async #onMoveStation(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (!this.#canMove() || this.moving !== null || this.#moveOpening) return;
+    const detail = (
+      event as CustomEvent<Pick<DishMove, "workingOrderId" | "lineId" | "name" | "stationId">>
+    ).detail;
+    this.#moveOpening = true;
+    this.moveErrorCode = undefined;
+    const limit = limited(READ_LIMIT_MS);
+    try {
+      const stations = await this.api.deviceStations({ signal: limit.signal });
+      this.moving = { ...detail, stations, busy: false, refusal: null };
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      if (code === "device.unauthorized") {
+        this.dispatchEvent(
+          new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
+        );
+      } else {
+        this.moveErrorCode = typeof code === "string" ? code : "server.internal";
+      }
+    } finally {
+      limit.done();
+      this.#moveOpening = false;
+    }
+  }
+
+  async #onStationChosen(event: Event, open: DishMove): Promise<void> {
+    const { stationId } = (event as CustomEvent<{ stationId: string | null }>).detail;
+    if (open.busy || stationId === null || stationId === open.stationId) return;
+    const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
+    const busy = { ...open, busy: true, refusal: null };
+    this.moving = busy;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await resendUnanswered(
+        (signal) => this.api.deviceMoveDishStation(open.workingOrderId, body, { signal }),
+        limit.signal,
+        () => this.isConnected,
+      );
+      if (this.moving === busy) this.moving = null;
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      if (this.moving === busy)
+        this.moving = { ...open, refusal: typeof code === "string" ? code : "server.internal" };
+    } finally {
+      limit.done();
+    }
+    await this.#reload();
+  }
+
+  #renderMoveDialog(open: DishMove): TemplateResult {
+    return html`<till-station-choice-dialog
+      mode="move"
+      .dishName=${open.name}
+      .stations=${open.stations}
+      .currentStationId=${open.stationId}
+      .busy=${open.busy}
+      .refusal=${open.refusal}
+      @station-chosen=${(event: Event) => {
+        event.stopPropagation();
+        void this.#onStationChosen(event, open);
+      }}
+      @close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.moving === open) this.moving = null;
+      }}
+    ></till-station-choice-dialog>`;
+  }
+
   override render() {
-    return this.deviceMode ? this.#renderDevice() : this.#renderOperator();
+    return html`${this.deviceMode ? this.#renderDevice() : this.#renderOperator()}${
+      this.moving === null ? nothing : this.#renderMoveDialog(this.moving)
+    }`;
   }
 
   #renderOperator(): TemplateResult {
@@ -733,6 +827,7 @@ export class TillStationScreen extends LitElement {
         .bumpMode=${this.bumpMode}
         .fireControl=${this.fireControl}
         .advanceOnly=${true}
+        .canMove=${this.#canMove()}
       ></till-station-queue>`;
   }
 
@@ -801,6 +896,7 @@ export class TillStationScreen extends LitElement {
         @fire-kitchen-group=${(event: Event) => void this.#onFireKitchenGroup(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
         @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}
+        @move-station=${(event: Event) => void this.#onMoveStation(event)}
       >
         ${
           this.embedded
@@ -867,6 +963,13 @@ export class TillStationScreen extends LitElement {
             : nothing
         }
         ${
+          this.moveErrorCode
+            ? html`<p class="error" role="alert" data-move-error>
+                ${codeMessage(this.moveErrorCode)}
+              </p>`
+            : nothing
+        }
+        ${
           this.acknowledgeFailed
             ? html`<p class="error" role="alert">${t("station.acknowledge_error")}</p>`
             : nothing
@@ -924,6 +1027,7 @@ export class TillStationScreen extends LitElement {
         .stationId=${station.id}
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}
+        .canMove=${this.#canMove()}
       ></till-station-queue>`;
   }
 

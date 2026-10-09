@@ -371,6 +371,32 @@ describe("till-app session activity", () => {
     expect(getDevicePassScreen).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [["act-as-kds", "take-orders"], true],
+    [["act-as-kds"], false],
+  ] as const)(
+    "lets an enrolled station screen offer Move to station only with Take orders (%j)",
+    async (capabilities, canMoveStation) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "station-device",
+          name: "Grill",
+          formFactor: "kds",
+          kitchenScreens: [kitchenScreen("station")],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+      });
+      await flush(el);
+      const screen = el
+        .shadowRoot!.querySelector("till-card-grid")!
+        .shadowRoot!.querySelector<HTMLElement & { canMoveStation: boolean }>(
+          "till-station-screen",
+        )!;
+      expect(screen.canMoveStation).toBe(canMoveStation);
+    },
+  );
+
   it("hands an enrolled station screen its device id, which keys its remembered view", async () => {
     const { el } = await mountApp({
       getTill: vi

@@ -109,6 +109,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "each device's own Done marks, live service in flight; copied to a standby, never drained back",
   ),
+  classify(
+    "ticket_item_moves",
+    "state",
+    "who moved a dish to another station, live service in flight; copied to a standby, never drained back",
+  ),
   classify("printers", "state", STATE),
   classify("page_printers", "state", STATE),
   classify("print_agents", "state", STATE),

@@ -16,7 +16,8 @@ export function isSharedDisplay(formFactor: FormFactor): boolean {
 }
 
 /** The actions a shared display can be given: every other one needs a named person signed in.
- * Taking and handing over are for a kitchen display's pass screen. */
+ * Taking is for a kitchen display's pass-screen Fire and its station screen's Move to station;
+ * handing over is for its pass screen. */
 const SHARED_DISPLAY_ACTIONS: readonly ProfileAction[] = [
   "prepare-orders",
   "take-orders",

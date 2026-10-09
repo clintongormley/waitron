@@ -238,6 +238,20 @@ export class TillStationQueue extends LitElement {
         cursor: pointer;
       }
 
+      .movable {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--wt-space-1);
+        width: fit-content;
+        max-width: 100%;
+        margin-bottom: var(--wt-space-1);
+      }
+
+      .movable > .line {
+        align-self: stretch;
+      }
+
       /* The dish row: qty× name (left) and the lens-specific secondary element (right). */
       .line-main {
         display: flex;
@@ -608,11 +622,11 @@ export class TillStationQueue extends LitElement {
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */
   @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
   @property() fireControl: FireControlMode = "waiter";
-  /** For an enrolled device display: the server's device routes are the per-line advance alone, and the
-   *  collect and fire routes need a session, so both buttons are hidden. */
+  /** For an enrolled device display: the collect and fire routes need a session, so both buttons are hidden. */
   @property({ type: Boolean }) advanceOnly = false;
   /** Rail-only, like collect: kanban columns cut across orders, so a per-order action has no home there. */
   @property({ type: Boolean }) showReprint = false;
+  @property({ type: Boolean }) canMove = false;
   /** Injectable clock for age colouring. Set in tests for deterministic bands. */
   @property({ attribute: false }) now?: number;
   @property({ attribute: false }) reducedMotion?: boolean;
@@ -667,6 +681,21 @@ export class TillStationQueue extends LitElement {
     this.dispatchEvent(
       new CustomEvent<FireKitchenGroupDetail>("fire-kitchen-group", {
         detail: { partyId: party.id, groupId: group.id, expectedPartyRevision: party.revision },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #move(group: MergedQueueGroup, item: StationQueueItem): void {
+    this.dispatchEvent(
+      new CustomEvent("move-station", {
+        detail: {
+          workingOrderId: group.orderId,
+          lineId: item.workingOrderLineId,
+          name: item.name,
+          stationId: group.stationId ?? this.stationId,
+        },
         bubbles: true,
         composed: true,
       }),
@@ -1052,20 +1081,43 @@ export class TillStationQueue extends LitElement {
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
     const next = NEXT[item.state];
-    if (held || next === undefined) {
-      const stateModifier = held ? "held" : "terminal";
-      return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
-        >${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
-      >`;
-    }
-    return html`<button
-      class="line state-${item.state}"
-      data-item=${item.id}
-      aria-label=${this.#bumpLabel(group)}
-      @click=${() => this.#bump(group, item, next)}
-    >
-      ${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}
-    </button>`;
+    const line =
+      held || next === undefined
+        ? html`<span
+            class="line state-${item.state} ${held ? "held" : "terminal"}"
+            data-item=${item.id}
+            >${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
+          >`
+        : html`<button
+            class="line state-${item.state}"
+            data-item=${item.id}
+            aria-label=${this.#bumpLabel(group)}
+            @click=${() => this.#bump(group, item, next)}
+          >
+            ${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}
+          </button>`;
+    if (!this.#movable(item)) return line;
+    return html`<div class="movable">
+      ${line}
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-move-station=${item.id}
+        aria-label=${`${t("table.move_station")} · ${item.name}`}
+        @click=${() => this.#move(group, item)}
+        >${t("table.move_station")}</wt-button
+      >
+    </div>`;
+  }
+
+  /** An extra prepared at its own station is its own queue item, marked only by its "for" cross
+   *  reference; like the till, only a dish moves. */
+  #movable(item: StationQueueItem): boolean {
+    return (
+      this.canMove &&
+      item.state === "queued" &&
+      !(item.crossRefs ?? []).some((ref) => ref.kind === "for")
+    );
   }
 
   #customisation(item: StationQueueItem): TemplateResult | typeof nothing {

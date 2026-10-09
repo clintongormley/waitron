@@ -126,6 +126,7 @@ export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { stationPrinters } from "./schema/station-printers.js";
 export { watchers, watcherStations, watcherZones, watcherPrinters } from "./schema/watchers.js";
 export { passItemMarks } from "./schema/pass-item-marks.js";
+export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { type AllergenMap, catalogues, categories, products } from "./schema/catalogue.js";
 export { locationCatalogues } from "./schema/location-catalogues.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";

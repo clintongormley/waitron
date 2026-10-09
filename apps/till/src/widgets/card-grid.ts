@@ -168,7 +168,6 @@ export class TillCardGrid extends LitElement {
   @property() cardProvider: CardProvider = "none";
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
-  /** See the waiting list's `canMoveStation`. */
   @property({ type: Boolean }) canMoveStation = false;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
@@ -468,6 +467,7 @@ export class TillCardGrid extends LitElement {
               .deviceMode=${this.deviceMode}
               .initialDeviceStation=${this.initialDeviceStation}
               .deviceId=${this.deviceId}
+              .canMoveStation=${this.canMoveStation}
             ></till-station-screen>`;
       case "table-order":
         // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen

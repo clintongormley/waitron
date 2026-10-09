@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { ticketItemMoves, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createStation, deactivateStation } from "./kitchen.js";
@@ -49,6 +49,33 @@ describe("GET /api/stations", () => {
 });
 
 describe("POST /api/working-orders/:id/lines/move-station", () => {
+  it("records the session's device and person as the mover", async () => {
+    const { tabId } = await seatedWith(venue, "Paella");
+    const [item] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    const answer = await call(`/api/working-orders/${tabId}/lines/move-station`, {
+      submissionId: randomUUID(),
+      lineIds: [item!.workingOrderLineId],
+      stationId: grill,
+    });
+    expect(answer.status).toBe(200);
+    const moves = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(ticketItemMoves)
+        .where(eq(ticketItemMoves.workingOrderLineId, item!.workingOrderLineId)),
+    );
+    expect(moves).toEqual([
+      expect.objectContaining({
+        fromStationId: bar,
+        toStationId: grill,
+        movedByDeviceId: venue.deviceId,
+        movedByPersonId: venue.operatorId,
+      }),
+    ]);
+  });
+
   it("moves a queued dish and exposes its station and move eligibility", async () => {
     const { tabId } = await seatedWith(venue, "Paella");
     const [item] = await inTx(venue, (tx) =>

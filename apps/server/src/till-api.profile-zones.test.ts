@@ -160,8 +160,12 @@ import { offerProducts } from "./testing/zone-offers.js";
  *
  * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
  * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
- * reads; the kitchen's `/api/device/station-screen`, notice and ticket-item routes, scoped by the
- * device's station screen ("a kitchen display" below); `/api/device/pass-screen`, its `/done` and
+ * reads; the kitchen's `/api/device/station-screen`, notice, ticket-item and
+ * `/api/device/working-orders/:id/lines/move-station` routes, scoped by the device's station screen
+ * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
+ * work, and moves nothing" in `apps/server/src/device-api.station-move.test.ts`);
+ * `/api/device/stations`, which needs a station screen and lists every active station;
+ * `/api/device/pass-screen`, its `/done` and
  * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * and the drawer, the authorizer and reason lists, `/api/statuses` and
@@ -1026,11 +1030,17 @@ describe("a kitchen display", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, round.tabId));
       await inTx(v, (tx) =>
-        moveDishesToStation(tx, v.cfg, round.tabId, {
-          submissionId: randomUUID(),
-          lineIds: lines.map((line) => line.id),
-          stationId: pastry.id,
-        }),
+        moveDishesToStation(
+          tx,
+          v.cfg,
+          round.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: lines.map((line) => line.id),
+            stationId: pastry.id,
+          },
+          { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
+        ),
       );
     }
 

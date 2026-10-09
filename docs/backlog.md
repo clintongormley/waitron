@@ -1588,6 +1588,22 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   display shows a sentence saying what to do, but a till or handheld whose choice a profile
   narrowed to nothing shows an empty screen. Left open by A366 slice 5 Part A.
 
+- **A move made from the old station's own screen still gives that station a "moved" notice, and a
+  correction slip where its ticket printed** — `moveDishesToStation`
+  (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.
+  Left open by A439.
+
+- **Nothing shows who moved a dish yet** — each move records its device and the person signed in on
+  it (`ticket_item_moves`; nobody on a kitchen display until someone can sign in on one), but no
+  screen or report reads them. Left open by A439.
+
+- **A till's own Station screen could move dishes too** — only a kitchen display's station screen
+  draws Move to station; A439 left the till's out.
+
+- **The move route does not refuse an extra (an add-on line)** — `moveDishesToStation`
+  (`apps/server/src/station-move.ts`) never checks that a line is a dish, so only the buttons keep
+  extras out, on the till and the kitchen display alike. Left open by A439.
+
 ### The till, devices and table service
 
 - **Investigate a null device identity during profile switching.** A432’s full till coverage run
