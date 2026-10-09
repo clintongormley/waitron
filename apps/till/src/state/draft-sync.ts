@@ -69,6 +69,14 @@ export interface DraftSyncOptions {
   requestLimitMs: number;
 }
 
+/**
+ * How long the till waits on a request it bounds, its automatic resends included, before cancelling
+ * it. It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus
+ * `STACK_CAPTURE_MS`, `packages/store/src/venue-liveness.ts`), so a server whose main thread had
+ * stopped when the wait began is killed before the till gives up.
+ */
+export const TABLE_REQUEST_LIMIT_MS = 150_000;
+
 /** A signal that aborts after `ms`, or with `also`; `done` clears the timer. */
 export function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: () => void } {
   const own = new AbortController();

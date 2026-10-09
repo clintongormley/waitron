@@ -17,6 +17,7 @@ import type {
 import { TillApi as StationTodayApi } from "../api/client.js";
 import type { TillStationToday } from "../widgets/station-today.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
+import type { TillStationChoiceDialog } from "../widgets/station-choice-dialog.js";
 
 const stations: Station[] = [
   {
@@ -4185,5 +4186,282 @@ describe("kitchen display station-today controls", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("till-station-screen moves a dish to another station (A439)", () => {
+  const cocinaDevice = {
+    id: "st-dev",
+    name: "Cocina",
+    available: true as const,
+    today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
+    printersDown: [],
+    queue: cocinaQueue,
+    notices: [],
+  };
+  const destinations: Station[] = [{ ...stations[0]!, id: "st-dev" }, stations[1]!];
+
+  async function mountMove(
+    props: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
+  ) {
+    const api = {
+      ...stubApi(),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [cocinaDevice] }),
+      deviceStations: vi.fn().mockResolvedValue(destinations),
+      deviceMoveDishStation: vi
+        .fn()
+        .mockResolvedValue({ revision: 2, stationId: "st-2", moved: [] }),
+      deviceAdvance: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    } as unknown as TillApi;
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+      canMoveStation: true,
+      ...props,
+    });
+    await flush(el);
+    return { el, api };
+  }
+
+  const moveButton = (el: TillStationScreen) =>
+    queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-1"]');
+  const dialogs = (el: TillStationScreen) => [
+    ...el.shadowRoot!.querySelectorAll<TillStationChoiceDialog>("till-station-choice-dialog"),
+  ];
+  const dialog = (el: TillStationScreen) => dialogs(el)[0];
+
+  async function open(el: TillStationScreen): Promise<TillStationChoiceDialog> {
+    moveButton(el)!.click();
+    await expect.poll(() => dialog(el)).toBeDefined();
+    await dialog(el)!.updateComplete;
+    return dialog(el)!;
+  }
+
+  function choose(target: TillStationChoiceDialog, stationId: string | null): void {
+    target.dispatchEvent(
+      new CustomEvent("station-chosen", { detail: { stationId }, bubbles: true, composed: true }),
+    );
+  }
+
+  it("a kitchen display with Take orders draws Move on its queued dishes", async () => {
+    const { el } = await mountMove();
+    expect(queueWidget(el)!.canMove).toBe(true);
+    expect(moveButton(el)).not.toBeNull();
+  });
+
+  it("a kitchen display without Take orders draws no Move", async () => {
+    const { el } = await mountMove({ canMoveStation: false });
+    expect(queueWidget(el)!.canMove).toBe(false);
+    expect(moveButton(el)).toBeNull();
+  });
+
+  it("the till's own Station screen draws no Move, even with Take orders", async () => {
+    const { el, api } = await mountMove({ deviceMode: false });
+    expect(queueWidget(el)!.canMove).toBe(false);
+    expect(moveButton(el)).toBeNull();
+    const escaped = vi.fn();
+    document.addEventListener("move-station", escaped);
+    try {
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("move-station", {
+          detail: { workingOrderId: "wo-1", lineId: "wol-1", name: "Paella", stationId: "st-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+    } finally {
+      document.removeEventListener("move-station", escaped);
+    }
+    expect(escaped).not.toHaveBeenCalled();
+    expect(api.deviceStations).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeUndefined();
+  });
+
+  it("the merged view of several stations draws Move too", async () => {
+    const { el } = await mountMove(
+      {},
+      {
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [cocinaDevice, { ...cocinaDevice, id: "st-2", name: "Barra", queue: [] }],
+        }),
+      },
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-merge-toggle]")!.click();
+    await flush(el);
+    expect(queueWidget(el)!.canMove).toBe(true);
+    expect(moveButton(el)).not.toBeNull();
+  });
+
+  it("Move opens the station dialog naming the dish, with its station marked as now", async () => {
+    const { el, api } = await mountMove();
+    const escaped = vi.fn();
+    document.addEventListener("move-station", escaped);
+    let target: TillStationChoiceDialog;
+    try {
+      target = await open(el);
+    } finally {
+      document.removeEventListener("move-station", escaped);
+    }
+    expect(escaped).not.toHaveBeenCalled();
+    expect(api.deviceStations).toHaveBeenCalledOnce();
+    expect(api.listStations).not.toHaveBeenCalled();
+    expect(target.mode).toBe("move");
+    expect(target.dishName).toBe("Paella");
+    expect(target.currentStationId).toBe("st-dev");
+    expect(target.stations).toEqual(destinations);
+    expect(target.busy).toBe(false);
+    expect(target.refusal).toBeNull();
+    const combobox = target.shadowRoot!.querySelector<
+      HTMLElement & { options: { label: string }[] }
+    >("wt-combobox")!;
+    expect(combobox.options.map((option) => option.label)).toEqual([
+      t("move_station.now").replace("{station}", "Cocina"),
+      "Barra",
+    ]);
+  });
+
+  it("choosing a station moves the dish through the display's route, closes and reloads", async () => {
+    const { el, api } = await mountMove();
+    const target = await open(el);
+    choose(target, "st-2");
+    await expect.poll(() => dialog(el)).toBeUndefined();
+    expect(api.deviceMoveDishStation).toHaveBeenCalledOnce();
+    expect(api.deviceMoveDishStation).toHaveBeenCalledWith(
+      "wo-1",
+      { submissionId: expect.any(String), lineIds: ["wol-1"], stationId: "st-2" },
+      { signal: expect.any(AbortSignal) },
+    );
+    await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
+  });
+
+  it("marks the dialog busy while the move is sent", async () => {
+    let answer!: (value: unknown) => void;
+    const { el } = await mountMove(
+      {},
+      { deviceMoveDishStation: vi.fn(() => new Promise((resolve) => (answer = resolve))) },
+    );
+    const target = await open(el);
+    choose(target, "st-2");
+    await flush(el);
+    expect(dialog(el)!.busy).toBe(true);
+    choose(dialog(el)!, "st-2");
+    answer({ revision: 2, stationId: "st-2", moved: [] });
+    await expect.poll(() => dialog(el)).toBeUndefined();
+  });
+
+  it("sends a move that got no answer again under the same submission", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ revision: 2, stationId: "st-2", moved: [] });
+    const { el } = await mountMove({}, { deviceMoveDishStation: send });
+    choose(await open(el), "st-2");
+    await expect.poll(() => dialog(el)).toBeUndefined();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]![1]).toEqual(send.mock.calls[0]![1]);
+  });
+
+  it("a refusal stays in the dialog in its own words, and the queue reloads", async () => {
+    const { el, api } = await mountMove(
+      {},
+      {
+        deviceMoveDishStation: vi.fn().mockRejectedValue({ code: "device.forbidden_station" }),
+      },
+    );
+    choose(await open(el), "st-2");
+    await expect.poll(() => dialog(el)?.refusal).toBe("device.forbidden_station");
+    const target = dialog(el)!;
+    await target.updateComplete;
+    expect(target.busy).toBe(false);
+    expect(target.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      codeMessage("device.forbidden_station"),
+    );
+    expect(codeMessage("device.forbidden_station")).not.toBe(codeMessage("server.internal"));
+    await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
+  });
+
+  it("a refusal with no code shows the general sentence", async () => {
+    const { el } = await mountMove(
+      {},
+      { deviceMoveDishStation: vi.fn().mockRejectedValue(new Error("boom")) },
+    );
+    choose(await open(el), "st-2");
+    await expect.poll(() => dialog(el)?.refusal).toBe("server.internal");
+  });
+
+  it.each([
+    ["answers", (send: { resolve: () => void; reject: () => void }) => send.resolve()],
+    ["is refused", (send: { resolve: () => void; reject: () => void }) => send.reject()],
+  ])("a dialog closed while its move is sent stays closed when the move %s", async (_, settle) => {
+    const send = { resolve: () => {}, reject: () => {} };
+    const { el, api } = await mountMove(
+      {},
+      {
+        deviceMoveDishStation: vi.fn(
+          () =>
+            new Promise((resolve, reject) => {
+              send.resolve = () => resolve({ revision: 2, stationId: "st-2", moved: [] });
+              send.reject = () => reject({ code: "ticket.already_started" });
+            }),
+        ),
+      },
+    );
+    const target = await open(el);
+    choose(target, "st-2");
+    await flush(el);
+    target.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(dialog(el)).toBeUndefined();
+    settle(send);
+    await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
+    expect(dialog(el)).toBeUndefined();
+  });
+
+  it("Cancel closes the dialog and moves nothing", async () => {
+    const { el, api } = await mountMove();
+    const target = await open(el);
+    target.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+    await expect.poll(() => dialog(el)).toBeUndefined();
+    expect(api.deviceMoveDishStation).not.toHaveBeenCalled();
+  });
+
+  it.each([null, "st-dev"])("a choice of %s moves nothing", async (stationId) => {
+    const { el, api } = await mountMove();
+    choose(await open(el), stationId);
+    await flush(el);
+    expect(api.deviceMoveDishStation).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeDefined();
+  });
+
+  it("a second press while the stations are read opens one dialog", async () => {
+    let answer!: (value: Station[]) => void;
+    const { el, api } = await mountMove(
+      {},
+      { deviceStations: vi.fn(() => new Promise<Station[]>((resolve) => (answer = resolve))) },
+    );
+    moveButton(el)!.click();
+    moveButton(el)!.click();
+    answer(destinations);
+    await expect.poll(() => dialog(el)).toBeDefined();
+    moveButton(el)!.click();
+    await flush(el);
+    expect(api.deviceStations).toHaveBeenCalledOnce();
+    expect(dialogs(el)).toHaveLength(1);
+  });
+
+  it("opens no dialog when the stations cannot be read, and a later press tries again", async () => {
+    const deviceStations = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(destinations);
+    const { el } = await mountMove({}, { deviceStations });
+    moveButton(el)!.click();
+    await flush(el);
+    expect(dialog(el)).toBeUndefined();
+    await open(el);
+    expect(deviceStations).toHaveBeenCalledTimes(2);
   });
 });
