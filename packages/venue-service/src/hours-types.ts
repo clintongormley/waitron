@@ -48,7 +48,6 @@ export interface SpecialDate {
   id: string;
   date: LocalDate;
   name: string;
-  colour: CalendarColour;
   kind: NamedDayKind;
   repeats: boolean;
   ownHours: boolean;
@@ -56,11 +55,11 @@ export interface SpecialDate {
 }
 
 export type SpecialDateInput = Pick<SpecialDate, "date" | "name" | "closeWholeVenue"> &
-  Partial<Pick<SpecialDate, "kind" | "repeats" | "ownHours" | "colour">> & {
+  Partial<Pick<SpecialDate, "kind" | "repeats" | "ownHours">> & {
     cells: DateHoursCell[];
   };
 
-/** How the calendar colours a date: a special date's own colour, or one of the two reserved. */
+/** Calendar tones derive from named-day kinds and the venue's open state. */
 export type CalendarTone = CalendarColour | "standard" | "closed";
 
 /** A public holiday fact for a date, supplied by a `HolidayReader` (`./hours.ts`) when one is given. */

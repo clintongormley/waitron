@@ -117,8 +117,13 @@ export function renderDatesList(host: DatesListHost) {
       key: "name",
       label: t("hours.name"),
       cell: (row) =>
-        html`${row.special.name} <span part=${`colour-swatch colour-${row.special.colour}`}></span
-          ><span part="colour-name">${t(`hours.colour.${row.special.colour}` as Key)}</span>`,
+        html`${row.special.name}
+          <span
+            part=${`colour-swatch colour-${row.special.kind === "holiday" ? "purple" : "blue"}`}
+          ></span
+          ><span part="colour-name"
+            >${t(`hours.colour.${row.special.kind === "holiday" ? "purple" : "blue"}` as Key)}</span
+          >`,
     },
     ...host.subjects.map((subject) => ({
       key: keyOf(subject),

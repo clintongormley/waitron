@@ -193,7 +193,6 @@ export function validateHoursConfiguration(
         refuse("special_dates.date");
     taken.push({ locationId: row.location_id, ...rule });
     if (typeof row.name !== "string" || row.name.trim() === "") refuse("special_dates.name");
-    if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("special_dates.colour");
     if (row.close_whole_venue !== 0 && row.close_whole_venue !== 1)
       refuse("special_dates.close_whole_venue");
     parsedAs("special_dates", () =>

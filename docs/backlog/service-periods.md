@@ -18,11 +18,10 @@ their full text.
   [Spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
-  Slice 2 is in progress in campaign lane D. Its remaining work is the colour
-  migration, and the demo and docs (plan Tasks 27–29). Task 26 retires the local-holiday API,
+  Slice 2 is in progress in campaign lane D. Its remaining work is the demo and docs (plan Tasks 28–29). Task 26 retires the local-holiday API,
   editor, facts and transfer entries while retaining Calendar holiday-area choice, public holidays
   and own named holidays. Task 26 and its retained-area corrections are reviewed and complete;
-  the branch has not landed. Task 29 also corrects the Calendar coverage label and EN/ES wording
+  Task 27's migration implementation awaits controller review; the branch has not landed. Task 29 also corrects the Calendar coverage label and EN/ES wording
   for an unsupported public-holiday country, so own holidays still show as owner-entered.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired

@@ -14,8 +14,7 @@ import {
   table,
   timeOfDay,
 } from "@waitron/db";
-import type { NamedDayKind } from "../named-day-rules.js";
-import { CALENDAR_COLOURS } from "../hours-types.js";
+import { NAMED_DAY_KINDS } from "../named-day-rules.js";
 import { departments } from "./service.js";
 
 /**
@@ -24,7 +23,6 @@ import { departments } from "./service.js";
  */
 export const HOURS_CELL_MODES = ["closed", "all_day", "periods"] as const;
 const hoursCellMode = enumType(HOURS_CELL_MODES);
-const calendarColour = enumType(CALENDAR_COLOURS);
 
 // The owner columns of a cell refer to a department or a station that the SQL cannot tie to the
 // cell's venue; the writers in `../hours.ts` resolve each owner within the venue.
@@ -90,8 +88,7 @@ export const specialDates = table(
     locationId: id("location_id").notNull(),
     date: day("date").notNull(),
     name: label("name").notNull(),
-    colour: calendarColour("colour").notNull(),
-    kind: label("kind").$type<NamedDayKind>().notNull().default("working_day"),
+    kind: enumType(NAMED_DAY_KINDS)("kind").notNull().default("working_day"),
     repeatOn: label("repeat_on"),
     ownHours: flag("own_hours").notNull().default(false),
     closeWholeVenue: flag("close_whole_venue").notNull().default(false),
@@ -108,7 +105,14 @@ export const specialDates = table(
       sql`${t.date} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`,
     ),
     check("special_dates_name_ck", sql`trim(${t.name}) <> ''`),
-    check("special_dates_colour_ck", enumCheck(t.colour)),
+    check("special_dates_kind_ck", enumCheck(t.kind)),
+    check(
+      "special_dates_repeat_ck",
+      sql`${t.repeatOn} is null or ${t.repeatOn} = substr(${t.date}, 6, 5)`,
+    ),
+    uniqueIndex("special_dates_location_repeat_key")
+      .on(t.locationId, t.repeatOn)
+      .where(sql`${t.repeatOn} is not null`),
   ],
 );
 

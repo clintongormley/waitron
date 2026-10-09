@@ -402,7 +402,6 @@ export async function readSpecialDate(
     id: row.id,
     date: row.date,
     name: row.name,
-    colour: row.colour,
     kind: row.kind,
     repeats: row.repeatOn !== null,
     ownHours: row.ownHours,
@@ -758,7 +757,6 @@ export async function saveSpecialDate(
   const values = {
     date: parsed.date,
     name: parsed.name,
-    colour: parsed.kind === "holiday" ? ("red" as const) : ("blue" as const),
     kind: parsed.kind,
     repeatOn: parsed.repeats ? repeatKey(parsed.date) : null,
     ownHours: parsed.ownHours,
@@ -818,7 +816,6 @@ export async function saveSpecialDate(
     id: specialDateId,
     date: values.date,
     name: values.name,
-    colour: values.colour,
     kind: values.kind,
     repeats: parsed.repeats,
     ownHours: values.ownHours,
@@ -843,7 +840,6 @@ export async function renameSpecialDate(
     id: row.id,
     date: row.date,
     name: row.name,
-    colour: row.colour,
     kind: row.kind,
     repeats: row.repeatOn !== null,
     ownHours: row.ownHours,
@@ -938,7 +934,6 @@ export async function duplicateSpecialDate(
 
   const values = {
     name: source.name,
-    colour: source.colour,
     kind: source.kind,
     repeats: false,
     ownHours: source.ownHours,
@@ -950,7 +945,6 @@ export async function duplicateSpecialDate(
       .insert(specialDates)
       .values({
         name: values.name,
-        colour: values.colour,
         kind: values.kind,
         ownHours: values.ownHours,
         closeWholeVenue: values.closeWholeVenue,
@@ -1055,7 +1049,6 @@ async function readRange(
       id: specialDates.id,
       date: specialDates.date,
       name: specialDates.name,
-      colour: specialDates.colour,
       kind: specialDates.kind,
       repeatOn: specialDates.repeatOn,
       ownHours: specialDates.ownHours,
@@ -1114,7 +1107,6 @@ function calendarDays(
   range: Awaited<ReturnType<typeof readRange>>,
   holidays: readonly HolidayFact[],
 ): CalendarDay[] {
-  const colourById = new Map(range.specials.map((special) => [special.id, special.colour]));
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of holidays) {
     const facts = factsOn.get(fact.date);
@@ -1131,7 +1123,6 @@ function calendarDays(
             id: occurrence.id,
             date,
             name: occurrence.name,
-            colour: colourById.get(occurrence.id)!,
             kind: occurrence.kind,
             repeats: occurrence.repeats,
             ownHours: occurrence.ownHours,
@@ -1151,7 +1142,13 @@ function calendarDays(
       date,
       specialDate: special,
       holidays: factsOn.get(date) ?? [],
-      tone: open ? (special?.colour ?? "standard") : "closed",
+      tone: open
+        ? special === null
+          ? "standard"
+          : special.kind === "holiday"
+            ? "purple"
+            : "blue"
+        : "closed",
     };
   });
 }

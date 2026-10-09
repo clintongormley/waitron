@@ -595,7 +595,10 @@ export class HoursCalendar extends LitElement {
         <span class="number">${number}</span>
         ${words.map((word, index) =>
           index === 0 && coloured
-            ? html`<span class="label" data-test="special-name" data-colour=${special.colour}
+            ? html`<span
+                class="label"
+                data-test="special-name"
+                data-colour=${special.kind === "holiday" ? "purple" : "blue"}
                 >${word}</span
               > `
             : html`<span>${word}</span> `,
@@ -664,7 +667,7 @@ export class HoursCalendar extends LitElement {
             ? nothing
             : html`<span
                 class="swatch"
-                data-colour=${day.tone === "closed" ? "closed" : special.colour}
+                data-colour=${day.tone === "closed" ? "closed" : special.kind === "holiday" ? "purple" : "blue"}
               ></span>`
         }<span
           >${special === null ? formatDate(date) : `${formatDate(date)} · ${special.name}`}</span
@@ -1030,11 +1033,8 @@ export class HoursCalendar extends LitElement {
         </div>
         <ul class="legend">
           ${legend("standard", "hours.calendar.legend_standard")}
-          ${legend("closed", "hours.calendar.legend_closed")}
-          <li>
-            <span class="swatch" data-colour="red"></span
-            ><span class="swatch" data-colour="amber"></span>${t("hours.calendar.legend_special")}
-          </li>
+          ${legend("closed", "hours.calendar.legend_closed")} ${legend("purple", "named.holiday")}
+          ${legend("blue", "named.working_day")}
         </ul>
         ${this.#monthCoverage()}
         ${this.readError ? html`<p role="alert">${this.readError}</p>` : nothing} ${this.#grid()}
