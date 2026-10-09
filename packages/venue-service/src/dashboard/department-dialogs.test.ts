@@ -791,3 +791,130 @@ it.each([6, 7])(
     expect(request.mock.calls.filter((call) => call[1] === "GET")).toHaveLength(1);
   },
 );
+
+it.each(dialogs.slice(0, 4))(
+  "$kind leaves newer native text free of an earlier name refusal",
+  async (dialog) => {
+    let refuse!: (error: unknown) => void;
+    const request = vi.fn(
+      () =>
+        new Promise<unknown>((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const { el } = await mount(dialog, request);
+    await change(el, "name", "Reserved");
+    save(el).click();
+    await expect.poll(() => request.mock.calls.length).toBe(1);
+    await field(el, "name").updateComplete;
+    const native = field(el, "name").shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(native), "New available name");
+    await el.updateComplete;
+    const kind = dialog.kind.endsWith("department") ? "department" : "zone";
+    refuse({
+      code: `${kind}.name_disabled`,
+      params: { name: "Reserved", [`${kind}Id`]: "disabled" },
+    });
+    await expect.poll(() => save(el).disabled).toBe(false);
+    expect(field(el, "name").error).toBe("");
+    expect(native.value).toBe("New available name");
+    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+    expect(await bottom(el)).toBe("");
+    expect(el.dialog).toEqual(dialog);
+    expect(request).toHaveBeenCalledTimes(1);
+  },
+);
+
+it.each(dialogs.slice(0, 4))(
+  "$kind leaves newer native text free of an earlier Enable refusal",
+  async (dialog) => {
+    let refuse!: (error: unknown) => void;
+    const kind = dialog.kind.endsWith("department") ? "department" : "zone";
+    let calls = 0;
+    const request = vi.fn(async () => {
+      if (++calls === 1)
+        throw {
+          code: `${kind}.name_disabled`,
+          params: { name: "Reserved", [`${kind}Id`]: "disabled" },
+        };
+      return new Promise<unknown>((_resolve, reject) => {
+        refuse = reject;
+      });
+    });
+    const { el } = await mount(dialog, request);
+    await change(el, "name", "Reserved");
+    save(el).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
+      .not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
+    await expect.poll(() => request.mock.calls.length).toBe(2);
+    await field(el, "name").updateComplete;
+    const native = field(el, "name").shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(native), "New available name");
+    await el.updateComplete;
+    refuse(kind === "zone" ? { code: "zone.department_inactive" } : { code: "connection.failed" });
+    await expect.poll(() => save(el).disabled).toBe(false);
+    expect(field(el, "name").error).toBe("");
+    expect(native.value).toBe("New available name");
+    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+    expect(await bottom(el)).toBe("");
+    expect(el.dialog).toEqual(dialog);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenLastCalledWith(
+      kind === "department"
+        ? "/management-api/venue-service/departments/disabled"
+        : "/management-api/zones/disabled",
+      "PATCH",
+      { active: true },
+    );
+  },
+);
+
+it.each(dialogs.slice(0, 4))(
+  "$kind paints the native Save state for clean, changed, reverted and refused names",
+  async (dialog) => {
+    const request = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const { el } = await mount(dialog, request);
+    const state = async () => {
+      const button = save(el);
+      await button.updateComplete;
+      return {
+        variant: button.variant,
+        disabled: button.disabled,
+        innerDisabled: button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled,
+      };
+    };
+    const cancel = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=cancel-editor]",
+    )!;
+    expect(cancel.variant).toBe("secondary");
+    expect(await state()).toEqual({ variant: "secondary", disabled: true, innerDisabled: true });
+    save(el).dispatchEvent(new MouseEvent("click"));
+    await el.updateComplete;
+    expect(request).not.toHaveBeenCalled();
+    expect(field(el, "name").error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(el.dialog).toEqual(dialog);
+    await field(el, "name").updateComplete;
+    const native = field(el, "name").shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(native), "Revised name");
+    await el.updateComplete;
+    expect(await state()).toEqual({ variant: "primary", disabled: false, innerDisabled: false });
+    await userEvent.fill(
+      page.elementLocator(native),
+      "row" in dialog ? ` ${dialog.row.name} ` : " ",
+    );
+    await el.updateComplete;
+    expect(await state()).toEqual({ variant: "secondary", disabled: true, innerDisabled: true });
+    await userEvent.fill(page.elementLocator(native), "Revised name");
+    await el.updateComplete;
+    await save(el).updateComplete;
+    await userEvent.click(page.elementLocator(save(el).shadowRoot!.querySelector("button")!));
+    await expect.poll(() => bottom(el)).toBe("The change could not be saved.");
+    expect(await state()).toEqual({ variant: "primary", disabled: false, innerDisabled: false });
+    expect(field(el, "name").error).toBe("");
+    expect(el.dialog).toEqual(dialog);
+    expect(request).toHaveBeenCalledTimes(1);
+  },
+);

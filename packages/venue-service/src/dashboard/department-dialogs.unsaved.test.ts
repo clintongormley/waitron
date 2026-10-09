@@ -257,3 +257,59 @@ it.each(cases)(
     ]);
   },
 );
+
+it.each(
+  cases.flatMap((dialog) => (["cancel", "escape"] as const).map((method) => ({ dialog, method }))),
+)(
+  "$dialog.kind native $method preserves Keep and discards without a write",
+  async ({ dialog, method }) => {
+    const el = await mount(dialog);
+    const request = vi.fn(async () => ({ id: "new" }));
+    el.api = testApi(request);
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const nativeDialog = modal.shadowRoot!.querySelector("dialog")!;
+    await field(el).updateComplete;
+    const nativeName = field(el).shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(nativeName), "Protected draft");
+    await el.updateComplete;
+    const dismiss = async () => {
+      if (method === "cancel") {
+        const cancel = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-test=cancel-editor]",
+        )!;
+        await cancel.updateComplete;
+        await userEvent.click(page.elementLocator(cancel.shadowRoot!.querySelector("button")!));
+      } else {
+        await userEvent.click(page.elementLocator(nativeName));
+        await userEvent.keyboard("{Escape}");
+      }
+      await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
+    };
+    await dismiss();
+    await choose("keep");
+    expect(nativeDialog.open).toBe(true);
+    expect(nativeName.value).toBe("Protected draft");
+    expect(unload()).toBe(true);
+    expect(request).not.toHaveBeenCalled();
+    await dismiss();
+    await choose("discard");
+    await expect.poll(() => el.dialog).toBeUndefined();
+    expect(nativeDialog.open).toBe(false);
+    expect(unload()).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  },
+);
+
+it("disconnecting a dialog with a pending leave question closes the question and releases its draft", async () => {
+  const el = await mount(cases[1]!);
+  await change(el, "Unsaved rename");
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const closing = modal.requestClose("cancel");
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => question.open).toBe(true);
+  el.remove();
+  expect(await closing).toBe(false);
+  await expect.poll(() => question.open).toBe(false);
+  expect(unload()).toBe(false);
+});

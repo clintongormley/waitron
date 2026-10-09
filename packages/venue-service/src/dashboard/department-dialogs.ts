@@ -186,7 +186,7 @@ export class DepartmentDialogs extends LitElement {
       return format("venue.table_in_use", { table });
     return t("venue.save_error");
   }
-  private fieldRefusal(error: unknown) {
+  private fieldRefusal(error: unknown, submitted: Draft) {
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
     let field: keyof Draft | undefined;
     if (
@@ -203,6 +203,7 @@ export class DepartmentDialogs extends LitElement {
         : undefined;
     if (kind && !this.moving) {
       field = "name";
+      if (this.draft.name.trim() !== submitted.name.trim()) return;
       this.refused = {
         name: t(
           code === `${kind}.name_disabled`
@@ -320,6 +321,7 @@ export class DepartmentDialogs extends LitElement {
     } catch (error) {
       if (this.current(dialog, generation)) {
         if (enable) {
+          if (this.draft.name.trim() !== submitted.name.trim()) return;
           if (
             enable.kind === "zone" &&
             (error as { code?: string } | undefined)?.code === "zone.department_inactive"
@@ -329,7 +331,7 @@ export class DepartmentDialogs extends LitElement {
             this.clash = enable;
             this.failure = this.refusal(error);
           }
-        } else this.fieldRefusal(error);
+        } else this.fieldRefusal(error, submitted);
       }
     } finally {
       if (this.current(dialog, generation)) this.busy = false;

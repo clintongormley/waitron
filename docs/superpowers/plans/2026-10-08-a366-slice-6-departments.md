@@ -1571,3 +1571,35 @@ with `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts
 A10 remains incomplete: finish the full old assertion mapping, retire only the approved removed
 checks, switch the public wrapper and remove the staged contribution spy. Then run these cases
 through the public screen, followed by A11 and A13–A15 and the branch gates.
+
+
+### Implementation checkpoint — Task A10 assertion audit and late name replies (2026-10-09)
+
+The first semantic audit now accounts for the declarations in all four old screen
+suites. Its read-only mappings identify retained checks that still need to move:
+post-save inheritance, translated action refusals, native field events, live reads
+with open dialog errors, transfer draft and load races, and pending leave
+questions. The old screen and suites remain intact. A matching replacement test
+title or a standalone screenshot does not close those gaps.
+
+Eight new browser cases reproduced stale name refusals and Enable offers after
+new native input arrived during the request. Add and Rename dialogs now apply
+those replies only while the displayed name matches the submitted name. The
+request still releases its busy state, so the newer draft can be submitted.
+Nine additional cases carry native Cancel/Escape Keep/Discard and disconnecting
+with a pending question; four carry native Save-button state through clean,
+changed, trimmed-reverted and refused names. No previous test body changed.
+
+Observed checks: the final thirteen-file browser selection passed 535 tests,
+including the unchanged legacy behavior suites. The unedited fiscal pair passed
+20 tests; scoped venue-service types, focused lint and formatting passed. An
+installed disposable candidate failed four cases when either stale-reply check
+was removed, four when native Save disabling was removed, and nine when dialog
+leave interception was removed. Restoring the source passed all 21 selected
+cases. These controls verify the checks added here, not the remaining audit gaps.
+
+Task A10 remains incomplete. Finish the carried-assertion gaps and retirement
+inventory before switching the public wrapper and removing the staged dashboard
+create spy. Public-screen LOOK, A13–A15, the two completed Claude reviews, normal
+push hook and current-head CI remain. No branch-review or package-coverage
+approval is claimed by this checkpoint.
