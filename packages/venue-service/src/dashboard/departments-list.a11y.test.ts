@@ -28,7 +28,6 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
                 name: "Restaurant",
                 tradingName: "Casa Delgado",
                 active: state !== "issues" && state !== "disabled-menu",
-                defaultServiceMode: "table_tab",
               },
             ],
       zones: [],

@@ -15,9 +15,8 @@ function view(): VenueServiceView {
         name: "Restaurant",
         tradingName: "Casa",
         active: true,
-        defaultServiceMode: "prepay",
       },
-      { id: "d2", name: "Deli", tradingName: "Shop", active: false, defaultServiceMode: "prepay" },
+      { id: "d2", name: "Deli", tradingName: "Shop", active: false },
     ],
     zones: ["z1", "z2"].map((id) => ({
       id,
@@ -26,7 +25,6 @@ function view(): VenueServiceView {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "prepay",
-      serviceModeOverride: null,
     })),
     floorZones: ["z1", "z2"].map((id) => ({ id, name: id, active: true })),
     salePolicies: { departments: [], zones: [] },
@@ -147,7 +145,6 @@ it("Add saves once, closes, refreshes passively and opens the created department
     name: "Brunch",
     tradingName: "",
     active: true,
-    defaultServiceMode: "prepay",
   });
   loaded(next);
   const list = shell.shadowRoot!.querySelector("departments-list")!;
@@ -430,7 +427,6 @@ it("a refresh finishing after browser navigation does not reopen the created dep
     name: "Brunch",
     tradingName: "",
     active: true,
-    defaultServiceMode: "prepay",
   });
   release(next);
   await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
@@ -680,11 +676,7 @@ it.each(["success", "failure"] as const)(
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
     }
     expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
-      [
-        "/management-api/venue-service/departments/d1",
-        "PATCH",
-        { name: "Submitted", tradingName: "Casa", defaultServiceMode: "prepay" },
-      ],
+      ["/management-api/venue-service/departments/d1", "PATCH", { name: "Submitted" }],
     ]);
   },
 );
@@ -913,11 +905,7 @@ it("a reserved-name Enable refreshes the shell without accepting or navigating a
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
   expect(alert(shell)).toBe("");
   expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
-    [
-      "/management-api/venue-service/departments/d1",
-      "PATCH",
-      { name: "Deli", tradingName: "Casa", defaultServiceMode: "prepay" },
-    ],
+    ["/management-api/venue-service/departments/d1", "PATCH", { name: "Deli" }],
     ["/management-api/venue-service/departments/d2", "PATCH", { active: true }],
   ]);
   expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {

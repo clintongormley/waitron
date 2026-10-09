@@ -13,15 +13,13 @@ const model: VenueServiceView = {
       id: "d1",
       name: "Restaurant",
       tradingName: "Casa",
-      defaultServiceMode: "table_tab",
       active: true,
     },
-    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+    { id: "d2", name: "Deli", tradingName: "Shop", active: true },
     {
       id: "d3",
       name: "Closed",
       tradingName: "Closed",
-      defaultServiceMode: "prepay",
       active: false,
     },
   ],
@@ -32,7 +30,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "prepay",
-      serviceModeOverride: "prepay",
       active: true,
     },
     {
@@ -41,7 +38,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -50,7 +46,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -59,7 +54,6 @@ const model: VenueServiceView = {
       departmentId: "d2",
       departmentName: "Deli",
       serviceMode: "prepay",
-      serviceModeOverride: "prepay",
       active: true,
     },
   ],
@@ -326,7 +320,7 @@ it("destination deactivation retains other drafts against their original baselin
     id: "d4",
     name: "Cafe",
     tradingName: "Coffee",
-    defaultServiceMode: "prepay",
+
     active: true,
   });
   el.model = view;

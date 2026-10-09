@@ -240,7 +240,6 @@ describe("whole service settings saves", () => {
       id: fx.departmentId,
       name: "New dining",
       tradingName: "Dining receipt",
-      defaultServiceMode: "prepay",
       active: true,
     });
     expect(
@@ -273,7 +272,7 @@ describe("whole service settings saves", () => {
     const read = await settingsSnapshot(fx);
     expect(read.transfers).toEqual(transfers);
     expect(
-      read.model.departments.find((row: { id: string }) => row.id === fx.departmentId)
+      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!
         .defaultServiceMode,
     ).toBe("table_tab");
     expect(
@@ -288,9 +287,9 @@ describe("whole service settings saves", () => {
     expect(
       (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
     ).toBe(204);
-    const retained = await settingsSnapshot(fx);
+
     expect(
-      retained.model.departments.find((row: { id: string }) => row.id === fx.departmentId)
+      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!
         .defaultServiceMode,
     ).toBe("ticket_then_pay");
   });
@@ -814,7 +813,6 @@ describe("venue service management routes", () => {
       const department = (await (
         await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
           name: "Terrace service",
-          defaultServiceMode: "prepay",
         })
       ).json()) as { id: string };
 
@@ -941,7 +939,6 @@ describe("venue service management routes", () => {
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
         name: "Garden service",
-        defaultServiceMode: "prepay",
       })
     ).json()) as { id: string };
     const response = await send(
@@ -962,7 +959,6 @@ describe("venue service management routes", () => {
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
         name: "Garden service",
-        defaultServiceMode: "prepay",
       })
     ).json()) as { id: string };
     const response = await send(
@@ -984,7 +980,6 @@ describe("venue service management routes", () => {
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
         name: "Garden service",
-        defaultServiceMode: "prepay",
       })
     ).json()) as { id: string };
     await db.execute(sql`
@@ -1014,7 +1009,6 @@ describe("venue service management routes", () => {
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
         name: "Restaurant",
-        defaultServiceMode: "table_tab",
       })
     ).json()) as { id: string };
     const [secondZone] = await db
@@ -1104,7 +1098,6 @@ describe("venue service management routes", () => {
       {
         name: "Restaurant",
         tradingName: "Dining Room",
-        defaultServiceMode: "prepay",
       },
     );
     expect(created.status).toBe(201);
@@ -1118,7 +1111,6 @@ describe("venue service management routes", () => {
           fx.managerCookie,
           {
             departmentId: department.id,
-            serviceMode: null,
           },
         )
       ).status,
@@ -1241,7 +1233,6 @@ describe("venue service management routes", () => {
       {
         name: "Restaurant",
         tradingName: "Restaurant",
-        defaultServiceMode: "prepay",
       },
     );
     const department = (await created.json()) as { id: string };
@@ -1423,7 +1414,6 @@ describe("venue service management routes", () => {
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
         name: "Restaurant",
-        defaultServiceMode: "table_tab",
       })
     ).json()) as { id: string };
     const hours = [{ weekday: 5, opensAt: "19:00", closesAt: "21:00" }];
@@ -1503,14 +1493,12 @@ describe("venue service management routes", () => {
       fx.managerCookie,
       {
         name: "Restaurant",
-        defaultServiceMode: "table_tab",
       },
     );
     const department = (await created.json()) as { id: string };
     const departmentInput = {
       name: "Deli",
       tradingName: "Deli counter",
-      defaultServiceMode: "prepay",
     };
     expect(
       (
@@ -1534,14 +1522,13 @@ describe("venue service management routes", () => {
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
         name: "Restaurant",
-        defaultServiceMode: "table_tab",
       })
     ).json()) as { id: string };
     const paths = [
       {
         method: "PATCH" as const,
         path: `/management-api/venue-service/departments/${department.id}`,
-        body: { name: "Deli", tradingName: "Deli", defaultServiceMode: "prepay" },
+        body: { name: "Deli", tradingName: "Deli" },
       },
     ];
     for (const { method, path, body } of paths) {
@@ -1577,7 +1564,7 @@ describe("venue service management routes", () => {
           "POST",
           "/management-api/venue-service/departments",
           fx.managerCookie,
-          { name, defaultServiceMode: "table_tab" },
+          { name },
         );
         ids.push(((await created.json()) as { id: string }).id);
       }
@@ -1641,7 +1628,7 @@ describe("venue service management routes", () => {
           await send(fx.app, "PATCH", path, fx.managerCookie, {
             name: "Dining",
             tradingName: "Dining room",
-            defaultServiceMode: "prepay",
+
             active: true,
           })
         ).status,
@@ -1807,7 +1794,7 @@ describe("venue service management routes", () => {
         "POST",
         "/management-api/venue-service/departments",
         other.managerCookie,
-        { name: "Other", defaultServiceMode: "prepay" },
+        { name: "Other" },
       )
     ).json()) as { id: string };
     expect(
@@ -1817,7 +1804,7 @@ describe("venue service management routes", () => {
           "PATCH",
           `/management-api/venue-service/departments/${department.id}`,
           fx.managerCookie,
-          { name: "Wrong", tradingName: "Wrong", defaultServiceMode: "prepay" },
+          { name: "Wrong", tradingName: "Wrong" },
         )
       ).status,
     ).toBe(404);
@@ -1840,12 +1827,21 @@ describe("venue service management routes", () => {
       {
         name: "Restaurant",
         tradingName: "Dining room",
-        defaultServiceMode: "table_tab",
       },
     );
     expect(created.status).toBe(201);
     const department = (await created.json()) as { id: string };
-
+    expect(
+      (
+        await send(
+          fx.app,
+          "PATCH",
+          `/management-api/venue-service/departments/${department.id}/sale-policy/orderStart`,
+          fx.managerCookie,
+          { value: "table" },
+        )
+      ).status,
+    ).toBe(204);
     expect(
       (
         await send(
@@ -1853,10 +1849,22 @@ describe("venue service management routes", () => {
           "PUT",
           `/management-api/venue-service/zones/${fx.zoneId}`,
           fx.managerCookie,
-          { departmentId: department.id, serviceMode: "prepay" },
+          { departmentId: department.id },
         )
       ).status,
     ).toBe(204);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PATCH",
+          `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/orderStart`,
+          fx.managerCookie,
+          { value: "counter" },
+        )
+      ).status,
+    ).toBe(204);
+
     expect(
       (
         await send(
@@ -1901,7 +1909,6 @@ describe("venue service management routes", () => {
           id: department.id,
           name: "Restaurant",
           tradingName: "Dining room",
-          defaultServiceMode: "table_tab",
         },
       ],
       zones: [
@@ -1936,7 +1943,7 @@ describe("venue service management routes", () => {
       "POST",
       "/management-api/venue-service/departments",
       fx.managerCookie,
-      { name: "Events", defaultServiceMode: "prepay" },
+      { name: "Events" },
     );
     const spareDepartment = (await spare.json()) as { id: string };
     expect(
@@ -1958,7 +1965,7 @@ describe("venue service management routes", () => {
       "POST",
       "/management-api/venue-service/departments",
       fx.managerCookie,
-      { name: "Deli", defaultServiceMode: "prepay" },
+      { name: "Deli" },
     );
     const department = (await created.json()) as { id: string };
     expect(
@@ -1968,7 +1975,7 @@ describe("venue service management routes", () => {
           "PUT",
           `/management-api/venue-service/zones/${fx.zoneId}`,
           fx.managerCookie,
-          { departmentId: department.id, serviceMode: null },
+          { departmentId: department.id },
         )
       ).status,
     ).toBe(204);
@@ -3152,7 +3159,6 @@ it.each([false, true])("answers department name clashes with 409 (active=%s)", a
   const path = "/management-api/venue-service/departments";
   const original = await send(fx.app, "POST", path, fx.managerCookie, {
     name: "Deli",
-    defaultServiceMode: "prepay",
   });
   expect(original.status).toBe(201);
   const target = (await original.json()) as { id: string };
@@ -3163,20 +3169,17 @@ it.each([false, true])("answers department name clashes with 409 (active=%s)", a
     : { code: "department.name_disabled", params: { name: "Deli", departmentId: target.id } };
   const duplicate = await send(fx.app, "POST", path, fx.managerCookie, {
     name: "Deli",
-    defaultServiceMode: "prepay",
   });
   expect(duplicate.status).toBe(409);
   expect(await duplicate.json()).toEqual({ error: expected });
   const source = (await (
     await send(fx.app, "POST", path, fx.managerCookie, {
       name: "Bar",
-      defaultServiceMode: "prepay",
     })
   ).json()) as { id: string };
   const rename = await send(fx.app, "PATCH", `${path}/${source.id}`, fx.managerCookie, {
     name: "Deli",
     tradingName: "Bar",
-    defaultServiceMode: "prepay",
   });
   expect(rename.status).toBe(409);
   expect(await rename.json()).toEqual({ error: expected });
@@ -3197,7 +3200,7 @@ describe("name-only department creation", () => {
     expect(made).toMatchObject({
       name: "Brunch",
       tradingName: "Brunch",
-      defaultServiceMode: "prepay",
+
       active: true,
     });
     const model = await (
@@ -3247,7 +3250,7 @@ describe("name-only department creation", () => {
       "PATCH",
       `/management-api/venue-service/departments/${row.id}`,
       fx.managerCookie,
-      { name: "Renamed", tradingName: "Shop", defaultServiceMode: "prepay" },
+      { name: "Renamed", tradingName: "Shop" },
     );
     expect(response.status).toBe(204);
     expect(

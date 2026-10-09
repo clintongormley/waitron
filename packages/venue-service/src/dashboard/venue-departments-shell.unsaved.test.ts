@@ -14,7 +14,6 @@ const model: VenueServiceView = {
       name: "Restaurant",
       tradingName: "Casa",
       active: true,
-      defaultServiceMode: "prepay",
     },
   ],
   zones: ["z1", "z2"].map((id) => ({
@@ -24,7 +23,6 @@ const model: VenueServiceView = {
     departmentId: "d1",
     departmentName: "Restaurant",
     serviceMode: "prepay",
-    serviceModeOverride: null,
   })),
   floorZones: ["z1", "z2"].map((id) => ({ id, name: id, active: true })),
   salePolicies: { departments: [], zones: [] },
@@ -171,7 +169,7 @@ it.each(["move-zone", "disable-zone"])(
       id: "d2",
       name: "Deli",
       tradingName: "Shop",
-      defaultServiceMode: "prepay",
+
       active: true,
     });
     shell.model = snapshot;

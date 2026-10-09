@@ -5,15 +5,13 @@ export const zonesModel: VenueServiceView = {
       id: "d1",
       name: "Restaurant",
       tradingName: "Casa",
-      defaultServiceMode: "table_tab",
       active: true,
     },
-    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+    { id: "d2", name: "Deli", tradingName: "Shop", active: true },
     {
       id: "d3",
       name: "Closed",
       tradingName: "Closed",
-      defaultServiceMode: "prepay",
       active: false,
     },
   ],
@@ -24,7 +22,6 @@ export const zonesModel: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "prepay",
-      serviceModeOverride: "prepay",
       active: true,
     },
     {
@@ -33,7 +30,6 @@ export const zonesModel: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -42,7 +38,6 @@ export const zonesModel: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -51,7 +46,6 @@ export const zonesModel: VenueServiceView = {
       departmentId: "d2",
       departmentName: "Deli",
       serviceMode: "prepay",
-      serviceModeOverride: "prepay",
       active: true,
     },
   ],

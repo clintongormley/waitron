@@ -147,7 +147,7 @@ describe("order flow from sale policies", () => {
     },
   ] as const)(
     "uses $start / $zoneStart / $paid / $zonePaid rather than old $old",
-    async ({ old, start, zoneStart, paid, zonePaid, want, override }) => {
+    async ({ old, start, zoneStart, paid, zonePaid, want }) => {
       const cfg = { locationId: brandLocationId(await seedLocation(`Flow ${randomUUID()}`)) };
       await scoped(async (tx) => {
         const department = await createDepartment(tx, cfg, {
@@ -165,9 +165,9 @@ describe("order flow from sale policies", () => {
           sql`update zone_sale_policies set order_start = ${zoneStart}, paid_when = ${zonePaid} where zone_id = ${zone.id}`,
         );
         expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: want });
-        expect(await listServiceZones(tx, cfg)).toMatchObject([
-          { id: zone.id, serviceMode: want, serviceModeOverride: override },
-        ]);
+        const listed = await listServiceZones(tx, cfg);
+        expect(listed).toMatchObject([{ id: zone.id, serviceMode: want }]);
+        expect(listed[0]).not.toHaveProperty("serviceModeOverride");
       });
     },
   );
@@ -186,9 +186,9 @@ describe("order flow from sale policies", () => {
         sql`delete from department_sale_policies where department_id = ${department.id}`,
       );
       expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: "prepay" });
-      expect(await listServiceZones(tx, cfg)).toMatchObject([
-        { id: zone.id, serviceMode: "prepay", serviceModeOverride: null },
-      ]);
+      const listed = await listServiceZones(tx, cfg);
+      expect(listed).toMatchObject([{ id: zone.id, serviceMode: "prepay" }]);
+      expect(listed[0]).not.toHaveProperty("serviceModeOverride");
     });
   });
 });
@@ -507,7 +507,6 @@ describe("venue service routing", () => {
           departmentId: department.id,
           departmentName: "Restaurant and bar",
           serviceMode: "prepay",
-          serviceModeOverride: "prepay",
         },
         {
           id: upstairsZone,
@@ -515,7 +514,6 @@ describe("venue service routing", () => {
           departmentId: department.id,
           departmentName: "Restaurant and bar",
           serviceMode: "table_tab",
-          serviceModeOverride: null,
         },
       ]);
       const menu = await createCatalogue(tx, { name: "Drinks" });
@@ -3173,7 +3171,6 @@ describe("reserved venue names", () => {
             id: source.id,
             name: "Bar",
             tradingName: "Bar",
-            defaultServiceMode: "prepay",
           }),
           expect.objectContaining({ id: target.id, name: "Deli", active }),
         ]),

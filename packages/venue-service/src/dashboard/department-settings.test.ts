@@ -12,15 +12,13 @@ const model: VenueServiceView = {
       id: "d1",
       name: "Restaurant",
       tradingName: "Casa",
-      defaultServiceMode: "table_tab",
       active: true,
     },
-    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+    { id: "d2", name: "Deli", tradingName: "Shop", active: true },
     {
       id: "d3",
       name: "Closed",
       tradingName: "Closed",
-      defaultServiceMode: "prepay",
       active: false,
     },
   ],
@@ -31,7 +29,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "prepay",
-      serviceModeOverride: "prepay",
       active: true,
     },
     {
@@ -40,7 +37,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -49,7 +45,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -58,7 +53,6 @@ const model: VenueServiceView = {
       departmentId: "d2",
       departmentName: "Deli",
       serviceMode: "prepay",
-      serviceModeOverride: "prepay",
       active: true,
     },
   ],
@@ -510,7 +504,7 @@ it("undoing a service or destination change returns Save to quiet without depend
     id: "d4",
     name: "Cafe",
     tradingName: "Coffee",
-    defaultServiceMode: "prepay",
+
     active: true,
   });
   const { el } = await mount(view);
@@ -590,7 +584,7 @@ it("a disabled department's transfer controls retain their values but cannot edi
     id: "d4",
     name: "Cafe",
     tradingName: "Coffee",
-    defaultServiceMode: "prepay",
+
     active: true,
   });
   const { el } = await mount(view);
@@ -801,27 +795,18 @@ it("a pristine refresh without transfers applies the latest trading name", async
   expect(save(el).disabled).toBe(true);
 });
 it.each(["table_tab", "ticket_then_pay"] as const)(
-  "a department without a policy row displays its %s service defaults",
+  "a department without a policy row ignores retired %s and displays current defaults",
   async (mode) => {
     const view = structuredClone(model);
     view.salePolicies.departments = [];
-    view.departments[0]!.defaultServiceMode = mode;
+    Object.assign(view.departments[0]!, { defaultServiceMode: mode });
     const { el } = await mount(view);
-    expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value).toMatchObject(
-      mode === "table_tab"
-        ? {
-            orderStart: "table",
-            paidWhen: "prepay",
-            collectionNumber: "none",
-            receiptPrintMode: "auto",
-          }
-        : {
-            orderStart: "counter",
-            paidWhen: "ticket_then_pay",
-            collectionNumber: "none",
-            receiptPrintMode: "auto",
-          },
-    );
+    expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value).toMatchObject({
+      orderStart: "counter",
+      paidWhen: "prepay",
+      collectionNumber: "none",
+      receiptPrintMode: "auto",
+    });
   },
 );
 it("waits for a known department before showing an editor", async () => {
@@ -843,7 +828,7 @@ it("a different destination set with the same count is still an edit", async () 
     id: "d4",
     name: "Cafe",
     tradingName: "Coffee",
-    defaultServiceMode: "prepay",
+
     active: true,
   });
   const { el } = await mount(view);
@@ -866,7 +851,7 @@ it("a destination deactivated while transfers remain shown can be corrected with
     id: "d4",
     name: "Cafe",
     tradingName: "Coffee",
-    defaultServiceMode: "prepay",
+
     active: true,
   });
   const { el, writes } = await mount(view);

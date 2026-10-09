@@ -10,7 +10,7 @@ const department = (id: string, active = true) => ({
   id,
   name: `Department ${id}`,
   tradingName: `Trading ${id}`,
-  defaultServiceMode: "prepay" as const,
+
   active,
 });
 function model(count = 2): VenueServiceView {
@@ -22,7 +22,6 @@ function model(count = 2): VenueServiceView {
       departmentId: "d1",
       departmentName: "Department d1",
       serviceMode: "prepay",
-      serviceModeOverride: null,
       active: true,
     })),
     floorZones: ["z1", "z2"].map((id) => ({ id, name: id, active: true })),

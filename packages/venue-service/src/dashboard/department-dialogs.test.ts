@@ -19,15 +19,13 @@ export const view: VenueServiceView = {
       id: "d1",
       name: "Restaurant",
       tradingName: "Casa",
-      defaultServiceMode: "table_tab",
       active: true,
     },
-    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+    { id: "d2", name: "Deli", tradingName: "Shop", active: true },
     {
       id: "d3",
       name: "Closed",
       tradingName: "Closed",
-      defaultServiceMode: "prepay",
       active: false,
     },
   ],
@@ -38,7 +36,6 @@ export const view: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "ticket_then_pay",
-      serviceModeOverride: "ticket_then_pay",
       active: true,
     },
   ],
@@ -172,7 +169,6 @@ it("move lists only other active departments and preserves the override", async 
   await expect.poll(() => el.dialog).toBeUndefined();
   expect(request).toHaveBeenCalledWith("/management-api/venue-service/zones/z1", "PUT", {
     departmentId: "d2",
-    serviceMode: "ticket_then_pay",
   });
 });
 it.each(["department", "zone"] as const)(
@@ -194,9 +190,7 @@ it.each(["department", "zone"] as const)(
         ? "/management-api/venue-service/departments/d1"
         : "/management-api/zones/z1",
       "PATCH",
-      kind === "department"
-        ? { name: "Renamed", tradingName: "Casa", defaultServiceMode: "table_tab" }
-        : { name: "Renamed" },
+      { name: "Renamed" },
     );
   },
 );
@@ -619,7 +613,7 @@ it.each([
     index: 1,
     path: "/management-api/venue-service/departments/d1",
     method: "PATCH",
-    body: { name: "Changed", tradingName: "Casa", defaultServiceMode: "table_tab" },
+    body: { name: "Changed" },
     detail: { departmentId: "d1" },
   },
   {
@@ -640,14 +634,14 @@ it.each([
     index: 4,
     path: "/management-api/venue-service/zones/z1",
     method: "PUT",
-    body: { departmentId: "d2", serviceMode: "ticket_then_pay" },
+    body: { departmentId: "d2" },
     detail: { zoneId: "z1" },
   },
   {
     index: 5,
     path: "/management-api/venue-service/zones/z2",
     method: "PUT",
-    body: { departmentId: "d2", serviceMode: null },
+    body: { departmentId: "d2" },
     detail: { zoneId: "z2" },
   },
   {
@@ -942,7 +936,7 @@ it.each([
   expect(request.mock.calls[0]).toEqual([
     `/management-api/venue-service/zones/${dialog.row.id}`,
     "PUT",
-    { departmentId: "d2", serviceMode: dialog.kind === "move-zone" ? "ticket_then_pay" : null },
+    { departmentId: "d2" },
   ]);
 });
 

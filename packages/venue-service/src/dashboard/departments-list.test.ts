@@ -20,14 +20,14 @@ const model: VenueServiceView = {
       id: "d1",
       name: "Restaurant and bar",
       tradingName: "Casa Delgado",
-      defaultServiceMode: "table_tab",
+
       active: true,
     },
     {
       id: "d2",
       name: "Deli",
       tradingName: "Casa Delgado Deli",
-      defaultServiceMode: "prepay",
+
       active: false,
     },
   ],
@@ -38,7 +38,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant and bar",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: true,
     },
     {
@@ -47,7 +46,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant and bar",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
     },
     {
       id: "z3",
@@ -55,7 +53,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant and bar",
       serviceMode: "table_tab",
-      serviceModeOverride: null,
       active: false,
     },
   ],

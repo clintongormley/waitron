@@ -16,10 +16,9 @@ const model: VenueServiceView = {
       id: "d1",
       name: "Restaurant",
       tradingName: "Casa",
-      defaultServiceMode: "table_tab",
       active: true,
     },
-    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+    { id: "d2", name: "Deli", tradingName: "Shop", active: true },
   ],
   zones: [
     {
@@ -28,7 +27,6 @@ const model: VenueServiceView = {
       departmentId: "d1",
       departmentName: "Restaurant",
       serviceMode: "prepay",
-      serviceModeOverride: null,
     },
   ],
   floorZones: [{ id: "z1", name: "Patio" }],

@@ -12,8 +12,8 @@ const hosts: HTMLElement[] = [];
 function model(name = "Restaurant"): VenueServiceView {
   return {
     departments: [
-      { id: "d1", name, tradingName: "Casa", active: true, defaultServiceMode: "prepay" },
-      { id: "d2", name: "Deli", tradingName: "Shop", active: false, defaultServiceMode: "prepay" },
+      { id: "d1", name, tradingName: "Casa", active: true },
+      { id: "d2", name: "Deli", tradingName: "Shop", active: false },
     ],
     zones: [],
     floorZones: [],

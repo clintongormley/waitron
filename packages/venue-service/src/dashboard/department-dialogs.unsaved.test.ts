@@ -17,10 +17,9 @@ const model: VenueServiceView = {
       id: "d1",
       name: "Restaurant",
       tradingName: "Casa",
-      defaultServiceMode: "prepay",
       active: true,
     },
-    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+    { id: "d2", name: "Deli", tradingName: "Shop", active: true },
   ],
   zones: [],
   floorZones: [],
@@ -242,11 +241,7 @@ it.each(cases)(
       dialog.kind === "add-department"
         ? ["/management-api/venue-service/departments", "POST", { name: "Submitted name" }]
         : dialog.kind === "rename-department"
-          ? [
-              "/management-api/venue-service/departments/d1",
-              "PATCH",
-              { name: "Submitted name", tradingName: "Casa", defaultServiceMode: "prepay" },
-            ]
+          ? ["/management-api/venue-service/departments/d1", "PATCH", { name: "Submitted name" }]
           : dialog.kind === "add-zone"
             ? [
                 "/management-api/venue-service/zones",
@@ -359,11 +354,7 @@ const acceptedNames = [
   },
   {
     dialog: cases[1]!,
-    request: [
-      "/management-api/venue-service/departments/d1",
-      "PATCH",
-      { name: "Accepted name", tradingName: "Casa", defaultServiceMode: "prepay" },
-    ],
+    request: ["/management-api/venue-service/departments/d1", "PATCH", { name: "Accepted name" }],
   },
   {
     dialog: cases[2]!,

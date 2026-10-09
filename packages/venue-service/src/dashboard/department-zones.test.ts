@@ -268,16 +268,16 @@ it("Cancel without a shell restores the baseline, and choice Enter does not subm
     ]);
 });
 it.each(["prepay", "ticket_then_pay", "table_tab"] as const)(
-  "a department without a policy uses its %s defaults as hints",
+  "a department without a policy ignores retired %s and uses current default hints",
   async (mode) => {
     await mount();
     el.model!.salePolicies.departments = [];
-    el.model!.departments[0]!.defaultServiceMode = mode;
+    Object.assign(el.model!.departments[0]!, { defaultServiceMode: mode });
     el.model = structuredClone(el.model!);
     await el.updateComplete;
     expect(fields().follows).toEqual({
-      orderStart: mode === "table_tab" ? "table" : "counter",
-      paidWhen: mode === "ticket_then_pay" ? "ticket_then_pay" : "prepay",
+      orderStart: "counter",
+      paidWhen: "prepay",
       collectionNumber: "none",
       receiptPrintMode: "auto",
     });

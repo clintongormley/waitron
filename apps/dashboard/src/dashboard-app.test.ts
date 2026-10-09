@@ -6964,7 +6964,7 @@ describe("department list links inside dashboard capture", () => {
           id: "d1",
           name: "Dining room",
           tradingName: "Dining",
-          defaultServiceMode: "table_tab",
+
           active: true,
         },
       ],
@@ -7061,14 +7061,13 @@ describe("mounted public department pages", () => {
           id: "d1",
           name: "Restaurant",
           tradingName: "Casa",
-          defaultServiceMode: "table_tab",
           active: true,
         },
         {
           id: "d2",
           name: "Deli",
           tradingName: "Shop",
-          defaultServiceMode: "prepay",
+
           active: false,
         },
       ],
@@ -7078,7 +7077,6 @@ describe("mounted public department pages", () => {
         departmentId: "d1",
         departmentName: "Restaurant",
         serviceMode: "table_tab",
-        serviceModeOverride: null,
         active: true,
       })),
       floorZones: ["z1", "z2"].map((id) => ({

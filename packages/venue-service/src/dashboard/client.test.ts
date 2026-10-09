@@ -201,7 +201,6 @@ describe("VenueServiceApi", () => {
     const department = {
       name: "Deli",
       tradingName: "Deli counter",
-      defaultServiceMode: "prepay" as const,
     };
     await api.updateDepartment("d1", department);
     expect(
@@ -351,11 +350,10 @@ describe("VenueServiceApi", () => {
     await api.createDepartment({
       name: "Deli",
       tradingName: "Casa Delgado Deli",
-      defaultServiceMode: "prepay",
     });
     await api.deactivateDepartment("d1");
     expect("replaceHours" in api).toBe(false);
-    await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
+    await api.configureZone("z1", { departmentId: "d1" });
     expect("allowMenu" in api).toBe(false);
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
@@ -482,7 +480,7 @@ it("creates a department through the real request with name only", async () => {
         id: "d3",
         name: "Brunch",
         tradingName: "Brunch",
-        defaultServiceMode: "prepay",
+
         active: true,
       },
       201,
@@ -493,7 +491,7 @@ it("creates a department through the real request with name only", async () => {
     id: "d3",
     name: "Brunch",
     tradingName: "Brunch",
-    defaultServiceMode: "prepay",
+
     active: true,
   });
   expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/departments", {
