@@ -661,7 +661,7 @@ leaves the slot empty. A widget that draws a table with an Add button for a scre
 (`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
 row, whose menu holds the screen's adds (spec `docs/superpowers/specs/2026-10-02-products-category-tree-design.md`
 §3), so its box appears only when a search matches nothing, holding the no-matches sentence. A
-menu's Structure tab has no such row (owner, A337, 2026-10-07): its toolbar's Add ⋮ holds the
+menu's Structure tab has no such row (owner, A337, 2026-10-07): its toolbar's Add menu holds the
 menu's top-level adds, and an empty menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page; the Printers
 screen does this by naming that button as the dialog's `opener` (see the `wt-modal` entry). When
@@ -916,7 +916,7 @@ Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice
 the menu itself (owner, A337, 2026-10-07: that row only repeated the page heading and made the
 hierarchy read wrongly): the menu's members are the top-level rows, in menu order, with no sort, and
 any of them can close. The menu's own adds — New section here, Include a menu and Add products — are
-in a ⋮ with a plus mark at the toolbar's end, "Add to this menu" ("Añadir a esta carta"), before
+in a menu behind a plus button at the toolbar's end, "Add to this menu" ("Añadir a esta carta"), before
 Reorder's Done; while the menu is empty there is no toolbar, so the table's empty box says
 "Nothing is on this menu yet." with the same three adds as buttons under it, and Reorder and Select
 turn off. A row's key
@@ -987,7 +987,7 @@ it; a pointer drag starts from the grip only, and offers only places among the m
 with Products' ghost and gap (the shared `apps/dashboard/src/widgets/tree-drag.ts`). When a window
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
 the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
-member. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
+member; at the top level, which has no row, to the toolbar's Add menu, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
 `menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`.
 
@@ -1414,7 +1414,7 @@ condition); a hidden tooltip is `display: none`. Bind `trackIconTooltip` to the 
 Escape hides the tooltip, which can show again once both have left (WCAG 1.4.13). Binding it also
 means a click on a showing tooltip does not press its button. The table's
 Customise columns button, icon-only in the same toolbar, does not use it yet: it has no tooltip and
-no pressed look. Guards: `packages/ui/src/icon-button.test.ts`, and the tooltip cases in
+no pressed look; nor does the Structure tab's Add to this menu button (`wt-row-actions` with `icon="plus"`). Guards: `packages/ui/src/icon-button.test.ts`, and the tooltip cases in
 `packages/ui/src/components/wt-data-table.test.ts`,
 `apps/dashboard/src/widgets/catalogue-browser.test.ts` and
 `apps/dashboard/src/screens/menus-screen.a11y.test.ts`.
@@ -1754,7 +1754,7 @@ and nothing guards it across screens:
   The screen's other windows, the menu price fields and Publish act at once, confirm an operation or
   only show, so they have no Save to gate, except the Add products window and the publication
   schedule, which are batch 2a's, and the Home page tab's shortcut window, whose Add follows the rule
-  since A336; the list is in
+  since A336, and the Structure tab's Move to section… dialog, whose Move follows the rule since A337; the list is in
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
@@ -3212,9 +3212,9 @@ buttons (New station and New watcher) on every tab rather than only on their own
 half the row through the `tab-actions` part so its tabs keep that half (the "keeps half of a … px
 tab row for the tabs" cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.
-A tab whose list is a tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
-Structure tab puts the menu's own adds in its toolbar's Add ⋮ (A337) and a section's in the ⋮ of
-each section the menu owns, and nothing in the `actions` slot (the "the Structure tree" cases in
+A tab whose list is a tree puts its adds in the tree rather than the tab's `actions` slot: the Products tree in its All products row's ⋮, and a menu's
+Structure tab in its toolbar's Add menu (A337) and in the ⋮ of
+each section the menu owns (the "the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`).
 
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a

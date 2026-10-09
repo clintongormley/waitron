@@ -3087,7 +3087,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not a
   `wt-icon-button` component** — Select is a native `<button>` because `wt-button` does not pass
-  `aria-pressed` through, and the Structure tab's Reorder toggle is a second hand-built icon button
+  `aria-pressed` through, and the Structure tab's Reorder and Select toggles are hand-built icon buttons
   for the same reason. Left open by W83's review (#1193), not started.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
