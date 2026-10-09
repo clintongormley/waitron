@@ -244,12 +244,20 @@ the server checks each at the route, never trusting the till's copy:
   top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
   refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
   route has no row.
-- **A kitchen display may only prepare.** A `kds` profile is a shared display with nobody signed
-  in: `profileAllows` refuses it every action but `prepare-orders`, even one its stored list
-  names, and with nobody signed in a till route that needs a session answers `session.required`.
-  Ordering, payment and the drawer always need a named person.
+- **A kitchen display may only prepare, fire and hand over.** A `kds` profile is a shared display
+  with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
+  every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
+  list names, and with nobody signed in a till route that needs a session answers
+  `session.required`. Payment and the drawer always need a named person. Its pass screen's Fire,
+  Ready and Away go through the device's own routes (`apps/server/src/device-levers.ts`), which
+  serve only a kitchen display, check the action each one takes (Fire `take-orders`, Ready
+  `prepare-orders`, Away `hand-over-orders`) and the order's zone against its pass screen, and a
+  Fire records the device as the one who fired. A new venue's default kitchen display profile holds
+  `take-orders` and `hand-over-orders` beside `prepare-orders` (`DEFAULT_PROFILE_CAPABILITIES`).
   Its station close/open controls use the device routes and require a manager's PIN with
-  `venue_service.manage`; they also check the device's `prepare-orders` action and bound station.
+  `venue_service.manage`; they also check the device's `prepare-orders` action and that its
+  station screen shows that station now (`assertScreenShowsStation`,
+  `apps/server/src/station-today-api.ts`).
   A till's station close/open and period-extension writes require a session, plus either that
   permission or a manager's PIN override. The PIN checks share the till's wrong-PIN limit.
   Cases: `apps/server/src/till-api.station-today.test.ts`,
@@ -262,15 +270,28 @@ the server checks each at the route, never trusting the till's copy:
   (`readProfileZones`, `packages/venue-service/src/profile-access.ts`). A zone outside the profile
   is refused `service_zone.not_allowed`, and lists show only the profile's zones and their orders.
   A profile with no department row keeps the venue's counter-default zone.
-- **A kitchen display's station and watcher lists are its manager's choices, not its routing.** The
-  manager gives each device on the profile one station or watcher from those lists (Devices →
-  edit); what reaches that station still comes from the venue's routing.
+- **A profile's kitchen screens are its manager's choices, not its routing.** A profile of any form
+  factor may offer a station screen, a pass screen and a pass monitor (a view-only pass board with
+  no buttons), each with its stations and, for the pass kinds, its zones, as "Every station" or a
+  list. Each device on it chooses within those (Devices → edit; `setDeviceKitchenScreens`,
+  `packages/venue-service/src/kitchen-screens.ts`): a kitchen display runs exactly one
+  (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
+  and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
+  pass screen draws Fire, Ready and Away only when its profile has "Run the pass"
+  (`run-the-pass`, a screen setting, not an action). What reaches a station still comes from the
+  venue's routing. Saving a profile that no longer offers a screen, station or zone a device
+  shows is allowed: the save names the devices it changed (`narrowedDevices`), each device records
+  what it lost and shows it as no longer available until someone picks again, and adding it back
+  to the profile gives it back to a device nobody has re-picked on since. A station switched off
+  on its own page keeps the dishes still waiting there on a kitchen display's station screen, under
+  its no-longer-available line, until they are done. Done marks on a pass screen belong to the
+  device, with the signed-in person when there is one (`pass_item_marks`).
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks
   the person's admission again; that switch, and a manager moving the device onto another profile
   (Devices → edit), end the sessions the new profile does not admit, and a move onto a kitchen
-  screen's profile ends every session on the device, whatever that profile's admission list says,
+  display's profile ends every session on the device, whatever that profile's admission list says,
   since nobody signs in on one (`endSessionsNotAdmitted`, `apps/server/src/device.ts`).
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save

@@ -85,9 +85,8 @@ enums, but a user-definable kitchen-status list does not exist.
 
 - **Seen in A323's look at the demo (2026-10-07), in files A323 did not change.** On the
   Routing tab, the label above the "Where is this made?" time choice is cut to "W…" ("Cuá…" in
-  Spanish) at 1280 and 390 px, in both themes, because the choice is too narrow for it. At
-  390 px the Prep stations tab row scrolls sideways with both ends cut ("Stations" on the left,
-  "New watcher" on the right) and nothing shows that it scrolls. Screenshots:
+  Spanish) at 1280 and 390 px, in both themes, because the choice is too narrow for it.
+  Screenshots:
   `~/waitron-campaign-c/a323-shots/`.
 
 ## At 390 px the routing grid's fixed first column takes about 140 of the grid's roughly 310 px
@@ -113,7 +112,8 @@ enums, but a user-definable kitchen-status list does not exist.
   status — the ticket must travel with the line, not re-fire (`moveTabLines`, which dropped it, was
   deleted by service plan Task 13; whether this still holds for the paths that move lines now is not
   checked); hold-on-send without courses plus a venue disable setting; FP-1's empty-named
-  child-modifier row; device-scoped fire/collect routes. Then the low-priority KDS list under
+  child-modifier row; a device-scoped collect route (a kitchen display's Fire already has a device
+  route, `apps/server/src/device-levers.ts`). Then the low-priority KDS list under
   [KDS operations](../backlog/kitchen.md#kds-operations--low-priority-a9).
 
 ## Mark a new dish as urgent

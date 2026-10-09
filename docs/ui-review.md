@@ -114,7 +114,7 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
   A requested destination still needs the current session's permissions and device canvas.
   Paths use `/manage/<section>` and `/tabs/<key>`, with nested selections as path segments.
 - Keep unsaved canvas tabs out of URL writes, including when you reselect them. Embedded station
-  pickers keep their selection local; an enrolled kitchen display keeps its bound station.
+  pickers keep their selection local; an enrolled kitchen display opens the kitchen screen its device chose.
 - Keep history for meaningful navigation. Payment and modifier steps do not add entries; menu choice
   stays in browser session storage as the last menu viewed across new and parked orders. Every new
   login resets it to the default, including the PIN login required after refresh.
