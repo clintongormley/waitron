@@ -61,14 +61,12 @@ async function fixture() {
         },
       ])
       .returning();
-    await tx
-      .insert(departmentSalePolicies)
-      .values(
-        [department!, other!].map((row) => ({
-          departmentId: row.id,
-          orderStart: "table" as const,
-        })),
-      );
+    await tx.insert(departmentSalePolicies).values(
+      [department!, other!].map((row) => ({
+        departmentId: row.id,
+        orderStart: "table" as const,
+      })),
+    );
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
     const ids = [];
     for (const owner of [department!, other!]) {
