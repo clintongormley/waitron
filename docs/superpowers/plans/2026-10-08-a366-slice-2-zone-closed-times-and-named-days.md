@@ -1179,6 +1179,11 @@ and holiday fields remain because the Opening hours calendar still reads them; T
 removal has not become applicable. Verification and changed-check receipts are in the campaign's
 Task 25 report. Controller review is pending; Tasks 26–29 remain.
 
+2026-10-09 Task 25 review checkpoint: the task and its EN/ES wording correction are approved.
+The editor and empty list now say named day, and the closure note points to the Calendar in
+Opening hours. The outgoing request retains the opened day’s metadata. Continue with Task 26.
+Tasks 26–29 and whole-branch validation remain before finish-branch.
+
 ### Task 26: Retire local holidays
 
 **Files:**
