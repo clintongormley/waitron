@@ -479,6 +479,9 @@ function validateDepartmentTransfers(tables: Tables): void {
  * not hold, and a zone that is switched off or has no service configuration. A zone whose
  * department is switched off is refused with the grid's own `service_zone.not_found`, its params
  * carrying the zone and department ids, the row, and each name the export holds as non-empty text.
+ * A cell's period choice is refused (`routing_cell_periods.<column>`) for a cell, period or station
+ * the bundle does not hold, a department that is not the period's, a zone cell's period of any
+ * department but its zone's, a second choice for one cell and period, and a bad target.
  */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);
@@ -550,10 +553,8 @@ export function validateRoutingConfiguration(tables: Tables): void {
 }
 
 /**
- * Refuses a period choice a save could not have written: a cell or period the bundle does not
- * hold, a department that is not the period's, a zone cell's period of another department, a
- * second choice for one cell and period, and a bad target. It does not ask whether the period's
- * menus hold any of the cell's products (A366 slice 4, decision 31).
+ * Does not ask whether the period's menus hold any of the cell's products: a line saved before its
+ * period's menus changed stays valid, so refusing it would make a good export unimportable.
  */
 function validateRoutingCellPeriods(
   tables: Tables,
