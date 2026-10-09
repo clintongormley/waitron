@@ -22,7 +22,7 @@ pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 
 That is the shallow, whole-workspace check. Root `test` / `test:coverage` cap package concurrency
 at two and enforce a 20-minute process deadline
-(`scripts/run-with-deadline.mjs`). CI test jobs have a 15-minute job deadline; each light bin also
+(`scripts/run-with-deadline.mjs`). CI test jobs and shard legs have a 10-minute job limit, and merge jobs 5; each light bin also
 caps package concurrency at two. Direct package commands retain their Vitest timers.
 
 ## The pre-push hook
@@ -459,7 +459,7 @@ list.
 
 ## CI job layout and scheduling
 
-### CI's shards run `test:coverage`, not `test`
+### CI's test jobs measure coverage, never plain `test`
 
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
@@ -501,7 +501,7 @@ appeared in the wrapper's json report with every count zero. On `apps/till`'s tw
 merge and the wrapper printed the same counts. On a Vitest upgrade, run a plain merge over a
 browser package's blobs: if it gives the unsharded totals, delete the wrapper.
 
-### Every test job prints which file is running
+### Every package test job prints which file is running
 
 Every `Run the … shard` step, and the stream tests' step, adds the reporter
 `scripts/vitest-file-progress.mjs`. It prints a `[file-progress] start` line when a test file is
@@ -514,7 +514,8 @@ established. In browser mode a file's `start` line means it was handed
 to a browser worker, which happens in batches, so it can come before the file is loaded. A
 `test:coverage` command passes `--reporter=default` beside it, because a lone `--reporter` replaces
 the default one; `test:shard` already names `default` and `blob`. Guard: the file-progress case in
-`scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text.
+`scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text, and finds a test
+command only in a `Run the … shard` step or the stream step.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
@@ -647,7 +648,7 @@ fired. Nobody found the cause, and the probe does not model it: it shows a late 
 for, not one that never comes. A single-file variant whose reporter never answers printed the
 file's `✓`, no `Test Files` or `Tests` summary, and was still waiting when an outer `gtimeout 180`
 killed it (exit 124). So if the stall recurs on 4.1.11 and never clears, expect no summary and the
-job cancelled by its `timeout-minutes: 15` (`.github/workflows/ci.yml`); whether a shard's other
+job cancelled by its `timeout-minutes` (`.github/workflows/ci.yml`); whether a shard's other
 files still finish meanwhile was not shown. This is not the silent-shard case in
 [testing-guide.md](testing-guide.md): there, tests were still unfinished; here they all finished.
 Keep the job log before re-running.
@@ -658,13 +659,10 @@ The `changes` job skips the expensive `code`-gated jobs when every changed path 
 documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
 `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
-the changed packages and their dependents. A root file a member depends on is the exception —
-`scripts/bundle-node.mjs` and `scripts/dev-server-proxy.ts`, which member files read, and
-`scripts/setup-litestream.mjs` and `scripts/setup-s3-test-server.mjs`, which the `test-server-stream`
-job runs before testing `apps/server`, and `scripts/vitest-file-progress.mjs`, which every test job
-loads as a reporter, so it selects every member with a `test:coverage` script:
-`ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` selects those members, so its change is
-`code=true`. `scripts/root-scope-consumers.test.mjs` fails when a member file starts reading an
+the changed packages and their dependents. A root file a member depends on is the exception — a
+root file `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` lists, because a member file reads
+it, the ci.yml job that tests the member runs it first, or that job's test command loads it as a
+Vitest reporter: that map selects those members, so its change is `code=true`. `scripts/root-scope-consumers.test.mjs` fails when a member file starts reading an
 unlisted one, when a ci.yml job starts running an unlisted one before a member's tests or loading
 one as a reporter in a test command, or when a listed entry is none of these. That guard is weaker than its name: it reads
 text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
@@ -832,8 +830,8 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 
-`lint` and `root-guards`, every package test job and shard leg (10) and every `-merge` job (5)
-follow the owner's four-minute bound for test jobs (2026-10-09) instead of the doubling rule; the
+Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-guards` (8) are set
+from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 "bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
 
 ui's figure is run `37267389722`; `mutation-db`'s are runs `36380351019` and `37267389722`, the
@@ -1070,7 +1068,7 @@ so the other bundles the server's `build` makes, and `waitron-provision` (`dist/
 ### The stream loop and pause tests run in a job of their own, which downloads two binaries
 
 `apps/server/src/stream-loop.e2e.test.ts` and `apps/server/src/stream-pause.e2e.test.ts` run in
-`test-server-stream`, beside the three `test-server` shards rather than inside one of them: each
+`test-server-stream`, beside the `test-server` shards rather than inside one of them: each
 shard's `test:shard` call passes `--exclude` for both files, which Vitest 4.1.11 adds to the
 config's own `exclude` list rather than replacing it (`vitest list --filesOnly` in `apps/server`
 listed 289 files without the two flags and 287 with them, and the config-excluded
@@ -1078,7 +1076,7 @@ listed 289 files without the two flags and 287 with them, and the config-exclude
 `apps/server/src/testing/s3-test-server.test.ts`, has cases that need versitygw too and is excluded
 and run the same way (2026-09-30). `test-server-stream` runs
 the same `test:shard` script over those files alone and uploads its blob as `server-blob-stream`,
-which `test-server-merge`'s `server-blob-*` download picks up with the shards' three, so the
+which `test-server-merge`'s `server-blob-*` download picks up with the shards' blobs, so the
 coverage gate counts what those tests reach. It alone runs `node scripts/setup-litestream.mjs` and
 `node scripts/setup-s3-test-server.mjs`, because the cases that run them fail rather than skip in CI
 without them; the S3 test server's suite runs versitygw alone, and only in some of its cases
@@ -1280,7 +1278,10 @@ wired in fails the hook, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
-the three named below; wired, the root project is green. The three:
+the three named below; wired, the root project is green. Since A441 (2026-10-09) a fourth,
+`scripts/root-scope-consumers.test.mjs`, fails for a new member with a `test:coverage` script until
+the member is added to the `scripts/vitest-file-progress.mjs` entry of `ROOT_SCOPE_CONSUMERS` in
+`scripts/changed-scope.mjs` (read from the guard, not measured). The three:
 
 - `scripts/changed-scope.test.mjs` — a member declaring no `test:coverage` script and not named in
   `PACKAGES_WITHOUT_TESTS` is a mistake, and this fails on it.
@@ -1292,8 +1293,9 @@ the three named below; wired, the root project is green. The three:
   registration.
 
 What to wire, for an ordinary package with tests: a `vitest.config.ts` whose thresholds are
-`98/98/98/95` (pinned by `scripts/coverage-thresholds.test.ts`), and the shard lists
-in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that declares no
+`98/98/98/95` (pinned by `scripts/coverage-thresholds.test.ts`), the shard lists
+in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`, and the
+`scripts/vitest-file-progress.mjs` entry of `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`. A package that declares no
 `test:coverage` script at all — today only the two `bench/` members — additionally goes in
 `PACKAGES_WITHOUT_TESTS`.
 

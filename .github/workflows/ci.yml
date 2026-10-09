@@ -66,8 +66,8 @@ jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
   #
   # Two independent decisions, deliberately not merged into one:
-  #   `code`  — does anything here reach a code-gated job? If not, only the `lint` job runs (eslint
-  #             AND format:check AND the repo-level Vitest project, all ungated), on pull requests
+  #   `code`  — does anything here reach a code-gated job? If not, only the ungated `lint` (eslint and
+  #             format:check) and `root-guards` (the repo-level Vitest project) jobs run, on pull requests
   #             AND on main, so an inert change — prose, or root config no code-gated job reads —
   #             costs nothing in either place, and neither does a change to the repository's OWN
   #             machinery (`scripts/`, `.husky/`, `.github/`, `scope=root`), which gives no package
@@ -757,10 +757,8 @@ jobs:
   # split out of test-light on a measurement (341.7s of test-light's 358s wall-clock on run
   # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
   #
-  # Six, not three, since 2026-10-09 (A441: no test job over about four minutes). Three shards took
-  # 297, 273 and 438 s on main run 37938947421, the slowest held by src/bill-payments.test.ts, one
-  # file of about 175 s. A shard cannot finish before its slowest file, so six is about as far as
-  # adding shards helps until that file gets faster.
+  # Six shards: a shard cannot finish before its slowest file, src/bill-payments.test.ts (about
+  # 175 s), so more shards would not shorten the server's jobs until that file gets faster.
   #
   # The dedicated runners also let apps/server run in SEVERAL workers (apps/server/vitest.config.ts's
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
@@ -1282,7 +1280,7 @@ jobs:
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Venue service combines server-side configuration tests with a Chromium dashboard project.
-  # Its own runner installs Chromium and keeps browser execution out of the light package bins.
+  # Its runners install Chromium and keep browser execution out of the light package bins.
   test-venue-service:
     timeout-minutes: 10
     needs: changes

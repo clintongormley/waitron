@@ -118,9 +118,20 @@ hook, or how tests are scheduled:
   `"ignored": true`.
 - **Check every command's exit status.** A shell sequence separated by newlines reports only its
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
-- **CI's shards run `test:coverage`, not `test`.** Verify that package’s coverage job on the
+- **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
+  the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the
   current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
   Vitest `--shard` splits by FILE COUNT, so `N` must never exceed a package's test-file count.
+  Guard: the "run no more shards than the package has test files" case in
+  `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts` under the
+  package, not what the package's Vitest config includes.
+- **A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
+  never a plain `--merge-reports`**, which on Vitest 4.1.11 counts a file some shards never loaded
+  twice and reads functions low. Cost: the venue-service merge failed at 97.44% functions against
+  99.32% unsharded. Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its
+  name — it reads `ci.yml` and package.json as text, and counts a package as browser-mode when its
+  `devDependencies` name `@vitest/browser-playwright`, not by reading its Vitest config. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list; a test file is
   measured by neither. Cost: `packages/db`'s branch coverage fell below its bar.
@@ -173,7 +184,7 @@ hook, or how tests are scheduled:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
-- **Adding a workspace package fails root guards until it is named in the shard lists**, and
+- **Adding a workspace package fails root guards until it is named in the shard lists and in `ROOT_SCOPE_CONSUMERS`**, and
   one of them CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
   and reads like a broken checkout.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides

@@ -23,20 +23,6 @@ their full text.
   only on macOS; the root project's thresholds still pass. Neither is queued. Receipt:
   [ci-and-gates.md](../developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 
-## Would the package suites' databases gain from memory too?
-
-- **Would the package suites' databases gain from memory too?** `useVenueDb`
-  (`packages/db/src/testing/venue-db.ts`) makes each suite's venue folder under the system temporary
-  directory, and the root suites `scripts/append-only-triggers.test.ts` and
-  `scripts/behavioural-triggers.test.ts` make theirs there too, so they all commit to the runner's
-  disk. Not measured for them. Next action: time one database-heavy package's `test:coverage` in CI
-  with its folders on the disk and under `/dev/shm` (`scratchParent()` in `scripts/scratch-dir.mjs`
-  is the choice the upgrade test makes), and adopt it in `useVenueDb` only if the shard times move
-  and a suite's databases fit in `/dev/shm` (Docker's default is 64 MiB). One data point from
-  A130: on a CI runner a stream test's commit took 1,017 ms while Linux's pressure counters showed
-  every process stalled on the disk ([testing-guide.md](../developers/testing-guide.md), "In CI their
-  temporary files are in memory").
-
 ## What the landing-port fix (A80, PR #740) left open
 
 - **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)`
@@ -118,7 +104,7 @@ their full text.
 - **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
   Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Under vitest 3.2.7 one
   worker's `onTaskUpdate` reporting call timed out on birpc's 60-second default. On 4.1.11 an answer
-  that never came would leave the shard waiting until the job's 15-minute `timeout-minutes`
+  that never came would leave the shard waiting until the job's 10-minute `timeout-minutes`
   cancelled it, rather than failing it when the run ends. Written up in
   [ci-and-gates.md](../developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
   the job log on the next sighting — it is the cheapest evidence there is.
@@ -334,6 +320,9 @@ null, empty or blank. Lane D RUNNER §7 bars this campaign from editing the rule
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
+- **The package suites' databases stay on the runner's disk.** Measured in A441 (#1477, run
+  37945937673): with `TMPDIR=/dev/shm` the server shards and `apps/server/src/bill-payments.test.ts`
+  took the same time, so the runner's disk is not what makes them slow.
 
 **The development stack:**
 
