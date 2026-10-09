@@ -3175,7 +3175,7 @@ describe("a counter order (B11c)", () => {
   /** A counter zone whose orders are placed with a ticket and paid after. */
   let ticketZone: string;
 
-  async function counterZoneNamed(name: string, serviceMode: "prepay" | "ticket_then_pay") {
+  async function counterZoneNamed(name: string) {
     return inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
@@ -3184,15 +3184,15 @@ describe("a counter order (B11c)", () => {
       return (
         await offerProducts(tx, venue.cfg, {
           zone: { zoneId: zone!.id },
-          serviceMode,
+          orderStart: "counter",
         })
       ).zoneId;
     });
   }
 
   beforeAll(async () => {
-    counterZone = await counterZoneNamed("Barra B11c", "prepay");
-    ticketZone = await counterZoneNamed("Barra ticket B11c", "ticket_then_pay");
+    counterZone = await counterZoneNamed("Barra B11c");
+    ticketZone = await counterZoneNamed("Barra ticket B11c");
   });
 
   /** A table's bill with `lines` sent to the kitchen, then moved to the counter. */

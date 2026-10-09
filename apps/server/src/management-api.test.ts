@@ -214,7 +214,7 @@ beforeAll(async () => {
     await withTransaction(suite.db, (tx) =>
       createDepartment(tx, tillConfigFromVenue(venue), {
         name: unique("Test department"),
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       }),
     )
   ).id;
@@ -1335,7 +1335,7 @@ describe("/management-api/tables", () => {
       const departmentId = await withTransaction(suite.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: unique("Dept"),
-          defaultServiceMode: "table_tab",
+          orderStart: "table",
         });
         await configureZone(tx, cfg, { zoneId, departmentId: department.id });
         return department.id;

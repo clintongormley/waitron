@@ -93,11 +93,11 @@ async function ready() {
   const f = await withTransaction(suite.db, async (tx) => {
     const a = await createDepartment(tx, v.cfg, {
       name: randomUUID(),
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const b = await createDepartment(tx, v.cfg, {
       name: randomUUID(),
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const az = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
     const hidden = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });

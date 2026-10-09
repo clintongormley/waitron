@@ -78,7 +78,12 @@ async function zoneNamed(
     .insert(floorZones)
     .values({ locationId: v.cfg.locationId, name })
     .returning({ id: floorZones.id });
-  return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, serviceMode })).zoneId;
+  return (
+    await offerProducts(tx, v.cfg, {
+      zone: { zoneId: zone!.id },
+      orderStart: serviceMode === "table_tab" ? "table" : "counter",
+    })
+  ).zoneId;
 }
 
 useVenueDb({
@@ -92,7 +97,7 @@ useVenueDb({
     await inTx(v, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {
         name: "Comedor",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       await configureZone(tx, v.cfg, { zoneId: v.tables.zoneId, departmentId: department.id });
       await offerProducts(tx, v.cfg, { zone: "tables" });
@@ -1074,7 +1079,7 @@ describe("the dishes of an open bill moved between service modes", () => {
       // Offering Tarta here writes no prep-station rule; the suite's other rules remain.
       const offered = await offerProducts(tx, v.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
         productIds: [v.productId("Tarta")],
       });
       await tx.execute(sql`

@@ -1471,7 +1471,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       const department = await createDepartment(tx, venue.cfg, {
         name: `Destino ${randomUUID()}`,
         tradingName: "Comedor Nuevo",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const zone = await createServiceZone(tx, venue.cfg, {
         name: `Zona ${randomUUID()}`,
@@ -1526,7 +1526,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       const department = await createDepartment(tx, venue.cfg, {
         name: `Destino ${randomUUID()}`,
         tradingName: "Mesa Nueva",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const zone = await createServiceZone(tx, venue.cfg, {
         name: `Zona ${randomUUID()}`,
@@ -1534,7 +1534,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       });
       const offers = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone.id },
-        serviceMode: "table_tab",
+        orderStart: "table",
       });
       const table = await createTable(tx, venue.cfg, {
         label: `D-${randomUUID().slice(0, 8)}`,

@@ -78,9 +78,8 @@ useVenueDb({
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: "Terraza" })
         .returning({ id: floorZones.id });
-      return (
-        await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, serviceMode: "table_tab" })
-      ).zoneId;
+      return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" }))
+        .zoneId;
     });
   },
 });
@@ -283,9 +282,8 @@ describe("move guests", () => {
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: `Third ${randomUUID()}` })
         .returning({ id: floorZones.id });
-      return (
-        await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, serviceMode: "table_tab" })
-      ).zoneId;
+      return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" }))
+        .zoneId;
     });
     const station = await act(async (tx) => {
       const station = await createStation(tx, v.cfg, {

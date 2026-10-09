@@ -174,7 +174,7 @@ useVenueDb({
       );
     });
     const offers = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     ticketThenPayZone = offers.zoneId;
     productIdOf = (name) => productIds.get(name)!;
@@ -546,7 +546,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
       });
 
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
       );
       const newId = await placed([
         {
@@ -578,7 +578,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
           sql`update extra_list_items set portion = 50 where list_id = ${portionListId}`,
         );
         await tx.execute(sql`update units set precision = 3 where seed_key = 'credit-test-kg'`);
-        await offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" });
+        await offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
       });
     }
   });
@@ -1234,7 +1234,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
       });
     });
   }
@@ -1334,7 +1334,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
       });
     });
     const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
@@ -1586,7 +1586,7 @@ describe("cancelling a placed order with no invoice", () => {
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
       });
     });
     const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
@@ -1610,7 +1610,7 @@ describe("cancelling a placed order with no invoice", () => {
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
       });
     });
     const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);

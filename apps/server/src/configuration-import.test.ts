@@ -526,7 +526,7 @@ describe("routing cells in a staged import", () => {
       const variant = await withTransaction(source.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: "Comedor",
-          defaultServiceMode: "table_tab",
+          orderStart: "table",
         });
         const zone = await createServiceZone(tx, cfg, {
           name: "Terraza",

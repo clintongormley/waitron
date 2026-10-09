@@ -2701,7 +2701,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     await createServiceZone(tx, cfg, { name: "Dining room", departmentId: restaurant.id });
     const terrace = await createServiceZone(tx, cfg, {
@@ -3556,7 +3556,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Receipt department",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     await tx
       .update(departmentSalePolicies)
@@ -3629,7 +3629,7 @@ it("transfers a department's customer and staff period menus to its zone under n
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Restaurante de cartas",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const barra = await createServiceZone(tx, scope, {
       name: "Barra de cartas",
@@ -3734,7 +3734,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Comedor de rutas",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const terraza = await createServiceZone(tx, scope, {
       name: "Terraza de rutas",
@@ -4915,11 +4915,11 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
   const original = await withTransaction(suite.db, async (tx) => {
     const a = await createDepartment(tx, cfg, {
       name: "Transfer deli",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const b = await createDepartment(tx, cfg, {
       name: "Transfer restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const zone = await createServiceZone(tx, cfg, {
       name: "Transfer receiving zone",
@@ -5030,7 +5030,7 @@ it.each([-15, 14])(
         .where(eq(locations.id, scope.locationId));
       const department = await createDepartment(tx, scope, {
         name: "Period transfer",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const customer = await createCatalogue(tx, { name: "Period customer" });
       const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
@@ -5159,7 +5159,7 @@ it("transfers order start policies under new department and zone ids", async () 
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Order start department",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const explicit = await createServiceZone(tx, scope, {
       name: "Counter override",

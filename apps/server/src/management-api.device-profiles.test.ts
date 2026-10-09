@@ -1494,7 +1494,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       });
       const deli = await createDepartment(tx, venueCfg, {
         name: uniqueName("Deli"),
-        defaultServiceMode: "prepay",
+        orderStart: "counter",
       });
       const deliCounter = await createServiceZone(tx, venueCfg, {
         name: uniqueName("Deli counter"),

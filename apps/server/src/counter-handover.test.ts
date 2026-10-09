@@ -43,7 +43,10 @@ useVenueDb({
           .insert(floorZones)
           .values({ locationId: venue.cfg.locationId, name: `Barra ${mode}` })
           .returning({ id: floorZones.id });
-        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, serviceMode: mode });
+        await offerProducts(tx, venue.cfg, {
+          zone: { zoneId: zone!.id },
+          orderStart: "counter",
+        });
         if (mode === "ticket_then_pay") {
           await tx.execute(sql`
             update zone_sale_policies set paid_when = 'ticket_then_pay'

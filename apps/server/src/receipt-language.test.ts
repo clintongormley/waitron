@@ -420,7 +420,7 @@ describe("a bill paid in parts and an unpaid invoice file the location's languag
   it("files and explicitly prints an unpaid invoice in Catalan", async () => {
     const venue = await catalanBillVenue();
     const { zoneId } = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
