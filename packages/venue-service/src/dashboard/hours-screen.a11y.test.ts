@@ -210,11 +210,15 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
     await showTab(el, "dates");
     return el;
   },
-  "the calendar with a special date open": async (theme) => {
+  "the named days Calendar links in an open row menu": async (theme) => {
     const el = await mount(theme);
-    await showTab(el, "calendar");
-    await press(el, 'td[data-date="2026-10-12"] button');
-    expect(deep(el, '[data-test="calendar-edit"]')).not.toBeNull();
+    await showTab(el, "dates");
+    const link = deep(el, '[data-test="duplicate-date"]')!;
+    link.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/calendar");
+    expect(deep(el, '[data-test="delete-date"]')!.getAttribute("href")).toBe(
+      "/manage/opening-hours/view/calendar",
+    );
     return el;
   },
   "a day's editor after a failed press": async (theme) => {
@@ -241,38 +245,30 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
     expect(deep(el, '[data-test="confirm-text"]')).not.toBeNull();
     return el;
   },
-  "a whole-venue closure refused for its date": async (theme) => {
+  "a named day edit refused for its date": async (theme) => {
     const el = await mount(theme, {
       refuse: { code: "special_date.date_taken", params: { date: "2026-10-12" } },
     });
     await showTab(el, "dates");
-    await press(el, '[data-test="close-venue"]');
-    await set(el, "date", "2026-10-12");
-    await set(el, "name", "Closed");
-    await chooseOption(deep(el, '[name="colour"]')!, "grey");
-    await settle(el);
+    await press(el, '[data-test="edit-date"]');
+    await set(el, "date", "2026-10-13");
     await press(el, '[data-test="save-editor"]');
     expect((deep(el, '[name="date"]') as HTMLElement & { error: string }).error).not.toBe("");
     return el;
   },
-  "a duplicate with a target date missing": async (theme) => {
+  "an edited whole-venue closure with locked station cells": async (theme) => {
     const el = await mount(theme);
     await showTab(el, "dates");
-    await press(el, '[data-test="duplicate-date"]');
-    await press(el, '[data-test="add-target"]');
-    await press(el, '[data-test="save-editor"]');
-    return el;
-  },
-  "a refused delete": async (theme) => {
-    const el = await mount(theme, {
-      refuse: {
-        code: "hours.invalid",
-        params: { field: "date", date: "2026-10-13", subjectId: "bar" },
-      },
-    });
-    await showTab(el, "dates");
-    await press(el, '[data-test="delete-date"]');
-    await press(el, '[data-test="save-editor"]');
+    await press(el, '[data-test="edit-date"]');
+    deep(el, '[name="closeWholeVenue"]')!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { checked: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(el);
+    expect(deep(el, '[data-test="whole-venue-note"]')).not.toBeNull();
     return el;
   },
 };

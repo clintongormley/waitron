@@ -627,11 +627,7 @@ const specialModel: HoursModel = {
     },
   ],
 };
-async function dateEditor(
-  kind: "add" | "edit" | "duplicate",
-  write?: () => Promise<void>,
-  refreshFails = false,
-) {
+async function dateEditor(_kind: "edit", write?: () => Promise<void>, refreshFails = false) {
   history.replaceState(null, "", "/manage/hours");
   const mounted = await mount(write, refreshFails, specialModel);
   const { screen } = mounted;
@@ -640,14 +636,10 @@ async function dateEditor(
     new CustomEvent("wt-tab-change", { detail: { value: "dates" }, bubbles: true, composed: true }),
   );
   await screen.updateComplete;
-  if (kind === "add")
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-date]")!.click();
-  else {
+  {
     const table = screen.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    const button = table.shadowRoot!.querySelector<HTMLElement>(
-      `[data-test=${kind === "edit" ? "edit-date" : "duplicate-date"}]`,
-    )!;
+    const button = table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date]")!;
     button
       .closest("wt-row-actions")!
       .shadowRoot!.querySelector<HTMLButtonElement>("button")!
@@ -673,12 +665,12 @@ function dateValue(screen: HoursScreen, name: string) {
     .shadowRoot!.querySelector<WtInput>(`[name="${name}"]`)!
     .shadowRoot!.querySelector<HTMLInputElement>("input")!.value;
 }
-it.each(["add", "edit", "duplicate"] as const)(
+it.each(["edit"] as const)(
   "special-date %s keeps actual values through Cancel/native Escape then discards without writing",
   async (kind) => {
     const { screen, modal, writes } = await dateEditor(kind);
-    const name = kind === "duplicate" ? "dates.0" : "name";
-    const value = kind === "duplicate" ? "2026-10-20" : "Changed fiesta";
+    const name = "name";
+    const value = "Changed fiesta";
     await dateField(screen, name, value);
     expect(unload()).toBe(true);
     action(modal, "cancel");
@@ -693,20 +685,17 @@ it.each(["add", "edit", "duplicate"] as const)(
     expect(writes).toEqual([]);
   },
 );
-it.each(["add", "edit", "duplicate"] as const)(
-  "special-date %s reverts to a clean opening",
-  async (kind) => {
-    const { screen, modal, writes } = await dateEditor(kind);
-    const name = kind === "duplicate" ? "dates.0" : "name";
-    await dateField(screen, name, kind === "duplicate" ? "2026-10-20" : "Changed");
-    await dateField(screen, name, kind === "edit" ? "  Fiesta  " : "");
-    expect(unload()).toBe(false);
-    action(modal, "cancel");
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-    expect((await question()).open).toBe(false);
-    expect(writes).toEqual([]);
-  },
-);
+it.each(["edit"] as const)("special-date %s reverts to a clean opening", async (kind) => {
+  const { screen, modal, writes } = await dateEditor(kind);
+  const name = "name";
+  await dateField(screen, name, "Changed");
+  await dateField(screen, name, kind === "edit" ? "  Fiesta  " : "");
+  expect(unload()).toBe(false);
+  action(modal, "cancel");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect((await question()).open).toBe(false);
+  expect(writes).toEqual([]);
+});
 const editedDateBody = [
   "/management-api/venue-service/special-dates/fiesta",
   {
@@ -802,7 +791,7 @@ it.each(["date", "name", "colour", "closeWholeVenue", "cell"])(
     expect(unload()).toBe(false);
   },
 );
-it.each(["edit", "duplicate"] as const)(
+it.each(["edit"] as const)(
   "special-date %s accepted write preserves newer input against the submitted snapshot",
   async (kind) => {
     const write = heldWrite();
@@ -835,30 +824,13 @@ it.each(["edit", "duplicate"] as const)(
     expect(unload()).toBe(false);
   },
 );
-it("special-date Duplicate protects multiple ordered target dates including blank invalid input", async () => {
-  const { screen, modal, writes } = await dateEditor("duplicate");
-  modal.querySelector<HTMLElement>("[data-test=add-target]")!.click();
-  await screen.updateComplete;
-  expect(unload()).toBe(true);
-  await dateField(screen, "dates.0", "2026-10-20");
-  await dateField(screen, "dates.1", "2026-10-21");
-  action(modal, "cancel");
-  await choose("keep");
-  expect(dateValue(screen, "dates.1")).toBe("2026-10-21");
-  action(modal, "save");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  expect(writes).toEqual([
-    [
-      "/management-api/venue-service/special-dates/fiesta/duplicate",
-      { dates: ["2026-10-20", "2026-10-21"] },
-    ],
-  ]);
-  expect(unload()).toBe(false);
-});
+
 it("special-date Edit asks before replacement and ancestor leave", async () => {
   const { screen, modal, writes } = await dateEditor("edit");
   await dateField(screen, "name", "Changed fiesta");
-  const add = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-date]")!;
+  const add = screen
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date]")!;
   add.click();
   await choose("keep");
   expect(modal.isConnected).toBe(true);
@@ -877,7 +849,7 @@ it("special-date Edit asks before replacement and ancestor leave", async () => {
   await choose("discard");
   await screen.updateComplete;
   expect(modal.isConnected).toBe(false);
-  expect(dateValue(screen, "name")).toBe("");
+  expect(dateValue(screen, "name")).toBe("Fiesta");
   expect(unload()).toBe(false);
   expect(writes).toEqual([]);
 });
@@ -886,117 +858,20 @@ it("special-date departed fields cannot mutate a replacement draft", async () =>
   const old = modal.querySelector<WtInput>('[name="name"]')!;
   action(modal, "cancel");
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-date]")!.click();
+  screen
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date]")!
+    .click();
   await screen.updateComplete;
   old.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Departed" }, bubbles: true, composed: true }),
   );
   await screen.updateComplete;
-  expect(dateValue(screen, "name")).toBe("");
+  expect(dateValue(screen, "name")).toBe("Fiesta");
   expect(unload()).toBe(false);
 });
 
-it("special-date departed Duplicate controls cannot replace the current editor", async () => {
-  const { screen, modal, writes } = await dateEditor("duplicate");
-  const add = modal.querySelector<HTMLElement>("[data-test=add-target]")!;
-  action(modal, "cancel");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-date]")!.click();
-  await screen.updateComplete;
-  add.click();
-  await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector('[name="name"]')).not.toBeNull();
-  expect(screen.shadowRoot!.querySelector('[name="dates.1"]')).toBeNull();
-  expect(unload()).toBe(false);
-  expect(writes).toEqual([]);
-});
-
-it.each(["make_special", "edit", "duplicate"] as const)(
-  "calendar %s protects the editor reached through its actual day panel",
-  async (kind) => {
-    history.replaceState(null, "", "/manage/hours");
-    const calendarModel = {
-      ...specialModel,
-      days: [
-        {
-          date: "2026-10-12",
-          specialDate: specialModel.specialDates[0]!,
-          holidays: [],
-          tone: "red" as const,
-        },
-      ],
-    };
-    const { screen, writes } = await mount(undefined, false, calendarModel);
-    screen.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
-      new CustomEvent("wt-tab-change", {
-        detail: { value: "calendar" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await screen.updateComplete;
-    const calendar = screen.shadowRoot!.querySelector("hours-calendar")!;
-    await expect
-      .poll(() => calendar.shadowRoot!.querySelector("td[data-date] button"))
-      .not.toBeNull();
-    const date = kind === "make_special" ? "2026-10-20" : "2026-10-12";
-    calendar
-      .shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!
-      .click();
-    await calendar.updateComplete;
-    calendar.shadowRoot!.querySelector<HTMLElement>(`[data-test=calendar-${kind}]`)!.click();
-    await screen.updateComplete;
-    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
-    await modal.updateComplete;
-    const name = kind === "duplicate" ? "dates.0" : "name";
-    const value = kind === "duplicate" ? "2026-10-21" : "Changed fiesta";
-    await dateField(screen, name, value);
-    action(modal, "cancel");
-    await choose("keep");
-    expect(dateValue(screen, name)).toBe(value);
-    expect(unload()).toBe(true);
-    await userEvent.keyboard("{Escape}");
-    await choose("discard");
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-    expect(writes).toEqual([]);
-    expect(unload()).toBe(false);
-  },
-);
-it("special-date Add saves its exact input and retires protection", async () => {
-  const { screen, modal, writes } = await dateEditor("add");
-  await dateField(screen, "name", "  Holiday  ");
-  await dateField(screen, "date", "2026-10-20");
-  await dateField(screen, "colour", "blue");
-  action(modal, "save");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  expect(writes).toEqual([
-    [
-      "/management-api/venue-service/special-dates",
-      { date: "2026-10-20", name: "Holiday", colour: "blue", closeWholeVenue: false, cells: [] },
-    ],
-  ]);
-  expect(unload()).toBe(false);
-  expect((await question()).open).toBe(false);
-});
-it("special-date Delete remains an exempt confirmation", async () => {
-  const { screen, modal, writes } = await dateEditor("edit");
-  action(modal, "cancel");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  const table = screen.shadowRoot!.querySelector("wt-data-table")!;
-  const button = table.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-date]")!;
-  button.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-  button.click();
-  await screen.updateComplete;
-  const confirmation = screen.shadowRoot!.querySelector("wt-modal")!;
-  await confirmation.updateComplete;
-  expect(unload()).toBe(false);
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  expect((await question()).open).toBe(false);
-  expect(writes).toEqual([]);
-});
-
-it.each(["edit", "duplicate"] as const)(
+it.each(["edit"] as const)(
   "special-date %s write blocks close and invalidates unanswered discard",
   async (kind) => {
     const write = heldWrite();
@@ -1019,7 +894,7 @@ it.each(["edit", "duplicate"] as const)(
     expect(unload()).toBe(false);
   },
 );
-it.each(["edit", "duplicate"] as const)(
+it.each(["edit"] as const)(
   "special-date %s departed successful reply cannot close a replacement opening",
   async (kind) => {
     const write = heldWrite();
@@ -1037,7 +912,10 @@ it.each(["edit", "duplicate"] as const)(
     action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
     await choose("discard");
     await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-date]")!.click();
+    screen
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date]")!
+      .click();
     await screen.updateComplete;
     await dateField(screen, "name", "New opening");
     write.resolve();
@@ -1124,7 +1002,7 @@ it("Configure Save waits for a changed day and retains it through confirmation a
   await expectSave(screen, false);
 });
 
-it.each(["add", "edit", "duplicate"] as const)(
+it.each(["edit"] as const)(
   "special-date %s Save follows its draft through reconnect and blocks unchanged host clicks",
   async (kind) => {
     const { screen, modal, writes } = await dateEditor(kind);
@@ -1133,8 +1011,8 @@ it.each(["add", "edit", "duplicate"] as const)(
     await screen.updateComplete;
     expect(writes).toEqual([]);
     expect(modal.querySelector("[invalid]")).toBeNull();
-    const name = kind === "duplicate" ? "dates.0" : "name";
-    const changed = kind === "duplicate" ? "2026-10-20" : "Changed fiesta";
+    const name = "name";
+    const changed = "Changed fiesta";
     await dateField(screen, name, changed);
     await expectSave(screen, true);
     screen.remove();
@@ -1167,7 +1045,7 @@ it("weekday edits made after reconnect still ask before discarding", async () =>
   expect(value(screen)).toBe("10:00");
   expect(writes).toEqual([]);
 });
-it.each(["add", "edit", "duplicate"] as const)(
+it.each(["edit"] as const)(
   "special-date %s edits made after reconnect still ask before discarding",
   async (kind) => {
     const { screen, writes } = await dateEditor(kind);
@@ -1176,8 +1054,8 @@ it.each(["add", "edit", "duplicate"] as const)(
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
     await expectSave(screen, false);
-    const name = kind === "duplicate" ? "dates.0" : "name";
-    const changed = kind === "duplicate" ? "2026-10-20" : "Changed fiesta";
+    const name = "name";
+    const changed = "Changed fiesta";
     await dateField(screen, name, changed);
     action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
     await choose("keep");
