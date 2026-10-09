@@ -3341,6 +3341,120 @@ describe("reserved venue names", () => {
 });
 
 describe("combined settings operations", () => {
+  it("saves a department's settings when its policy row is missing", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Repair department settings")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "counter" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Terrace",
+        departmentId: department.id,
+      });
+      await tx.execute(
+        sql`delete from department_sale_policies where department_id = ${department.id}`,
+      );
+      await settingsOperations.saveDepartmentSettings(tx, cfg, department.id, {
+        name: "Restaurant",
+        tradingName: "Receipt",
+        printTradingName: false,
+        orderStart: "table",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
+        zoneId: zone.id,
+        departmentId: department.id,
+        departmentName: "Restaurant",
+        tradingName: "Receipt",
+        printTradingName: false,
+        orderStart: "table",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+        serviceMode: "table_tab",
+      });
+    });
+  });
+
+  it("saves a zone's settings when its policy row is missing", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Repair zone settings")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Terrace",
+        departmentId: department.id,
+      });
+      await tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id));
+      await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+        serviceMode: "ticket_then_pay",
+      });
+    });
+  });
+
+  it("lists missing policy rows with the settings form's defaults for repair", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Read missing policies")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Terrace",
+        departmentId: department.id,
+      });
+      await tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id));
+      expect((await listSalePolicies(tx, cfg)).zones).toEqual([
+        {
+          zoneId: zone.id,
+          orderStart: null,
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+          effective: {
+            orderStart: "table",
+            paidWhen: "prepay",
+            collectionNumber: "none",
+            receiptPrintMode: "auto",
+            printTradingName: true,
+          },
+        },
+      ]);
+      await tx.execute(
+        sql`delete from department_sale_policies where department_id = ${department.id}`,
+      );
+      expect(await listSalePolicies(tx, cfg)).toEqual({
+        departments: [],
+        zones: [
+          {
+            zoneId: zone.id,
+            orderStart: null,
+            paidWhen: null,
+            collectionNumber: null,
+            receiptPrintMode: null,
+            effective: {
+              orderStart: "counter",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: false,
+            },
+          },
+        ],
+      });
+    });
+  });
+
   it("writes department fields and zone overrides through the caller transaction", async () => {
     const cfg = { locationId: brandLocationId(await seedLocation(`Settings ${randomUUID()}`)) };
     const { department, zone } = await scoped(async (tx) => {
