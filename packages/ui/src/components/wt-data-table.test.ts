@@ -1878,6 +1878,22 @@ test("a tree search stops at a parent that is missing or that points back down",
   expect(menuKeys(el)).toEqual(["eggs"]);
 });
 
+test("sortedSiblings gives the order a tree draws siblings in, during a search and without one", async () => {
+  const spirits: MenuNode[] = [
+    { id: "s", parent: null, name: "Spirits" },
+    { id: "vg", parent: "s", name: "Virgin" },
+    { id: "gin", parent: "s", name: "Gin" },
+  ];
+  const el = await menuTree({ rows: spirits, sortDirection: "descending" });
+  const children = (order: MenuNode[]) => order.map(({ id }) => id);
+  expect(menuKeys(el)).toEqual(["s", "gin", "vg"]);
+  expect(children(el.sortedSiblings([spirits[1]!, spirits[2]!]))).toEqual(["gin", "vg"]);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(menuKeys(el)).toEqual(["s", "vg", "gin"]);
+  expect(children(el.sortedSiblings([spirits[2]!, spirits[1]!]))).toEqual(["vg", "gin"]);
+});
+
 test("a search of only punctuation empties a tree", async () => {
   const el = await menuTree({ searchTerm: "&", searchOpensPath: true });
   expect(menuKeys(el)).toEqual([]);
@@ -2149,6 +2165,12 @@ test("during a search, rows whose closeness ties follow the column sort, and a h
   el.shadowRoot!.querySelector<HTMLButtonElement>('button.sort[data-sort="name"]')!.click();
   await el.updateComplete;
   expect(keys(el)).toEqual(["gin", "sour", "fizz", "gt", "tonic-gin", "ginger", "virgin"]);
+});
+
+test("sortedSiblings gives a flat table's drawn order during a search", async () => {
+  const el = await drinksTable({ searchTerm: "gin" });
+  expect(el.sortedSiblings(drinks).map(({ id }) => id)).toEqual(keys(el));
+  expect(keys(el)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
 });
 
 test("searchable renders a search box that narrows rows", async () => {

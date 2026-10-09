@@ -1790,7 +1790,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
     }
     const byKey = this.#rowsByKey();
-    const ranks = this.#treeRanks(rows, indexOf);
+    const ranks = this.#treeRanks(rows, byKey);
     const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
     const walk = (parentKey: string, depth: number) => {
       const children = childrenByParent.get(parentKey) ?? [];
@@ -1818,13 +1818,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * neither has no rank, and sorts after its ranked siblings. */
   #treeRanks(
     rows: readonly Row[],
-    indexOf: ReadonlyMap<Row, number>,
+    byKey: ReadonlyMap<string, Row>,
   ): ReadonlyMap<Row, SearchRank> | undefined {
     const own = this.#ranks;
     if (own === undefined) return undefined;
     const parentOf = this.rowParent!;
-    const byKey = new Map<string, Row>();
-    for (const row of rows) byKey.set(this.rowKey(row, indexOf.get(row)!), row);
     const best = new Map(own);
     for (const row of rows) {
       const rank = own.get(row);
@@ -1924,12 +1922,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** The order the table draws these rows in when they share a parent. */
   sortedSiblings(rows: readonly Row[]): Row[] {
     const parentKey = rows[0] === undefined ? null : (this.rowParent?.(rows[0]) ?? null);
-    const parent = parentKey === null ? undefined : this.#rowsByKey().get(parentKey);
+    const byKey = this.#rowsByKey();
+    const parent = parentKey === null ? undefined : byKey.get(parentKey);
     if (parent !== undefined && this.rowKeepsChildOrder(parent)) {
       const position = new Map(this.rows.map((row, index) => [row, index]));
       return [...rows].sort((a, b) => (position.get(a) ?? -1) - (position.get(b) ?? -1));
     }
-    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()), undefined);
+    const visible = this.#visibleRows();
+    const ranks = this.rowParent
+      ? this.#treeRanks(this.#treeVisible(visible).rows, byKey)
+      : this.#ranks;
+    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()), ranks);
   }
 
   /** Opens every closed branch above the row with this key, then scrolls the row into view. */
