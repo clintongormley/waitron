@@ -379,10 +379,6 @@ export class ModifiersScreen extends LitElement {
     if (list.usage.products > 0) counts.push(this.#count("products", list.usage.products));
     return counts;
   }
-  #usageText(list: ModifierList): string {
-    const counts = this.#usageCounts(list);
-    return counts.length === 0 ? t("modifiers.not_used") : counts.join(" · ");
-  }
   #usageCell(kind: Kind, list: ModifierList) {
     const counts = this.#usageCounts(list);
     if (counts.length === 0) return t("modifiers.not_used");
@@ -438,7 +434,6 @@ export class ModifiersScreen extends LitElement {
         label: t("modifiers.used_by"),
         choosable: "shown",
         activatesRow: false,
-        searchValue: (list) => this.#usageText(list),
         sortValue: (list) => list.usage.products,
         cell: (list) => this.#usageCell(kind, list),
       },

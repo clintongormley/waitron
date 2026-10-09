@@ -1542,6 +1542,7 @@ export class DevicesScreen extends LitElement {
         key: "name",
         label: t("devices.name"),
         sortValue: (d) => d.label,
+        searchValue: (d) => d.label,
         cell: (d) =>
           html`<span data-test=${`device-row-${d.id}`}
             ><span data-test=${`device-label-${d.id}`}>${d.label}</span></span

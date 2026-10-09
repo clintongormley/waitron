@@ -396,6 +396,14 @@ describe("devices-screen", () => {
         await table.updateComplete;
         expect(deepText(el, "[data-test=device-label-d3]")).toBe("Handheld");
         expect(dq(table.shadowRoot!, "[data-test=device-row-d1]")).toBeNull();
+        // d3's profile is "Waiter handheld" and d1 is active: neither column is searched.
+        for (const other of ["Waiter", t("devices.status_active")]) {
+          search!.value = other;
+          search!.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+          await table.updateComplete;
+          expect(dq(table.shadowRoot!, "[data-test=device-row-d3]")).toBeNull();
+          expect(dq(table.shadowRoot!, "[data-test=device-row-d1]")).toBeNull();
+        }
         search!.value = "";
         search!.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
         await table.updateComplete;

@@ -3,7 +3,6 @@ import {
   byLabel,
   categoryAncestors,
   categoryPath,
-  categoryPathSearchText,
   categoryRefusalErrors,
   categoryWithDescendants,
 } from "./category-form.js";
@@ -88,12 +87,6 @@ it("names a category by the path of names down to it, joined by the shared separ
   expect(categoryPath(child, [food, child])).toBe("Food › Sandwiches");
   expect(categoryPath(child, [food, child], " / ")).toBe("Food / Sandwiches");
   expect(categoryPath(food, [food, child])).toBe("Food");
-});
-
-it("spells a category's path for search with each separator a person might type, one spelling per line", () => {
-  expect(categoryPathSearchText(child, [food, child])).toBe(
-    "Food › Sandwiches\nFood / Sandwiches\nFood > Sandwiches",
-  );
 });
 
 it("gathers a category and every category below it, whatever order the list is in", () => {

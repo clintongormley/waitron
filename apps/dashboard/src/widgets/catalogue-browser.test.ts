@@ -616,8 +616,8 @@ it("drags the whole selected group and clears selection after moving", async () 
 });
 it("refuses a folder over itself or its descendants but highlights a sibling", async () => {
   const el = await mountBrowser({ categories: [...CATEGORIES, folder("s", "Soft drinks", null)] });
+  await toggleCategory(el, "d");
   await press(el, "select");
-  await typeSearch(el, "drinks");
   const from = await nameCell(el, "folder:d");
   pointerEvent(from, "pointerdown");
   for (const key of ["folder:d", "folder:b"]) {
@@ -1057,7 +1057,7 @@ it("search keeps the categories above a match open, and clearing it restores wha
   await typeSearch(el, "");
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
 });
-it("searches folder paths and product variant names", async () => {
+it("searches a folder's own name and a product's variant names, never a product's folder", async () => {
   const el = await mountBrowser({
     products: [
       ...PRODUCTS,
@@ -1082,7 +1082,9 @@ it("searches folder paths and product variant names", async () => {
     ],
   });
   await typeSearch(el, "drinks");
-  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "with-variants", "cola"]);
+  expect(await rowKeys(el)).toEqual(["folder:d"]);
+  await typeSearch(el, "drinks cola");
+  expect(await rowKeys(el)).toEqual([]);
   await typeSearch(el, "cup");
   expect(await rowKeys(el)).toEqual(["folder:d", "with-variants"]);
 });
@@ -3401,7 +3403,7 @@ it.each(["move", "delete"])(
 
 it("counts overlapping selected folders once in the delete consent", async () => {
   const el = await mountBrowser();
-  await typeSearch(el, "Drinks");
+  await toggleCategory(el, "d");
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 0 },
     { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 1, ownRoutes: 1 },

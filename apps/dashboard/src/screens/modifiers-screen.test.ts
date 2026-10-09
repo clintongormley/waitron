@@ -690,7 +690,7 @@ describe("in English", () => {
     ).toBeNull();
   });
 
-  it("sorts and searches the Used by column by what it counts", async () => {
+  it("sorts the Used by column by what it counts, and does not search it", async () => {
     const el = await mount();
     const extras = table(el, "extra-lists").columns.find((column) => column.key === "usedBy")!;
     const options = table(el, "option-lists").columns.find((column) => column.key === "usedBy")!;
@@ -699,12 +699,8 @@ describe("in English", () => {
     expect(extras.sortValue!(extraList as never)).toBe(2);
     expect(extras.sortValue!({ ...extraList, usage: { products: 1 } } as never)).toBe(1);
     expect(options.sortValue!(optionList as never)).toBe(2);
-    expect(extras.searchValue!(extraList as never)).toBe("2 products");
-    expect(options.searchValue!(optionList as never)).toBe("2 products");
-    // "Not used" is what the cell shows at zero, so it is what a search finds.
-    expect(options.searchValue!({ ...optionList, usage: { products: 0 } } as never)).toBe(
-      "Not used",
-    );
+    expect(extras.searchValue).toBeUndefined();
+    expect(options.searchValue).toBeUndefined();
   });
 
   it("shows the list's name as plain text and opens Used by from the count", async () => {
@@ -1853,12 +1849,20 @@ async function search(found: Table, text: string): Promise<string> {
   return found.shadowRoot.querySelector("tbody")!.textContent!;
 }
 
-it("finds a list by its name and by the status it shows", async () => {
+it("finds a list by its name and its extras' names, never by its status or what uses it", async () => {
   const el = await mount(
     api({
-      listExtraLists: vi
-        .fn()
-        .mockResolvedValue([extraList, { ...extraList, id: "e2", name: "Sauces", active: false }]),
+      listExtraLists: vi.fn().mockResolvedValue([
+        extraList,
+        {
+          ...extraList,
+          id: "e2",
+          name: "Sauces",
+          active: false,
+          items: [],
+          usage: { products: 0 },
+        },
+      ]),
     }),
   );
   const extras = table(el, "extra-lists");
@@ -1867,9 +1871,14 @@ it("finds a list by its name and by the status it shows", async () => {
   expect(byName).toContain("Sauces");
   expect(byName).not.toContain("Breads");
 
-  const byStatus = await search(extras, "Deshabilitada");
-  expect(byStatus).toContain("Sauces");
-  expect(byStatus).not.toContain("Breads");
+  const byExtra = await search(extras, "rye");
+  expect(byExtra).toContain("Breads");
+  expect(byExtra).not.toContain("Sauces");
+
+  // Breads shows a count of 2 under Used by, Sauces "Sin usar", and Deshabilitada as its status.
+  for (const other of ["Deshabilitada", "2", t("modifiers.not_used")]) {
+    expect(await searchToNothing(extras, other)).toBe(tableNoMatches());
+  }
 });
 
 it("finds a detail-modal product row by its name", async () => {
@@ -1889,10 +1898,10 @@ it("finds a detail-modal product row by its name", async () => {
 });
 
 /** Types into a table's search box and returns the sentence it shows once no row is left. */
-async function searchToNothing(found: Table): Promise<string> {
+async function searchToNothing(found: Table, text = "zzz-nothing"): Promise<string> {
   await found.updateComplete;
   const box = found.shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
-  box.value = "zzz-nothing";
+  box.value = text;
   box.dispatchEvent(new Event("input", { bubbles: true }));
   await found.updateComplete;
   expect(found.shadowRoot.querySelector("tbody")).toBeNull();
