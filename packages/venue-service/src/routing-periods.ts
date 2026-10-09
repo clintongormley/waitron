@@ -7,7 +7,10 @@ import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from 
 import { departments } from "./schema/service.js";
 import { rangeSpan } from "./service-day.js";
 
-type PeriodRow = Omit<RoutingPeriod, "productIds"> & { menuId: string };
+type PeriodRow = Omit<RoutingPeriod, "productIds" | "departmentInactive"> & {
+  menuId: string;
+  departmentActive: boolean;
+};
 
 /** The venue's periods, or only those of `ids` that are the venue's. */
 export async function readPeriods(
@@ -21,6 +24,7 @@ export async function readPeriods(
       id: menuPeriods.id,
       departmentId: menuPeriods.departmentId,
       departmentName: departments.name,
+      departmentActive: departments.active,
       name: menuPeriods.name,
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
@@ -86,10 +90,11 @@ export async function readRoutingPeriods(
   const periods = await readPeriods(tx, cfg);
   const productIds = await periodProductIds(tx, periods);
   return (await inPeriodOrder(tx, cfg, periods, dayCutover)).map(
-    ({ id, departmentId, departmentName, name, colour }) => ({
+    ({ id, departmentId, departmentName, departmentActive, name, colour }) => ({
       id,
       departmentId,
       departmentName,
+      ...(departmentActive ? {} : { departmentInactive: true as const }),
       name,
       colour,
       productIds: productIds.get(id)!,

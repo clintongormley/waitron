@@ -97,6 +97,8 @@ export interface RoutingPeriod {
   name: string;
   colour: CalendarColour;
   productIds: string[];
+  /** Present only while the period's department is switched off: no new line may name it. */
+  departmentInactive?: true;
 }
 
 /** `periods` is present only on a cell with period lines. */

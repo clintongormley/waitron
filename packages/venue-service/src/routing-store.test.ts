@@ -60,6 +60,7 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
+import { departments } from "./schema/service.js";
 import {
   replaceMenuWeek,
   resolveDepartmentService,
@@ -3682,5 +3683,22 @@ describe("saving a cell's period choices", () => {
         colour: "blue",
         productIds: [f.mojito],
       });
+      await tx
+        .update(departments)
+        .set({ active: false })
+        .where(eq(departments.id, f.barDepartment));
+      const after = (await routingModel(tx, f.cfg, at)).periods;
+      expect(after.find((period) => period.id === f.barLunch)).toEqual({
+        id: f.barLunch,
+        departmentId: f.barDepartment,
+        departmentName: "Bar",
+        departmentInactive: true,
+        name: "Lunch",
+        colour: "blue",
+        productIds: [f.mojito],
+      });
+      expect(after.filter((period) => "departmentInactive" in period).map(({ id }) => id)).toEqual([
+        f.barLunch,
+      ]);
     }));
 });
