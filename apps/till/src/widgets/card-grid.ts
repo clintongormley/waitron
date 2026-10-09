@@ -168,7 +168,6 @@ export class TillCardGrid extends LitElement {
   @property() cardProvider: CardProvider = "none";
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
-  /** See the waiting list's `canMoveStation`. */
   @property({ type: Boolean }) canMoveStation = false;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;

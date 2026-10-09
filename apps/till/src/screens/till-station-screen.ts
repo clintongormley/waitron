@@ -54,6 +54,7 @@ const READ_LIMIT_MS = 25_000;
 const viewKey = (deviceId: string): string => `waitron.stationScreenView.${deviceId}`;
 
 type DeviceStation = DeviceStationScreen["stations"][number];
+type WorkedStation = Extract<DeviceStation, { queue: StationQueueGroup[] }>;
 
 interface DishMove {
   workingOrderId: string;
@@ -64,7 +65,6 @@ interface DishMove {
   busy: boolean;
   refusal: string | null;
 }
-type WorkedStation = Extract<DeviceStation, { queue: StationQueueGroup[] }>;
 
 /** A station whose queue the display works: available, or switched off on its own page. */
 const worked = (station: DeviceStation): station is WorkedStation =>
@@ -708,11 +708,9 @@ export class TillStationScreen extends LitElement {
       );
       if (this.moving === busy) this.moving = null;
     } catch (error) {
+      const code = (error as { code?: unknown }).code;
       if (this.moving === busy)
-        this.moving = {
-          ...open,
-          refusal: (error as { code?: string }).code ?? "server.internal",
-        };
+        this.moving = { ...open, refusal: typeof code === "string" ? code : "server.internal" };
     } finally {
       limit.done();
     }

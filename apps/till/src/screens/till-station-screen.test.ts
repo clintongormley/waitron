@@ -4339,7 +4339,7 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
 
   it("marks the dialog busy while the move is sent", async () => {
     let answer!: (value: unknown) => void;
-    const { el } = await mountMove(
+    const { el, api } = await mountMove(
       {},
       { deviceMoveDishStation: vi.fn(() => new Promise((resolve) => (answer = resolve))) },
     );
@@ -4348,6 +4348,7 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     await flush(el);
     expect(dialog(el)!.busy).toBe(true);
     choose(dialog(el)!, "st-2");
+    expect(api.deviceMoveDishStation).toHaveBeenCalledOnce();
     answer({ revision: 2, stationId: "st-2", moved: [] });
     await expect.poll(() => dialog(el)).toBeUndefined();
   });
@@ -4418,6 +4419,58 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     settle(send);
     await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
     expect(dialog(el)).toBeUndefined();
+  });
+
+  it("a move answered after its dialog closed leaves another dish's dialog open", async () => {
+    let answer!: (value: unknown) => void;
+    const twoDishes: StationQueueGroup[] = [
+      {
+        ...cocinaQueue[0]!,
+        items: [
+          ...cocinaQueue[0]!.items,
+          {
+            ...cocinaQueue[0]!.items[0]!,
+            id: "ti-3",
+            workingOrderLineId: "wol-3",
+            name: "Tortilla",
+          },
+        ],
+      },
+    ];
+    const { el, api } = await mountMove(
+      {},
+      {
+        getDeviceStationScreen: vi
+          .fn()
+          .mockResolvedValue({ stations: [{ ...cocinaDevice, queue: twoDishes }] }),
+        deviceMoveDishStation: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      },
+    );
+    const first = await open(el);
+    choose(first, "st-2");
+    await flush(el);
+    first.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(dialog(el)).toBeUndefined();
+    queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-3"]')!.click();
+    await expect.poll(() => dialog(el)?.dishName).toBe("Tortilla");
+    answer({ revision: 2, stationId: "st-2", moved: [] });
+    await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
+    await flush(el);
+    expect(dialog(el)?.dishName).toBe("Tortilla");
+  });
+
+  it("a move timed out shows the general sentence", async () => {
+    const { el } = await mountMove(
+      {},
+      {
+        deviceMoveDishStation: vi
+          .fn()
+          .mockRejectedValue(new DOMException("The operation was aborted.", "AbortError")),
+      },
+    );
+    choose(await open(el), "st-2");
+    await expect.poll(() => dialog(el)?.refusal).toBe("server.internal");
   });
 
   it("Cancel closes the dialog and moves nothing", async () => {
