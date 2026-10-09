@@ -285,11 +285,13 @@ it("keeps a printer choice it can no longer send out of the save when the statio
   expect(el.shadowRoot!.textContent).toContain("Enable the station to change its printers.");
   const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
   expect(button.disabled).toBe(true);
+  expect(button.variant).toBe("secondary");
   await save(el);
   expect(seen).toEqual([]);
   expect(el.open).toBe(true);
   await rename(el, "Hot grill");
   expect(button.disabled).toBe(false);
+  expect(button.variant).toBe("primary");
   await save(el);
   expect(seen).toEqual([{ name: "Hot grill" }]);
   expect(el.saved()).toBe(false);

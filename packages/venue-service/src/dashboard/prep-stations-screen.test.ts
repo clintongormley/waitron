@@ -3561,7 +3561,7 @@ it.each([
   },
 );
 
-it("Watchers clears only a resolved printer conflict after Tickets releases every station mapping", async () => {
+it("Watchers clears a printer conflict only once a live update frees the printer from every station", async () => {
   const liveData = new LiveData();
   const server = structuredClone(ticketView);
   server.stationPrinters = [

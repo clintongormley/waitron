@@ -206,7 +206,7 @@ describe("product-list", () => {
       "No replacement (Cocktail bar is disabled)",
     );
   });
-  it("shows the made-at station, zone variation, and tester link", async () => {
+  it("shows the made-at station, zone variation, and Routing link", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "lager" }), product({ id: "mojito" })],
@@ -256,7 +256,7 @@ describe("product-list", () => {
     expect(cell.querySelector("a")).toBeNull();
     expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
   });
-  it("says nowhere, with the tester link, for a product the made-at read routes to no station", async () => {
+  it("says nowhere, with the Routing link, for a product the made-at read routes to no station", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bread" })],
@@ -4174,7 +4174,7 @@ describe("a category's Made at", () => {
     }
   });
 
-  it("keeps a product row's own value and its tester link beside the categories'", async () => {
+  it("keeps a product row's own value and its Routing link beside the categories'", async () => {
     const { root } = await mountMadeAt(
       [["d", { maker: { kind: "no_preparation" }, source: { kind: "own" }, someElsewhere: true }]],
       {

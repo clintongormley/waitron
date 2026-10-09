@@ -3793,12 +3793,6 @@ describe("dashboard URL navigation", () => {
               cells: [],
               canMakeDefault: false,
             } as never;
-          if (path === "/management-api/stations/health")
-            return {
-              capturedAt: "2026-10-06T10:00:00Z",
-              stations: [],
-              outputsDown: { printersDown: [], screensDark: [] },
-            } as never;
           if (path === "/management-api/stations/outputs-down")
             return { printersDown: [], screensDark: [] } as never;
           return [] as never;
@@ -3853,12 +3847,6 @@ describe("dashboard URL navigation", () => {
             clockReadable: true,
           } as never;
         if (path === "/management-api/stations?includeDisabled=true") return [] as never;
-        if (path === "/management-api/stations/health")
-          return {
-            capturedAt: "2026-10-05T12:00:00Z",
-            stations: [],
-            outputsDown: { printersDown: [], screensDark: [] },
-          } as never;
         if (path === "/management-api/stations/outputs-down")
           return { printersDown: [], screensDark: [] } as never;
         return [] as never;
@@ -3911,13 +3899,7 @@ describe("dashboard URL navigation", () => {
               stations: [],
               canMakeDefault: false,
             } as never)
-          : path === "/management-api/stations/health"
-            ? ({
-                capturedAt: "2026-10-05T12:00:00Z",
-                stations: [],
-                outputsDown: { printersDown: [], screensDark: [] },
-              } as never)
-            : stubRequest(path, method, body, options),
+          : stubRequest(path, method, body, options),
     });
     await flush(el);
     const screen = el.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;

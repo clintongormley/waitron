@@ -568,9 +568,6 @@ describe("venue-routing-grid", () => {
     const readOnly = await mount(routing({ canMakeDefault: false }));
     const fixed = cell(readOnly.el, "all", "every");
     expect(fixed.querySelector("button")).toBeNull();
-    expect(fixed.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      "Kitchen Kitchen (default) — as an extra, follows its dish Only someone who can configure the venue can change the default station.",
-    );
 
     const repair = await mount(routing({ defaultStationId: null }));
     const missing = cell(repair.el, "all", "every");

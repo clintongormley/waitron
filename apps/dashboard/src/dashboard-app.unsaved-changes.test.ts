@@ -947,12 +947,6 @@ it.each([
               showsRestOfOrder: false,
             },
           ] as never;
-        if (url === "/management-api/stations/health")
-          return {
-            capturedAt: "2026-10-06T10:00:00Z",
-            stations: [],
-            outputsDown: { printersDown: [], screensDark: [] },
-          } as never;
         if (url === "/management-api/stations/outputs-down")
           return { printersDown: [], screensDark: [] } as never;
         if (

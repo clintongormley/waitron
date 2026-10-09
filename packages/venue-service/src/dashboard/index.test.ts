@@ -163,13 +163,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
                   stations: [],
                   canMakeDefault: true,
                 }
-              : path === "/management-api/stations/health"
-                ? {
-                    capturedAt: "2026-10-05T12:00:00Z",
-                    stations: [],
-                    outputsDown: { printersDown: [], screensDark: [] },
-                  }
-                : [],
+              : [],
           ),
       } as Response),
     );
