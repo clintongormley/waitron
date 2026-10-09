@@ -4586,6 +4586,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
 - **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
   deleted-state uniqueness rules and shared confirmation dialog.
+  [Printer delete plan](superpowers/plans/2026-10-09-a435-2-printer-delete.md).
 - **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete.
