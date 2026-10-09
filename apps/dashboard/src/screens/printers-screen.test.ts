@@ -1235,7 +1235,7 @@ describe("printer configuration tabs", () => {
         .shadowRoot!.querySelector("button")!
         .getAttribute("aria-busy"),
     ).toBe("true");
-    q(el, "[data-test=cancel-new-agent]")!.click();
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
     await flush(el);
     expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
   });
@@ -2318,7 +2318,7 @@ describe("printers-screen", () => {
     );
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await flush(el);
     await openDiscovery(el);
     reject({ code: "printer.probe_busy" });
@@ -2942,7 +2942,7 @@ describe("printers-screen", () => {
       expect(background.renewPrinterDiscovery).toHaveBeenCalledTimes(4);
       expect(api.renewPrinterDiscovery).not.toHaveBeenCalled();
 
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await flush(el);
       await vi.advanceTimersByTimeAsync(5 * 60_000);
       expect(background.renewPrinterDiscovery).toHaveBeenCalledTimes(4);
@@ -3460,7 +3460,7 @@ describe("printer settings table layout", () => {
     expect(q(el, "[data-test=cancel-new-printer]")!.closest("wt-form-actions")?.slot).toBe(
       "footer",
     );
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await flush(el);
     expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
     expect(api.createPrinter).not.toHaveBeenCalled();
@@ -3639,7 +3639,7 @@ it("shows a failed agent rename and lets Cancel discard the draft", async () => 
     codeMessage("agent.not_found", "es-ES"),
   );
   expect(topAlertOf(el, "edit-agent-modal")).toBeNull();
-  q(el, "[data-test=cancel-edit-agent]")!.click();
+  await clickAndAwaitClose(el, "edit-agent-modal", "cancel-edit-agent");
   await flush(el);
   q(el, "[data-test=edit-agent-a1]")!.click();
   await flush(el);
@@ -4886,7 +4886,7 @@ it("releases a hold whose take answers after the modal is dismissed", async () =
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
-  q(el, "[data-test=cancel-new-agent]")!.click();
+  await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
   await flush(el);
   expect(api.releasePairingHold).not.toHaveBeenCalled();
   resolve({ holdId: "late", openUntil: OPEN.openUntil });
@@ -4903,7 +4903,7 @@ it("shows nothing when a hold's release fails after dismissing the modal, since 
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
-  q(el, "[data-test=cancel-new-agent]")!.click();
+  await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
   await flush(el);
   expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
   expect(q(el, "[role=alert]")).toBeNull();
@@ -4994,7 +4994,7 @@ it("re-adds a printer after adding and disabling it in the same screen", async (
   await openDiscovery(el);
   await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
   await vi.waitFor(() => expect(q(el, "[data-test=calibration-step-1]")).not.toBeNull());
-  q(el, "[data-test=cancel-edit-printer]")!.click();
+  await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
   await flush(el);
   q(el, "[data-test=deactivate-printer-p9]")!.click();
   await flush(el);
@@ -5040,7 +5040,7 @@ it("ignores an old agent scan after closing and reopening the modal", async () =
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
-  q(el, "[data-test=cancel-new-agent]")!.click();
+  await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
@@ -5072,7 +5072,7 @@ it("starts a fresh agent read immediately after reopening, without overlapping i
   try {
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-new-agent]")!.click();
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
@@ -5120,7 +5120,7 @@ it("ignores a previous opening's pairing failure while the reopened dialog scans
   await selectTab(el, "agents");
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
-  q(el, "[data-test=cancel-new-agent]")!.click();
+  await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
@@ -5146,7 +5146,7 @@ it("does not show a previous pairing deadline after reopening before the next op
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
   expect(q(el, "[data-test=pairing-until]")).not.toBeNull();
-  q(el, "[data-test=cancel-new-agent]")!.click();
+  await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
@@ -5295,7 +5295,7 @@ describe("printer setup refinements", () => {
     q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     await chooseOption(el, "printer-paper-width", "58mm");
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
     q(el, "[data-test=calibrate-printer-details]")!.click();
@@ -5324,7 +5324,7 @@ it("keeps a reopened calibration independent of a pending earlier print", async 
   await flush(el);
   q(el, '[data-test="print-ruler-p1"]')!.click();
   expect(api.testPrint).toHaveBeenCalledOnce();
-  q(el, '[data-test="cancel-edit-printer"]')!.click();
+  await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
   await flush(el);
   await openPrinter(el);
   q(el, '[data-test="print-ruler-p1"]')!.click();
@@ -5515,7 +5515,7 @@ describe("printers-screen agent joining edges", () => {
         .mockResolvedValue([]),
     });
     const el = await openAgentModal(api);
-    q(el, "[data-test=cancel-new-agent]")!.click();
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
@@ -5546,7 +5546,7 @@ describe("printers-screen agent joining edges", () => {
     await flush(el);
     expect(q(el, "[data-test=pairing-until]")).toBeNull();
     expect(q(el, "[data-test=pairing-refused]")).toBeNull();
-    q(el, "[data-test=cancel-new-agent]")!.click();
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
     await flush(el);
     finishOpen({ holdId: "h1", openUntil: OPEN.openUntil });
     await flush(el);
@@ -5943,7 +5943,7 @@ describe("printers-screen discovery and add edges", () => {
       await openDiscovery(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       expect(passive).toHaveBeenCalledOnce();
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await flush(el);
 
       failRead({ code: "management_session.expired" });
@@ -7167,7 +7167,7 @@ describe("printers-screen Bluetooth pairing", () => {
       const reads = passive.mock.calls.length;
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       expect(passive).toHaveBeenCalledTimes(reads + 1);
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await flush(el);
       await flush(el);
       fail({ code: "connection.failed" });
@@ -9197,7 +9197,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
       listRecentJobs: vi.fn().mockResolvedValue([job({ ...ended, id: "drawer-test" })]),
     });
     await openPrinter(el, "p5");
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await flush(el);
     await openPrinter(el, "p5");
     for (let step = 1; step < 3; step++) {
@@ -9212,7 +9212,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await flush(el);
     expect(q(el, "[data-test=calibration-job-failed]")).not.toBeNull();
 
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await flush(el);
     await openPrinter(el, "p5");
     expect(q(el, "[data-test=calibration-job-failed]")).toBeNull();
@@ -9233,7 +9233,7 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     await flush(el);
     expect(q(el, "[data-test=calibration-next]")).not.toBeNull();
     expect(q(el, "[data-test=bluetooth-printing-unavailable]")).toBeNull();
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await flush(el);
 
     await openPrinter(el, "p1");
