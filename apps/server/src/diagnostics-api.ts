@@ -22,15 +22,10 @@ export interface DiagnosticsApiDeps {
   verbosity: VerbosityController;
 }
 
-/**
- * Every AppError CODE the diagnostics API answers, and the HTTP status it maps to.
- * `management_session.required` (401, an absent/forged
- * cookie) and `authorization.not_permitted` (403, a session that holds no `diagnostics.view`) come
- * from the shared authorize gate; `diagnostics.invalid_verbosity` (400) is this surface's own
- * request-shape fault. A registered code absent here would default to 400 in the boundary.
- */
 const STATUS = {
   "management_session.required": 401,
+  "management_session.expired": 401,
+  "person.suspended": 403,
   "authorization.not_permitted": 403,
   "diagnostics.invalid_verbosity": 400,
 } as const;
