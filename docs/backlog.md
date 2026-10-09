@@ -1289,8 +1289,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
   APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Parts B/C.**
-  Slice 4 Part A is built: combined tickets on shared printers, period choices in routing cells
-  and the station editor, which retiring watchers (slice 5 Part B) waited for. Station-hours and
+  Slice 4 Part A is built: combined tickets on shared printers, which retiring watchers (slice 5
+  Part B) waited for, period choices in routing cells and the station editor. Station-hours and
   fallback retirement (slice 4 Part B) and department receipts (slice 7) remain. Slice 6's
   remaining parts add the closed-times summary and floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
@@ -1492,9 +1492,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
   Decide whether to remove them or use them; slice 4 Part A leaves both.
 
-- **Spanish and nested routing-grid labels split mid-word at 390 px** — the dashboard sets no
-  `lang` (`apps/dashboard/index.html`), so `hyphens: auto` cannot work
-  (`packages/venue-service/src/dashboard/routing-grid.ts`). Left open by A366 slice 4 Part A.
+- **Spanish and nested routing-grid labels split mid-word at 390 px** — the grid breaks words with
+  `overflow-wrap: anywhere` and sets no `hyphens`
+  (`packages/venue-service/src/dashboard/routing-grid.ts`); hyphenating would need `hyphens: auto`
+  and a page `lang`, which the dashboard does not set (`apps/dashboard/index.html`). Left open by
+  A366 slice 4 Part A.
 
 - **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
   level** — module screens are not told the person's permissions, so Prep stations always passes
@@ -4734,9 +4736,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
   deleted-state uniqueness rules and shared confirmation dialog.
   [Printer delete plan](superpowers/plans/2026-10-09-a435-2-printer-delete.md).
-  The plan cites `apps/server/src/station-health.ts` and
-  `packages/venue-service/src/dashboard/station-health-table.ts`, which A366 slice 4 Part A
-  deleted with the Stations tab's down-printer notes; re-ground those rows before building.
+  The plan cites `apps/server/src/station-health.ts`, which A366 slice 4 Part A deleted, and
+  `packages/venue-service/src/dashboard/station-health-table.ts`, which it renamed
+  `station-table.ts` without the down-printer notes; re-ground those rows before building.
 - **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete.

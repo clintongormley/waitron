@@ -500,8 +500,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
    whether any intended case legally needs N1 or N2 instead — to be answered before the first live
    filing (the #345 entry below).
-3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations Tickets/Watchers,
-   and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
+3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations' station editor and
+   Watchers, and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
    screens against the rules before changing them.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
    `packages/payments-sumup`. #333 changed only their row menus.

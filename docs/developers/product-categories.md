@@ -445,7 +445,7 @@ keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
 cascades. The dialog counts the routing rules each answer
 removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
-Prep Stations' tester after changing the category tree. A variant is routed by its product's
+Prep stations' Routing tab after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
 
 ## API
