@@ -22,7 +22,7 @@ export function fixture(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
-    specialDates: [],
+    namedDays: [],
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     departments: [
       {

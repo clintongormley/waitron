@@ -144,7 +144,10 @@ it("shows dated ranges and whole-venue closure when a named day is selected", as
     id: "named",
     date: "2026-10-12",
     name: "Own Monday",
-    colour: "purple",
+    kind: "working_day" as const,
+    repeats: false,
+    ownHours: true,
+    hasStationHours: false,
     closeWholeVenue: false,
   };
   await el.updateComplete;

@@ -22,7 +22,7 @@ class DayLeaveApp extends LitElement {
       clockReadable: true,
       dayCutover: "06:00",
       menus: [],
-      specialDates: [],
+      namedDays: [],
       departments: [
         {
           id: "d1",

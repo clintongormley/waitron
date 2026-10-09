@@ -34,7 +34,7 @@ function model(): OpeningHoursModel {
       { id: "drinks", name: "Drinks", active: true, includes: [] },
       { id: "staff", name: "Staff snacks", active: true, includes: [] },
     ],
-    specialDates: [],
+    namedDays: [],
     departments: [
       {
         id: "restaurant",
@@ -1074,11 +1074,14 @@ it("passes the chosen named day to All departments", async () => {
     id: "named",
     date: "2026-10-12",
     name: "Own Monday",
-    colour: "purple" as const,
+    kind: "working_day" as const,
+    repeats: false,
+    ownHours: true,
+    hasStationHours: false,
     closeWholeVenue: false,
   };
   const el = await mount((async () =>
-    structuredClone({ ...data, specialDates: [special] })) as DashboardRequest);
+    structuredClone({ ...data, namedDays: [special] })) as DashboardRequest);
   el.shadowRoot!.querySelector("[name=weekMode]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "date" }, bubbles: true, composed: true }),
   );

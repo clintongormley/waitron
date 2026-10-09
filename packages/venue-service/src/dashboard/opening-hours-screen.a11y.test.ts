@@ -36,7 +36,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
         timeZone: "Europe/Madrid",
         clockReadable: state !== "unreadable-viewer",
         dayCutover: "06:00",
-        specialDates: [],
+        namedDays: [],
         menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
         departments: [
           {
@@ -108,7 +108,7 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
           timeZone: "Europe/Madrid",
           clockReadable: true,
           dayCutover: "06:00",
-          specialDates: [],
+          namedDays: [],
           menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
           departments: [
             {

@@ -29,8 +29,17 @@ async function mount(
     timeZone,
     clockReadable,
     menus: [{ id: "m1", name: "Night menu", active: true, includes: [] }],
-    specialDates: [
-      { id: "s1", date, name: "Clock change", colour: "red" as const, closeWholeVenue: false },
+    namedDays: [
+      {
+        id: "s1",
+        date,
+        name: "Clock change",
+        kind: "working_day" as const,
+        repeats: false,
+        ownHours: true,
+        hasStationHours: false,
+        closeWholeVenue: false,
+      },
     ],
     departments: [
       {

@@ -19,7 +19,7 @@ function model(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
-    specialDates: [],
+    namedDays: [],
     menus: [],
     departments: [
       {
@@ -98,9 +98,20 @@ describe.each(["en", "es"] as const)("Opening hours choices (%s)", (locale) => {
           expect(grid.columns).toHaveLength(14);
           expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
         } else {
-          expect(
-            screen.shadowRoot!.querySelector("[data-test=zone-placeholder]")?.textContent,
-          ).toContain("Terrace");
+          const zone = screen.shadowRoot!.querySelector("opening-hours-zone-week")!;
+          expect(zone).not.toBeNull();
+          await zone.updateComplete;
+          const grid = zone.shadowRoot!.querySelector("service-grid")!;
+          expect(grid).not.toBeNull();
+          await grid.updateComplete;
+          const picker =
+            screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+              "[name=departmentId]",
+            )!;
+          await picker.updateComplete;
+          expect(picker.shadowRoot!.querySelector("button .value")!.textContent).toContain(
+            "Terrace",
+          );
         }
         await expectNoA11yViolations(host);
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

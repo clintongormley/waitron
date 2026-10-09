@@ -18,7 +18,7 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
       timeZone: "Europe/Madrid",
       clockReadable: true,
       dayCutover: "06:00",
-      specialDates:
+      namedDays:
         state === "empty"
           ? []
           : [
@@ -26,7 +26,10 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
                 id: "s1",
                 date: "2026-10-12",
                 name: "Holiday",
-                colour: "red",
+                kind: "working_day" as const,
+                repeats: false,
+                ownHours: true,
+                hasStationHours: false,
                 closeWholeVenue: false,
               },
             ],

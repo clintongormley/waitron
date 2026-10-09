@@ -222,6 +222,6 @@ describe("departments and calendar follow named days", () => {
     await dated(f, retained.id);
     const future = await day(f, "2026-12-26");
     const model = await run((tx) => readOpeningHoursModel(tx, f.cfg, now));
-    expect(model.specialDates.map(({ id }) => id)).toEqual([repeat.id, retained.id, future.id]);
+    expect(model.namedDays.map(({ id }) => id)).toEqual([repeat.id, retained.id, future.id]);
   });
 });

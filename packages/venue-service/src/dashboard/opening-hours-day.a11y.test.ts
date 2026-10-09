@@ -30,14 +30,17 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
           clockReadable: state !== "clock",
           dayCutover: "06:00",
           menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-          specialDates:
+          namedDays:
             state === "special"
               ? [
                   {
                     id: "s1",
                     date: "2026-10-12",
                     name: "Holiday",
-                    colour: "red",
+                    kind: "working_day" as const,
+                    repeats: false,
+                    ownHours: true,
+                    hasStationHours: false,
                     closeWholeVenue: false,
                   },
                 ]

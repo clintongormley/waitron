@@ -545,6 +545,7 @@ describe("HoursApi.watchLocalHolidays", () => {
       "locations",
       "holiday_geographies",
       "local_holidays",
+      "special_dates",
     ]);
     expect(liveData.interests).toEqual(QUERY_DEPENDENCIES.holidays.map((type) => ({ type })));
     expect(request.mock.calls).toEqual([[LOCAL_PATH, "GET", undefined, { passive: true }]]);

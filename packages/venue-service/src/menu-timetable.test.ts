@@ -1301,14 +1301,14 @@ describe("a period no longer placed anywhere but a past special date", () => {
       { code: "menu_period.in_use", params: { periodId: periods.brunch, uses: [use] } },
     );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    expect(model.specialDates).toContainEqual({
+    expect(model.namedDays).toContainEqual({
       kind: "working_day",
       repeats: false,
       ownHours: true,
+      hasStationHours: false,
       id: lastChristmas.id,
       date: "2025-12-25",
       name: "Navidad",
-      colour: "blue",
       closeWholeVenue: false,
     });
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
@@ -1320,7 +1320,7 @@ describe("a period no longer placed anywhere but a past special date", () => {
     await turnOffOwnHours(v, lastChristmas.id);
     await scoped((tx) => deleteMenuPeriod(tx, v.cfg, periods.brunch));
     const after = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    expect(after.specialDates.map((date) => date.id)).not.toContain(lastChristmas.id);
+    expect(after.namedDays.map((date) => date.id)).not.toContain(lastChristmas.id);
   });
 });
 
@@ -2001,25 +2001,25 @@ describe("the editor's model", () => {
       active: false,
       periods: [{ id: periods.mediodiaDeli }],
     });
-    expect(model.specialDates).toEqual([
+    expect(model.namedDays).toEqual([
       {
         kind: "working_day",
         repeats: false,
         ownHours: true,
+        hasStationHours: false,
         id: yesterday.id,
         date: "2026-10-06",
         name: "Ayer",
-        colour: "blue",
         closeWholeVenue: false,
       },
       {
         kind: "working_day",
         repeats: false,
         ownHours: true,
+        hasStationHours: false,
         id: christmas.id,
         date: CHRISTMAS,
         name: "Navidad",
-        colour: "blue",
         closeWholeVenue: false,
       },
     ]);
@@ -2030,7 +2030,7 @@ describe("the editor's model", () => {
       );
     });
     const unreadable = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    expect(unreadable.specialDates.map((date) => date.id)).toEqual([
+    expect(unreadable.namedDays.map((date) => date.id)).toEqual([
       earlier.id,
       yesterday.id,
       christmas.id,
@@ -2217,15 +2217,15 @@ describe("the editor's model of two venues", () => {
       saveSpecialDateMenus(tx, other.cfg, theirPast.id, other.restaurant, [], AT),
     );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    expect(model.specialDates).toEqual([
+    expect(model.namedDays).toEqual([
       {
         kind: "working_day",
         repeats: false,
         ownHours: true,
+        hasStationHours: false,
         id: ours.id,
         date: CHRISTMAS,
         name: "Navidad",
-        colour: "blue",
         closeWholeVenue: false,
       },
     ]);
@@ -2741,15 +2741,15 @@ describe("department service periods", () => {
       week: weekOf(() => []),
       dates: [],
     });
-    expect(model.specialDates).toEqual([
+    expect(model.namedDays).toEqual([
       {
         kind: "working_day",
         repeats: false,
         ownHours: true,
+        hasStationHours: false,
         id: date.id,
         date: FRIDAY,
         name: "Navidad",
-        colour: "red",
         closeWholeVenue: false,
       },
     ]);
@@ -2762,18 +2762,14 @@ describe("department service periods", () => {
     const yesterday = await makeDate(v, "2026-10-06");
     await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, used.id, v.restaurant, [], AT));
     expect(
-      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).specialDates.map(
-        (date) => date.id,
-      ),
+      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).namedDays.map((date) => date.id),
     ).toEqual([used.id, yesterday.id]);
     await db
       .update(locations)
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.locationId));
     expect(
-      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).specialDates.map(
-        (date) => date.id,
-      ),
+      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).namedDays.map((date) => date.id),
     ).toEqual([used.id, unused.id, yesterday.id]);
   });
 

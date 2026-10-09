@@ -19,7 +19,7 @@ class OpeningLeaveApp extends LitElement {
       timeZone: "Europe/Madrid",
       clockReadable: true,
       dayCutover: "06:00",
-      specialDates: [],
+      namedDays: [],
       menus: [
         { id: "lunch", name: "Lunch menu", active: true, includes: [] },
         { id: "dinner", name: "Dinner menu", active: true, includes: [] },

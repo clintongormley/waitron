@@ -11,7 +11,10 @@ const special = {
   id: "s/1",
   date: "2026-10-12",
   name: "Holiday",
-  colour: "red" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: true,
+  hasStationHours: false,
   closeWholeVenue: false,
 };
 function fixture(own = true): OpeningHoursModel {
@@ -20,7 +23,7 @@ function fixture(own = true): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-    specialDates: [special, { ...special, id: "s2", date: "2026-10-13", name: "Party" }],
+    namedDays: [special, { ...special, id: "s2", date: "2026-10-13", name: "Party" }],
     departments: [
       {
         id: "d1",

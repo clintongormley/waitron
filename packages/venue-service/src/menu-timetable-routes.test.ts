@@ -260,7 +260,7 @@ describe("the opening-hours routes", () => {
     const restaurant = restaurantOf(model, r);
     expect(restaurant.week.find((day) => day.weekday === 1)!.slots).toEqual(monday);
     expect(restaurant.dates).toEqual([{ specialDateId: r.christmas, slots: christmas }]);
-    expect(model.specialDates.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
+    expect(model.namedDays.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
 
     await answers(
       await r.send("PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, r.manager, {
@@ -284,7 +284,7 @@ describe("the opening-hours routes", () => {
     model = await r.model();
     expect(restaurantOf(model, r).dates).toEqual([]);
     expect(restaurantOf(model, r).periods.map((period) => period.id)).toEqual([r.mananas]);
-    expect(model.specialDates.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
+    expect(model.namedDays.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
   });
 
   it("change only what a period update sends, keeping a rename made in the meantime", async () => {

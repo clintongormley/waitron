@@ -9,7 +9,7 @@ const model: OpeningHoursModel = {
   dayCutover: "06:00",
   menus: [],
   departments: [],
-  specialDates: [],
+  namedDays: [],
 };
 const base = "/management-api/venue-service";
 
@@ -55,6 +55,7 @@ describe("OpeningHoursApi", () => {
           "menu_day_timetables",
           "menu_slots",
           "special_dates",
+          "special_date_hours",
           "departments",
           "catalogues",
           "locations",

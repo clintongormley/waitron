@@ -21,9 +21,27 @@ class DateLeaveApp extends LitElement {
       clockReadable: true,
       dayCutover: "06:00",
       menus: [],
-      specialDates: [
-        { id: "s1", date: "2026-10-12", name: "Holiday", colour: "red", closeWholeVenue: false },
-        { id: "s2", date: "2026-10-13", name: "Party", colour: "blue", closeWholeVenue: false },
+      namedDays: [
+        {
+          id: "s1",
+          date: "2026-10-12",
+          name: "Holiday",
+          kind: "working_day" as const,
+          repeats: false,
+          ownHours: true,
+          hasStationHours: false,
+          closeWholeVenue: false,
+        },
+        {
+          id: "s2",
+          date: "2026-10-13",
+          name: "Party",
+          kind: "working_day" as const,
+          repeats: false,
+          ownHours: true,
+          hasStationHours: false,
+          closeWholeVenue: false,
+        },
       ],
       departments: [
         {

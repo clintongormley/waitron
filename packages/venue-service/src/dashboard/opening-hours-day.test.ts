@@ -13,8 +13,17 @@ export function dayFixture(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-    specialDates: [
-      { id: "s/1", date: "2026-10-13", name: "Party", colour: "red", closeWholeVenue: false },
+    namedDays: [
+      {
+        id: "s/1",
+        date: "2026-10-13",
+        name: "Party",
+        kind: "working_day" as const,
+        repeats: false,
+        ownHours: true,
+        hasStationHours: false,
+        closeWholeVenue: false,
+      },
     ],
     departments: [
       {
@@ -306,7 +315,7 @@ it("keeps a dirty ordinary day's write target when a new named date arrives in t
   await day.updateComplete;
   day.model = {
     ...day.model,
-    specialDates: [{ ...day.model.specialDates[0]!, date: "2026-10-12" }],
+    namedDays: [{ ...day.model.namedDays[0]!, date: "2026-10-12" }],
   };
   await day.updateComplete;
   expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
@@ -725,4 +734,36 @@ it("keeps a created period's signed offset in its wire body and department range
   expect(
     range.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=periodId]")!.value,
   ).toBe("late");
+});
+
+it("applies an old repeating named day's own hours on the later occurrence", async () => {
+  vi.setSystemTime(new Date("2026-10-13T10:00:00Z"));
+  const model = dayFixture();
+  model.namedDays = [
+    { ...model.namedDays[0]!, date: "2025-10-13", kind: "holiday", repeats: true, ownHours: true },
+  ];
+  const writes: unknown[] = [];
+  const day = await mount(async (...args) => {
+    writes.push(args);
+  }, model);
+  expect(grid(day).columns[0]!.slots).toEqual([
+    { periodId: "p1", startsAt: "12:00", endsAt: "16:00" },
+  ]);
+  emit(grid(day), "grid-block-change", {
+    columnKey: "d1",
+    index: 0,
+    startsAt: "12:00",
+    endsAt: "17:00",
+  });
+  await day.updateComplete;
+  save(day).click();
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      [
+        "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
+        "PUT",
+        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+      ],
+    ]);
 });
