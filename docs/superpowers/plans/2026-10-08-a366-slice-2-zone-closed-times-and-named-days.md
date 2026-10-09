@@ -652,7 +652,7 @@ list `:550-575`); tests both `configuration-transfer.test.ts`.
 bundle, both or neither of weekday and named day, a dated row on a day without own hours, or ranges
 `parseClosedRanges` refuses.
 
-- [ ] Steps: failing tests (a Terrace week round-trips — fails today because the table list at
+- [x] Steps: failing tests (a Terrace week round-trips — fails today because the table list at
   `:550-575` omits `zone_closed_times`; each refusal); watch them fail; implement; the venue-service
   node project and the server package; commit
   `feat(venue-service): configuration transfer carries zone closed times (A366)`.

@@ -20,7 +20,7 @@ import { isReadableClock, isReadableZone, skippedEndpoint } from "./hours-clock.
 import { occursOn, repeatKey } from "./named-day-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
-import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
+import { calendarDateOfTime, parseClosedRanges, parseServiceDay } from "./service-day.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { HOURS_CELL_MODES } from "./schema/hours.js";
@@ -44,7 +44,8 @@ function parsedAs<T>(table: string, parse: () => T): T {
       error instanceof AppError &&
       (error.code === "hours.invalid" ||
         error.code === "menu_timetable.invalid" ||
-        error.code === "menu_period.invalid")
+        error.code === "menu_period.invalid" ||
+        error.code === "zone_closed_time.invalid")
     )
       refuse(table);
     throw error;
@@ -590,6 +591,43 @@ function validateZoneDepartments(tables: Tables): void {
   }
 }
 
+function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover: string }): void {
+  const rows = tables.zone_closed_times ?? [];
+  if (rows.length === 0) return;
+  if (bundle === undefined || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(bundle.dayCutover))
+    refuse("zone_closed_times");
+  const zones = ids(tables.floor_zones);
+  const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
+  const days = new Map((tables.special_dates ?? []).map((row) => [row.id, row]));
+  const groups = new Map<string, { startsAt: string; endsAt: string }[]>();
+  for (const row of rows) {
+    if (!zones.has(row.zone_id) || !configured.has(row.zone_id))
+      refuse("zone_closed_times.zone_id");
+    const weekday = row.weekday;
+    const day = row.special_date_id;
+    if ((weekday === null) === (day === null)) refuse("zone_closed_times");
+    if (
+      weekday !== null &&
+      (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
+    )
+      refuse("zone_closed_times.weekday");
+    if (day !== null && days.get(day)?.own_hours !== 1) refuse("zone_closed_times.special_date_id");
+    for (const column of ["starts_at", "ends_at"] as const) {
+      if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
+        refuse(`zone_closed_times.${column}`);
+    }
+    const key = JSON.stringify([row.zone_id, weekday, day]);
+    const ranges = groups.get(key) ?? [];
+    ranges.push({
+      startsAt: (row.starts_at as string).slice(0, 5),
+      endsAt: (row.ends_at as string).slice(0, 5),
+    });
+    groups.set(key, ranges);
+  }
+  for (const ranges of groups.values())
+    parsedAs("zone_closed_times", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
@@ -597,6 +635,7 @@ function validateVenueServiceConfiguration(
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);
+  validateZoneClosedTimes(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
   // After the routing check, whose refusal of such a zone's cell also names the cell's row.
@@ -627,6 +666,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
     { name: "special_date_hours" },
+    { name: "zone_closed_times" },
     { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },
     { name: "local_holidays" },

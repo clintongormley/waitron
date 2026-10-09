@@ -1962,3 +1962,115 @@ describe("service-period configuration", () => {
     ).not.toThrow();
   });
 });
+
+describe("zone closed times in configuration transfer", () => {
+  const clock = {
+    createdAt: new Date("2026-10-08T12:00:00Z"),
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+  };
+  function closureTables(): Tables {
+    return {
+      floor_zones: [{ id: "terrace", active: 1 }],
+      zone_service_policies: [{ zone_id: "terrace" }],
+      special_dates: [
+        {
+          id: "own-day",
+          location_id: "venue",
+          date: "2026-12-25",
+          name: "Christmas",
+          kind: "holiday",
+          colour: "red",
+          repeat_on: null,
+          own_hours: 1,
+          close_whole_venue: 0,
+        },
+      ],
+      zone_closed_times: [
+        {
+          id: "closed",
+          zone_id: "terrace",
+          weekday: 5,
+          special_date_id: null,
+          starts_at: "23:00:00",
+          ends_at: "04:00:00",
+        },
+      ],
+    };
+  }
+  it("accepts adjacent ranges, a cutover end and separate weekday/date scopes", () => {
+    const tables = closureTables();
+    tables.zone_closed_times!.push(
+      {
+        id: "early",
+        zone_id: "terrace",
+        weekday: 5,
+        special_date_id: null,
+        starts_at: "22:00:00",
+        ends_at: "23:00:00",
+      },
+      {
+        id: "dated",
+        zone_id: "terrace",
+        weekday: null,
+        special_date_id: "own-day",
+        starts_at: "23:00:00",
+        ends_at: "04:00:00",
+      },
+      {
+        id: "other-weekday",
+        zone_id: "terrace",
+        weekday: 6,
+        special_date_id: null,
+        starts_at: "23:00:00",
+        ends_at: "04:00:00",
+      },
+    );
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).not.toThrow();
+  });
+  it.each([
+    ["foreign zone", { zone_id: "foreign" }, "zone_closed_times.zone_id"],
+    ["both day selectors", { special_date_id: "own-day" }, "zone_closed_times"],
+    ["neither day selector", { weekday: null }, "zone_closed_times"],
+    [
+      "foreign date",
+      { weekday: null, special_date_id: "foreign" },
+      "zone_closed_times.special_date_id",
+    ],
+    ["string weekday", { weekday: "5" }, "zone_closed_times.weekday"],
+    ["fractional weekday", { weekday: 1.5 }, "zone_closed_times.weekday"],
+    ["negative weekday", { weekday: -1 }, "zone_closed_times.weekday"],
+    ["late weekday", { weekday: 7 }, "zone_closed_times.weekday"],
+    ["noncanonical start", { starts_at: "23:00" }, "zone_closed_times.starts_at"],
+    ["nonzero seconds", { ends_at: "04:00:01" }, "zone_closed_times.ends_at"],
+    ["empty range", { ends_at: "23:00:00" }, "zone_closed_times"],
+    ["backwards range", { ends_at: "22:00:00" }, "zone_closed_times"],
+    ["off-step start", { starts_at: "23:05:00" }, "zone_closed_times"],
+    ["off-step end", { ends_at: "03:55:00" }, "zone_closed_times"],
+  ])("refuses %s", (_name, changes, field) => {
+    const tables = closureTables();
+    Object.assign(tables.zone_closed_times![0]!, changes);
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+      refusal(field as string),
+    );
+  });
+  it("refuses a dated closure while the named day keeps the week", () => {
+    const tables = closureTables();
+    tables.special_dates![0]!.own_hours = 0;
+    Object.assign(tables.zone_closed_times![0]!, { weekday: null, special_date_id: "own-day" });
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+      refusal("zone_closed_times.special_date_id"),
+    );
+  });
+  it("refuses overlapping ranges in the same zone and weekday", () => {
+    const tables = closureTables();
+    tables.zone_closed_times!.push({
+      ...tables.zone_closed_times![0]!,
+      id: "overlap",
+      starts_at: "23:15:00",
+    });
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+      refusal("zone_closed_times"),
+    );
+  });
+});

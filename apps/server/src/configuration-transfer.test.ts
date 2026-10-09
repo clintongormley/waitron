@@ -3902,6 +3902,161 @@ describe("opening hours in a configuration transfer", () => {
     return { source, versions, transferred };
   }
 
+  async function preparedWithZoneClosures() {
+    const { source } = await preparedWithHours("B44007711");
+    const cfg = { locationId: locationId(source.locationId) };
+    const ids = await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, cfg, {
+        name: "Outdoor service",
+        defaultServiceMode: "table_tab",
+      });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Terrace",
+        departmentId: department.id,
+      });
+      const day = await saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2027-01-06",
+          name: "Own Terrace day",
+          kind: "holiday",
+          repeats: true,
+          ownHours: true,
+          closeWholeVenue: false,
+          cells: [],
+        },
+        AT,
+      );
+      await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
+        values (${randomUUID()}, ${zone.id}, 5, null, '23:00:00', '04:00:00'),
+        (${randomUUID()}, ${zone.id}, null, ${day.id}, '22:00:00', '04:00:00')`);
+      return { zoneId: zone.id, dayId: day.id };
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
+    return { versions, transferred, ...ids };
+  }
+
+  it("round-trips Terrace week and named-day zone closed times with fresh linked ids", async () => {
+    const { versions, transferred, zoneId, dayId } = await preparedWithZoneClosures();
+    expect(transferred.tables.zone_closed_times).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          zone_id: zoneId,
+          weekday: 5,
+          special_date_id: null,
+          starts_at: "23:00:00",
+          ends_at: "04:00:00",
+        }),
+        expect.objectContaining({
+          zone_id: zoneId,
+          weekday: null,
+          special_date_id: dayId,
+          starts_at: "22:00:00",
+          ends_at: "04:00:00",
+        }),
+      ]),
+    );
+    await applyVenue(planVenue(venue("B44007722"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await targetSuite.db.execute<{
+      id: string;
+      zone_id: string;
+      weekday: number | null;
+      special_date_id: string | null;
+      starts_at: string;
+      ends_at: string;
+      name: string;
+      date: string | null;
+    }>(sql`
+      select c.*, z.name, d.date from zone_closed_times c
+      join floor_zones z on z.id = c.zone_id
+      left join special_dates d on d.id = c.special_date_id order by c.starts_at`);
+    expect(imported.rows).toEqual([
+      expect.objectContaining({
+        name: "Terrace",
+        weekday: null,
+        date: "2027-01-06",
+        starts_at: "22:00:00",
+        ends_at: "04:00:00",
+      }),
+      expect.objectContaining({
+        name: "Terrace",
+        weekday: 5,
+        date: null,
+        special_date_id: null,
+        starts_at: "23:00:00",
+        ends_at: "04:00:00",
+      }),
+    ]);
+    for (const row of imported.rows) {
+      expect(row.zone_id).not.toBe(zoneId);
+      expect(transferred.tables.zone_closed_times!.map((source) => source.id)).not.toContain(
+        row.id,
+      );
+    }
+    expect(imported.rows[0]!.special_date_id).not.toBe(dayId);
+  });
+
+  it.each(["foreign-zone", "both-days", "neither-day", "keeps-week", "overlap", "off-step"])(
+    "refuses imported zone closed times %s without retaining a target venue",
+    async (problem) => {
+      const { versions, transferred, zoneId, dayId } = await preparedWithZoneClosures();
+      const edited = structuredClone(transferred);
+      edited.tables.zone_closed_times ??= [
+        {
+          id: randomUUID(),
+          zone_id: zoneId,
+          weekday: 5,
+          special_date_id: null,
+          starts_at: "23:00:00",
+          ends_at: "04:00:00",
+        },
+      ];
+      const row = edited.tables.zone_closed_times[0]!;
+      let field = "zone_closed_times";
+      if (problem === "foreign-zone") {
+        row.zone_id = randomUUID();
+        field += ".zone_id";
+      }
+      if (problem === "both-days") row.special_date_id = dayId;
+      if (problem === "neither-day") {
+        row.weekday = null;
+        row.special_date_id = null;
+      }
+      if (problem === "keeps-week") {
+        row.weekday = null;
+        row.special_date_id = dayId;
+        edited.tables.special_dates!.find((day) => day.id === dayId)!.own_hours = 0;
+        field += ".special_date_id";
+      }
+      if (problem === "overlap")
+        edited.tables.zone_closed_times.push({ ...row, id: randomUUID(), starts_at: "23:15:00" });
+      if (problem === "off-step") row.starts_at = "23:05:00";
+      const error = { code: "setup.request_invalid", params: { field } };
+      expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
+        expect.objectContaining(error),
+      );
+      await expect(
+        applyVenue(planVenue(venue("B44007722"), ALL_MODULES), {
+          db: targetSuite.db,
+          modules: ALL_MODULES,
+          beforeCommit: (tx, result) =>
+            importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        }),
+      ).rejects.toMatchObject(error);
+      expect(
+        (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+      ).toEqual([{ n: 0 }]);
+    },
+  );
+
   it("round-trips a repeating named day with its kind and own hours", async () => {
     const source = await applyVenue(planVenue(venue("B44008811"), ALL_MODULES), {
       db: suite.db,
