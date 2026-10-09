@@ -269,28 +269,62 @@ describe("shared translation writes", () => {
     ).rejects.toMatchObject({ code: "content.translation_invalid" });
   });
 
-  it.each(["variant", "option_label"] as const)("%s refuses an inactive owner", async (kind) => {
+  it("option_label refuses an inactive owner", async () => {
     await seedTenant(suite.db);
     await expect(
       withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
-        if (kind === "variant")
-          await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
-        else
-          await tx
-            .update(optionLists)
-            .set({ active: false })
-            .where(eq(optionLists.id, ids.option_list));
+        await tx
+          .update(optionLists)
+          .set({ active: false })
+          .where(eq(optionLists.id, ids.option_list));
+        const { targets } = await resolveTranslationTargets(
+          tx,
+          "en",
+          [{ kind: "option_label", id: ids.option_label }],
+          context,
+        );
+        await writeOptionLabelTranslation(tx, targets[0]!, { en: "English" });
+      }),
+    ).rejects.toMatchObject({ code: "content.translation_invalid" });
+  });
+
+  it.each(["product", "variant", "variant parent"] as const)(
+    "%s accepts only a customer-name translation after archiving",
+    async (archived) => {
+      await seedTenant(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        const ids = await fixture(tx);
+        const kind = archived === "product" ? "product" : "variant";
+        const archivedId = archived === "variant" ? ids.variant : ids.product;
+        await tx.update(products).set({ active: false }).where(eq(products.id, archivedId));
+        const before = await snapshot(tx);
+        expect(before.products.find((row) => row.id === archivedId)!.active).toBe(false);
         const { targets } = await resolveTranslationTargets(
           tx,
           "en",
           [{ kind, id: ids[kind] }],
           context,
         );
-        await writers[kind](tx, targets[0]!, { en: "English" });
-      }),
-    ).rejects.toMatchObject({ code: "content.translation_invalid" });
-  });
+        expect(await snapshot(tx)).toEqual(before);
+        await writers[kind](tx, targets[0]!, { en: "CLIENT English" });
+        expect(await snapshot(tx)).toEqual({
+          ...before,
+          products: before.products.map((row) =>
+            row.id === ids[kind]
+              ? {
+                  ...row,
+                  customerName:
+                    kind === "product"
+                      ? { es: "CLIENT Pan", ca: "CLIENT Pa", en: "CLIENT English" }
+                      : { es: "CLIENT Pequeño", ca: "CLIENT Petit", en: "CLIENT English" },
+                }
+              : row,
+          ),
+        });
+      });
+    },
+  );
 
   it("shared named cells preserve aggregates and other language cells without another configuration read", async () => {
     await seedTenant(suite.db);
