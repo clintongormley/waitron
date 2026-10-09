@@ -1221,6 +1221,21 @@ describe("Device API — the device-guarded routes", () => {
       expect(after.status).toBe(403);
       expect(await after.json()).toMatchObject({ error: { code: "device.forbidden_station" } });
     });
+
+    it("reads the device's kitchen screens once per request, on an every-station screen too", async () => {
+      const { venue, app, fria, items, notice } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, null);
+      await switchStationOff(fria);
+      const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
+      try {
+        expect((await read(app, jar)).map((entry) => entry.id)).toContain(fria);
+        expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+        expect((await acknowledge(app, jar, notice)).status).toBe(204);
+        expect(single).toHaveBeenCalledTimes(3);
+      } finally {
+        single.mockRestore();
+      }
+    });
   });
 
   it("a station screen a narrowing took answers device.unauthorized, and the device's identity says which", async () => {
@@ -1241,7 +1256,15 @@ describe("Device API — the device-guarded routes", () => {
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(me.status).toBe(200);
     expect(((await me.json()) as { kitchenScreens: unknown }).kitchenScreens).toEqual([
-      { kind: "station", available: false, stations: [], zones: null },
+      {
+        kind: "station",
+        available: false,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: false,
+        stations: [],
+        zones: null,
+      },
     ]);
   });
 
@@ -1269,6 +1292,9 @@ describe("Device API — the device-guarded routes", () => {
       {
         kind: "station",
         available: true,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: false,
         stations: [
           {
             id: venue.defaultStationId,
@@ -2020,6 +2046,9 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         {
           kind: "station",
           available: true,
+          everyStation: false,
+          everyZone: true,
+          profileEveryStation: false,
           stations: [
             {
               id: venue.defaultStationId,
@@ -2058,6 +2087,9 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         {
           kind: "pass",
           available: true,
+          everyStation: true,
+          everyZone: true,
+          profileEveryStation: true,
           stations: [
             {
               id: venue.defaultStationId,
@@ -2423,7 +2455,9 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       });
       expect({ status: refused.status, body: await refused.json() }).toEqual({
         status: 400,
-        body: { error: { code: "station.not_allowed", params: { stationId: pastry } } },
+        body: {
+          error: { code: "station.not_allowed", params: { stationId: pastry, screen: "station" } },
+        },
       });
       const stationsOf = async (deviceId: string) =>
         (await shownOn(venue, deviceId)).flatMap((screen) => screen.stations.map((st) => st.id));
@@ -3702,6 +3736,9 @@ describe("a device's approved profiles and switching its active one", () => {
         {
           kind: "station",
           available: true,
+          everyStation: false,
+          everyZone: false,
+          profileEveryStation: false,
           stations: [
             {
               id: venue.defaultStationId,

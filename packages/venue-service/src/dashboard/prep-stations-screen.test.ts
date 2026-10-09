@@ -3290,7 +3290,15 @@ const slot = (id: string, name: string, available = true) => ({
 const stationScreen = (
   stations: ReturnType<typeof slot>[],
   kind: "station" | "pass" | "pass_monitor" = "station",
-) => ({ kind, available: true, stations, zones: null });
+) => ({
+  kind,
+  available: true,
+  everyStation: false,
+  everyZone: true,
+  profileEveryStation: true,
+  stations,
+  zones: null,
+});
 const ticketView: PrepStationsView = {
   ...view,
   stations: [...view.stations, upstairs],

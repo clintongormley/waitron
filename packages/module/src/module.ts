@@ -457,6 +457,14 @@ export interface ResolvedKitchenScreen {
   readonly kind: KitchenScreenKind;
   /** False when a profile narrowing took this kind from the device. */
   readonly available: boolean;
+  /** The device's own station list is "every" (`stationIds` null). False on a kind it holds no
+   *  choice of, as when a narrowing took the kind or emptied its list. */
+  readonly everyStation: boolean;
+  /** As `everyStation`, for zones; a station screen's is true, since it never filters by zone. */
+  readonly everyZone: boolean;
+  /** The profile's station list for this kind is "every", or it has no row for it. False on a
+   *  kind the device holds no choice of. */
+  readonly profileEveryStation: boolean;
   /** Display order; unavailable when a narrowing took it or it is switched off. */
   readonly stations: readonly ScreenSlot[];
   /** null: no zone filter; otherwise zone order. */
@@ -798,14 +806,6 @@ export interface VenueServiceContribution {
     deviceId: string,
     zoneId: string | null,
   ): Promise<void>;
-  /** Whether the device's `kind` screen and its profile's both list every station; false for a
-   *  device with no such screen. */
-  followsEveryStation(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    deviceId: string,
-    kind: KitchenScreenKind,
-  ): Promise<boolean>;
   /** Each active kitchen display running a station screen, with the stations it shows now; with
    *  `withSwitchedOff`, also the switched-off ones its explicit list names (never "every"'s, never
    *  one a narrowing took). */

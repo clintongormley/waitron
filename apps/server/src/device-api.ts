@@ -449,7 +449,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const cfg = requestCfg(deps.cfg, device);
       const stations = await withTransaction(deps.db, async (tx) => {
         const screen = await stationScreenOf(tx, c, deps.cfg, device);
-        const { slots, queues } = await stationScreenSlots(tx, deps.cfg, device, screen);
+        const { slots, queues } = await stationScreenSlots(tx, deps.cfg, screen);
         const live = [...queues.keys()];
         const now = new Date();
         const states = await VENUE_SERVICE.stationStates(tx, cfg, now);
@@ -504,10 +504,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .select({ stationId: kitchenNotices.stationId })
           .from(kitchenNotices)
           .where(eq(kitchenNotices.id, id));
-        if (
-          notice === undefined ||
-          !(await worksStation(tx, deps.cfg, device, screen, notice.stationId))
-        )
+        if (notice === undefined || !(await worksStation(tx, deps.cfg, screen, notice.stationId)))
           throw new AppError("kitchen_notice.not_found", { noticeId: id });
         await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId: notice.stationId });
       });
@@ -538,10 +535,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .select({ stationId: ticketItems.stationId })
           .from(ticketItems)
           .where(eq(ticketItems.id, id));
-        if (
-          item !== undefined &&
-          !(await worksStation(tx, deps.cfg, device, screen, item.stationId))
-        ) {
+        if (item !== undefined && !(await worksStation(tx, deps.cfg, screen, item.stationId))) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
         await advanceTicketItem(tx, cfg, id, to);
@@ -850,11 +844,10 @@ async function kitchenScreenOf(
 async function stationScreenSlots(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId">,
-  device: DeviceBinding,
   screen: ResolvedKitchenScreen,
 ): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
   const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
-  if (!(await VENUE_SERVICE.followsEveryStation(tx, cfg, device.deviceId, "station"))) {
+  if (!(screen.everyStation && screen.profileEveryStation)) {
     const queues = await listStationQueues(
       tx,
       screen.stations.filter(worked).map((slot) => slot.id),
@@ -882,13 +875,12 @@ async function stationScreenSlots(
 async function worksStation(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId">,
-  device: DeviceBinding,
   screen: ResolvedKitchenScreen,
   stationId: string,
 ): Promise<boolean> {
   const slot = screen.stations.find((candidate) => candidate.id === stationId);
   if (slot !== undefined) return slot.available || slot.switchedOff;
-  if (!(await VENUE_SERVICE.followsEveryStation(tx, cfg, device.deviceId, "station"))) return false;
+  if (!(screen.everyStation && screen.profileEveryStation)) return false;
   const station = (await stationsHere(tx, cfg)).find((candidate) => candidate.id === stationId);
   if (station === undefined || station.active) return false;
   return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;

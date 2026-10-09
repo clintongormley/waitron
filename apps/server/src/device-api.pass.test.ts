@@ -298,7 +298,17 @@ describe("the pass screen's device routes", () => {
     const screens = await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, pass.id),
     );
-    expect(screens).toEqual([{ kind: "pass", available: false, stations: [], zones: null }]);
+    expect(screens).toEqual([
+      {
+        kind: "pass",
+        available: false,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: false,
+        stations: [],
+        zones: null,
+      },
+    ]);
   });
 
   it("refuses malformed Done, and foreign items atomically when Done also names a local item", async () => {

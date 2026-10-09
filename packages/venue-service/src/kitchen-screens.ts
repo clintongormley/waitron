@@ -324,8 +324,12 @@ export async function addProfileKitchenScreen(
 type ChoiceField = ErrorParams["kitchen_screen.invalid"]["field"];
 type ChoiceReason = ErrorParams["kitchen_screen.invalid"]["reason"];
 
-function refuseChoice(field: ChoiceField, reason: ChoiceReason): never {
-  throw new AppError("kitchen_screen.invalid", { field, reason });
+function refuseChoice(field: ChoiceField, reason: ChoiceReason, screen?: KitchenScreenKind): never {
+  throw new AppError("kitchen_screen.invalid", {
+    field,
+    reason,
+    ...(screen === undefined ? {} : { screen }),
+  });
 }
 
 interface Place {
@@ -466,7 +470,7 @@ async function checkChoice(
       throw new AppError("kitchen_screen.not_allowed", { screen: screen.kind });
     }
     if (screen.kind === "station" && screen.zoneIds !== null) {
-      refuseChoice("zoneIds", "not_for_screen");
+      refuseChoice("zoneIds", "not_for_screen", screen.kind);
     }
     const kept = stored.get(screen.kind);
     for (const id of checkedChoice(
@@ -474,12 +478,19 @@ async function checkChoice(
       places.stations,
       kept?.stationIds,
       "stationIds",
+      screen.kind,
     )) {
       if (bound?.stationIds && !bound.stationIds.includes(id)) {
-        throw new AppError("station.not_allowed", { stationId: id });
+        throw new AppError("station.not_allowed", { stationId: id, screen: screen.kind });
       }
     }
-    for (const id of checkedChoice(screen.zoneIds, places.zones, kept?.zoneIds, "zoneIds")) {
+    for (const id of checkedChoice(
+      screen.zoneIds,
+      places.zones,
+      kept?.zoneIds,
+      "zoneIds",
+      screen.kind,
+    )) {
       if (bound?.zoneIds && !bound.zoneIds.includes(id)) {
         throw new AppError("kitchen_screen.zone_not_allowed", { zoneId: id });
       }
@@ -492,13 +503,14 @@ function checkedChoice(
   places: readonly Place[],
   kept: readonly string[] | null | undefined,
   field: ChoiceField,
+  kind: KitchenScreenKind,
 ): readonly string[] {
   if (ids === null) return [];
-  if (ids.length === 0) refuseChoice(field, "empty");
+  if (ids.length === 0) refuseChoice(field, "empty", kind);
   for (const id of ids) {
     const place = places.find((entry) => entry.id === id);
     if (place === undefined || !(place.active || kept?.includes(id))) {
-      refuseChoice(field, "not_found");
+      refuseChoice(field, "not_found", kind);
     }
   }
   return ids;
@@ -635,6 +647,9 @@ async function resolveDevices(
         return {
           kind,
           available: !ofKind.some((row) => row.stationId === null && row.zoneId === null),
+          everyStation: false,
+          everyZone: false,
+          profileEveryStation: false,
           stations: slots(places.stations, [], null, removedStations),
           zones: removedZones.size === 0 ? null : slots(places.zones, [], null, removedZones),
         };
@@ -644,6 +659,9 @@ async function resolveDevices(
       return {
         kind,
         available: true,
+        everyStation: chosen.stationIds === null,
+        everyZone: chosen.zoneIds === null,
+        profileEveryStation: (bound?.stationIds ?? null) === null,
         stations: slots(
           places.stations,
           chosen.stationIds,
@@ -857,24 +875,6 @@ export async function assertPassScreenZone(
   if (!pass.zones.some((zone) => zone.available && zone.id === zoneId)) {
     throw new AppError("kitchen_screen.zone_not_allowed", { zoneId });
   }
-}
-
-/** Whether the device's `kind` screen and its profile's both list every station, so a station
- *  switched off since drops out of the read rather than showing as no longer available. */
-export async function followsEveryStation(
-  tx: Transaction,
-  cfg: VenueScope,
-  deviceId: string,
-  kind: KitchenScreenKind,
-): Promise<boolean> {
-  const [device] = await tx
-    .select({ profileId: devices.deviceProfileId })
-    .from(devices)
-    .where(and(eq(devices.id, deviceId), eq(devices.locationId, cfg.locationId)));
-  if (device === undefined) return false;
-  const chosen = (await readEffectiveChoices(tx, [deviceId])).get(deviceId)!.get(kind);
-  const bound = (await readStored(tx, cfg, device.profileId)).get(device.profileId)?.[kind];
-  return chosen?.stationIds === null && (bound?.stationIds ?? null) === null;
 }
 
 /** Each active kitchen display running a station screen, with the stations it shows now; with

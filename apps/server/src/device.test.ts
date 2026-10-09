@@ -255,6 +255,9 @@ describe("accepting a device writes its kitchen screens", () => {
       {
         kind: "station",
         available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [
           { id: stationId, name: "Cocina", available: true, switchedOff: false },
           { id: grill.id, name: "Plancha", available: true, switchedOff: false },
@@ -319,6 +322,9 @@ describe("accepting a device writes its kitchen screens", () => {
       {
         kind: "station",
         available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: false,
         stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },
@@ -340,6 +346,9 @@ describe("accepting a device writes its kitchen screens", () => {
       {
         kind: "pass",
         available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [{ id: expect.any(String), name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },
@@ -367,6 +376,9 @@ describe("accepting a device writes its kitchen screens", () => {
       {
         kind: "pass_monitor",
         available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },

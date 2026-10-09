@@ -124,14 +124,16 @@ declare module "@waitron/shared" {
         | "not_for_screen";
     };
     /** A device was given a station its profile does not offer. */
-    "station.not_allowed": { stationId: string };
+    "station.not_allowed": { stationId: string; screen: "station" | "pass" | "pass_monitor" };
     "kitchen_screen.required": Record<string, never>;
     "kitchen_screen.not_allowed": { screen: "station" | "pass" | "pass_monitor" };
     /** null: an order in no zone. */
     "kitchen_screen.zone_not_allowed": { zoneId: string | null };
+    /** `screen` names the kind whose list is refused; absent for `field: "screens"`. */
     "kitchen_screen.invalid": {
       field: "screens" | "stationIds" | "zoneIds";
       reason: "empty" | "not_found" | "not_for_screen" | "one_only";
+      screen?: "station" | "pass" | "pass_monitor";
     };
     /** The profile has a department but none of its zones can be used now, so it cannot order. */
     "device_profile.no_service_zone": { profileId: string };
