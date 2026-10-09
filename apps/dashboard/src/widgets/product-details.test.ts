@@ -4,7 +4,7 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { userEvent } from "vitest/browser";
 import type { ProductEditorValue } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./product-details.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -185,6 +185,8 @@ describe("archived product details", () => {
       expect((closed.mock.calls[0]![0] as Event).composed).toBe(true);
       expect(el.open).toBe(false);
       await expect.poll(() => document.activeElement).toBe(opener);
+      await closeReportsDelivered();
+      expect(closed).toHaveBeenCalledOnce();
     },
   );
 });
