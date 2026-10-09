@@ -150,6 +150,75 @@ async function createBooking(
 }
 
 describe("Bookings API (routes, gates and request screens)", () => {
+  it.each(["create", "update", "seat"] as const)(
+    "400s an unknown body table on %s with table.not_found",
+    async (action) => {
+      const { ctx, managerCookie } = await setupVenue();
+      const app = mountApp(ctx);
+      const tableId = "00000000-0000-0000-0000-000000000000";
+      const id = action === "create" ? null : await createBooking(app, managerCookie);
+      const path =
+        action === "create"
+          ? "/management-api/bookings"
+          : `/management-api/bookings/${id}${action === "seat" ? "/seat" : ""}`;
+      const res = await send(
+        app,
+        action === "update" ? "PATCH" : "POST",
+        path,
+        managerCookie,
+        action === "create" ? bookingBody({ tableId }) : { tableId },
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: { code: "table.not_found", params: { tableId } } });
+    },
+  );
+
+  it.each(["cancel", "no-show", "seat", "complete"] as const)(
+    "409s an edit after %s with booking.invalid_transition",
+    async (action) => {
+      const { ctx, cfg, managerCookie } = await setupVenue();
+      const app = mountApp(ctx);
+      const tableId = await seedTable(cfg);
+      const id = await createBooking(app, managerCookie, { tableId });
+      if (action === "complete") {
+        expect(
+          (await send(app, "POST", `/management-api/bookings/${id}/seat`, managerCookie, {}))
+            .status,
+        ).toBe(200);
+      }
+      const moved = await send(
+        app,
+        "POST",
+        `/management-api/bookings/${id}/${action}`,
+        managerCookie,
+        {},
+      );
+      expect(moved.status).toBe(action === "seat" ? 200 : 204);
+      const before = await listOn(app, managerCookie, "2026-08-20");
+      const res = await send(app, "PATCH", `/management-api/bookings/${id}`, managerCookie, {
+        partySize: 6,
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "booking.invalid_transition", params: { bookingId: id } },
+      });
+      expect(await listOn(app, managerCookie, "2026-08-20")).toEqual(before);
+    },
+  );
+
+  it("404s an edit of an absent booking with booking.not_found", async () => {
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
+    const id = "00000000-0000-0000-0000-000000000000";
+    const res = await send(app, "PATCH", `/management-api/bookings/${id}`, managerCookie, {
+      partySize: 6,
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: { code: "booking.not_found", params: { bookingId: id } },
+    });
+  });
+
   it("runs the manager happy path: create → list → patch → seat → read-back", async () => {
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);

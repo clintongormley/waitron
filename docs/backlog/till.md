@@ -109,8 +109,7 @@ their full text.
   table in a zone that is not a table-tab zone has no bookings test: the real `openTab` refuses
   it with `service_zone.mode_incompatible`, the fake core in `src/testing/fake-core.ts` does not,
   and `routes.ts`'s `STATUS` map has no entry for that code, so it answers 400 by default.
-  Editing a booking that is already seated answers `booking.not_found`, which the dashboard shows
-  as "could not be found". The server accepts an empty contact name; only the dashboard form
+  The server accepts an empty contact name; only the dashboard form
   refuses one. `seatBooking`'s `status = 'booked'` condition on its final update cannot fire
   while every caller goes through `withTransaction` (read, not run). Test titles in
   `bookings.test.ts` and `migrations.test.ts` still say "tenant", and `floor.test.ts` inserts
