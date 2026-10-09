@@ -35,7 +35,7 @@ const minuteOfServiceDay = (time: string, cutover: string) =>
     Number(cutover.slice(3)) +
     1440) %
   1440;
-function today(model: OpeningHoursModel): string {
+export function businessDateToday(model: OpeningHoursModel): string {
   if (!model.clockReadable) return "";
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -137,7 +137,7 @@ export class OpeningHoursDay extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate() {
-    if (!this.date && this.model.clockReadable) this.date = today(this.model);
+    if (!this.date && this.model.clockReadable) this.date = businessDateToday(this.model);
     if (!this.source) {
       this.draft = this.seed();
       this.baseline = clone(this.draft);

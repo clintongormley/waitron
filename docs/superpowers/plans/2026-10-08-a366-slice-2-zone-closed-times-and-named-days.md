@@ -1052,7 +1052,9 @@ copy uses that read for the retained station repeated-clock warnings.
 
 **Files:** modify `dashboard/opening-hours-screen.ts`, `dashboard/opening-hours-week.ts`,
 `dashboard/opening-hours-zone-week.ts`, `dashboard/opening-hours-all.ts`, `strings.ts`; tests
-beside each (`.test.ts`, `.unsaved.test.ts`).
+beside each (`.test.ts`, `.unsaved.test.ts`), plus `real-week.ts` occurrence/action helpers,
+`opening-hours-day.ts` exporting its existing business-date derivation, a shared browser-safe
+test model and real-week axe/capture tests.
 
 **Behaviour:** decision 18. A `wt-switch` "Real week" (off: the normal week) with ‹ › and the dates
 in the column headings; the URL holds `week=<Monday's date>` in a real week. Columns apply the
@@ -1064,13 +1066,24 @@ closure, which offers no action (decision 7). **(unbuilt in slice
 1)** If slice 1 lands with Task 13's "Special date" switch, this task replaces it; its tests go in
 the changed-checks commit.
 
-- [ ] Steps: failing tests (a real week with a repeating own day shows it — fails today because
+- [x] Steps: failing tests (a real week with a repeating own day shows it — fails today because
   there is no real week; ‹ stops at the current week; an own-hours date saves only that date; a
   plain date offers "Give this date its own hours"; a staged edit asks before stepping weeks);
   watch them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and
   390; commit `feat(venue-service): real weeks with named days applied (A366)`.
 
 ---
+
+Task 22 rulings (2026-10-09): dated Save uses one shared draft scope per own-hours date;
+a successful date commits only its submitted baseline, retaining every other staged date.
+Normal week keeps one scope and one Save. Reconnect registers those retained baselines before
+comparing a fresh model snapshot. Public-holiday own-hours actions wait for the week's passive
+calendar read, rather than treating missing facts as a plain working day. Invalid week queries
+are removed; earlier Mondays are replaced by the current business Monday. Explicit valid week
+URLs remain usable when the venue clock is unreadable, with Previous and the switch disabled.
+The old one-date selector and Station hours link are retired by decision 18/spec §9.2; their
+behavioral checks migrate to full weeks and independent date saves in the changed-checks commit.
+Tasks 23–29 remain.
 
 ### Task 23: Zones on the Day tab
 

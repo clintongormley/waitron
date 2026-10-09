@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -28,6 +28,7 @@ class ZoneWeekLeaveApp extends LitElement {
     this.guard?.dispose();
     super.disconnectedCallback();
   }
+  realWeek = false;
   writes: unknown[][] = [];
   failRead = false;
   failWrite = false;
@@ -43,7 +44,18 @@ class ZoneWeekLeaveApp extends LitElement {
       clockReadable: true,
       dayCutover: "06:00",
       menus: [],
-      namedDays: [],
+      namedDays: this.realWeek
+        ? [1, 2].map((day) => ({
+            id: `s${day}`,
+            date: `2026-10-${day + 11}`,
+            name: `Own ${day}`,
+            kind: "working_day",
+            repeats: false,
+            ownHours: true,
+            hasStationHours: false,
+            closeWholeVenue: false,
+          }))
+        : [],
       departments: [
         {
           id: "d1",
@@ -54,7 +66,12 @@ class ZoneWeekLeaveApp extends LitElement {
               id: "z1",
               name: "Terrace",
               week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "14:00" }] }],
-              dates: [],
+              dates: this.realWeek
+                ? [1, 2].map((day) => ({
+                    specialDateId: `s${day}`,
+                    ranges: [{ startsAt: "10:00", endsAt: "14:00" }],
+                  }))
+                : [],
             },
           ],
           periods: [
@@ -87,11 +104,21 @@ beforeEach(() => {
 });
 afterEach(() => {
   app?.remove();
+  vi.useRealTimers();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
 });
-async function mount() {
+async function mount(realWeek = false) {
+  if (realWeek) {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(
+      null,
+      "",
+      "/manage/opening-hours/view/week/department/d1/zone/z1?week=2026-10-12",
+    );
+  }
   app = document.createElement("zone-week-leave-test-app") as ZoneWeekLeaveApp;
+  app.realWeek = realWeek;
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
@@ -265,4 +292,102 @@ describe.each(["en", "es"])("Retained zone week save contract (%s)", (locale) =>
     expect(await request).toBe("kept");
     expect(unload()).toBe(true);
   });
+});
+
+it("a real-zone date save retains another staged date and asks before stepping weeks", async () => {
+  const { screen, week } = await mount(true);
+  const grid = week.shadowRoot!.querySelector("service-grid")!;
+  for (const day of [1, 2])
+    grid.dispatchEvent(
+      new CustomEvent("grid-block-change", {
+        detail: { columnKey: String(day), index: 0, startsAt: "10:00", endsAt: "15:00" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await week.updateComplete;
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='1']")!.click();
+  await expect
+    .poll(() => app.writes)
+    .toEqual([
+      [
+        "/management-api/venue-service/special-dates/s1/zone-closed-times/z1",
+        "PUT",
+        { ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },
+      ],
+    ]);
+  await expect
+    .poll(
+      () =>
+        week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-test=save-date][data-day='1']",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-date][data-day='2']",
+    )!.disabled,
+  ).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
+  await choose("keep");
+  expect(location.search).toBe("?week=2026-10-12");
+  expect(week.shadowRoot!.querySelector("service-grid")!.columns[1]!.closed).toEqual([
+    { startsAt: "10:00", endsAt: "15:00" },
+  ]);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
+  await choose("discard");
+  await expect.poll(() => location.search).toBe("?week=2026-10-19");
+});
+it.each(["before", "after"])(
+  "retains real-zone date protection across an edit %s reconnect",
+  async (when) => {
+    const { screen, week } = await mount(true);
+    if (when === "before") await change(week);
+    const parent = screen.parentNode!;
+    screen.remove();
+    await screen.updateComplete;
+    parent.appendChild(screen);
+    await screen.updateComplete;
+    await week.updateComplete;
+    if (when === "after") await change(week);
+    const request = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await choose("keep");
+    expect(await request).toBe("kept");
+    expect(
+      week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=save-date][data-day='1']",
+      )!.disabled,
+    ).toBe(false);
+  },
+);
+
+it("keeps a real-date draft when a fresh snapshot is supplied before reconnect scopes register", async () => {
+  const { week } = await mount(true);
+  const grid = week.shadowRoot!.querySelector("service-grid")!;
+  grid.dispatchEvent(
+    new CustomEvent("grid-block-change", {
+      detail: { columnKey: "1", index: 0, startsAt: "10:00", endsAt: "17:00" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await week.updateComplete;
+  const parent = week.parentNode!;
+  week.remove();
+  week.zone = structuredClone(week.zone);
+  parent.appendChild(week);
+  await week.updateComplete;
+  expect(week.shadowRoot!.querySelector("service-grid")!.columns[0]!.closed).toEqual([
+    { startsAt: "10:00", endsAt: "17:00" },
+  ]);
+  expect(
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-date][data-day='1']",
+    )!.disabled,
+  ).toBe(false);
 });

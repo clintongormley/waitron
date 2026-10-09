@@ -813,6 +813,22 @@ the stale form result. The two departed-layout cases reproduced a stuck busy fla
 release followed the identity check; each failed at the new view's disabled editor. Moving only
 that release before the check made both pass, and each installed-candidate deletion failed again.
 
+### Register retained scopes before reconciling a fresh snapshot
+
+On A366 slice 2 Task 22 (2026-10-09), both real-week editors disposed their per-date scopes on
+removal. A fresh department or zone object supplied before reconnect's first update then looked
+clean, because the scopes had not been registered again. Reconciliation replaced the staged
+ranges before the new scopes could protect them.
+
+The two `keeps a real-date draft when a fresh snapshot is supplied before reconnect scopes
+register` cases in `opening-hours-date.unsaved.test.ts` and
+`opening-hours-zone-week.unsaved.test.ts`, under `packages/venue-service/src/dashboard/`, first
+failed at the retained end time: the department returned 16:00 and the zone 14:00 instead of the
+staged 17:00. Registering scopes from the retained baselines before checking the incoming source
+made both pass. Reconciliation registers again after a clean reseed so a newly own-hours date
+gets its own scope. The dirty comparison remains `saveActionState(scope)`; no separate comparison
+or cached dirty flag decides whether a snapshot may replace the draft.
+
 ### Staff drafts commit independently of invitation commands
 
 On the W69 branch, Add/Edit staff register their normalized submitted details. Edit additionally

@@ -1565,22 +1565,28 @@ Dragging stages a closed range; opening a closed block edits its two times or de
 no period choice. Copy this day and Clear change only the closed ranges. One Save writes all
 seven weekdays; a refusal naming a submitted day appears in that day's header and leaves the
 staged week available to retry. Its Save follows the draft comparison below, including after
-removal and reconnect. Zone date mode keeps its placeholder until the dated-hours editor lands.
+removal and reconnect. In a real week, a named day with own hours shows its dated closed
+times over the department’s dated periods. Each date has its own Save; plain dates stay read-only
+and offer Give this date its own hours. A whole-venue closure says Closed and offers no action.
 
 The Opening hours normal-week editor stages its seven days before one Save. Each day's menu
 copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
 times and period; New period opens the period editor above it, then returns to the same range.
 Save on the week waits while a child chooser is open. A server refusal that names a day sits in
 that day's header, with the form's generic message immediately above Save; the refusal leaves
-Save available for retry. A venue viewer gets the grid without day menus or Save. A special date
-uses one column and stages Closed all day before Save. Its comparison includes
-the override's presence as well as its ranges, so choosing Closed on an inherited empty
-weekday still enables Save. The per-department Follow the normal week action is retired by
-A366 slice 2 Task 7; the named day’s own-hours flag decides whether it keeps the normal week.
-A refusal because that flag is off explains how to give the day its own hours above Save,
-and leaves Save available for retry. Changing the date or returning to the normal week asks before
-discarding a staged draft. A special-date range explains endpoints the venue clock repeats on
-their calendar morning; its ending changeover belongs to the next morning. A skipped-time refusal
+Save available for retry. A venue viewer gets the grid without day menus or Save. Real week
+starts at the venue's current business week, Monday first; Previous cannot go earlier. The URL
+holds `week=<Monday's date>`, and each column names its calendar date. Named days apply on their
+occurrences, including later years of a repeat. A whole-venue closure says Closed and has no
+action. Only a named day with own hours can be edited; each date has its own draft scope and Save,
+so saving it leaves another staged date protected. Closed all day stages an empty department
+override. Its comparison includes the override's presence as well as its ranges, so choosing
+Closed on an inherited empty weekday still enables Save. Other dates offer Give this date its own
+hours after the calendar facts load: a public holiday prefills its name and kind; an existing
+named day opens its own editor, with own hours staged and its original repeating identity kept.
+Changing weeks or returning to the normal week asks before discarding staged drafts. A dated
+range explains endpoints the venue clock repeats on their calendar morning; its ending
+changeover belongs to the next morning. A skipped-time refusal
 names the clock gap at the date header and keeps Save available for retry. The Day tab starts on the venue's business date and shows one editable column per active
 department in a shared grid. Previous/next date actions ask before discarding a staged draft.
 An ordinary date shows “Changes every {weekday}” and saves that weekday in the normal week;

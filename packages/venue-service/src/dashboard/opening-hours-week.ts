@@ -10,8 +10,8 @@ import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./servi
 import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import { t } from "./strings.js";
-import { format, formatDate } from "./hours-view.js";
-import { weekdayOf } from "../hours-rules.js";
+import { format } from "./hours-view.js";
+import { dateInWeek, namedOn, realDayLabel, giveOwnHours } from "./real-week.js";
 import "./service-grid.js";
 import "./range-dialog.js";
 import "./period-editor.js";
@@ -100,8 +100,14 @@ export class OpeningHoursWeek extends LitElement {
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
-  @property({ attribute: false }) specialDate?: OpeningHoursModel["namedDays"][number];
-  @state() private following = false;
+  @property() weekStart = "";
+  @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
+  @property({ type: Boolean }) dateActionsReady = true;
+  private sourceNamedDays?: OpeningHoursModel["namedDays"];
+  private contextDays: OpeningHoursModel["namedDays"] = [];
+  private dateFollowing = new Set<number>();
+  private dateBaselineFollowing = new Set<number>();
+  private dateScopes = new Map<number, DraftScope<Draft>>();
   @property({ type: Boolean }) readOnly = false;
   @state() private draft: MenuWeekDay[] = [];
   @state() private opening?: RangeOpening;
@@ -124,6 +130,8 @@ export class OpeningHoursWeek extends LitElement {
   }
   override disconnectedCallback() {
     this.scope?.dispose();
+    for (const scope of this.dateScopes.values()) scope.dispose();
+    this.dateScopes.clear();
     this.scope = undefined;
     this.generation = {};
     super.disconnectedCallback();
@@ -133,17 +141,61 @@ export class OpeningHoursWeek extends LitElement {
       this.seedDraft();
       this.baseline = copyDraft(this.snapshot());
       this.source = this.department;
+      this.sourceNamedDays = this.namedDays;
     }
-    if (this.source !== this.department) {
-      if (!saveActionState(this.scope).unchanged && this.scope) this.source = this.department;
-      else if (!this.saving) {
+    this.registerScopes();
+    if (this.source !== this.department || this.sourceNamedDays !== this.namedDays) {
+      if (this.dirty()) {
+        this.source = this.department;
+        this.sourceNamedDays = this.namedDays;
+      } else if (!this.saving) {
         this.seedDraft();
         this.baseline = copyDraft(this.snapshot());
         this.scope?.commit(this.baseline);
+        for (const [weekday, scope] of this.dateScopes)
+          scope.commit({
+            days: copyWeek([this.baseline.days[weekday]!]),
+            following: this.dateBaselineFollowing.has(weekday),
+          });
         this.source = this.department;
+        this.sourceNamedDays = this.namedDays;
       }
     }
-    if (this.isConnected && !this.scope) {
+    this.registerScopes();
+  }
+  private registerScopes() {
+    if (this.isConnected && this.weekStart) {
+      for (const weekday of displayOrder) {
+        if (!this.namedDay(weekday)?.ownHours || this.namedDay(weekday)?.closeWholeVenue) {
+          this.dateScopes.get(weekday)?.dispose();
+          this.dateScopes.delete(weekday);
+          continue;
+        }
+        if (this.dateScopes.has(weekday)) continue;
+        const scope = draftScopeFor(this, {
+          id: { host: this, weekday },
+          current: () => ({
+            days: copyWeek([this.draft[weekday]!]),
+            following: this.dateFollowing.has(weekday),
+          }),
+          snapshot: copyDraft,
+          equal: (a, b) => a.following === b.following && sameWeek(a.days, b.days),
+          restore: (value) => {
+            if (value.following) this.dateFollowing.add(weekday);
+            else this.dateFollowing.delete(weekday);
+            this.draft = this.draft.map((day) =>
+              day.weekday === weekday ? copyWeek(value.days)[0]! : day,
+            );
+          },
+        }).scope;
+        scope.commit({
+          days: copyWeek([this.baseline.days[weekday]!]),
+          following: this.dateBaselineFollowing.has(weekday),
+        });
+        this.dateScopes.set(weekday, scope);
+      }
+    }
+    if (this.isConnected && !this.weekStart && !this.scope) {
       const { scope } = draftScopeFor(this, {
         id: this,
         current: () => this.snapshot(),
@@ -151,34 +203,50 @@ export class OpeningHoursWeek extends LitElement {
         equal: (a, b) => a.following === b.following && sameWeek(a.days, b.days),
         restore: (value) => {
           this.draft = copyWeek(value.days);
-          this.following = value.following;
         },
       });
       this.scope = scope;
       scope.commit(this.baseline);
     }
   }
+  private dirty() {
+    return this.weekStart
+      ? [...this.dateScopes.values()].some((scope) => !saveActionState(scope).unchanged)
+      : !saveActionState(this.scope).unchanged;
+  }
+  private namedDay(weekday: number) {
+    return namedOn(this.contextDays, this.weekStart, weekday);
+  }
+  private canEditDay(weekday: number) {
+    return (
+      !this.weekStart ||
+      (!!this.namedDay(weekday)?.ownHours && !this.namedDay(weekday)?.closeWholeVenue)
+    );
+  }
   private snapshot(): Draft {
-    return { days: this.draft, following: this.following };
+    return { days: this.draft, following: false };
   }
   private seedDraft() {
     this.draft = weekOf(this.department);
-    const special = this.specialDate;
-    if (!special) {
-      this.following = false;
-      return;
+    this.contextDays = this.namedDays.map((day) => ({ ...day }));
+    if (this.weekStart) {
+      this.dateFollowing.clear();
+      for (const day of this.draft) {
+        const named = this.namedDay(day.weekday);
+        const own =
+          named?.ownHours && this.department.dates.find((row) => row.specialDateId === named.id);
+        if (named?.closeWholeVenue) day.slots = [];
+        else if (own) day.slots = own.slots.map((slot) => ({ ...slot }));
+        else if (named?.ownHours) this.dateFollowing.add(day.weekday);
+      }
+      this.dateBaselineFollowing = new Set(this.dateFollowing);
     }
-    const own = this.department.dates.find((date) => date.specialDateId === special.id);
-    this.following = !own;
-    if (own) this.draft[weekdayOf(special.date)]!.slots = own.slots.map((slot) => ({ ...slot }));
   }
   private displayedDays() {
-    return this.specialDate ? [weekdayOf(this.specialDate.date)] : displayOrder;
+    return displayOrder;
   }
   private dayLabel(weekday: number) {
-    return this.specialDate
-      ? `${formatDate(this.specialDate.date)} · ${this.specialDate.name}`
-      : dayName(weekday);
+    return realDayLabel(this.weekStart, weekday, this.namedDay(weekday));
   }
   private periods() {
     return [
@@ -190,19 +258,21 @@ export class OpeningHoursWeek extends LitElement {
     return this.isConnected && !this.readOnly && !this.saving && !this.creating;
   }
   private stage(weekday: number, slots: readonly ServiceRange[]) {
+    if (!this.canEditDay(weekday)) return;
+    this.dateFollowing.delete(weekday);
     this.draft = this.draft.map((day) =>
       day.weekday === weekday ? { weekday, slots: slots.map((slot) => ({ ...slot })) } : day,
     );
-    if (this.specialDate) this.following = false;
     this.error = "";
     this.errorDay = undefined;
     this.scope?.changed();
+    this.dateScopes.get(weekday)?.changed();
   }
   private openRange(event: CustomEvent<GridRangeSelection | GridBlockOpen>) {
     event.stopPropagation();
     if (!this.editable() || this.opening || this.copying) return;
     const weekday = Number(event.detail.columnKey);
-    if (!this.displayedDays().includes(weekday)) return;
+    if (!this.displayedDays().includes(weekday) || !this.canEditDay(weekday)) return;
     const day = this.draft.find((day) => day.weekday === weekday);
     if (!day) return;
     if ("index" in event.detail) {
@@ -219,7 +289,8 @@ export class OpeningHoursWeek extends LitElement {
     event.stopPropagation();
     if (!this.editable() || this.opening || this.copying) return;
     const { columnKey, index, startsAt, endsAt } = event.detail;
-    if (!this.displayedDays().includes(Number(columnKey))) return;
+    if (!this.displayedDays().includes(Number(columnKey)) || !this.canEditDay(Number(columnKey)))
+      return;
     const day = this.draft.find((day) => day.weekday === Number(columnKey));
     if (!day?.slots[index]) return;
     this.stage(
@@ -261,8 +332,10 @@ export class OpeningHoursWeek extends LitElement {
     );
     this.opening = undefined;
   }
-  private async save() {
-    if (!this.editable() || this.opening || this.copying || saveActionState(this.scope).unchanged)
+  private async save(weekday?: number) {
+    const scope =
+      this.weekStart && weekday !== undefined ? this.dateScopes.get(weekday) : this.scope;
+    if (!this.editable() || this.opening || this.copying || saveActionState(scope).unchanged)
       return;
     const submitted = copyDraft(this.snapshot()),
       input = submitted.days,
@@ -273,12 +346,10 @@ export class OpeningHoursWeek extends LitElement {
     this.skippedTime = false;
     this.offsetClash = false;
     try {
-      if (this.specialDate) {
-        await this.api.saveDateMenus(
-          this.specialDate.id,
-          this.department.id,
-          input[weekdayOf(this.specialDate.date)]!.slots,
-        );
+      if (this.weekStart && weekday !== undefined) {
+        const named = this.namedDay(weekday);
+        if (!named?.ownHours || named.closeWholeVenue) return;
+        await this.api.saveDateMenus(named.id, this.department.id, input[weekday]!.slots);
       } else await this.api.saveWeek(this.department.id, input);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
@@ -289,8 +360,8 @@ export class OpeningHoursWeek extends LitElement {
       const field = (error as { params?: { field?: unknown } })?.params?.field;
       if (codeOf(error) === "menu_timetable.invalid" && typeof field === "string") {
         const match = /^days\.(\d+)(?:\.|$)/.exec(field);
-        if (this.specialDate && /^(?:slots(?:\.|$)|date$)/.test(field))
-          this.errorDay = weekdayOf(this.specialDate.date);
+        if (this.weekStart && weekday !== undefined && /^(?:slots(?:\.|$)|date$)/.test(field))
+          this.errorDay = weekday;
         else if (match) this.errorDay = input[Number(match[1])]?.weekday;
         this.offsetClash =
           this.errorDay !== undefined &&
@@ -304,8 +375,14 @@ export class OpeningHoursWeek extends LitElement {
       this.saving = false;
     }
     if (generation === this.generation && this.isConnected) {
-      this.baseline = copyDraft(submitted);
-      this.scope?.commit(submitted);
+      if (this.weekStart && weekday !== undefined) {
+        this.baseline.days[weekday] = copyWeek([submitted.days[weekday]!])[0]!;
+        this.dateBaselineFollowing.delete(weekday);
+        scope?.commit({ days: copyWeek([submitted.days[weekday]!]), following: false });
+      } else {
+        this.baseline = copyDraft(submitted);
+        this.scope?.commit(submitted);
+      }
       this.api.rereadWatches();
     }
   }
@@ -368,31 +445,9 @@ export class OpeningHoursWeek extends LitElement {
       period = this.periodOpening,
       copying = this.copying,
       state = saveActionState(this.scope);
-    return html`${
-        this.specialDate
-          ? html`<p data-test="date-status">
-                ${this.following ? t("opening.follow_week") : this.draft[weekdayOf(this.specialDate.date)]?.slots.length ? nothing : t("opening.close_date")}
-              </p>
-              ${
-                this.readOnly
-                  ? nothing
-                  : html`<div class="date-actions">
-                      <wt-button
-                        variant="secondary"
-                        data-test="close-date"
-                        ?disabled=${this.saving || !!opening}
-                        @click=${() => {
-                          if (this.editable() && !this.opening)
-                            this.stage(weekdayOf(this.specialDate!.date), []);
-                        }}
-                        >${t("opening.close_date")}</wt-button
-                      >
-                    </div>`
-              }`
-          : nothing
-      }<service-grid
+    return html`<service-grid
         .dayCutover=${this.dayCutover}
-        .columns=${this.displayedDays().map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), slots: this.draft[weekday]?.slots ?? [], periods: this.periods(), editable: !this.readOnly && !this.saving && !this.opening && !this.copying }))}
+        .columns=${this.displayedDays().map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), slots: this.draft[weekday]?.slots ?? [], periods: this.periods(), editable: this.canEditDay(weekday) && !this.readOnly && !this.saving && !this.opening && !this.copying }))}
         @grid-range-select=${this.openRange}
         @grid-block-open=${this.openRange}
         @grid-block-change=${this.resize}
@@ -404,8 +459,49 @@ export class OpeningHoursWeek extends LitElement {
                 (weekday) =>
                   html`<div slot=${`header-${weekday}`}>
                     ${
-                      this.specialDate
-                        ? nothing
+                      this.weekStart
+                        ? this.namedDay(weekday)?.closeWholeVenue
+                          ? nothing
+                          : this.namedDay(weekday)?.ownHours
+                            ? html`<wt-button
+                                  variant="secondary"
+                                  data-test="close-date"
+                                  data-day=${weekday}
+                                  ?disabled=${this.saving || !!opening}
+                                  @click=${() => {
+                                    if (this.editable() && !this.opening) this.stage(weekday, []);
+                                  }}
+                                  >${t("opening.close_date")}</wt-button
+                                >
+                                <wt-form-actions
+                                  .error=${this.errorDay === undefined || this.errorDay === weekday ? (this.errorDay === undefined ? this.error : t("menu.fix_fields")) : ""}
+                                >
+                                  <wt-button
+                                    data-test="save-date"
+                                    data-day=${weekday}
+                                    variant=${saveActionState(this.dateScopes.get(weekday)).variant}
+                                    ?disabled=${saveActionState(this.dateScopes.get(weekday)).unchanged || this.saving || !!opening}
+                                    @click=${() => this.save(weekday)}
+                                    >${t("menu.save")}</wt-button
+                                  ></wt-form-actions
+                                >`
+                            : html`<wt-button
+                                variant="secondary"
+                                data-test="own-date"
+                                data-day=${weekday}
+                                ?disabled=${!this.dateActionsReady || this.saving || !!opening}
+                                @click=${(event: Event) => {
+                                  if (this.dateActionsReady && this.editable() && !this.opening)
+                                    giveOwnHours(
+                                      this,
+                                      this.weekStart,
+                                      weekday,
+                                      this.namedDay(weekday),
+                                      event.currentTarget as HTMLElement,
+                                    );
+                                }}
+                                >${t("named.give_own")}</wt-button
+                              >`
                         : html`<wt-row-actions
                             label=${format("menu.row_actions", { name: dayName(weekday) })}
                           >
@@ -437,7 +533,7 @@ export class OpeningHoursWeek extends LitElement {
               )
         }</service-grid
       >
-      ${this.readOnly ? nothing : html`<wt-form-actions .error=${this.errorDay === undefined ? this.error : t("menu.fix_fields")}><span data-test="week-error" ?hidden=${!this.error}></span><wt-button data-test="save-week" variant=${state.variant} ?disabled=${state.unchanged || this.saving || !!this.opening || !!copying} @click=${() => this.save()}>${t("menu.save")}</wt-button></wt-form-actions>`}
+      ${this.readOnly || this.weekStart ? nothing : html`<wt-form-actions .error=${this.errorDay === undefined ? this.error : t("menu.fix_fields")}><span data-test="week-error" ?hidden=${!this.error}></span><wt-button data-test="save-week" variant=${state.variant} ?disabled=${state.unchanged || this.saving || !!this.opening || !!copying} @click=${() => this.save()}>${t("menu.save")}</wt-button></wt-form-actions>`}
       ${
         opening
           ? keyed(
@@ -447,7 +543,7 @@ export class OpeningHoursWeek extends LitElement {
                 .range=${opening.input}
                 .periods=${this.periods()}
                 .dayCutover=${this.dayCutover}
-                .businessDate=${this.specialDate?.date}
+                .businessDate=${this.weekStart ? dateInWeek(this.weekStart, opening.weekday) : undefined}
                 .timeZone=${this.timeZone}
                 .occupied=${this.draft[opening.weekday]!.slots.filter((_, index) => index !== opening.index)}
                 .deletable=${opening.index !== undefined}
