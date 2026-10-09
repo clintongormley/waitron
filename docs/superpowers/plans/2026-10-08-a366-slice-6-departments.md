@@ -1673,3 +1673,23 @@ remaining native/focus assertions. Reconcile the retained same-request input beh
 with the existing busy-input check. Then inventory removed checks, switch the public
 wrapper, remove the staged create spy and rerun mounted dashboard checks and public
 LOOK. A13–A15, branch reviews, the normal push hook and current-head CI remain.
+
+
+### Implementation checkpoint: A10 live reads and translated Enable retries (2026-10-09)
+
+Nine added browser cases carry the original screen's live-read/error separation
+(`venue-operations-screen.test.ts`, “keeps a refusal above Save when the list refreshes
+behind the editor” and “says a failed refresh at the top of the screen while an editor
+is open, not above Save”) and department/zone Enable behavior in English and Spanish.
+The composed loader keeps an open dialog's name and refusal through a failed live read
+and recovery. Enable refusals send one exact PATCH, leave the disabled controls available,
+and perform no refresh. Successful retries remove the disabled state and clear the page
+alert; the zone checks inspect the zone itself.
+
+The old test bodies and public wrapper remain intact. In an installed disposable
+candidate, resetting a refusal on a model replacement, suppressing read alerts, omitting
+the Enable refresh, sending `active: false`, or replacing the parent-department refusal
+with a generic error each failed the corresponding new assertions. The restored nine
+cases passed. These experiments do not complete A10: post-save inheritance/overrides,
+opening-hours history/bounds, remaining native/focus checks and the same-request Settings
+input reconciliation still precede retirement and the public switch.

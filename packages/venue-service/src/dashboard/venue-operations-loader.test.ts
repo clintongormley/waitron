@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { VenueOperationsLoader } from "./venue-operations-loader.js";
@@ -378,4 +379,89 @@ it("opening an already cached query displays it without extending the session", 
   } finally {
     observation.unsubscribe();
   }
+});
+
+it.each([
+  ["en", "The change could not be saved.", "The venue configuration could not be loaded."],
+  ["es", "No se pudo guardar el cambio.", "No se pudo cargar la configuración del local."],
+] as const)(
+  "an open refused dialog retains its draft through live failure and recovery in %s",
+  async (locale, refusal, loadError) => {
+    const { shell, loader, liveData, request, value, readFailure } = await mount();
+    setLocale(locale);
+    emit(shell.shadowRoot!.querySelector("departments-list")!, "add-department");
+    await shell.updateComplete;
+    const dialog = shell.shadowRoot!.querySelector("department-dialogs")!;
+    await dialog.updateComplete;
+    const name =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    emit(name, "wt-change", { value: "Brunch" });
+    await dialog.updateComplete;
+    request.mockRejectedValueOnce({ code: "connection.failed" });
+    const save =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=save-editor]",
+      )!;
+    save.click();
+    const bottom = async () =>
+      (
+        await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim() ?? "";
+    await expect.poll(bottom).toBe(refusal);
+    expect(name.error).toBe("");
+    expect(save.disabled).toBe(false);
+    expect(loader.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(shell.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    readFailure(true);
+    await invalidate(liveData, request);
+    await expect
+      .poll(() => loader.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim())
+      .toBe(loadError);
+    expect(await bottom()).toBe(refusal);
+    expect(name.value).toBe("Brunch");
+    expect(dialog.dialog?.kind).toBe("add-department");
+    expect(save.disabled).toBe(false);
+
+    readFailure(false);
+    value(model("Updated elsewhere"));
+    await invalidate(liveData, request);
+    await expect.poll(() => shell.model.departments[0]!.name).toBe("Updated elsewhere");
+    await dialog.updateComplete;
+    expect(await bottom()).toBe(refusal);
+    expect(name.value).toBe("Brunch");
+    expect(save.disabled).toBe(false);
+    expect(loader.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(shell.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(1);
+  },
+);
+
+it("a live failure behind an unsaved dialog leaves its Save message empty", async () => {
+  const { shell, loader, liveData, request, readFailure } = await mount();
+  emit(shell.shadowRoot!.querySelector("departments-list")!, "add-department");
+  await shell.updateComplete;
+  const dialog = shell.shadowRoot!.querySelector("department-dialogs")!;
+  await dialog.updateComplete;
+  emit(dialog.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Brunch" });
+  await dialog.updateComplete;
+  readFailure(true);
+  await invalidate(liveData, request);
+  await expect
+    .poll(() => loader.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim())
+    .toBe("The venue configuration could not be loaded.");
+  expect(
+    (
+      await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!)
+    )?.textContent?.trim() ?? "",
+  ).toBe("");
+  expect(dialog.dialog?.kind).toBe("add-department");
+  expect(
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+  ).toBe("Brunch");
+  expect(
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
+      .disabled,
+  ).toBe(false);
+  expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(0);
 });
