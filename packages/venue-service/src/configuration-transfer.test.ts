@@ -1966,3 +1966,43 @@ describe("configuration receipt modes", () => {
     },
   );
 });
+
+describe("configuration order starts", () => {
+  it.each(["department_sale_policies", "zone_sale_policies"])(
+    "refuses malformed %s order starts",
+    (table) => {
+      for (const value of [
+        "tab",
+        "",
+        ["table"],
+        1,
+        false,
+        {},
+        ...(table === "department_sale_policies" ? [null] : []),
+      ]) {
+        expect(() =>
+          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+            [table]: [{ order_start: value }],
+          }),
+        ).toThrowError(refusal(`${table}.order_start`));
+      }
+    },
+  );
+  it.each(["department_sale_policies", "zone_sale_policies"])(
+    "accepts explicit and absent %s order starts",
+    (table) => {
+      for (const value of [
+        "table",
+        "counter",
+        undefined,
+        ...(table === "zone_sale_policies" ? [null] : []),
+      ]) {
+        expect(() =>
+          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+            [table]: [value === undefined ? {} : { order_start: value }],
+          }),
+        ).not.toThrow();
+      }
+    },
+  );
+});

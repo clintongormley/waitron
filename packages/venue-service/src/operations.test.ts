@@ -1239,6 +1239,70 @@ describe("service zone name refusals", () => {
 });
 
 describe("departments", () => {
+  it("repairs a missing zone sale policy when configuring its existing assignment", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Repair zone policy")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Terrace",
+        departmentId: department.id,
+      });
+      await tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id));
+      await configureZone(tx, cfg, { zoneId: zone.id, departmentId: department.id });
+      expect(
+        await tx.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id)),
+      ).toEqual([
+        {
+          zoneId: zone.id,
+          orderStart: null,
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+        },
+      ]);
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+        orderStart: "table",
+        paidWhen: "prepay",
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+        serviceMode: "table_tab",
+      });
+    });
+  });
+
+  it("keeps all existing zone sale overrides when moving its assignment", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Retain zone policy")) };
+    await scoped(async (tx) => {
+      const first = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
+      const second = await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" });
+      const zone = await createServiceZone(tx, cfg, { name: "Terrace", departmentId: first.id });
+      const overrides = {
+        orderStart: "counter" as const,
+        paidWhen: "ticket_then_pay" as const,
+        collectionNumber: "numbered" as const,
+        receiptPrintMode: "on_request" as const,
+      };
+      await tx.update(zoneSalePolicies).set(overrides).where(eq(zoneSalePolicies.zoneId, zone.id));
+      await configureZone(tx, cfg, { zoneId: zone.id, departmentId: second.id });
+      expect(
+        await tx.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id)),
+      ).toEqual([
+        {
+          zoneId: zone.id,
+          ...overrides,
+        },
+      ]);
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+        departmentId: second.id,
+        ...overrides,
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+        departmentId: second.id,
+        serviceMode: "ticket_then_pay",
+      });
+    });
+  });
+
   it("creates a zone with explicit order start", async () => {
     const cfg = { locationId: brandLocationId(await seedLocation("Explicit zone start")) };
     const department = await scoped((tx) =>
