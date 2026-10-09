@@ -1623,9 +1623,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
 - a changed form that is blocked — failing its own checks after the first press, busy, a nested
   window open — stays drawn `primary` and disabled. A refused save leaves the draft changed, so the
   action stays enabled;
-- a second action that saves by itself (the product editor's Enable on an inactive product) is not
-  the form's primary action and is not gated: pressing it is the change. The setup wizard's step
-  navigation is not a save, and neither is a sign-in;
+- the setup wizard's step navigation is not a save, and neither is a sign-in;
 - the Products browser's Move and Delete dialog draws its confirm `secondary` while it waits for a
   destination or for the folder summary, or after the summary failed, and its own variant once it
   can act; while it is working (`loading`) it keeps its own variant (owner, 2026-10-08, A409).
@@ -1633,7 +1631,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   dashboard and the till (2026-10-08, A416; the till's two buttons are A417): a button that is not a
   save is drawn `secondary` while it waits for a choice, a selection or a load, and its own variant
   once it can act, keeping its own variant while its own action is being sent. A416 brought these
-  under it: the Products browser's toolbar Delete (Disable when only products are selected); on the
+  under it: the Products browser's toolbar Delete (Archive when only products are selected); on the
   Modifiers screen, the Delete confirmation, Add extras list, Add options list and the Used by
   window's Edit; Print on an equipment label; Print a copy on Reprint the receipt; the profile
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
@@ -3184,7 +3182,7 @@ removing a product from a menu removes that offer.
 
 ### Switching off versus deleting
 
-Something switched off but kept — a product, a variant, an options or extras list, a zone, a
+Something switched off but kept — an options or extras list, a zone, a
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
 agent, a device, a card reader, and a watcher or a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
@@ -3194,34 +3192,44 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 "Inactive" are not used for a record that is kept.
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
-screen uses: **Activo** or **Deshabilitado** for a producto, departamento, estado, motivo, usuario,
-lector, agente, dispositivo, punto de seguimiento or curso; **Activa** or **Deshabilitada** for a variante, lista, zona,
+screen uses: **Activo** or **Deshabilitado** for a departamento, estado, motivo, usuario,
+lector, agente, dispositivo, punto de seguimiento or curso; **Activa** or **Deshabilitada** for a lista, zona,
 estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
-Where a screen has both, the action follows what the code does: a watcher's or a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then; the products list's bulk action
-reads Disable while only products are selected (and is not offered when every selected product is
-disabled already) and Delete once a category is in the selection,
-because the category itself is deleted. Products selected directly are disabled; the products
-inside the category, its subcategories included, are disabled only with the delete dialog's
-"Also: …" answer, and with the answer that moves them to the parent they
-stay active.
+Where a screen has both, the action follows what the code does: a watcher's or a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then.
+
+Products use **Archive**, with **Active / Archived** status, and **View** for an archived row.
+In Spanish these are **Archivar**, **Activo / Archivado** for a product,
+**Activa / Archivada** for a variant, and **Ver**. Archive is permanent; it has no Enable action.
+With only products selected, the bulk action reads Archive and is absent when every selected
+product is already archived. With a category selected it reads Delete: the category is deleted,
+and its contents are moved or archived according to the dialog's answer. Products selected
+directly are archived in either case.
 
 ### Products: Active and Available are two different words
 
-On the products screens, **Active / Disabled** says whether a product exists for the
-venue, and **Available / Unavailable** says whether it is sold out for now. Disable switches a
-product off, and Enable makes it Active again; never label either of them "unavailable". The
-products list's Status filter starts on Active, so a disabled product is hidden until the filter is
-changed, while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge.
-A variant's Disable and Enable work the same way, on the products list and in the product editor's
-variants section; a disabled variant is hidden behind the list's same Status filter, and in the
-editor until the "Show N disabled" link beside Add variant shows it. A menu's Price overrides tab
-lists no disabled product or size, because disabling one takes it off every menu. Its Available
-column reads Yes or No from the product's own Available, or a size's own, the flag a till honours,
-and each row's ⋮ holds Edit product, a link to that product's or size's page. The Structure tab's
-product rows show the same Available word, muted like the Type word beside it.
+**Active / Archived** describes the product's retained state. **Available / Unavailable** says
+whether an active product is sold out for now. Archive keeps the row and past sales, but you
+cannot bring it back. Take it out of every live or scheduled menu and publish before archiving;
+a refusal names the menus that still include it. This also applies to variants and to products
+offered as extras or home-screen shortcuts.
+
+The Status filter starts on Active. Change it to Archived to find a retained product, then choose
+View to open its plain-text details panel. The panel has no Save or availability control and does
+not open the editor. A variant of an archived product is archived too. An Unavailable active
+product stays listed with its Unavailable badge.
+
+The editor hides variants archived before it opened. Archive on a saved variant stages the
+change: its row remains visible with **Archived when saved** and **Keep** until Save. Keep cancels
+that staged archive; it cannot restore an archive already saved. An unsaved variant uses Remove.
+There is no Show disabled toggle or Archive action in the editor footer.
+
+A menu's Price overrides tab lists active products and sizes reached by its working structure.
+Archiving removes a product from drafts and clears the archived variants' menu prices. Its
+Available column still reads Yes or No from the product's or size's own Available flag, and each
+row's ⋮ holds Edit product. The Structure tab's product rows show the same Available word.
 
 ### Navigation and language controls
 

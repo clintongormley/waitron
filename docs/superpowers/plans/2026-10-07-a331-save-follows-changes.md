@@ -1,5 +1,9 @@
 # A331 — a form's Save stays quiet and disabled until something changes
 
+> Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
+> Products and variants now archive permanently. See [the current product guide](../../products.md)
+> for Archive, View and the editor's staged Archive/Keep actions.
+
 Owner, 2026-10-07 ~12:05: "open a form with the Save button transparent (and disabled?). but as soon
 as you make a change, make the Save button active/blue". ~13:10: "this should be global". The full
 item, with the owner's interaction rules, is A331 in lane B's queue; this plan is its runbook.

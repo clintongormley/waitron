@@ -982,11 +982,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
   product back to a menu revives those prices** (found in A347's review, believed to predate it).
   Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
-  reaches. Left open by A347 (a disabled product or size is on no menu, #1392).
+  reaches. Left open by A347 (#1392); A435-1 (2026-10-09) replaces the former Disable action with Archive.
 
 - **A bulk Disable of 500 products could not read the count in A347's review** (HTTP 431, because
   the ids go in the URL), so the dialog says "every menu"; the smallest count that fails was not
-  measured. Left open by A347 (#1392).
+  measured. Left open by A347 (#1392). A435-1 (2026-10-09) renames the action Archive; the request still carries ids in the URL.
+  The earlier 500-product failure has not been remeasured.
 
 - **Deleting a category with its contents says its products come off every menu, with no count.**
   Left open by A347 (#1392).
@@ -4592,13 +4593,17 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — delete hardware and venue setup, archive products for good (owner, 2026-10-08; spec
-  written; product archive plan approved, step 1 in progress in lane E).** A permanent deleted state rather than row removal: printers, card
-  readers and devices keep Disable beside a new Delete; kitchen stations, courses, tables, zones and
-  departments get Delete only; products get a permanent Archive, refused while a live or scheduled
-  menu includes them. History is left as it is. Six steps, products first, then printers.
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 2–6 open).**
+  Printers are next. Each point below is a separate remaining step.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
+- **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
+  deleted-state uniqueness rules and shared confirmation dialog.
+- **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete.
+- **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
+  Disable with Delete. Each remaining step follows the linked spec and preserves recorded history.
 
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under

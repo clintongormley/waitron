@@ -594,8 +594,8 @@ how a screen adopts it: [design-system.md](../developers/design-system.md) → F
 request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
 
 - **Batch 1 — the shared mechanism, the product editor and the variant form.** `draftScopeFor` and
-  `saveActionState` in `@waitron/ui`. Enable on a disabled product still saves at once: pressing
-  it is the change. No batch-1 form opens already savable. Looked at on 2026-10-08 in 35
+  `saveActionState` in `@waitron/ui`. Enable on a disabled product saved at once: pressing
+  it was the change. (2026-10-09, A435-1: products archive permanently and Enable is removed.) No batch-1 form opens already savable. Looked at on 2026-10-08 in 35
   screenshots of the two forms mounted with test data (English and Spanish, light and dark,
   1280px and 390px wide, unchanged and after one edit, plus a changed form refused by its own
   checks and a disabled product), kept outside the repository in `~/waitron-campaign-b/a331-shots/`:
