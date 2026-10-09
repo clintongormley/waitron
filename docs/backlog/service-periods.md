@@ -19,7 +19,7 @@ their full text.
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
   Slice 2 is in progress in campaign lane D. Its remaining work is the Opening hours and Calendar
-  editors, station-calendar and local-holiday retirement, and the demo and docs (plan Tasks 17–29).
+  editors, station-calendar and local-holiday retirement, and the demo and docs (plan Tasks 18–29).
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired
   after slice 4. Revised 2026-10-08 to the owner's answers (any device may run a station or pass

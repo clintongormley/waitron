@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { ServiceRange } from "../service-day.js";
+import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
 import { addDays } from "../hours-rules.js";
@@ -28,7 +28,7 @@ const equal = (a: ServiceRange, b: ServiceRange) =>
   a.startsAt === b.startsAt && a.endsAt === b.endsAt && a.periodId === b.periodId;
 const clock = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 const minute = (time: string, cutover: string) => (clock(time) - clock(cutover) + 1440) % 1440;
-const span = (range: ServiceRange, cutover: string) => ({
+const span = (range: ClosedRange, cutover: string) => ({
   start: minute(range.startsAt, cutover),
   end: minute(range.endsAt, cutover) || 1440,
 });
@@ -51,13 +51,18 @@ export class RangeDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) deletable = false;
+  @property({ type: Boolean }) closedTimes = false;
   @property({ attribute: false }) businessDate?: string;
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
-  @property({ attribute: false }) range: ServiceRange = { startsAt: "", endsAt: "", periodId: "" };
+  @property({ attribute: false }) range: ClosedRange | ServiceRange = {
+    startsAt: "",
+    endsAt: "",
+    periodId: "",
+  };
   @property({ attribute: false }) periods: readonly { id: string; name: string }[] = [];
-  @property({ attribute: false }) occupied: readonly ServiceRange[] = [];
-  @state() private draft: ServiceRange = copy(this.range);
+  @property({ attribute: false }) occupied: readonly (ClosedRange | ServiceRange)[] = [];
+  @state() private draft: ServiceRange = this.rangeDraft();
   @state() private attempted = false;
   private baseline?: ServiceRange;
   private scope?: DraftScope<ServiceRange>;
@@ -88,8 +93,8 @@ export class RangeDialog extends LitElement {
     if (!this.identity) {
       this.identity = {};
       this.generation = {};
-      this.draft = copy(this.range);
-      this.baseline = copy(this.range);
+      this.draft = this.rangeDraft();
+      this.baseline = this.rangeDraft();
       this.attempted = false;
     }
     if (this.isConnected && !this.scope) {
@@ -106,6 +111,9 @@ export class RangeDialog extends LitElement {
       this.leave = coordinator;
       scope.commit(this.baseline!);
     }
+  }
+  private rangeDraft(): ServiceRange {
+    return { ...this.range, periodId: "periodId" in this.range ? this.range.periodId : "" };
   }
   private get errors(): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
@@ -127,7 +135,7 @@ export class RangeDialog extends LitElement {
       )
         errors.endsAt = t("menu.slot_overlap");
     }
-    if (!this.periods.some((period) => period.id === this.draft.periodId))
+    if (!this.closedTimes && !this.periods.some((period) => period.id === this.draft.periodId))
       errors.periodId = t("menu.period_required");
     return errors;
   }
@@ -148,7 +156,12 @@ export class RangeDialog extends LitElement {
     this.scope?.changed();
   }
   choosePeriod(id: string) {
-    if (this.open && this.isConnected && this.periods.some((period) => period.id === id))
+    if (
+      !this.closedTimes &&
+      this.open &&
+      this.isConnected &&
+      this.periods.some((period) => period.id === id)
+    )
       this.changed("periodId", id);
   }
   private emit(name: string, detail: object) {
@@ -165,7 +178,9 @@ export class RangeDialog extends LitElement {
     const input = copy(this.draft);
     this.scope?.commit(input);
     this.open = false;
-    this.emit("range-save", { input });
+    this.emit("range-save", {
+      input: this.closedTimes ? { startsAt: input.startsAt, endsAt: input.endsAt } : input,
+    });
   }
   private readonly beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (!this.isConnected || this.busy) return false;
@@ -219,25 +234,29 @@ export class RangeDialog extends LitElement {
                 }}
               ></wt-input>`,
           )}
-          <wt-combobox
-            name="periodId"
-            label=${t("menu.slot_period")}
-            required
-            search="never"
-            .value=${this.draft.periodId}
-            .options=${[...this.periods.map((period) => ({ value: period.id, label: period.name })), { value: "new", label: t("opening.new_period"), action: true as const }]}
-            .error=${errors.periodId ?? ""}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("periodId", event.detail.value);
-            }}
-            @wt-combobox-action=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current() && event.detail.value === "new")
-                this.emit("range-new-period", { input: copy(this.draft) });
-            }}
-          ></wt-combobox>
+          ${
+            this.closedTimes
+              ? nothing
+              : html`<wt-combobox
+                  name="periodId"
+                  label=${t("menu.slot_period")}
+                  required
+                  search="never"
+                  .value=${this.draft.periodId}
+                  .options=${[...this.periods.map((period) => ({ value: period.id, label: period.name })), { value: "new", label: t("opening.new_period"), action: true as const }]}
+                  .error=${errors.periodId ?? ""}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (current()) this.changed("periodId", event.detail.value);
+                  }}
+                  @wt-combobox-action=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (current() && event.detail.value === "new")
+                      this.emit("range-new-period", { input: copy(this.draft) });
+                  }}
+                ></wt-combobox>`
+          }
           ${this.repeatedTimes().map((time) => html`<p data-test="repeat-note">${format("menu.time_repeats", { time })}</p>`)}
         </div>
         <wt-form-actions

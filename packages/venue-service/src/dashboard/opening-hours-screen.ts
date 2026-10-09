@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./period-editor.js";
 import "./opening-hours-week.js";
+import "./opening-hours-zone-week.js";
 import "./opening-hours-day.js";
 import "./opening-hours-all.js";
 import type { PeriodEditor } from "./period-editor.js";
@@ -452,26 +453,37 @@ export class OpeningHoursScreen extends LitElement {
                             void this.chooseDepartment(event.detail.departmentId);
                           }}
                         ></opening-hours-all>`
-                      : this.view === "week" && this.zone()
-                        ? html`<p data-test="zone-placeholder">
-                            ${format("opening.zone_placeholder", { name: this.zone()!.name })}
-                          </p>`
-                        : this.view === "week" &&
-                            department &&
-                            (this.weekMode === "week" || special)
-                          ? keyed(
-                              `${department.id}:${this.weekMode}:${special?.id ?? ""}`,
-                              html`<opening-hours-week
-                                .api=${this.api}
-                                .department=${department}
-                                .menus=${this.model!.menus}
-                                .dayCutover=${this.model!.dayCutover}
-                                .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
-                                .specialDate=${special}
-                                .readOnly=${this.readOnly}
-                              ></opening-hours-week>`,
-                            )
-                          : nothing
+                      : this.view === "week" && this.zone() && this.weekMode === "week"
+                        ? keyed(
+                            this.zone()!.id,
+                            html`<opening-hours-zone-week
+                              .api=${this.api}
+                              .department=${department!}
+                              .zone=${this.zone()!}
+                              .dayCutover=${this.model.dayCutover}
+                              .readOnly=${this.readOnly}
+                            ></opening-hours-zone-week>`,
+                          )
+                        : this.view === "week" && this.zone()
+                          ? html`<p data-test="zone-placeholder">
+                              ${format("opening.zone_placeholder", { name: this.zone()!.name })}
+                            </p>`
+                          : this.view === "week" &&
+                              department &&
+                              (this.weekMode === "week" || special)
+                            ? keyed(
+                                `${department.id}:${this.weekMode}:${special?.id ?? ""}`,
+                                html`<opening-hours-week
+                                  .api=${this.api}
+                                  .department=${department}
+                                  .menus=${this.model!.menus}
+                                  .dayCutover=${this.model!.dayCutover}
+                                  .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
+                                  .specialDate=${special}
+                                  .readOnly=${this.readOnly}
+                                ></opening-hours-week>`,
+                              )
+                            : nothing
                   }
                 </div>
                 <div slot="periods">

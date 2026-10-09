@@ -909,11 +909,22 @@ range; opening a block reuses slice 1's `range-dialog` with its period choice hi
 Wording for `zone_closed_time.invalid`: "These closed times overlap or are not in 15-minute steps."
 / "Estas horas de cierre se solapan o no van de 15 en 15 minutos."
 
-- [ ] Steps: failing tests (a drag 23:30→06:00 on Friday stages it — fails today because the
+- [x] Steps: failing tests (a drag 23:30→06:00 on Friday stages it — fails today because the
   element does not exist; `range-dialog` in `closedTimes` mode shows no period field; copy and
   clear; Save sends seven days; unchanged Save is quiet and disabled; reconnect still asks); watch
   them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and 390;
   commit `feat(venue-service): a zone's closed times in Opening hours (A366)`.
+
+Verified 2026-10-09: the focused zone/range/screen browser family ran 163 tests, the whole
+venue-service node project ran 1463, and the unchanged fiscal write-path/inmutabilidad suites
+ran 20. Types, touched-file lint/format and six relevant root guards (70 tests) passed.
+Seven independent guard changes failed their selected assertions in an installed disposable
+checkout; restoring it passed 46 behavioral cases. EN/ES light/dark captures at measured
+1280/390 CSS pixels covered the week, copy chooser, two-time dialog, refusal and the overnight
+range's start and changeover end in separate scroll positions. The normal-week zone placeholder
+assertion was deliberately replaced by strict zone name/id and department-id wiring assertions
+in signed-off `ace9d08c1`; its navigation assertions remain. Date mode retains its safe
+placeholder until the later dated-hours editor, so it cannot write the normal week's closed times.
 
 ---
 

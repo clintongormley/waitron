@@ -1560,6 +1560,13 @@ form's own checks disable the action; an error that comes back from a request ne
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
+The zone's normal-week editor draws seven closed-time columns over its department's periods.
+Dragging stages a closed range; opening a closed block edits its two times or deletes it, with
+no period choice. Copy this day and Clear change only the closed ranges. One Save writes all
+seven weekdays; a refusal naming a submitted day appears in that day's header and leaves the
+staged week available to retry. Its Save follows the draft comparison below, including after
+removal and reconnect. Zone date mode keeps its placeholder until the dated-hours editor lands.
+
 The Opening hours normal-week editor stages its seven days before one Save. Each day's menu
 copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
 times and period; New period opens the period editor above it, then returns to the same range.
