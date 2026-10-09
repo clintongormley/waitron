@@ -1671,7 +1671,6 @@ describe("a printing problem whose dishes move to another bill", () => {
   });
 });
 
-/** The staff names of the lines `printJobId` recorded carrying, sorted. */
 describe("a printing problem on a printer two stations share (A366)", () => {
   /** A station printer Cocina and Barra both list, beside each one's own. */
   async function sharedPrinter(v: Venue): Promise<string> {
@@ -1751,6 +1750,7 @@ describe("a printing problem on a printer two stations share (A366)", () => {
   });
 });
 
+/** The staff names of the lines `printJobId` recorded carrying, sorted. */
 async function linesCarried(printJobId: string): Promise<string[]> {
   const rows = await db
     .select({ name: workingOrderLines.name })

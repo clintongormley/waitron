@@ -422,6 +422,22 @@ describe("a reprint on a printer shared by several stations", () => {
       const shared = onPrinter(reprints, p);
       expect(shared.printed.filter((text) => text === "*** REPRINT ***")).toHaveLength(2);
       expect(shared.printed.filter((text) => text === "*** HOLD ***")).toHaveLength(1);
+      const heldAt = shared.printed.lastIndexOf("*** REPRINT ***");
+      const firedPart = shared.printed.slice(0, heldAt);
+      const heldPart = shared.printed.slice(heldAt);
+      const names = { steak: "Grill", tart: "Pastry" } as const;
+      const kitchenName = { steak: "Steak", tart: "Tart" } as const;
+      expect(firedPart[1]).toBe(fired.map((dish) => names[dish]).join(" · "));
+      expect(firedPart.filter((text) => text.startsWith("1.000 x "))).toEqual(
+        fired.map((dish) => `1.000 x ${kitchenName[dish]}`),
+      );
+      expect(heldPart.slice(1, 3)).toEqual([
+        "*** HOLD ***",
+        held.map((dish) => names[dish]).join(" · "),
+      ]);
+      expect(heldPart.filter((text) => text.startsWith("1.000 x "))).toEqual(
+        held.map((dish) => `1.000 x ${kitchenName[dish]}`),
+      );
       expect(shared.stationIds).toEqual([venue.y, venue.z].sort());
       expect(shared.lineCount).toBe(fired.length + held.length);
     },
@@ -459,4 +475,41 @@ describe("a correction slip on a printer shared by several stations", () => {
       expect(slip.stationIds).toEqual([]);
     }
   });
+});
+
+describe("the rest of the order on a reprint that joins fired and held work on one printer", () => {
+  // P carries the fired part and the HOLD part of one reprint as one job, so it prints one "Also on
+  // this order" block between them, listing only dishes at stations not on either part.
+  it.each([
+    { fired: ["salad", "tart"], held: ["steak"], showing: ["y"] },
+    { fired: ["salad", "tart"], held: ["steak"], showing: ["y", "z"] },
+    { fired: ["salad", "steak"], held: ["tart"], showing: ["y"] },
+  ] as const)(
+    "prints one block naming no dish the paper carries: fired $fired, held $held, shown by $showing",
+    async ({ fired, held, showing }) => {
+      const { cfg, catalogueId } = await setupVenue();
+      cfg.locale = "en-GB";
+      const result = await withTransaction(db, async (tx) => {
+        const venue = await threeStations(tx, cfg, catalogueId);
+        for (const station of showing) {
+          await updateStation(tx, cfg, venue[station], { showsRestOfOrder: true });
+        }
+        const p = await makePrinter(tx, cfg, "P");
+        await attachPrinterToStation(tx, { stationId: venue.y, printerId: p });
+        await attachPrinterToStation(tx, { stationId: venue.z, printerId: p });
+        const tabId = await seatAndSubmit(tx, cfg, [
+          { release: "fire", productIds: fired.map((dish) => venue[dish]) },
+          { release: "hold", productIds: held.map((dish) => venue[dish]) },
+        ]);
+        const before = (await sentJobs(tx)).length;
+        await reprintOrderTickets(tx, cfg, tabId);
+        return { p, reprints: (await sentJobs(tx)).slice(before) };
+      });
+      const { p, reprints } = result;
+
+      const printed = onPrinter(reprints, p).printed;
+      expect(printed.filter((text) => text.startsWith("-- Also on this order"))).toHaveLength(1);
+      expect(printed.filter((text) => text.includes(" — "))).toEqual(["1.000 x Salad — Cold"]);
+    },
+  );
 });
