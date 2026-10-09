@@ -4540,6 +4540,14 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   Send the session outlives" does.
   [Detail](backlog/ci.md#two-till-tests-wait-a-fixed-real-time-for-a-resend-to-give-up)
 
+- **Tests that close a dialog and then check after a single `flush` were not searched** (A452,
+  #1487). A452 made browser tests wait for a dialog's `wt-close` before checking what a screen does
+  on close, but its search found only a click or Escape followed within three lines by a wait; one
+  followed by a single-frame `flush` and an assertion was fixed in the Printers tests alone. Popovers
+  (combobox, help tooltip, row actions) report their toggle late too, and were not looked at.
+  **Next action:** search the browser suites for a dialog close followed by `flush` and an assertion
+  on a close-driven effect, and decide whether the popovers need the same treatment.
+
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after each
   Escape.** **Next action:** decide whether "closes on a real Escape press" should wait for its
   `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
