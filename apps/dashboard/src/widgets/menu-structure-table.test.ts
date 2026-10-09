@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { registerIcons } from "@waitron/ui";
+import { iconButtonStyles, registerIcons } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -298,6 +298,18 @@ function own<T extends Element = HTMLElement>(el: MenuStructureTable, test: stri
   return el.shadowRoot!.querySelector<T>(`[data-test="${CSS.escape(test)}"]`);
 }
 
+it("names a new section's add Add section, in English and Spanish", async () => {
+  const before = currentLocale();
+  onTestFinished(() => setLocale(before));
+  setLocale("en");
+  const el = await mount();
+  expect(own(el, "new-section-top")!.textContent!.trim()).toBe("Add section");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(own(el, "new-section-top")!.textContent!.trim()).toBe("Añadir sección");
+});
+
 it("offers the top-level adds in the toolbar's Add ⋮ and on each place an owned section is shown, naming that list", async () => {
   const el = await mount();
   const adds = listen(el, "wt-structure-add");
@@ -349,6 +361,44 @@ it("keeps a button the host puts in the toolbar's end after the Add ⋮", async 
   expect(
     toolbar.compareDocumentPosition(done.assignedSlot!) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+});
+
+it("draws the Add ⋮ with the border and fill of the toolbar's icon buttons", async () => {
+  const el = await mount();
+  // The menus screen's Reorder and Select are icon buttons; it puts them in the toolbar's start.
+  const neighbour = document.createElement("span");
+  neighbour.slot = "toolbar-end";
+  const shadow = neighbour.attachShadow({ mode: "open" });
+  shadow.adoptedStyleSheets = [iconButtonStyles.styleSheet!];
+  shadow.innerHTML = `<button class="icon-button">R</button>`;
+  el.append(neighbour);
+  const bare = document.createElement("wt-row-actions");
+  bare.icon = "plus";
+  bare.label = "Bare";
+  document.body.append(bare);
+  onTestFinished(() => bare.remove());
+  await settle(el);
+  await bare.updateComplete;
+  const look = (button: Element): Record<string, string> => {
+    const style = getComputedStyle(button);
+    return {
+      background: style.backgroundColor,
+      ...Object.fromEntries(
+        ["top", "right", "bottom", "left"].flatMap((side) =>
+          ["width", "style", "color"].map((what) => [
+            `${side}-${what}`,
+            style.getPropertyValue(`border-${side}-${what}`),
+          ]),
+        ),
+      ),
+    };
+  };
+  const trigger = (actions: Element) => actions.shadowRoot!.querySelector('[part~="trigger"]')!;
+  const plus = look(trigger(own(el, "toolbar-adds")!));
+  expect(plus).toEqual(look(shadow.querySelector("button")!));
+  expect(plus["top-style"]).toBe("solid");
+  // A wt-row-actions without the class draws no border, so the match above is the class's doing.
+  expect(look(trigger(bare))).not.toEqual(plus);
 });
 
 it("offers Edit and Delete on an owned section and Remove on a product, naming the holding list", async () => {
@@ -1568,6 +1618,33 @@ describe("dragging into another list", () => {
       { from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 1 },
     ]);
     expect(moves).toEqual([]);
+  });
+
+  it("tints and rings every cell of the row a drop would go into, the pinned ⋮ cell included", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-beer", "middle");
+    expect(drops(el)).toEqual({ ...noDrop, into: ["m-drinks/m-beer"] });
+    const look = (key: string) =>
+      [...row(el, key)!.querySelectorAll("td")].map((cell) => {
+        const style = getComputedStyle(cell);
+        return { background: style.backgroundColor, shadow: style.boxShadow };
+      });
+    const target = look("m-drinks/m-beer");
+    const unmarked = look("m-fav");
+    expect(target.length).toBeGreaterThan(2);
+    expect(target.length).toBe(unmarked.length);
+    for (const [index, cell] of target.entries()) {
+      expect(cell.background).not.toBe(unmarked[index]!.background);
+      expect(cell.shadow).not.toBe(unmarked[index]!.shadow);
+      expect(cell.shadow).toContain("inset");
+    }
+    expect(new Set(target.map((cell) => cell.background)).size).toBe(1);
+    pointer(from, "pointercancel", nameAt(el, "m-drinks/m-beer"));
+    await settle(el);
+    expect(look("m-drinks/m-beer")).toEqual(look("m-fav"));
   });
 
   it("marks a closed section in another list over its middle and drops into it at the end, and offers the gap beside it over its quarters", async () => {

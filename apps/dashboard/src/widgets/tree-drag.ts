@@ -18,6 +18,20 @@ export const treeDragStyles = css`
   wt-data-table::part(drop-target) {
     border-inline-start: var(--wt-selected-ring);
   }
+  /* Painted on every cell, not the row: the pinned cell paints its own background over the row's. */
+  wt-data-table::part(drop-into) {
+    background: var(--wt-color-surface-lifted);
+    box-shadow:
+      inset 0 var(--wt-field-line-width-active) 0 var(--wt-color-primary),
+      inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
+  }
+  /* A shadow has no logical offset: this draws the right-hand edge. */
+  wt-data-table::part(drop-into-end) {
+    box-shadow:
+      inset 0 var(--wt-field-line-width-active) 0 var(--wt-color-primary),
+      inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary),
+      inset calc(-1 * var(--wt-field-line-width-active)) 0 0 var(--wt-color-primary);
+  }
   wt-data-table::part(drop-gap-before) {
     padding-block-start: calc(var(--wt-space-3) + var(--wt-tap-min));
     border-block-start: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
@@ -73,7 +87,14 @@ export function placeDragGhost(root: ParentNode, point: { x: number; y: number }
     ?.style.setProperty("transform", `translate(${point.x}px, ${point.y}px)`);
 }
 
-const MARKS = ["dragging", "drop-target", "drop-gap-before", "drop-gap-after"];
+const MARKS = [
+  "dragging",
+  "drop-target",
+  "drop-into",
+  "drop-into-end",
+  "drop-gap-before",
+  "drop-gap-after",
+];
 
 /** The table re-renders rows in place, so marks are cleared and set again by key, never kept. */
 export function clearDragMarks(root: ShadowRoot): void {
@@ -91,6 +112,13 @@ export function markDragging(row: HTMLElement | null): void {
   row?.part.add("dragging");
   // Faded text needs no contrast only as part of an inactive control, which the row is until the drop.
   row?.setAttribute("aria-disabled", "true");
+}
+
+export function markInto(row: HTMLElement | null): void {
+  const cells = [...(row?.querySelectorAll<HTMLElement>(":scope > td") ?? [])];
+  cells[0]?.part.add("drop-target");
+  for (const cell of cells) cell.part.add("drop-into");
+  cells.at(-1)?.part.add("drop-into-end");
 }
 
 export function markGap(root: ShadowRoot, gap: DropGap): void {

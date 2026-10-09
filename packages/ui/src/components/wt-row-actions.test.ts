@@ -58,6 +58,17 @@ describe("row actions", () => {
     });
     expect(bigger.shadowRoot!.querySelector("button wt-icon")!.getAttribute("size")).toBe("lg");
   });
+  it("exposes its trigger as part trigger, so a host can style it", async () => {
+    const outer = await mount("<div></div>");
+    const root = outer.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>wt-row-actions::part(trigger) { border-top-style: dashed; }</style>
+      <wt-row-actions label="Add"></wt-row-actions>`;
+    const actions = root.querySelector("wt-row-actions")!;
+    await actions.updateComplete;
+    const trigger = actions.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(trigger).borderTopStyle).toBe("dashed");
+  });
+
   it("registers the reusable action disclosure", async () => {
     const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
     expect(el.shadowRoot?.querySelector("button")?.getAttribute("aria-label")).toBe(
@@ -460,9 +471,10 @@ describe("standard icon trigger", () => {
     expect(trigger.querySelector("wt-icon")!.getAttribute("name")).toBe("kebab");
   });
 
-  it("exposes only the popup part", async () => {
-    const { el, popup } = await mountActions();
-    expect([...el.shadowRoot!.querySelectorAll("[part]")]).toEqual([popup]);
+  it("exposes only the trigger and popup parts", async () => {
+    const { el, trigger, popup } = await mountActions();
+    expect([...el.shadowRoot!.querySelectorAll("[part]")]).toEqual([trigger, popup]);
+    expect(trigger.getAttribute("part")).toBe("trigger");
     expect(popup.getAttribute("part")).toBe("popup");
   });
 });

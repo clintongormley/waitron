@@ -343,8 +343,9 @@ selected inside a selected category moves with that category rather than being f
 On a pointer device you can also drag rows, but only in **Select**, which shows each row's
 grip; outside it nothing can be dragged. Drag a product or a category (dragging a selected row
 carries every selected row with it) onto a category, onto a product (to file beside it) or onto **All products** (to file in no
-category). The row stays in place, faded, while a copy follows the pointer; the target shows a bar
-on its left edge and a dashed gap where the row will land in the current sort; a closed category
+category). The row stays in place, faded, while a copy follows the pointer; the row the drop goes into
+is tinted, inside a primary-colour ring with a bar on its left edge, and, while that row is open
+and shows rows under it, a dashed gap shows where the row will land in the current sort; a closed category
 opens after `HOVER_OPEN_MS` (600 ms, `apps/dashboard/src/widgets/product-list.ts`) of hovering.
 Esc, or a drop where the drag started, moves nothing. A mouse drags from anywhere on the row; a
 finger drags only from the row's grip, so the rest of the row still scrolls. A keyboard does not

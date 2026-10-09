@@ -333,6 +333,9 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     await el.updateComplete;
     await table.updateComplete;
     expect(beer.querySelector("td")!.part.contains("drop-target")).toBe(true);
+    expect([...beer.querySelectorAll("td")].every((cell) => cell.part.contains("drop-into"))).toBe(
+      true,
+    );
     await expectNoA11yViolations(host);
     move("pointercancel");
   });
