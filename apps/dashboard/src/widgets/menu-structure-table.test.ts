@@ -363,9 +363,9 @@ it("keeps a button the host puts in the toolbar's end after the Add ⋮", async 
   ).toBeTruthy();
 });
 
-it("draws the Add ⋮ with the border and fill of the toolbar's icon buttons beside it", async () => {
+it("draws the Add ⋮ with the border and fill of the toolbar's icon buttons", async () => {
   const el = await mount();
-  // The menus screen's Reorder and Select are icon buttons it puts in the toolbar's end.
+  // The menus screen's Reorder and Select are icon buttons; it puts them in the toolbar's start.
   const neighbour = document.createElement("span");
   neighbour.slot = "toolbar-end";
   const shadow = neighbour.attachShadow({ mode: "open" });
@@ -397,7 +397,7 @@ it("draws the Add ⋮ with the border and fill of the toolbar's icon buttons bes
   const plus = look(trigger(own(el, "toolbar-adds")!));
   expect(plus).toEqual(look(shadow.querySelector("button")!));
   expect(plus["top-style"]).toBe("solid");
-  // A row's ⋮ draws no border, so the match above is the class's doing.
+  // A wt-row-actions without the class draws no border, so the match above is the class's doing.
   expect(look(trigger(bare))).not.toEqual(plus);
 });
 
