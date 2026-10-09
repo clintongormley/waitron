@@ -42,7 +42,7 @@ class OpeningLeaveApp extends LitElement {
         ],
         holidayCoverage: [],
         holidaySources: [],
-        area: { options: [], required: false, chosen: null },
+        area: { addressKey: "fixture-address", options: [], required: false, chosen: null },
         localHolidaysPerYear: 2,
       };
     if (path.includes("/hours?"))

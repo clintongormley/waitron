@@ -1117,6 +1117,7 @@ describe("Opening hours named month", () => {
       holidayCoverage: [],
       holidaySources: [],
       area: {
+        addressKey: "old-city",
         options: [
           { key: "aran", name: "Aran" },
           { key: "rest", name: "Rest of province" },
@@ -1388,4 +1389,63 @@ describe("Opening hours named month", () => {
     );
     expect(el.shadowRoot!.querySelector("[data-test=local-holiday-hint]")).toBeNull();
   });
+  it.each(["settled refusal", "late refusal", "late success"])(
+    "an address change clears area state and ignores the old address's %s",
+    async (reply) => {
+      let addressKey = "old-city";
+      let reject!: (value: unknown) => void;
+      let resolve!: (value: unknown) => void;
+      let reads = 0;
+      const api = new NamedDaysApi((async (_path, method) => {
+        if (method === "PUT")
+          return new Promise((yes, no) => {
+            resolve = yes;
+            reject = no;
+          });
+        reads++;
+        const model = namedModel();
+        Object.assign(model.area, { addressKey });
+        return model;
+      }) as DashboardRequest);
+      const el = await namedMount((async (_path, method) => {
+        if (method === "PUT")
+          return new Promise((yes, no) => {
+            resolve = yes;
+            reject = no;
+          });
+        const model = namedModel();
+        Object.assign(model.area, { addressKey });
+        return model;
+      }) as DashboardRequest);
+      el.namedApi = api;
+      el.remove();
+      document.body.append(el);
+      await expect.poll(() => reads).toBeGreaterThan(0);
+      const chooser = () =>
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]")!;
+      chooser().dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "aran" }, bubbles: true, composed: true }),
+      );
+      await expect.poll(() => chooser().disabled).toBe(true);
+      if (reply === "settled refusal") {
+        reject({ code: "holiday.invalid" });
+        await expect.poll(() => chooser().error).toBe("The change could not be saved.");
+      }
+      addressKey = "new-city";
+      const beforeRead = reads;
+      api.rereadWatches();
+      await expect.poll(() => reads).toBeGreaterThan(beforeRead);
+      await el.updateComplete;
+      expect(chooser().error).toBe("");
+      expect(chooser().disabled).toBe(false);
+      const afterMove = reads;
+      if (reply === "late refusal") reject({ code: "holiday.invalid" });
+      if (reply === "late success") resolve({});
+      await new Promise((done) => setTimeout(done, 0));
+      await el.updateComplete;
+      expect(chooser().error).toBe("");
+      expect(chooser().disabled).toBe(false);
+      expect(reads).toBe(afterMove);
+    },
+  );
 });

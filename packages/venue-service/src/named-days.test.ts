@@ -386,6 +386,7 @@ it("returns the country's area options and the chosen venue area without inventi
     namedDayReads.readNamedDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now),
   );
   expect(before.area).toEqual({
+    addressKey: JSON.stringify(["ES", "38", "santa cruz"]),
     options: [
       { key: "el-hierro", name: "El Hierro" },
       { key: "la-gomera", name: "La Gomera" },

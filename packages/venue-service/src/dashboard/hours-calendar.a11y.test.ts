@@ -278,7 +278,12 @@ describe.each(["light", "dark"] as const)("Named month accessibility (%s)", (the
       ),
       holidayCoverage: [],
       holidaySources: [],
-      area: { options: [{ key: "aran", name: "Aran" }], required: true, chosen: null },
+      area: {
+        addressKey: "fixture-address",
+        options: [{ key: "aran", name: "Aran" }],
+        required: true,
+        chosen: null,
+      },
       localHolidaysPerYear: 2,
     };
     const el = document.createElement("hours-calendar");
