@@ -1,9 +1,12 @@
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  hashSessionToken,
+  managementSessions,
   hashPassword,
   hashPin,
   persons,
@@ -128,21 +131,22 @@ function stubReader(): { reader: LogReader; lastRecentOpts: () => { limit?: numb
 
 /** One Hono app for a venue, wiring the diagnostics routes with a real verbosity controller (default
  * `info`) and the given stub reader. `now` is fixed so `revertsAt` is deterministic. */
-function mountApp(reader: LogReader): { app: Hono } {
+function mountApp(reader: LogReader) {
   const app = new Hono();
+  const verbosity = createVerbosityController({
+    defaultLevel: "info",
+    now: () => new Date("2026-08-31T12:00:00.000Z"),
+  });
   mountDiagnosticsApi(
     app,
     {
       db: suite.db,
       reader,
-      verbosity: createVerbosityController({
-        defaultLevel: "info",
-        now: () => new Date("2026-08-31T12:00:00.000Z"),
-      }),
+      verbosity,
     },
     noopLog,
   );
-  return { app };
+  return { app, verbosity };
 }
 
 async function get(app: Hono, path: string, cookie?: string): Promise<Response> {
@@ -167,6 +171,69 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity", () => {
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },
+    });
+  });
+
+  describe.each([
+    { method: "GET", path: "/management-api/diagnostics/recent" },
+    { method: "GET", path: "/management-api/diagnostics/verbosity" },
+    { method: "POST", path: "/management-api/diagnostics/verbosity" },
+  ])("$method $path", ({ method, path }) => {
+    it("answers 401 management_session.expired for an idle-expired manager", async () => {
+      const v = await setupVenue();
+      const tokenHash = hashSessionToken(v.managerCookie.split("=")[1]!);
+      await withTransaction(suite.db, async (tx) => {
+        await tx
+          .update(managementSessions)
+          .set({ lastSeenAt: "1970-01-01T00:00:00.000Z" })
+          .where(eq(managementSessions.tokenHash, tokenHash));
+      });
+      const stub = stubReader();
+      const { app, verbosity } = mountApp(stub.reader);
+      const res =
+        method === "GET"
+          ? await get(app, path, v.managerCookie)
+          : await post(app, path, v.managerCookie, { level: "debug", ttlMinutes: 5 });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({
+        error: { code: "management_session.expired", params: {} },
+      });
+      expect(stub.lastRecentOpts()).toBeUndefined();
+      expect(verbosity.current()).toBe("info");
+      expect(verbosity.revertsAt()).toBeNull();
+      const [session] = await suite.db
+        .select({ lastSeenAt: managementSessions.lastSeenAt })
+        .from(managementSessions)
+        .where(eq(managementSessions.tokenHash, tokenHash));
+      expect(session).toEqual({ lastSeenAt: "1970-01-01T00:00:00.000Z" });
+    });
+
+    it("answers 403 person.suspended for a suspended manager with a live session", async () => {
+      const v = await setupVenue();
+      const tokenHash = hashSessionToken(v.managerCookie.split("=")[1]!);
+      const [session] = await suite.db
+        .select({ personId: managementSessions.personId })
+        .from(managementSessions)
+        .where(eq(managementSessions.tokenHash, tokenHash));
+      await withTransaction(suite.db, async (tx) => {
+        await tx
+          .update(persons)
+          .set({ status: "suspended" })
+          .where(eq(persons.id, session!.personId));
+      });
+      const stub = stubReader();
+      const { app, verbosity } = mountApp(stub.reader);
+      const res =
+        method === "GET"
+          ? await get(app, path, v.managerCookie)
+          : await post(app, path, v.managerCookie, { level: "debug", ttlMinutes: 5 });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "person.suspended", params: { personId: session!.personId } },
+      });
+      expect(stub.lastRecentOpts()).toBeUndefined();
+      expect(verbosity.current()).toBe("info");
+      expect(verbosity.revertsAt()).toBeNull();
     });
   });
 
