@@ -2828,6 +2828,7 @@ describe("catalogue-screen", () => {
       await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
         ...variantValue,
         active: false,

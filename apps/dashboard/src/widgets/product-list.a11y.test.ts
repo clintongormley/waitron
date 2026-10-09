@@ -528,15 +528,33 @@ describe.each(["light", "dark"] as const)("archive row actions a11y (%s)", (them
             expect(icon.shadowRoot!.querySelector("svg")).not.toBeNull();
             menu.show();
             await menu.updateComplete;
-            expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(
-              true,
-            );
+            const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+            expect(popup.matches(":popover-open")).toBe(true);
+            const bounds = popup.getBoundingClientRect();
+            expect(bounds.height).toBeGreaterThan(0);
+            expect(bounds.left).toBeGreaterThanOrEqual(0);
+            expect(bounds.right).toBeLessThanOrEqual(innerWidth);
+            expect(bounds.top).toBeGreaterThanOrEqual(0);
+            expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
+            for (const button of menu.querySelectorAll("wt-button")) {
+              const actionBounds = button.getBoundingClientRect();
+              expect(actionBounds.top).toBeGreaterThanOrEqual(bounds.top);
+              expect(actionBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
+            }
             await expectNoA11yViolations(host);
-            if (import.meta.env.VITE_A435_TASK7_CAPTURE === "1")
+            if (import.meta.env.VITE_A435_TASK7_CAPTURE === "1") {
               await page.screenshot({
                 element: host,
                 path: `__screenshots__/a435-task7/list-${locale}-${theme}-${width}-${id}.png`,
               });
+              if (id === "p1") {
+                popup.setAttribute("data-testid", "a435-archive-popup");
+                await page.screenshot({
+                  element: page.getByTestId("a435-archive-popup"),
+                  path: `__screenshots__/a435-task7/menu-${locale}-${theme}-${width}.png`,
+                });
+              }
+            }
             menu.hide();
           }
           cleanupWidgets();
