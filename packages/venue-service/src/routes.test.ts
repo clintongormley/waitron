@@ -588,6 +588,183 @@ describe("venue service management routes", () => {
     });
   });
 
+  it("department and zone answers omit retired style fields", async () => {
+    const fx = await fixture();
+    const created = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/departments",
+      fx.managerCookie,
+      { name: "Answer" },
+    );
+    expect(created.status).toBe(201);
+    const department = await created.json();
+    expect(department).not.toHaveProperty("defaultServiceMode");
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/zones/${fx.zoneId}`,
+          fx.managerCookie,
+          { departmentId: department.id },
+        )
+      ).status,
+    ).toBe(204);
+
+    const model = await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json();
+    expect(
+      model.departments.find((row: { id: string }) => row.id === department.id),
+    ).not.toHaveProperty("defaultServiceMode");
+    expect(model.zones.find((row: { id: string }) => row.id === fx.zoneId)).not.toHaveProperty(
+      "serviceModeOverride",
+    );
+  });
+
+  it.each(["prepay", "table_tab", "ticket_then_pay", null])(
+    "refuses retired department request fields without writes (%s)",
+    async (defaultServiceMode) => {
+      const fx = await fixture();
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+      );
+      const before = await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json();
+      for (const method of ["POST", "PATCH"] as const) {
+        const path =
+          method === "POST"
+            ? "/management-api/venue-service/departments"
+            : `/management-api/venue-service/departments/${department.id}`;
+        const response = await send(fx.app, method, path, fx.managerCookie, {
+          name: "Changed",
+          tradingName: "Changed receipt",
+          defaultServiceMode,
+        });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "defaultServiceMode" } },
+        });
+        expect(
+          await (
+            await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+          ).json(),
+        ).toEqual(before);
+      }
+    },
+  );
+
+  it("patches only the trading name without changing the department name or service settings", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, {
+        name: "Dining",
+        tradingName: "Original receipt",
+        orderStart: "table",
+      }),
+    );
+    await db
+      .update(departments)
+      .set({ defaultServiceMode: "prepay" })
+      .where(eq(departments.id, department.id));
+    const before = await db.all(
+      sql`select * from department_sale_policies where department_id = ${department.id}`,
+    );
+    const response = await send(
+      fx.app,
+      "PATCH",
+      `/management-api/venue-service/departments/${department.id}`,
+      fx.managerCookie,
+      { tradingName: "New receipt" },
+    );
+    expect(response.status).toBe(204);
+    expect(
+      await db.select().from(departments).where(eq(departments.id, department.id)),
+    ).toMatchObject([{ name: "Dining", tradingName: "New receipt", active: true }]);
+    expect(
+      await db.all(
+        sql`select * from department_sale_policies where department_id = ${department.id}`,
+      ),
+    ).toEqual(before);
+  });
+
+  it.each(["table", "counter", null] as const)(
+    "moving a zone retains its service overrides (%s)",
+    async (orderStart) => {
+      const fx = await fixture();
+      const [source, target] = await withTransaction(db, async (tx) => {
+        const source = await createDepartment(tx, fx, { name: "Source", orderStart: "counter" });
+        const target = await createDepartment(tx, fx, { name: "Target", orderStart: "table" });
+        await configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: source.id, orderStart });
+        await tx.run(
+          sql`update zone_sale_policies set paid_when = 'ticket_then_pay', collection_number = 'numbered', receipt_print_mode = 'on_request' where zone_id = ${fx.zoneId}`,
+        );
+        await tx
+          .update(zoneServicePolicies)
+          .set({ serviceMode: orderStart === "table" ? "prepay" : "table_tab" })
+          .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
+        return [source, target];
+      });
+      const before = await db.all(
+        sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`,
+      );
+      const response = await send(
+        fx.app,
+        "PUT",
+        `/management-api/venue-service/zones/${fx.zoneId}`,
+        fx.managerCookie,
+        { departmentId: target!.id },
+      );
+      expect(response.status).toBe(204);
+      expect(
+        await db.all(sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`),
+      ).toEqual(before);
+      expect(
+        await db
+          .select({ departmentId: zoneServicePolicies.departmentId })
+          .from(zoneServicePolicies)
+          .where(eq(zoneServicePolicies.zoneId, fx.zoneId)),
+      ).toEqual([{ departmentId: target!.id }]);
+      expect(source!.id).not.toBe(target!.id);
+    },
+  );
+
+  it.each(["prepay", "table_tab", "ticket_then_pay", null])(
+    "refuses the retired zone request field without writes (%s)",
+    async (serviceMode) => {
+      const fx = await fixture();
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+      );
+      await withTransaction(db, (tx) =>
+        configureZone(tx, fx, {
+          zoneId: fx.zoneId,
+          departmentId: department.id,
+          orderStart: "counter",
+        }),
+      );
+      const before = await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json();
+      const response = await send(
+        fx.app,
+        "PUT",
+        `/management-api/venue-service/zones/${fx.zoneId}`,
+        fx.managerCookie,
+        { departmentId: department.id, serviceMode },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "serviceMode" } },
+      });
+      expect(
+        await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),
+      ).toEqual(before);
+    },
+  );
+
   it("refuses the retired invoice-first style without changing departments or zones", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
