@@ -2373,6 +2373,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   timer. Polling would read `listTablesWithState` every few seconds on every till; choose the
   interval and cost first.
 
+- **The station dialog's own guard has no test** — left open by A438 (#1472).
+  `till-station-choice-dialog` refuses to send a choice while busy, with no station chosen, or with
+  the current station (`apps/till/src/widgets/station-choice-dialog.ts`); its tests still pass with
+  that refusal removed, and the app's matching early return in `#onWaitingStationChosen` is
+  unreachable through it. **Next action:** a dialog test for each of the three, proved by deletion.
+
+- **Move to station on a counter order sent but not paid** — left open by A438 (#1472), which
+  offers the move on the "Paid, not handed over" rows only. A "Sent, not paid" row has no move,
+  and the basket it is paid from cannot list its dishes (`readTabLines` refuses a non-open order).
+  **Next action:** ask the owner whether that row needs it.
+
 - **Current orders hides kitchen progress for an extra made at another station** (P6). — left open
   by the product folders work. The till's Current orders read attaches extras under each dish but
   reads kitchen state only from the dish's record (`readCurrentOrders`,
