@@ -299,8 +299,14 @@ describe("Hours calendar: the month", () => {
     const el = await mount(api);
     const legend = el.shadowRoot!.querySelector(".legend")!;
     const entries = [...legend.querySelectorAll("li")];
-    expect(entries.slice(2).map((entry) => [entry.querySelector<HTMLElement>(".swatch")!.dataset.colour, text(entry)]))
-      .toEqual([["purple", holiday], ["blue", working]]);
+    expect(
+      entries
+        .slice(2)
+        .map((entry) => [entry.querySelector<HTMLElement>(".swatch")!.dataset.colour, text(entry)]),
+    ).toEqual([
+      ["purple", holiday],
+      ["blue", working],
+    ]);
   });
 
   it("paints a holiday named day purple", async () => {

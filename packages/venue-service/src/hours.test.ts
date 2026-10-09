@@ -1430,7 +1430,7 @@ describe("the station hours model on one date", () => {
     });
   });
 
-  it("keeps a date's id and its cells when its name, colour and date change", async () => {
+  it("keeps a date's id and its cells when its name and date change", async () => {
     const f = await fixture();
     const closedDeli: DateHoursCell = { subject: f.deli, cell: { mode: "closed", periods: [] } };
     const first = await saveDate(f, null, specialInput({ cells: [closedDeli] }));
@@ -1783,7 +1783,7 @@ describe("holiday facts beside the calendar", () => {
 });
 
 describe("duplicating a special date", () => {
-  it("copies the name, colour and every cell to each target under new ids, an inactive station's included", async () => {
+  it("copies the name and every cell to each target under new ids, an inactive station's included", async () => {
     const f = await fixture();
     const lunch = period("12:00", "15:00");
     const dinner = period("19:00", "23:00");
