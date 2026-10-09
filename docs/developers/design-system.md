@@ -2780,6 +2780,15 @@ The till and kitchen-display surfaces reuse the same tokens but have their own c
 targets, glanceability at a distance) that these rules don't yet cover; treat them separately
 rather than assuming this composition applies unchanged.
 
+### Wording
+
+- **Keep text as short as its meaning allows** (owner, 2026-10-09). Leave out what the reader can
+  infer: the kitchen ticket's heading is "Also on this order", not a sentence explaining it.
+- **An action label starts with a verb** (owner, 2026-10-09): Add, Delete, Move, Remove, Save. A
+  button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
+  — "Add" is a verb like "Delete"; "New" is an adjective. The rule names action labels; dialog
+  headings such as "New unit" were left as they were (A443).
+
 ## Event discipline
 
 Custom events crossing a shadow boundary are `composed: true`. A native event that is itself
