@@ -278,7 +278,9 @@ the server checks each at the route, never trusting the till's copy:
   (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
   and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
   pass screen draws Fire, Ready and Away only when its profile has "Run the pass"
-  (`run-the-pass`, a screen setting, not an action). What reaches a station still comes from the
+  (`run-the-pass`, a screen setting, not an action). A kitchen display's station screen draws
+  Move to station on each waiting dish only when its profile has `take-orders`; a till's own
+  Station screen draws none (A439). What reaches a station still comes from the
   venue's routing. Saving a profile that no longer offers a screen, station or zone a device
   shows is allowed: the save names the devices it changed (`narrowedDevices`), each device records
   what it lost and shows it as no longer available until someone picks again, and adding it back

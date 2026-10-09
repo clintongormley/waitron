@@ -1897,7 +1897,7 @@ export const en = {
   "device_profiles.actions_hint":
     "A device on this profile can do only what is switched on here. A new profile starts with nothing switched on.",
   "device_profiles.shared_display_actions_hint":
-    "A kitchen display has nobody signed in, so it can only prepare orders, and take and hand them over from a pass screen.",
+    "A kitchen display has nobody signed in, so it can only prepare orders, take and hand them over from a pass screen, and move dishes between stations.",
   "device_profiles.screens": "Screens it shows",
   "device_profiles.starting_screen": "Opens on",
   "device_profiles.starting_screen_first_tab": "The layout's first tab",
@@ -4430,7 +4430,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.actions_hint":
     "Un dispositivo con este perfil solo puede hacer lo que esté activado aquí. Un perfil nuevo empieza sin nada activado.",
   "device_profiles.shared_display_actions_hint":
-    "En una pantalla de cocina no inicia sesión nadie, así que solo puede preparar pedidos, y tomarlos y entregarlos desde una pantalla de pase.",
+    "En una pantalla de cocina no inicia sesión nadie, así que solo puede preparar pedidos, tomarlos y entregarlos desde una pantalla de pase, y cambiar platos de estación.",
   "device_profiles.screens": "Pantallas que muestra",
   "device_profiles.starting_screen": "Se abre en",
   "device_profiles.starting_screen_first_tab": "La primera pestaña del diseño",
