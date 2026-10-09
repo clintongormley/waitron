@@ -4,6 +4,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { DateHoursCell, HoursModel, HoursModelSubject, SpecialDate } from "../hours-types.js";
+import { addDays } from "../hours-rules.js";
 import { dateValue, format, formatDate, keyOf, storedCells } from "./hours-view.js";
 import { t } from "./strings.js";
 
@@ -103,7 +104,6 @@ function rowActions(host: DatesListHost, { special }: ListRow) {
   </wt-row-actions>`;
 }
 
-/** Every current and future special date, one row each, with the week's columns. */
 export function renderDatesList(host: DatesListHost) {
   const actions: DataTableColumn<ListRow> = {
     key: "actions",
@@ -128,15 +128,16 @@ export function renderDatesList(host: DatesListHost) {
     })),
     ...(host.readOnly ? [] : [actions]),
   ];
-  const rows: ListRow[] = host.model.specialDates.map((special) => ({
-    special,
-    cells: storedCells(host.model, special.id),
-  }));
+  const from = host.model.civilDate === null ? null : addDays(host.model.civilDate, -1);
+  const rows: ListRow[] = host.model.specialDates
+    .filter((special) => !special.repeats && (from === null || special.date >= from))
+    .map((special) => ({ special, cells: storedCells(host.model, special.id) }));
   return html`<p class="toolbar">
       <a data-test="calendar-link" href="/manage/opening-hours/view/calendar"
         >${t("hours.named_days_calendar")}</a
       >
     </p>
+    <p class="note" data-test="repeating-days-note">${t("hours.repeating_days_week")}</p>
     <wt-data-table
       data-test="special-dates"
       aria-label=${t("hours.tab.named_days")}

@@ -1164,12 +1164,20 @@ day's other fields back as stored (the `hidden` pattern the `date` editor uses f
 not show, the other way round). A note says repeating named days follow each station's week. A331
 rule for the rewritten editor.
 
-- [ ] Steps: failing tests (the editor has no Date or Name field and its save sends the stored
+- [x] Steps: failing tests (the editor has no Date or Name field and its save sends the stored
   name and kind — fails today because the editor edits them); watch them fail; implement; the
   package's node project; LOOK in EN and ES, both themes, 1280 and 390; commit
   `feat(venue-service): Station hours edits station cells on a named day (A366)`.
 
 ---
+
+2026-10-09 Task 25 implementation checkpoint: Station Named days lists one-off days from yesterday
+onward. Edit shows the date and name as text, changes station cells only, and carries every stored
+metadata value back unchanged. Repeating days have a localized standard-week note. Whole-venue
+closures retain locked station cells and unchanged Save protection. The shared `HoursModel` calendar
+and holiday fields remain because the Opening hours calendar still reads them; Task 25's conditional
+removal has not become applicable. Verification and changed-check receipts are in the campaign's
+Task 25 report. Controller review is pending; Tasks 26–29 remain.
 
 ### Task 26: Retire local holidays
 

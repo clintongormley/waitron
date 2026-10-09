@@ -434,6 +434,7 @@ const en = {
   "hours.tab.dates": "Special dates",
   "hours.tab.station_week": "Week",
   "hours.tab.named_days": "Named days",
+  "hours.repeating_days_week": "Repeating named days follow each prep station’s standard week.",
   "hours.named_days_calendar": "Add, copy or delete named days in Opening hours → Calendar.",
   "hours.show_inactive": "Show inactive",
   "hours.clock_note": "Times are the venue's local time ({timeZone}).",
@@ -1160,6 +1161,8 @@ const es: Record<keyof typeof en, string> = {
   "hours.tab.dates": "Fechas especiales",
   "hours.tab.station_week": "Semana",
   "hours.tab.named_days": "Días con nombre",
+  "hours.repeating_days_week":
+    "Los días con nombre que se repiten siguen la semana habitual de cada estación de preparación.",
   "hours.named_days_calendar":
     "Añade, copia o elimina días con nombre en Horario de apertura → Calendario.",
   "hours.show_inactive": "Mostrar inactivos",

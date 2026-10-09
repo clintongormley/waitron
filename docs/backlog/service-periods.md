@@ -18,9 +18,9 @@ their full text.
   [Spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
-  Slice 2 is in progress in campaign lane D. Its remaining work is station-date editor ownership and local-holiday
-  retirement, and the demo and docs (plan Tasks 25–29). Task 24 removes the Station Calendar
-  and links named-day management to Opening hours → Calendar; its checkpoint awaits controller review.
+  Slice 2 is in progress in campaign lane D. Its remaining work is local-holiday retirement, the
+  colour migration, and the demo and docs (plan Tasks 26–29). Task 25 limits Station named-day
+  Edit to station cells and preserves stored metadata; its checkpoint awaits controller review.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired
   after slice 4. Revised 2026-10-08 to the owner's answers (any device may run a station or pass

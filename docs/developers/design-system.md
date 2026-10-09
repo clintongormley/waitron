@@ -1697,8 +1697,8 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- A366 slice 1: Station hours' weekday and Configure editors, special-date Add/Edit and Duplicate.
-  Clear hours and Delete stay confirmations. The weekday and special-date editors retain an edit
+- A366 slice 2: Station hours' weekday, Configure and named-day station-cell editors.
+  Clear hours stays a confirmation. The weekday and named-day editors retain an edit
   made before removal and ask before discarding an edit made after reconnect; their cases are in
   `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`. Opening hours' normal week,
   a day, the period editor and the date range dialog follow it too;
@@ -2990,8 +2990,10 @@ commit with Save, bind it to that Save even when its preview updates as you type
 ### Station hours named days
 
 Station hours offers Week and Named days. Create, copy or delete a named day through the links
-in Named days to Opening hours → Calendar. Station-date Edit and the local-holiday editor remain
-on Station hours at the A366 slice 2 Task 24 checkpoint; their remaining changes are Tasks 25 and 26.
+in Named days to Opening hours → Calendar. You see one-off days from the venue’s yesterday
+onward; repeating days follow each station’s standard week. Edit shows the stored date and name
+as text and saves station cells with the day’s other fields unchanged. A stored whole-venue closure
+locks those cells; the default station stays open. The local-holiday editor remains until Task 26.
 
 ### Tabbed management pages
 
@@ -3054,8 +3056,8 @@ Make default and Disable/Enable actions belong to the Stations row menu; Routing
 Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
 Stations.
 
-Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates`
-and `calendar` at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
+Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
+at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
 with focus on the station's heading once it is read. Department opening hours belong to
 `/manage/opening-hours`, with Week, Periods and Day tabs; `/department/<id>` selects the
 department and `/view/periods` selects its periods. The Week and Day editing contract is in
@@ -3070,18 +3072,13 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
   reads "No hours restriction"; Prep stations says
   "Always open" for that station state. A cell opens that day's editor; a subject with no hours
   opens a seven-day draft that starts Closed and saves only after a confirmation.
-- **Special dates.** A `wt-data-table` of every current and future special date, with prep station
-  columns; a value kept from the standard week is muted. Its row menu holds
-  Edit, Duplicate and Delete, above it sit Add a date and Close the whole venue on a date. With the
-  whole-venue closure on, the date editor shows the subjects' cells locked.
-- **Calendar** (`hours-calendar.ts`). A Monday-first month beside the chosen date's panel; on a
-  phone the panel sits under the month. Each date says in words what its colour means (its special
-  date's name, Closed, a holiday), coloured by the calendar tokens above. The panel lists each active
-  subject's hours on that date, muted where kept from the standard week, then Edit, Duplicate and
-  Delete for a special date or Make this a special date for an ordinary one; a viewer gets no
-  actions.
+- **Named days.** A `wt-data-table` of one-off named days from yesterday onward, with prep station
+  columns; a value kept from the standard week is muted. Edit changes station cells only; the date
+  and name are text, and the save carries the stored kind, repeat, own-hours, closure and colour
+  values unchanged. A whole-venue closure keeps the station cells locked. Create, copy and delete
+  lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
 
-Under the Special dates table sits the Local holidays section (`local-holidays-editor.ts`), with
+Under the Named days table sits the Local holidays section (`local-holidays-editor.ts`), with
 its own `h2`. A line names the venue's city and yearly allowance, or says why none can be entered
 yet. Where the province's official list needs an area, a dropdown chooses it (a viewer reads the
 choice as text). Then come the year's count against the allowance, Add a local holiday, and a
