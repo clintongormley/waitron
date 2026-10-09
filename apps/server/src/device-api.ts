@@ -563,6 +563,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const answer = await withTransaction(deps.db, async (tx) => {
         const { screen, personId } = await kitchenScreenOf(tx, c, deps.cfg, device, "station");
+        const works = new Map<string, boolean>();
         return moveDishesToStation(
           tx,
           cfg,
@@ -571,8 +572,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           { deviceId: device.deviceId, personId },
           {
             assertFrom: async (stationId) => {
-              if (!(await worksStation(tx, deps.cfg, screen, stationId)))
-                throw new AppError("device.forbidden_station", { stationId });
+              let allowed = works.get(stationId);
+              if (allowed === undefined) {
+                allowed = await worksStation(tx, deps.cfg, screen, stationId);
+                works.set(stationId, allowed);
+              }
+              if (!allowed) throw new AppError("device.forbidden_station", { stationId });
             },
           },
         );

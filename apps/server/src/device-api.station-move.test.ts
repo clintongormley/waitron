@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { deviceProfiles, ticketItemMoves, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -14,6 +14,7 @@ import { loginWithPin } from "@waitron/identity";
 import { createPairingMode } from "./pairing-mode.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createStation, deactivateStation } from "./kitchen.js";
+import { moveDishesToStation } from "./station-move.js";
 import {
   inTx,
   provisionBillVenue,
@@ -184,6 +185,60 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     expect(await movesOf(item.workingOrderLineId)).toEqual([]);
   });
 
+  it("refuses a dish already at the destination when the screen does not work there, and moves nothing", async () => {
+    const screen = await display(stationScreen(bar));
+    const { tabId } = await seatedWith(venue, "Paella", "Caña");
+    const items = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    expect(items).toHaveLength(2);
+    const [atBar, atGrill] = items as [(typeof items)[0], (typeof items)[0]];
+    await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        { submissionId: randomUUID(), lineIds: [atGrill.workingOrderLineId], stationId: grill },
+        { deviceId: screen.id, personId: null },
+      ),
+    );
+    const answer = await move(screen.cookie, tabId, {
+      lineIds: [atBar.workingOrderLineId, atGrill.workingOrderLineId],
+      stationId: grill,
+    });
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({
+      code: "device.forbidden_station",
+      params: { stationId: grill },
+    });
+    const [after] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.id, atBar.id)),
+    );
+    expect(after!.stationId).toBe(bar);
+    expect(await movesOf(atBar.workingOrderLineId)).toEqual([]);
+  });
+
+  it("refuses a dish from another order beside one of its own, and moves nothing", async () => {
+    const screen = await display(stationScreen(bar));
+    const own = await paella();
+    const other = await paella();
+    const answer = await move(screen.cookie, own.tabId, {
+      lineIds: [own.item.workingOrderLineId, other.item.workingOrderLineId],
+      stationId: grill,
+    });
+    expect(answer.status).toBe(404);
+    expect(answer.json).toMatchObject({ code: "tab.line_not_found" });
+    const after = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(ticketItems)
+        .where(inArray(ticketItems.id, [own.item.id, other.item.id])),
+    );
+    expect(after.map((row) => row.stationId)).toEqual([bar, bar]);
+    expect(await movesOf(own.item.workingOrderLineId)).toEqual([]);
+    expect(await movesOf(other.item.workingOrderLineId)).toEqual([]);
+  });
+
   it("answers a started dish and a switched-off destination as the till does", async () => {
     const screen = await display(stationScreen(bar));
     const { tabId, item } = await paella();
@@ -215,13 +270,16 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     expect(badOrder.status).toBe(404);
     expect(badOrder.json).toMatchObject({ code: "working_order.not_found" });
     const noLines = await move(screen.cookie, tabId, { lineIds: [], stationId: grill });
+    expect(noLines.status).toBe(400);
     expect(noLines.json).toMatchObject({
       code: "management.request_invalid",
       params: { field: "lineIds" },
     });
     const badLine = await move(screen.cookie, tabId, { lineIds: ["bad"], stationId: grill });
+    expect(badLine.status).toBe(404);
     expect(badLine.json).toMatchObject({ code: "tab.line_not_found" });
     const badStation = await move(screen.cookie, tabId, { lineIds: [lineId], stationId: "bad" });
+    expect(badStation.status).toBe(404);
     expect(badStation.json).toMatchObject({ code: "station.not_found" });
     const noSubmission = await send(
       app,
