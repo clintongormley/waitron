@@ -104,7 +104,7 @@ jobs:
   #
   # scripts/changed-packages.mjs attributes each path to the workspace member whose directory
   # contains it and fails CLOSED — anything outside every member, bar the repository's own
-  # machinery, is `scope=global`, which is no filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
+  # machinery other than a file `GLOBAL_ROOT_FILES` lists, is `scope=global`, which is no filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
   # `--filter "...<pkg>"` arguments built below.
   changes:
     runs-on: ubuntu-latest
@@ -650,8 +650,8 @@ jobs:
   # plus the merge) rather than one.
   #
   # `ci` needs BOTH this matrix job AND test-heavy-merge: if a shard fails, the merge job's `needs` is
-  # unsatisfied so it SKIPS, and `ci` counts a skip as a pass — so a shard failure is caught only
-  # because `ci` names test-heavy directly. `fail-fast: false` lets every shard report rather than one
+  # unsatisfied so it SKIPS; `ci` fails the run because it names test-heavy directly, and also
+  # because it refuses a merge job skipped while its package was selected. `fail-fast: false` lets every shard report rather than one
   # failure cancelling its siblings. scripts/ci-workflow.test.mjs pins the matrix size against the
   # `--shard=i/N` denominator and the merge job against its shards, so the two cannot drift.
   test-heavy:
@@ -1846,7 +1846,7 @@ jobs:
       # `cancelled`, so this step can pass it. The next step reads each needed job's conclusion
       # from GitHub's jobs API instead of from `needs`. See docs/developers/ci-and-gates.md, "The
       # `ci` check passes only when every needed job succeeded or was skipped".
-      - name: Fail unless every needed job succeeded or was skipped
+      - name: Fail unless every needed job succeeded or was skipped, and no selected package's merge job was skipped
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |

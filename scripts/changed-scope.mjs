@@ -63,7 +63,10 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
  * Root-scope files whose change runs everything. A ci.yml test command loads each as a Vitest
  * `--reporter=`, so every tested member depends on it and a list of them would need every new
  * package added by hand. `scripts/root-scope-consumers.test.mjs` fails when a `--reporter=` script
- * in ci.yml is missing here or is listed in ROOT_SCOPE_CONSUMERS instead.
+ * in ci.yml is missing here, when a file here is no such reporter, or when one is also in
+ * ROOT_SCOPE_CONSUMERS. Weaker than its name: it reads ci.yml as text, counts only a `--reporter=`
+ * flag on a `pnpm … test:shard` or `test:coverage` line, and never reads a reporter set in a
+ * package's own config.
  */
 export const GLOBAL_ROOT_FILES = ["scripts/vitest-file-progress.mjs"];
 

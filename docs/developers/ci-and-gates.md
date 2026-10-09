@@ -99,7 +99,7 @@ A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and st
 guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
 also selects the members listed against it (those that read it, or whose CI test job runs it) and
 their dependents, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI
-test command loads), which runs everything. A documentation-only push stops after formatting. Deletion-only pushes run no
+test command loads), which typechecks the whole workspace here and runs every package in CI. A documentation-only push stops after formatting. Deletion-only pushes run no
 checks. Unknown ranges keep the full local gate, including workspace typechecking.
 
 The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
@@ -540,9 +540,7 @@ The first step makes one exception to "skipped passes" (A452): when `changes` re
 fails, with a message such as
 `@waitron/db was selected but its coverage merge job test-heavy-merge was skipped`. A skipped merge
 job for a selected package means that package's coverage bar was never checked. The step holds a
-table of the five merge jobs (`test-heavy-merge`, `test-server-merge`, `test-till-merge`,
-`test-dashboard-merge`, `test-venue-service-merge`), each with the gate and package its own job
-reads. When some job also failed or was cancelled, the step stops on that failure's message first.
+table naming every `-merge` job in ci.yml, each with the gate and package its own job reads. When some job also failed or was cancelled, the step stops on that failure's message first.
 With no `changes` outputs to read, nothing counts as selected and this check does not fire; a
 `changes` job that failed is already caught as a failure. The second step does not make this
 check.
@@ -1297,10 +1295,7 @@ wired in fails the hook, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
-the three named below; wired, the root project is green. From A441 until A452 (both 2026-10-09) a
-new member with tests also had to be added to a hand-kept list of the members that load
-`scripts/vitest-file-progress.mjs`; since A452 a change to that file runs everything instead, and
-there is no such list. The three:
+the three named below; wired, the root project is green. The three:
 
 - `scripts/changed-scope.test.mjs` — a member declaring no `test:coverage` script and not named in
   `PACKAGES_WITHOUT_TESTS` is a mistake, and this fails on it.

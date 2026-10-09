@@ -515,7 +515,7 @@ describe("ci.yml's job graph", () => {
   });
 });
 
-const NEEDS_STEP = "Fail unless every needed job succeeded or was skipped";
+const NEEDS_STEP = "Fail unless every needed job succeeded or was skipped, and no selected package's merge job was skipped";
 const JOBS_API_STEP = "Fail unless GitHub's jobs API reports every needed job succeeded or skipped";
 
 /**
