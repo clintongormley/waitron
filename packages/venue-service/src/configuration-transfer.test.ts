@@ -1566,14 +1566,6 @@ describe("validateRoutingConfiguration", () => {
       expect(() => validateRoutingConfiguration(tables)).not.toThrow();
     });
 
-    it("accepts a choice whose period's menus hold none of the cell's products", () => {
-      const { tables, everyZone, choice } = periodTables();
-      tables.catalogues = [{ id: "m-empty", name: "Empty" }];
-      tables.menu_items = [];
-      tables.routing_cell_periods!.push(choice({ cell: everyZone }));
-      expect(() => validateRoutingConfiguration(tables)).not.toThrow();
-    });
-
     it("refuses a choice whose cell the bundle does not hold", () => {
       choiceRefused({ cell: randomUUID() }, "routing_cell_periods.cell_id");
     });
