@@ -419,12 +419,8 @@ interface KitchenRoute {
   printers: PrinterMapping[];
 }
 
-/**
- * One kitchen print job: its printer, the stations and lines its paper carries, and its bytes.
- * `station` is the first of `stationIds`, null on a watcher's copy.
- */
+/** One kitchen print job: its printer, the stations and lines its paper carries, and its bytes. */
 type KitchenJob = Omit<KitchenRoute, "printers"> & {
-  station: string | null;
   printerId: string;
   watcherId?: string;
   lineIds: string[];
@@ -625,7 +621,6 @@ async function planKitchenTickets(
     for (const printer of route.printers) {
       jobs.push({
         printerId: printer.printerId,
-        station: route.stationIds[0]!,
         stationIds: route.stationIds,
         lineIds,
         bytes,
@@ -704,7 +699,6 @@ async function planKitchenTickets(
             jobs.push({
               printerId: printer.printerId,
               watcherId: watcher.watcherId,
-              station: null,
               stationIds: [],
               lineIds,
               bytes,
@@ -1481,9 +1475,10 @@ async function readReprintTargets(
 /**
  * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
  * stamped with the reprint time, not the original fire time. Fired and HOLD sections for one
- * printer go as one job; for a station printer, separate jobs could clear an earlier failure for
- * dishes the later section does not carry ({@link readPrintProblems}). It changes no line, ticket
- * item or group event. An order with nothing to print is a no-op.
+ * printer go as one job, linked to every station either carries, whatever stations each covers;
+ * for a station printer, separate jobs could clear an earlier failure for dishes the later section
+ * does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An
+ * order with nothing to print is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -1503,7 +1498,7 @@ export async function reprintOrderTickets(
   });
   for (const hold of holdJobs) {
     const same = jobs.find(
-      (job) => job.printerId === hold.printerId && job.station === hold.station,
+      (job) => job.printerId === hold.printerId && job.watcherId === hold.watcherId,
     );
     if (same === undefined) {
       jobs.push(hold);

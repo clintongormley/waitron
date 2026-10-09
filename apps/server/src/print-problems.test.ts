@@ -1672,6 +1672,85 @@ describe("a printing problem whose dishes move to another bill", () => {
 });
 
 /** The staff names of the lines `printJobId` recorded carrying, sorted. */
+describe("a printing problem on a printer two stations share (A366)", () => {
+  /** A station printer Cocina and Barra both list, beside each one's own. */
+  async function sharedPrinter(v: Venue): Promise<string> {
+    return inTx(async (tx) => {
+      const { id } = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        { name: "Compartida", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+      );
+      await attachPrinterToStation(tx, { stationId: v.cocina, printerId: id });
+      await attachPrinterToStation(tx, { stationId: v.barra, printerId: id });
+      return id;
+    });
+  }
+
+  // Fired work on the shared printer covers Barra and Cocina, held work only Cocina: the Reprint
+  // still goes there as one job.
+  it("shows a failed combined ticket on both stations' cards, and one Reprint there clears both", async () => {
+    const v = await holdingVenue();
+    const shared = await sharedPrinter(v);
+    const mesa4 = await seated(v, "Mesa 4");
+    await submit(v, mesa4.partyId, [
+      { release: "fire", lines: [line(v, "burger"), line(v, "beer")] },
+      { release: "hold", lines: [line(v, "fish")] },
+    ]);
+    const sent = await jobsAt(shared);
+    expect(sent).toHaveLength(2);
+    for (const job of sent) await setJob(job.id, exhausted);
+
+    expect((await problemsOf(mesa4.partyId)).map((p) => p.stationId).sort()).toEqual(
+      [v.barra, v.cocina].sort(),
+    );
+    expect((await stationCard(v.cocina, mesa4.tabId)).printProblem).toBe(true);
+    expect((await stationCard(v.barra, mesa4.tabId)).printProblem).toBe(true);
+
+    const before = (await links()).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+
+    const reprints = (await jobsAt(shared)).slice(sent.length);
+    expect(reprints).toHaveLength(1);
+    expect(
+      (await links())
+        .slice(before)
+        .filter((row) => row.printerId === shared)
+        .map((row) => [row.printJobId, row.stationId, row.reprint])
+        .sort(),
+    ).toEqual(
+      [
+        [reprints[0]!.id, v.barra, true],
+        [reprints[0]!.id, v.cocina, true],
+      ].sort(),
+    );
+    expect(await linesCarried(reprints[0]!.id)).toEqual(
+      [DISHES.beer.staff, DISHES.burger.staff, DISHES.fish.staff].sort(),
+    );
+    expect(await problemsOf(mesa4.partyId)).toHaveLength(2);
+
+    await setJob(reprints[0]!.id, { status: "done" });
+    expect(await problemsOf(mesa4.partyId)).toEqual([]);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(false);
+    expect(await stationSees(v.barra, mesa4.tabId)).toBe(false);
+  });
+
+  it("drops one station's problem there once a Reprint would carry nothing for it, and keeps the other's", async () => {
+    const v = await setupVenue();
+    const shared = await sharedPrinter(v);
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const [combined] = await jobsAt(shared);
+    await setJob(combined!.id, exhausted);
+    expect(await stationSees(v.barra, mesa4.tabId)).toBe(true);
+
+    await voidDish(v, mesa4, "beer");
+
+    expect(await problemsOf(mesa4.partyId)).toMatchObject([{ stationId: v.cocina }]);
+    expect(await stationSees(v.cocina, mesa4.tabId)).toBe(true);
+    expect(await stationSees(v.barra, mesa4.tabId)).toBe(false);
+  });
+});
+
 async function linesCarried(printJobId: string): Promise<string[]> {
   const rows = await db
     .select({ name: workingOrderLines.name })
