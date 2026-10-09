@@ -1352,3 +1352,36 @@ shell switch, dialog navigation, history leave protection, permission checks,
 refresh failures and focus return. Audit the retained assertions before retiring
 the policy-tree, list-table, inline-editor and transfer-modal suites. A10's full
 look pass and A11–A15 remain, along with the whole-branch review and CI gates.
+
+
+### Implementation checkpoint — Task A10 staged routing shell (2026-10-09)
+
+The internal `venue-departments-shell.ts` composes the department list, page and
+Zones tab. It reads the address, pushes department and tab changes, replaces zone
+changes, replaces old view bookmarks with the list, and displays the approved
+missing-department sentence in English and Spanish. It is not yet consumed by
+`venue-operations-screen.ts`; the public screen and its legacy tests remain intact.
+
+Observed checks: the empty component failed all 17 routing cases before implementation.
+The final eight-file browser selection passed 79 tests, including three additional
+checks using a real leave coordinator and navigation guard around the staged shell.
+These exercised a real tab click, browser Back with Keep/Discard, and an external
+route to an unknown department. They are not mounted DashboardApp checks. Types,
+focused lint and 46 root guard cases passed. In an installed disposable worktree,
+deleting zone-event wiring failed two tests; deleting post-write restoration failed
+two tests; restoring both passed all 20 shell cases. The test harness's initial
+missing-module failure, two premature render reads and two type errors are retained
+in the campaign receipts rather than counted as passing verification.
+
+The staged list, Settings, Zones and missing-department states were captured in
+English and Spanish, both themes, at CSS widths 1280 and 390. The 32 viewport
+captures were inspected through scaled contact sheets. This was not a full-page
+capture or a mounted dashboard look pass.
+
+Ruling: stage this internal composition before replacing the public screen so the
+legacy assertions remain available for the kept-behavior audit. It adds no public
+route or compatibility path. If this split proves unnecessary, inline the component
+when the wrapper switches. Task A10 remains in progress: wire dialogs, Enable,
+refresh failures and focus return; audit and carry every surviving assertion; then
+replace the old tree and editors and run the mounted dashboard integration matrix.
+A11–A15 and the final review, push, CI and landing gates remain.

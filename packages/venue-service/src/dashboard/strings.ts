@@ -346,6 +346,7 @@ const en = {
   "venue.tab_transfers": "Tab transfers",
   "venue.transfers_load_error": "Tab transfers could not be loaded.",
   "venue.enable_department_settings": "Enable this department to change its settings",
+  "venue.department_not_found": "This department no longer exists.",
   "venue.open": "Open",
   "venue.no_enabled_department": "No department is enabled: enable one to take orders",
   "venue.zones_no_department": "Zones in no department",
@@ -1104,6 +1105,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.tab_transfers": "Traslados de cuentas",
   "venue.transfers_load_error": "No se pudieron cargar los traslados de cuentas.",
   "venue.enable_department_settings": "Habilita este departamento para cambiar sus ajustes",
+  "venue.department_not_found": "Este departamento ya no existe.",
   "venue.open": "Abrir",
   "venue.no_enabled_department":
     "Ningún departamento está habilitado: habilita uno para aceptar pedidos",
