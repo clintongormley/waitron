@@ -1,5 +1,16 @@
 # Prep stations, slice 4 — combined tickets, period choices in routing, and no station hours (A366)
 
+> **Revised 2026-10-09.** The owner answered all 28 decisions on 2026-10-09
+> (`~/waitron-campaign-d/questions.md`, "OWNER ANSWERS … slice 4 decisions"). Every default stands
+> except four, and this revision applies them: the server also refuses a period line whose
+> period's menus include none of the row's products (decision 10, with new decisions 29–31); the
+> "Where is this made?" tester goes in Part A, not Part B (decision 13: old Task A4b is gone, old
+> Task B4 moves to Part A as Tasks A3b–A3d, new decisions 32–33); the Stations tab loses its live
+> kitchen numbers and the server read only it used (decision 20: new Tasks A11b and A11d, old
+> A11b becomes A11c, new decisions 34–36); and closing a station that still has open dishes always
+> asks what to do with them (decisions 22–24, Part B's). Part A was also re-read on the new `main`,
+> where slices 1, 2 and 3 Part A have landed (see "What this plan was read against").
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Each task is test-first: write the failing behavioural test, run it,
@@ -24,29 +35,26 @@
 > browser package checks headroom first (`memory_pressure | grep free`). Read each run's `Tests`
 > count.
 >
-> **What this plan was read against.** `main` at `ce8185e82` (marked **M**). Slice 1's unlanded
-> branch `feat/service-periods-slice-1` at commit **`bdf64d9cd8b0a6527cc9110aa9a2b09988f608fd`**
-> (marked **S1**; `git rev-parse feat/service-periods-slice-1` on 2026-10-08). A file that slice 1
-> does not change has the same lines at M and S1; `git diff --stat ce8185e82 bdf64d9cd -- <path>`
-> is empty for `routing.ts`, `routing-store.ts`, `schema/routing.ts`, `schema/hours.ts`,
-> `schema/station-times.ts`, `station-times.ts`, `dashboard/prep-stations-screen.ts`,
-> `dashboard/routing-grid.ts`, `dashboard/routing-client.ts`, `dashboard/station-health-table.ts`,
-> `apps/server/src/kitchen-print.ts`, `kitchen-ticket.ts`, `station-printers.ts`, `watchers.ts`,
-> `station-move.ts`, `dead-ends.ts` and `packages/ui/src/components/wt-tabs.ts`. It does change
-> `hours.ts`, `routes.ts`, `errors.ts`, `classification.ts`, `configuration-transfer.ts`,
-> `dashboard/strings.ts`, `dashboard/live-queries.ts`, `dashboard/hours-*.ts`,
-> `packages/module/src/module.ts`, `apps/server/src/working-order.ts`, `till-api.ts`, and it adds
-> `menu-timetable.ts`'s resolver, `service-day.ts` and the Opening hours screen
-> (`dashboard/opening-hours-*.ts`, `service-grid.ts`); lines in those files are S1 lines.
+> **What this plan was read against.** **Part A** was re-read on `main` at `46c1333f0` (marked
+> **N**), which holds slice 1 (#1460), slice 2 (#1470), slice 3 Part A (#1469), A432's end offsets
+> (#1463) and A438's "Move to station" on a paid counter order (#1472). Every `file:line` in Part
+> A's tasks, in its file list, in "Behaviour this slice removes" (Part A) and in the review focus
+> was opened on N. Files the plan cites that did not change between the first reading and N
+> (`git diff --stat ce8185e82 46c1333f0 -- <path>` is empty): `apps/server/src/kitchen-print.ts`,
+> `kitchen-ticket.ts`, `station-printers.ts`, `watchers.ts`, `station-move.ts`, `order-groups.ts`,
+> `packages/venue-service/src/routing-types.ts`, `schema/routing.ts`,
+> `dashboard/routing-grid.ts` and its tests, `dashboard/station-health-table.ts`,
+> `packages/catalogue/src/section-graph.ts`. **Part B** still carries the lines read on 2026-10-08:
+> `main` at `ce8185e82` (marked **M**) and slice 1's branch at `bdf64d9cd` (marked **S1**). Part B
+> must be re-grounded on `main` when it is started.
 >
-> It builds on the [slice 1 plan](2026-10-07-a366-slice-1-service-periods.md), the unbuilt
-> [slice 2 plan](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md) and
-> [slice 3 plan](2026-10-08-a366-slice-3-station-controls.md), and reads the
+> It builds on the [slice 1 plan](2026-10-07-a366-slice-1-service-periods.md), the
+> [slice 2 plan](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md) and the
+> [slice 3 plan](2026-10-08-a366-slice-3-station-controls.md), all three now built (slice 3's
+> Part B, keeping a zone open later, is not needed here), and reads the
 > [slice 5 plan](2026-10-08-a366-slice-5-monitors.md) for what its Part B needs from this slice.
 >
-> **Start Part A only after slice 1 has merged; Part B only after slices 2 and 3 (Part A) have
-> merged.** Before each part, re-read every line cited from a slice it waits on, and diff what that
-> slice changed after the commit or plan read here.
+> **Either part may start now:** slices 1, 2 and 3 Part A have merged. Part B re-grounds first.
 
 **Goal:** a printer that several stations print on gets one ticket per send, with a section per
 station, so a printer on every station is the pass ticket. A routing cell can send dishes to a
@@ -54,7 +62,8 @@ different station during named periods ("Upstairs bar; during Breakfast–Aftern
 bar"). Prep stations lose their hours and their fallbacks: a station is open unless someone closed
 it for today, and the Opening hours page shows, read-only, when something it makes can be
 ordered. The Prep stations page becomes configuration only: Stations (with their printers and the
-screens that show them), Routing and Settings.
+screens that show them), Routing and Settings — no live kitchen numbers and no "Where is this
+made?" tester.
 
 **Architecture:** combined tickets are a change inside `planKitchenTickets`: routes are grouped by
 printer, not by station, and a ticket covering several stations uses the section-per-station layout
@@ -70,15 +79,17 @@ the routing, and feeds a read-only view in the Opening hours Week tab.
 Chromium browser projects).
 
 **Spec:** [Service times, departments, zones and prep stations](../specs/2026-10-07-service-times-departments-and-stations-design.md)
-§2 (kitchen tickets), §3 (Prep station), §8, §9.2 (the prep station view), §9.3, §12 (station
-hours, the station fallback setting, the tester, the Tickets tab), §13 item 4. Backlog: A366, and
-the phone-width points under "On the Routing tab, the label above the 'Where is this made?' time
-choice is cut" and "At 390 px the routing grid's fixed first column takes about 140 of the grid's
-roughly 310 px" (`docs/backlog.md:1432-1443`, M; detail `docs/backlog/kitchen.md:84-99`, M).
+§2 (kitchen tickets), §3 (Prep station), §8, §9 ("Nothing on them shows live state"), §9.2 (the
+prep station view), §9.3, §12 (station hours, the station fallback setting, the tester, the
+Tickets tab), §13 item 4. Backlog: A366, and the phone-width entries "On the Routing tab, the
+label above the 'Where is this made?' time choice is cut" and "At 390 px the routing grid's fixed
+first column takes about 140 of the grid's roughly 310 px" (`docs/backlog.md`, detail under the
+same titles in `docs/backlog/kitchen.md`).
 
 **Risk path:** FULL ceremony, two run-it reviews per pull request: migrations (Part A adds a
-table; Part B drops five), routing that decides where a dish is made, kitchen printing, and a
-changed cross-package contract (`stationStates`, `MakerResolver` and the routing types in
+table; Part B drops five), routing that decides where a dish is made, kitchen printing, a removed
+management route (`GET /management-api/stations/health`, Part A), and a changed cross-package
+contract (`stationStates`, `MakerResolver` and the routing types in
 `packages/module/src/module.ts`).
 
 **Venue reset: not needed** for either part, expected. Part A adds one table. Part B drops
@@ -95,42 +106,49 @@ becomes "venue reset needed" with the reason it printed.
 
 ### 1. Every file this slice changes
 
-**Part A (Tasks A1–A13; A4, A8 and A11 in two halves each).**
+**Part A (Tasks A1–A13; A3 with three follow-ons, A4a, A8 in two halves, A11 in four).**
 
 - `apps/server/src/`: `kitchen-print.ts`, `kitchen-ticket.ts`, `rest-of-order.ts` (if the filter
-  moves there), `kitchen.ts` (`updateStation`), `management-api.ts` (`PATCH /management-api/stations/:id`,
-  `:2025`, M), and their tests (`kitchen-print.test.ts`, `kitchen-print.watchers.test.ts`,
-  `kitchen-ticket.test.ts`, `print-problems.test.ts`, a new `kitchen-print.shared-printers.test.ts`,
-  `management-api.test.ts` or the station route's suite); `testing/clear-provision-fixture.ts`;
-  `configuration-transfer.test.ts`; `catalogue-api.ts` (`/management-api/products/made-at`
-  `:1305-1344`, M) if its answer gains the period note
+  moves there), `kitchen.ts` (`updateStation :205`, `createStation :103`, N), `management-api.ts`
+  (`PATCH /management-api/stations/:id`, `:2026-2085`, N; `POST /management-api/stations`,
+  `:1943`, N; `GET /management-api/stations/health`, `:2002-2011`, N, deleted),
+  `station-health.ts` (deleted, with `station-health.test.ts`), and their tests
+  (`kitchen-print.test.ts`, `kitchen-print.watchers.test.ts`, `kitchen-ticket.test.ts`,
+  `print-problems.test.ts`, a new `kitchen-print.shared-printers.test.ts`, `management-api.test.ts`
+  or the station route's suite, `kitchen-timing-consumers.test.ts`);
+  `testing/clear-provision-fixture.ts`; `configuration-transfer.test.ts`; `catalogue-api.ts`
+  (`/management-api/products/made-at`, `:1349-1397`, N) if its answer gains the period note
 - `packages/venue-service/src/`: `schema/routing.ts`, `schema/index.ts`, `classification.ts` and its
   test, `configuration-transfer.ts` and its test, `migrations.test.ts`, `service.test.ts`,
   `routing.ts`, `routing-types.ts`, `routing-store.ts` and their tests, `menu-timetable.ts`
-  (`deleteMenuPeriod`, `periodUses`), `routes.ts`, `routes.test.ts`, `errors.ts`, `index.ts`,
+  (`readOpeningHoursModel`, `menu-timetable-types.ts`), `routes.ts` (the cell and preview routes;
+  `GET /routing/explain`, `:442-477`, N, deleted), `routes.test.ts`, `errors.ts`, `index.ts`,
   `dashboard/routing-grid.ts`, `dashboard/routing-grid-model.ts`, `dashboard/routing-cell-editor.ts`
   (new), `dashboard/prep-stations-screen.ts`, `dashboard/station-editor.ts` (new),
-  `dashboard/routing-client.ts`, `dashboard/opening-hours-screen.ts`,
-  `dashboard/opening-hours-client.ts`, `dashboard/live-queries.ts`, `dashboard/strings.ts`, and their
-  tests; `drizzle/` (one generated migration)
+  `dashboard/station-health-table.ts` (renamed `dashboard/station-table.ts`, decision 36),
+  `dashboard/routing-explanation.ts` (deleted, with its test), `dashboard/routing-client.ts`,
+  `dashboard/opening-hours-screen.ts`, `dashboard/opening-hours-client.ts`,
+  `dashboard/live-queries.ts`, `dashboard/strings.ts`, and their tests (including
+  `prep-stations-overview.a11y.test.ts` and `live-queries.test.ts`); `drizzle/` (one generated
+  migration)
 - `packages/module/src/module.ts`
 - `packages/ui/src/components/wt-tabs.ts` and its tests (decision 17)
-- `apps/dashboard/src/widgets/folder-made-at.ts` and its test; `apps/dashboard/src/api/live-queries.ts`
-  (`listMadeAt`, `getFolderRouting`, `:231-255`, S1)
-- `packages/venue-service/src/operations.ts` (`configureZone`, `:433-469`, S1)
+- `apps/dashboard/src/`: `widgets/folder-made-at.ts` and its test; `api/live-queries.ts`
+  (`listMadeAt :231-239`, `getFolderRouting :240-255`, N); `navigation.ts` (the `test` key of
+  `"prep-stations"`, `:9`, N) and `navigation.test.ts`; `dashboard-app.test.ts` (the tester case)
+- `packages/venue-service/src/operations.ts` (`configureZone`, `:434-470`, N)
 - `scripts/schema-constraints.test.ts`
-- `docs/developers/design-system.md`, `docs/developers/products.md` (`:223`, M),
+- `docs/developers/design-system.md`, `docs/developers/products.md` (`:223`, N),
   `docs/backlog.md`, `docs/backlog/kitchen.md`, `docs/backlog/service-periods.md`
 
-**Part B (Tasks B1–B12; B1 in two halves).**
+**Part B (Tasks B1–B12; B1 in two halves; B4 moved to Part A). Lines are M or S1; re-ground.**
 
 - `packages/venue-service/src/`: `routing.ts`, `routing-types.ts`, `routing-store.ts`,
   `station-times.ts`, `hours.ts`, `hours-types.ts`, `hours-rules.ts`, `routes.ts`, `errors.ts`,
   `index.ts`, `service.ts`, `configuration-transfer.ts`, `classification.ts`, `schema/hours.ts`,
   `schema/station-times.ts`, `schema/index.ts`, `migrations.test.ts`, `service.test.ts`,
   `station-service-times.ts` (new), `testing/station-week.ts` (deleted), and their tests;
-  `dashboard/prep-stations-screen.ts`, `dashboard/station-health-table.ts`,
-  `dashboard/routing-explanation.ts` (deleted, if only the tester uses it),
+  `dashboard/prep-stations-screen.ts`, `dashboard/station-table.ts` (Part A's name),
   `dashboard/routing-client.ts`, `dashboard/hours-screen.ts`, `hours-client.ts`, `hours-view.ts`,
   `hours-dates-list.ts`, `hours-cell-editor.ts` (each deleted once nothing imports it),
   `dashboard/index.ts`, `dashboard/live-queries.ts`, `dashboard/strings.ts`,
@@ -138,11 +156,14 @@ becomes "venue reset needed" with the reason it printed.
   `dashboard/opening-hours-client.ts`, and their tests; `drizzle/` (one generated migration)
 - `packages/module/src/module.ts`
 - `apps/server/src/`: `kitchen.ts` (`assertDefaultCanStepDown`, `:83-95`, S1), `dead-ends.ts` (only
-  if a `why` it reads goes), `till-api.ts` (`GET /api/stations`), `alert-sources.ts`
+  if a `why` it reads goes), `till-api.ts` (`GET /api/stations`), `station-today-api.ts` (slice 3's
+  close and open routes, decisions 22–24), `alert-sources.ts`
   (`stationOutputAlertSource`, `:322-370`, M, reads `open`), `testing/clear-provision-fixture.ts`,
   `configuration-transfer.test.ts`, `scripts/demo-seed/seed-floor.ts` (`:154-161`, S1) and
   `seed.test.ts`
-- `apps/till/src/` only where a `why` string it shows goes (slice 3's station status line)
+- `apps/till/src/`: where a `why` string it shows goes (slice 3's station status line), and slice
+  3's `widgets/station-today-dialog.ts` and `widgets/station-today.ts` (closing with open dishes,
+  decisions 22–24)
 - `apps/dashboard/src/navigation.ts` (the `hours` entry, `:10`, S1),
   `apps/dashboard/src/widgets/folder-made-at.ts` (`timed`, `:116-125`, S1),
   `apps/dashboard/src/api/live-queries.ts` (`:231-255`, S1: its lists name `station_fallbacks` and
@@ -154,52 +175,34 @@ becomes "venue reset needed" with the reason it printed.
 
 ### 2. Does this slice need slice 2 or slice 3?
 
+All three earlier slices have now landed (#1460, #1470, #1469); the table records why the work is
+split as it is.
+
 | What (spec) | Needs | What was checked |
 | --- | --- | --- |
-| Combined tickets on shared printers (§8, last paragraph) | **Neither — and not slice 1.** | It changes `planKitchenTickets` and the ticket document only (`kitchen-print.ts:445-603`, `kitchen-ticket.ts:46-68`, M). `git diff --stat ce8185e82 bdf64d9cd -- apps/server/src/kitchen-print.ts apps/server/src/kitchen-ticket.ts apps/server/src/station-printers.ts` is empty, and neither the slice 2 nor the slice 3 plan names either file. |
-| Period choices in routing cells (§8) | **Slice 1 only.** | A choice names a department's period (`menu_periods`, `schema/menus.ts:21-46`, S1, with the composite key `menu_periods_department_key (id, department_id)`, `:42`, S1) and is applied by asking which period runs now (`resolveDepartmentService`, `menu-timetable.ts:193-314`, S1). Slice 2 changes which period runs on a named day inside that resolver (slice 2 Task 3), and slice 3 extends a period inside it (slice 3 Task A9); routing asks the same resolver, so it follows both whenever they land, in either order. Neither slice 2 nor slice 3 adds a routing input. |
-| The Stations page slimmed (§9.3): the Tickets tab merged into Stations, the station editor, "Shown on" | **Slice 1 only (for the link, slice 2).** | The printers and screens columns move from the Tickets tab (`prep-stations-screen.ts:1972-2035`, M); the editor replaces Rename (`:1282-1337`, M). Nothing in slices 2–3 changes these. The Stations tab's link to Opening hours needs the prep station entries this slice adds to slice 2's picker, so it is in Part B (Task B11). |
-| Phone-width points (lane D's queue note on A366-4) | **Neither.** | The routing grid's widths are `routing-grid.ts:69-123` (M); the tab row is `wt-tabs.ts:28-42` (M) with the screen's actions at `prep-stations-screen.ts:3444-3458` (M). The "W…" label is the tester's, which Part B removes. |
-| Station hours and fallbacks removed (§8, §12) | **Slices 2 and 3.** | Slice 3's "Close for today" asks where the work goes and stores it (`station_day_states.sends_to_station_id`, slice 3 Task A1), which is what replaces the fallback for a closed station; slice 3 decision 9 keeps the configured fallback for out-of-hours closures and rows with no destination "until slice 4" (slice 3 plan, section "What slice 4 will change that this slice touches"). The Station hours screen (`dashboard/hours-screen.ts`, S1) still holds the special dates, the local holidays and the calendar until slice 2 moves them to Opening hours → Calendar (slice 2 Tasks 24–26); deleting the screen before slice 2 would leave named days with no editor. Slice 2 Task 4 also changes `readStationSchedules` and `stationsRestrictedFrom` (`hours.ts:1118`, `:1195`, S1), which Part B deletes. |
-| Worked-out times in the Week view (§8, §9.2) | **Slice 2.** | The prep station entries go in slice 2's picker (slice 2 Task 16, `opening-hours-all.ts`) and its real weeks apply named days (slice 2 Task 22); a station's times honour zone closed times (decision 21, slice 2 Tasks 8 and 15). At S1 the Week tab has a department chooser only (`opening-hours-screen.ts:350-372`, S1). |
-| The tester removed, with its extras note moved into the grid (§9.3) | **Slices 2 and 3 (through Part B).** | The tester's station-closed explanations (`prep-stations-screen.ts:1634-1655`, M) keep arising until station hours go (decision 13), so it goes with them. |
+| Combined tickets on shared printers (§8, last paragraph) | **Neither — and not slice 1.** | It changes `planKitchenTickets` and the ticket document only (`kitchen-print.ts:445-603`, `kitchen-ticket.ts:46-68`, N). Neither file changed between M and N. |
+| Period choices in routing cells (§8) | **Slice 1 only.** | A choice names a department's period (`menu_periods`, `schema/menus.ts:21-47`, N, with the composite key `menu_periods_department_key (id, department_id)`, `:43`, N) and is applied by asking which period runs now (`resolveDepartmentService`, `menu-timetable.ts:432-508`, N). That resolver already applies slice 2's named days and slice 3's kept-open periods (`withExtension`, `:469`, N), so routing follows both. |
+| The Stations page slimmed (§9.3): the Tickets tab merged into Stations, the station editor, "Shown on", no live numbers | **Slice 1 only (for the link, slice 2).** | The printers and screens columns move from the Tickets tab (`prep-stations-screen.ts:1958-2021`, N); the editor replaces Rename (`:1281-1337`, N); the live numbers are `station-health-table.ts:142-158` (N). Slice 3 Part A took the Today buttons out of this screen (`#todayCell :1695-1702`, N, now a status line only). The Stations tab's link to Opening hours needs the prep station entries this slice adds to slice 2's picker, so it is in Part B (Task B11). |
+| Phone-width points (lane D's queue note on A366-4) | **Neither.** | The routing grid's widths are `routing-grid.ts:69-123` (N); the tab row is `wt-tabs.ts:31-45` (N) with the screen's actions at `prep-stations-screen.ts:3410-3426` (N). The "W…" label is the tester's, which Part A now removes (decision 13). |
+| Station hours and fallbacks removed (§8, §12) | **Slices 2 and 3.** | Slice 3's "Close for today" stores where the work goes (`station_day_states.sends_to_station_id`; read as `todaySendsTo`, `routing.ts:57`, N, and followed by `walkFallbacks`, `:245-270`, N). The Station hours screen still exists (`dashboard/index.ts:53-71`, N). Part B, re-grounded. |
+| Worked-out times in the Week view (§8, §9.2) | **Slice 2.** | Slice 2's picker and real weeks (`opening-hours-all.ts`, `opening-hours-real-week.ts`, landed in #1470). Part B, re-grounded. |
+| The tester removed, with its extras note moved into the grid (§9.3) | **Neither (owner, 2026-10-09).** | The owner moved it into Part A, so the tester never has to name a period (decision 13). |
 
 **Conclusion.** **Part A** (Tasks A1–A13: combined tickets, period choices in routing cells, the
-Stations page's configuration columns and editor, the phone-width points) needs slice 1 only and
-can be built as soon as slice 1 lands, beside slices 2 and 3. Its first two tasks (combined
-tickets) need nothing from slice 1 at all and could be built on `main` today. **Part B** (Tasks
-B1–B12: station hours, fallbacks, the Station hours screen and the tester removed; the worked-out
-times and their view) needs slice 2 and slice 3's Part A, and must not start until both land; its
-tasks are written against those plans, not their code, and must be re-grounded then. Slice 3's
-Part B (the zone extension) is not needed. Building Part A ahead of slices 2 and 3 departs from
-the spec's order (decision 1).
+tester gone and its extras note in the grid, the Stations page's configuration columns and editor
+with no live numbers, the phone-width points) can be built now. **Part B** (Tasks B1–B12: station
+hours, fallbacks and the Station hours screen removed, closing a station with open dishes, the
+worked-out times and their view) can also start now that slices 2 and 3 Part A have landed, but its
+tasks were written against those slices' plans, not their code, and must be re-grounded.
 
-### 3. Files shared with other slices (same files, different areas)
+### 3. Files shared with other work (same files, different areas)
 
-- **Slice 1** (Part A builds on it): `menu-timetable.ts` (Task A6 extends `deleteMenuPeriod`'s
-  answer, `:482-491`, S1), `opening-hours-screen.ts` (the Periods tab's delete dialog, `:422-455`,
-  S1), `opening-hours-client.ts`, `routes.ts`, `errors.ts`, `classification.ts`,
-  `migrations.test.ts`, `configuration-transfer.ts`, `module.ts`, the venue-service drizzle
-  journal, `scripts/schema-constraints.test.ts`, `clear-provision-fixture.ts`.
-- **Slice 2** (unbuilt): `hours.ts` (Task 4 changes the two station readers Part B deletes; Tasks 5
-  and 25 change the named-day writer and the Station hours editor), `dashboard/hours-screen.ts`
-  and `hours-dates-list.ts` (Tasks 24–25), `opening-hours-screen.ts` (Task 16's picker; Part B adds
-  the station entries), `routing-store.test.ts` (Task 4's cases, which Part B deletes with the
-  readers they test), `configuration-transfer.ts`, `classification.ts`, `errors.ts`, the journal
-  (a number collision is fixed by regenerating, never by hand — CLAUDE.md §3).
-- **Slice 3** (unbuilt): `routing.ts` (`StationTiming.todaySendsTo`, `walkFallbacks`,
-  `closedSendsTo` — Task A3), `routing-store.ts` (`snapshot`'s day-state read, `stationStates`,
-  `scheduledStationStatus` — Tasks A2–A3), `station-times.ts` (`openStationForToday`,
-  `closeStationForToday` — Task A2), `module.ts` (`StationTodayState`), `prep-stations-screen.ts`
-  (Task A8 removes the today buttons and relabels `prep.when_closed`; Part B removes the field and
-  the status sentence), `dashboard/strings.ts`. Part A's routing change (period lines in
-  `selectRoutingCell`) and slice 3's (the walk) are in different functions of the same files:
-  whichever lands second rebases.
-- **Slice 5** (Part A may land first): `prep-stations-screen.ts` (slice 5 Task A17 changes the
-  Tickets tab's "Screens" read-out "or slice 4's 'Shown on' if it has landed"), `routing-client.ts`
-  (`devices`), `dashboard/live-queries.ts`, `module.ts`. If slice 5 Part A lands before Task A11b,
-  "Shown on" reads the device monitors (slice 5 decision 7's shape) instead of
-  `devices.stationId`/`watcherId`.
+- **Slice 5 Part A** (lane A, branch `feat/service-periods-slice-5-monitors`, not landed, no pull
+  request): `prep-stations-screen.ts` (its Task A17 changes the Tickets tab's "Screens" read-out
+  "or slice 4's 'Shown on' if it has landed"), `dashboard/live-queries.ts`, `module.ts`, and
+  `apps/server/src/station-health.ts` (its Task A7 edits the file this slice deletes, Task A11d).
+  Whoever lands second rebases. If slice 5 Part A lands before Task A11c, "Shown on" reads the
+  device monitors (slice 5 decision 7's shape) instead of `devices.stationId`/`watcherId`.
 - **Slice 6** (planned later): the Departments page; nothing here.
 
 ### 4. What slice 5 Part B relies on from this slice
@@ -227,258 +230,382 @@ shared by several stations printing one ticket per send" before deleting
 
 ## Decisions this plan makes that the spec does not
 
-Each is the DEFAULT to build; the owner may override any when reviewing the plan.
+Decisions 1–28 were answered by the owner on 2026-10-09; each heading says how. Decisions 29–36
+were added in this revision to carry out the owner's changes; each is the DEFAULT to build, and the
+owner may override any when reviewing the plan.
 
-1. **Two pull requests.** Part A (combined tickets, period choices, the Stations page's
-   configuration, the phone-width points) after slice 1; Part B (hours and fallbacks gone, the
-   worked-out times) after slices 2 and 3. Why: Part A needs nothing from slices 2 and 3 (section
-   2), and slice 5 Part B waits on the combined tickets. Override: one pull request after slice 3,
-   in the spec's order.
-2. **A combined ticket groups by printer, per send.** For each printer, the stations in this send
-   whose printers include it are that printer's ticket; printers whose station set and paper
-   layout (`groupByLayout`, `kitchen-print.ts:170`, M) are equal share one rendered ticket, one job
-   per printer, as twin printers do today. A printer with one station prints exactly today's
-   station ticket (`scope: "station"`). A printer with two or more prints one ticket with a section
-   per station, in the order the send already sorts stations (by name, `:504-531`, M), using the
-   watcher ticket's section layout (`kitchen-ticket.ts:220-225`, M) under a header naming the
-   stations ("Grill · Bar"). Each combined job links to every station it covers
-   (`kitchen_print_jobs` is already unique on `(print_job_id, working_order_id, station_id)`,
-   `packages/db/src/schema/kitchen-print-jobs.ts:15-49`, M), so a failed one shows a printing
-   problem on each of those stations' cards, as the backlog's pass-printer entry describes
-   (`docs/backlog.md:1350-1355`, M).
-3. **"Show the rest of the order" on a combined ticket.** It is printed when any station on the
-   ticket has the setting on, and lists the order's other dishes at stations NOT on this ticket.
-   Today the filter assumes one station (`item.stationId !== route.station`,
-   `kitchen-print.ts:571`, M); it becomes "not one of the ticket's stations". Override: only when
-   every station on the ticket has it.
-4. **The rule against one printer both making and watching stays until watchers go.** Spec §8 says
-   it goes; while watchers still print (until slice 5 Part B), a printer that was both a station's
-   and a watcher's would print the same dish twice per send. So `printer.makes_and_watches`
-   (`station-printers.ts:44`, `watchers.ts:324`, M) stays, and slice 5 Part B removes it with
-   watchers. Override: remove it here and accept the double print until slice 5 Part B.
-5. **Correction slips stay one per dish.** Spec §8: "Reprints and correction slips follow the same
-   grouping." A slip is already one per dish on its station's printers (`printCorrectionSlips`,
-   `kitchen-print.ts:1040-1113`, M), so a printer shared by several stations gets each slip once;
-   nothing prints twice and no slip covers another station's dish. A reprint follows the grouping
-   fully (Task A2): `reprintOrderTickets` merges HOLD and fired work into one job **per printer**
-   (`:1474-1486`, M, merges per printer and station today), joining their station lists, because
-   separate jobs on one printer would let a later one clear an earlier one's printing problem (the
-   reason the merge exists, `:1450-1456`, M); and `readReprintTargets` reads the same groups
-   (`:1419-1444`, M). For a combined HOLD ticket, "the rest of the order" is left out when ANY of
-   its stations is in `restOfOrderExcept` (`:541`, `:1472`, M).
-5a. **"One ticket per send" is one ticket per planning call — a stated limit.** One send can plan
-   tickets more than once: `finishRelease` plans the ordinary dishes, then once per station whose
-   dishes were moved off it (with "From X", `working-order.ts:1996-2006`, S1); a HOLD advance
-   ticket (`order-groups.ts:1253`, M) and a station move (`station-move.ts:324-332`, M) plan on
-   their own. In those sends a printer on every station prints one ticket per call — one for the
-   ordinary dishes and one per "From" station. Slice 5 Part B's pass ticket inherits this limit.
-   Override: merge `finishRelease`'s calls into one plan with a "From" label per dish (its own
-   task).
-6. **A period choice is stored per cell and period**: `routing_cell_periods` (cell, period, the
-   period's department, and a target — a station or No preparation, as the cell's own). Unique on
-   `(cell_id, period_id)`, which is the spec's "a period can be in one line only". The editor
-   groups rows with the same target into one line; two lines that name the same station are saved
-   as one. The cell row's own target is "Any other time". A cell keeps its id on update
-   (`setRoutingCell` updates in place, `routing-store.ts:170-193`, M), so its period rows survive
-   a change of its plain station; clearing the cell deletes the row and, by cascade, its periods.
-7. **Which period applies.** A dish's station is decided when it goes on the order, as today:
-   sent, or sent held (a held dish's `ticket_items` row and its station are written then, in
-   `fireLines`, `working-order.ts:1615-1643`, `:1667`, S1, and its HOLD ticket prints there). The
-   extras of a held dish that are split off to their own station are routed at release
-   (`finishRelease` calls `insertSplitExtras` with the release's routing, `:1980-1992`, S1), so
-   they follow the period running then. At that moment its zone's
-   department's running period is read (`resolveDepartmentService(…, at).periodId`, S1) — lazily,
-   once per department per routing call, remembered for the rest of the call (`routingAt`
-   already resolves the zone's department through `resolveZoneContext`, `routing-store.ts:667`,
-   `:685`, M). A dish with no zone uses "Any other time". A held dish keeps its
-   station at release: `rerouteHeldAtRelease` re-routes only dishes whose station is not open
-   (`station-move.ts:22-60`, S1), and a period ending does not close a station. At slice 1's
-   offset of 0 a new dish is only accepted while its period runs (slice 1 decision 1), so an
-   unsent dish is always routed inside the period that offered it; once A432 lets dishes be sent
-   after the end, they are routed by the period running at the send, or "Any other time" when
-   none runs. A period kept open (slice 3) or a named day with its own hours (slice 2) changes the
-   answer because the resolver does. Untimed reads (the preview, `describeMakers`, the Products
-   screen's folder read-out) use "Any other time". Override: re-route held dishes at release by
-   the period then running.
-8. **Cells that can have period choices.** Every stored cell can, and so can a zone's All
-   categories cell. The All categories × Every zone cell cannot: it is the default station and is
-   never a row (`schema/routing.ts:15`, `routing_cells_coordinate_ck :58-61`, M). A period line on
-   it would need a second way to store the default. Override: store the default cell's period
-   lines with a null cell id.
-9. **A cell with period choices needs a plain choice.** "Any other time" is required; the editor
-   fills it with what the cell shows now (its own choice, or the inherited one). A cell that sets
-   nothing inherits the whole cell above it, period lines included (spec §8); a cell that sets
-   anything is its own, with no lines merged from above.
-10. **What the server refuses.** An unknown period: `route.subject_not_found { subject: "period",
-    id }` (404, the code an unknown category or product already gets, `routes.ts:115`, S1). A
-    period of another department on a zone's cell, or a period named twice:
-    `route.period_invalid { periodId, reason: "other_department" | "repeated" }` (409; sibling
-    `route.station_inactive`, `routes.ts:116`, S1). A period line naming a switched-off or unknown
-    station: `route.station_inactive`, as the cell's own station is checked
-    (`routing-store.ts:136-150`, M). The default cell's address is already refused before anything else
-    (`management.request_invalid { field: "address" }`, `routing-store.ts:97-98`, M), and stays
-    so with periods; period choices on a cell being cleared:
-    `management.request_invalid { field: "periods" }` (400, as the route's other malformed fields).
-    The configuration import refuses the same rows (Task A3). The spec's "limited to those whose
-    menus include the row's products" is the editor's offer list only: menus change after a choice
-    is made, and a choice whose period no longer offers the row's products is harmless (it never
-    applies). A zone moved to another department (`configureZone`, `operations.ts:433-469`, S1) loses
-    its cells' period rows for the old department's periods in the same transaction (Task A5).
-11. **What a period offers.** The routing read (`routingModel`, `routing-store.ts:802`, M) gains
-    `periods: { id, departmentId, departmentName, name, colour, productIds }[]`, `productIds` being
-    the products reachable from the period's customer menu and staff-only menus
-    (`reachableProducts`, `packages/catalogue/src/section-graph.ts:175`, M, from each menu's root),
-    variants by their parent's id as routing does (`ProductFacts.routedProductId`,
-    `routing.ts:77-81`, M). The editor offers a period when any product the row covers is in its
-    `productIds`.
-12. **Deleting a period that a cell names warns first.** Slice 1 refuses deleting a period that
-    any day still places (`menu_period.in_use`, `menu-timetable.ts:489`, S1). A period that passes
-    that check but is named by routing cells is deleted with a warning: the Periods tab's delete
-    dialog (`opening-hours-screen.ts:422-455`, S1) lists the cells by row and column ("Cocktails ·
-    Every zone") and says their choices for this period go; confirming deletes the period, and the
-    cells' rows for it go by cascade. The list comes from a read added to the opening hours model
-    per period (`routingUses: { rowLabel, zoneName }[]`). Override: refuse the delete until the
-    cells drop it.
-13. **The tester goes in Part B, not Part A.** Spec §9.3 removes it because "the station-closed
-    explanations it gave no longer arise"; they arise until station hours go. Until then it keeps
-    working and shows the period choice that applied (Task A4b: `explainRoute` reads the periods as
-    routing does; its "Weekday and time" mode reads the department's normal week). Its "W…" label
-    goes with it.
-14. **The cell becomes a button that opens its editor** (spec §8: "Clicking a cell opens its
-    editor"), replacing the inline combobox (`routing-grid.ts:361-378`, M). The button shows the
-    station, inherited choices in italics as today, and the period line beneath it. The editor is
-    a `wt-modal`: one line per target (a `wt-combobox multiple` of periods, grouped by department in
-    an Every zone column, and a station `wt-combobox`), a Remove per line, "Any other time" with
-    its station `wt-combobox`, "+ Different station during some periods", Clear (for a stored
-    cell), Cancel and Save. Save runs the existing preview (`#previewDialog`,
-    `prep-stations-screen.ts:3230-3291`, M) and writes only once confirmed, as a combobox choice
-    does today; the preview's moves say "during Lunch" when `periodIds` is set. With no arrow
-    beside the name, the "Downstairs bar" text no longer meets one. **Its starting state:** a
-    stored cell opens with its own choice and lines and its Save quiet until the draft changes; an
-    inherited cell opens with the inherited choice and lines as its draft, marked "from Every zone"
-    (or the row above), and with Save available at once (`{ savableAtOpen: true }`), so a person
-    can still pin the inherited choice as the cell's own, as choosing it in today's combobox does.
-15. **The period line's words.** One or two periods: their names joined by ", " ("Lunch, Afternoon:
-    Downstairs bar"). Three or more: "first–last" when the line holds every period between them in
-    the department's period order ("Breakfast–Afternoon: Downstairs bar"), else the first name and
-    a count ("Breakfast +3: Downstairs bar"). `menu_periods` has no order column
-    (`schema/menus.ts:21-46`, S1), so the order is each period's earliest start in the normal week
-    (Monday first, from the changeover — `weekdayOf` numbers Sunday 0, `hours-rules.ts:56-58`, S1,
-    so the sort moves Sunday last), a period placed nowhere last, the name breaking ties; the
-    routing model sends `periods` in that order. Several lines: one line each. The full text is the
-    button's accessible name.
-16. **The page's tabs.** Part A: Stations, Routing, Watchers, Settings — the Tickets tab goes, its
-    printers and screens columns move to Stations, and "Show the rest of the order" moves from
-    Settings to the station editor (spec §9.3). The Watchers tab stays until slice 5 Part B, which
-    removes it. An old `view=tickets` address opens Stations, as an unknown view does
-    (`prep-stations-screen.ts:289-295`, M). Part B: the Settings tab loses the fallback column.
-17. **The tab row at phone width.** Each header action shows only on its own tab ("New station" on
+1. **Two pull requests.** _OWNER 2026-10-09: stands._ Part A (combined tickets, period choices,
+   the tester, the Stations page's configuration, the phone-width points); Part B (hours and
+   fallbacks gone, closing a station with open dishes, the worked-out times). Why: slice 5 Part B
+   waits on the combined tickets, and Part B's removals are a separate review. Override: one pull
+   request, in the spec's order.
+2. **A combined ticket groups by printer, per send.** _OWNER 2026-10-09: stands._ For each
+   printer, the stations in this send whose printers include it are that printer's ticket;
+   printers whose station set and paper layout (`groupByLayout`, `kitchen-print.ts:170`, N) are
+   equal share one rendered ticket, one job per printer, as twin printers do today. A printer with
+   one station prints exactly today's station ticket (`scope: "station"`). A printer with two or
+   more prints one ticket with a section per station, in the order the send already sorts
+   stations (by name, `:504-531`, N), using the watcher ticket's section layout
+   (`kitchen-ticket.ts:220-225`, N) under a header naming the stations ("Grill · Bar"). Each
+   combined job links to every station it covers (`kitchen_print_jobs` is already unique on
+   `(print_job_id, working_order_id, station_id)`, `kitchen_print_jobs_job_order_station_key`,
+   `packages/db/src/schema/kitchen-print-jobs.ts:43`, N), so a failed one shows a printing problem
+   on each of those stations' cards, as the backlog entry "A failed ticket on a pass printer (one
+   ticket for the whole order) shows on the card of every station it covered" describes.
+3. **"Show the rest of the order" on a combined ticket.** _OWNER 2026-10-09: stands._ It is
+   printed when any station on the ticket has the setting on, and lists the order's other dishes
+   at stations NOT on this ticket. Today the filter assumes one station
+   (`item.stationId !== route.station`, `kitchen-print.ts:571`, N); it becomes "not one of the
+   ticket's stations". Override: only when every station on the ticket has it.
+4. **The rule against one printer both making and watching stays until watchers go.** _OWNER
+   2026-10-09: stands._ Spec §8 says it goes; while watchers still print (until slice 5 Part B), a
+   printer that was both a station's and a watcher's would print the same dish twice per send. So
+   `printer.makes_and_watches` (`station-printers.ts:44`, `watchers.ts:324`, N) stays, and slice 5
+   Part B removes it with watchers. Override: remove it here and accept the double print until
+   slice 5 Part B.
+5. **Correction slips stay one per dish.** _OWNER 2026-10-09: stands._ Spec §8: "Reprints and
+   correction slips follow the same grouping." A slip is already one per dish on its station's
+   printers (`printCorrectionSlips`, `kitchen-print.ts:1040-1113`, N), so a printer shared by
+   several stations gets each slip once; nothing prints twice and no slip covers another station's
+   dish. A reprint follows the grouping fully (Task A2): `reprintOrderTickets` merges HOLD and fired
+   work into one job **per printer** (`:1474-1486`, N, merges per printer and station today),
+   joining their station lists, because separate jobs on one printer would let a later one clear an
+   earlier one's printing problem (the reason the merge exists, the comment at `:1450-1456`, N);
+   and `readReprintTargets` reads the same groups (`:1419-1444`, N). For a combined HOLD ticket,
+   "the rest of the order" is left out when ANY of its stations is in `restOfOrderExcept`
+   (`:541`, `:1472`, N).
+
+   5a. **"One ticket per send" is one ticket per planning call — a stated limit.** _OWNER
+   2026-10-09: stands (limit accepted)._ One send can plan tickets more than once:
+   `finishRelease` plans the ordinary dishes, then once per station whose dishes were moved off it
+   (with "From X", `working-order.ts:2006-2016`, N); a HOLD advance ticket (`order-groups.ts:1253`,
+   N) and a station move (`station-move.ts:324-332`, N) plan on their own. In those sends a printer
+   on every station prints one ticket per call — one for the ordinary dishes and one per "From"
+   station. Slice 5 Part B's pass ticket inherits this limit.
+6. **A period choice is stored per cell and period.** _OWNER 2026-10-09: stands._
+   `routing_cell_periods` (cell, period, the period's department, and a target — a station or No
+   preparation, as the cell's own). Unique on `(cell_id, period_id)`, which is the spec's "a period
+   can be in one line only". The editor groups rows with the same target into one line; two lines
+   that name the same station are saved as one. The cell row's own target is "Any other time". A
+   cell keeps its id on update (`setRoutingCell` updates in place, `routing-store.ts:176-199`, N),
+   so its period rows survive a change of its plain station; clearing the cell deletes the row
+   and, by cascade, its periods.
+7. **Which period applies.** _OWNER 2026-10-09: stands._ A dish's station is decided when it goes
+   on the order, as today: sent, or sent held (a held dish's `ticket_items` row and its station are
+   written then, in `fireLines`, `working-order.ts:1454`, its insert at `:1677`, N, and its HOLD
+   ticket prints there). The extras of a held dish that are split off to their own station are
+   routed at release (`finishRelease` calls `insertSplitExtras` with the release's routing,
+   `:1990-2002`, N), so they follow the period running then. At that moment its zone's
+   department's running period is read (`resolveDepartmentService(…, at).periodId`) — lazily, once
+   per department per routing call, remembered for the rest of the call (`routingAt` already calls
+   `resolveZoneContext`, whose answer carries `departmentId`, `routing-store.ts:687`, `:705`;
+   `operations.ts:522-556`, N). A dish with no zone uses "Any other time". A held dish keeps its
+   station at release: `rerouteHeldAtRelease` re-routes only dishes whose station is switched off
+   or not open (`station-move.ts:22-62`, the test at `:61`, N), and a period ending does not close a
+   station. A new dish is only accepted until its period's end or earlier last orders (A432's
+   offset, `menu-timetable.ts:477-489`, N, takes `min(offset, 0)` for choosing, `:482`); with a positive
+   offset it may be SENT after the period ends, and is then routed by the period running at the
+   send, or "Any other time" when none runs. A period kept open (slice 3) or a named day with its
+   own hours (slice 2) changes the answer because the resolver does. Untimed reads (the preview,
+   `describeMakers`, the Products screen's folder read-out) use "Any other time". Override:
+   re-route held dishes at release by the period then running.
+8. **Cells that can have period choices.** _OWNER 2026-10-09: stands._ Every stored cell can, and
+   so can a zone's All categories cell. The All categories × Every zone cell cannot: it is the
+   default station and is never a row (`schema/routing.ts:15`, `routing_cells_coordinate_ck
+   :58-61`, N). A period line on it would need a second way to store the default. Override: store
+   the default cell's period lines with a null cell id.
+9. **A cell with period choices needs a plain choice.** _OWNER 2026-10-09: stands._ "Any other
+   time" is required; the editor fills it with what the cell shows now (its own choice, or the
+   inherited one). A cell that sets nothing inherits the whole cell above it, period lines included
+   (spec §8); a cell that sets anything is its own, with no lines merged from above.
+10. **What the server refuses.** _OWNER 2026-10-09: CHANGED — the server also refuses a period line
+    whose period's menus (customer and staff-only) include none of the row's products, checked
+    when the line is saved; a later menu change does not invalidate existing lines._ An unknown
+    period: `route.subject_not_found { subject: "period", id }` (404, the code an unknown category
+    or product already gets, `routes.ts:108`, N). A period of another department on a zone's cell,
+    a period named twice, or a period whose menus hold none of the row's products:
+    `route.period_invalid { periodId, reason: "other_department" | "repeated" | "not_offered" }`
+    (409; sibling `route.station_inactive`, `routes.ts:109`, N; the reason is decision 30, which
+    lines are checked is decision 29). "The row's products" are the active products the row
+    covers, variants by their parent's id: a product row's product, a category row's products in
+    that category and its subcategories, the No category row's products with no category, and All
+    categories' every product; the period's products are decision 11's `productIds`, from the same
+    reader. A period line naming a switched-off or unknown station: `route.station_inactive`, as
+    the cell's own station is checked (`routing-store.ts:143-158`, N). The default cell's address
+    is already refused before anything else (`management.request_invalid { field: "address" }`,
+    `routing-store.ts:103-104`, N), and stays so with periods; period choices on a cell being
+    cleared: `management.request_invalid { field: "periods" }` (400, as the route's other malformed
+    fields). The configuration import refuses the same rows except the menu check (Task A3,
+    decision 31). A zone moved to another department (`configureZone`, `operations.ts:434-470`, N)
+    loses its cells' period rows for the old department's periods in the same transaction (Task
+    A5).
+11. **What a period offers.** _OWNER 2026-10-09: stands._ The routing read (`routingModel`,
+    `routing-store.ts:838`, N) gains `periods: { id, departmentId, departmentName, name, colour,
+    productIds }[]`, `productIds` being the products reachable from the period's customer menu and
+    staff-only menus (`reachableProducts`, `packages/catalogue/src/section-graph.ts:175`, N, from
+    each menu's root), variants by their parent's id as routing does
+    (`ProductFacts.routedProductId`, `routing.ts:78-82`, N). The editor offers a period when any
+    product the row covers is in its `productIds`; the server's check (decision 10) reads the same
+    reader.
+12. **Deleting a period that a cell names warns first.** _OWNER 2026-10-09: stands._ Slice 1
+    refuses deleting a period that any day still places (`menu_period.in_use`,
+    `menu-timetable.ts:698`, N). A period that passes that check but is named by routing cells is
+    deleted with a warning: the Periods tab's delete dialog (the `wt-dialog` at
+    `opening-hours-screen.ts:812-845`, N; `deletePeriod :371-400`, which shows the `in_use`
+    refusal after the request) lists the cells by row and column ("Cocktails · Every zone") and
+    says their choices for this period go; confirming deletes the period, and the cells' rows for
+    it go by cascade. The list comes from a read added to the opening hours model per period
+    (`routingUses: { rowLabel, zoneName }[]`). Override: refuse the delete until the cells drop
+    it.
+13. **The tester goes in Part A.** _OWNER 2026-10-09: CHANGED — remove the "Where is this made?"
+    tester in Part A, not kept until Part B, so it never needs to name the period._ The whole of
+    old Task B4 moves here: the tester, its route and its "W…" label (Task A3b for the screen, A3c
+    for the server), and the extras note spec §9.3 moves into the grid (Task A3d, decision 33). It
+    goes before the period work (Task A4a), so `explainRoute` is never taught about periods. What
+    goes with it is decision 32. Nothing of it is left for Part B.
+14. **The cell becomes a button that opens its editor.** _OWNER 2026-10-09: stands (the cell is a
+    button opening an editor; an inherited cell can be pinned)._ Spec §8: "Clicking a cell opens
+    its editor"; it replaces the inline combobox (`routing-grid.ts:361-378`, N). The button shows
+    the station, inherited choices in italics as today, the period line beneath it, and the extras
+    note (Task A3d) where the cell has one. The editor is a `wt-modal`: one line per target (a
+    `wt-combobox multiple` of periods, grouped by department in an Every zone column, and a station
+    `wt-combobox`), a Remove per line, "Any other time" with its station `wt-combobox`, "+
+    Different station during some periods", Clear (for a stored cell), Cancel and Save. Save runs
+    the existing preview (`#previewDialog`, `prep-stations-screen.ts:3216-3278`, N) and writes only
+    once confirmed, as a combobox choice does today; the preview's moves say "during Lunch" when
+    `periodIds` is set. With no arrow beside the name, the "Downstairs bar" text no longer meets
+    one. **Its starting state:** a stored cell opens with its own choice and lines and its Save
+    quiet until the draft changes; an inherited cell opens with the inherited choice and lines as
+    its draft, marked "from Every zone" (or the row above), and with Save available at once
+    (`{ savableAtOpen: true }`), so a person can still pin the inherited choice as the cell's own,
+    as choosing it in today's combobox does.
+15. **The period line's words.** _OWNER 2026-10-09: stands._ One or two periods: their names
+    joined by ", " ("Lunch, Afternoon: Downstairs bar"). Three or more: "first–last" when the line
+    holds every period between them in the department's period order ("Breakfast–Afternoon:
+    Downstairs bar"), else the first name and a count ("Breakfast +3: Downstairs bar").
+    `menu_periods` has no order column (`schema/menus.ts:21-47`, N), so the order is each period's
+    earliest start in the normal week (Monday first, from the changeover — `weekdayOf` numbers
+    Sunday 0, `hours-rules.ts:55-57`, N, so the sort moves Sunday last), a period placed nowhere
+    last, the name breaking ties; the routing model sends `periods` in that order. Several lines:
+    one line each. The full text is the button's accessible name.
+16. **The page's tabs.** _OWNER 2026-10-09: stands._ Part A: Stations, Routing, Watchers, Settings
+    — the Tickets tab goes, its printers and screens columns move to Stations, and "Show the rest
+    of the order" moves from Settings to the station editor (spec §9.3). The Watchers tab stays
+    until slice 5 Part B, which removes it. An old `view=tickets` address opens Stations, as an
+    unknown view does (`prep-stations-screen.ts:288-301`, N). Part B: the Settings tab loses the
+    fallback column.
+17. **The tab row at phone width.** _OWNER 2026-10-09: stands (the shared `wt-tabs` fades on
+    overflow, on every screen)._ Each header action shows only on its own tab ("New station" on
     Stations, "New watcher" on Watchers). When the tab strip is wider than the row, `wt-tabs` fades
     its cut end (a mask on the strip's scrolling side, set from its scroll position), so a person
-    sees that it scrolls. This is a shared-primitive change: every tabbed screen gains the fade
-    when, and only when, its tabs overflow. Override: fix only this screen, by moving the actions
-    into the panels.
-18. **The routing grid at phone width.** Under the grid's existing 40rem container query
-    (`routing-grid.ts:75-79`, M) the row-label column is `calc(var(--wt-space-6) * 3)` (96 px) and
-    a zone column `calc(var(--wt-space-6) * 3.25)` (104 px), so at a 390 px viewport the labels
-    and two zone columns (Every zone and one zone) are wholly visible without scrolling; row labels
-    wrap. Above 40rem nothing changes.
-19. **The station editor.** "Edit" replaces "Rename" in the ⋮ menu and sets the name, the printers
-    and "Show the rest of the order" (spec §9.3), in one request: `PATCH
-    /management-api/stations/:id` gains `printerIds`, applied with `replaceStationPrinters`
-    (`station-printers.ts:64`, M) in the same transaction as the rest of the patch (CLAUDE.md §3:
+    sees that it scrolls. Every tabbed screen gains the fade when, and only when, its tabs
+    overflow.
+18. **The routing grid at phone width.** _OWNER 2026-10-09: stands._ Under the grid's existing
+    40rem container query (`routing-grid.ts:75-79`, N) the row-label column is
+    `calc(var(--wt-space-6) * 3)` (96 px) and a zone column `calc(var(--wt-space-6) * 3.25)`
+    (104 px), so at a 390 px viewport the labels and two zone columns (Every zone and one zone) are
+    wholly visible without scrolling; row labels wrap. Above 40rem nothing changes.
+19. **The station editor.** _OWNER 2026-10-09: stands._ "Edit" replaces "Rename" in the ⋮ menu and
+    sets the name, the printers and "Show the rest of the order" (spec §9.3), in one request:
+    `PATCH /management-api/stations/:id` gains `printerIds`, applied with `replaceStationPrinters`
+    (`station-printers.ts:64`, N) in the same transaction as the rest of the patch (CLAUDE.md §3:
     one transaction per request). **Permissions:** the PATCH needs `venue.configure`
-    (`management-api.ts:420-428`, `:2081`, M), while setting a station's printers needs
-    `printer.manage` (`print-api.ts:101`, `:402-412`, M); a PATCH carrying `printerIds` checks
-    both, in the same transaction, and is refused `authorization.not_permitted` without
-    `printer.manage` (nothing written). The editor shows Printers as a read-out to a person
+    (`withVenueAuth`, `management-api.ts:421-430`, used at `:2082`, N), while setting a station's
+    printers needs `printer.manage` (`print-api.ts:101`, `gated :402-413`, N); a PATCH carrying
+    `printerIds` checks both, in the same transaction, and is refused `authorization.not_permitted`
+    without `printer.manage` (nothing written). The editor shows Printers as a read-out to a person
     without `printer.manage`, and sends no `printerIds`. The old `PUT
-    /management-api/stations/:id/printers` route stays (the Printers screen may use it; Task A11b
+    /management-api/stations/:id/printers` route stays (`print-api.ts:1288-1304`, N; Task A11c
     removes the dashboard client method only if `grep` finds no other caller). "New station" keeps
-    its fields (name, order, timings) and gains the printers, under the same rule.
-    The Stations tab's table gains "Printed on" and "Shown on" read-outs, and keeps the
-    live kitchen numbers (decision 20).
-20. **The live kitchen numbers stay — departs from spec §9's "nothing on them shows live state".**
-    The Stations tab's Waiting, Preparing, Ready, Late and Oldest columns
-    (`station-health-table.ts:138-159`, M) are the only dashboard view of a kitchen's load, and
-    the only thing a supervisor without configuration rights sees on this page
-    (`prep-stations-screen.ts:293-298`, `:3421`, M). The spec moves live CONTROLS to the till and
-    kitchen display (§10) but names no new home for these numbers. Part B removes the Today column
-    (its state is now closed-for-today or switched off, which the Stations table shows as a short
-    note beside the name). Override: remove the live numbers too.
-21. **What the worked-out times are.** For a date, a station's times are the union, over active
-    departments, of the department's ranges whose period offers at least one product that the
-    routing sends to this station in at least one of the department's active zones, during that
-    period — each zone's share cut by that zone's closed times that date (slice 2). Dishes only:
-    an extra makes no station "open" (extras are not on menus). A period kept open today (slice 3)
-    is not shown: the view is for planning. The default station shows no grid, only "Always open:
-    the default station takes what no other station makes." A switched-off station shows
-    "Switched off". The times are a read-out: routing never asks them (decision 22).
-22. **Routing without hours.** A station's status is `switched_off`, `default`, `closed_by_hand` or
-    `open`. A station closed for today sends its work where "Close for today" said (slice 3); a
-    closed row with no destination (stored before slice 3, or by a test fixture) and a switched-off
-    station send it to the default station; a walk continues past a destination that is itself
-    closed or switched off, as slice 3's does, and ends at the default station. Only a venue whose
-    default station is switched off or missing still reaches `noReplacement` (`selectRoutingCell`
-    returns the default only while it is active, `routing.ts:184-189`, M), so `station.no_replacement`
-    and the till's dead-end prompt stay. A dish routed to a station whose worked-out times are over
-    (a held Lunch dish sent at 16:00) goes there anyway: the spec's "open whenever something it
-    makes can be ordered" describes when work arrives, not a closure.
-23. **"Open for today" without hours.** Slice 3's `openStationForToday` deletes today's row when
-    the station would be open without it and stores "open" otherwise (slice 3 decision 11); with
-    hours gone a station is always open without it, so it always deletes. A stored `open: true` row
-    reads as no row. The `opened_by_hand` reason goes.
-24. **Disabling a station no longer asks where its work goes.** Today Disable opens the fallback
-    choice (`#openFallback(id, "switch_off")`, `prep-stations-screen.ts:1235-1241`, M). In Part B it
-    confirms instead: "Its dishes go to {default}, the default station, until you change the
-    routing", listing the routing cells that name it. Override: make Disable clear or rewrite those
-    cells.
-25. **Where a station's times are seen.** The Opening hours picker gains a "Prep stations" group
-    after the departments (slice 2 Task 16's picker), one entry per active station, and the URL a
-    `station` key (`opening-hours?view=week&station=<id>`). A station's view is All departments'
-    layout (slice 2 Task 16: one narrow column per department per day), showing only the counted
-    ranges in their period's colours, in the normal week or a real week (slice 2 Task 22). The
-    Stations tab's row links "When it gets orders" there.
-26. **The Station hours screen goes whole.** Its dashboard entry (`hours`, `dashboard/index.ts:53-70`,
-    S1), its navigation key (`apps/dashboard/src/navigation.ts:10`, S1), the client and the views
-    only it uses. An old `/manage/hours` link lands where any unknown dashboard address lands; no
-    redirect (pre-live). Its API routes go with the station-hours writers.
-27. **The demo shows a period choice.** The demo seed's Upstairs bar hours and its fallback to the
-    Downstairs bar (`seed-floor.ts:154-161`, S1) go; in their place one cell of the demo's drinks
-    rows gets a period line for the demo's evening period → Upstairs bar, with Downstairs bar at
-    any other time — the spec's §8 example the other way round. If the demo has no evening period
-    at that time, the task says so and adds no line.
-28. **Error codes** (pre-live, named for the concept — CLAUDE.md §3; siblings in
-    `packages/venue-service/src/errors.ts`, S1):
-    - New: `route.period_invalid` (decision 10), 409. Reused: `route.subject_not_found` with
-      `subject: "period"` (404) and `route.station_inactive` (venue-service's);
-      `authorization.not_permitted` (identity's, `packages/identity/src/errors.ts:71`);
-      `printer.makes_and_watches` (the server's, newly mapped in `management-api.ts`, Task A10).
-    - Retired in Part B: `station.fallback_loop` (`errors.ts:83`, S1) and every code only station
+    its fields (name, order, timings) and gains the printers, under the same rule. The Stations
+    tab's table gains "Printed on" and "Shown on" read-outs and has no live numbers (decision 20).
+20. **The Stations tab shows no live kitchen numbers.** _OWNER 2026-10-09: CHANGED — remove the
+    live kitchen numbers (Waiting, Preparing, Ready, Late, Oldest) from the Stations tab, as the
+    spec says: Prep stations is configuration only; the live view is the kitchen screens and the
+    till's pass board. Remove any server read that only that tab used, and say so in the pull
+    request._ The five columns and their dish drill-down (`station-health-table.ts:142-158`,
+    `#details :160-200`, N) go, and the table's rows come from the stations list instead of the
+    health snapshot (today they come from the snapshot, `render :201-222`, N). The only caller of
+    `GET /management-api/stations/health` (`management-api.ts:2002-2011`, N) is this tab
+    (`readStationHealth`, `routing-client.ts:264-273`, N, called only at
+    `prep-stations-screen.ts:848`, N), and the server reader behind it, `readStationHealth` with
+    `stationHealthItemsQuery` (`apps/server/src/station-health.ts`), is called only by that route
+    and by tests; so the route and the file go (Tasks A11b and A11d), and the pull request names
+    the route as removed. The receipts are the `grep` commands in Task A11d. The printer-down and
+    dark-screen notes beside a station's name go too (decision 34); what a supervisor sees is
+    decision 35. Part B still replaces the Today column with a short note beside the name (its
+    state is then closed for today or switched off). Override: none — the owner chose.
+21. **What the worked-out times are.** _OWNER 2026-10-09: stands._ For a date, a station's times
+    are the union, over active departments, of the department's ranges whose period offers at
+    least one product that the routing sends to this station in at least one of the department's
+    active zones, during that period — each zone's share cut by that zone's closed times that date
+    (slice 2). Dishes only: an extra makes no station "open" (extras are not on menus). A period
+    kept open today (slice 3) is not shown: the view is for planning. The default station shows no
+    grid, only "Always open: the default station takes what no other station makes." A switched-off
+    station shows "Switched off". The times are a read-out: routing never asks them (decision 22).
+22. **Routing without hours.** _OWNER 2026-10-09: CHANGED — the routing default stands; closing
+    a station that still has open dishes always warns and asks (the last part of this decision)._
+    A station's status is `switched_off`, `default`, `closed_by_hand` or `open`. A station closed for
+    today sends its NEW work where "Close for today" said (slice 3); a closed row with no
+    destination (stored before slice 3, or by a test fixture) and a switched-off station send it to
+    the default station; a walk continues past a destination that is itself closed or switched
+    off, as slice 3's does, and ends at the default station. Only a venue whose default station is
+    switched off or missing still reaches `noReplacement` (`selectRoutingCell` returns the default
+    only while it is active, `routing.ts:185-190`, N), so `station.no_replacement` and the till's
+    dead-end prompt stay. A dish routed to a station whose worked-out times are over (a held Lunch
+    dish sent at 16:00) goes there anyway: the spec's "open whenever something it makes can be
+    ordered" describes when work arrives, not a closure. **Closing with open dishes (owner
+    2026-10-09):** closing a station that still has open dishes — by "Close for today" on the till
+    or kitchen display (slice 3's station today dialog) or by Disable on the dashboard — always
+    warns and asks what to do with them: send them to a station the person picks, or leave them
+    there to finish (as slice 5's answer "b" has a switched-off station keep showing its waiting
+    dishes until done). New dishes after closing go to the chosen destination, else the default
+    station, as above.
+23. **"Open for today" without hours.** _OWNER 2026-10-09: CHANGED — the default stands for a station with no
+    open dishes; with open dishes, closing asks first (decision 22)._ Slice 3's
+    `openStationForToday` deletes today's row when the station would be open without it and stores "open" otherwise (slice 3 decision 11); with hours gone a
+    station is always open without it, so it always deletes. A stored `open: true` row reads as no
+    row. The `opened_by_hand` reason goes. "Close for today" on a station with no open dishes
+    behaves as slice 3 built it; with open dishes it first asks as decision 22 says.
+24. **Disabling a station no longer asks for a fallback.** _OWNER 2026-10-09: CHANGED — with open
+    dishes it asks as decision 22 says._ Today Disable opens the fallback choice
+    (`#openFallback(id, "switch_off")`, `prep-stations-screen.ts:1238`, N). In Part B, for a
+    station with no open dishes it confirms: "Its dishes go to {default}, the default station,
+    until you change the routing", listing the routing cells that name it. For a station with open
+    dishes the same dialog first asks what happens to them (send to a station the person picks, or
+    leave them to finish). Override: make Disable clear or rewrite those cells.
+25. **Where a station's times are seen.** _OWNER 2026-10-09: stands._ The Opening hours picker
+    gains a "Prep stations" group after the departments (slice 2's picker), one entry per active
+    station, and the URL a `station` key (`opening-hours?view=week&station=<id>`). A station's view
+    is All departments' layout (slice 2: one narrow column per department per day), showing only
+    the counted ranges in their period's colours, in the normal week or a real week. The Stations
+    tab's row links "When it gets orders" there.
+26. **The Station hours screen goes whole.** _OWNER 2026-10-09: stands._ Its dashboard entry
+    (`hours`, `dashboard/index.ts:53-70`, S1), its navigation key
+    (`apps/dashboard/src/navigation.ts:10`, S1), the client and the views only it uses. An old
+    `/manage/hours` link lands where any unknown dashboard address lands; no redirect (pre-live).
+    Its API routes go with the station-hours writers.
+27. **The demo shows a period choice.** _OWNER 2026-10-09: stands._ The demo seed's Upstairs bar
+    hours and its fallback to the Downstairs bar (`seed-floor.ts:154-161`, S1) go; in their place
+    one cell of the demo's drinks rows gets a period line for the demo's evening period → Upstairs
+    bar, with Downstairs bar at any other time — the spec's §8 example the other way round. If the
+    demo has no evening period at that time, the task says so and adds no line.
+28. **Error codes.** _OWNER 2026-10-09: stands; decision 10's change adds a reason, not a code._
+    (Pre-live, named for the concept — CLAUDE.md §3; siblings in
+    `packages/venue-service/src/errors.ts`, N.)
+    - New: `route.period_invalid { periodId, reason: "other_department" | "repeated" |
+      "not_offered" }` (decisions 10 and 30), 409, registered beside `route.station_inactive`
+      (`errors.ts:93`, N) with its status beside `routes.ts:109` (N). Reused:
+      `route.subject_not_found` with `subject: "period"` (404) and `route.station_inactive`
+      (venue-service's); `authorization.not_permitted` (identity's,
+      `packages/identity/src/errors.ts:71`, N); `printer.makes_and_watches` (the server's, newly
+      mapped in `management-api.ts`'s `STATUS`, `:251`, N, Task A10).
+    - Retired in Part B: `station.fallback_loop` (`errors.ts:99`, N) and every code only station
       hours throw (Task B6 lists them with `grep`), each removed from every copy in the tree in one
       change (`apps/dashboard/src/i18n/codes.ts` and any till copy); `station.always_open` stays
       (slice 3 reuses it).
     None is a recorded incident, so none needs alert wording.
+29. **The menu check applies to the periods a save adds to the cell.** _Added 2026-10-09, not yet
+    answered._ The owner's rule is that a line is checked when it is saved and a later menu change
+    does not invalidate it. A cell's routing request sends all its lines, so a stale line would
+    otherwise block every later edit of that cell. So the server checks each period the request
+    names that the cell does not already store; a period already stored on the cell is not
+    re-checked, may stay in its line or move to another line, and is kept. The editor offers, in
+    each line, the periods whose `productIds` meet the row's products plus the periods the cell
+    already stores. Override: check every period in the request, so a stale line must be removed
+    before the cell can be saved.
+30. **The new refusal is a reason, not a new code.** _Added 2026-10-09, not yet answered._
+    `route.period_invalid` gains `reason: "not_offered"`, beside its other two, as the house's
+    siblings carry a `reason` union under one code (`station.destination_invalid`,
+    `errors.ts:94-98`; `device_profile.access_invalid`, `:101-118`, N). It names `periodId`, so the
+    editor puts it under that period's line. Override: a separate code, `route.period_not_offered
+    { periodId }`.
+31. **The configuration import does not apply the menu check.** _Added 2026-10-09, not yet
+    answered._ An export can hold a line whose period's menus changed after it was saved, which
+    decision 29 keeps valid, so refusing it on import would make a good export unimportable. The
+    import still refuses the rows decision 10 lists otherwise (Task A3). Override: refuse such a
+    row on import as well.
+32. **What goes with the tester.** _Added 2026-10-09, not yet answered._ The route `GET
+    /management-api/venue-service/routing/explain` (`routes.ts:442-477`, N) answers 404;
+    `explainRoute` and `ExplainWhen` (`routing-store.ts:332-426`, N), `RouteExplanation` and
+    `ExtraExplanation` (`routing-types.ts:63-79`, N, re-exported at `routing.ts:17`),
+    `dashboard/routing-explanation.ts` and its test (only the screen imports it,
+    `prep-stations-screen.ts:49-54`, N), the client's `explain` (`routing-client.ts:197-211`, N),
+    the screen's tester state, `#explain`, `#testNames` and `#tester` (`:257-267`, `:1416-1656`, N),
+    its `.tester-when` styles (`:169-190`, N), its `test` URL key (`:288-305`, `:766-770`, `:889`,
+    N) and `navigation.ts`'s `test` key (`apps/dashboard/src/navigation.ts:9`, N), and the
+    `prep.test_*` strings. `chooseExtraMakerBeside` stays: the preview uses it
+    (`routing-store.ts:567`, N). A test in `routing-store.test.ts` that uses `explainRoute` only to
+    read where something is made is moved to `resolveMakers`/`resolveExtraMakers`, or to the pure
+    `chooseMaker`/`chooseExtraMakerBeside` where it checks fallback steps, with the same
+    expectations; only a case whose subject is the tester itself (its `when` parsing, the shape of
+    its answer, its sentences) is deleted. An old tester link
+    (`/manage/prep-stations/view/routing/test/<id>`) opens the tab its `view` names, else Stations:
+    the URL controller ignores a segment its config does not name (`packages/ui/src/url-state.ts:58-75`,
+    N) and drops it at its next write. Override: keep the route for a later tool.
+33. **The extras note belongs to the cell's plain choice.** _Added 2026-10-09, not yet answered._
+    Spec §9.3: an empty cell (nothing set at it or above it, so it falls through to the default
+    station) shows "{station} (default) — as an extra, follows its dish", and a No preparation
+    cell (its own or inherited) shows "No preparation — as an extra, follows its dish"; a cell that
+    names a station, even the default one, shows nothing (owner, A371). The note reads the cell's
+    "Any other time" choice only: a period line naming No preparation already says so in its own
+    words and gets no second note. It is built with the tester's removal (Task A3d), so no commit
+    leaves the grid without what only the tester showed. Override: also note a No preparation
+    period line.
+34. **The printer-down and dark-screen notes leave the Stations tab too.** _Added 2026-10-09, not
+    yet answered._ They come from the same live read (`#name`, `station-health-table.ts:114-130`,
+    N) and are live state, which spec §9 keeps off these pages. The dashboard still raises both as
+    alerts for a person with `venue_service.manage` (`stationOutputAlertSource`,
+    `apps/server/src/alert-sources.ts:322-370`, N), and those alerts still link to Prep stations
+    (`:353`, `:365`, N), where the station's printers can be changed; the till and the kitchen
+    display show a station's down printers (`till-api.ts:1841`, `device-api.ts:425`, N).
+    Override: keep the notes, read from the existing `GET /management-api/stations/outputs-down`
+    (`management-api.ts:2013-2024`, N), which the screen's client already wraps
+    (`listOutputsDown`, `routing-client.ts:274-278`, N) but nothing calls.
+35. **A supervisor still gets the page, read-only.** _Added 2026-10-09, not yet answered._ The
+    page is offered to `venue.view` read-only (`readPermission: "venue.view"`,
+    `packages/venue-service/src/dashboard/index.ts:38-39`, N), as Opening hours and the Station
+    hours screen are (`:80`, `:60`, N); a supervisor holds `venue.view` and not
+    `venue_service.manage` (`packages/identity/src/permissions.ts:45-54`, N;
+    `packages/venue-service/src/permissions.ts:6`, N, grants it from manager). Today that person
+    sees only the Stations tab, whose rows and numbers come from the health read
+    (`prep-stations-screen.ts:288-297`, `:3436-3446`, N). After this slice they see the same tab
+    with each station's name, its Default and Disabled marks and the Today column — no ⋮ menus,
+    no numbers, and no Printed on or Shown on, because their read-only load carries no printers or
+    devices (`routing-client.ts:116-145`, N) and the printers and devices reads need
+    `printer.manage` and `device.manage` (`print-api.ts:898-901`, `device-api.ts:106`, `:164-170`,
+    N). This keeps the existing permission pattern and adds no read. Override: stop offering the
+    page to `venue.view` (remove its `readPermission`).
+36. **The table is renamed for what it shows.** _Added 2026-10-09, not yet answered._ With no
+    health in it, `prep-station-health-table` in `dashboard/station-health-table.ts` would misname
+    itself, so it becomes `prep-station-table` in `dashboard/station-table.ts` (`git mv`, with its
+    tests). Selectors in other suites follow in the changed-test-checks commit. Override: keep the
+    name.
 
 ## Where the code differs from what the spec assumes
 
 - §2 says "each station's ticket prints on each of its printers separately". True, and no test
   pins the two-tickets case for two stations firing in one send onto one printer: the only
   one-printer-on-two-stations setups are mapping tests (`station-printers.test.ts:173-187`,
-  `print-api.printer-wiring.test.ts:887`, M) and `kitchen-print.watchers.test.ts:709` (M), where
+  `print-api.printer-wiring.test.ts:887`, N) and `kitchen-print.watchers.test.ts:709` (N), where
   only one of the two stations fires. So Task A1 changes no existing assertion about it.
 - §8 says the rule against making and watching goes; decision 4 keeps it until slice 5 Part B.
 - §8 says "the default station is always open". Today a venue can switch its default station off
-  (`deactivateStation`, `apps/server/src/kitchen.ts:256-269`, S1, has no default check), and the
-  routing then returns no default (`routing.ts:184-189`, M). Decision 22 keeps today's answer for
+  (`deactivateStation`, `apps/server/src/kitchen.ts:256-269`, N, has no default check), and the
+  routing then returns no default (`routing.ts:185-190`, N). Decision 22 keeps today's answer for
   that case.
-- §9.3 lists the Stations tab's columns without the live numbers; decision 20 keeps them.
+- §8 says the periods offered are "limited to those whose menus include the row's products". The
+  editor limits its offer and, since the owner's answer to decision 10, the server refuses a newly
+  added period that fails it; a period already stored on the cell is not re-checked (decision 29).
+- §9 says nothing on these pages shows live state. Besides the live numbers (decision 20) and the
+  printer-down notes (decision 34), the Stations tab's Today column shows today's state until Part
+  B turns it into a note beside the name.
 - §9.3 says "Editing a station sets its name, its printers and 'Show the rest of the order'".
   Today there is no station editor: Rename (name only), the Tickets tab (printers) and the Settings
-  tab ("Show the rest of the order") each edit one (`prep-stations-screen.ts:1282-1337`,
-  `:1878-1971`, `:2712-2715`, M).
+  tab ("Show the rest of the order") each edit one (`prep-stations-screen.ts:1281-1337`,
+  `:1864-1957`, `:2697-2701`, N).
 - §9.3's Stations tab: "the printers its tickets print on". A station's printers are stored in
-  `station_printers` (`packages/db/src/schema/station-printers.ts:10-30`, M), a core table, not
+  `station_printers` (`packages/db/src/schema/station-printers.ts:10`, N), a core table, not
   venue-service's: Task A10 changes the core route.
 
 ## Global constraints
@@ -494,17 +621,19 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
 - Every foreign key and unique index is declared in the TypeScript schema; every new table is
   classified in `VENUE_SERVICE_CLASSIFICATION` (`classification.ts`).
 - Error codes are registered in `packages/venue-service/src/errors.ts`, with a status in the route
-  map that answers them (`routes.ts` `STATUS`, S1), and wording in English and Spanish wherever a
-  screen shows them (`dashboard/strings.ts` or `apps/dashboard/src/i18n/codes.ts`).
+  map that answers them (`routes.ts` `STATUS`, `:81`, N), and wording in English and Spanish
+  wherever a screen shows them (`dashboard/strings.ts` or `apps/dashboard/src/i18n/codes.ts`).
 - venue-service functions take `cfg: VenueScope`; multi-table writes take one `tx: Transaction`;
   queries on one transaction are awaited in turn. **Departments' periods are read in turn, once per
-  routing call**, never per dish (CLAUDE.md §3: resolve shared data once before a line loop).
+  routing call**, never per dish (CLAUDE.md §3: resolve shared data once before a line loop). **A
+  period's products are read once per write**, not per line.
 - **Kitchen printing changes keep every existing printing test passing unedited** except those
   listed under "Behaviour this slice removes". A printing change is checked through the real
   planner and the outbox, never a stubbed printer list.
-- The dashboard's routing live query (`dashboard/live-queries.ts:17-41`, S1) gains
-  `routing_cell_periods` and `menu_periods` (Part A) and loses the dropped tables (Part B); a
-  misspelled name breaks the whole tab's stream, so run `scripts/live-subscriptions.test.ts`.
+- The dashboard's routing live query (`dashboard/live-queries.ts:17-41`, N) gains
+  `routing_cell_periods` and the tables the period reader reads (Part A) and loses the dropped
+  tables (Part B); its `health` list (`:2-15`, N) goes in Task A11b. A misspelled name breaks the
+  whole tab's stream, so run `scripts/live-subscriptions.test.ts`.
 - **Save rule (A331).** Each form this slice creates or rewrites — the routing cell editor, the
   station editor, the New station dialog (gains printers), the Disable confirmation is not a form
   — takes its scope from `draftScopeFor`, draws its action through `saveActionState`, returns early
@@ -522,23 +651,49 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
 
 Tests pinning these may change, under the rule at the top, in the task named.
 
-**Part A**
+**Part A** (lines N)
 
+- The "Where is this made?" tester on the Routing tab, its route and its URL key (decisions 13
+  and 32): the tester cases in `prep-stations-screen.test.ts` (find them with
+  `grep -n "route-tester\|testProduct\|testWhen\|explain" packages/venue-service/src/dashboard/prep-stations-screen.test.ts`),
+  `prep-stations-screen.a11y.test.ts:540` ("timed routing tester"), `routing-explanation.test.ts`
+  whole, `routing-client.test.ts:175-210` and `:483-495` (the `explain` paths),
+  `apps/dashboard/src/navigation.test.ts:18` ("preserves the Prep stations tab and tester when the
+  dashboard rewrites its destination"), `apps/dashboard/src/dashboard-app.test.ts:3885`
+  ("preserves a prep station tester product when the dashboard restores the screen"). Task A3b.
+- The explain route and `explainRoute`: `routes.test.ts`'s explain cases (`:2266-2445`), and the
+  `explainRoute` cases in `routing-store.test.ts` (`grep -n "explainRoute" packages/venue-service/src/routing-store.test.ts`),
+  each moved to the routing reads with the same expectations or, where its subject is the tester,
+  deleted and listed (decision 32). Task A3c.
 - A station's printers edited in the Tickets tab's "Printed on" cell, and the Tickets tab itself
-  (`prep-stations-screen.ts:1972-2035`, `:1878-1971`, M; `prep-stations-screen.printers-unsaved.test.ts`
-  whole, and the Tickets cases in `prep-stations-screen.test.ts` and `.a11y.test.ts`). Task A11b.
-- "Show the rest of the order" in the Settings tab (`:2712-2715`, `:2551-2556`, M; its cases in
-  `prep-stations-screen.settings.test.ts` and `.settings-unsaved.test.ts`). Task A11b.
-- Rename in the station ⋮ menu (`:1205-1220`, `#renameDialog :1282-1337`, M). Task A11a.
-- The routing cell's inline combobox (`routing-grid.ts:361-378`, `#defaultCell :392-426`, M; its
+  (`prep-stations-screen.ts:1958-2021`, `#printerCell :1864-1957`; `prep-stations-screen.printers-unsaved.test.ts`
+  whole, and the Tickets cases in `prep-stations-screen.test.ts` and `.a11y.test.ts`). Task A11c.
+- "Show the rest of the order" in the Settings tab (the `rest` column `:2697-2701` and
+  `#settingsCell`'s `rest` branches `:2473-2595`; its cases in `prep-stations-screen.settings.test.ts`
+  and `.settings-unsaved.test.ts`). Task A11c.
+- Rename in the station ⋮ menu (`:1204-1218`, `#renameDialog :1281-1337`). Task A11a.
+- The live kitchen numbers, their dish drill-down and the printer-down and dark-screen notes on the
+  Stations tab (decisions 20 and 34; `station-health-table.ts:114-200`): `station-health-table.test.ts`
+  and `.a11y.test.ts` (their number and drill-down cases), `prep-stations-overview.a11y.test.ts`,
+  the health cases in `prep-stations-screen.test.ts` (`:2434` "subscribes dish health to ticket
+  changes…", `:2459` "refreshes elapsed health…", `:2495` "a health read failure stays…", `:2526`
+  "a health snapshot ahead of routing metadata…", `:4585` "keeps supervisor numbers and
+  drilldowns live…"), `routing-client.test.ts:518-522` (`readStationHealth`),
+  `live-queries.test.ts:5` (the `health` list pin), and the `prep-station-health-table` selectors
+  in `station-action.unsaved.test.ts:186`, `prep-stations-screen.unsaved.test.ts:145`,
+  `prep-stations-screen.test.ts:2431`, `:4622`, `:4855` (decision 36). Task A11b.
+- `GET /management-api/stations/health` and its reader: `apps/server/src/station-health.test.ts`
+  whole, and the `"health"` row of "refuses the %s read with a named configuration error"
+  (`kitchen-timing-consumers.test.ts:235`, `:248-249`). Task A11d.
+- The routing cell's inline combobox (`routing-grid.ts:361-378`, `#defaultCell :392-426`; its
   cases in `routing-grid.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts`). Task A8b.
-- The row-label column's width at phone width: `routing-grid.test.ts:751` ("row label column is
-  capped", at most 140) narrows to 96. Task A9.
-- The header actions on every tab (`prep-stations-screen.ts:3444-3458`, M) and
-  "keeps half of a $width px tab row" (`prep-stations-screen.test.ts:2844-2851`, M), which keeps
-  its 50% cap but sees one action per tab. Task A12.
+- The row-label column's width at phone width: `routing-grid.test.ts:751` ("at phone width the row
+  label column is capped…", at most 140) narrows to 96. Task A9.
+- The header actions on every tab (`prep-stations-screen.ts:3410-3426`) and
+  "keeps half of a $width px tab row for the tabs…" (`prep-stations-screen.test.ts:2715-2746`,
+  its two-actions check at `:2741`), which keeps its 50% cap but sees one action per tab. Task A12.
 
-**Part B**
+**Part B** (lines M or S1; re-ground)
 
 - Station hours, special-date station cells, fallbacks, and every status that reads them: the
   `in_hours`, `no_hours`, `out_of_hours`, `time_not_applied` and `opened_by_hand` reasons; a
@@ -548,9 +703,12 @@ Tests pinning these may change, under the rule at the top, in the task named.
   being a dead end** (`noReplacement`, `station.no_replacement`): under decision 22 their work goes
   to the default station. Pinned at least at `apps/server/src/catalogue-api.test.ts:1508-1520` and
   `working-order.test.ts:3255-3280` (M); Task B1a's grep finds the rest. Tasks B1a–B1b.
+- **Closing a station without asking about its open dishes** (decisions 22–24): slice 3's
+  station today dialog closes at once (`apps/till/src/widgets/station-today-dialog.ts` and its
+  tests, `apps/server/src/till-api.station-today.test.ts`), and Disable asks for a fallback. The
+  pull request names each slice 3 check that changes. Tasks B2–B3.
 - The Prep stations Today column, its status sentences and the fallback field in the Settings tab
   and the Disable dialog. Task B3.
-- The "Where is this made?" tester and its route. Task B4.
 - The Station hours screen and its routes. Tasks B5–B6.
 - The demo's station hours and fallback. Task B10.
 
@@ -571,15 +729,27 @@ The conditions most likely to bite a person that no single task's happy path exe
    (decision 7); a cocktail sent at 14:10 from a period with no line goes Upstairs; a Terrace cell
    that sets nothing inherits the Lunch line; a Terrace cell set to Pastry has no line, so a
    Terrace cocktail at 13:00 goes to Pastry (Tasks A4a–A5).
-4. **Periods are department-scoped.** A zone cell refuses another department's period
-   (`route.period_invalid`); an Every zone cell holding two departments' Lunches applies each in
-   its own department (Task A5).
+4. **Periods are department-scoped and must offer the row.** A zone cell refuses another
+   department's period (`route.period_invalid`, `other_department`); an Every zone cell holding two
+   departments' Lunches applies each in its own department; a Lunch line on Cocktails is refused
+   (`not_offered`) when no Lunch menu, customer or staff-only, holds a cocktail; after a Lunch menu
+   drops its cocktails, re-saving that cell with its stored Lunch line and a new plain station
+   succeeds (decision 29) (Task A5).
 5. **Deleting a period takes its routing lines with it, after a warning** (Task A6).
-6. **Without hours, nothing is dropped.** In Part B: a station closed for today with no recorded
+6. **The tester is gone and nothing it alone showed is lost.** The explain route answers 404; an
+   old `/test/<id>` link opens a tab without error; an empty cell and a No preparation cell say how
+   an extra is made, a cell naming the default station does not; every routing behaviour an
+   `explainRoute` case pinned is still pinned through the routing reads (Tasks A3b–A3d).
+7. **The Stations tab is configuration only.** No Waiting, Preparing, Ready, Late or Oldest, no
+   drill-down and no printer-down note; `GET /management-api/stations/health` answers 404; a
+   supervisor still opens Prep stations and sees the station list read-only, and a manager's
+   station reorder still works with rows from the stations list (Tasks A11b, A11d).
+8. **Without hours, nothing is dropped.** In Part B: a station closed for today with no recorded
    destination sends work to the default station; a switched-off station's work goes to the
    default station; a held Lunch dish sent after its station's worked-out times goes to that
-   station; with the default switched off, the till still asks (`station.no_replacement`) (Task B1a).
-7. **The worked-out times match the routing.** A station that makes only Cocktails, routed to it
+   station; with the default switched off, the till still asks (`station.no_replacement`); closing
+   or disabling a station with open dishes asks what to do with them (Tasks B1a–B3).
+9. **The worked-out times match the routing.** A station that makes only Cocktails, routed to it
    during Lunch only, shows Lunch's ranges and nothing else; on a named day with own hours it shows
    that day's Lunch; with the Terrace closed at 15:00 and Cocktails routed there only on the
    Terrace, it shows Lunch up to 15:00 (Task B8).
@@ -593,8 +763,8 @@ The conditions most likely to bite a person that no single task's happy path exe
 **Files:**
 - Modify: `apps/server/src/kitchen-print.ts` (`KitchenRoute :414`, `routeKitchenTickets :445-455`,
   `planKitchenTickets :465-603` — the station-ticket part, not the watcher block `:605-688`; the
-  rest-of-order filter `:539-542`, `:571`, M), `apps/server/src/kitchen-ticket.ts`
-  (`KitchenTicket :46-68`, `formatKitchenTicket :178-225`, M)
+  rest-of-order filter `:539-542`, `:571`, N), `apps/server/src/kitchen-ticket.ts`
+  (`KitchenTicket :46-68`, `formatKitchenTicket :178-225`, N)
 - Create: `apps/server/src/kitchen-print.shared-printers.test.ts`
 - Test: also `kitchen-ticket.test.ts`
 
@@ -613,7 +783,7 @@ that list it; then groups printers by (station set, layout). A one-station group
 `scope: "station"` ticket byte for byte; a larger one renders `scope: "stations"` (header: the
 station names joined " · "; a section per station as the watcher ticket's). `KitchenJob.station`
 becomes the first station of the group only where a caller needs one name; `stationIds` carries
-all, and `linkKitchenJob` already writes one link per station (`:754-764`, M).
+all, and `linkKitchenJob` already writes one link per station (`:754-764`, N).
 
 - [ ] **Step 1: Failing tests** in the new file, through `planKitchenTickets` and the outbox on a
   `useVenueDb` venue with real printers: review focus 1 (the X/Y/Z case: four jobs, P's bytes
@@ -636,8 +806,8 @@ all, and `linkKitchenJob` already writes one link per station (`:754-764`, M).
 ### Task A2: Reprints, HOLD tickets and printing problems follow the grouping
 
 **Files:**
-- Modify: `apps/server/src/kitchen-print.ts` (`reprintOrderTickets :1458-1489`,
-  `readReprintTargets :1419-1444`, `readPrintProblems :1519-1548`, `readUncoveredLinks :1588`, M)
+- Modify: `apps/server/src/kitchen-print.ts` (`reprintOrderTickets :1458-1487`,
+  `readReprintTargets :1419-1444`, `readPrintProblems :1519`, `readUncoveredLinks :1588`, N)
 - Test: `kitchen-print.shared-printers.test.ts`, `print-problems.test.ts` (new cases only)
 
 **Behaviour:** decision 5. A reprint of the X/Y/Z order prints one ticket on P; fired and HOLD
@@ -658,21 +828,22 @@ prints once on P and once on PY, and nothing for Z (decision 5).
 
 **Files:**
 - Modify: `packages/venue-service/src/schema/routing.ts`, `schema/index.ts`, `classification.ts`
-  and its test, `configuration-transfer.ts` (beside `routing_cells`, `:562`, S1) and its test,
-  `migrations.test.ts` (`TABLES`), `scripts/schema-constraints.test.ts` (routing keys beside
-  `:183-187`, checks beside `:570-573`, S1), `apps/server/src/testing/clear-provision-fixture.ts`
-  (before `routing_cells`)
+  (beside `routing_cells`, `:28`, N) and its test, `configuration-transfer.ts` (the table list
+  beside `routing_cells`, `:639`; `validateRoutingConfiguration :483`, N) and its test,
+  `migrations.test.ts` (`TABLES`, beside `:47`, N), `scripts/schema-constraints.test.ts` (routing
+  keys beside `:185-189`, unique keys beside `:364-370`, checks beside `:579-582`, N),
+  `apps/server/src/testing/clear-provision-fixture.ts` (before `routing_cells`, `:23`, N)
 - Create: generated `packages/venue-service/drizzle/00NN_*.sql`, snapshot, journal entry
 
 **Interfaces — produces:** `routingCellPeriods` (table `routing_cell_periods`): `id` (primary key,
 `newId`), `cellId` not null → `routing_cells.id` **on delete cascade**
 (`routing_cell_periods_cell_fk`), `periodId` and `departmentId` not null, composite foreign key
 `(period_id, department_id)` → `menu_periods (id, department_id)` **on delete cascade**
-(`routing_cell_periods_period_fk`, over `menu_periods_department_key`, `schema/menus.ts:42`, S1 —
-slice 1's pattern, `menu_slots_period_fk :130-134`), `stationId` → `kitchen_stations.id`
-(`routing_cell_periods_station_fk`), `noPreparation` boolean; check
+(`routing_cell_periods_period_fk`, over `menu_periods_department_key`, `schema/menus.ts:43`, N —
+the pattern of slice 1's `menu_slots_period_fk`, `:131-135`, N), `stationId` →
+`kitchen_stations.id` (`routing_cell_periods_station_fk`), `noPreparation` boolean; check
 `routing_cell_periods_target_ck` written as `routing_cells_target_ck` (`schema/routing.ts:62-65`,
-M); unique `routing_cell_periods_cell_period_key (cell_id, period_id)`. Class `state`; the
+N); unique `routing_cell_periods_cell_period_key (cell_id, period_id)`. Class `state`; the
 configuration transfer carries it with its cell (`locationColumns` none: it has no location column;
 the export validator rejects a row whose cell is not in the export).
 
@@ -686,9 +857,9 @@ the export validator rejects a row whose cell is not in the export).
   the SQL: expected one `CREATE TABLE` and its indexes, no rebuild.
 - [ ] **Step 3: Classification, transfer, guard lists, clear list.** A configuration export and
   import round-trips a cell's period rows (`configuration-transfer.test.ts`, a new case beside the
-  routing cases); the import's routing validator (`validateRoutingConfiguration`,
-  `configuration-transfer.ts:444`, S1) refuses a row whose cell is missing, a zone cell's row
-  naming another department's period, and a row naming a station the export does not carry.
+  routing cases); the import's routing validator refuses a row whose cell is missing, a zone
+  cell's row naming another department's period, and a row naming a station the export does not
+  carry, and accepts a row whose period's menus hold none of the row's products (decision 31).
 - [ ] **Step 4: Run** Step 1's test, the package's node project, the server package, and
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts scripts/migration-upgrade.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts scripts/module-graph-honesty.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/live-subscriptions.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`.
@@ -696,81 +867,160 @@ the export validator rejects a row whose cell is not in the export).
 
 ---
 
+### Task A3b: The "Where is this made?" tester leaves the dashboard
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/prep-stations-screen.ts` (tester state `:257-267`,
+  the URL controller's `test` handling `:288-305`, `:766-770`, `:889`, `#explain :1416-1453`,
+  `#testNames :1459-1469`, `#tester :1470-1656`, the `routing-explanation.js` import `:49-54`,
+  `.tester-when` styles `:169-190`, the Routing panel's `${this.#tester()}` `:3452`, N),
+  `dashboard/routing-client.ts` (`explain :197-211`, N), `dashboard/strings.ts` (`prep.test_*`),
+  `apps/dashboard/src/navigation.ts` (`"prep-stations": { view, test }`, `:9`, N)
+- Delete: `dashboard/routing-explanation.ts` and `routing-explanation.test.ts` (only the screen
+  imports it: `grep -rn "routing-explanation" packages apps --include='*.ts'`)
+- Test: `prep-stations-screen.test.ts`, `.a11y.test.ts` (`:540`), `routing-client.test.ts`,
+  `apps/dashboard/src/navigation.test.ts` (`:18`), `apps/dashboard/src/dashboard-app.test.ts`
+  (`:3885`)
+
+**Behaviour:** decisions 13 and 32. The Routing tab shows the grid with no tester above it. An old
+tester link opens the tab its `view` names, else Stations, and the `test` part is dropped at the
+screen's next URL write.
+
+- [ ] **Step 1: Changed test checks commit** for the tester's cases (listed under "Behaviour this
+  slice removes", Part A): each is deleted and listed with `file:line`; `navigation.test.ts:18`
+  keeps its tab check and drops the tester half; `dashboard-app.test.ts:3885` becomes "an old
+  tester link opens the Routing tab" with the same restore steps.
+- [ ] **Step 2: Failing tests:** the Routing tab has no `[data-test="route-tester"]`;
+  `/manage/prep-stations/view/routing/test/lager` opens Routing and the next tab change writes no
+  `test` segment; `/manage/prep-stations/test/lager` opens Stations; axe on the Routing tab in both
+  themes.
+- [ ] **Step 3: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/prep-stations-screen src/dashboard/routing-client.test.ts`
+  and `pnpm --filter @waitron/dashboard exec vitest run src/navigation.test.ts src/dashboard-app.test.ts`.
+- [ ] **Step 4: Implement;** the venue-service node project; typecheck `@waitron/venue-service` and
+  `@waitron/dashboard`; LOOK at Routing in EN and ES, both themes, 1280 and 390.
+- [ ] **Step 5: Commit** — `feat(venue-service): the routing tester leaves Prep stations (A366)`.
+
+---
+
+### Task A3c: The tester's route and `explainRoute` go
+
+**Files:**
+- Modify: `packages/venue-service/src/routes.ts` (`GET /management-api/venue-service/routing/explain`
+  `:442-477`, the `explainRoute`/`ExplainWhen` import `:58-59`, N), `routing-store.ts`
+  (`ExplainWhen :332`, `explainRoute :334-426`, N, and any import only it used), `routing-types.ts`
+  (`RouteExplanation`, `ExtraExplanation`, `:63-79`, N), `routing.ts` (the re-export `:17`, N),
+  `index.ts` if it exports them
+- Test: `routes.test.ts` (`:2266-2445`, N), `routing-store.test.ts`, `routing.test.ts` (cases
+  moved there)
+
+**Behaviour:** decision 32. The route answers 404; `chooseExtraMakerBeside` stays (the preview,
+`routing-store.ts:567`, N).
+
+- [ ] **Step 1: Changed test checks commit.** For each `explainRoute` case in
+  `routing-store.test.ts` (`grep -n "explainRoute" packages/venue-service/src/routing-store.test.ts`):
+  a case that reads where a dish or extra is made moves to `resolveMakers`/`resolveExtraMakers`
+  (or `routingAt`) with the same expected station; a case that checks fallback steps moves to the
+  pure `chooseMaker`/`chooseExtraMakerBeside` in `routing.test.ts` with the same steps; a case
+  whose subject is the tester (its `when` parsing, `clockReadable`, `stations` list, an unknown
+  product's refusal through the explain path) is deleted. The route's cases in `routes.test.ts`
+  are deleted. Each is listed with `file:line`, before and after. If a case pins something no
+  routing read exposes, STOP and report it.
+- [ ] **Step 2: Failing test:** `GET /management-api/venue-service/routing/explain?productId=…`
+  answers 404 (fails today: 200).
+- [ ] **Step 3: Run; watch it fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routes.test.ts`.
+- [ ] **Step 4: Implement;** `grep -rn "explainRoute\|ExplainWhen\|RouteExplanation\|ExtraExplanation\|routing/explain" apps packages --include='*.ts'`
+  finds nothing outside the moved tests; the venue-service node project, the server package;
+  typecheck `@waitron/venue-service`, `@waitron/server`, `@waitron/dashboard`.
+- [ ] **Step 5: Commit** — `feat(venue-service): the routing explain route goes (A366)`.
+
+---
+
+### Task A3d: Empty and No preparation cells say how extras are made
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/routing-grid.ts` (the cell `:361-378`, N, and
+  the inherited-choice lookup it already makes), `dashboard/strings.ts`
+- Test: `routing-grid.test.ts`, `routing-grid.a11y.test.ts`
+
+**Behaviour:** decision 33 and spec §9.3. A cell whose choice falls through to the default station
+shows "{station} (default) — as an extra, follows its dish"; a cell whose choice, its own or
+inherited, is No preparation shows "No preparation — as an extra, follows its dish"; a cell that
+names a station, even the default one, shows nothing. The note is part of the cell's accessible
+name. Task A8b keeps it inside the cell's button.
+
+- [ ] Steps: failing tests (an empty Every zone cell carries the default note; a zone cell that
+  inherits No preparation carries the No preparation note; a cell naming the default station
+  carries none; axe for the three in both themes — fails today: no note); watch them fail
+  (`pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/routing-grid`);
+  implement; LOOK at Routing in EN and ES, both themes, 1280 and 390; commit
+  `feat(venue-service): routing cells say how extras are made (A366)`.
+
+---
+
 ### Task A4a: Routing applies the running period
 
 **Files:**
-- Modify: `packages/venue-service/src/routing.ts` (`RoutingRules :31-38`, `RoutingMoment :63-68`,
-  `selectRoutingCell :149-191`, `chooseMaker :284-309`, `chooseExtraMaker :317-336`, M),
-  `routing-store.ts` (`snapshot :235-299`, `routingAt :607`, `resolveMakers :702`,
-  `resolveExtraMakers :713`, M), `routing-types.ts` (`decidedBy`), `packages/module/src/module.ts`
-  (only if a routing type it names changes, `:293-319`, S1)
+- Modify: `packages/venue-service/src/routing.ts` (`RoutingRules :31-38`, `RoutingMoment :64-69`,
+  `selectRoutingCell :150-192`, `chooseMaker :298-323`, `chooseExtraMaker :331-350`, N),
+  `routing-store.ts` (`snapshot :242-311`, `routingAt :629-720`, `resolveMakers :722`,
+  `resolveExtraMakers :733`, N), `routing-types.ts` (`RoutingDecision :22`, N),
+  `packages/module/src/module.ts` (only if a routing type it names changes, `:310-370`, N)
 - Test: `routing.test.ts`, `routing-store.test.ts`, and one case in the server's send suite (real
   route)
 
 **Interfaces:**
 
 ```ts
-// RoutingRules gains, both OPTIONAL so the ~68 rule literals in routing.test.ts stand:
+// RoutingRules gains, both OPTIONAL so the existing rule literals in routing.test.ts stand:
 readonly cellPeriods?: ReadonlyMap<string /* cell key */, ReadonlyMap<string /* periodId */, RouteTarget>>;
 readonly zoneDepartment?: ReadonlyMap<string /* zoneId */, string /* departmentId */>;
 // RoutingMoment gains: readonly periods?: ReadonlyMap<string /* departmentId */, string | null>;
-// selectRoutingCell gains a last parameter: moment: RoutingMoment | null (null: Any other time).
-// decidedBy gains: periodId?: string — set when a period line chose the target.
+// selectRoutingCell's options object gains: periods?: RoutingMoment["periods"] (absent: Any other time).
+// The cell decision gains: periodId?: string — set when a period line chose the target.
 ```
 
-`selectRoutingCell` finds the cell as today, then, when the moment carries the dish's zone's
-department's period and the cell has a row for it, returns that row's target with `periodId` set;
-otherwise the cell's own target. `routingAt(tx, cfg, at)` reads a department's period the first
-time a dish in one of its zones is resolved (`resolveZoneContext` already gives `departmentId`,
-`routing-store.ts:667`, `:685`, M) and remembers it for the rest of the call (decision 7). With an
-unreadable clock the resolver answers open with every menu orderable and a null period (slice 1
-decision 5, `menu-timetable.ts:228-233`, S1): routing then uses "Any other time".
+`selectRoutingCell` (today `(rules, row, zoneId, categoryId, { skipOwn })`) finds the cell as
+today, then, when it is given the dish's zone's department's period and the cell has a row for it,
+returns that row's target with `periodId` set; otherwise the cell's own target. `routingAt(tx, cfg,
+at)` reads a department's period the first time a dish in one of its zones is resolved (it already
+calls `resolveZoneContext`, which answers `departmentId`, `routing-store.ts:687`, `:705`, N) and
+remembers it for the rest of the call (decision 7). With an unreadable clock the resolver answers
+open with every menu orderable and a null period (`menu-timetable.ts:461-467`, N): routing then
+uses "Any other time". Slice 3's closed-for-today walk (`walkFallbacks :245-270`, `closedSendsTo
+:280-296`, N) runs after the cell is chosen and is not changed: a period line naming a station
+closed for today follows that station's recorded destination like any other choice.
 
 - [ ] **Step 1: Failing tests** — `routing.test.ts` (pure): review focus 3's cases and focus 4's
-  second; an extra on a cell with a Lunch line follows the line during Lunch. `routing-store.test.ts`:
-  `routingAt` at 13:00 inside Lunch routes a Cocktail Downstairs, at 14:10 inside Afternoon (no
-  line) Upstairs; two dishes of one department in one call read its period once (count through a
-  wrapper of the seat the test injects). Server: a till send at 13:00 puts the Cocktail's ticket
-  item at Downstairs bar (`ticket_items.station_id`); a Cocktail sent held at 13:55 and released at
-  14:10 (Afternoon, no line) keeps its ticket item and its printed ticket at Downstairs bar
-  (`station-move.ts:59-62`, S1, re-routes only closed or switched-off stations). (Fails today: no
-  `cellPeriods`.)
+  second; an extra on a cell with a Lunch line follows the line during Lunch; a Lunch line naming
+  a station closed for today with a destination sends the dish to that destination.
+  `routing-store.test.ts`: `routingAt` at 13:00 inside Lunch routes a Cocktail Downstairs, at
+  14:10 inside Afternoon (no line) Upstairs; two dishes of one department in one call read its
+  period once (count through a wrapper of the seat the test injects). Server: a till send at 13:00
+  puts the Cocktail's ticket item at Downstairs bar (`ticket_items.station_id`); a Cocktail sent
+  held at 13:55 and released at 14:10 (Afternoon, no line) keeps its ticket item and its printed
+  ticket at Downstairs bar (`station-move.ts:61`, N, re-routes only switched-off or not-open
+  stations). (Fails today: no `cellPeriods`.)
 - [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routing.test.ts src/routing-store.test.ts`.
-- [ ] **Step 3: Implement.** Pass the moment to every `selectRoutingCell` caller
-  (`grep -rn "selectRoutingCell(" packages apps`; the dashboard's callers pass `null`).
+- [ ] **Step 3: Implement.** Pass the periods to every `selectRoutingCell` caller
+  (`grep -rn "selectRoutingCell(" packages apps --include='*.ts'`; the dashboard's callers pass
+  none).
 - [ ] **Step 4: Run; see them pass;** the venue-service node project, the server package; typecheck
   `@waitron/module`, `@waitron/venue-service`, `@waitron/server`, `@waitron/dashboard`.
 - [ ] **Step 5: Commit** — `feat(venue-service): a routing cell can send dishes elsewhere during a period (A366)`.
 
 ---
 
-### Task A4b: The tester names the period that chose
-
-**Files:** `packages/venue-service/src/routing-store.ts` (`explainRoute :312`, M), `routing-types.ts`
-(`RouteExplanation :63-72`, M), `dashboard/prep-stations-screen.ts` (the tester's result,
-`:1634-1655`, M), `dashboard/strings.ts`; tests `routing-store.test.ts`, `prep-stations-screen.test.ts`.
-
-**Behaviour:** decision 13. `explainRoute` reads the periods as `routingAt` does for "Now" and
-"Date and time"; for "Weekday and time" it reads the department's normal-week range in force at
-that minute (`rangeInForce`, `service-day.ts:84`, S1). Its answer carries `decidedBy.periodId`, and
-the tester says "during Lunch" beside "Made at".
-
-- [ ] Steps: failing tests (Monday 13:00 names Lunch and Downstairs bar; Monday 16:00 names no
-  period and Upstairs bar); watch them fail; implement; the node project and the screen's browser
-  file; commit `feat(venue-service): the routing tester names the period (A366)`.
-
----
-
 ### Task A5: Writing period choices, and the preview
 
 **Files:**
-- Modify: `packages/venue-service/src/operations.ts` (`configureZone :433-469`, S1: a zone moved to
+- Modify: `packages/venue-service/src/operations.ts` (`configureZone :434-470`, N: a zone moved to
   another department deletes its cells' period rows for the old department, decision 10),
-  `packages/venue-service/src/routing-store.ts` (`validateRoutingCell :90-153`,
-  `setRoutingCell :170-193`, `previewRoutingChange :406-470`, `routingModel :802-845`, M),
-  `routing-types.ts` (`RoutingChange`, `RoutingMove`, `RoutingModel`), `routes.ts` (`PUT
-  /routing/cell :532`, `POST /routing/preview :524`, `STATUS`, S1), `errors.ts`
-  (`route.period_invalid`)
+  `packages/venue-service/src/routing-store.ts` (`validateRoutingCell :96-160`,
+  `setRoutingCell :176-199`, `clearRoutingCell :201-209`, `previewRoutingChange :428-497`,
+  `routingModel :838-880`, N), `routing-types.ts` (`RoutingChange`, `RoutingMove :84`,
+  `RoutingModel :96`, N), `routes.ts` (`PUT /routing/cell :488-502`, whose `onlyKeys(body,
+  ["address", "target"])` gains `periods`; `POST /routing/preview :480-486`; `STATUS :81`, N),
+  `errors.ts` (`route.period_invalid`, beside `:93`, N)
 - Test: `routing-store.test.ts`, `routes.test.ts`
 
 **Interfaces:**
@@ -780,25 +1030,32 @@ the tester says "during Lunch" beside "Made at".
 readonly periods?: readonly { periodId: string; target: RouteTarget }[]; // omitted = keep stored rows
 // RoutingModel gains: periods (decision 11) and, per cell, `periods: { periodId; target }[]`.
 // RoutingMove gains: periodIds: string[] | null — null: at any other time.
+// errors.ts: "route.period_invalid": { periodId: string; reason: "other_department" | "repeated" | "not_offered" };
 ```
 
-`setRoutingCell` validates (decision 10: the zone's department from `zone_service_policies`, as
-`validateRoutingCell` already reads it, `routing-store.ts:100-115`, M), writes the cell, then
-replaces its period rows in the same transaction (delete, then insert — nothing outside points at
-these rows). `previewRoutingChange` compares before and after untimed, as today, and once for each
-period that the old or the new cell names, reporting a move with `periodIds` (moves equal across
-periods are merged into one entry).
+`setRoutingCell` validates (decision 10: the zone's department from `zone_service_policies`, the
+join `validateRoutingCell` already makes, `routing-store.ts:106-122`, N; the row's products and
+each new period's products read once per write through decision 11's reader; the menu check only
+for periods the cell does not already store, decision 29), writes the cell, then replaces its
+period rows in the same transaction (delete, then insert — nothing outside points at these rows).
+`previewRoutingChange` compares before and after untimed, as today, and once for each period that
+the old or the new cell names, reporting a move with `periodIds` (moves equal across periods are
+merged into one entry).
 
 - [ ] **Step 1: Failing tests:** saving Cocktails · Every zone with Upstairs bar and a Lunch line →
   the model shows both; saving it again without `periods` keeps the line; with `periods: []` clears
   it; clearing the cell deletes its rows; a zone cell naming another department's period → 409
   `route.period_invalid` `other_department`; an unknown period → 404 `route.subject_not_found`
-  `subject: "period"`; the same period twice → `repeated`; a line naming a switched-off station →
-  409 `route.station_inactive`; moving the Terrace to another department drops its cells' Lunch
-  rows and keeps their plain choices; `periods` on the default cell → 400 `field: "address"` (today's refusal); `periods` with a
-  null target → 400 `field: "periods"`; the preview of adding
-  the Lunch line lists the Cocktails moving to Downstairs bar with `periodIds: [lunch]` and lists
-  no untimed move; the model's `periods` gives Lunch's product ids, a variant by its parent.
+  `subject: "period"`; the same period twice → `repeated`; a Lunch line on Cocktails when neither
+  Lunch's customer menu nor its staff-only menus reach a cocktail → 409 `not_offered`, nothing
+  written; the same line when only a staff-only menu reaches one → saved; a stored Lunch line
+  whose menus later drop every cocktail survives a re-save of the cell with a new plain station
+  (decision 29); a line naming a switched-off station → 409 `route.station_inactive`; moving the
+  Terrace to another department drops its cells' Lunch rows and keeps their plain choices;
+  `periods` on the default cell → 400 `field: "address"` (today's refusal); `periods` with a null
+  target → 400 `field: "periods"`; the preview of adding the Lunch line lists the Cocktails moving
+  to Downstairs bar with `periodIds: [lunch]` and lists no untimed move; the model's `periods`
+  gives Lunch's product ids, a variant by its parent.
 - [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routing-store.test.ts src/routes.test.ts`.
 - [ ] **Step 3: Implement**; run `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`.
 - [ ] **Step 4: Run; see them pass;** the node project; typecheck.
@@ -809,16 +1066,19 @@ periods are merged into one entry).
 ### Task A6: Deleting a period that routing names warns first
 
 **Files:**
-- Modify: `packages/venue-service/src/menu-timetable.ts` (`readOpeningHoursModel :624`; the
-  period entries of `OpeningHoursModel`, `menu-timetable-types.ts:37-64`, S1),
-  `dashboard/opening-hours-screen.ts` (the delete `wt-dialog`, `:422-455`, S1), `dashboard/strings.ts`
+- Modify: `packages/venue-service/src/menu-timetable.ts` (`readOpeningHoursModel :840`, N; the
+  period entries of `OpeningHoursModel`, `menu-timetable-types.ts:63-71`, N),
+  `dashboard/opening-hours-screen.ts` (the delete `wt-dialog`, `:812-845`, and `askDelete`/
+  `deletePeriod :366-400`, N), `dashboard/strings.ts`
 - Test: `menu-timetable.test.ts` (or the opening hours model's suite), `opening-hours-screen.test.ts`,
   `.a11y.test.ts`
 
 **Behaviour:** each period in the model carries `routingUses: { rowLabel: string; zoneName:
 string | null }[]`. The delete dialog, when the list is not empty, says "Routing names this period
 in {n} cells. Their choices for it will be removed:" and lists them ("Cocktails · Every zone");
-confirming deletes, and the cells keep their other lines (decision 12).
+confirming deletes, and the cells keep their other lines (decision 12). The dialog's existing
+refusal for a period a day still places (`menu_period.in_use`, shown after the request,
+`opening-hours-screen.ts:380-391`, N) is unchanged.
 
 - [ ] Steps: failing tests (the model lists the uses; the dialog lists them; after confirming the
   cell's Lunch row is gone and its Afternoon row stays — fails today: no `routingUses`); watch them
@@ -832,18 +1092,18 @@ confirming deletes, and the cells keep their other lines (decision 12).
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/routing-grid-model.ts` (the model the grid draws
-  from), `apps/dashboard/src/widgets/folder-made-at.ts` (`folderMadeAt :70-130`, `timed :116-125`,
-  S1), `packages/venue-service/src/routing-store.ts` (`describeMakers :746`, M) if its answer gains
-  `periodLines: boolean`, `apps/server/src/catalogue-api.ts` (`:1305-1344`, M) only to pass it on,
-  `apps/dashboard/src/api/live-queries.ts` (`listMadeAt`, `getFolderRouting`, `:231-255`, S1: add
-  `routing_cell_periods`, which is all these untimed reads newly depend on)
+  from), `apps/dashboard/src/widgets/folder-made-at.ts` (`folderMadeAt :67`, `timed :116-125`,
+  N), `packages/venue-service/src/routing-store.ts` (`describeMakers :782-836`, N) if its answer
+  gains `periodLines: boolean`, `apps/server/src/catalogue-api.ts` (`:1349-1397`, N) only to pass
+  it on, `apps/dashboard/src/api/live-queries.ts` (`listMadeAt :231-239`, `getFolderRouting
+  :240-255`, N: add `routing_cell_periods`, which is all these untimed reads newly depend on)
 - Test: `routing-grid-model.test.ts`, `apps/dashboard/src/widgets/folder-made-at.test.ts`,
   `apps/dashboard/src/api/live-queries.test.ts` if it pins the lists
 
 **Behaviour:** the grid model gives each cell its period lines in decision 15's words, and marks
 an inherited cell's lines as inherited. The Products screen's folder read-out treats a category
 whose applying cell has period lines as "timed" (its existing marker for a station with hours,
-`:116-125`, S1), so it shows that the answer changes during the day.
+`:116-125`, N), so it shows that the answer changes during the day.
 
 - [ ] Steps: failing tests (decision 15's three cases; an inherited zone cell carries the Every
   zone line; a folder whose cell has a Lunch line reads as timed — fails today: no lines); watch
@@ -868,17 +1128,19 @@ names, bubbling and composed) `routing-cell-save` `{ target, periods }`, `routin
 
 **Behaviour:** decision 14. "Any other time" (required); each line: a periods `wt-combobox
 multiple` offering the column's periods (a zone column its department's; Every zone all, grouped by
-department) whose `productIds` meet `rowProductIds`, and not a period already in another line; a
-station `wt-combobox` with the cell's own choices; Remove. "+ Different station during some
-periods" (absent when `isDefaultCell`, decision 8). Clear only for a stored cell. A refusal set on
-the editor lands under the line whose period it names, else at the bottom. A331 rule, with
-decision 14's starting state.
+department) whose `productIds` meet `rowProductIds`, plus the periods the cell already stores
+(decision 29), and not a period already in another line; a station `wt-combobox` with the cell's
+own choices; Remove. "+ Different station during some periods" (absent when `isDefaultCell`,
+decision 8). Clear only for a stored cell. A refusal set on the editor lands under the line whose
+period it names (`route.period_invalid`, any reason), else at the bottom. A331 rule, with decision
+14's starting state.
 
 - [ ] Steps: failing tests (the offers for a zone column and for Every zone; a period whose
-  products miss the row is not offered; a period in one line is not offered in another; adding a
-  line and saving emits `routing-cell-save` with `periods`; Remove; Clear; an inherited cell's Save
-  is available at open and a stored cell's is not; the reconnect case; axe for empty, two lines and
-  a refusal, both themes); watch them fail
+  products miss the row is not offered; a stored line's period is still offered after its menus
+  drop the row's products; a period in one line is not offered in another; adding a line and
+  saving emits `routing-cell-save` with `periods`; Remove; Clear; a `not_offered` refusal shows
+  under its line; an inherited cell's Save is available at open and a stored cell's is not; the
+  reconnect case; axe for empty, two lines and a refusal, both themes); watch them fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/routing-cell-editor`);
   implement; commit `feat(venue-service): a routing cell editor with period choices (A366)`.
 
@@ -887,11 +1149,11 @@ decision 14's starting state.
 ### Task A8b: The grid's cells open the editor
 
 **Files:**
-- Modify: `dashboard/routing-grid.ts` (the cell `:361-378` and `#defaultCell :392-426`, M; events
+- Modify: `dashboard/routing-grid.ts` (the cell `:361-378` and `#defaultCell :392-426`, N; events
   `routing-cell-change :376`, `routing-make-default :426`), `prep-stations-screen.ts` (the handlers
-  that run the preview, `#previewDialog :3230-3291`, M — the moves say "during Lunch"),
-  `routing-client.ts` (`setCell :285`, `preview :190`, M: pass `periods`),
-  `dashboard/live-queries.ts` (`routing`, `:17-41`, S1: add `routing_cell_periods`, `menu_periods`,
+  that run the preview, `#previewDialog :3216-3278`, N — the moves say "during Lunch"),
+  `routing-client.ts` (`setCell :283-285`, `preview :190-196`, N: pass `periods`),
+  `dashboard/live-queries.ts` (`routing`, `:17-41`, N: add `routing_cell_periods`, `menu_periods`,
   `menu_period_staff_menus`, `menu_slots`, `menu_day_timetables`, `departments`,
   `zone_service_policies` and the section and catalogue tables `reachableProducts` reads — taken
   from the model's queries, not from memory)
@@ -899,16 +1161,17 @@ decision 14's starting state.
   (the preview cases), `routing-client.test.ts`
 
 **Behaviour:** the cell is a button: the station (italic when inherited), the period lines beneath
-(Task A7). Clicking opens Task A8a's editor on that cell; Save runs the preview, then `setCell`
-with `periods` once confirmed; the default cell saves through `routing-make-default` as today. A
-refusal from the write is handed to the editor.
+(Task A7) and the extras note where it has one (Task A3d, kept as it is). Clicking opens Task A8a's
+editor on that cell; Save runs the preview, then `setCell` with `periods` once confirmed; the
+default cell saves through `routing-make-default` as today. A refusal from the write is handed to
+the editor.
 
 - [ ] **Step 1: Changed test checks commit** for the inline combobox's cases (listed under
   "Behaviour this slice removes"): each case that chose through the combobox now opens the editor
   and saves through it, asserting the same write and the same preview.
-- [ ] **Step 2: Failing tests:** the cell is a button whose accessible name holds station and lines;
-  saving a Lunch line previews, then writes `periods`; a `route.period_invalid` refusal lands under
-  its line; a live update to `routing_cell_periods` redraws the cell.
+- [ ] **Step 2: Failing tests:** the cell is a button whose accessible name holds station, lines
+  and any extras note; saving a Lunch line previews, then writes `periods`; a `route.period_invalid`
+  refusal lands under its line; a live update to `routing_cell_periods` redraws the cell.
 - [ ] **Step 3: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/routing-grid src/dashboard/prep-stations-screen.test.ts`.
 - [ ] **Step 4: Implement;** the venue-service node project and `pnpm exec vitest run scripts/live-subscriptions.test.ts`.
 - [ ] **Step 5: LOOK** at the grid and the editor in EN and ES, both themes, 1280 and 390; confirm
@@ -919,8 +1182,8 @@ refusal from the write is handed to the editor.
 
 ### Task A9: The routing grid at phone width
 
-**Files:** modify `dashboard/routing-grid.ts` (`:69-79`, `:115-123`, M); test
-`routing-grid.test.ts` (`:751`, `:773`, M).
+**Files:** modify `dashboard/routing-grid.ts` (`:69-79`, `:115-123`, N); test
+`routing-grid.test.ts` (`:751`, `:773`, N).
 
 **Behaviour:** decision 18.
 
@@ -935,21 +1198,22 @@ refusal from the write is handed to the editor.
 ### Task A10: Server — one request edits a station's name, printers and rest of order
 
 **Files:**
-- Modify: `apps/server/src/management-api.ts` (`PATCH /management-api/stations/:id :2025-2084`,
-  `POST /management-api/stations`, M), `apps/server/src/kitchen.ts` (`updateStation`,
-  `createStation :103`, S1), `apps/server/src/station-printers.ts` (`replaceStationPrinters :64`,
-  M); `management-api.ts`'s `STATUS` (`:251`, M) gains `"printer.makes_and_watches": 409` (today
-  only `print-api.ts` maps it; an unlisted code answers 400, `packages/server-kit/src/error-boundary.ts`)
+- Modify: `apps/server/src/management-api.ts` (`PATCH /management-api/stations/:id :2026-2085`,
+  `POST /management-api/stations :1943`, N), `apps/server/src/kitchen.ts` (`updateStation :205`,
+  `createStation :103`, N), `apps/server/src/station-printers.ts` (`replaceStationPrinters :64`,
+  N); `management-api.ts`'s `STATUS` (`:251`, N) gains `"printer.makes_and_watches": 409` (today
+  only `print-api.ts:116` maps it; an unlisted code answers 400,
+  `packages/server-kit/src/error-boundary.ts`)
 - Test: the station routes' suite (`grep -rln "management-api/stations" apps/server/src --include='*.test.ts'`)
 
 **Behaviour:** decision 19. Both routes accept `printerIds?: string[]`; the station row and its
 printers are written in one transaction; with `printerIds` the route also checks `printer.manage`
-(`print-api.ts:101`, M, the permission today's printers route needs) and refuses
+(`print-api.ts:101`, N, the permission today's printers route needs) and refuses
 `authorization.not_permitted` without it, writing nothing; a refused printer (switched off, or a
 watcher's — `printer.makes_and_watches`, decision 4) leaves the name unchanged too. The route's
-early "nothing to change" answer (`:2070-2080`, M, a 204 before any check) counts `printerIds` as a
+early "nothing to change" answer (`:2071-2081`, N, a 204 before any check) counts `printerIds` as a
 change. The editor sends `printerIds` only when they changed, since `replaceStationPrinters` refuses
-a switched-off station (`station.not_found`, `station-printers.ts:70-74`, M): a switched-off
+a switched-off station (`station.not_found`, `station-printers.ts:70-74`, N): a switched-off
 station's name can still be edited.
 
 - [ ] Steps: failing tests (a PATCH with a new name and two printers stores both; the same by a
@@ -967,9 +1231,10 @@ station's name can still be edited.
 **Files:**
 - Create: `packages/venue-service/src/dashboard/station-editor.ts` (`wt-modal`) and its `.test.ts`,
   `.a11y.test.ts`, `.save-state.test.ts`, `.unsaved.test.ts`
-- Modify: `dashboard/prep-stations-screen.ts` (`#stationMenu :1177-1243`, `#renameDialog
-  :1282-1337`, the New station dialog `:3156-3193`, M), `routing-client.ts` (`updateStation :235`,
-  `createStation :212`, M: `printerIds`), `dashboard/strings.ts`
+- Modify: `dashboard/prep-stations-screen.ts` (`#stationMenu :1176-1242`, its Rename item
+  `:1204-1218`, `#renameDialog :1281-1337`, the New station dialog `#dialog :3142-3178`, N),
+  `routing-client.ts` (`updateStation :235-245`, `createStation :212`, N: `printerIds`),
+  `dashboard/strings.ts`
 - Test: `prep-stations-screen.test.ts`, `.a11y.test.ts`
 
 **Behaviour:** decision 19. ⋮: Edit, Make default, Disable/Enable. The editor: name (required),
@@ -988,49 +1253,119 @@ rest of the order" (a switch); one `updateStation` call. The New station dialog 
 
 ---
 
-### Task A11b: Dashboard — the Stations tab's read-outs; the Tickets tab and the Settings column go
+### Task A11b: Dashboard — the Stations table drops the live kitchen numbers
 
 **Files:**
-- Modify: `dashboard/prep-stations-screen.ts` (`PREP_TABS :78`, the Tickets panel `:3516` and
-  `#tickets :1972-2035`, `#printerCell :1878-1971`, `#saveStationPrinters :1841`, the Settings
-  column `:2712-2715`, M), `dashboard/station-health-table.ts` (two read-out columns),
-  `routing-client.ts` (`setStationPrinters :246`, M, only if `grep` finds no other caller),
-  `dashboard/strings.ts`
+- Rename and modify: `dashboard/station-health-table.ts` → `dashboard/station-table.ts`, element
+  `prep-station-table` (decision 36), with `station-health-table.test.ts` and `.a11y.test.ts`
+  (`git mv`): rows from its `stations` property (`:83`, N) instead of `snapshot.stations`
+  (`render :201-222`, N); the `snapshot` property, the number columns `:142-158`, `#number :89`,
+  `#items :104`, `#details :160-200` and the problem notes in `#name :114-130` go
+- Modify: `dashboard/prep-stations-screen.ts` (the `health` state and `#loadHealth :282-284`,
+  `:777-779`, `:835`, `:840-857`; `#healthTable :1078`; the table at `:3436-3446`; the import
+  `:61`, `:69`, N), `dashboard/routing-client.ts` (`readStationHealth :264-273` and the
+  `StationHealth*` types `:19-46`, N — `OutputsDown` and `listOutputsDown` stay, decision 34),
+  `dashboard/live-queries.ts` (the `health` list `:2-15`, N), `dashboard/strings.ts`
+  (`prep.health.*` keys no longer read, the `prep.printer_down`/`prep.screen_*` keys once unused)
+- Test: `prep-stations-screen.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts`,
+  `prep-stations-overview.a11y.test.ts`, `station-action.unsaved.test.ts`, `routing-client.test.ts`,
+  `live-queries.test.ts`, the renamed table's tests
+
+**Behaviour:** decisions 20, 34, 35, 36. The Stations table shows each station's name with its
+Default and Disabled marks, the Today column (until Part B), and the ⋮ menu and reorder grip for a
+manager; nothing live. A supervisor gets the same table read-only, with no menus. The screen
+makes no health read.
+
+- [ ] **Step 1: Changed test checks commit** for the live numbers' cases (listed under "Behaviour
+  this slice removes", Part A): number and drill-down cases are deleted and listed; the supervisor
+  case `:4585` becomes "a supervisor sees the stations read-only" with its no-configuration-controls
+  checks kept; the read-failure case `:2495` keeps its routing-recovery half; selectors move to
+  `prep-station-table`.
+- [ ] **Step 2: Failing tests** — the table renders its rows before any health read and with
+  `readStationHealth` absent from the client; it has no Waiting, Preparing, Ready, Late or Oldest
+  column; a manager's drag reorder still saves the new order; a supervisor's table has no ⋮ and
+  no number; the screen subscribes to no `health` query; axe for the manager's and the
+  supervisor's table in both themes.
+- [ ] **Step 3: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/prep-stations src/dashboard/station-table src/dashboard/station-action src/dashboard/routing-client.test.ts src/dashboard/live-queries.test.ts`.
+- [ ] **Step 4: Implement;** the node project; `pnpm exec vitest run scripts/live-subscriptions.test.ts`;
+  typecheck `@waitron/venue-service` and `@waitron/dashboard`; LOOK at Stations as a manager and as
+  a supervisor in EN and ES, both themes, 1280 and 390.
+- [ ] **Step 5: Commit** — `feat(venue-service): Prep stations shows no live kitchen numbers (A366)`.
+
+---
+
+### Task A11c: Dashboard — the Stations tab's read-outs; the Tickets tab and the Settings column go
+
+**Files:**
+- Modify: `dashboard/prep-stations-screen.ts` (`PREP_TABS :77`, the Tickets panel `:3483` and
+  `#tickets :1958-2021`, `#printerCell :1864-1957`, `#saveStationPrinters :1827-1863`, the
+  Settings `rest` column `:2697-2701` and `#settingsCell`'s `rest` branches, N),
+  `dashboard/station-table.ts` (two read-out columns), `routing-client.ts` (`setStationPrinters
+  :246-248`, N, only if `grep -rn "setStationPrinters" packages apps --include='*.ts'` finds no
+  other caller), `dashboard/strings.ts`
 - Test: `prep-stations-screen.test.ts`, `.a11y.test.ts`, `.printers-unsaved.test.ts` (deleted: its
   subject goes, and the editor's reconnect case is Task A11a's), `.settings.test.ts`,
-  `.settings-unsaved.test.ts`, `station-health-table.test.ts`
+  `.settings-unsaved.test.ts`, `station-table.test.ts`
 
-**Behaviour:** decision 16. The Stations table: name, "Printed on" (printer names, or "No
-printer"), "Shown on" (the kitchen displays bound to the station and those bound to a watcher that
-follows it — today's two read-outs merged, `:1994-2025`, M; if slice 5 Part A has landed, the
-monitors that show it, slice 5 Task A17), then the live numbers as today (decision 20). The
-Settings tab keeps timing and the fallback column (until Part B).
+**Behaviour:** decision 16. The Stations table for a manager: name, "Printed on" (printer names, or
+"No printer"), "Shown on" (the kitchen displays bound to the station and those bound to a watcher
+that follows it — today's two read-outs merged, `#tickets`' `screens` and `watchers` columns
+`:1980-2009`, N; if slice 5 Part A has landed, the monitors that show it, slice 5 Task A17), then
+Today. A supervisor's table has neither read-out (decision 35). The Settings tab keeps timing and
+the fallback column (until Part B).
 
 - [ ] **Step 1: Changed test checks commit** for the Tickets tab and the Settings "Show the rest of
   the order" column (under "Behaviour this slice removes"): a case that edited printers in the
   Tickets cell now edits them in the editor; the Settings case now checks the editor's switch.
 - [ ] **Step 2: Failing tests** — the tab list is Stations, Routing, Watchers, Settings; the two
-  read-outs show; `view=tickets` opens Stations; axe in both themes.
-- [ ] **Step 3: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/prep-stations-screen src/dashboard/station-health-table`.
+  read-outs show for a manager and not for a supervisor; `view=tickets` opens Stations; axe in
+  both themes.
+- [ ] **Step 3: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/prep-stations-screen src/dashboard/station-table`.
 - [ ] **Step 4: Implement;** the node project; LOOK at Stations in EN and ES, both themes, 1280
   and 390.
 - [ ] **Step 5: Commit** — `feat(venue-service): stations show their printers and screens; the Tickets tab goes (A366)`.
 
 ---
 
+### Task A11d: Server — the station health read goes
+
+**Files:**
+- Modify: `apps/server/src/management-api.ts` (`GET /management-api/stations/health`
+  `:2002-2011` and its import `:12`, N)
+- Delete: `apps/server/src/station-health.ts` and `station-health.test.ts`
+- Test: `kitchen-timing-consumers.test.ts` (the `"health"` row, `:235`, `:248-249`, and its import
+  `:15`, N)
+
+**Behaviour:** decision 20. The route answers 404. The receipts that only the Stations tab used it,
+run on N and re-run here before deleting:
+`grep -rn "stations/health\|readStationHealth\|stationHealthItemsQuery\|station-health.js" apps packages scripts --include='*.ts' --include='*.mjs'`
+— on N its only non-test hits were the route (`management-api.ts:2002`), its import (`:12`), the
+file itself and the dashboard client (`routing-client.ts:264-273`), whose only caller is
+`prep-stations-screen.ts:848`; Task A11b removed the client side. If the grep shows any other
+caller (slice 5 Part A may have landed: its Task A7 edits `station-health.ts`), STOP and report.
+
+- [ ] Steps: the changed-checks commit (`station-health.test.ts` deleted, by file; the
+  `kitchen-timing-consumers.test.ts` `"health"` row removed, the other six rows kept); failing test
+  (the route answers 404 — fails today: 200); watch it fail; implement; the server package;
+  typecheck `@waitron/server`; commit `feat(server): the station health read goes (A366)`.
+
+---
+
 ### Task A12: The tab row at phone width
 
-**Files:** modify `packages/ui/src/components/wt-tabs.ts` (`:28-42`, `:117`, `:147-156`, M) and
-its tests (`wt-tabs.test.ts`, `wt-tabs.a11y.test.ts`; a token-painting case if the fade reads a
-token), `packages/venue-service/src/dashboard/prep-stations-screen.ts` (`:3444-3458`, M); tests
-`prep-stations-screen.test.ts` (`:2844-2851`, M).
+**Files:** modify `packages/ui/src/components/wt-tabs.ts` (the strip `:31-38`, the actions area
+`:39-45`, `#stripObserver :127-132`, `#showSelected :146-163`, N) and its tests
+(`wt-tabs.test.ts`, `wt-tabs.a11y.test.ts`; a token-painting case if the fade reads a token),
+`packages/venue-service/src/dashboard/prep-stations-screen.ts` (the actions slot `:3410-3426`,
+N); tests `prep-stations-screen.test.ts` (`:2715-2746`, N).
 
 **Behaviour:** decision 17. `wt-tabs` sets `data-overflow` to `start`, `end`, `both` or nothing from
 its strip's scroll position and size (on scroll and on resize), and masks the cut end
 (`mask-image` with a transparent stop `var(--wt-space-6)` from the edge). The screen shows "New
-station" on Stations and "New watcher" on Watchers only.
+station" on Stations and "New watcher" on Watchers only. A marked tab (`marked`, added since the
+plan was first written, `wt-tabs.ts:10-12`, N) keeps its colour under the fade.
 
-- [ ] Steps: the changed check first (`:2844-2851` keeps the 50% cap and asserts one action);
+- [ ] Steps: the changed check first (`:2741`'s two actions become one; the 50% cap is kept);
   failing tests: in `wt-tabs.test.ts`, a strip narrower than its tabs reports `end` at the start,
   `both` after scrolling a little, `start` at the end, and nothing when it fits; in the screen, at
   390 px in ES (the longest labels) the strip reports `end` and the selected tab is fully visible;
@@ -1044,31 +1379,50 @@ station" on Stations and "New watcher" on Watchers only.
 
 ### Task A13: Documentation and backlog (Part A)
 
-**Files:** `docs/developers/design-system.md` (the Prep stations paragraph `:2982-2995`, S1; the
-save-editor list `:1718-1723`, S1; add the cell editor and the station editor; the tab fade under
-`wt-tabs`), `docs/developers/products.md` (`:223`, M, if a combined ticket's names need a line),
-`docs/backlog.md` (A366: slice 4 Part A built; delete the bullet "At 390 px the routing grid's
-fixed first column…" `:1439-1443`, M, and its detail `docs/backlog/kitchen.md:93-99`; in "On the
-Routing tab, the label… is cut" `:1432-1437`, M, delete the tab-row half and keep the "W…" half,
-which Part B closes), `docs/backlog/service-periods.md` (the A366 detail).
+**Files:**
+- `docs/developers/design-system.md`: the Prep stations paragraph (`:3073-3095`, N: it says
+  "Stations shows live health and opens read-only dish drilldowns", "Routing shows the route
+  tester above the routing grid", "Tickets and Watchers own their printer selections" and "Station
+  Rename"); the tab-row paragraph's Prep stations sentence (`:3213-3216`, N: "shows both its add
+  buttons … on every tab"); the Save editors line (`:1797-1799`, N: "New and Rename station,
+  station printers, … Settings rest/fallback/timing"); add the cell editor and the station editor;
+  the tab fade under `wt-tabs`
+- `docs/developers/products.md` (`:223`, N, if a combined ticket's names need a line)
+- `docs/backlog.md`: in the A366 entry ("Service times, departments, zones and prep stations
+  (A366, owner 2026-10-07)"), say slice 4 Part A is built; delete "On the Routing tab, the label
+  above the 'Where is this made?' time choice is cut" (both halves are now closed: the tab row by
+  Task A12, the "W…" label with the tester) and "At 390 px the routing grid's fixed first column
+  takes about 140 of the grid's roughly 310 px"; delete "`#fallbackReason` … turns the server's
+  `switched_off` reason into `prep.test_disabled`…" (its subject, `fallbackReason` in
+  `routing-explanation.ts:57`, N, is deleted with the tester)
+- `docs/backlog/kitchen.md`: delete the two sections with the same titles as the two phone-width
+  entries
+- `docs/backlog/service-periods.md`: the A366 detail's slice 4 sentence (it says the tester is
+  removed after slices 2 and 3): the tester and the live numbers went in Part A
 
-- [ ] Read every claim about kitchen tickets per station, station printers, the Tickets tab and
-  Rename across `docs/developers/` (CLAUDE.md §1: a behaviour change retires every receipt about
-  the old one: `grep -rn -i "tickets tab\|each of its printers\|Printed on\|Rename" docs/developers`),
+- [ ] Read every claim about kitchen tickets per station, station printers, the Tickets tab,
+  Rename, the tester and live station health across `docs/developers/` and the backlog (CLAUDE.md
+  §1: a behaviour change retires every receipt about the old one:
+  `grep -rn -i "tickets tab\|each of its printers\|Printed on\|Rename\|route tester\|Where is this made\|live health\|drilldown\|stations/health" docs/developers docs/backlog.md docs/backlog`),
   correct each, and commit `docs: shared printers, period choices and the station editor (A366)`.
 
 Then run `/finish-branch` with this worktree and this plan. Pull request's first line: **"no venue
-reset needed"**. Its body lists the changed test checks.
+reset needed"**. Its body lists the changed test checks, and names the removed routes `GET
+/management-api/stations/health` (the only server read the Stations tab's live numbers used,
+decision 20) and `GET /management-api/venue-service/routing/explain` (the tester's, decision 32).
 
 ---
 
-## Part B — no station hours or fallbacks; worked-out times (second pull request, after slices 2 and 3)
+## Part B — no station hours or fallbacks; worked-out times (second pull request)
 
-Re-ground first. Slices 2 and 3 change the files below; read what landed:
-`git log --oneline <slice-2 merge>^..<slice-3 merge> -- packages/venue-service/src/routing.ts packages/venue-service/src/routing-store.ts packages/venue-service/src/station-times.ts packages/venue-service/src/hours.ts packages/venue-service/src/dashboard/hours-screen.ts packages/venue-service/src/dashboard/prep-stations-screen.ts packages/venue-service/src/dashboard/opening-hours-screen.ts`,
+**Re-ground before starting.** Part B was written on 2026-10-08 against slices 2 and 3's plans,
+not their code; its lines are M or S1. Slices 2 and 3 Part A have since landed (#1470, #1469) and
+Part A of this plan changes some of the same files. Re-read every line it cites on `main`, and
+re-check its tasks against what landed:
+`git log --oneline 974f7170e^..origin/main -- packages/venue-service/src/routing.ts packages/venue-service/src/routing-store.ts packages/venue-service/src/station-times.ts packages/venue-service/src/hours.ts packages/venue-service/src/dashboard/hours-screen.ts packages/venue-service/src/dashboard/prep-stations-screen.ts packages/venue-service/src/dashboard/opening-hours-screen.ts apps/till/src/widgets/station-today-dialog.ts apps/server/src/station-today-api.ts`,
 then `grep -rn "fallbackId\|todaySendsTo\|readStationSchedules\|stationsRestrictedFrom\|out_of_hours\|opened_by_hand\|station_fallbacks\|hours_week_cells\|special_date_hours" apps packages --include='*.ts'`
-for the current readers. If slice 3 has not stored a destination with "Close for today", or slice 2
-has not moved named days off the Station hours screen, STOP and ask.
+for the current readers. If slice 3 does not store a destination with "Close for today", or slice 2
+did not move named days off the Station hours screen, STOP and ask.
 
 ### Task B1a: Routing without hours or fallbacks (pure)
 
@@ -1094,7 +1448,7 @@ switched-off station goes to `todaySendsTo` when recorded, else to the default s
   else the default station; a case expecting `noReplacement` for a switched-off station or a
   closed loop now expects the default station (decision 22); a case whose whole subject was hours
   is deleted and listed.
-- [ ] **Step 2: Failing tests:** review focus 6's pure cases.
+- [ ] **Step 2: Failing tests:** review focus 8's pure cases.
 - [ ] **Step 3: Run; watch them fail;** implement; the venue-service node project; typecheck.
 - [ ] **Step 4: Commit** — `feat(venue-service): a station is open unless closed for today (A366)`.
 
@@ -1114,7 +1468,7 @@ switched-off station goes to `todaySendsTo` when recorded, else to the default s
 
 **Behaviour:** `routingModel`'s station times lose `hours`, `weekSet`, `specialDateRestricts`,
 `fallbackStationId` and `nextTransition`; opening a station closed for today deletes its row; a
-slice 3 row with no destination lands at the default station; review focus 6's server cases.
+slice 3 row with no destination lands at the default station; review focus 8's server cases.
 
 - [ ] Steps: failing tests; watch them fail; implement; the venue-service node project, the server
   package, the dashboard's folder read-out file, and the till's suite (Chromium, headroom first);
@@ -1123,64 +1477,59 @@ slice 3 row with no destination lands at the default station; review focus 6's s
 
 ---
 
-### Task B2: The till and the kitchen display without hours
+### Task B2: The till and the kitchen display without hours; closing with open dishes
 
 **Files:** `apps/till/src/` where slice 3's status line shows `out_of_hours` or `opened_by_hand`
-(`grep -rn "out_of_hours\|opened_by_hand" apps/till/src`), `i18n/strings.ts`; `apps/server/src/`
-`till-api.ts` (`GET /api/stations`), `device-api.ts` (slice 3's `today`), `alert-sources.ts`
-(`:337-344`, M: a printer-down alert is suppressed for a closed station — now only a station closed
-for today), and their tests.
+(`grep -rn "out_of_hours\|opened_by_hand" apps/till/src`), slice 3's station today dialog
+(`apps/till/src/widgets/station-today-dialog.ts`, `station-today.ts`), `i18n/strings.ts`;
+`apps/server/src/` `till-api.ts` (`GET /api/stations`), `device-api.ts` (slice 3's `today`),
+`station-today-api.ts` (the close routes), `alert-sources.ts` (`:337-344`, M: a printer-down alert
+is suppressed for a closed station — now only a station closed for today), and their tests. Re-ground
+first; this task may need splitting once the open-dishes move is designed.
+
+**Behaviour:** decisions 22 and 23. "Close for today" on a station with open dishes warns and asks:
+send them to a station the person picks, or leave them to finish; then asks where new work goes,
+as slice 3 does. With no open dishes it closes as slice 3 built it. The pull request lists each
+slice 3 check this changes.
 
 - [ ] Steps: failing tests (the kitchen display's status line never reads "outside its hours"; a
-  printer-down alert for a station closed for today is suppressed and for an open one is raised —
-  fails today on the removed `why` values' strings and types); watch them fail; implement; the
-  server package and the till's suite; commit `feat: the till and kitchen display drop station hours (A366)`.
+  printer-down alert for a station closed for today is suppressed and for an open one is raised;
+  closing a station with an open dish asks about it, sending moves it, leaving keeps it there
+  until done — fails today on the removed `why` values and on closing without asking); watch them
+  fail; implement; the server package and the till's suite; commit
+  `feat: the till and kitchen display drop station hours and ask about open dishes (A366)`.
 
 ---
 
-### Task B3: Dashboard — the Today column, status sentences and fallback field go
+### Task B3: Dashboard — the Today column, status sentences and fallback field go; Disable asks
 
 **Files:** `dashboard/prep-stations-screen.ts` (`#stationStatus :1670-1695`, `#todayCell
 :1696-1715`, `#destination :1661-1665`, the Settings fallback cell `:2487-2609`, `#fallbackOptions
 :1716-1728`, the Station action dialog's fallback `:3349-3368`, `#fallbackConfirmation
 :1770-1789`, the Disable flow `:1235-1241`, the Disabled section's `prep.off_*` cards in the
-Routing tab, M, as slice 3 left them), `station-health-table.ts` (the Today column `:141`, M),
+Routing tab, M, as slice 3 left them), `station-table.ts` (Part A's name; the Today column),
 `routing-client.ts` (`setStationFallback :258`, M), `dashboard/strings.ts` (`prep.when_closed`
 and the status keys `:115-160`, S1, once unused); tests `prep-stations-screen*.test.ts`,
-`station-action.unsaved.test.ts`, `station-health-table.test.ts`.
+`station-action.unsaved.test.ts`, `station-table.test.ts`.
 
 **Behaviour:** decisions 20 and 24. The Stations table shows "Closed for today → {destination}" or
-"Switched off" beside a station's name instead of a Today column. Disable confirms with the cells
-that name the station and where their dishes go.
+"Switched off" beside a station's name instead of a Today column. Disable on a station with open
+dishes first asks what happens to them (send to a station the person picks, or leave them to
+finish); then, as for a station with none, it confirms with the cells that name the station and
+where their dishes go.
 
 - [ ] Steps: the changed-checks commit (each Today, fallback and Disable-asks case, with
   `file:line`, before and after); failing tests (no Today column; the note beside a closed
-  station; Disable lists the naming cells and sends no fallback; the Settings tab has no fallback
-  column); watch them fail; implement; LOOK in EN and ES, both themes, 1280 and 390; commit
-  `feat(venue-service): Prep stations drops hours and fallbacks (A366)`.
+  station; Disable with an open dish asks about it; Disable lists the naming cells and sends no
+  fallback; the Settings tab has no fallback column); watch them fail; implement; LOOK in EN and
+  ES, both themes, 1280 and 390; commit `feat(venue-service): Prep stations drops hours and fallbacks (A366)`.
 
 ---
 
-### Task B4: The tester goes; empty and No preparation cells say what extras do
+### Task B4: moved to Part A
 
-**Files:** `dashboard/prep-stations-screen.ts` (`#tester :1471-1657`, `#explain :1418`, `.tester-when`
-CSS `:170-191`, the `test` URL key `:290`, M), `dashboard/routing-explanation.ts` and its test
-(deleted if nothing else imports it), `routing-client.ts` (`explain :197-211`, M), `routes.ts` (`GET
-/routing/explain :486`, S1), `routing-store.ts` (`explainRoute :312`, M), `routing-types.ts`
-(`RouteExplanation`), `apps/dashboard/src/navigation.ts` (`"prep-stations": { view, test }`, `:9`,
-S1), `dashboard/routing-grid.ts`, `dashboard/strings.ts` (`prep.test_*`); tests
-`prep-stations-screen.test.ts`, `.a11y.test.ts` (`:550-552`, M), `routing-client.test.ts`,
-`routes.test.ts`, `routing-grid.test.ts`.
-
-**Behaviour:** spec §9.3. The route answers 404. An empty cell, and a No preparation cell, show
-"{station} (default) — as an extra, follows its dish" (empty) or "No preparation — as an extra,
-follows its dish"; a cell naming a station, even the default one, does not (owner, A371).
-
-- [ ] Steps: the changed-checks commit (every tester case, deleted and listed; the backlog's
-  `#fallbackReason` gap, `docs/backlog.md:1323-1327`, M, goes with its subject); failing tests (no
-  tester; the two notes; a cell naming the default station has no note); watch them fail;
-  implement; LOOK at Routing in EN and ES, both themes, 1280 and 390; commit
-  `feat(venue-service): the routing tester goes; cells say how extras follow (A366)`.
+The tester and its extras note are Tasks A3b–A3d (owner, decision 13). The number is kept so the
+later Part B tasks keep theirs.
 
 ---
 
@@ -1189,8 +1538,9 @@ follows its dish"; a cell naming a station, even the default one, does not (owne
 **Files:** `dashboard/hours-screen.ts`, `hours-client.ts`, `hours-view.ts`, `hours-dates-list.ts`,
 `hours-cell-editor.ts` and their tests (each deleted once `grep -rn "<file stem>" packages apps`
 finds no importer outside the deleted set — slice 2 may have moved the calendar component to
-Opening hours), `dashboard/index.ts` (the `hours` entry, `:53-70`, S1), `dashboard/live-queries.ts`
-(`hours :42-56`, S1), `apps/dashboard/src/navigation.ts` (`hours`, `:10`, S1) and its test,
+Opening hours, and `prep-stations-screen.ts` imports `format`/`formatDate` from `hours-view.ts`),
+`dashboard/index.ts` (the `hours` entry, `:53-70`, S1), `dashboard/live-queries.ts` (`hours :42-56`,
+S1), `apps/dashboard/src/navigation.ts` (`hours`, `:10`, S1) and its test,
 `dashboard/strings.ts` (`nav.hours`, `hours.*` once unused); every link to `/manage/hours` (`grep -rn
 "manage/hours\|dashboard: \"hours\"" packages apps docs`).
 
@@ -1271,12 +1621,12 @@ export async function stationServiceTimes(
 ```
 
 Decision 21, reading each date's department ranges as slice 2's real week does (named days
-applied), each zone's closed ranges as slice 2's Task 8 reader gives them, each period's products
+applied), each zone's closed ranges as slice 2's reader gives them, each period's products
 (decision 11's reader, shared, not copied), and the routing rules once (`loadRoutingRules`,
 `routing-store.ts:302`, M) with the moment's period set to the period being tested. At most 42
 days per call (`management.request_invalid` beyond).
 
-- [ ] Steps: failing tests (review focus 7's three cases; the default station answers `always:
+- [ ] Steps: failing tests (review focus 9's three cases; the default station answers `always:
   "default"`; a switched-off one `switched_off`; a station no routing reaches has no ranges);
   watch them fail (`pnpm --filter @waitron/venue-service exec vitest run --project node src/station-service-times.test.ts`);
   implement; the node project; typecheck; commit
@@ -1288,7 +1638,7 @@ days per call (`management.request_invalid` beyond).
 
 **Files:**
 - Create: `dashboard/opening-hours-station.ts` and its `.test.ts`, `.a11y.test.ts`
-- Modify: `dashboard/opening-hours-screen.ts` (slice 2 Task 16's picker; the URL's `station` key),
+- Modify: `dashboard/opening-hours-screen.ts` (slice 2's picker; the URL's `station` key),
   `opening-hours-client.ts`, `apps/dashboard/src/navigation.ts` (`opening-hours` children),
   `dashboard/strings.ts`; tests `opening-hours-screen.test.ts`, `navigation.test.ts`
 
@@ -1327,16 +1677,15 @@ sentence instead of a grid.
 
 ### Task B12: Documentation and backlog (Part B)
 
-**Files:** `docs/developers/design-system.md` (Prep stations and Station hours paragraphs,
-`:2982-3017`, S1, as slices 2–3 left them), `docs/developers/conventions-data.md` (`:402`, `:1203`,
-S1), `docs/developers/public-holidays.md` (`:4`, S1), `docs/backlog.md` (A366: slice 4 built;
-delete "For a non-default station with no hours…" `:1282-1283`, the "W…" half of `:1432-1437`, and
-the `#fallbackReason` entry `:1323-1327`, M, each only if Part B removed its subject),
-`docs/backlog/kitchen.md` (`:84-92`, M), `docs/backlog/setup.md` (`:174-176`, M: station hours and
-an unreadable zone), `docs/backlog/service-periods.md`.
+**Files:** `docs/developers/design-system.md` (Prep stations and Station hours paragraphs, as
+slices 2–3 and Part A left them), `docs/developers/conventions-data.md` (`:402`, `:1203`, S1),
+`docs/developers/public-holidays.md` (`:4`, S1), `docs/backlog.md` (A366: slice 4 built; delete
+"For a non-default station with no hours, Hours says 'No hours restriction' and Prep stations…"
+only if Part B removed its subject), `docs/backlog/kitchen.md` (`:84-92`, M), `docs/backlog/setup.md`
+(`:174-176`, M: station hours and an unreadable zone), `docs/backlog/service-periods.md`.
 
-- [ ] Read every claim about station hours, fallbacks, "When closed, work goes to", the tester and
-  the Station hours page across `docs/developers/` and the backlog (`grep -rn -i "station hours\|fallback\|Where is this made\|manage/hours\|out of hours" docs/developers docs/backlog.md docs/backlog`),
+- [ ] Read every claim about station hours, fallbacks, "When closed, work goes to", closing a
+  station and the Station hours page across `docs/developers/` and the backlog (`grep -rn -i "station hours\|fallback\|close for today\|manage/hours\|out of hours" docs/developers docs/backlog.md docs/backlog`),
   correct each, and commit `docs: prep stations have no hours (A366)`.
 
 Then run `/finish-branch` with this worktree and this plan. Pull request's first line: **"no venue
