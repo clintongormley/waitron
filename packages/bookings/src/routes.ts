@@ -45,7 +45,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "booking.invalid": 400,
   "booking.invalid_transition": 409,
   "booking.table_required": 400,
-  "table.not_found": 404,
+  "table.not_found": 400,
   "table.inactive": 400,
   "tab.already_open": 409,
   "table.needs_clearing": 409,

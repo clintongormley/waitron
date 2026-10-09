@@ -109,14 +109,21 @@ their full text.
   table in a zone that is not a table-tab zone has no bookings test: the real `openTab` refuses
   it with `service_zone.mode_incompatible`, the fake core in `src/testing/fake-core.ts` does not,
   and `routes.ts`'s `STATUS` map has no entry for that code, so it answers 400 by default.
-  Editing a booking that is already seated answers `booking.not_found`, which the dashboard shows
-  as "could not be found". The server accepts an empty contact name; only the dashboard form
+  The server accepts an empty contact name; only the dashboard form
   refuses one. `seatBooking`'s `status = 'booked'` condition on its final update cannot fire
   while every caller goes through `withTransaction` (read, not run). Test titles in
   `bookings.test.ts` and `migrations.test.ts` still say "tenant", and `floor.test.ts` inserts
   `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
   `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
   commit message; `docs/developers/testing-guide.md` has no paragraph holding it.
+
+## The booking state refusal describes a state move even when editing
+
+- **OPEN, carried from A394-18's run-it review.**
+  `packages/bookings/src/dashboard/strings.ts`'s `booking.invalid_transition` says
+  "can't move to that state now". An edit of a seated, completed, cancelled or no-show booking
+  now uses this code too. Choose wording that covers both edits and lifecycle actions, then
+  update English and Spanish and pin both messages in the bookings wording tests.
 
 ## The bookings seat picker keeps a table it no longer offers
 

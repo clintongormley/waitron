@@ -327,13 +327,18 @@ describe("updateBooking", () => {
     ).rejects.toMatchObject({ code: "booking.not_found" });
   });
 
-  it("rejects an edit of a non-booked booking with booking.not_found", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const id = await seedBooking(cfg, createdBy, "cancelled");
-    await expect(
-      scoped(cfg, (tx) => updateBooking(tx, cfg, id, { partySize: 3 })),
-    ).rejects.toMatchObject({ code: "booking.not_found" });
-  });
+  it.each(["seated", "completed", "no_show", "cancelled"] as const)(
+    "rejects an edit of a %s booking with booking.invalid_transition",
+    async (status) => {
+      const { cfg, createdBy } = await setupVenue();
+      const id = await seedBooking(cfg, createdBy, status);
+      const before = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
+      await expect(
+        scoped(cfg, (tx) => updateBooking(tx, cfg, id, { partySize: 3 })),
+      ).rejects.toMatchObject({ code: "booking.invalid_transition", params: { bookingId: id } });
+      expect(await scoped(cfg, (tx) => getBooking(tx, cfg, id))).toEqual(before);
+    },
+  );
 
   it("rejects a non-positive party size with booking.invalid", async () => {
     const { cfg, createdBy } = await setupVenue();

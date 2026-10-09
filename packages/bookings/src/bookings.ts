@@ -116,7 +116,6 @@ export async function getBooking(
   return row;
 }
 
-/** A row that is missing or no longer `booked` is refused as `booking.not_found`. */
 export async function updateBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -144,7 +143,11 @@ export async function updateBooking(
     .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
     .returning({ id: bookings.id });
   if (updated.length === 0) {
-    throw new AppError("booking.not_found", { bookingId: id });
+    const [row] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, id));
+    if (row === undefined) {
+      throw new AppError("booking.not_found", { bookingId: id });
+    }
+    throw new AppError("booking.invalid_transition", { bookingId: id });
   }
 }
 
