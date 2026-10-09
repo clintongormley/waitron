@@ -319,3 +319,26 @@ it.each([
     expect(state.sendableMenuIds).toEqual(sendable ? [f.menuId] : []);
   },
 );
+
+it.each([
+  ["05:50:00", "05:45"],
+  ["05:05:00", "05:00"],
+])("offers clock quarters accepted by the writer for a %s changeover", async (cutover, last) => {
+  const f = await fixture();
+  await run(async (tx) => {
+    await tx
+      .update(locations)
+      .set({ dayCutover: cutover })
+      .where(eq(locations.id, f.cfg.locationId));
+  });
+  const result = await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("13:50")));
+  expect(result.period!.choices[0]).toBe("14:15");
+  expect(result.period!.choices.at(-1)).toBe(last);
+  expect(result.period!.choices.every((time) => /:(00|15|30|45)$/.test(time))).toBe(true);
+  for (const until of [result.period!.choices[0]!, result.period!.choices.at(-1)!]) {
+    await run((tx) =>
+      keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until }, at("13:50")),
+    );
+    expect(await rows(f)).toMatchObject([{ endsAt: `${until}:00` }]);
+  }
+});

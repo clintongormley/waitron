@@ -53,9 +53,13 @@ export async function readKeepOpen(
   const c = await context(tx, cfg, zoneId, at);
   if (c.subject === null || c.moment === null) return { period: null };
   const start = Math.max(c.moment.minute, endMinute(scheduledEnd(c), c.clock.dayCutover));
+  const cutoverMinute =
+    Number(c.clock.dayCutover.slice(0, 2)) * 60 + Number(c.clock.dayCutover.slice(3, 5));
   const choices: string[] = [];
   for (
-    let minute = (Math.floor(start / SERVICE_STEP_MINUTES) + 1) * SERVICE_STEP_MINUTES;
+    let minute =
+      (Math.floor((start + cutoverMinute) / SERVICE_STEP_MINUTES) + 1) * SERVICE_STEP_MINUTES -
+      cutoverMinute;
     minute <= 1440;
     minute += SERVICE_STEP_MINUTES
   ) {
