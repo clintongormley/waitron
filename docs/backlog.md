@@ -3565,6 +3565,19 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   there may wrap mid-word.
   [Detail](backlog/dashboard.md#the-overviews-top-sellers-table-can-reach-into-its-cards-padding-at-desktop-width)
 
+- **A create dialog headed "Add …" still submits with "Save"** — options list, extras list, unit,
+  product, menu, menu section, named day, station, zone and reason. For the owner: should the
+  submit say "Add" too? Left open by A450 (#1484); asked in lane C's questions file.
+
+- **Three texts still use the old words.** Two hints say "Create" (the Products screen's empty
+  prompt, "Create a menu on the Menus screen…", and the readiness line "Create an active department
+  before service."), and the purchase dialog's edit heading reads "Edit purchase invoice" while its
+  create heading is now "Add invoice". The named-day button "Give this date its own hours" opens a
+  dialog headed "Add named day" (main had "New named day"). Left open by A450 (#1484).
+
+- **The service status screen's colour field label is cut to "C…" at 390 px** — seen on A450's
+  look pass (#1484), not changed; not checked whether it predates that branch.
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
