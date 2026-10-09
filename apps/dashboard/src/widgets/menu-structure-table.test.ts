@@ -3064,13 +3064,14 @@ describe("search and the Available filter", () => {
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
     await press(el, "m-fav", "ArrowUp");
     expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 0 }]);
-    expect(shown(el)).toEqual(["m-fav", "m-burger"]);
+    // A search draws the closest match first, so Burger stays above Favourites.
+    expect(shown(el)).toEqual(["m-burger", "m-fav"]);
     expect(announced(el)).toBe(reordered("Favourites", 1, 2));
     expect(focusedInTable(el)).toBe("drag-m-fav");
-    // The full order is now Favourites, Burger, Drinks; Burger is the last one drawn.
-    await press(el, "m-burger", "ArrowDown");
+    // The full order is now Favourites, Burger, Drinks; Favourites is the last one drawn.
+    await press(el, "m-fav", "ArrowDown");
     expect(moves).toHaveLength(1);
-    await press(el, "m-burger", "ArrowUp");
+    await press(el, "m-burger", "ArrowDown");
     expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 0 });
     await search(el, "");
     expect(shown(el)).toEqual(["m-burger", "m-fav", "m-drinks"]);

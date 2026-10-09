@@ -363,8 +363,11 @@ export class MenuStructureTable extends LitElement {
 
   /** While a search or filter hides rows, a grip moves only past the siblings the person can see. */
   #shownSiblingRows(row: Row): Row[] {
-    const root = this.#table()!.shadowRoot!;
-    return this.#siblingRows(row).filter((sibling) => shownRow(root, sibling.key) !== null);
+    const table = this.#table()!;
+    const root = table.shadowRoot!;
+    return table.sortedSiblings(
+      this.#siblingRows(row).filter((sibling) => shownRow(root, sibling.key) !== null),
+    );
   }
 
   /** Whether the list holding `row` already holds `ref`. */
