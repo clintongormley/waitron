@@ -1288,14 +1288,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4, 6 and 7, and slice 5 Part B.**
-  Station-hours and fallback retirement, period routing, combined tickets, department pages and
-  department receipts remain in slices 4, 6 and 7; retiring watchers (slice 5 Part B) waits for
-  slice 4's combined tickets. Slice 7's plan/spec apply the owner's
-  2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
-  Slice 6 Part A's department pages and service settings are built on Lane E's branch; its
-  documentation and demo checks are complete, with branch reviews, hook and CI still owed.
+  APPROVED 2026-10-07; remaining work is slices 4 and 7, slice 5 Part B, and slice 6 Parts B/C.**
+  Station-hours and fallback retirement, period routing, combined tickets and department
+  receipts remain; retiring watchers waits for combined tickets. Slice 6's remaining parts
+  add the closed-times summary and floor-plan entry. Slice 7 applies the owner's receipt answers.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+
+- **Refresh service settings on an open till** — decide how changed department/zone policy
+  reaches an empty till and preserves an existing basket's facts, then carry it through polling.
+  Fresh sign-in reads changed settings; the open till keeps its loaded flow.
+  [Detail](backlog/service-periods.md#refresh-service-settings-on-an-open-till)
 
 - **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
   Served at a table or counter; payment due before the kitchen, at collection or at the end of

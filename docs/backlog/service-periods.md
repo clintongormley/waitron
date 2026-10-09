@@ -35,28 +35,17 @@ their full text.
   "Where is this made?" tester and the Stations tab's live kitchen numbers removed; Part B —
   station hours and fallbacks removed, closing a station with open dishes asks what to do with
   them, and each station's worked-out times. Its new decisions 29–37 wait for the owner.
-  Slice 6's plan is written ahead of lane D (A366-6p, 2026-10-08): [slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md),
-  with all owner answers applied on 2026-10-09 (~09:40–10:05): the list always shows, each
-  department page always has its parent link, empty zone hints contain only the inherited value,
-  collection tickets offer Print / Don't print with clear-to-null, and receipt modes finish as
-  auto/on_request (Always/On request). All footers put Cancel before Save. Part A, Tasks A1–A15,
-  remains one Lane E PR from landed slices 1/3A. Its storage, policy writers, order flow, shared service settings fields, standalone department list
-  and department/zone dialogs are built, as is the standalone department page with Settings.
-  Task A10 now uses the registered public screen: the list, department page, Zones tab, dialogs,
-  Enable actions and live reads use their replacement owners. The legacy-case map is
-  [recorded separately](../superpowers/plans/2026-10-09-a366-6a-screen-case-map.md); public mounted
-  navigation and the EN/ES light/dark 390/1280 look pass ran on that destination. A13a now narrows
-  the department and zone requests, removes the old answer fields and preserves settings when
-  renaming or moving. A13b also retires the writer inputs; A14 drops the old style columns.
-  The synthetic-row upgrade walk refused the generated `0045_retire_service_style` at
-  `DROP TABLE departments` with a foreign-key error, recorded by the walk's reset entry.
-  The seeded demo shows Restaurant and bar with table service, Deli with counter service,
-  and the two bar zones overriding to counter service. A15 updates the service-setting
-  documentation and checks the actual dashboard at 390/1280 px in EN/ES and both themes.
-  The branch reviews, normal hook and current-head CI remain. Parts B/C remain Lane D work after
-  slice 2/A429. Lane E's slice 7 follows 6A, with no current branch. The explicit overlap waiver
-  permits independent slice 2/5 checkouts; whoever lands second reconciles source and regenerates
-  migration clashes. No conversion of obsolete receipt data, only pre-live reset. The 6A branch has not landed.
+  Slice 6's remaining work is Part B's closed-times summary and Part C's floor-plan entry,
+  in Lane D after slice 2/A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
+
+## Refresh service settings on an open till
+
+A till already signed in keeps its loaded payment flow when a department or zone policy changes.
+Its menu-state poll does not carry the policy, and reloading offers after a menu change still
+keeps that flow. A fresh sign-in reads the changed policy. Decide when an empty till should adopt
+new settings and how an existing basket keeps its recorded facts, then update the poll and its
+consumer. Left open by A366 slice 6 Part A; the branch's real-route and browser probes are in
+its review receipts. This entry does not establish when the behavior began.
 
 ## Split an order's recorded service mode into two facts
 
