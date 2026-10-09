@@ -1670,6 +1670,7 @@ export interface MyAbsence {
 
 /** One active floor-plan zone from `GET /api/zones`. */
 export interface FloorZone {
+  closed: boolean;
   id: string;
   name: string;
   displayOrder: number;

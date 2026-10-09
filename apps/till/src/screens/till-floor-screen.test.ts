@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
-  return { id: "z1", name: "Comedor", displayOrder: 0, active: true, ...over };
+  return { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false, ...over };
 }
 
 /** Defaults to a free, unstatused, UNPLACED table in zone z1, so the screen defaults to the LIST view. */
@@ -886,5 +886,72 @@ describe("floor zone URL navigation", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!.click();
     await el.updateComplete;
     expect(location.pathname).toBe("/tabs/floor/zone/~");
+  });
+});
+
+describe("closed floor zones", () => {
+  it.each(["en-GB", "es-ES"])("labels the zone and refuses a free table in %s", async (locale) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const { el } = await mount({ zones: [zone({ name: "Terrace", closed: true })] });
+      const open = vi.fn();
+      el.addEventListener("open-table", open);
+      expect(el.shadowRoot!.querySelector("[data-zone]")!.textContent?.trim()).toBe(
+        locale === "en-GB" ? "Terrace · Closed" : "Terrace · Cerrada",
+      );
+      el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+      const notice = el.shadowRoot!.querySelector("[data-zone-closed]");
+      expect(notice?.textContent?.trim()).toBe(
+        locale === "en-GB"
+          ? "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area."
+          : "Terrace está cerrada: no se puede pedir nada nuevo aquí. Las cuentas se pueden cobrar o mover a otra zona.",
+      );
+      expect(notice?.getAttribute("role")).toBe("status");
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("refuses the map's free table too", async () => {
+    const { el } = await mount({ zones: [zone({ closed: true })], tables: [placed("t1")] });
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("wt-open-table", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+  });
+
+  it("still resumes an occupied table in a closed zone", async () => {
+    const { el } = await mount({
+      zones: [zone({ closed: true })],
+      tables: [table({ hasOpenTab: true, state: "open-tab", tabTotal: "12.00", tabLineCount: 1 })],
+    });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(seen.detail).toEqual({ tableId: "t1", seated: true });
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+  });
+
+  it("seats free tables after the zone reopens and clears the old notice", async () => {
+    const { el } = await mount({ zones: [zone({ closed: true })] });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+    el.zones = [zone({ closed: false })];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
   });
 });

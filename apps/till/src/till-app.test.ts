@@ -108,7 +108,13 @@ const heldSummary: HeldOrderSummary = {
   signals: [],
 };
 
-const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const floorZone: FloorZone = {
+  id: "z1",
+  name: "Comedor",
+  displayOrder: 0,
+  active: true,
+  closed: false,
+};
 
 const freeTable: TableState = {
   id: "t1",
@@ -17684,4 +17690,83 @@ it("a completed sale can start the next basket while its held-list refresh is st
   await flush(el);
   expect(counter(el)!.store.id).toBe(next!.store.id);
   expect(currentApi.recordSale).toHaveBeenCalledOnce();
+});
+
+describe("closed floor zone refusals", () => {
+  it("reloads the zones after a seat refusal and retains its explanation", async () => {
+    const listZones = vi.fn().mockResolvedValue([floorZone]);
+    const { el } = await mountApp({
+      listZones,
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      seatTable: vi.fn().mockRejectedValue({ code: "service_zone.closed", zoneId: "z1" }),
+    });
+    await toCounter(el);
+    selectTab(el, "floor");
+    await flush(el);
+    listZones.mockResolvedValue([{ ...floorZone, closed: true }]);
+    const count = listZones.mock.calls.length;
+    emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false, guestCount: 2 });
+    await flush(el);
+    await expect.poll(() => listZones.mock.calls.length).toBeGreaterThan(count);
+    await flush(el);
+    expect(currentApi.seatTable).toHaveBeenCalledWith(freeTable.id, 2);
+    expect(floor(el)!.zones[0]).toMatchObject({ closed: true });
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      codeMessage("service_zone.closed", "es"),
+    );
+    expect(tableOrder(el)).toBeNull();
+  });
+});
+
+describe("closed floor zone counter refusals", () => {
+  it("reloads floor zones on a counter refusal and keeps the basket", async () => {
+    const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
+    const { el } = await mountApp({
+      listZones,
+      parkOrder: vi.fn().mockRejectedValue({ code: "service_zone.closed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    await expect.poll(() => listZones.mock.calls.length).toBe(1);
+    expect(c.store.lines.map((line) => [line.product.id, line.quantity])).toEqual([[cafe.id, "2"]]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      codeMessage("service_zone.closed", "es"),
+    );
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.zones[0]).toMatchObject({ closed: true });
+  });
+
+  it("ignores a refusal's floor read after the operator session changes", async () => {
+    let answer!: (zones: FloorZone[]) => void;
+    const listZones = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<FloorZone[]>((resolve) => {
+            answer = resolve;
+          }),
+      )
+      .mockResolvedValue([{ ...floorZone, name: "Fresh floor", closed: false }]);
+    const { el } = await mountApp({
+      listZones,
+      parkOrder: vi.fn().mockRejectedValue({ code: "service_zone.closed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "park-order", {});
+    await flush(el);
+    await expect.poll(() => listZones.mock.calls.length).toBe(1);
+    emit(c, "logout");
+    await flush(el);
+    await toCounter(el);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.zones[0]?.name).toBe("Fresh floor");
+    answer([{ ...floorZone, name: "Previous session", closed: true }]);
+    await flush(el);
+    expect(floor(el)!.zones[0]).toMatchObject({ name: "Fresh floor", closed: false });
+  });
 });

@@ -1,3 +1,5 @@
+import { page } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-floor-screen.js";
@@ -5,8 +7,8 @@ import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
 
 const zones: FloorZone[] = [
-  { id: "z1", name: "Comedor", displayOrder: 0, active: true },
-  { id: "z2", name: "Terraza", displayOrder: 1, active: true },
+  { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false },
+  { id: "z2", name: "Terraza", displayOrder: 1, active: true, closed: false },
 ];
 
 // A spread of occupancy states + a zoneless table, plus one card for EACH of the three service hints
@@ -483,3 +485,63 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 });
+
+for (const locale of ["en-GB", "es-ES"]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      for (const view of ["list", "map"]) {
+        it(`closed floor zone ${view} is readable in ${locale}/${theme}/${width}`, async () => {
+          const previous = currentLocale();
+          try {
+            setLocale(locale);
+            await page.viewport(width, 900);
+            expect(window.innerWidth).toBe(width);
+            const { el, host } = await mountWidget<TillFloorScreen>(
+              "till-floor-screen",
+              {
+                zones: [
+                  { ...zones[0]!, name: locale === "en-GB" ? "Terrace" : "Terraza", closed: true },
+                  zones[1]!,
+                ],
+                tables: [
+                  {
+                    ...tables[2]!,
+                    ...(view === "map"
+                      ? { posX: 250, posY: 400, shape: "round", rotation: 0 }
+                      : {}),
+                  },
+                ],
+              },
+              theme,
+            );
+            if (view === "map") {
+              el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+                new CustomEvent("wt-open-table", {
+                  detail: { tableId: "t3" },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+            } else {
+              el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+            }
+            await el.updateComplete;
+            const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-zone-closed]");
+            expect(notice?.textContent).toContain(
+              locale === "en-GB" ? "Terrace is closed" : "Terraza está cerrada",
+            );
+            expect(notice!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+            await expectNoA11yViolations(host);
+            await page.screenshot({
+              path: `../__screenshots__/a366-floor-closed/${view}-${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale(previous);
+            await page.viewport(1280, 768);
+          }
+        });
+      }
+    }
+  }
+}

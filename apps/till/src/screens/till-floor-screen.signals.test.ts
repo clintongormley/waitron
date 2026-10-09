@@ -80,7 +80,7 @@ async function mountFloor(
   over: Partial<TillFloorScreen> = {},
 ): Promise<TillFloorScreen> {
   const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
-    zones: [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }],
+    zones: [{ id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false }],
     tables,
     now,
     ...over,
@@ -251,8 +251,8 @@ describe("till-floor-screen: what each station has ready", () => {
     const elsewhere = { ...mesa8, zoneId: "z2" };
     const el = await mountFloor([table({ signals: [ready(["bar", "Bar", 3])] }), elsewhere], {
       zones: [
-        { id: "z1", name: "Comedor", displayOrder: 0, active: true },
-        { id: "z2", name: "Terraza", displayOrder: 1, active: true },
+        { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false },
+        { id: "z2", name: "Terraza", displayOrder: 1, active: true, closed: false },
       ],
     });
     expect(summary(el).map((row) => row.text)).toEqual([

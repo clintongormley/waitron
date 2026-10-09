@@ -31,7 +31,7 @@ import type {
 // The till's cancel, give-away and discount flow through the app: reasons, the preview, approval
 // and the refusals (service plan Task 11, part B). The API is stubbed at the client boundary.
 
-const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false };
 
 const party: TableParty = {
   id: "v1",

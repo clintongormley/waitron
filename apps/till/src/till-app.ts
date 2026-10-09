@@ -361,6 +361,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
 
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
+  "service_zone.closed",
   "order.payment_in_flight",
   "sale.total_exceeds_simplified_limit",
   "table.not_shared",
@@ -576,6 +577,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "service_zone.closed",
   "device.forbidden_action",
   "device.profile_changed",
   "order.payment_in_flight",
@@ -2206,6 +2208,16 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (
+      changed.has("errorKey") &&
+      typeof this.errorKey === "object" &&
+      "code" in this.errorKey &&
+      this.errorKey.code === "service_zone.closed" &&
+      this.#inShell()
+    ) {
+      const session = this.#operatorSession;
+      void this.#loadFloorData(() => !this.isConnected || session !== this.#operatorSession);
+    }
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);

@@ -45,7 +45,13 @@ const cafe: TillProduct = {
   catalogueName: "Carta",
 };
 
-const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const floorZone: FloorZone = {
+  id: "z1",
+  name: "Comedor",
+  displayOrder: 0,
+  active: true,
+  closed: false,
+};
 
 const openTable: TableState = {
   id: "t2",

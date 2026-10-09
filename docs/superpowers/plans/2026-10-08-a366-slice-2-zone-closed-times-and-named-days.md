@@ -825,11 +825,18 @@ nuevo. Las cuentas se pueden cobrar o mover."
 table there answers a tap with the refusal sentence; any `service_zone.closed` refusal reloads the
 floor.
 
-- [ ] Steps: failing tests (a zone with `closed: true` labels its tab — fails today because
+- [x] Steps: failing tests (a zone with `closed: true` labels its tab — fails today because
   `FloorZone` has no `closed`; tapping its free table shows the sentence and no seat dialog; a
   seat refused by the server reloads the floor); watch them fail; implement; the till's whole
   suite; LOOK at the floor in EN and ES, both themes, 1280 and 390; commit
   `feat(till): the floor shows a closed zone (A366)`.
+
+The app's table and counter refusal lists both retain `service_zone.closed`. When that refusal
+is displayed, reload through `#loadFloorData` so the zone flags and tables are refreshed together;
+ignore the result after disconnect or an operator-session change. Placement refreshes remain
+table-only. The floor keeps occupied tables openable, clears the notice on a zone change and stops
+showing it after that zone reopens. Typed open-zone fixtures gain `closed: false` without changing
+any existing check.
 
 ---
 

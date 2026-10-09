@@ -40,7 +40,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
-const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false };
 
 function table(over: Partial<TableState> = {}): TableState {
   return {
