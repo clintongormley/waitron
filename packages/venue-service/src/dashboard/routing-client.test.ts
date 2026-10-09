@@ -101,7 +101,7 @@ it("updates and removes watchers through management routes", async () => {
   ]);
 });
 
-it("keeps top-level product names, and offers active variants only to the tester", async () => {
+it("keeps top-level product names, active or not, and lists no variants", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/products"
       ? [
@@ -133,81 +133,7 @@ it("keeps top-level product names, and offers active variants only to the tester
     { id: "lager", name: "Lager" },
     { id: "retired", name: "Retired lager" },
   ]);
-  expect(result.testProducts).toEqual([
-    { id: "lager", name: "Lager" },
-    { id: "large", name: "Lager · Large" },
-  ]);
-});
-
-it("offers an active product to the tester when it has no variants", async () => {
-  const request = vi.fn(async (path: string) =>
-    path === "/management-api/products"
-      ? [{ id: "bread", name: "Bread", active: true }]
-      : path === "/management-api/venue-service/routing"
-        ? {
-            zones: [],
-            categories: [],
-            products: [],
-            cells: [],
-            defaultStationId: null,
-            stations: [],
-            canMakeDefault: true,
-          }
-        : [],
-  );
-  const result = await new PrepStationsApi(request as DashboardRequest).load();
-  expect(result.testProducts).toEqual([{ id: "bread", name: "Bread" }]);
-});
-
-it("asks the route tester for a product and an optional zone", async () => {
-  const request = vi.fn(async () => ({
-    route: null,
-    decidedBy: null,
-    fallbacks: [],
-    noReplacement: false,
-    stations: [],
-  }));
-  const result = await new PrepStationsApi(request as DashboardRequest).explain("lager", null);
-  expect(result.route).toBeNull();
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/routing/explain?productId=lager&zoneId=",
-    "GET",
-    undefined,
-    { passive: false },
-  );
-});
-
-it("escapes product and zone identifiers in a zoned route explanation", async () => {
-  const request = vi.fn(async () => ({
-    route: null,
-    decidedBy: null,
-    fallbacks: [],
-    noReplacement: false,
-    stations: [],
-  }));
-  await new PrepStationsApi(request as DashboardRequest).explain("rice & beans", "front/bar");
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/routing/explain?productId=rice+%26+beans&zoneId=front%2Fbar",
-    "GET",
-    undefined,
-    { passive: false },
-  );
-});
-
-it("sends every chosen extra in order with a scheduled explanation", async () => {
-  const request = vi.fn(async () => ({ extras: [] }));
-  await new PrepStationsApi(request as DashboardRequest).explain(
-    "burger",
-    null,
-    { weekday: 5, timeOfDay: "22:00" },
-    ["chips", "cheese"],
-  );
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/routing/explain?productId=burger&zoneId=&extraId=chips&extraId=cheese&weekday=5&time=22%3A00",
-    "GET",
-    undefined,
-    { passive: false },
-  );
+  expect(result).not.toHaveProperty("testProducts");
 });
 
 it("uses passive reads for the background routing refresh", async () => {
@@ -473,30 +399,6 @@ it("switches a station on through the core station PATCH", async () => {
   expect(request).toHaveBeenCalledWith("/management-api/stations/bar", "PATCH", { active: true });
 });
 
-it("serializes the scheduled weekday and time together", async () => {
-  const request = vi.fn(async () => undefined);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  await api.explain("lager", null, { weekday: 5, timeOfDay: "22:00" });
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/routing/explain?productId=lager&zoneId=&weekday=5&time=22%3A00",
-    "GET",
-    undefined,
-    { passive: false },
-  );
-});
-
-it("sends a date instead of a weekday to preview that date's own hours", async () => {
-  const request = vi.fn(async () => undefined);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  await api.explain("lager", null, { civilDate: "2026-10-09", weekday: 5, timeOfDay: "22:00" });
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/routing/explain?productId=lager&zoneId=&date=2026-10-09&time=22%3A00",
-    "GET",
-    undefined,
-    { passive: false },
-  );
-});
-
 it("reads station health passively and preserves summary and drilldown data", async () => {
   const snapshot = {
     capturedAt: "2026-10-05T18:00:00.000Z",
@@ -585,13 +487,13 @@ it("loads the supervisor overview without requesting management-only context, in
     "categories",
     "zones",
     "products",
-    "testProducts",
     "printers",
     "stationPrinters",
     "devices",
     "watchers",
   ] as const)
     expect(loaded[key]).toEqual([]);
+  expect(loaded).not.toHaveProperty("testProducts");
   await overview.background.load();
   expect(request.mock.calls).toEqual([
     ["/management-api/venue-service/stations/overview", "GET", undefined, { passive: false }],

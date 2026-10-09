@@ -3882,8 +3882,8 @@ describe("dashboard URL navigation", () => {
       expect(reads).not.toContain(path);
   });
 
-  it("preserves a prep station tester product when the dashboard restores the screen", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/test/lager");
+  it("an old tester link opens the Routing tab", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -3917,12 +3917,15 @@ describe("dashboard URL navigation", () => {
                 stations: [],
                 outputsDown: { printersDown: [], screensDark: [] },
               } as never)
-            : path.startsWith("/management-api/venue-service/routing/explain?")
-              ? ({ route: null, decidedBy: null, fallbacks: [], clockReadable: true } as never)
-              : stubRequest(path, method, body, options),
+            : stubRequest(path, method, body, options),
     });
     await flush(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/lager");
+    const screen = el.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;
+    await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
+    const tabs = screen.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!;
+    expect(tabs.value).toBe("routing");
+    expect(screen.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
+    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
   });
   it.each([
     { modules: ["venue-service"], permissions: [] },
