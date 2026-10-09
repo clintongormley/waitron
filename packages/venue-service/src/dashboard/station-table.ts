@@ -75,7 +75,7 @@ export class StationTable extends LitElement {
               label: t("prep.printed_on"),
               cell: (station: PrepStation) =>
                 html`<span data-test=${`printed-on-${station.id}`}
-                  >${outputs[station.id]?.printedOn ?? t("prep.no_printer")}</span
+                  >${outputs[station.id]?.printedOn}</span
                 >`,
             },
             {
@@ -83,7 +83,7 @@ export class StationTable extends LitElement {
               label: t("prep.shown_on"),
               cell: (station: PrepStation) =>
                 html`<span part="screens" data-test=${`screens-${station.id}`}
-                  >${outputs[station.id]?.shownOn ?? t("prep.none")}</span
+                  >${outputs[station.id]?.shownOn}</span
                 >`,
             },
           ]

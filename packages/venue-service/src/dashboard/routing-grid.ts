@@ -331,7 +331,7 @@ export class RoutingGrid extends LitElement {
 
   /**
    * How an extra is made where the cell's choice is the default station's fall-through or No
-   * preparation: with its dish (`chooseExtraMaker`). A cell naming a station sends it there.
+   * preparation: with its dish (`chooseExtraMaker`).
    */
   #extraNoteText(shown: RouteTarget | null, inherited: SelectedCell): string | null {
     const choice = shown ?? inherited.target;

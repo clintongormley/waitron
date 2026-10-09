@@ -1936,7 +1936,6 @@ export class PrepStationsScreen extends LitElement {
       : "";
   }
   #fallbackCell(station: PrepStation) {
-    const field = "fallback";
     const label = t("prep.when_closed");
     if (station.isDefault)
       return html`<span data-test=${`settings-fallback-${station.id}`}
@@ -1945,19 +1944,19 @@ export class PrepStationsScreen extends LitElement {
     const value = this.#times(station.id)?.fallbackStationId ?? "";
     const text = value ? this.#stationName(value) : t("prep.no_replacement_choice");
     const editor =
-      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
+      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === "fallback"
         ? this.settingsEditor
         : undefined;
     if (!editor)
       return html`<wt-button
         variant="secondary"
-        data-test=${`edit-settings-${field}-${station.id}`}
+        data-test=${`edit-settings-fallback-${station.id}`}
         aria-label=${`${station.name}: ${label}`}
         ?disabled=${this.settingsBusy}
         @click=${() => {
           this.#openSettings({
             stationId: station.id,
-            field,
+            field: "fallback",
             value,
             fieldError: "",
             error: "",

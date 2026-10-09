@@ -13,12 +13,3 @@ export interface WatcherView {
   /** Something refers to it, so removing it disables it rather than deleting it. */
   inUse: boolean;
 }
-
-export function watchersOfStation(
-  watchers: readonly WatcherView[],
-  stationId: string,
-): WatcherView[] {
-  return watchers.filter(
-    (watcher) => watcher.everyStation || watcher.stationIds.includes(stationId),
-  );
-}
