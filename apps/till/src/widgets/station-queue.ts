@@ -244,6 +244,9 @@ export class TillStationQueue extends LitElement {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--wt-space-1);
+        width: fit-content;
+        max-width: 100%;
+        margin-bottom: var(--wt-space-1);
       }
 
       .movable > .line {

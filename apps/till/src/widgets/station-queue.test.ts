@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
-import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
+import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
 
 // The shipped DB defaults.
 const DEFAULT_THRESHOLDS: StationThresholds = {
@@ -2133,4 +2133,57 @@ describe("till-station-queue — moving a dish to another station", () => {
       });
     },
   );
+});
+
+describe("till-station-queue — where Move sits", () => {
+  const dish = (id: string, name: string): StationQueueItem => ({
+    id,
+    workingOrderLineId: `wol-${id}`,
+    state: "queued",
+    name,
+    quantity: "1.000",
+    course: null,
+    firedAt: "2026-08-17T10:00:00.000Z",
+  });
+  const order: StationQueueGroup = {
+    orderId: "wo-g",
+    orderNumber: 9,
+    label: null,
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
+    items: [dish("ti-a", "Ensalada mixta"), dish("ti-b", "Pan")],
+  };
+  const box = (el: TillStationQueue, selector: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+
+  it("kanban: Move does not widen the dish it sits under", async () => {
+    const plain = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      view: "kanban",
+    });
+    const movable = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      view: "kanban",
+      canMove: true,
+    });
+    expect(box(movable.el, '[data-item="ti-a"]').width).toBe(
+      box(plain.el, '[data-item="ti-a"]').width,
+    );
+  });
+
+  it("rail: Move sits nearer its own dish than the next one", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      view: "rail",
+      canMove: true,
+    });
+    const own = box(el, '[data-item="ti-a"]');
+    const move = box(el, '[data-move-station="ti-a"]');
+    const next = box(el, '[data-item="ti-b"]');
+    expect(move.top - own.bottom).toBeLessThan(next.top - move.bottom);
+  });
 });
