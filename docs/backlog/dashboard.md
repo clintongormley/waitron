@@ -757,8 +757,9 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   Transfers) and its three inline name editors now open quiet and turn blue on the first edit; the
   inline Save and Cancel became `wt-button`s. Looked at on 2026-10-08 with the screen mounted with
   test data (English light 1280px; Spanish dark 390px with long names), screenshots in
-  `~/waitron-campaign-b/a331-4b-shots/`: no defect found. Left open: the inline editors put Save
-  before Cancel, the editor window puts Cancel first (as on `main`).
+  `~/waitron-campaign-b/a331-4b-shots/`: no defect found. A366 slice 6A replaces these inline editors
+  with Rename dialogs on its branch, with Cancel before Save; its native keyboard-order checks
+  are in `packages/venue-service/src/dashboard/department-dialogs.test.ts`.
 - **Re-check the venue-service screens once after A366 slice 7.** Each A366 slice builds the rule
   into the forms it creates or rewrites (owner, 2026-10-08); after slice 7 lands, run batch 4b's
   audit once more over `packages/venue-service/src/dashboard/` and gate any form a slice missed.

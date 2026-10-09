@@ -423,9 +423,9 @@ message bounded by the narrower of the form width and the body in every modal si
 content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); `wt-slider`'s own case "the field max-width token bounds the slider's width" (`packages/ui/src/components/wt-slider.test.ts`); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
-`packages/venue-service/src/dashboard/venue-operations-screen.test.ts` (these two measure the
-reasons screen's two role `wt-combobox`es and the venue department editor's `wt-input` and
-`wt-combobox` fields). A new field primitive that does not read
+`packages/venue-service/src/dashboard/department-dialogs.test.ts` (these two measure the
+reasons screen's two role `wt-combobox`es and the department Rename dialog's `wt-input` and
+field error). A new field primitive that does not read
 `--wt-field-max-width` is seen by none of them, and neither is a new screen-styled native control.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it

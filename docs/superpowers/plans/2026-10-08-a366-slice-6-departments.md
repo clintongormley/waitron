@@ -1815,3 +1815,23 @@ inventory and public switch remain pending. Resume at that inventory, remove the
 DashboardApp create spy when switching, and run mounted public navigation and LOOK.
 A13–A15 and the authorised branch gates remain. Detailed audit, execution and visual
 receipts stay in Lane E's `receipts/a366-6a/a10-public-switch/`.
+
+### Implementation checkpoint: A10 public screen switch (2026-10-09)
+
+The registered screen now uses the QueryController loader and department shell. The dashboard
+integration suite no longer substitutes its module-create function. Its existing mounted cases
+first gave 15 failures with the legacy destination, then all 17 passed through the public screen.
+The four legacy screen suites and the separate transfer-modal accessibility suite are retired
+under the [case map](2026-10-09-a366-6a-screen-case-map.md). URL, shared request/live-data and
+saved-bookmark consumers retain their expected values with the new rendered destination.
+The old URL fixtures gain only absent operation fields. Three added checks carry department
+sorting, Spanish published-menu readiness and native input containment at the page boundary.
+
+The public LOOK covers the list, Settings, Zones, unknown department and Add/Rename/Move/Disable
+in EN/ES, both themes and measured 390/1280 CSS pixels. The image capture scales differ from
+those viewport widths; Lane E retains the PNG dimensions and contact sheets. The transient
+harness draft and logs of its synthetic-event/missing-destination fixture corrections are retained in receipts.
+Unused legacy translation keys are removed; the dynamic department/zone name-refusal keys stay.
+Current documentation points to the replacement tests. Task A13 retires the route/client/writer
+fields next; A14/A15 and the branch review, hook, CI and authorised landing remain. This is a
+passing public-switch checkpoint, not branch readiness.
