@@ -523,6 +523,20 @@ describe("dashboard-device-home-preview", () => {
       expect(names(tiles(el, region))).not.toContain("Chips");
   });
 
+  it("finds a product whose name holds every word typed", async () => {
+    const { el } = await mount();
+    await search(el, "lemonade lem");
+    expect(names(tiles(el, "results"))).toEqual(["Lemonade"]);
+    await search(el, "lemonade ham");
+    expect(tiles(el, "results")).toEqual([]);
+  });
+
+  it("lists the closest matches first: the earlier match, then the shorter name", async () => {
+    const { el } = await mount();
+    await search(el, "a");
+    expect(names(tiles(el, "results"))).toEqual(["Ham", "Water", "Lemonade"]);
+  });
+
   it("keeps an empty slot's place", async () => {
     const { el } = await mount();
     const cells = [

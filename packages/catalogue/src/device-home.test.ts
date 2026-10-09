@@ -9,6 +9,7 @@ import {
   homeDisplayProblem,
   indexDocument,
   openedSection,
+  searchFor,
   sectionTrail,
   shownMembers,
   tileFill,
@@ -85,6 +86,65 @@ describe("tileFill", () => {
 
 it("folds case and accents, so jamon finds Jamón", () => {
   expect(foldForSearch("Jamón Ibérico")).toBe("jamon iberico");
+});
+
+describe("searchFor", () => {
+  const find = (query: string, ...names: string[]) =>
+    searchFor(query)(names.map((name) => [name, foldForSearch(name)] as const));
+  it("finds a name holding every typed word, whatever lies between them", () => {
+    expect(find("gin tonic", "Gin & Tónic", "Gin")).toEqual(["Gin & Tónic"]);
+  });
+  it("finds a name whatever order the words are typed in", () => {
+    expect(find("TONIC  gin", "Gin & Tónic")).toEqual(["Gin & Tónic"]);
+  });
+  it("finds a name from the middle of the word still being typed", () => {
+    expect(find("onic", "Gin & Tónic")).toEqual(["Gin & Tónic"]);
+  });
+  it("finds only a whole word once the word is followed by a space", () => {
+    expect(find("gin ", "Ginger Ale", "Gin & Tónic")).toEqual(["Gin & Tónic"]);
+    expect(find("ginger ale", "Ginger Ale")).toEqual(["Ginger Ale"]);
+    expect(find("ton gin", "Gin & Tónic")).toEqual([]);
+  });
+  it("treats punctuation like a space, in what is typed and in the name", () => {
+    expect(find("gin&ton", "Gin & Tónic")).toEqual(["Gin & Tónic"]);
+    expect(find("gin & tonic", "Gin & Tónic")).toEqual(["Gin & Tónic"]);
+    expect(find("gin-", "Ginger Ale")).toEqual([]);
+  });
+  it("does not find a name missing one of the typed words", () => {
+    expect(find("gin lemon", "Gin & Tónic")).toEqual([]);
+  });
+  it("needs every word typed, not only the last two", () => {
+    const names = ["Lemon Tonic", "Gin Tonic", "Gin Lemon", "Gin Lemon Tonic"];
+    expect(find("gin lemon ton", ...names)).toEqual(["Gin Lemon Tonic"]);
+    expect(find("gin lemon tonic ", ...names)).toEqual(["Gin Lemon Tonic"]);
+  });
+  it("finds every name, in the order given, when nothing is typed", () => {
+    expect(find("  ", "Virgin Mary", "Gin")).toEqual(["Virgin Mary", "Gin"]);
+  });
+  it("lists a whole word first, then the start of a word, then the middle of one", () => {
+    expect(find("gin", "Virgin Mary", "Ginger Ale", "Gin & Tonic")).toEqual([
+      "Gin & Tonic",
+      "Ginger Ale",
+      "Virgin Mary",
+    ]);
+  });
+  it("among equal matches, lists the earlier match first, then the shorter name", () => {
+    expect(find("gin", "Tonic Gin", "Gin & Tonic", "Gin")).toEqual([
+      "Gin",
+      "Gin & Tonic",
+      "Tonic Gin",
+    ]);
+  });
+  it("keeps the order given for names that match equally well", () => {
+    expect(find("cola", "Cola Zero", "Cola Lite")).toEqual(["Cola Zero", "Cola Lite"]);
+    expect(find("cola", "Cola Lite", "Cola Zero")).toEqual(["Cola Lite", "Cola Zero"]);
+  });
+  it("orders by the last word typed", () => {
+    expect(find("tonic gin", "Virgin Tonic", "Gin & Tonic")).toEqual([
+      "Gin & Tonic",
+      "Virgin Tonic",
+    ]);
+  });
 });
 
 describe("indexDocument", () => {

@@ -1064,7 +1064,7 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
           heading: t("menu.results_this_menu").replace("{menu}", () => "lunch"),
           names: ["Steak"],
         },
-        { menu: "drinks", heading: "drinks", names: ["Wine", "Beer"] },
+        { menu: "drinks", heading: "drinks", names: ["Beer", "Wine"] },
       ]);
     });
 
