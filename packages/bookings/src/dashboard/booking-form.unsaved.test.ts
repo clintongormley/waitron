@@ -100,6 +100,11 @@ async function open(screen: HTMLElementTagNameMap["dashboard-bookings-screen"], 
 function dialog(form: BookingForm) {
   return form.shadowRoot!.querySelector("wt-dialog")!;
 }
+function dialogClosed(form: BookingForm): Promise<unknown> {
+  return new Promise((resolve) =>
+    dialog(form).addEventListener("wt-close", resolve, { once: true }),
+  );
+}
 function native(form: BookingForm) {
   return dialog(form).shadowRoot!.querySelector("dialog")!;
 }
@@ -147,8 +152,10 @@ for (const edit of [false, true]) {
     expect(input(form, "contact-name").value).toBe("Ortega");
     expect(closed).toBe(0);
     expect(writes).toEqual([]);
+    const reported = dialogClosed(form);
     await userEvent.keyboard("{Escape}");
     await choose("discard");
+    await reported;
     await expect.poll(() => form.open).toBe(false);
     expect(closed).toBe(1);
     expect(unload()).toBe(false);
@@ -401,7 +408,9 @@ it("clean Add and Edit close directly through native Escape", async () => {
   for (const edit of [false, true]) {
     const form = await open(screen, edit);
     expect(unload()).toBe(false);
+    const closed = dialogClosed(form);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await expect.poll(() => form.open).toBe(false);
     expect((await question()).open).toBe(false);
   }

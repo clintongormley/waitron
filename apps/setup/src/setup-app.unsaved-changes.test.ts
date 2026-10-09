@@ -225,7 +225,13 @@ describe("setup administrator unsaved changes", () => {
       .shadowRoot!.querySelector("wt-modal")!
       .shadowRoot!.querySelector("dialog")!;
     await expect.poll(() => nativeWarning.open).toBe(true);
+    const closed = new Promise((resolve) =>
+      warning(el)
+        .shadowRoot!.querySelector("wt-modal")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await expect.poll(() => warning(el).open).toBe(false);
     await expect.poll(() => nativeWarning.open).toBe(false);
     expect((el as unknown as State).screen).toBe("admin");
@@ -500,7 +506,13 @@ describe("setup mode leaves the root draft", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     const modal = warning(el).shadowRoot!.querySelector("wt-modal")!;
     await expect.poll(() => modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    const closed = new Promise((resolve) =>
+      warning(el)
+        .shadowRoot!.querySelector("wt-modal")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await expect.poll(() => warning(el).open).toBe(false);
     expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
     expect((el as unknown as State).screen).toBe("mode");

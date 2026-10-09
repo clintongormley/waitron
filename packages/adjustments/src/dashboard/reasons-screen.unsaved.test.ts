@@ -123,6 +123,10 @@ async function choose(which: "keep" | "discard") {
   q.shadowRoot!.querySelector<HTMLElement>(`[data-choice="${which}"]`)!.click();
   await expect.poll(() => q.open).toBe(false);
 }
+function editorClosed(screen: AdjustmentReasonsScreen): Promise<unknown> {
+  const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
 function native(modal: HTMLElementTagNameMap["wt-modal"]) {
   return modal.shadowRoot!.querySelector("dialog")!;
 }
@@ -140,8 +144,10 @@ for (const add of [false, true])
       expect(native(modal).open).toBe(true);
       await choose("keep");
       expect(value(screen, "name")).toBe("Changed reason");
+      const closed = editorClosed(screen);
       await press(screen, "cancel-editor");
       await choose("discard");
+      await closed;
       await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
       expect(api.updateReason).not.toHaveBeenCalled();
       expect(api.createReason).not.toHaveBeenCalled();
@@ -158,7 +164,9 @@ it("clean and normalized reverted reason values close directly", async () => {
   await field(screen, "maxPercent", "12,50");
   await field(screen, "maxAmount", "030,0");
   expect(unload()).toBe(false);
+  const closed = editorClosed(screen);
   await press(screen, "cancel-editor");
+  await closed;
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect((await question()).open).toBe(false);
 });
@@ -291,7 +299,9 @@ it("acceptance commits only submitted values and retains a newer draft", async (
   expect(unload()).toBe(false);
   expect(save.variant).toBe("secondary");
   expect(save.disabled).toBe(true);
+  const closed = editorClosed(screen);
   await press(screen, "cancel-editor");
+  await closed;
   expect((await question()).open).toBe(false);
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
 });
@@ -441,7 +451,9 @@ it("acceptance invalidates a pending discard without undoing the saved reason", 
 it("late native close reports leave a reopened editor intact", async () => {
   const { screen } = await mount();
   const old = await open(screen);
+  const closed = editorClosed(screen);
   await press(screen, "cancel-editor");
+  await closed;
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
   const current = await open(screen);
   await field(screen, "name", "Current edit");
@@ -572,8 +584,10 @@ it("saving a limit leaves the independent reason dirty", async () => {
   await press(screen, "save-limit");
   expect(value(screen, "name")).toBe("Changed");
   expect(unload()).toBe(true);
+  const closed = editorClosed(screen);
   await press(screen, "cancel-editor");
   await choose("discard");
+  await closed;
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(unload()).toBe(false);
 });
@@ -664,7 +678,9 @@ it.each([false, true])(
     await modal.updateComplete;
     const request = vi.spyOn(app.leave.coordinator, "request");
     try {
+      const closed = editorClosed(screen);
       await modal.requestClose("cancel");
+      await closed;
       await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
       expect(request).not.toHaveBeenCalled();
     } finally {

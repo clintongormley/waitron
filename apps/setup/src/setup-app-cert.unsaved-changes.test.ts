@@ -122,7 +122,13 @@ describe("setup certificate unsaved changes", () => {
     const modal = warning(el).shadowRoot!.querySelector("wt-modal")!;
     await modal.updateComplete;
     await expect.poll(() => modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    const closed = new Promise((resolve) =>
+      warning(el)
+        .shadowRoot!.querySelector("wt-modal")!
+        .addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await expect.poll(() => warning(el).open).toBe(false);
     expect(input.value).toBe("edited-pass");
     expect((el as unknown as State).screen).toBe("cert");

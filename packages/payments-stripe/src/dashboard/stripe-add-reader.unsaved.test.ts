@@ -48,6 +48,10 @@ function value(form: StripeAddReader, id: string) {
 function native(form: StripeAddReader) {
   return form.shadowRoot!.querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
 }
+function dialogClosed(form: StripeAddReader): Promise<unknown> {
+  const dialog = form.shadowRoot!.querySelector("wt-dialog")!;
+  return new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
+}
 function cancel(form: StripeAddReader) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
@@ -94,8 +98,10 @@ for (const id of ["reader-name", "reader-id"])
       await choice("keep");
       expect(value(form, id)).toBe("  edited  ");
       expect(native(form).open).toBe(true);
+      const closed = dialogClosed(form);
       cancel(form);
       await choice("discard");
+      await closed;
       await vi.waitFor(() => expect(app.closed).toHaveBeenCalledOnce());
       expect(native(form).open).toBe(false);
       expect(app.request).not.toHaveBeenCalled();
@@ -107,7 +113,9 @@ it("clean and reverted reader values close directly", async () => {
   await field(form, "reader-name", "changed");
   await field(form, "reader-name", "");
   expect(unload()).toBe(false);
+  const closed = dialogClosed(form);
   cancel(form);
+  await closed;
   await vi.waitFor(() => expect(app.closed).toHaveBeenCalledOnce());
   expect((await question()).open).toBe(false);
   expect(native(form).open).toBe(false);
