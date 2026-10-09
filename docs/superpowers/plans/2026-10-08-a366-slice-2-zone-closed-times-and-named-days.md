@@ -1134,7 +1134,7 @@ slice work starts at Task 24; this checkpoint does not complete slice 2.
 **Behaviour:** tabs Week and Named days; adding, copying and deleting named days link to Opening
 hours → Calendar. The local-holiday editor stays on this screen until Task 26 removes it.
 
-- [ ] Steps: failing tests (no Calendar tab; the Named days tab links to the Calendar — fails
+- [x] Steps: failing tests (no Calendar tab; the Named days tab links to the Calendar — fails
   today because the tab is "Special dates" with Add buttons); watch them fail; implement; the
   removed tabs' tests go in the changed-checks commit; the package's node project; LOOK in EN and
   ES, both themes, 1280 and 390; commit `feat(venue-service): Station hours leaves named days to the Calendar (A366)`.
@@ -1145,7 +1145,9 @@ hours → Calendar. The local-holiday editor stays on this screen until Task 26 
 The Named days list links creation, copying and deletion to Opening hours → Calendar; existing
 station-date Edit and the local-holiday section remain. Retired entry-point assertions and migrated
 station behavior are inventoried in the separate changed-checks commit and Task 24 report. This
-checkpoint awaits controller review and does not complete Tasks 25–29.
+checkpoint passed task-scoped spec and quality review. The stale suggestion comment found during
+review was deleted in a comment-only commit; disclosed runtime warnings remain for whole-branch
+review. This checkpoint does not complete Tasks 25–29.
 
 ### Task 25: Station hours edits only station cells on a named day
 
