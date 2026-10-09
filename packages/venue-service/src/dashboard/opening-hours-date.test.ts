@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -56,10 +56,12 @@ function fixture(own = true): OpeningHoursModel {
 }
 beforeEach(() => {
   setLocale("en");
+  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
   history.replaceState(null, "", "/manage/opening-hours");
 });
 afterEach(() => {
   screen?.remove();
+  vi.useRealTimers();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
 });
@@ -79,10 +81,10 @@ async function mount(
   document.body.append(screen);
   await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
   const mode =
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=weekMode]");
-  expect(mode, "normal-week / special-date selector").not.toBeNull();
-  emit(mode!, "wt-change", { value: "date" });
-  await expect.poll(() => screen.shadowRoot?.querySelector("[name=specialDateId]")).not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=realWeek]");
+  expect(mode, "normal-week / real-week switch").not.toBeNull();
+  emit(mode!, "wt-change", { checked: true });
+  await expect.poll(() => location.search).toBe("?week=2026-10-12");
   await screen.updateComplete;
   const week =
     screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
@@ -94,21 +96,20 @@ async function mount(
 const grid = (week: HTMLElementTagNameMap["opening-hours-week"]) =>
   week.shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!;
 const save = (week: HTMLElementTagNameMap["opening-hours-week"]) =>
-  week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-week]")!;
-it("selects a special date and draws its own single column with a quiet Save", async () => {
+  week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=save-date][data-day='1']",
+  )!;
+it("selects a real week and draws the named date with a quiet independent Save", async () => {
   const week = await mount();
-  expect(grid(week).columns.map((c) => c.key)).toEqual(["1"]);
+  expect(grid(week).columns.map((c) => c.key)).toEqual(["1", "2", "3", "4", "5", "6", "0"]);
   expect(grid(week).columns[0]!.label).toContain("Holiday");
   expect(grid(week).columns[0]!.slots).toEqual([
     { periodId: "p1", startsAt: "12:00", endsAt: "16:00" },
   ]);
   expect(save(week).disabled).toBe(true);
   expect(save(week).variant).toBe("secondary");
-  const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>(
-    "[data-test=station-hours-link]",
-  )!;
-  expect(link.textContent).toContain("Add special dates in Station hours");
-  expect(link.getAttribute("href")).toBe("/manage/hours");
+  expect(screen.shadowRoot!.querySelector("[name=specialDateId]")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("[name=realWeek]")).not.toBeNull();
 });
 it("stages a date resize then writes only its date timetable", async () => {
   const writes: unknown[] = [];
@@ -194,7 +195,7 @@ it("keeps a viewer's date read-only with no close, follow or save actions", asyn
   expect(week.shadowRoot!.querySelector("[data-test=follow-week]")).toBeNull();
   expect(save(week)).toBeNull();
 });
-it("ignores grid events for weekdays hidden by the date column", async () => {
+it("ignores grid events for plain dates in a real week", async () => {
   const writes: unknown[] = [];
   const week = await mount(true, async (...args) => {
     writes.push(args);
@@ -207,7 +208,7 @@ it("ignores grid events for weekdays hidden by the date column", async () => {
     ],
   };
   await week.updateComplete;
-  emit(grid(week), "grid-range-select", { columnKey: "2", startsAt: "11:00", endsAt: "15:00" });
+  emit(grid(week), "grid-range-select", { columnKey: "3", startsAt: "11:00", endsAt: "15:00" });
   await week.updateComplete;
   expect(week.shadowRoot!.querySelector("range-dialog")).toBeNull();
   emit(grid(week), "grid-block-change", {
@@ -233,34 +234,23 @@ it("keeps a date unchanged when its inherited weekday is already empty until Clo
   expect(save(week).disabled).toBe(false);
   expect(save(week).variant).toBe("primary");
 });
-it("ignores controls from a departed special-date picker", async () => {
+it("ignores controls from a departed real-week switch", async () => {
   await mount();
-  const picker = screen.shadowRoot!.querySelector("[name=specialDateId]")!;
-  const mode = screen.shadowRoot!.querySelector("[name=weekMode]")!;
-  emit(mode, "wt-change", { value: "week" });
-  await screen.updateComplete;
-  emit(picker, "wt-change", { value: "s2" });
-  await screen.updateComplete;
-  emit(mode, "wt-change", { value: "date" });
-  await screen.updateComplete;
-  expect(
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
-      "opening-hours-week",
-    )!.specialDate?.id,
-  ).toBe("s/1");
-  const oldMode = screen.shadowRoot!.querySelector("[name=weekMode]")!;
+  const oldMode = screen.shadowRoot!.querySelector("[name=realWeek]")!;
   const tabs = screen.shadowRoot!.querySelector("wt-tabs")!;
   emit(tabs, "wt-tab-change", { value: "periods" });
-  await screen.updateComplete;
-  emit(oldMode, "wt-change", { value: "week" });
-  await screen.updateComplete;
+  await expect.poll(() => screen.shadowRoot!.querySelector("[name=realWeek]")).toBeNull();
+  emit(oldMode, "wt-change", { checked: false });
+  expect(location.search).toBe("?week=2026-10-12");
   emit(tabs, "wt-tab-change", { value: "week" });
-  await screen.updateComplete;
-  expect(
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
-      "opening-hours-week",
-    )!.specialDate?.id,
-  ).toBe("s/1");
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
+          "opening-hours-week",
+        )?.weekStart,
+    )
+    .toBe("2026-10-12");
 });
 it("keeps staged date ranges when a background department snapshot arrives", async () => {
   const week = await mount();
@@ -305,15 +295,16 @@ it("does not mark a reconnected date draft saved by a reply started before remov
   await expect.poll(() => save(week).disabled).toBe(false);
   expect(grid(week).columns[0]!.slots[0]!.endsAt).toBe("17:00");
 });
-it("paints the Station hours link with the theme's readable link colour", async () => {
+it("paints the real-week switch label with the theme's readable text colour", async () => {
   await mount();
-  const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>(
-    "[data-test=station-hours-link]",
-  )!;
+  const toggle =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=realWeek]")!;
+  await toggle.updateComplete;
+  const label = toggle.shadowRoot!.querySelector("label")!;
   const probe = document.createElement("span");
-  probe.style.color = "var(--wt-color-primary-text)";
+  probe.style.color = "var(--wt-color-text)";
   screen.shadowRoot!.appendChild(probe);
-  expect(getComputedStyle(link).color).toBe(getComputedStyle(probe).color);
+  expect(getComputedStyle(label).color).toBe(getComputedStyle(probe).color);
 });
 it("adds a date range through the shared dialog without changing its weekday", async () => {
   const writes: unknown[] = [];
@@ -372,3 +363,36 @@ it.each([
     expect(save(week).disabled).toBe(false);
   },
 );
+
+it("retains date protection through a second reconnect after a stale save reply", async () => {
+  let done!: () => void;
+  const week = await mount(
+    true,
+    async () =>
+      new Promise<void>((resolve) => {
+        done = resolve;
+      }),
+  );
+  emit(grid(week), "grid-block-change", {
+    columnKey: "1",
+    index: 0,
+    startsAt: "12:00",
+    endsAt: "17:00",
+  });
+  await week.updateComplete;
+  save(week).click();
+  await expect.poll(() => done).toBeTypeOf("function");
+  const parent = week.parentNode!;
+  week.remove();
+  parent.appendChild(week);
+  await week.updateComplete;
+  done();
+  await expect.poll(() => save(week).disabled).toBe(false);
+  week.remove();
+  parent.appendChild(week);
+  await week.updateComplete;
+  expect(save(week).disabled).toBe(false);
+  expect(grid(week).columns[0]!.slots).toEqual([
+    { periodId: "p1", startsAt: "12:00", endsAt: "17:00" },
+  ]);
+});

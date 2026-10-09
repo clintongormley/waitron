@@ -140,24 +140,31 @@ it("shows dated ranges and whole-venue closure when a named day is selected", as
     },
     allDepartments()[1]!,
   ];
-  el.specialDate = {
-    id: "named",
-    date: "2026-10-12",
-    name: "Own Monday",
-    kind: "working_day" as const,
-    repeats: false,
-    ownHours: true,
-    hasStationHours: false,
-    closeWholeVenue: false,
-  };
+  el.weekStart = "2026-10-12";
+  el.namedDays = [
+    {
+      id: "named",
+      date: "2026-10-12",
+      name: "Own Monday",
+      kind: "working_day" as const,
+      repeats: false,
+      ownHours: true,
+      hasStationHours: false,
+      closeWholeVenue: false,
+    },
+  ];
   await el.updateComplete;
   const grid = el.shadowRoot!.querySelector<ServiceGrid>("service-grid")!;
-  expect(grid.columns).toHaveLength(2);
+  expect(grid.columns).toHaveLength(14);
   expect(grid.columns[0]!.slots).toEqual([
     { periodId: "lunch", startsAt: "14:00", endsAt: "17:00" },
   ]);
   expect(grid.columns[1]!.slots).toEqual([]);
-  el.specialDate = { ...el.specialDate, closeWholeVenue: true };
+  el.weekStart = "2026-10-12";
+  el.namedDays = [{ ...el.namedDays[0]!, ownHours: false, closeWholeVenue: true }];
   await el.updateComplete;
-  expect(grid.columns.every((column) => column.slots.length === 0)).toBe(true);
+  expect(grid.columns.slice(0, 2).every((column) => column.slots.length === 0)).toBe(true);
+  expect(grid.columns[3]!.slots).toEqual([
+    { periodId: "dinner", startsAt: "18:00", endsAt: "23:00" },
+  ]);
 });

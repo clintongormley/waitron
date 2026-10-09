@@ -1084,15 +1084,16 @@ it("passes the chosen named day to All departments", async () => {
   };
   const el = await mount((async () =>
     structuredClone({ ...data, namedDays: [special] })) as DashboardRequest);
-  el.shadowRoot!.querySelector("[name=weekMode]")!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "date" }, bubbles: true, composed: true }),
+  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+  el.shadowRoot!.querySelector("[name=realWeek]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
   );
-  await el.updateComplete;
-  const all =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-all"]>("opening-hours-all")!;
+  await expect.poll(() => location.search).toBe("?week=2026-10-12");
+  const all = el.shadowRoot!.querySelector("opening-hours-all")!;
   await all.updateComplete;
-  expect(all.specialDate).toEqual(special);
-  expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(2);
+  expect(all.weekStart).toBe("2026-10-12");
+  expect(all.namedDays).toEqual([special]);
+  expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(14);
 });
 
 it("restores the Calendar month URL and writes month navigation without a department picker", async () => {
