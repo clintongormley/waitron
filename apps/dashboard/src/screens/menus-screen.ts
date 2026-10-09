@@ -523,8 +523,18 @@ export class MenusScreen extends LitElement {
         color: var(--wt-color-danger);
       }
       .list,
-      .sizer {
+      .sizer,
+      dashboard-menu-structure-table {
         container-type: inline-size;
+      }
+      wt-input[name="structure-search"] {
+        flex: 1 1 calc(var(--wt-tap-min) * 7);
+        min-width: min(100%, calc(var(--wt-tap-min) * 7));
+      }
+      @container (max-width: 40rem) {
+        wt-input[name="structure-search"] {
+          flex-basis: 100%;
+        }
       }
       .narrow-probe,
       .wide-probe {

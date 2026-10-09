@@ -3843,6 +3843,19 @@ describe("the Structure tree", () => {
       expect(searchBox(el).getAttribute("label")).toBe("Buscar en esta carta");
     });
 
+    it.each(["en-GB", "es-ES"])(
+      "fills the toolbar's width at phone width in %s",
+      async (locale) => {
+        await at([390, 844], locale, async () => {
+          const el = await mountLunch();
+          const table = q<HTMLElement>(el, "dashboard-menu-structure-table")!;
+          expect(searchBox(el).getBoundingClientRect().width).toBeGreaterThanOrEqual(
+            table.getBoundingClientRect().width * 0.9,
+          );
+        });
+      },
+    );
+
     it("keeps the search through a refresh after a write, and through Done on Reorder", async () => {
       const client = api();
       const el = await mountLunch(client);
