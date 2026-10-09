@@ -2828,7 +2828,11 @@ describe("an editor's messages", () => {
     const el = await newDepartment();
     await action(el, "save-editor");
     input(el, "department-name").focus();
+    const closed = new Promise((resolve) =>
+      modal(el)!.addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("x{Escape}");
+    await closed;
     await vi.waitFor(() => expect(modal(el)).toBeNull());
     await settle(el);
     expect(pageAlert(el)).toBe("");
@@ -3080,7 +3084,11 @@ describe("the editor's keyboard", () => {
     await selectTab(el, "departments");
     await action(el, "new-department");
     input(el, "department-name").focus();
+    const closed = new Promise((resolve) =>
+      modal(el)!.addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     // Escape closes the native dialog at once, but the modal leaves only when its close event
     // arrives, which the HTML spec's dialog-closing steps queue as a later task.
     await vi.waitFor(() => expect(modal(el)).toBeNull());

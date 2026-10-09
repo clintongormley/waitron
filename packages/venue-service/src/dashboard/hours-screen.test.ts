@@ -482,12 +482,20 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, bar, 3));
     await setField(el, "wednesday.periods.0.opensAt", "16:00");
+    const cancelled = new Promise((resolve) =>
+      modal(el)!.addEventListener("wt-close", resolve, { once: true }),
+    );
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
+    await cancelled;
     await expect.poll(() => modal(el)).toBeNull();
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(cellButton(el, bar, 3)));
     await click(el, cellButton(el, bar, 3));
     expect(field(el, "wednesday.periods.0.opensAt")!.value).toBe("17:00");
+    const escaped = new Promise((resolve) =>
+      modal(el)!.addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await escaped;
     await vi.waitFor(() => expect(modal(el)).toBeNull());
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(cellButton(el, bar, 3)));
     expect(calls("PUT")).toEqual([]);
