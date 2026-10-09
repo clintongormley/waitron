@@ -290,6 +290,19 @@ describe("Hours calendar: the month", () => {
     );
   });
 
+  it.each([
+    ["en", "Holiday", "Working day"],
+    ["es", "Festivo", "Día laborable"],
+  ] as const)("explains the named-day kind colours in %s", async (locale, holiday, working) => {
+    setLocale(locale);
+    const { api } = server();
+    const el = await mount(api);
+    const legend = el.shadowRoot!.querySelector(".legend")!;
+    const entries = [...legend.querySelectorAll("li")];
+    expect(entries.slice(2).map((entry) => [entry.querySelector<HTMLElement>(".swatch")!.dataset.colour, text(entry)]))
+      .toEqual([["purple", holiday], ["blue", working]]);
+  });
+
   it("paints a holiday named day purple", async () => {
     const { api } = server({
       edit(model) {
@@ -309,7 +322,7 @@ describe("Hours calendar: the month", () => {
     expect(getComputedStyle(label).color).toBe(token(el, "--wt-color-on-palette-purple"));
   });
 
-  it("names each special date in its own colour, and paints the reserved standard and Closed colours", async () => {
+  it("names working days in blue and paints the reserved standard and Closed colours", async () => {
     const { api } = server();
     const el = await mount(api);
     expect(text(dayButton(el, "2026-10-12"))).toBe("12 Fiesta Nacional");
@@ -320,7 +333,7 @@ describe("Hours calendar: the month", () => {
       "Monday, 12 October 2026, Fiesta Nacional",
     );
 
-    // A whole-venue closure is Closed whatever its own colour, and says so in words.
+    // A whole-venue closure says Closed regardless of the named-day kind.
     expect(day(el, "2026-10-13").dataset.tone).toBe("closed");
     expect(text(dayButton(el, "2026-10-13"))).toBe("13 Staff day off · Closed");
     expect(getComputedStyle(day(el, "2026-10-13")).backgroundColor).toBe(
