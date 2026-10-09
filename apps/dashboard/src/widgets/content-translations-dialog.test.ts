@@ -77,6 +77,26 @@ afterEach(() => {
 
 describe("staged translation dialog", () => {
   it.each([
+    ["en-GB", "Valencian", "Every name has a translation in Valencian."],
+    ["es-ES", "Valenciano", "Todos los nombres tienen una traducción en valenciano."],
+  ])(
+    "names Valencian separately in the translation dialog in %s",
+    async (locale, name, sentence) => {
+      setLocale(locale);
+      const language = "ca-ES-valencia";
+      const api = {
+        getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
+      } as unknown as DashboardApi;
+      const { el } = await mountWidget<ContentTranslationsDialog>(
+        "dashboard-content-translations-dialog",
+        { api, language, open: true },
+      );
+      await vi.waitFor(() => expect(q(el, "[data-test=complete]")).not.toBeNull());
+      expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toContain(name);
+      expect(q(el, "[data-test=complete]")!.textContent!.trim()).toBe(sentence);
+    },
+  );
+  it.each([
     ["en-GB", "en", "Every name has a translation in English."],
     ["en-GB", "es", "Every name has a translation in Spanish."],
     ["es-ES", "en", "Todos los nombres tienen una traducción en inglés."],

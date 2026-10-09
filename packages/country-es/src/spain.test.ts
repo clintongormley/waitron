@@ -150,7 +150,7 @@ describe("regional content languages", () => {
   const area = (code: string) => SPAIN.administrativeAreas.find((entry) => entry.code === code)!;
 
   it("names Spain's official languages", () => {
-    expect(SPAIN.officialLocales).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES"]);
+    expect(SPAIN.officialLocales).toEqual(["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"]);
   });
 
   it.each(CATALONIA)("requires Catalan and Spanish in %s, with Catalan the default", (code) => {
@@ -162,8 +162,8 @@ describe("regional content languages", () => {
   it.each(VALENCIAN_COMMUNITY)(
     "requires Valencian and Spanish in %s, with Valencian the default, and gives the one-foreign-language notice",
     (code) => {
-      expect(area(code).requiredContentLocales).toEqual(["ca-ES", "es-ES"]);
-      expect(area(code).defaultContentLocale).toBe("ca-ES");
+      expect(area(code).requiredContentLocales).toEqual(["ca-ES-valencia", "es-ES"]);
+      expect(area(code).defaultContentLocale).toBe("ca-ES-valencia");
       const notice = area(code).foreignLanguageNotice!;
       expect(notice.minimumForeign).toBe(1);
       expect(Object.keys(notice.text).sort()).toEqual(["en", "es"]);

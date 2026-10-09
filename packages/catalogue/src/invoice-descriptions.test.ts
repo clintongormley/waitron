@@ -63,3 +63,13 @@ describe("toInvoiceLineDescriptions", () => {
     expect(Object.keys(result).sort()).toEqual(["ca-ES", "es-ES"]);
   });
 });
+
+it("freezes distinct Valencian and Catalan content under the requested snapshot keys", () => {
+  expect(
+    toInvoiceLineDescriptions(
+      { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
+      ["ca-ES", "ca-ES-valencia", "es-ES"],
+      "es",
+    ),
+  ).toEqual({ "ca-ES": "Catalan", "ca-ES-valencia": "Valencian", "es-ES": "Spanish" });
+});

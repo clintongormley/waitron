@@ -58,8 +58,6 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
   return texts;
 }
 
-/** Catalan or Galician values this data set writes the same as in Spanish or English: proper names,
- * a dish known by its own name, and words both languages spell alike. */
 const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = {
   ca: [
     "Negroni",
@@ -69,6 +67,16 @@ const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = 
     "Postres",
     "Refrescos",
     "rac",
+  ],
+  "ca-ES-valencia": [
+    "Negroni",
+    "Crema catalana",
+    "Torta del Casar (per kg)",
+    "Conserves",
+    "Postres",
+    "Refrescos",
+    "rac",
+    "Café",
   ],
   gl: [
     "Negroni",
@@ -118,16 +126,40 @@ describe("demo data sets", () => {
       expect(
         sections.map((section) => [section.name, section.products.map((product) => product.image)]),
       ).toEqual([
-        [{ en: "Cocktails", es: "Cócteles", ca: "Còctels", gl: "Cócteles" }, ["negroni.png"]],
         [
-          { en: "Wine and beer", es: "Vino y cerveza", ca: "Vi i cervesa", gl: "Viño e cervexa" },
+          {
+            en: "Cocktails",
+            es: "Cócteles",
+            ca: "Còctels",
+            "ca-ES-valencia": "Còctels",
+            gl: "Cócteles",
+          },
+          ["negroni.png"],
+        ],
+        [
+          {
+            en: "Wine and beer",
+            es: "Vino y cerveza",
+            ca: "Vi i cervesa",
+            "ca-ES-valencia": "Vi i cervesa",
+            gl: "Viño e cervexa",
+          },
           ["vino-tinto.png", "cana-cerveza.png"],
         ],
         [
-          { en: "Soft drinks", es: "Refrescos", ca: "Refrescos", gl: "Refrescos" },
+          {
+            en: "Soft drinks",
+            es: "Refrescos",
+            ca: "Refrescos",
+            "ca-ES-valencia": "Refrescos",
+            gl: "Refrescos",
+          },
           ["refresco-cola.png", "agua-mineral.png", "zumo-naranja.png"],
         ],
-        [{ en: "Coffee", es: "Café", ca: "Cafè", gl: "Café" }, ["cafe-solo.png"]],
+        [
+          { en: "Coffee", es: "Café", ca: "Cafè", "ca-ES-valencia": "Café", gl: "Café" },
+          ["cafe-solo.png"],
+        ],
       ]);
     }
   });
@@ -197,7 +229,14 @@ describe("demo data sets", () => {
     // Barcelona
     ["08", { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] }],
     // Valencia
-    ["46", { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] }],
+    [
+      "46",
+      {
+        defaultLanguage: "ca-ES-valencia",
+        languages: ["ca-ES-valencia", "es", "en"],
+        required: ["ca-ES-valencia", "es"],
+      },
+    ],
     // A Coruña
     ["15", { defaultLanguage: "gl", languages: ["gl", "es", "en"], required: ["gl", "es"] }],
   ])("gives a demo in %s these content languages", (area, expected) => {

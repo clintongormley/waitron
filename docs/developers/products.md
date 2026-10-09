@@ -319,6 +319,14 @@ of default but are not in the list.
 
 ## Content languages per region
 
+**2026-10-08, A419:** Valencian is a separate content language, `ca-ES-valencia`.
+Spain offers it alongside Catalan. New venues in the Valencian Community start with Valencian
+as the default, Spanish and English; Valencian and Spanish are required there. Existing Catalan
+text remains under `ca`: it is neither moved nor used as an implicit Valencian translation.
+Missing requested text still falls back to the venue's configured default. Receipt languages
+and interface translations keep their own choices. This replaces the Valencian parts of the
+2026-10-06 decisions below.
+
 The owner's decisions (2026-10-06 ~17:23, W109; built in W109-6, #1320, and W109-4, #1322), for real
 venues and the demo. As relayed in lane A's queue (`~/waitron-campaign/queue.md`, WATCHER
 NOTE of 17:23 above W109-1) and `~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER

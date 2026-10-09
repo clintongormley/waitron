@@ -10,18 +10,39 @@ import { unitSeedStates, units } from "./schema/units.js";
 
 // Full display name shown in the dashboard; the short abbreviation is frozen onto sold lines.
 const UNIT_NAMES = {
-  g: { en: "Gram", es: "Gramo", ca: "Gram", gl: "Gramo", eu: "Gramo" },
-  kg: { en: "Kilogram", es: "Kilogramo", ca: "Quilogram", gl: "Quilogramo", eu: "Kilogramo" },
-  mg: { en: "Milligram", es: "Miligramo", ca: "Mil·ligram", gl: "Miligramo", eu: "Miligramo" },
-  ml: { en: "Millilitre", es: "Mililitro", ca: "Mil·lilitre", gl: "Mililitro", eu: "Mililitro" },
-  l: { en: "Litre", es: "Litro", ca: "Litre", gl: "Litro", eu: "Litro" },
+  g: { en: "Gram", es: "Gramo", ca: "Gram", "ca-ES-valencia": "Gram", gl: "Gramo", eu: "Gramo" },
+  kg: {
+    en: "Kilogram",
+    es: "Kilogramo",
+    ca: "Quilogram",
+    "ca-ES-valencia": "Quilogram",
+    gl: "Quilogramo",
+    eu: "Kilogramo",
+  },
+  mg: {
+    en: "Milligram",
+    es: "Miligramo",
+    ca: "Mil·ligram",
+    "ca-ES-valencia": "Mil·ligram",
+    gl: "Miligramo",
+    eu: "Miligramo",
+  },
+  ml: {
+    en: "Millilitre",
+    es: "Mililitro",
+    ca: "Mil·lilitre",
+    "ca-ES-valencia": "Mil·lilitre",
+    gl: "Mililitro",
+    eu: "Mililitro",
+  },
+  l: { en: "Litre", es: "Litro", ca: "Litre", "ca-ES-valencia": "Litre", gl: "Litro", eu: "Litro" },
 } as const;
 const UNIT_ABBR = {
-  g: { en: "g", es: "g", ca: "g", gl: "g", eu: "g" },
-  kg: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
-  mg: { en: "mg", es: "mg", ca: "mg", gl: "mg", eu: "mg" },
-  ml: { en: "ml", es: "ml", ca: "ml", gl: "ml", eu: "ml" },
-  l: { en: "l", es: "l", ca: "l", gl: "l", eu: "l" },
+  g: { en: "g", es: "g", ca: "g", "ca-ES-valencia": "g", gl: "g", eu: "g" },
+  kg: { en: "kg", es: "kg", ca: "kg", "ca-ES-valencia": "kg", gl: "kg", eu: "kg" },
+  mg: { en: "mg", es: "mg", ca: "mg", "ca-ES-valencia": "mg", gl: "mg", eu: "mg" },
+  ml: { en: "ml", es: "ml", ca: "ml", "ca-ES-valencia": "ml", gl: "ml", eu: "ml" },
+  l: { en: "l", es: "l", ca: "l", "ca-ES-valencia": "l", gl: "l", eu: "l" },
 } as const;
 
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {

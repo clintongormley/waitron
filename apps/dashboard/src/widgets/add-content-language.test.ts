@@ -394,3 +394,32 @@ describe("add content language dialog", () => {
     expect(closed).not.toHaveBeenCalled();
   });
 });
+
+describe("adding Valencian alongside Catalan", () => {
+  it.each([
+    ["en-GB", "Valencian"],
+    ["es-ES", "Valenciano"],
+  ])("offers an official separate choice in %s", async (locale, label) => {
+    setLocale(locale);
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountWidget<AddContentLanguageDialog>("dashboard-add-content-language", {
+      open: true,
+      config: { defaultLanguage: "ca", languages: ["ca", "es"] },
+      official: ["es", "ca", "ca-ES-valencia", "gl", "eu"],
+      save,
+    });
+    expect(inGroup(el, 0)).toContainEqual({
+      value: "ca-ES-valencia",
+      label,
+      group: t("content_languages.official_group"),
+    });
+    expect(codesIn(field(el).options)).not.toContain("ca");
+    await choose(el, "ca-ES-valencia");
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        defaultLanguage: "ca",
+        languages: ["ca", "es", "ca-ES-valencia"],
+      }),
+    );
+  });
+});

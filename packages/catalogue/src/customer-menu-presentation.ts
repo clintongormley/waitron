@@ -1,5 +1,6 @@
 import {
   compareDecimal,
+  contentLanguageCode,
   decimal,
   resolveContentText,
   type ContentLanguages,
@@ -18,14 +19,8 @@ function textInLanguage(
   map: Readonly<Record<string, string>>,
   locale: string,
 ): { text: string; language: string } | null {
-  const language = locale.split("-")[0]!;
-  const keys = [
-    locale,
-    language,
-    ...Object.keys(map)
-      .filter((key) => key.startsWith(`${language}-`))
-      .sort(),
-  ];
+  const language = contentLanguageCode(locale);
+  const keys = [locale, language, ...Object.keys(map).sort()];
   for (const key of keys) {
     if (!Object.hasOwn(map, key)) continue;
     const text = resolveContentText({ [key]: map[key]! }, locale, locale);
@@ -46,7 +41,9 @@ export function resolveMenuText(
   if (view.kind === "customer") {
     try {
       const locale = new Intl.Locale(view.language);
-      requested = config.languages.includes(locale.language) ? locale.toString() : null;
+      requested = config.languages.includes(contentLanguageCode(view.language))
+        ? locale.toString()
+        : null;
     } catch {
       requested = null;
     }

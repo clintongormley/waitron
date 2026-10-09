@@ -209,8 +209,8 @@ const CATALONIA: LanguageRules = {
 // preferably English. Art. 1.2.g exempts takeaway-only and delivery-only places; Waitron does
 // not distinguish them and keeps both languages enabled everywhere in the region.
 const VALENCIAN_COMMUNITY: LanguageRules = {
-  requiredContentLocales: ["ca-ES", "es-ES"],
-  defaultContentLocale: "ca-ES",
+  requiredContentLocales: ["ca-ES-valencia", "es-ES"],
+  defaultContentLocale: "ca-ES-valencia",
   foreignLanguageNotice: {
     minimumForeign: 1,
     text: {
@@ -292,7 +292,7 @@ export const SPAIN: CountryPack = {
   defaultTimeZone: "Europe/Madrid",
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   receiptLabels: SPAIN_RECEIPT_LABELS,
-  officialLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+  officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],
   moduleIds: ["workforce-es"],
   availableForVenueSetup: true,
   administrativeAreas,

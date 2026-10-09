@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
-  capitaliseFirst,
+  languageDisplayName,
   resolveContentText,
   type ContentLanguageRules,
   type ContentLanguages,
@@ -234,8 +234,7 @@ export class ContentLanguagesScreen extends LitElement {
 
   #renderConfig(config: ContentLanguages, rules: ContentLanguageRules) {
     const locale = currentLocale();
-    const names = new Intl.DisplayNames([locale], { type: "language" });
-    const name = (code: string) => capitaliseFirst(names.of(code)!, locale);
+    const name = (code: string) => languageDisplayName(code, locale);
     const collator = new Intl.Collator(locale);
     const others = config.languages
       .filter((code) => code !== config.defaultLanguage)
@@ -296,11 +295,7 @@ export class ContentLanguagesScreen extends LitElement {
     config: ContentLanguages,
     rules: ContentLanguageRules,
   ): DataTableColumn<string>[] {
-    const name = (code: string) =>
-      capitaliseFirst(
-        new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!,
-        currentLocale(),
-      );
+    const name = (code: string) => languageDisplayName(code, currentLocale());
     return [
       {
         key: "language",
@@ -322,7 +317,7 @@ export class ContentLanguagesScreen extends LitElement {
             : report.gaps.length === 0
               ? t("content_gaps.none")
               : html`${t("content_gaps.count").replace("{count}", String(report.gaps.length))}
-                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${(report.gaps.length === 1 ? t("content_gaps.required_warning_one") : t("content_gaps.required_warning").replace("{count}", String(report.gaps.length))).replace("{language}", new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!)}</span>` : nothing}`;
+                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${(report.gaps.length === 1 ? t("content_gaps.required_warning_one") : t("content_gaps.required_warning").replace("{count}", String(report.gaps.length))).replace("{language}", languageDisplayName(code, currentLocale(), false))}</span>` : nothing}`;
         },
       },
       {

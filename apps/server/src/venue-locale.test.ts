@@ -75,7 +75,7 @@ describe("readVenueLocale", () => {
 });
 
 describe("readVenueContentLanguageRules", () => {
-  const SPAIN_OFFICIAL = ["es", "ca", "gl", "eu"];
+  const SPAIN_OFFICIAL = ["es", "ca", "ca-ES-valencia", "gl", "eu"];
 
   it("requires Catalan and Spanish for the Barcelona venue", async () => {
     expect(await readVenueContentLanguageRules(suite.db, { locationId })).toStrictEqual({
