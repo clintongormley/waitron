@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
@@ -373,7 +374,7 @@ it("a failed manager list keeps the endpoint and lets staff retry approval", asy
     "The venue's clock cannot be read",
   );
   expect(d.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
-  expect(d.shadowRoot!.querySelector("wt-button[data-submit]")!.disabled).toBe(false);
+  expect(d.shadowRoot!.querySelector<WtButton>("wt-button[data-submit]")!.disabled).toBe(false);
   d.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
   await expect
     .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
@@ -397,7 +398,7 @@ it("closing the editor re-enables its control and reads fresh choices on reopeni
   const d = await dialog(el);
   d.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
   await expect.poll(() => el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
-  expect(el.shadowRoot!.querySelector("wt-button[data-action]")!.disabled).toBe(false);
+  expect(el.shadowRoot!.querySelector<WtButton>("wt-button[data-action]")!.disabled).toBe(false);
   act(el);
   const reopened = await dialog(el);
   expect(reopened).not.toBe(d);
