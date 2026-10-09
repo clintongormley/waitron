@@ -5696,6 +5696,16 @@ describe("Routing grid", () => {
   });
 });
 
+/**
+ * Edge scroll moves a held row at most 16 px a frame, and this browser can draw fewer than 10
+ * frames a second on a busy machine, so the wait counts frames rather than milliseconds.
+ */
+async function scrollsPast(distance: number, scrolled: () => number) {
+  for (let frame = 0; frame < 90 && scrolled() <= distance; frame++)
+    await new Promise(requestAnimationFrame);
+  expect(scrolled()).toBeGreaterThan(distance);
+}
+
 it("edge scroll carries a held station past the visible summary and persists on release", async () => {
   const next = {
     ...view,
@@ -5734,7 +5744,7 @@ it("edge scroll carries a held station past the visible summary and persists on 
   );
   const initial = box.scrollTop;
   try {
-    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(initial + 150);
+    await scrollsPast(150, () => box.scrollTop - initial);
     document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
     await settle(el);
     expect(order).toHaveBeenCalledTimes(1);
@@ -5781,7 +5791,7 @@ it("edge scroll Escape stops a held station without another reorder on release",
   );
   const initial = box.scrollTop;
   try {
-    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(initial + 100);
+    await scrollsPast(100, () => box.scrollTop - initial);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await settle(el);
     await new Promise(requestAnimationFrame);
@@ -5836,11 +5846,9 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
     try {
       if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
       else
-        await expect
-          .poll(() => (action === "up" ? initial - box.scrollTop : box.scrollTop - initial), {
-            timeout: 3000,
-          })
-          .toBeGreaterThan(250);
+        await scrollsPast(250, () =>
+          action === "up" ? initial - box.scrollTop : box.scrollTop - initial,
+        );
       if (action === "up") {
         send("pointerup");
         await settle(el);
