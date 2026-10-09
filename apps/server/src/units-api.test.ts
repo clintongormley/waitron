@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -409,3 +409,53 @@ describe("unit management routes", () => {
     ).toBe(3);
   });
 });
+
+it.each(["target", "each"])(
+  "returns 409 and preserves a mixed active/archived reassignment to %s",
+  async (destination) => {
+    const makeUnit = async (name: string) =>
+      (await (
+        await send("POST", "/management-api/units", {
+          name: { en: name },
+          precision: 0,
+          abbreviation: { en: name },
+        })
+      ).json()) as { id: string };
+    const source = await makeUnit("source");
+    const target = await makeUnit("target");
+    const [active, archived] = await withTransaction(suite.db, async (tx) => {
+      const menu = await seedCatalogue(tx);
+      const active = await seedProduct(tx, menu, "Active", source.id);
+      const archived = await seedProduct(tx, menu, "Archived", source.id);
+      await tx
+        .update(products)
+        .set({ active: false, pricingUnit: "weight" })
+        .where(inArray(products.id, [archived]));
+      return [active, archived];
+    });
+    const response = await send("POST", `/management-api/units/${source.id}/products/reassign`, {
+      productIds: [active, archived],
+      unitId: destination === "each" ? null : target.id,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "product.archived", params: { productId: archived } },
+    });
+    const rows = await suite.db
+      .select({ productId: productUnits.productId, unitId: productUnits.unitId })
+      .from(productUnits);
+    expect(rows).toHaveLength(2);
+    expect(Object.fromEntries(rows.map((row) => [row.productId, row.unitId]))).toEqual({
+      [active!]: source.id,
+      [archived!]: source.id,
+    });
+    expect(
+      (
+        await suite.db
+          .select({ pricingUnit: products.pricingUnit })
+          .from(products)
+          .where(inArray(products.id, [archived!]))
+      )[0]?.pricingUnit,
+    ).toBe("weight");
+  },
+);

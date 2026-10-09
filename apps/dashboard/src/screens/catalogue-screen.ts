@@ -42,6 +42,7 @@ import {
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
+import "../widgets/product-details.js";
 import "../widgets/catalogue-browser.js";
 import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
@@ -99,6 +100,7 @@ export class CatalogueScreen extends LitElement {
   @state() private courses: Course[] = [];
   @state() private selectedCatalogueId = "";
   @state() private editorOpen = false;
+  @state() private detailsOpen = false;
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
@@ -315,6 +317,7 @@ export class CatalogueScreen extends LitElement {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
+    this.detailsOpen = false;
     this.#showError(null);
     this.editorOpen = true;
   }
@@ -332,15 +335,17 @@ export class CatalogueScreen extends LitElement {
     if (!this.#knows(productId)) return;
     this.#resetEditorState();
     this.editorOpen = false;
+    this.detailsOpen = false;
     this.editorValue = null;
     this.editorInitialField = field === "image" ? "image" : "";
     this.#showError(null);
     const generation = ++this.#editorGeneration;
     try {
-      const value = await this.api.getProductEditor(productId);
+      const value = await (this.api.background ?? this.api).getProductEditor(productId);
       if (generation !== this.#editorGeneration) return;
       this.editorValue = value;
-      this.editorOpen = true;
+      this.detailsOpen = !value.active;
+      this.editorOpen = value.active;
       this.#url.write({ product: productId }, true);
     } catch (error) {
       if (generation === this.#editorGeneration) this.#showReadError(error);
@@ -417,6 +422,7 @@ export class CatalogueScreen extends LitElement {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorOpen = false;
+    this.detailsOpen = false;
     this.editorValue = null;
     this.#linkedProduct = null;
     if (writeUrl) {
@@ -713,6 +719,10 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId, event.detail.field);
               }}
+              @view-product=${(event: CustomEvent<{ productId: string }>) => {
+                event.stopPropagation();
+                void this.#openProduct(event.detail.productId);
+              }}
               @delete-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 this.#openDelete(event.detail.productId);
@@ -721,6 +731,18 @@ export class CatalogueScreen extends LitElement {
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
       ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
+      <dashboard-product-details
+        .open=${this.detailsOpen}
+        .value=${this.detailsOpen ? this.editorValue : null}
+        .categories=${this.categories}
+        .units=${this.units}
+        .extraLists=${this.extraLists}
+        .optionLists=${this.optionLists}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#closeEditor();
+        }}
+      ></dashboard-product-details>
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();

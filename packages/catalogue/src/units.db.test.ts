@@ -315,3 +315,62 @@ describe("a variant's stored unit row, from before a variant always took its pro
     expect(await app((tx) => storedUnitId(tx, variant))).toBe(source.id);
   });
 });
+
+it.each(["target", "each"])(
+  "refuses a mixed active/archived reassignment to %s without changing either product",
+  async (destination) => {
+    await seedTenant(suite.db);
+    const active = await product();
+    const archived = await product();
+    const source = await kg();
+    const target = await kg();
+    await app(async (tx) => {
+      await assignProductUnit(tx, active, source.id);
+      await assignProductUnit(tx, archived, source.id);
+      await tx
+        .update(products)
+        .set({ active: false, pricingUnit: "weight" })
+        .where(inArray(products.id, [archived]));
+    });
+    await expect(
+      app((tx) =>
+        reassignProductsToUnit(
+          tx,
+          source.id,
+          [active, archived],
+          destination === "each" ? null : target.id,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "product.archived" });
+    expect(await app((tx) => storedUnitId(tx, active))).toBe(source.id);
+    expect(await app((tx) => storedUnitId(tx, archived))).toBe(source.id);
+    expect(
+      (
+        await suite.db
+          .select({ pricingUnit: products.pricingUnit })
+          .from(products)
+          .where(inArray(products.id, [archived]))
+      )[0]?.pricingUnit,
+    ).toBe("weight");
+  },
+);
+
+it("skips an archived selection already moved off the source while moving an active product", async () => {
+  await seedTenant(suite.db);
+  const active = await product();
+  const archived = await product();
+  const source = await kg();
+  const other = await kg();
+  const target = await kg();
+  await app(async (tx) => {
+    await assignProductUnit(tx, active, source.id);
+    await assignProductUnit(tx, archived, other.id);
+    await tx
+      .update(products)
+      .set({ active: false })
+      .where(inArray(products.id, [archived]));
+  });
+  await app((tx) => reassignProductsToUnit(tx, source.id, [active, archived], target.id));
+  expect(await app((tx) => storedUnitId(tx, active))).toBe(target.id);
+  expect(await app((tx) => storedUnitId(tx, archived))).toBe(other.id);
+});

@@ -739,6 +739,8 @@ describe("catalogue-screen", () => {
   });
 
   async function archivedRowOffersView(api: DashboardApi, productId = "p1") {
+    const archived = { ...(await api.getProductEditor(productId)), active: false };
+    vi.mocked(api.getProductEditor).mockReset().mockResolvedValue(archived);
     const original = vi.mocked(api.listProducts).getMockImplementation()!;
     vi.mocked(api.listProducts).mockImplementation(async (id: string) =>
       (await original(id)).map((product) => ({
@@ -770,7 +772,11 @@ describe("catalogue-screen", () => {
     list(el).addEventListener("view-product", (event) => seen.push((event as CustomEvent).detail));
     actions.querySelector<HTMLElement>(`[data-test="view-${productId}"]`)!.click();
     expect(seen).toEqual([{ productId }]);
-    expect(api.getProductEditor).not.toHaveBeenCalled();
+    expect(api.getProductEditor).toHaveBeenCalledExactlyOnceWith(productId);
+    await flush(el);
+    const details = el.shadowRoot!.querySelector("dashboard-product-details")!;
+    expect(details.open).toBe(true);
+    expect(details.value).toEqual(archived);
     expect(api.updateProductEditor).not.toHaveBeenCalled();
     expect(editor(el).open).toBe(false);
     return el;
@@ -3459,4 +3465,81 @@ it("reads the venue's default into a new editor without replacing an open draft"
   await el.updateComplete;
   await editor(el).updateComplete;
   expect(tax().value).toBe("reduced");
+});
+
+describe("archived product entry", () => {
+  it("reads archived details passively from the existing background client", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const background = stubApi({
+      getProductEditor: vi.fn().mockResolvedValue({ ...value, active: false }),
+    });
+    const api = { ...stubApi(), background } as DashboardApi;
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "view-product", { productId: "p1" });
+    await flush(el);
+    expect(background.getProductEditor).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(api.getProductEditor).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("dashboard-product-details")!.open).toBe(true);
+    expect(api.updateProductEditor).not.toHaveBeenCalled();
+  });
+
+  it.each(["row", "variant", "link"])(
+    "opens details through %s without opening the editor",
+    async (entry) => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const archived = { ...value, active: false, id: entry === "variant" ? "v1" : "p1" };
+      const api = stubApi({
+        getProductEditor: vi.fn().mockResolvedValue(archived),
+        listProducts: vi.fn().mockResolvedValue([
+          {
+            ...products[0]!,
+            active: false,
+            variants: [
+              {
+                id: "v1",
+                name: "Small",
+                customerName: null,
+                kitchenName: null,
+                image: null,
+                unitPrice: null,
+                available: true,
+                active: false,
+                effective: { unitPrice: "8.50", vatClass: "reduced", primaryCategoryId: "c1" },
+              },
+            ],
+          },
+        ]),
+      });
+      if (entry === "link") history.replaceState(null, "", "/manage/catalogue/product/p1");
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      if (entry !== "link") emit(list(el), "view-product", { productId: archived.id });
+      await flush(el);
+      const details = el.shadowRoot!.querySelector<
+        HTMLElement & { open: boolean; value: ProductEditorValue }
+      >("dashboard-product-details");
+      expect(details?.open).toBe(true);
+      expect(details?.value.id).toBe(archived.id);
+      expect(editor(el).open).toBe(false);
+      emit(details!, "wt-close", {});
+      await flush(el);
+      expect(details?.open).toBe(false);
+      expect(location.pathname).toBe("/manage/catalogue");
+    },
+  );
+
+  it("keeps active products in the editor", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    expect(editor(el).open).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("dashboard-product-details")
+        ?.open ?? false,
+    ).toBe(false);
+  });
 });

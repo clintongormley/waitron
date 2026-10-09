@@ -4600,11 +4600,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
 
-  Step 1's remaining write audit includes bulk unit reassignment. A real-store probe on the
-  A435 branch (2026-10-09) archived a product, reassigned its unit, and read back the target unit;
-  the assertion that its original unit stayed failed. The active-product control passed.
-  `reassignProductsToUnit` in `packages/catalogue/src/units.ts` has no archived-product check.
-  Close this path before landing permanent archiving, retaining active reassignment behaviour.
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
