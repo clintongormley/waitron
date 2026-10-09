@@ -20,6 +20,7 @@ import "./opening-hours-week.js";
 import "./opening-hours-zone-week.js";
 import "./opening-hours-day.js";
 import "./opening-hours-all.js";
+import "./hours-calendar.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { MenuPeriodInput, MenuPeriodUse, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -28,7 +29,7 @@ import { t } from "./strings.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
-type View = "week" | "periods" | "day";
+type View = "week" | "periods" | "day" | "calendar";
 type Editor = { department: Department; period?: Period };
 type Deletion = { period: Period };
 
@@ -71,6 +72,7 @@ export class OpeningHoursScreen extends LitElement {
   @state() private departmentId = "";
   @state() private zoneId = "";
   @state() private view: View = "week";
+  @state() private month = "";
   @state() private weekMode = "week";
   @state() private specialDateId = "";
   @state() private readError = "";
@@ -83,14 +85,18 @@ export class OpeningHoursScreen extends LitElement {
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
     basePath: "/manage",
     primary: "dashboard",
-    children: { "opening-hours": { view: "view", department: "department", zone: "zone" } },
+    children: {
+      "opening-hours": { view: "view", department: "department", zone: "zone", month: "month" },
+    },
   });
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
-    this.view = view === "periods" || view === "day" ? view : "week";
+    this.view = view === "periods" || view === "day" || view === "calendar" ? view : "week";
     this.departmentId = this.url.read("department") ?? "";
     this.zoneId = this.url.read("zone") ?? "";
+    const month = this.url.read("month") ?? "";
+    this.month = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : "";
   }
   override connectedCallback() {
     super.connectedCallback();
@@ -398,7 +404,9 @@ export class OpeningHoursScreen extends LitElement {
         !this.model
           ? nothing
           : html` ${
-                (department || this.view === "week") && this.view !== "day"
+                (department || this.view === "week") &&
+                this.view !== "day" &&
+                this.view !== "calendar"
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
@@ -420,7 +428,7 @@ export class OpeningHoursScreen extends LitElement {
                         }}
                       ></wt-combobox>
                     </div>`
-                  : this.view === "day"
+                  : this.view === "day" || this.view === "calendar"
                     ? nothing
                     : html`<p>${t("menu.no_departments")}</p>`
               }
@@ -431,6 +439,7 @@ export class OpeningHoursScreen extends LitElement {
                   { key: "week", label: t("hours.tab.week") },
                   { key: "periods", label: t("opening.tab.periods") },
                   { key: "day", label: t("opening.tab.day") },
+                  { key: "calendar", label: t("hours.tab.calendar") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   if (event.target !== event.currentTarget) return;
@@ -488,6 +497,25 @@ export class OpeningHoursScreen extends LitElement {
                 </div>
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}
+                </div>
+                <div slot="calendar">
+                  ${
+                    this.view === "calendar"
+                      ? html`<hours-calendar
+                          .namedApi=${this.api.namedDays}
+                          .month=${this.month}
+                          .readOnly=${this.readOnly}
+                          @calendar-month-change=${(event: CustomEvent<{ month: string }>) => {
+                            event.stopPropagation();
+                            void this.url.write({
+                              dashboard: "opening-hours",
+                              view: "calendar",
+                              month: event.detail.month,
+                            });
+                          }}
+                        ></hours-calendar>`
+                      : nothing
+                  }
                 </div>
                 <div slot="day">
                   ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .readOnly=${this.readOnly}></opening-hours-day>` : nothing}

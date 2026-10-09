@@ -34,6 +34,9 @@ export class NamedDaysApi {
       recovered,
     );
   }
+  saveHolidayArea(areaKey: string): Promise<void> {
+    return this.request("/management-api/venue-service/holiday-area", "PUT", { areaKey });
+  }
   rereadWatches(): void {
     this.#watches.reread(QUERY_DEPENDENCIES["named-days"]);
   }

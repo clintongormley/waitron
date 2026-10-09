@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import type { HolidayCoverage, HolidaySource } from "../holiday-types.js";
+import type { NamedDaysModel, HolidayCoverage, HolidaySource } from "../holiday-types.js";
 import type {
   CalendarDay,
   HolidayFact,
@@ -15,6 +15,7 @@ import type {
 } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import { HoursApi } from "./hours-client.js";
+import { NamedDaysApi } from "./named-days-client.js";
 import { addMonths, monthGrid, type CalendarAction, type HoursCalendar } from "./hours-calendar.js";
 import "./hours-calendar.js";
 
@@ -1043,5 +1044,314 @@ describe("Hours calendar: public holidays", () => {
       "2026: se incluyen los festivos oficiales nacionales y autonómicos.",
       "2026: los festivos locales son los que introdujiste.",
     ]);
+  });
+});
+
+describe("Opening hours named month", () => {
+  function namedModel(): NamedDaysModel {
+    const namedDay = {
+      id: "own",
+      date: "2026-10-13",
+      name: "Anniversary",
+      kind: "holiday" as const,
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+      hasStationHours: false,
+    };
+    return {
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      civilDate: "2026-10-07",
+      clockReadable: true,
+      days: [
+        {
+          date: "2026-10-12",
+          namedDay: { ...namedDay, date: "2026-10-12", kind: "working_day", name: "Staff feast" },
+          holidays: [
+            {
+              id: "p",
+              date: "2026-10-12",
+              name: "Public feast",
+              scope: "national",
+              sourceId: "official",
+            },
+          ],
+          tone: "public_holiday",
+          ownHours: true,
+          closed: true,
+        },
+        {
+          date: "2026-10-13",
+          namedDay,
+          holidays: [],
+          tone: "own_holiday",
+          ownHours: true,
+          closed: false,
+        },
+        {
+          date: "2026-10-14",
+          namedDay: { ...namedDay, date: "2026-10-14", kind: "working_day", ownHours: false },
+          holidays: [],
+          tone: "working_day",
+          ownHours: false,
+          closed: false,
+        },
+        {
+          date: "2026-10-15",
+          namedDay: null,
+          holidays: [],
+          tone: "closed",
+          ownHours: false,
+          closed: true,
+        },
+        {
+          date: "2026-10-16",
+          namedDay: null,
+          holidays: [],
+          tone: "standard",
+          ownHours: false,
+          closed: false,
+        },
+      ],
+      holidayCoverage: [],
+      holidaySources: [],
+      area: {
+        options: [
+          { key: "aran", name: "Aran" },
+          { key: "rest", name: "Rest of province" },
+        ],
+        required: true,
+        chosen: null,
+      },
+      localHolidaysPerYear: 2,
+    };
+  }
+  async function namedMount(request?: DashboardRequest) {
+    const el = document.createElement("hours-calendar");
+    el.api = new HoursApi((async (path: string) => {
+      const query = new URL(path, location.origin).searchParams;
+      return rangeModel(query.get("from")!, query.get("to")!);
+    }) as DashboardRequest);
+    Object.assign(el, {
+      namedApi: new NamedDaysApi(request ?? ((async () => namedModel()) as DashboardRequest)),
+      today: "2026-10-07",
+    });
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    return el;
+  }
+  it("paints kind tones across each date, says Closed independently and marks own hours", async () => {
+    const el = await namedMount();
+    for (const [date, fill] of [
+      ["12", "palette-red"],
+      ["13", "palette-purple"],
+      ["14", "palette-blue"],
+      ["15", "day-closed"],
+      ["16", "day-standard"],
+    ]) {
+      const cell = day(el, `2026-10-${date}`);
+      expect(getComputedStyle(cell).backgroundColor, date).toBe(token(el, `--wt-color-${fill}`));
+    }
+    expect(text(day(el, "2026-10-12"))).toContain("Closed");
+    expect(text(day(el, "2026-10-12"))).toContain("Public feast");
+    expect(text(day(el, "2026-10-12"))).toContain("Staff feast");
+    expect(day(el, "2026-10-13").querySelector("wt-icon[name=clock]")).not.toBeNull();
+    expect(getComputedStyle(day(el, "2026-10-13").querySelector("wt-icon")!).color).toBe(
+      token(el, "--wt-color-on-palette-purple"),
+    );
+    expect(text(day(el, "2026-10-13"))).toContain("Own hours");
+    expect(day(el, "2026-10-14").querySelector("wt-icon")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=date-panel]")).toBeNull();
+  });
+  it("saves only an offered changed area and refreshes the month passively", async () => {
+    let chosen: string | null = null;
+    const calls: unknown[][] = [];
+    const el = await namedMount((async (path, method, body, options) => {
+      calls.push([path, method, body, options]);
+      if (method === "PUT") {
+        chosen = (body as { areaKey: string }).areaKey;
+        return;
+      }
+      const model = namedModel();
+      model.area.chosen = chosen;
+      return model;
+    }) as DashboardRequest);
+    const chooser =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]");
+    expect(chooser).not.toBeNull();
+    chooser!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "aran" }, bubbles: true, composed: true }),
+    );
+    await expect.poll(() => chooser!.value).toBe("aran");
+    expect(calls.filter((call) => call[1] === "PUT")).toEqual([
+      ["/management-api/venue-service/holiday-area", "PUT", { areaKey: "aran" }, undefined],
+    ]);
+    expect(
+      calls
+        .filter((call) => call[1] === "GET")
+        .every((call) => (call[3] as { passive: boolean }).passive),
+    ).toBe(true);
+    chooser!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "missing" }, bubbles: true, composed: true }),
+    );
+    chooser!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "aran" }, bubbles: true, composed: true }),
+    );
+    expect(calls.filter((call) => call[1] === "PUT")).toHaveLength(1);
+    expect(el.shadowRoot!.textContent).toContain("2 local holidays a year");
+  });
+  it("ignores an old area refusal after detach and reconnect", async () => {
+    let refuse!: (value: unknown) => void;
+    const el = await namedMount((async (_path, method) => {
+      if (method === "PUT")
+        return new Promise((_resolve, reject) => {
+          refuse = reject;
+        });
+      return namedModel();
+    }) as DashboardRequest);
+    const chooser =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]")!;
+    chooser.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "aran" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    el.remove();
+    document.body.append(el);
+    await el.updateComplete;
+    refuse({ code: "holiday.invalid" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(chooser.error).toBe("");
+    expect(chooser.disabled).toBe(false);
+  });
+  it("retains an area refusal through a successful passive month refresh and allows retry", async () => {
+    let saves = 0;
+    const api = new NamedDaysApi((async (_path, method) => {
+      if (method === "PUT" && ++saves === 1) throw { code: "holiday.invalid" };
+      const model = namedModel();
+      model.area.chosen = saves > 1 ? "aran" : null;
+      return model;
+    }) as DashboardRequest);
+    const el = document.createElement("hours-calendar");
+    el.namedApi = api;
+    el.today = "2026-10-07";
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    await expect.poll(() => el.shadowRoot!.querySelector("[name=holidayArea]")).not.toBeNull();
+    const chooser =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]")!;
+    const pick = () =>
+      chooser.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "aran" }, bubbles: true, composed: true }),
+      );
+    pick();
+    await expect.poll(() => chooser.error).toBe("The change could not be saved.");
+    api.rereadWatches();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(chooser.error).toBe("The change could not be saved.");
+    expect(chooser.disabled).toBe(false);
+    pick();
+    await expect.poll(() => chooser.value).toBe("aran");
+    expect(chooser.error).toBe("");
+  });
+  it("discards a late old-month response, and shows both years' coverage across December", async () => {
+    let finish!: (model: NamedDaysModel) => void;
+    let reads = 0;
+    const el = await namedMount((async () => {
+      if (++reads === 1)
+        return new Promise<NamedDaysModel>((resolve) => {
+          finish = resolve;
+        });
+      const model = namedModel();
+      model.days = [];
+      model.area.options = [];
+      model.holidayCoverage = [
+        {
+          year: 2026,
+          country: "ES",
+          provinceCode: "41",
+          regionCode: "01",
+          nationalRegional: "complete",
+          local: "owner_entered",
+          dataVersion: "ES-2026.1",
+          sourceIds: [],
+        },
+        {
+          year: 2027,
+          country: "ES",
+          provinceCode: "41",
+          regionCode: "01",
+          nationalRegional: "missing_year",
+          local: "none_entered",
+          dataVersion: null,
+          sourceIds: [],
+        },
+      ];
+      return model;
+    }) as DashboardRequest);
+    expect(el.shadowRoot!.querySelector("table")).toBeNull();
+    el.month = "2026-12";
+    await el.updateComplete;
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=month-coverage]")?.textContent)
+      .toContain("2027: official holidays are not available yet");
+    finish(namedModel());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=month-coverage]")!.textContent).toContain(
+      "2026: official national and regional holidays are included.",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=month-coverage]")!.textContent).toContain(
+      "2026: local holidays are the ones you entered.",
+    );
+    expect(el.shadowRoot!.querySelector("[name=holidayArea]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=month]")!.textContent).toContain(
+      "December 2026",
+    );
+  });
+  it("shows an unavailable read without inventing a loaded calendar", async () => {
+    const el = await namedMount((async () => {
+      throw { code: "connection.failed" };
+    }) as DashboardRequest);
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+      "Hours could not be loaded.",
+    );
+    expect(el.shadowRoot!.querySelector("table")).toBeNull();
+  });
+  it("shows a viewer the saved area in words and no picker, and quotes incomplete area coverage here", async () => {
+    const el = await namedMount((async () => {
+      const model = namedModel();
+      model.area.chosen = "aran";
+      model.localHolidaysPerYear = 0;
+      model.holidayCoverage = [
+        {
+          year: 2026,
+          country: "ES",
+          provinceCode: "25",
+          regionCode: "09",
+          nationalRegional: "area_required",
+          local: "none_entered",
+          dataVersion: "ES-2026.1",
+          sourceIds: [],
+        },
+      ];
+      return model;
+    }) as DashboardRequest);
+    el.readOnly = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[name=holidayArea]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=area-chosen]")!.textContent).toContain("Aran");
+    expect(el.shadowRoot!.querySelector("[data-test=month-coverage]")!.textContent).toContain(
+      "choose the holiday area here",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=local-holiday-hint]")).toBeNull();
   });
 });

@@ -10,6 +10,8 @@ import { DROPDOWN_ICONS } from "@waitron/ui";
  * (https://www.apache.org/licenses/LICENSE-2.0), published at https://fonts.google.com/icons.
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
+  clock:
+    "M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11A5.5 5.5 0 0 1 8 2.5ZM7.25 4H8.75V7.5L11 9 10.2 10.2 7.25 8.25Z",
   folder: "M1 3h5l2 2h7v8H1Z",
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
   kebab:

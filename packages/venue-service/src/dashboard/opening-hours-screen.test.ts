@@ -1092,3 +1092,47 @@ it("passes the chosen named day to All departments", async () => {
   expect(all.specialDate).toEqual(special);
   expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(2);
 });
+
+it("restores the Calendar month URL and writes month navigation without a department picker", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02?keep=yes");
+  const ranges: string[] = [];
+  const el = await mount((async (path: string) => {
+    if (path.includes("named-days?")) {
+      ranges.push(path);
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        days: [],
+        holidayCoverage: [],
+        holidaySources: [],
+        area: { options: [], required: false, chosen: null },
+        localHolidaysPerYear: 2,
+      };
+    }
+    return model();
+  }) as DashboardRequest);
+  expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!.value).toBe(
+    "calendar",
+  );
+  const calendar =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["hours-calendar"]>("hours-calendar");
+  expect(calendar).not.toBeNull();
+  await expect.poll(() => calendar!.shadowRoot?.textContent).toContain("February 2027");
+  expect(el.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
+  expect(ranges[0]).toContain("from=2027-02-01&to=2027-02-28");
+  (calendar!.shadowRoot!.querySelector("[data-test=next-month]") as HTMLElement).click();
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/opening-hours/view/calendar/month/2027-03");
+  expect(location.search).toBe("?keep=yes");
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBe(calendar);
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-12");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => calendar!.shadowRoot?.textContent).toContain("December 2026");
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBe(calendar);
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => calendar!.shadowRoot?.textContent).not.toContain("Invalid Date");
+});

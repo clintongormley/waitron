@@ -7,6 +7,7 @@ import type {
 } from "../menu-timetable-types.js";
 import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { NamedDaysApi } from "./named-days-client.js";
 import { ModelWatches } from "./model-watch.js";
 
 const BASE = "/management-api/venue-service";
@@ -14,11 +15,13 @@ const at = (id: string) => encodeURIComponent(id);
 
 export class OpeningHoursApi {
   readonly #watches: ModelWatches;
+  readonly namedDays: NamedDaysApi;
   constructor(
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
   ) {
     this.#watches = new ModelWatches(liveData);
+    this.namedDays = new NamedDaysApi(request, liveData);
   }
   watchOpeningHours(
     apply: (model: OpeningHoursModel) => void,

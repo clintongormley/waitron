@@ -1014,7 +1014,7 @@ in words; the holiday area picker shows when the region has areas and saves thro
 /holiday-area`; the yearly coverage notes stay; the local-holiday hint quotes
 `localHolidaysPerYear` (decision 10). No actions yet.
 
-- [ ] Steps: failing tests (an own holiday's date is purple — fails today because the calendar
+- [x] Steps: failing tests (an own holiday's date is purple — fails today because the calendar
   colours by the stored `colour`; the mark; the area choice saves; axe for each tone in both
   themes); watch them fail; implement; the package's node project; LOOK in EN and ES, both themes,
   1280 and 390; commit `feat(venue-service): the Calendar month in Opening hours (A366)`.

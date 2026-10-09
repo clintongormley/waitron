@@ -1,6 +1,13 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "calendar.public": "Public holiday",
+  "calendar.own_holiday": "Own holiday",
+  "calendar.working": "Named working day",
+  "calendar.own_hours": "Own hours",
+  "calendar.local_hint": "Towns have {count} local holidays a year: add yours as own holidays.",
+  "calendar.area_required":
+    "{year}: only official holidays for the whole province are shown until you choose the holiday area here.",
   "named.new": "New named day",
   "named.edit": "Edit named day",
   "named.date": "Date",
@@ -697,6 +704,14 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "calendar.public": "Festivo oficial",
+  "calendar.own_holiday": "Festivo propio",
+  "calendar.working": "Día laborable especial",
+  "calendar.own_hours": "Horario propio",
+  "calendar.local_hint":
+    "Los municipios tienen {count} festivos locales al año: añade los tuyos como festivos propios.",
+  "calendar.area_required":
+    "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que elijas aquí la zona de festivos.",
   "named.new": "Nuevo día con nombre",
   "named.edit": "Editar día con nombre",
   "named.date": "Fecha",

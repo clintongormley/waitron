@@ -1,6 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { LitElement } from "lit";
 import { UrlStateController } from "@waitron/ui";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "./icons.js";
 import { dashboardPath } from "./navigation.js";
 
 class NavigationHost extends LitElement {}
@@ -93,4 +95,26 @@ it("preserves Opening hours zone and All departments URLs", async () => {
   await url.write({ department: "all", zone: null }, true);
   expect(location.pathname).toBe("/manage/opening-hours/view/week/department/all");
   expect(url.read("department")).toBe("all");
+});
+
+it("preserves an Opening hours Calendar month while the shell replaces its section", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02?keep=yes");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  document.body.append(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  await url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/calendar/month/2027-02");
+  expect(location.search).toBe("?keep=yes");
+  host.remove();
+});
+
+it("draws the Calendar's own-hours clock from the dashboard registry", async () => {
+  registerIcons(DASHBOARD_ICONS);
+  const icon = document.createElement("wt-icon");
+  icon.name = "clock";
+  document.body.append(icon);
+  await icon.updateComplete;
+  expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
+  icon.remove();
 });
