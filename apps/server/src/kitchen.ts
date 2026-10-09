@@ -18,6 +18,7 @@ import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 import { assertDemotedStationHours } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { assertStationTiming, getKitchenTimingDefaults } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
@@ -180,6 +181,19 @@ export async function listStations(
     warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
     overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
     forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
+  }));
+}
+
+/** The active stations, each with how it stands today. */
+export async function listStationsToday(tx: Transaction, cfg: TillConfig) {
+  const listed = await listStations(tx, cfg);
+  const states = await VENUE_SERVICE.stationStates(tx, { locationId: cfg.locationId }, new Date());
+  return listed.map((station) => ({
+    ...station,
+    open: states.get(station.id)?.open ?? false,
+    byHand: states.get(station.id)?.byHand ?? null,
+    sendsTo: states.get(station.id)?.sendsTo ?? null,
+    why: states.get(station.id)?.why ?? "switched_off",
   }));
 }
 

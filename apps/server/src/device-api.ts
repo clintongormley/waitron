@@ -80,7 +80,9 @@ import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 import { listPassMonitor, listPassScreen, markPassItems, passScopeOf } from "./pass-board.js";
 import { parsePassDoneBody } from "./pass-done-body.js";
 import { mountDeviceLevers } from "./device-levers.js";
-import { STATUS as TILL_STATUS } from "./till-api.js";
+import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
+import { moveDishesToStation } from "./station-move.js";
+import { listStationsToday } from "./kitchen.js";
 
 /**
  * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
@@ -386,7 +388,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
-  mountDeviceLevers(app, deps, log, createErrorBoundary(LEVER_STATUS, "device.failed"));
+  const leverRun = createErrorBoundary(LEVER_STATUS, "device.failed");
+  mountDeviceLevers(app, deps, log, leverRun);
 
   // ── The device's pass screen and pass monitor (DEVICE-GUARDED) ─────────────────────────────────────
   app.get("/api/device/pass-screen", (c) =>
@@ -544,6 +547,51 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         await advanceTicketItem(tx, cfg, id, to);
       });
       return c.body(null, 204);
+    }),
+  );
+
+  // ── Move dishes from the screen's stations to another (DEVICE-GUARDED, kitchen displays only) ──────
+  // A till moves dishes on its session route, under its zone check.
+  app.post("/api/device/working-orders/:id/lines/move-station", (c) =>
+    leverRun(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
+      assertProfileAction(device, "take-orders");
+      const cfg = requestCfg(deps.cfg, device);
+      const id = c.req.param("id").toLowerCase();
+      if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
+      const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
+      const answer = await withTransaction(deps.db, async (tx) => {
+        const { screen, personId } = await kitchenScreenOf(tx, c, deps.cfg, device, "station");
+        return moveDishesToStation(
+          tx,
+          cfg,
+          id,
+          request,
+          { deviceId: device.deviceId, personId },
+          {
+            assertFrom: async (stationId) => {
+              if (!(await worksStation(tx, deps.cfg, screen, stationId)))
+                throw new AppError("device.forbidden_station", { stationId });
+            },
+          },
+        );
+      });
+      return c.json(answer);
+    }),
+  );
+
+  // ── Where a station screen may move a dish to (DEVICE-GUARDED, kitchen displays only) ─────────────
+  app.get("/api/device/stations", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          await kitchenScreenOf(tx, c, deps.cfg, device, "station");
+          return listStationsToday(tx, deps.cfg);
+        }),
+      );
     }),
   );
 
