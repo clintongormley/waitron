@@ -146,13 +146,23 @@ async function open(screen: PrepStationsScreen, rename: boolean) {
         .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!
     : screen.shadowRoot!;
   await expect
-    .poll(() => root.querySelector(`[data-test=${rename ? "rename-bar" : "new-station"}]`))
+    .poll(() => root.querySelector(`[data-test=${rename ? "edit-bar" : "new-station"}]`))
     .not.toBeNull();
-  root.querySelector<HTMLElement>(`[data-test=${rename ? "rename-bar" : "new-station"}]`)!.click();
+  root.querySelector<HTMLElement>(`[data-test=${rename ? "edit-bar" : "new-station"}]`)!.click();
   await screen.updateComplete;
-  const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+  const modal = modalIn(screen)!;
   await modal.updateComplete;
   return modal;
+}
+/** The open station form: New station is drawn by the screen, Edit by its station editor. */
+function modalIn(screen: PrepStationsScreen) {
+  return (
+    screen.shadowRoot!.querySelector("wt-modal") ??
+    screen
+      .shadowRoot!.querySelector("prep-station-editor")
+      ?.shadowRoot?.querySelector("wt-modal") ??
+    null
+  );
 }
 async function field(modal: HTMLElementTagNameMap["wt-modal"], value: string, name = "name") {
   const input = modal.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -160,6 +170,7 @@ async function field(modal: HTMLElementTagNameMap["wt-modal"], value: string, na
   )!;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await ((modal.getRootNode() as ShadowRoot).host as PrepStationsScreen).updateComplete;
+  await modal.updateComplete;
 }
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
@@ -179,7 +190,7 @@ async function choose(decision: "keep" | "discard") {
   await expect.poll(() => q.open).toBe(false);
 }
 for (const rename of [false, true]) {
-  const label = rename ? "Rename" : "Add";
+  const label = rename ? "Edit" : "Add";
   it(`${label} keeps name through native Escape and discards once without writing`, async () => {
     const { screen, writes } = await mount();
     const modal = await open(screen, rename);
@@ -192,7 +203,7 @@ for (const rename of [false, true]) {
     expect(modal.querySelector("wt-input")!.value).toBe("Kitchen");
     modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
     await choose("discard");
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    await expect.poll(() => modalIn(screen)).toBeNull();
     expect(writes).toEqual([]);
     expect(unload()).toBe(false);
   });
@@ -200,13 +211,13 @@ for (const rename of [false, true]) {
     const { screen } = await mount();
     let modal = await open(screen, rename);
     modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    await expect.poll(() => modalIn(screen)).toBeNull();
     modal = await open(screen, rename);
     await field(modal, "Kitchen");
     await field(modal, rename ? " Bar " : "");
     expect(unload()).toBe(false);
     modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    await expect.poll(() => modalIn(screen)).toBeNull();
     expect((await question()).open).toBe(false);
   });
   it(`${label} accepted write commits before a refused refresh`, async () => {
@@ -214,9 +225,9 @@ for (const rename of [false, true]) {
     const modal = await open(screen, rename);
     await field(modal, "Kitchen");
     modal
-      .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-name" : "save-station"}]`)!
+      .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-edit" : "save-station"}]`)!
       .click();
-    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    await expect.poll(() => modalIn(screen)).toBeNull();
     expect(writes).toEqual(
       rename
         ? [{ id: "bar", body: { name: "Kitchen" } }]
@@ -238,14 +249,14 @@ for (const rename of [false, true]) {
     const modal = await open(screen, rename);
     await field(modal, "Kitchen");
     modal
-      .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-name" : "save-station"}]`)!
+      .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-edit" : "save-station"}]`)!
       .click();
     write.reject({ code: "station.name_taken" });
     await expect
       .poll(() =>
         modal
           .querySelector<HTMLElement>(
-            `[data-test=${rename ? "save-station-name" : "save-station"}]`,
+            `[data-test=${rename ? "save-station-edit" : "save-station"}]`,
           )!
           .hasAttribute("disabled"),
       )
@@ -261,7 +272,7 @@ for (const rename of [false, true]) {
     const modal = await open(screen, rename);
     await field(modal, "Kitchen");
     modal
-      .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-name" : "save-station"}]`)!
+      .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-edit" : "save-station"}]`)!
       .click();
     await screen.updateComplete;
     expect(await modal.requestClose("cancel")).toBe(false);
@@ -272,7 +283,7 @@ for (const rename of [false, true]) {
       .poll(() =>
         modal
           .querySelector<HTMLElement>(
-            `[data-test=${rename ? "save-station-name" : "save-station"}]`,
+            `[data-test=${rename ? "save-station-edit" : "save-station"}]`,
           )!
           .hasAttribute("disabled"),
       )
@@ -297,13 +308,13 @@ for (const rename of [false, true]) {
 
 for (const rename of [false, true])
   for (const refused of [false, true]) {
-    it(`${rename ? "Rename" : "Add"} departed ${refused ? "refused" : "accepted"} write and field events cannot affect a new editor`, async () => {
+    it(`${rename ? "Edit" : "Add"} departed ${refused ? "refused" : "accepted"} write and field events cannot affect a new editor`, async () => {
       const write = deferred();
       const { screen } = await mount(write.promise);
       const old = await open(screen, rename);
       await field(old, "Kitchen");
       old
-        .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-name" : "save-station"}]`)!
+        .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-edit" : "save-station"}]`)!
         .click();
       await screen.updateComplete;
       screen.remove();
@@ -321,7 +332,7 @@ for (const rename of [false, true])
       expect(next.isConnected).toBe(true);
       expect(
         next
-          .querySelector(`[data-test=${rename ? "save-station-name" : "save-station"}]`)!
+          .querySelector(`[data-test=${rename ? "save-station-edit" : "save-station"}]`)!
           .hasAttribute("disabled"),
       ).toBe(false);
       expect(next.querySelector("wt-input")!.value).toBe("New station draft");
@@ -349,17 +360,18 @@ for (const [name, changed, reverted] of [
 }
 
 for (const rename of [false, true]) {
-  it(`${rename ? "Rename" : "Add"} reconnects its retained editor with a coordinated Save scope`, async () => {
+  it(`${rename ? "Edit" : "Add"} reconnects its retained editor with a coordinated Save scope`, async () => {
     const { screen, writes } = await mount();
     await open(screen, rename);
     screen.remove();
     await screen.updateComplete;
-    expect(screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    if (rename) expect(modalIn(screen)!.isConnected).toBe(false);
+    else expect(modalIn(screen)).toBeNull();
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
-    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+    const modal = modalIn(screen)!;
     const save = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      `[data-test=${rename ? "save-station-name" : "save-station"}]`,
+      `[data-test=${rename ? "save-station-edit" : "save-station"}]`,
     )!;
     await save.updateComplete;
     expect(save.variant).toBe("secondary");
@@ -383,19 +395,19 @@ for (const rename of [false, true]) {
 }
 
 for (const rename of [false, true]) {
-  it(`${rename ? "Rename" : "Add"} retains its dirty baseline through reconnect and quiets on undo`, async () => {
+  it(`${rename ? "Edit" : "Add"} retains its dirty baseline through reconnect and quiets on undo`, async () => {
     const { screen, writes } = await mount();
     await open(screen, rename);
-    const before = screen.shadowRoot!.querySelector("wt-modal")!;
+    const before = modalIn(screen)!;
     const original = before.querySelector("wt-input")!.value;
     await field(before, "Retained edit");
     screen.remove();
     await screen.updateComplete;
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
-    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+    const modal = modalIn(screen)!;
     const save = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      `[data-test=${rename ? "save-station-name" : "save-station"}]`,
+      `[data-test=${rename ? "save-station-edit" : "save-station"}]`,
     )!;
     await save.updateComplete;
     expect(modal.querySelector("wt-input")!.value).toBe("Retained edit");

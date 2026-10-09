@@ -252,6 +252,7 @@ async function editSaveField(el: PrepStationsScreen, field: HTMLElement, value: 
 }
 const q = (el: PrepStationsScreen, s: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(s) ??
+  el.shadowRoot!.querySelector("prep-station-editor")?.shadowRoot?.querySelector<HTMLElement>(s) ??
   el
     .shadowRoot!.querySelector('[data-test="watchers-table"]')
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
@@ -735,7 +736,7 @@ it("keeps whole-station editing out of Routing while showing the grid", async ()
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="edit-bar"]')).toBeNull();
   expect(routing.querySelector("venue-routing-grid")).not.toBeNull();
-  expect(q(el, '[data-test="rename-bar"]')).not.toBeNull();
+  expect(q(el, '[data-test="edit-bar"]')).not.toBeNull();
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="name"]')).not.toBeNull();
@@ -752,14 +753,14 @@ it("does not rename a station removed while its draft is open", async () => {
     .mockResolvedValue({ ...view, stations: [] });
   const a = api({ liveData, load });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
-  const input = q(el, '[data-test="station-rename"] wt-input') as WtInput;
+  const input = q(el, '[data-test="station-editor"] wt-input') as WtInput;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }));
   await settle(el);
-  const save = q(el, '[data-test="save-station-name"]')!;
+  const save = q(el, '[data-test="save-station-edit"]')!;
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() => expect(q(el, '[data-test="rename-bar"]')).toBeNull());
+  await vi.waitFor(() => expect(q(el, '[data-test="edit-bar"]')).toBeNull());
   save.click();
   await settle(el);
   expect(a.updateStation).not.toHaveBeenCalled();
@@ -918,13 +919,13 @@ it("saves station name, order and thresholds through their individual controls",
   const next = withUpstairs({ open: true, why: "in_hours" });
   const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   q(el, 'wt-input[name="stationName"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
   await settle(el);
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenNthCalledWith(1, "bar", { name: "Terrace bar" });
   q(el, '[data-test="drag-bar"]')!.dispatchEvent(
@@ -1036,7 +1037,7 @@ it("renames a station when Enter is pressed in its name field", async () => {
     }),
   });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Bar");
   q(el, 'wt-input[name="stationName"]')!
@@ -1076,7 +1077,7 @@ it("does not submit Enter for a rename draft whose station was removed by live r
     .mockResolvedValue({ ...view, stations: [] });
   const a = api({ liveData, load });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
@@ -1102,7 +1103,7 @@ it("guards repeated Enter rename saves while a station write is pending and allo
     }),
   });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Bar");
   const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
@@ -1117,7 +1118,7 @@ it("guards repeated Enter rename saves while a station write is pending and allo
     );
   enter();
   enter();
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   expect(updateStation).toHaveBeenCalledTimes(1);
   expect(updateStation).toHaveBeenCalledWith("bar", { name: "Bar" });
   reject({ code: "management.request_invalid" });
@@ -2242,11 +2243,11 @@ it.each([false, true])(
 );
 
 it.each([
-  ["en", "Rename", "Disable", "Enable"],
-  ["es", "Cambiar nombre", "Deshabilitar", "Habilitar"],
+  ["en", "Edit", "Disable", "Enable"],
+  ["es", "Editar", "Deshabilitar", "Habilitar"],
 ])(
   "Stations row menus identify their row and use retained-state wording in %s",
-  async (locale, rename, disable, enable) => {
+  async (locale, edit, disable, enable) => {
     setLocale(locale as "en" | "es");
     const next = withUpstairs({ open: true, why: "in_hours" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
@@ -2255,7 +2256,7 @@ it.each([
     const menu = summary.querySelector('wt-row-actions[data-test="station-menu-upstairs"]');
     expect(menu).not.toBeNull();
     expect(menu!.getAttribute("label")).toContain("Upstairs bar");
-    expect(menu!.querySelector('[data-test="rename-upstairs"]')!.textContent).toContain(rename);
+    expect(menu!.querySelector('[data-test="edit-upstairs"]')!.textContent).toContain(edit);
     expect(menu!.querySelector('[data-test="disable-upstairs"]')!.textContent).toContain(disable);
     expect(menu!.querySelector('[data-test="make-default-upstairs"]')).not.toBeNull();
     expect(summary.querySelector('[data-test="make-default-bar"]')).toBeNull();
@@ -2268,7 +2269,7 @@ it("renames from Stations without submitting timing settings and closes before a
   const next = withUpstairs({ open: true, why: "in_hours" });
   const load = vi.fn().mockResolvedValueOnce(next).mockRejectedValue({ code: "connection.failed" });
   const { el, a } = await mountToday(next, { load });
-  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]');
+  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
@@ -2276,10 +2277,10 @@ it("renames from Stations without submitting timing settings and closes before a
   expect(name).not.toBeNull();
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Cold kitchen" } }));
   await settle(el);
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledWith("upstairs", { name: "Cold kitchen" });
-  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).toBeNull();
   expect(q(el, '[role="alert"]')!.textContent).toContain("could not be loaded");
 });
 it("keeps a refused station name editable, marks duplicates and validates a corrected blank locally", async () => {
@@ -2289,23 +2290,23 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
       .mockRejectedValueOnce({ code: "station.name_taken" })
       .mockResolvedValue(undefined),
   });
-  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]');
+  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
-  expect(q(el, '[data-test="station-rename"]')).not.toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).not.toBeNull();
   expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toContain("already");
-  expect(q(el, '[data-test="save-station-name"]')!.hasAttribute("disabled")).toBe(false);
+  expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
   const name = q(el, 'wt-input[name="stationName"]')!;
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: " " } }));
   await settle(el);
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(1);
-  expect(q(el, '[data-test="save-station-name"]')!.hasAttribute("disabled")).toBe(true);
+  expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(true);
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "New name" } }));
   await settle(el);
   name
@@ -2313,7 +2314,7 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   await settle(el);
   expect(a.updateStation).toHaveBeenLastCalledWith("upstairs", { name: "New name" });
-  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).toBeNull();
 });
 it("Stations row actions reuse default and retained disable/enable writes", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
@@ -2434,17 +2435,20 @@ it("keeps a general rename refusal below the field and permits retry", async () 
       .mockRejectedValueOnce({ code: "connection.failed" })
       .mockResolvedValue(undefined),
   });
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!.click();
+  healthSummary(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
-  expect(q(el, '[data-test="station-rename"]')!.textContent).toContain("could not be saved");
-  q(el, '[data-test="save-station-name"]')!.click();
+  expect(
+    (q(el, '[data-test="station-editor"] wt-form-actions') as HTMLElement & { error: string })
+      .error,
+  ).toContain("could not be saved");
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(2);
-  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).toBeNull();
 });
 it("announces the reordered station and its position to a screen reader", async () => {
   const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
@@ -2469,7 +2473,7 @@ it.each([
   ["es", "light", 1280],
   ["es", "dark", 1280],
 ] as const)(
-  "Stations menus and rename remain accessible in %s %s at %ipx",
+  "Stations menus and the station editor remain accessible in %s %s at %ipx",
   async (locale, theme, width) => {
     const previous = {
       width: window.innerWidth,
@@ -2499,18 +2503,18 @@ it.each([
       await page.screenshot({
         path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-menu.png`,
       });
-      const rename = menu.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!;
-      await page.elementLocator(rename).click();
+      const edit = menu.querySelector<HTMLElement>('[data-test="edit-upstairs"]')!;
+      await page.elementLocator(edit).click();
       await settle(el);
       expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
       expect(
-        q(el, '[data-test="station-rename"]')!.getBoundingClientRect().right,
+        q(el, '[data-test="station-editor"]')!.getBoundingClientRect().right,
       ).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-rename.png`,
+        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-edit.png`,
       });
-      q(el, '[data-test="station-rename"]')!
+      q(el, '[data-test="station-editor"]')!
         .querySelector<HTMLElement>('wt-button[slot="cancel"]')!
         .click();
       await settle(el);
@@ -6039,7 +6043,7 @@ describe("Save follows changes", () => {
       settingsQ(el, selector);
     const info = {
       create: ["new-station", "save-station", 'wt-input[name="name"]', "", "New station"],
-      rename: ["rename-bar", "save-station-name", 'wt-input[name="stationName"]', "Bar", "New bar"],
+      rename: ["edit-bar", "save-station-edit", 'wt-input[name="stationName"]', "Bar", "New bar"],
       printers: [
         "edit-printers-bar",
         "save-printers-bar",
