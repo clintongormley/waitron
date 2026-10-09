@@ -96,8 +96,6 @@ async function zoneTill(zoneId: string): Promise<string> {
       departmentId,
       allowedZoneIds: [zoneId],
       startingZoneId: zoneId,
-      stationIds: [],
-      watcherIds: [],
     });
     return profile!.id;
   });
