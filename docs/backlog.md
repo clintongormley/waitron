@@ -2364,11 +2364,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   reads kitchen state only from the dish's record (`readCurrentOrders`,
   `apps/server/src/order-groups.ts`). Show the extra's own progress.
 
-- **Move to station on a paid counter order.** — left open by the product folders work. The move
-  route accepts an order that is paid but not yet handed over (`apps/server/src/station-move.ts`).
-  Add the button to B16's "Paid, not handed over" list ([Task
-  16](superpowers/plans/2026-09-26-service-ordering-and-billing.md)).
-
 - **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
   does not notice a publish that adds a required options list to a dish in the basket, or lowers a
   list's picks limit, so the till takes the new version silently and the server then refuses
