@@ -34,6 +34,7 @@ import {
 import {
   createDepartment,
   departments,
+  departmentSalePolicies,
   createServiceZone,
   deleteMenuPeriod,
   menuPeriods,
@@ -623,6 +624,10 @@ describe("service periods gate only added dishes and added stored quantities", (
       .update(departments)
       .set({ defaultServiceMode: "table_tab" })
       .where(eq(departments.id, v.restaurant));
+    await suite.db
+      .update(departmentSalePolicies)
+      .set({ orderStart: "table" })
+      .where(eq(departmentSalePolicies.departmentId, v.restaurant));
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, v.cfg, { label: "Grace table", zoneId: v.sala }),
     );
@@ -1023,6 +1028,10 @@ describe("service periods gate only added dishes and added stored quantities", (
           .update(departments)
           .set({ defaultServiceMode: "table_tab" })
           .where(eq(departments.id, v.restaurant));
+        await suite.db
+          .update(departmentSalePolicies)
+          .set({ orderStart: "table" })
+          .where(eq(departmentSalePolicies.departmentId, v.restaurant));
         const { id: tableId } = await withTransaction(suite.db, (tx) =>
           createTable(tx, v.cfg, { label: "Fired meal table", zoneId: v.sala }),
         );
@@ -1095,6 +1104,10 @@ describe("service periods gate only added dishes and added stored quantities", (
         .update(departments)
         .set({ defaultServiceMode: "table_tab" })
         .where(eq(departments.id, v.restaurant));
+      await suite.db
+        .update(departmentSalePolicies)
+        .set({ orderStart: "table" })
+        .where(eq(departmentSalePolicies.departmentId, v.restaurant));
       const { id: tableId } = await withTransaction(suite.db, (tx) =>
         createTable(tx, v.cfg, { label: "Meal table", zoneId: v.sala }),
       );
