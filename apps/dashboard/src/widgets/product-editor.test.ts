@@ -1314,6 +1314,10 @@ it("offers every unattached list of both kinds, and attaches the one chosen", as
     `Cut · ${t("options.title")}`,
     t("editor.create_option_list"),
   ]);
+  expect([t("editor.create_extra_list"), t("editor.create_option_list")]).toEqual([
+    "Añadir lista de extras…",
+    "Añadir lista de opciones…",
+  ]);
   // Each make-new choice ends its own group, drawn in the primary colour so it does not read as
   // one more list.
   expect(combobox.options.map((option) => option.group)).toEqual([

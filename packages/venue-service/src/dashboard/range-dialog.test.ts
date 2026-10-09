@@ -66,7 +66,7 @@ it("opens with quarter-hour native time fields, an unchosen period and quiet Sav
   expect(field(el, "periodId").options).toEqual([
     { value: "lunch", label: "Lunch" },
     { value: "dinner", label: "Dinner" },
-    { value: "new", label: "New period…", action: true },
+    { value: "new", label: "Add period…", action: true },
   ]);
   expect(save(el).variant).toBe("secondary");
   expect(save(el).disabled).toBe(true);

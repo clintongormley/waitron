@@ -358,7 +358,7 @@ export class RecipeScreen extends LitElement {
       <div class="header">
         <h1 class="title">${t("recipe.title")}</h1>
         <wt-button variant="primary" data-test="new-ingredient" @click=${() => this.#openForm()}
-          >${t("ingredient.new")}</wt-button
+          >${t("ingredient.add")}</wt-button
         >
       </div>
 

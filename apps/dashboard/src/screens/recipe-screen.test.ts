@@ -155,7 +155,9 @@ describe("recipe-screen", () => {
     await flush(el);
 
     expect(form(el).open).toBe(false);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!.click();
+    const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!;
+    expect(add.textContent!.trim()).toBe("Añadir ingrediente");
+    add.click();
     await el.updateComplete;
 
     expect(form(el).open).toBe(true);

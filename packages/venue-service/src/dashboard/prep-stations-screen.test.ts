@@ -2536,6 +2536,7 @@ it("opens the default Stations tab and places New station, the only create actio
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
+  expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add station");
   expect(
     [...q(el, '[slot="actions"]')!.children].map((child) => child.getAttribute("data-test")),
   ).toEqual(["new-station"]);

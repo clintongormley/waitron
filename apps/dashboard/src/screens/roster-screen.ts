@@ -444,7 +444,7 @@ export class RosterScreen extends LitElement {
         type="button"
         class="cell-button"
         data-test=${testId}
-        aria-label=${cellShifts.length > 0 ? nothing : t("roster.new_shift")}
+        aria-label=${cellShifts.length > 0 ? nothing : t("roster.add_shift")}
         @click=${() => this.openCell(personId, day, null)}
       >
         ${cellShifts.length > 0 ? t("roster.add_another") : nothing}

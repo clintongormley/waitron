@@ -320,6 +320,7 @@ describe("venue operations screen", () => {
       '[data-test="policy-tree-actions"] [data-test="new-zone"]',
     );
     expect(add).not.toBeNull();
+    expect(add!.textContent!.trim()).toBe("Add zone");
     add!.click();
     await settle(el);
     expect(modal(el)?.getAttribute("heading")).toBe("New zone");

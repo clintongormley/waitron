@@ -254,7 +254,7 @@ describe("roster-screen", () => {
     await flush(el);
     const cell = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test^=cell-p1-]")!;
     expect(cell.tagName).toBe("BUTTON");
-    expect(cell.getAttribute("aria-label")).toBe("Nuevo turno");
+    expect(cell.getAttribute("aria-label")).toBe("Añadir turno");
   });
 
   it("opens the dialog when a grid cell button is activated by keyboard (Enter)", async () => {

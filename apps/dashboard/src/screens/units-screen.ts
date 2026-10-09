@@ -221,7 +221,7 @@ export class UnitsScreen extends LitElement {
       slot=${ifDefined(slot)}
       variant="primary"
       @click=${this.#openCreate}
-      >${t("units.create")}</wt-button
+      >${t("units.add")}</wt-button
     >`;
   }
 
