@@ -2438,7 +2438,6 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
   }
 
-  /** Reads ahead the board the device's kitchen screen opens on; what it answers shows that board. */
   async #readKitchenScreen(screens: readonly ResolvedKitchenScreen[]): Promise<() => void> {
     const screen = kitchenDisplayScreen(screens);
     if (screen.kind === "station") {
@@ -2456,7 +2455,7 @@ export class TillApp extends LitElement {
     return () => (this.kitchenScreenNotice = screen.notice);
   }
 
-  /** True when the boot stops here: dev mode answered, or a newer boot overtook this one. */
+  /** True when the boot stops here: dev mode answered, or the boot was overtaken. */
   async #openDevChooser(overtaken: () => boolean): Promise<boolean> {
     try {
       const devices = await this.api.getDevDevices();
