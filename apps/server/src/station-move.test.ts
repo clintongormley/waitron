@@ -1359,6 +1359,64 @@ describe("moveDishesToStation", () => {
     expect(await movesOf([item.workingOrderLineId])).toEqual([]);
   });
 
+  it("asks assertFrom once for two named dishes at the same station", async () => {
+    const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    await orderForParty(venue, partyId, ["Burger", "Agua"], tabId);
+    const items = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    expect(items.map((item) => item.stationId)).toEqual([bar, bar]);
+    const asked: string[] = [];
+    await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: items.map((item) => item.workingOrderLineId),
+          stationId: grill,
+        },
+        mover(),
+        { assertFrom: (stationId) => void asked.push(stationId) },
+      ),
+    );
+    expect(asked).toEqual([bar]);
+  });
+
+  it("asks assertFrom about each distinct station of the named dishes", async () => {
+    const tableId = await venue.table(`D-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    await orderForParty(venue, partyId, ["Burger", "Agua"], tabId);
+    const lineIds = (
+      await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      )
+    ).map((item) => item.workingOrderLineId);
+    await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        { submissionId: randomUUID(), lineIds: [lineIds[1]!], stationId: grill },
+        mover(),
+      ),
+    );
+    const asked: string[] = [];
+    await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        { submissionId: randomUUID(), lineIds, stationId: bar },
+        mover(),
+        { assertFrom: (stationId) => void asked.push(stationId) },
+      ),
+    );
+    expect([...asked].sort()).toEqual([bar, grill].sort());
+  });
+
   it("copies a dish's move records, under new ids, to the line a quantity split makes", async () => {
     const { tabId, item } = await burger();
     await inTx(venue, async (tx) => {

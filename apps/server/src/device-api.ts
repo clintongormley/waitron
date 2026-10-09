@@ -79,7 +79,7 @@ import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 import { listPassMonitor, listPassScreen, markPassItems, passScopeOf } from "./pass-board.js";
 import { parsePassDoneBody } from "./pass-done-body.js";
-import { mountDeviceLevers } from "./device-levers.js";
+import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
 import { listStationsToday } from "./kitchen.js";
@@ -551,19 +551,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   );
 
   // ── Move dishes from the screen's stations to another (DEVICE-GUARDED, kitchen displays only) ──────
-  // A till moves dishes on its session route, under its zone check.
   app.post("/api/device/working-orders/:id/lines/move-station", (c) =>
     leverRun(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
-      assertProfileAction(device, "take-orders");
+      const device = await requireKitchenDisplay(deps, c, "take-orders");
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id").toLowerCase();
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
       const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const answer = await withTransaction(deps.db, async (tx) => {
         const { screen, personId } = await kitchenScreenOf(tx, c, deps.cfg, device, "station");
-        const works = new Map<string, boolean>();
         return moveDishesToStation(
           tx,
           cfg,
@@ -572,12 +568,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           { deviceId: device.deviceId, personId },
           {
             assertFrom: async (stationId) => {
-              let allowed = works.get(stationId);
-              if (allowed === undefined) {
-                allowed = await worksStation(tx, deps.cfg, screen, stationId);
-                works.set(stationId, allowed);
-              }
-              if (!allowed) throw new AppError("device.forbidden_station", { stationId });
+              if (!(await worksStation(tx, deps.cfg, screen, stationId)))
+                throw new AppError("device.forbidden_station", { stationId });
             },
           },
         );
@@ -593,7 +585,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await kitchenScreenOf(tx, c, deps.cfg, device, "station");
+          await stationScreenOf(tx, c, deps.cfg, device);
           return listStationsToday(tx, deps.cfg);
         }),
       );

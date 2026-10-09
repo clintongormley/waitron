@@ -188,13 +188,16 @@ export async function listStations(
 export async function listStationsToday(tx: Transaction, cfg: TillConfig) {
   const listed = await listStations(tx, cfg);
   const states = await VENUE_SERVICE.stationStates(tx, { locationId: cfg.locationId }, new Date());
-  return listed.map((station) => ({
-    ...station,
-    open: states.get(station.id)?.open ?? false,
-    byHand: states.get(station.id)?.byHand ?? null,
-    sendsTo: states.get(station.id)?.sendsTo ?? null,
-    why: states.get(station.id)?.why ?? "switched_off",
-  }));
+  return listed.map((station) => {
+    const state = states.get(station.id);
+    return {
+      ...station,
+      open: state?.open ?? false,
+      byHand: state?.byHand ?? null,
+      sendsTo: state?.sendsTo ?? null,
+      why: state?.why ?? "switched_off",
+    };
+  });
 }
 
 export async function reorderStations(

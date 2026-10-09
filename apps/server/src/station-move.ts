@@ -177,7 +177,8 @@ export interface StationMover {
 }
 
 export interface StationMoveOptions {
-  /** Refuses a named dish by the station it sits at; runs inside the command so a replay skips it. */
+  /** Refuses the named dishes by the station they sit at, asked once per station; runs inside the
+   *  command so a replay skips it. */
   assertFrom?: (stationId: string) => void | Promise<void>;
 }
 
@@ -249,8 +250,15 @@ export async function moveDishesToStation(
         if (!stillMovable({ state: row.state!, awayAt: row.awayAt, madeHere: false }, row))
           throw new AppError("ticket.already_started", { ticketItemId: row.ticketItemId });
       }
-      if (options.assertFrom)
-        for (const lineId of lineIds) await options.assertFrom(byId.get(lineId)!.stationId!);
+      if (options.assertFrom) {
+        const asked = new Set<string>();
+        for (const lineId of lineIds) {
+          const stationId = byId.get(lineId)!.stationId!;
+          if (asked.has(stationId)) continue;
+          asked.add(stationId);
+          await options.assertFrom(stationId);
+        }
+      }
       const moving = rows.filter((row) => row.stationId !== request.stationId);
       if (moving.length === 0)
         return {

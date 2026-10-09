@@ -53,8 +53,8 @@ const LEVERS: readonly Lever[] = [
   { verb: "away", action: "hand-over-orders", course: markCourseAway, group: markGroupAway },
 ];
 
-/** The levers serve kitchen displays only: a till keeps its session routes and their zone gate. */
-async function requireKitchenDisplay(
+/** Serves kitchen displays only: a till keeps its session routes and their zone gate. */
+export async function requireKitchenDisplay(
   deps: { db: Database; devMode?: boolean },
   c: Context,
   action: ProfileAction,

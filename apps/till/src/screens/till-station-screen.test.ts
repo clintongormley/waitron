@@ -18,6 +18,7 @@ import { TillApi as StationTodayApi } from "../api/client.js";
 import type { TillStationToday } from "../widgets/station-today.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
 import type { TillStationChoiceDialog } from "../widgets/station-choice-dialog.js";
+import { SUBMIT_RETRIES, SUBMIT_RETRY_PAUSE_MS } from "../state/draft-sync.js";
 
 const stations: Station[] = [
   {
@@ -4460,17 +4461,17 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     expect(dialog(el)?.dishName).toBe("Tortilla");
   });
 
-  it("a move timed out shows the general sentence", async () => {
-    const { el } = await mountMove(
-      {},
-      {
-        deviceMoveDishStation: vi
-          .fn()
-          .mockRejectedValue(new DOMException("The operation was aborted.", "AbortError")),
-      },
-    );
+  it("an aborted move shows the general sentence", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValue(new DOMException("The operation was aborted.", "AbortError"));
+    const { el } = await mountMove({}, { deviceMoveDishStation: send });
     choose(await open(el), "st-2");
-    await expect.poll(() => dialog(el)?.refusal).toBe("server.internal");
+    // An abort is no answer, so the move is sent SUBMIT_RETRIES more times, a pause apart, first.
+    await expect
+      .poll(() => dialog(el)?.refusal, { timeout: SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS + 2_000 })
+      .toBe("server.internal");
+    expect(send).toHaveBeenCalledTimes(SUBMIT_RETRIES + 1);
   });
 
   it("Cancel closes the dialog and moves nothing", async () => {
@@ -4505,16 +4506,66 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     expect(dialogs(el)).toHaveLength(1);
   });
 
-  it("opens no dialog when the stations cannot be read, and a later press tries again", async () => {
-    const deviceStations = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(destinations);
-    const { el } = await mountMove({}, { deviceStations });
-    moveButton(el)!.click();
-    await flush(el);
+  const moveError = (el: TillStationScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-move-error]");
+
+  it.each([
+    ["no answer", new TypeError("Failed to fetch")],
+    ["a timeout", new DOMException("The operation was aborted.", "AbortError")],
+  ])(
+    "stations that cannot be read (%s) say so, and a later press that reads them opens the dialog and clears it",
+    async (_, failure) => {
+      const deviceStations = vi
+        .fn()
+        .mockRejectedValueOnce(failure)
+        .mockResolvedValueOnce(destinations);
+      const { el } = await mountMove({}, { deviceStations });
+      moveButton(el)!.click();
+      await expect.poll(() => moveError(el)).not.toBeNull();
+      expect(dialog(el)).toBeUndefined();
+      expect(moveError(el)!.getAttribute("role")).toBe("alert");
+      expect(moveError(el)!.textContent!.trim()).toBe("Something went wrong, try again");
+      await open(el);
+      expect(deviceStations).toHaveBeenCalledTimes(2);
+      expect(moveError(el)).toBeNull();
+    },
+  );
+
+  it("a station read refused device.unauthorized re-boots the device and shows no message", async () => {
+    const { el } = await mountMove(
+      {},
+      { deviceStations: vi.fn().mockRejectedValue({ code: "device.unauthorized" }) },
+    );
+    const reboot = vi.fn();
+    document.addEventListener("device-unauthorized", reboot);
+    try {
+      moveButton(el)!.click();
+      await expect.poll(() => reboot.mock.calls.length).toBe(1);
+      await flush(el);
+    } finally {
+      document.removeEventListener("device-unauthorized", reboot);
+    }
+    expect(reboot).toHaveBeenCalledOnce();
+    expect(moveError(el)).toBeNull();
     expect(dialog(el)).toBeUndefined();
-    await open(el);
-    expect(deviceStations).toHaveBeenCalledTimes(2);
+  });
+
+  it("a queue read that succeeds after a failed station read keeps its message", async () => {
+    const { el, api } = await mountMove(
+      {},
+      { deviceStations: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) },
+    );
+    moveButton(el)!.click();
+    await expect.poll(() => moveError(el)).not.toBeNull();
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-1", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await expect.poll(() => vi.mocked(api.getDeviceStationScreen).mock.calls.length).toBe(2);
+    await flush(el);
+    expect(moveError(el)!.textContent!.trim()).toBe("Something went wrong, try again");
   });
 });

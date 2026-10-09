@@ -1169,6 +1169,19 @@ export interface StationDestination {
   name: string;
   isDefault: boolean;
 }
+
+export interface StationMoveBody {
+  submissionId: string;
+  lineIds: string[];
+  stationId: string;
+}
+
+export interface StationMoveAnswer {
+  revision: number;
+  stationId: string;
+  moved: { workingOrderLineId: string; fromStationId: string }[];
+}
+
 export interface KeepOpenPeriod {
   id: string;
   name: string;
@@ -2594,13 +2607,9 @@ export class TillApi {
 
   moveDishStation(
     orderId: string,
-    body: { submissionId: string; lineIds: string[]; stationId: string },
+    body: StationMoveBody,
     options: ReadOptions = {},
-  ): Promise<{
-    revision: number;
-    stationId: string;
-    moved: { workingOrderLineId: string; fromStationId: string }[];
-  }> {
+  ): Promise<StationMoveAnswer> {
     return this.#request(
       `/api/working-orders/${orderId}/lines/move-station`,
       "POST",
@@ -2617,13 +2626,9 @@ export class TillApi {
   /** {@link moveDishStation} for a kitchen display's station screen → its device route. */
   deviceMoveDishStation(
     orderId: string,
-    body: { submissionId: string; lineIds: string[]; stationId: string },
+    body: StationMoveBody,
     options: ReadOptions = {},
-  ): Promise<{
-    revision: number;
-    stationId: string;
-    moved: { workingOrderLineId: string; fromStationId: string }[];
-  }> {
+  ): Promise<StationMoveAnswer> {
     return this.#request(
       `/api/device/working-orders/${orderId}/lines/move-station`,
       "POST",

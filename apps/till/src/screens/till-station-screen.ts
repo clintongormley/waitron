@@ -234,6 +234,8 @@ export class TillStationScreen extends LitElement {
    * shown by the next successful read, and gone at the one after. */
   @state() private tableChanged: string | null = null;
   @state() private moving: DishMove | null = null;
+  /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
+  @state() private moveErrorCode?: string;
   #moveOpening = false;
   #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
@@ -681,12 +683,20 @@ export class TillStationScreen extends LitElement {
       event as CustomEvent<Pick<DishMove, "workingOrderId" | "lineId" | "name" | "stationId">>
     ).detail;
     this.#moveOpening = true;
+    this.moveErrorCode = undefined;
     const limit = limited(READ_LIMIT_MS);
     try {
       const stations = await this.api.deviceStations({ signal: limit.signal });
       this.moving = { ...detail, stations, busy: false, refusal: null };
-    } catch {
-      // No dialog opens; Move can be pressed again.
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      if (code === "device.unauthorized") {
+        this.dispatchEvent(
+          new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
+        );
+      } else {
+        this.moveErrorCode = typeof code === "string" ? code : "server.internal";
+      }
     } finally {
       limit.done();
       this.#moveOpening = false;
@@ -950,6 +960,13 @@ export class TillStationScreen extends LitElement {
         ${
           this.reprintErrorCode
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
+            : nothing
+        }
+        ${
+          this.moveErrorCode
+            ? html`<p class="error" role="alert" data-move-error>
+                ${codeMessage(this.moveErrorCode)}
+              </p>`
             : nothing
         }
         ${
