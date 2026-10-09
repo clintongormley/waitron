@@ -1017,8 +1017,8 @@ another change has taken off the menu sends nothing and reads the menu again. Wh
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
 the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
 member; at the top level, which has no row, to the toolbar's Add menu, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
-`menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
-`apps/dashboard/src/screens/menus-screen.test.ts`.
+`menu-structure-table.a11y.test.ts` beside it, and the Structure tree cases in
+`apps/dashboard/src/screens/menus-screen.test.ts`, inside `describe("the Structure tree")` and the member-move cases above it.
 
 Hold a dragged row or tile near the visible top or bottom edge to reach rows outside the current
 view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
