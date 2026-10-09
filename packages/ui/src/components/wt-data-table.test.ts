@@ -2173,6 +2173,126 @@ test("sortedSiblings gives a flat table's drawn order during a search", async ()
   expect(keys(el)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
 });
 
+function filteredDrinkColumns(value: (row: Drink) => string): DataTableColumn<Drink>[] {
+  return [
+    {
+      key: "name",
+      label: "Name",
+      cell: (r) => r.name,
+      sortValue: (r) => r.name,
+      searchValue: (r) => r.name,
+    },
+    {
+      key: "category",
+      label: "Category",
+      cell: (r) => r.category,
+      searchValue: (r) => r.category,
+      filter: {
+        label: "Category",
+        allLabel: "Any category",
+        multiple: { countLabel: (count) => `${count} categories` },
+        value,
+        options: ["Cocktails", "Mixers", "Mocktails", "Spirits"].map((name) => ({
+          value: name,
+          label: name,
+        })),
+      },
+    },
+  ];
+}
+
+test("sortedSiblings does not repeat the search while nothing it reads has changed", async () => {
+  const value = vi.fn((r: Drink) => r.category);
+  const el = await drinksTable({ searchTerm: "gin", columns: filteredDrinkColumns(value) });
+  el.chooseFilter("category", ["Cocktails", "Mixers", "Mocktails", "Spirits"]);
+  await el.updateComplete;
+  value.mockClear();
+  const order = ["gin", "gt", "tonic-gin", "ginger", "virgin"];
+  expect(el.sortedSiblings(drinks).map(({ id }) => id)).toEqual(order);
+  expect(el.sortedSiblings(drinks).map(({ id }) => id)).toEqual(order);
+  expect(value).not.toHaveBeenCalled();
+});
+
+test("sortedSiblings reads a new search, rows, columns or filter at once, before the table redraws", async () => {
+  const el = await drinksTable({
+    searchTerm: "gin",
+    columns: filteredDrinkColumns((r) => r.category),
+  });
+  const order = (rows: readonly Drink[]) => el.sortedSiblings(rows).map(({ id }) => id);
+  expect(order(drinks)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
+  el.searchTerm = "tonic";
+  expect(order(drinks)).toEqual(["tonic-gin", "gt", "gin", "ginger", "virgin"]);
+  const tonic = { id: "tonic", name: "Tonic", category: "Mixers" };
+  el.rows = [...drinks, tonic];
+  expect(order([...drinks, tonic])).toEqual([
+    "tonic",
+    "tonic-gin",
+    "gt",
+    "gin",
+    "ginger",
+    "virgin",
+  ]);
+  el.searchTerm = "mixers";
+  expect(order(drinks)).toEqual(["ginger", "gin", "gt", "tonic-gin", "virgin"]);
+  el.columns = el.columns.slice(0, 1);
+  expect(order(drinks)).toEqual(["gin", "gt", "ginger", "tonic-gin", "virgin"]);
+  el.columns = filteredDrinkColumns((r) => r.category);
+  el.searchTerm = "gin";
+  expect(order(drinks)).toEqual(["gin", "gt", "tonic-gin", "ginger", "virgin"]);
+  el.chooseFilter("category", ["Cocktails"]);
+  expect(order(drinks)).toEqual(["gt", "tonic-gin", "gin", "ginger", "virgin"]);
+});
+
+test("in a tree, sortedSiblings does not walk the tree again while nothing has changed", async () => {
+  const parentOf = vi.fn((r: MenuNode) => r.parent);
+  const el = await menuTree({ rowParent: parentOf });
+  const children = [nodes[1]!, nodes[2]!];
+  parentOf.mockClear();
+  expect(el.sortedSiblings(children).map(({ id }) => id)).toEqual(["gin", "virgin"]);
+  expect(el.sortedSiblings(children).map(({ id }) => id)).toEqual(["gin", "virgin"]);
+  // Once per call, to find the siblings' parent.
+  expect(parentOf).toHaveBeenCalledTimes(2);
+  el.searchTerm = "virgin";
+  expect(el.sortedSiblings(children).map(({ id }) => id)).toEqual(["virgin", "gin"]);
+});
+
+test("in a tree, sortedSiblings and shownKeys read a new parent lookup, row key or path rule at once", async () => {
+  const el = await menuTree();
+  const food = nodes[3]!;
+  const spirits = nodes[5]!;
+  const order = () => el.sortedSiblings([food, spirits]).map(({ id }) => id);
+  expect(order()).toEqual(["spirits", "food"]);
+  el.rowKey = (r: MenuNode) => `${r.id}!`;
+  expect(order()).toEqual(["food", "spirits"]);
+  el.rowKey = (r: MenuNode) => r.id;
+  expect(order()).toEqual(["spirits", "food"]);
+  el.rowParent = () => null;
+  expect(order()).toEqual(["food", "spirits"]);
+  el.rows = [
+    { id: "bar", parent: null, name: "Gin bar" },
+    { id: "absinthe", parent: "bar", name: "Absinthe" },
+  ];
+  el.rowParent = (r: MenuNode) => r.parent;
+  expect(el.shownKeys()).toEqual(["bar"]);
+  el.searchOpensPath = true;
+  expect(el.shownKeys()).toEqual(["bar", "absinthe"]);
+});
+
+test("a filter that reads something outside the table is asked again when the table redraws", async () => {
+  const moved = new Set<string>();
+  const el = await drinksTable({
+    searchTerm: "gin",
+    columns: filteredDrinkColumns((r) => (moved.has(r.id) ? "Mixers" : r.category)),
+  });
+  el.chooseFilter("category", ["Spirits"]);
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["gin"]);
+  moved.add("gin");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(keys(el)).toEqual([]);
+});
+
 test("searchable renders a search box that narrows rows", async () => {
   const el = await table({
     searchable: true,
