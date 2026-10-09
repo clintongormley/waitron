@@ -196,3 +196,69 @@ it("a station read that settles after its editor leaves cannot begin the write",
   await saving;
   expect(methods).toEqual(["GET"]);
 });
+
+it("preserves current station cells when the calendar snapshot says there are none", async () => {
+  const { parseSpecialDateInput } = await import("../hours-rules.js");
+  const cell = {
+    subject: { kind: "station" as const, id: "bar" },
+    cell: {
+      mode: "periods" as const,
+      periods: [
+        { id: "00000000-0000-4000-8000-000000000001", opensAt: "12:00", closesAt: "16:00" },
+      ],
+    },
+  };
+  const requests: unknown[][] = [];
+  const api = new clients.NamedDaysApi((async (path, method, body, options) => {
+    requests.push([path, method, body, options]);
+    if (method === "GET")
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        departments: [],
+        subjects: [{ kind: "station", id: "bar", name: "Bar", active: true, isDefault: false }],
+        week: [],
+        days: [],
+        specialDates: [],
+        specialCells: [{ specialDateId: "source", cells: [cell] }],
+        holidayCoverage: [],
+        holidaySources: [],
+      };
+    parseSpecialDateInput(body);
+    return {};
+  }) as DashboardRequest);
+  const input = {
+    date: "2026-10-02",
+    name: "Edited",
+    kind: "holiday" as const,
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: false,
+  };
+  await api.saveDay("source", input, {
+    id: "source",
+    date: "2026-10-01",
+    name: "Original",
+    kind: "holiday",
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: false,
+    hasStationHours: false,
+  });
+  expect(requests).toEqual([
+    [
+      "/management-api/venue-service/hours?from=2026-10-01&to=2026-10-01",
+      "GET",
+      undefined,
+      { passive: true },
+    ],
+    [
+      "/management-api/venue-service/special-dates/source",
+      "PUT",
+      { ...input, cells: [cell] },
+      undefined,
+    ],
+  ]);
+});

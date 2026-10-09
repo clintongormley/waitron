@@ -64,7 +64,7 @@ export class NamedDaysApi {
     source?: NamedDay,
     current: () => boolean = () => true,
   ): Promise<unknown> {
-    const model = source?.hasStationHours ? await this.loadDayHours(source.date) : undefined;
+    const model = id === null ? undefined : await this.loadDayHours(source?.date ?? input.date);
     if (!current()) return;
     const defaults = new Set(model?.subjects.filter(isDefaultStation).map(keyOf) ?? []);
     const cells = model
