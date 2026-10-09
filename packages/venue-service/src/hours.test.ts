@@ -1556,10 +1556,10 @@ describe("the calendar's Closed colour", () => {
     });
     expect(await tone(f, "2026-10-19")).toBe("standard");
     expect(await tone(f, "2026-10-20")).toBe("closed");
-    for (const [date, _colour, open] of [
-      ["2026-10-21", "green", false],
-      ["2026-10-22", "purple", true],
-      ["2026-10-23", "red", true],
+    for (const [date, open] of [
+      ["2026-10-21", false],
+      ["2026-10-22", true],
+      ["2026-10-23", true],
     ] as const) {
       const special = await saveDate(
         f,
