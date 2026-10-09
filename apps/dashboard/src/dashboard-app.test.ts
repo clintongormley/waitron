@@ -5975,11 +5975,47 @@ describe("the nav search", () => {
     ]);
   });
 
+  it("finds a page by every word typed, in any order, and by words split between it and its group", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "profiles device");
+    expect(shownItems(el)).toEqual(["nav-device-profiles"]);
+    await search(el, "units products");
+    expect(shownHeaders(el)).toEqual(["nav-group-menu"]);
+    expect(shownItems(el)).toEqual(["nav-units"]);
+    await search(el, "print ");
+    expect(shownItems(el)).toEqual([]);
+  });
+
+  it("finds no page and no group for a search of only punctuation", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "&");
+    expect(shownItems(el)).toEqual([]);
+    expect(shownHeaders(el)).toEqual([]);
+    expect(emptyStatus(el)!.textContent!.trim()).toBe("No pages match.");
+  });
+
+  it("lists a page holding the word whole before one where it starts a word", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "device");
+    expect(shownItems(el)).toEqual(["nav-device-profiles", "nav-devices"]);
+  });
+
+  it("shows a whole group whose name matches, the pages matching by their own label first", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "menus");
+    expect(shownHeaders(el)).toEqual(["nav-group-menu"]);
+    const items = shownItems(el);
+    expect(items[0]).toBe("nav-menus");
+    expect([...items].sort()).toEqual(
+      ["nav-catalogue", "nav-menus", "nav-modifiers", "nav-units"].sort(),
+    );
+  });
+
   it("finds the moved pages under Venue operations", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "venue");
     expect(shownHeaders(el)).toEqual(["nav-group-operations"]);
-    expect(shownItems(el)).toEqual(["nav-floor", "nav-venue-settings"]);
+    expect(shownItems(el)).toEqual(["nav-venue-settings", "nav-floor"]);
   });
 
   it("opens a collapsed group holding a match, and clearing the term leaves the nav as it was", async () => {
@@ -6012,7 +6048,7 @@ describe("the nav search", () => {
     );
     // "Menus" is a manager page; its group's name holds the term, so the group's other pages show.
     await search(el, "Menus");
-    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-units"]);
+    expect(shownItems(el)).toEqual(["nav-units", "nav-catalogue"]);
     await search(el, "Diagnostics");
     expect(shownItems(el)).toEqual([]);
     // Bookings is enabled for the venue, but this session lacks its permission.

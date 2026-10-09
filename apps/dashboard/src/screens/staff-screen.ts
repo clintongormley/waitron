@@ -150,25 +150,14 @@ export class StaffScreen extends LitElement {
   #editing = false;
 
   #filteredPeople(): PersonSummary[] {
-    const query = this.search.trim().toLocaleLowerCase();
     return this.people.filter((person) => {
       if (this.roleFilter !== "all" && person.role !== this.roleFilter) return false;
       if (this.statusFilter === "current" && person.status === "suspended") return false;
-      if (
-        this.statusFilter !== "current" &&
-        this.statusFilter !== "all" &&
-        person.status !== this.statusFilter
-      ) {
-        return false;
-      }
-      if (query === "") return true;
-      return [
-        person.displayName,
-        person.firstNames,
-        person.lastNames,
-        person.email,
-        person.telephone,
-      ].some((value) => value?.toLocaleLowerCase().includes(query));
+      return (
+        this.statusFilter === "current" ||
+        this.statusFilter === "all" ||
+        person.status === this.statusFilter
+      );
     });
   }
 
@@ -410,6 +399,7 @@ export class StaffScreen extends LitElement {
       </div>
       <dashboard-staff-list
         .people=${this.#filteredPeople()}
+        .searchTerm=${this.search}
         .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
         .currentPersonId=${this.currentPersonId}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}

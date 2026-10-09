@@ -14,7 +14,9 @@ export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   @property({ attribute: false }) currentPersonId: string | null = null;
-  /** What the table says with no rows; the screen filters before the table, so it names its own. */
+  @property() searchTerm = "";
+  /** What the table says with no rows; the screen filters by role and status before the table, so
+   * it names its own. */
   @property() emptyMessage?: string;
 
   #edit(event: Event, personId: string): void {
@@ -35,6 +37,8 @@ export class StaffList extends LitElement {
         label: t("staff.field_display_name"),
         cell: (person) => person.displayName,
         sortValue: (person) => person.displayName,
+        searchValue: (person) =>
+          [person.displayName, person.firstNames, person.lastNames].filter(Boolean).join(" "),
       },
       {
         key: "legalName",
@@ -59,6 +63,7 @@ export class StaffList extends LitElement {
         label: t("staff.field_email"),
         cell: (person) => person.email ?? "—",
         sortValue: (person) => person.email ?? "",
+        searchValue: (person) => person.email ?? "",
       },
       {
         key: "telephone",
@@ -66,6 +71,7 @@ export class StaffList extends LitElement {
         label: t("staff.field_telephone"),
         cell: (person) => person.telephone ?? "—",
         sortValue: (person) => person.telephone ?? "",
+        searchValue: (person) => person.telephone ?? "",
       },
       {
         key: "status",
@@ -139,6 +145,7 @@ export class StaffList extends LitElement {
         lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         .rows=${this.people}
+        .searchTerm=${this.searchTerm}
         .columns=${this.#columns()}
         .rowKey=${(person: PersonSummary) => person.personId}
         .emptyMessage=${this.emptyMessage ?? t("staff.empty")}

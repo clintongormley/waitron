@@ -357,6 +357,27 @@ describe("staged translation dialog", () => {
       "Nada coincide con tu búsqueda ni con tus filtros.",
     );
   });
+  it("finds a row by every word typed, accents and order aside, closest first", async () => {
+    const { el } = await mount([
+      target("croqueta", { name: "Croquetas de jamón ibérico" }),
+      target("serrano", { name: "Jamón serrano" }),
+      target("pan", { name: "Pan" }),
+    ]);
+    const shownFor = async (value: string) => {
+      q(el, '[name="search"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      const table = q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!;
+      await table.updateComplete;
+      return table.rows.map((row) => (row as TranslationTarget).id);
+    };
+    expect(await shownFor("IBERICO jamon")).toEqual(["croqueta"]);
+    expect(await shownFor("jam")).toEqual(["serrano", "croqueta"]);
+    expect(await shownFor("jam ")).toEqual([]);
+    expect(await shownFor("&")).toEqual([]);
+    expect(await shownFor("   ")).toEqual(["croqueta", "serrano", "pan"]);
+  });
   it("opens only the selected language with quiet unchanged Save and no default copied from staff", async () => {
     const { el, api } = await mount();
     expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toContain("Español");
