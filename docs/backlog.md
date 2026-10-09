@@ -916,23 +916,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   removed; each is still deleted from its own row's ⋮. **Next action:** the owner says whether a bulk
   Delete is wanted.
 
-- **The Structure tab's toolbar and Select mode: four wording and look points left for the owner
-  (A337, #1471)** — the Remove dialog asks "Remove N items from their sections?" under a button
-  saying "Remove from menu"; the toolbar's Add menu offers "New section here", where "here" is the
-  top level; the toolbar "+" has no border; "Move to section…" is primary where the Products tree's
-  Move is secondary. Nobody has looked by eye at the empty-menu box or the Available filter's panel.
-  **Next action:** the owner picks the wording and looks; each is a small change in
-  `apps/dashboard/src/i18n/strings.ts` or `menus-screen.ts`.
-
-- **Dragging into a section on the Structure tab: two look points left for the owner (A338,
-  #1475)** — while a row is dragged over the middle of a closed or empty section, that section is
-  marked only by the Products tree's thin bar on the row's left edge (`drop-target`,
-  `treeDragStyles` in `apps/dashboard/src/widgets/tree-drag.ts`), which is faint and far from the
-  pointer; and the dashed "drop before" line looks thinner in the pinned ⋮ column, which I believe
-  predates A338 (its gap styling was not changed) but nobody checked on `main`. Screenshots:
-  lane C's `a338-shots/` (`1-`, `2-`, `4-`, `8-`). **Next action:** the owner says whether the
-  drop-into mark should be stronger in both trees, and someone checks the ⋮-column line on `main`.
-
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](content-and-images.md). **A new picture consumer has to add a real database
   reference, not just store a filename.** **The online language selector has nothing to select for
