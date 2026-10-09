@@ -586,9 +586,9 @@ const en = {
     "{year}: official holidays are not available for this country.",
   "hours.calendar.coverage.unknown": "{year}: which official holidays apply could not be read.",
   "hours.calendar.local.address_unresolved":
-    "{year}: local holidays need the venue's city and a recognised province; set them in Venue details.",
+    "{year}: no local holidays entered. You can add your town’s holidays as own named days without completing the holiday address.",
   "hours.calendar.local.unsupported_country":
-    "{year}: local holidays cannot be entered for a venue in this country.",
+    "{year}: no local holidays entered. Add your town’s holidays as own named days.",
   "hours.calendar.local.none_entered": "{year}: no local holidays entered.",
   "hours.calendar.local.owner_entered": "{year}: local holidays are the ones you entered.",
   "holidays.heading": "Local holidays",
@@ -1324,9 +1324,9 @@ const es: Record<keyof typeof en, string> = {
     "{year}: no hay festivos oficiales disponibles para este país.",
   "hours.calendar.coverage.unknown": "{year}: no se pudo leer qué festivos oficiales se aplican.",
   "hours.calendar.local.address_unresolved":
-    "{year}: los festivos locales necesitan la ciudad y una provincia reconocida; indícalas en Datos del local.",
+    "{year}: no hay festivos locales introducidos. Puedes añadir los de tu municipio como días festivos propios sin completar la dirección de festivos.",
   "hours.calendar.local.unsupported_country":
-    "{year}: no se pueden introducir festivos locales para un local de este país.",
+    "{year}: no hay festivos locales introducidos. Añade los de tu municipio como días festivos propios.",
   "hours.calendar.local.none_entered": "{year}: no hay festivos locales introducidos.",
   "hours.calendar.local.owner_entered": "{year}: los festivos locales son los que introdujiste.",
   "holidays.heading": "Festivos locales",

@@ -759,14 +759,7 @@ export class HoursCalendar extends LitElement {
           coverage === undefined
             ? nothing
             : html`<li>
-                ${format(
-                  `hours.calendar.local.${
-                    coverage.nationalRegional === "unsupported_country"
-                      ? "unsupported_country"
-                      : coverage.local
-                  }` as Key,
-                  { year: String(year) },
-                )}
+                ${format(`hours.calendar.local.${coverage.local}` as Key, { year: String(year) })}
               </li>`
         }
       </ul>`;
@@ -839,7 +832,7 @@ export class HoursCalendar extends LitElement {
                   return html`<li>
                       ${coverage?.nationalRegional === "area_required" ? format("calendar.area_required", { year: String(year) }) : nationalCoverage(year, coverage)}
                     </li>
-                    ${coverage ? html`<li>${format(`hours.calendar.local.${coverage.nationalRegional === "unsupported_country" ? "unsupported_country" : coverage.local}` as Key, { year: String(year) })}</li>` : nothing}`;
+                    ${coverage ? html`<li>${format(`hours.calendar.local.${coverage.local}` as Key, { year: String(year) })}</li>` : nothing}`;
                 })}
               </ul>
               ${model.localHolidaysPerYear > 0 ? html`<p class="note" data-test="local-holiday-hint">${format("calendar.local_hint", { count: String(model.localHolidaysPerYear) })}</p>` : nothing}
