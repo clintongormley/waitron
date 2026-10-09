@@ -54,9 +54,7 @@ export default class FileProgressReporter {
   }
 
   onTestRunEnd() {
-    if (this.timer !== undefined) this.stopInterval(this.timer);
-    this.timer = undefined;
-    this.running.clear();
+    this.stopInterval(this.timer);
   }
 
   // Keyed by label, not by object: Vitest hands each hook a different TestModule for one file.

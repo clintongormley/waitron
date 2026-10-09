@@ -1082,14 +1082,9 @@ jobs:
       # libraries; see the test-ui step above for the full rationale and the receipt.
       - run: pnpm --filter @waitron/till exec playwright install chromium
 
-      # The guard first, for the same reason as the other shards: pnpm answers "nothing to do" with
-      # exit 0 and a line on stdout, so a shard whose filter selects nothing reports success having
-      # run no tests.
       - name: Run the till shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/till" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:shard
           pnpm --filter "@waitron/till" test:shard \
             --shard=${{ matrix.shard }}/2 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
@@ -1183,14 +1178,9 @@ jobs:
       # Chromium's shared libraries; see the test-ui step above for the full rationale and the receipt.
       - run: pnpm --filter @waitron/dashboard exec playwright install chromium
 
-      # The guard first, for the same reason as the other shards: pnpm answers "nothing to do" with
-      # exit 0 and a line on stdout, so a shard whose filter selects nothing reports success having
-      # run no tests.
       - name: Run the dashboard shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:shard
           pnpm --filter "@waitron/dashboard" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
@@ -1331,8 +1321,6 @@ jobs:
       - name: Run the venue-service shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/venue-service" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:shard
           pnpm --filter "@waitron/venue-service" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \

@@ -278,10 +278,18 @@ function expectGatedOnCodePlusOneScope(read) {
   expect(names).toContain(own[0]);
 }
 
+let listing;
+
+/** `pnpm ls -r --depth -1 --json`, run once on first use and shared by every caller. */
+function workspaceListing() {
+  listing ??= pnpmLs(["ls", "-r", "--depth", "-1", "--json"]);
+  return listing;
+}
+
 /** Every workspace member's package.json `scripts`, keyed by package name (never the root). */
 function scriptsByPackage() {
   const map = new Map();
-  for (const pkg of pnpmLs(["ls", "-r", "--depth", "-1", "--json"])) {
+  for (const pkg of workspaceListing()) {
     if (resolve(pkg.path) === resolve(repoRoot)) continue;
     map.set(
       pkg.name,
@@ -343,7 +351,7 @@ function selects(filters) {
 
 /** Every workspace member (never the root) that declares a `test:coverage` script. */
 function membersDeclaringTests() {
-  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
+  return workspaceListing()
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter(
       (pkg) =>
@@ -356,7 +364,7 @@ function membersDeclaringTests() {
 
 /** Every workspace member that declares the Vitest browser provider. */
 function browserPackages() {
-  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
+  return workspaceListing()
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter((pkg) => {
       const manifest = JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8"));
@@ -1265,9 +1273,7 @@ describe("the sharded jobs", () => {
   it(
     "run no more shards than the package has test files",
     () => {
-      const paths = new Map(
-        pnpmLs(["ls", "-r", "--depth", "-1", "--json"]).map((pkg) => [pkg.name, pkg.path]),
-      );
+      const paths = new Map(workspaceListing().map((pkg) => [pkg.name, pkg.path]));
       const testFiles = (dir) =>
         readdirSync(dir, { withFileTypes: true })
           .filter((entry) => !entry.name.startsWith(".") && entry.name !== "node_modules")
@@ -1286,8 +1292,9 @@ describe("the sharded jobs", () => {
     PNPM_LS_TEST_TIMEOUT_MS,
   );
 
-  // The packages the owner's four-minute bound (2026-10-09) split, at the counts it was split to.
-  it("shard each package the number of ways its measured time needs", () => {
+  // db's three date from 2026-09-04; the rest were set for the owner's four-minute bound
+  // (2026-10-09).
+  it("pin each sharded package's shard count", () => {
     const counts = Object.fromEntries(
       shardedJobs.map(({ pkg, body }) => [pkg, shardDenominator(body)]),
     );
@@ -1309,7 +1316,8 @@ describe("the sharded jobs", () => {
 });
 
 describe("the lint and root-guards jobs", () => {
-  // The repo-level project runs in a job of its own so lint is not the slowest ungated job.
+  // The repo-level project runs in a job of its own so its time runs beside lint's rather than
+  // inside it.
   it("run the repo-level Vitest project only in root-guards, which nothing gates", () => {
     const runsRoot = (body) =>
       body.some((line) => !line.trim().startsWith("#") && /pnpm vitest run --coverage/.test(line));
@@ -1480,19 +1488,12 @@ describe("the sharded packages' scripts", () => {
 
   it("merge a browser-mode package's blobs through the shard coverage merge, and the rest through plain v8", () => {
     // A browser package's plain merge reads coverage LOWER than an unsharded run: see
-    // scripts/vitest-shard-coverage-merge.mjs. "Browser-mode" is read as text: the package's
-    // vitest.config.ts imports @vitest/browser-playwright.
+    // scripts/vitest-shard-coverage-merge.mjs.
     const plain = "vitest --merge-reports .vitest-reports --coverage";
     const browser = `${plain} --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs`;
-    const dirs = new Map(
-      pnpmLs(["ls", "-r", "--depth", "-1", "--json"]).map((pkg) => [pkg.name, pkg.path]),
-    );
-    const usesBrowser = (pkg) =>
-      readFileSync(join(dirs.get(pkg), "vitest.config.ts"), "utf8").includes(
-        "@vitest/browser-playwright",
-      );
+    const browserMode = new Set(browserPackages());
     const expected = new Map(
-      shardedPackages.map((pkg) => [pkg, usesBrowser(pkg) ? browser : plain]),
+      shardedPackages.map((pkg) => [pkg, browserMode.has(pkg) ? browser : plain]),
     );
 
     expect(new Map(shardedPackages.map((pkg) => [pkg, scripts.get(pkg)?.["test:merge"]]))).toEqual(

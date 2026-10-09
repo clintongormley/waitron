@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PACKAGES_WITHOUT_TESTS, classify } from "./changed-scope.mjs";
+import { PACKAGES_WITHOUT_TESTS, ROOT_SCOPE_CONSUMERS, classify } from "./changed-scope.mjs";
 import {
   formatScope,
   scopeForPaths,
@@ -205,6 +205,7 @@ describe("scopeForPaths", () => {
         member("@waitron/setup", "apps/setup"),
         member("@waitron/till", "apps/till"),
         member("@waitron/db", "packages/db"),
+        member("@waitron/venue-service", "packages/venue-service"),
       ),
       ROOT,
     );
@@ -240,6 +241,28 @@ describe("scopeForPaths", () => {
         });
       },
     );
+
+    it("selects the three browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
+      expect(
+        scopeForPaths(["scripts/vitest-shard-coverage-merge.mjs"], workspace(consumers)),
+      ).toMatchObject({
+        kind: "packages",
+        packages: ["@waitron/dashboard", "@waitron/till", "@waitron/venue-service"],
+        root: true,
+      });
+    });
+
+    // Every tested member loads it, so the fixture names each member by its directory: a
+    // hand-written list here would be a second copy of ROOT_SCOPE_CONSUMERS' own.
+    it("selects every member whose CI test command loads scripts/vitest-file-progress.mjs", () => {
+      const dirs = [...new Set([...ROOT_SCOPE_CONSUMERS.values()].flat())];
+      const everyMember = workspacePackages(ls(...dirs.map((dir) => member(dir, dir))), ROOT);
+      const scope = scopeForPaths(["scripts/vitest-file-progress.mjs"], workspace(everyMember));
+      expect(scope).toMatchObject({ kind: "packages", root: true });
+      expect(scope.packages).toEqual(
+        expect.arrayContaining(["apps/server", "apps/till", "packages/shared"]),
+      );
+    });
 
     it("still gives any other scripts/ file root scope alone", () => {
       const load = loader(consumers);
@@ -712,6 +735,31 @@ describe("the CLI", () => {
       );
     },
   );
+
+  it("selects the real browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
+    expect(run("scripts/vitest-shard-coverage-merge.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/till @waitron/venue-service\n" +
+        "root=true\ndeploy=false\n",
+    );
+  });
+
+  // Pinned against the real workspace rather than a copied list: every member that has tests.
+  it("selects every real member with tests when scripts/vitest-file-progress.mjs changes", () => {
+    const listed = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
+      encoding: "utf8",
+      cwd: repoRoot,
+    });
+    expect(listed.status).toBe(0);
+    const tested = workspacePackages(listed.stdout, repoRoot)
+      .map(({ name }) => name)
+      .filter((name) => !PACKAGES_WITHOUT_TESTS.includes(name))
+      .sort();
+    expect(tested).toContain("@waitron/shared");
+
+    expect(run("scripts/vitest-file-progress.mjs\n").stdout).toBe(
+      `code=true\nscope=packages\npackages=${tested.join(" ")}\nroot=true\ndeploy=false\n`,
+    );
+  });
 
   it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
     expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(

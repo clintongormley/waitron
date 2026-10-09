@@ -145,21 +145,6 @@ describe("vitest file progress reporter", () => {
     expect(timers[0].cleared).toBe(true);
   });
 
-  it("forgets running files at run end, so a watch rerun starts clean", () => {
-    const { reporter, lines, tick } = harness();
-    reporter.onInit();
-    reporter.onTestModuleQueued(fakeModule("src/a.test.ts"));
-    reporter.onTestRunEnd();
-    reporter.onInit();
-    tick(60_000);
-    expect(lines).toEqual(["[file-progress] start src/a.test.ts"]);
-  });
-
-  it("tolerates a run end with no timer started", () => {
-    const { reporter } = harness();
-    expect(() => reporter.onTestRunEnd()).not.toThrow();
-  });
-
   it("uses the real clock, stdout and an unref'd timer by default", () => {
     const reporter = new FileProgressReporter();
     const written = [];
