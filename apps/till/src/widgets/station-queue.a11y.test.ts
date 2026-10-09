@@ -402,6 +402,20 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it.each(["kanban", "rail"] as const)(
+    "%s: Move buttons on queued held and fired dishes have no violations",
+    async (view) => {
+      const { host, el } = await mountWidget<TillStationQueue>(
+        "till-station-queue",
+        { groups: [...groups, ...coursedGroups], stationId: "st-1", view, canMove: true },
+        theme,
+      );
+      if (el.shadowRoot!.querySelectorAll("[data-move-station]").length < 3)
+        throw new Error("Move buttons missing");
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("whole-ticket bump mode has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

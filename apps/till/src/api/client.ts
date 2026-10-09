@@ -2609,6 +2609,29 @@ export class TillApi {
     );
   }
 
+  /** {@link listStations} for a kitchen display, which has no session → `GET /api/device/stations`. */
+  deviceStations(options: ReadOptions = {}): Promise<Station[]> {
+    return this.#request<Station[]>("/api/device/stations", "GET", undefined, options.signal);
+  }
+
+  /** {@link moveDishStation} for a kitchen display's station screen → its device route. */
+  deviceMoveDishStation(
+    orderId: string,
+    body: { submissionId: string; lineIds: string[]; stationId: string },
+    options: ReadOptions = {},
+  ): Promise<{
+    revision: number;
+    stationId: string;
+    moved: { workingOrderLineId: string; fromStationId: string }[];
+  }> {
+    return this.#request(
+      `/api/device/working-orders/${orderId}/lines/move-station`,
+      "POST",
+      body,
+      options.signal,
+    );
+  }
+
   /**
    * One station's kitchen queue → `GET /api/stations/:id/queue`, grouped by order, oldest first. A
    * malformed or unknown station id rejects with `station.not_found`.

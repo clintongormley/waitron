@@ -1993,3 +1993,144 @@ describe("till-station-queue — a merged queue's station labels", () => {
     );
   });
 });
+
+describe("till-station-queue — moving a dish to another station", () => {
+  const order: StationQueueGroup = {
+    orderId: "wo-m",
+    orderNumber: 8,
+    label: "Mesa 3",
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
+    items: [
+      {
+        id: "ti-fired",
+        workingOrderLineId: "wol-fired",
+        state: "queued",
+        name: "Paella",
+        quantity: "2.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        id: "ti-held",
+        workingOrderLineId: "wol-held",
+        state: "queued",
+        name: "Solomillo",
+        quantity: "1.000",
+        course: { id: "co-main", name: "Principales", displayOrder: 2 },
+        firedAt: null,
+      },
+      {
+        id: "ti-preparing",
+        workingOrderLineId: "wol-preparing",
+        state: "preparing",
+        name: "Agua",
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        id: "ti-ready",
+        workingOrderLineId: "wol-ready",
+        state: "ready",
+        name: "Café",
+        quantity: "1.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+      },
+      // An extra prepared at its own station is its own queue item, named "for" its dish
+      // (apps/server/src/split-off-extras.queue.test.ts); the till moves dishes only.
+      {
+        id: "ti-extra",
+        workingOrderLineId: "wol-extra",
+        state: "queued",
+        name: "CHIPS",
+        quantity: "2.000",
+        course: null,
+        firedAt: "2026-08-17T10:00:00.000Z",
+        crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
+      },
+    ],
+  };
+  const moveButtons = (el: TillStationQueue) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-move-station]")].map(
+      (button) => button.dataset.moveStation,
+    );
+
+  it.each(["kanban", "rail"] as const)("%s: draws no Move without canMove", async (view) => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      view,
+    });
+    expect(moveButtons(el)).toEqual([]);
+  });
+
+  it.each(["kanban", "rail"] as const)(
+    "%s: draws Move on held and fired queued dishes only, never on a started dish or an extra",
+    async (view) => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [order],
+        stationId: "st-1",
+        view,
+        canMove: true,
+      });
+      expect(moveButtons(el).sort()).toEqual(["ti-fired", "ti-held"]);
+      const button = el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!;
+      expect(button.tagName).toBe("WT-BUTTON");
+      expect(button.getAttribute("size")).toBe("sm");
+      expect(button.getAttribute("variant")).toBe("secondary");
+      expect(button.getAttribute("aria-label")).toBe(`${t("table.move_station")} · Paella`);
+      expect(button.textContent!.trim()).toBe(t("table.move_station"));
+      expect(button.closest("[data-item]")).toBeNull();
+    },
+  );
+
+  it.each(["kanban", "rail"] as const)(
+    "%s: pressing Move asks to move that dish from this station, and bumps nothing",
+    async (view) => {
+      const { el, host } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [order],
+        stationId: "st-1",
+        view,
+        canMove: true,
+      });
+      const moves: CustomEvent[] = [];
+      host.addEventListener("move-station", (e) => moves.push(e as CustomEvent));
+      const bumps = vi.fn();
+      el.addEventListener("advance-ticket-item", bumps);
+      el.addEventListener("advance-ticket", bumps);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
+      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-held"]')!.click();
+      expect(moves.map((e) => e.detail)).toEqual([
+        { workingOrderId: "wo-m", lineId: "wol-fired", name: "Paella", stationId: "st-1" },
+        { workingOrderId: "wo-m", lineId: "wol-held", name: "Solomillo", stationId: "st-1" },
+      ]);
+      expect(moves.every((e) => e.bubbles && e.composed)).toBe(true);
+      expect(bumps).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["kanban", "rail"] as const)(
+    "%s: a merged queue's Move names the dish's own station, not the widget's",
+    async (view) => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [{ ...order, stationId: "st-2" }],
+        stationNames: new Map([["st-2", "Barra"]]),
+        stationId: "st-1",
+        view,
+        canMove: true,
+      });
+      const moved = vi.fn();
+      el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
+      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
+      expect(moved).toHaveBeenCalledWith({
+        workingOrderId: "wo-m",
+        lineId: "wol-fired",
+        name: "Paella",
+        stationId: "st-2",
+      });
+    },
+  );
+});

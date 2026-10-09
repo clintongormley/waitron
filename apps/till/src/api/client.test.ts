@@ -971,6 +971,71 @@ describe("TillApi", () => {
     expect(answer).toEqual(result);
   });
 
+  it("deviceStations GETs the venue's active stations through the kitchen display's route", async () => {
+    const stations = [
+      { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true, open: true },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stations));
+    const signal = new AbortController().signal;
+
+    const r = await new TillApi("", fetchStub).deviceStations({ signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/stations",
+      expect.objectContaining({ method: "GET", credentials: "include", signal }),
+    );
+    expect(r).toEqual(stations);
+  });
+
+  it("deviceMoveDishStation posts the move through the kitchen display's route", async () => {
+    const body = { submissionId: "sub-1", lineIds: ["line-1"], stationId: "station-2" };
+    const result = {
+      revision: 4,
+      stationId: "station-2",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "station-1" }],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
+    const signal = new AbortController().signal;
+
+    const answer = await new TillApi("", fetchStub).deviceMoveDishStation("order-1", body, {
+      signal,
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/working-orders/order-1/lines/move-station",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify(body),
+        signal,
+      }),
+    );
+    expect(answer).toEqual(result);
+  });
+
+  it("deviceMoveDishStation rejects with the route's refusal code", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: "device.forbidden_station", params: { stationId: "station-1" } },
+        }),
+        { status: 403 },
+      ),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).deviceMoveDishStation("order-1", {
+        submissionId: "sub-1",
+        lineIds: ["line-1"],
+        stationId: "station-2",
+      }),
+    ).rejects.toMatchObject({
+      code: "device.forbidden_station",
+      stationId: "station-1",
+      status: 403,
+    });
+  });
+
   it("getStationQueue GETs one station's queue grouped by order", async () => {
     const groups = [
       {
