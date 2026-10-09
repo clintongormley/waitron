@@ -1213,6 +1213,12 @@ describe("Opening hours named month", () => {
       ] as const) {
         const el = await namedMount((async () => {
           const model = namedModel();
+          if (local !== "owner_entered") {
+            const own = model.days.find((day) => day.date === "2026-10-13")!;
+            own.namedDay = { ...own.namedDay!, kind: "working_day" };
+            own.tone = "working_day";
+          }
+
           model.holidayCoverage = [
             {
               year: 2026,
@@ -1256,7 +1262,14 @@ describe("Opening hours named month", () => {
         );
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=named-edit]")!.click();
         expect(events).toMatchObject([
-          { kind: "edit", day: { id: "own", kind: "holiday", repeats: true } },
+          {
+            kind: "edit",
+            day: {
+              id: "own",
+              kind: local === "owner_entered" ? "holiday" : "working_day",
+              repeats: true,
+            },
+          },
         ]);
         el.remove();
       }
