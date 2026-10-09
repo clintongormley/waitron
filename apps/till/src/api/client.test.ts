@@ -2726,6 +2726,19 @@ describe("TillApi", () => {
     expect(r).toEqual(identity);
   });
 
+  it("getDeviceIdentity hands a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ deviceId: "dev-1", formFactor: "till", name: "Till", kitchenScreens: [] }),
+    );
+    const signal = new AbortController().signal;
+
+    await new TillApi("", fetchStub).getDeviceIdentity({ signal });
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.signal])).toEqual([
+      ["/api/device/me", signal],
+    ]);
+  });
+
   it("getDeviceIdentity surfaces { code: 'device.unauthorized' } when the cookie is missing/rejected", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { code: "device.unauthorized" } }), {

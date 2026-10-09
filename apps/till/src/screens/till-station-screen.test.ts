@@ -3230,6 +3230,66 @@ describe("till-station-screen out-of-date banner", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("a late failure of an older refresh's station list, after a newer refresh answered, shows no banner", async () => {
+    const api = stubApi({
+      listStations: vi
+        .fn()
+        .mockResolvedValueOnce(stations)
+        .mockImplementationOnce(
+          () =>
+            new Promise((_resolve, reject) =>
+              setTimeout(() => reject({ code: "server.internal" }), 20_000),
+            ),
+        )
+        .mockResolvedValueOnce(stations)
+        .mockImplementation(() => new Promise(() => {})),
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
+        .mockResolvedValue(later),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    await tick(el, 31_000); // refresh 1's list out since 15 s; refresh 2's set out at 30 s and answered
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+    await tick(el, 4_000); // refresh 1's list fails at 35 s
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a choice read that never answers is cancelled 25 seconds after it set out, and shows the banner", async () => {
+    // Answers as `fetch` does: at once, refused, when its signal was cancelled before it set out.
+    const answer = (options?: { signal?: AbortSignal }) =>
+      options?.signal?.aborted
+        ? Promise.reject(options.signal.reason)
+        : Promise.resolve({ printersDown: [], items: cocinaQueue, notices: [] });
+    const api = stubApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValueOnce({
+          deviceId: "dev-1",
+          formFactor: "till",
+          name: "Till",
+          kitchenScreens: [],
+        })
+        .mockImplementation(
+          (options?: { signal?: AbortSignal }) =>
+            new Promise((_resolve, reject) =>
+              options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+            ),
+        ),
+      getStationQueue: vi.fn((_stationId: string, options?: { signal?: AbortSignal }) =>
+        answer(options),
+      ),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    await tick(el, 39_999); // the choice read that set out at 15 s is still out
+    expect(banner(el)).toBeNull();
+    await tick(el, 1); // and is cancelled at 40 s
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:19, less than a minute ago");
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+  });
+
   it("switching station clears the banner, and a failure there dates from the switch", async () => {
     let failBarra!: (reason: unknown) => void;
     const api = stubApi({

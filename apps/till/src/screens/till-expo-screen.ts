@@ -534,16 +534,16 @@ export class TillExpoScreen extends LitElement {
   }
 
   /**
-   * At a till the device's choice is read before each board read, so the board follows a change made
-   * while the screen is open. Until a read answers, All stations shows; after that a failed read
-   * keeps what the last one said.
+   * At a till the device's choice is read before each refresh's board read, so the board follows a
+   * change made while the screen is open. Until a read answers, All stations shows; after that a
+   * failed read keeps what the last one said.
    */
   async #loadChoice(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
     let pass;
     let read = true;
     try {
-      const { kitchenScreens } = await this.api.getDeviceIdentity();
+      const { kitchenScreens } = await this.api.getDeviceIdentity({ signal });
       pass = kitchenScreens.find(
         (screen) => screen.kind === "pass" || screen.kind === "pass_monitor",
       );
@@ -551,8 +551,8 @@ export class TillExpoScreen extends LitElement {
       read = false;
     }
     if (!this.isConnected || request < this.#appliedChoice) return;
+    this.#appliedChoice = request;
     if (read || !this.#choiceRead) {
-      this.#appliedChoice = request;
       this.#choiceRead = read;
       this.passGone = pass?.available === false;
       this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";

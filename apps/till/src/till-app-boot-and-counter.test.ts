@@ -17,6 +17,7 @@ import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
+import type { TillCardGrid } from "./widgets/card-grid.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
@@ -530,6 +531,109 @@ describe("till-app session activity", () => {
     expect(grid().querySelector(".kitchen-screen-message")).toBeNull();
     expect(grid().querySelector("till-expo-screen")).not.toBeNull();
   });
+
+  it.each(["answers", "fails"] as const)(
+    "a re-boot overtaken by a newer one, whose till read %s last, changes nothing",
+    async (outcome) => {
+      const board = { orders: [], stations: [], zones: null };
+      const kds = { ...till, locale: "en-GB", canvas: kdsCanvas, capabilities: ["act-as-kds"] };
+      const passIdentity = (available: boolean) => ({
+        deviceId: "kd-1",
+        name: "Pantalla Pase",
+        formFactor: "kds",
+        kitchenScreens: [kitchenScreen("pass", available)],
+      });
+      let settleOlder!: () => void;
+      const getTill = vi
+        .fn()
+        .mockResolvedValueOnce(kds)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              settleOlder = () =>
+                outcome === "answers" ? resolve(kds) : reject({ code: "server.internal" });
+            }),
+        )
+        .mockResolvedValue(kds);
+      const getDeviceIdentity = vi
+        .fn()
+        .mockResolvedValueOnce(passIdentity(false))
+        .mockResolvedValueOnce(passIdentity(true))
+        .mockResolvedValue(passIdentity(false));
+      const { el } = await mountApp({
+        getTill,
+        getDeviceIdentity,
+        getDevicePassScreen: vi.fn().mockResolvedValue(board),
+      });
+      await flush(el);
+      const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      const notice = () => grid().querySelector("till-kitchen-screen-notice")!;
+      emit(notice(), "kitchen-screen-changed"); // its till read waits
+      await flush(el);
+      emit(notice(), "kitchen-screen-changed"); // the newer re-boot reads the pass
+      await flush(el);
+      expect(grid().querySelector("till-expo-screen")).not.toBeNull();
+      settleOlder();
+      await flush(el);
+      await flush(el);
+      expect(getTill).toHaveBeenCalledTimes(3);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(grid().querySelector("till-expo-screen")).not.toBeNull();
+      expect(grid().querySelector(".kitchen-screen-message")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    },
+  );
+
+  it.each(["identity", "pass board"] as const)(
+    "a re-boot overtaken by a newer one, whose %s read answers last, changes nothing",
+    async (last) => {
+      const board = { orders: [], stations: [], zones: null };
+      const passIdentity = (available: boolean) => ({
+        deviceId: "kd-1",
+        name: "Pantalla Pase",
+        formFactor: "kds",
+        kitchenScreens: [kitchenScreen("pass", available)],
+      });
+      let answerOlder!: () => void;
+      const waitForOlder = <T>(value: T) =>
+        new Promise<T>((resolve) => (answerOlder = () => resolve(value)));
+      // Mount shows the line; the older re-boot is given the pass, the newer one the line again.
+      const getDeviceIdentity = vi.fn().mockResolvedValueOnce(passIdentity(false));
+      if (last === "identity")
+        getDeviceIdentity.mockImplementationOnce(() => waitForOlder(passIdentity(true)));
+      else getDeviceIdentity.mockResolvedValueOnce(passIdentity(true));
+      getDeviceIdentity.mockResolvedValue(passIdentity(false));
+      const getDevicePassScreen =
+        last === "pass board" ? vi.fn(() => waitForOlder(board)) : vi.fn().mockResolvedValue(board);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale: "en-GB",
+          canvas: kdsCanvas,
+          capabilities: ["act-as-kds"],
+        }),
+        getDeviceIdentity,
+        getDevicePassScreen,
+      });
+      await flush(el);
+      const grid = () => el.shadowRoot!.querySelector("till-card-grid")?.shadowRoot;
+      emit(grid()!.querySelector("till-kitchen-screen-notice")!, "kitchen-screen-changed");
+      await flush(el);
+      emit(lock(el)!, "device-unauthorized"); // the newer re-boot, from the lock screen shown meanwhile
+      await flush(el);
+      expect(grid()!.querySelector(".kitchen-screen-message")).not.toBeNull();
+      answerOlder();
+      await flush(el);
+      await flush(el);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(3);
+      expect(getDevicePassScreen).toHaveBeenCalledTimes(last === "identity" ? 0 : 1);
+      expect(
+        el.shadowRoot!.querySelector<TillCardGrid>("till-card-grid")!.initialDevicePass,
+      ).toBeUndefined();
+      expect(grid()!.querySelector("till-expo-screen")).toBeNull();
+      expect(grid()!.querySelector(".kitchen-screen-message")).not.toBeNull();
+    },
+  );
 
   describe("a narrowing between the boot's identity read and its screen read", () => {
     const passIdentity = (available = true) => ({

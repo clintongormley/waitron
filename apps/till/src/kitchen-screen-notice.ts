@@ -106,7 +106,6 @@ export class TillKitchenScreenNotice extends LitElement {
     this.#answer(request, changed ? "kitchen-screen-changed" : undefined);
   }
 
-  /** An answer older than the one already taken says nothing. */
   #answer(request: number, event?: "kitchen-screen-changed" | "device-unauthorized"): void {
     if (request <= this.#answered || !this.isConnected || request < this.#applied) return;
     this.#applied = request;

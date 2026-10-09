@@ -364,7 +364,7 @@ export class TillStationScreen extends LitElement {
    */
   async #load(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
-    const choice = this.#readStationChoice();
+    const choice = this.#readStationChoice(signal);
     try {
       const listed = await this.api.listStations({ signal });
       const screen = await choice;
@@ -384,7 +384,7 @@ export class TillStationScreen extends LitElement {
       this.stations = chosen === null ? listed : listed.filter((station) => chosen.has(station.id));
       this.#stationsLoaded = true;
     } catch {
-      this.stale = true;
+      if (request > this.#appliedChoice) this.stale = true;
       return;
     }
     if (!this.isConnected) return;
@@ -394,9 +394,11 @@ export class TillStationScreen extends LitElement {
   }
 
   /** The device's station screen; undefined when it has none, null when the read failed. */
-  async #readStationChoice(): Promise<ResolvedKitchenScreen | undefined | null> {
+  async #readStationChoice(
+    signal: AbortSignal | undefined,
+  ): Promise<ResolvedKitchenScreen | undefined | null> {
     try {
-      const { kitchenScreens } = await this.api.getDeviceIdentity();
+      const { kitchenScreens } = await this.api.getDeviceIdentity({ signal });
       return kitchenScreens.find((screen) => screen.kind === "station");
     } catch {
       return null;

@@ -874,7 +874,7 @@ describe("till-expo-screen", () => {
         expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
       }));
 
-    it("becomes the pass monitor when the choice is now a monitor, whose pass board is refused", () =>
+    it("leaves the pass screen for the pass monitor at the next refresh when the choice is now a monitor", () =>
       withFakeTimers(async () => {
         const api = passApi(
           [threeCourseOrder],
@@ -882,19 +882,70 @@ describe("till-expo-screen", () => {
           {
             getDevicePassMonitor: vi
               .fn()
-              .mockResolvedValue({ orders: [threeCourseOrder], stations: [], zones: null }),
+              .mockResolvedValue({ orders: [firedNotReadyOrder], stations: [], zones: null }),
           },
         );
         const el = await mount({ api });
         expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
         vi.mocked(api.getDeviceIdentity).mockResolvedValue(passMonitor);
-        vi.mocked(api.getDevicePassScreen).mockRejectedValue(refused());
         await vi.advanceTimersByTimeAsync(15_000);
         await el.updateComplete;
         expect(api.getDevicePassMonitor).toHaveBeenCalledTimes(1);
         expect(api.getDevicePassScreen).toHaveBeenCalledTimes(1);
-        expect(el.shadowRoot!.querySelector('[data-order="5"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-order="6"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-order="5"]')).toBeNull();
         expect(el.shadowRoot!.querySelector(".board button, .board wt-button")).toBeNull();
+      }));
+
+    /** Answers as `fetch` does: at once, refused, when its signal was cancelled before it set out. */
+    const likeFetch =
+      <T>(value: T) =>
+      (options?: { signal?: AbortSignal }) =>
+        options?.signal?.aborted ? Promise.reject(options.signal.reason) : Promise.resolve(value);
+    const hangUntilAborted = (options?: { signal?: AbortSignal }) =>
+      new Promise<never>((_resolve, reject) =>
+        options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+      );
+
+    it("marks its board out of date when a choice read never answers and is cancelled 25 seconds after it set out", () =>
+      withFakeTimers(async () => {
+        const board = { orders: [threeCourseOrder].map(asPassOrder), stations: [], zones: null };
+        const api = passApi(
+          [threeCourseOrder],
+          {},
+          { getDevicePassScreen: vi.fn(likeFetch(board)) },
+        );
+        vi.mocked(api.getDeviceIdentity)
+          .mockResolvedValueOnce(passScreen(true))
+          .mockImplementation(hangUntilAborted);
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(39_999); // the choice read that set out at 15 s is still out
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector(".stale[data-stale]")).toBeNull();
+        await vi.advanceTimersByTimeAsync(1); // and is cancelled at 40 s
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector(".stale[data-stale]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+      }));
+
+    it("shows no banner when an older refresh's choice read is cancelled after a newer refresh read its board", () =>
+      withFakeTimers(async () => {
+        const board = { orders: [threeCourseOrder].map(asPassOrder), stations: [], zones: null };
+        const api = passApi(
+          [threeCourseOrder],
+          {},
+          { getDevicePassScreen: vi.fn(likeFetch(board)) },
+        );
+        vi.mocked(api.getDeviceIdentity)
+          .mockResolvedValueOnce(passScreen(true))
+          .mockImplementationOnce(hangUntilAborted) // 15 s, cancelled at 40 s
+          .mockRejectedValueOnce({ code: "server.internal" }) // 30 s: keeps the pass and reads it
+          .mockImplementation(() => new Promise(() => {}));
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(31_000);
+        expect(api.getDevicePassScreen).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(9_000);
+        await el.updateComplete;
         expect(el.shadowRoot!.querySelector(".stale[data-stale]")).toBeNull();
       }));
 

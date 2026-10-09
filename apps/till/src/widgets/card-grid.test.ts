@@ -233,6 +233,35 @@ describe("a kitchen display's notice in place of a queue", () => {
       expect(changed).toHaveBeenCalledTimes(2);
     }));
 
+  it("says the device was refused once when two reads that overlap are both refused", () =>
+    withFakeTimers(async () => {
+      const refusals: ((reason: unknown) => void)[] = [];
+      const getDeviceIdentity = vi.fn(
+        () => new Promise<DeviceIdentity>((_resolve, reject) => refusals.push(reject)),
+      );
+      const { changed, unauthorized } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(refusals).toHaveLength(2);
+      refusals[0]!({ code: "device.unauthorized" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      refusals[1]!({ code: "device.unauthorized" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+    }));
+
+  it("says the device was refused again at a later refresh while it is still on the page", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
+      const { unauthorized } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(unauthorized).toHaveBeenCalledTimes(2);
+    }));
+
   it("stops reading once it is taken off the page", () =>
     withFakeTimers(async () => {
       const getDeviceIdentity = vi.fn().mockResolvedValue(passGone);

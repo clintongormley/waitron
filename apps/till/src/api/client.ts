@@ -2774,8 +2774,8 @@ export class TillApi {
    * This enrolled device's OWN identity → `GET /api/device/me`. A missing, rejected or revoked cookie
    * rejects `device.unauthorized` (401) — the signal that this browser is not an enrolled device.
    */
-  getDeviceIdentity(): Promise<DeviceIdentity> {
-    return this.#request<DeviceIdentity>("/api/device/me", "GET");
+  getDeviceIdentity(options: ReadOptions = {}): Promise<DeviceIdentity> {
+    return this.#request<DeviceIdentity>("/api/device/me", "GET", undefined, options.signal);
   }
 
   /**

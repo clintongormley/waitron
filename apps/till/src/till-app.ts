@@ -2299,6 +2299,10 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
+    // A boot a newer one has overtaken writes nothing after its reads answer. A torn-down app's boot
+    // writes nothing either: `setLocale` is module-global, and `disconnectedCallback` has already run,
+    // so nothing would stop a battery reporter started now.
+    const overtaken = () => !this.isConnected || bootGeneration !== this.#bootGeneration;
     this.#browserLocale = undefined;
     this.#browserLocaleVenue = undefined;
     this.#localeList = undefined;
@@ -2306,7 +2310,7 @@ export class TillApp extends LitElement {
     void this.api
       .getLocales()
       .then(({ locales, loginDefault, venueDefault }) => {
-        if (!this.isConnected || bootGeneration !== this.#bootGeneration) return;
+        if (overtaken()) return;
         this.#browserLocale = loginDefault;
         this.#browserLocaleVenue = venueDefault;
         this.#localeList = locales;
@@ -2322,9 +2326,7 @@ export class TillApp extends LitElement {
         this.api.getTill(),
         this.#refreshContentLanguages(contentGeneration),
       ]);
-      // `setLocale` changes module-global state, so it must not run for a torn-down app. The state
-      // writes below need no guard: Lit never paints a detached element.
-      if (!this.isConnected) return;
+      if (overtaken()) return;
       this.router?.setServers(till.servers);
       this.#venueLocale = till.locale;
       this.#venueLocaleReady = true;
@@ -2357,7 +2359,7 @@ export class TillApp extends LitElement {
     } catch {
       // Return before the device probe: a till that could not read its own setup is not a display to
       // route into device mode.
-      this.errorKey = "boot.error";
+      if (!overtaken()) this.errorKey = "boot.error";
       return;
     }
     // `#boot` re-runs, and the branches below only ever set a mode, so reset first.
@@ -2376,26 +2378,23 @@ export class TillApp extends LitElement {
     this.#setScreen("lock");
     // The till has no server flag for dev mode: the dev-only `GET /api/dev/devices` answers only there,
     // and its list is also the chooser's data.
-    if (!this.devTab && (await this.#openDevChooser())) return;
+    if (!this.devTab && (await this.#openDevChooser(overtaken))) return;
     // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
     // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
     // gets the join screen (a dev tab whose remembered device is refused forgets it and gets the picker
     // below, or the join screen if the device list fails to load), which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
+      if (overtaken()) return;
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
-      // `disconnectedCallback` has already run for a torn-down app, so nothing would stop a reporter
-      // started now; and a boot a later one has overtaken must not start one.
-      if (this.isConnected && bootGeneration === this.#bootGeneration) {
-        const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
-        this.#battery = startBatteryReport(
-          (r, signal) => this.api.reportBattery(r, { signal }),
-          nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
-        );
-      }
+      const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
+      this.#battery = startBatteryReport(
+        (r, signal) => this.api.reportBattery(r, { signal }),
+        nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
+      );
       this.#holdIdentity(identity);
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
@@ -2403,16 +2402,18 @@ export class TillApp extends LitElement {
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
+        let show: () => void;
         try {
-          await this.#readKitchenScreen(identity.kitchenScreens);
+          show = await this.#readKitchenScreen(identity.kitchenScreens);
         } catch (error) {
           if ((error as { code?: string }).code !== "device.unauthorized") throw error;
           // A narrowing that lands between the two reads refuses the screen it took, from a device
           // still enrolled: the identity, read again, says what it shows now.
           const again = await this.api.getDeviceIdentity();
-          await this.#readKitchenScreen(again.kitchenScreens);
+          show = await this.#readKitchenScreen(again.kitchenScreens);
         }
-        if (!this.isConnected) return;
+        if (overtaken()) return;
+        show();
         this.deviceMode = true;
         if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
         this.#setScreen("station");
@@ -2422,13 +2423,14 @@ export class TillApp extends LitElement {
       // Only a genuine `device.unauthorized` goes to the join screen. Any other failure is transient,
       // and stranding a sellable till behind an approval it cannot get would block sales, so it falls
       // through to the login screen.
+      if (overtaken()) return;
       if ((error as { code?: string }).code === "device.unauthorized") {
         // A dev tab's remembered device can be gone (a venue reset deletes it). In dev mode the server
         // reads the header instead of the device cookie, so joining from this tab could not recover it.
         if (this.devTab) {
           clearDevDeviceId();
           this.devTab = false;
-          if (await this.#openDevChooser()) return;
+          if (await this.#openDevChooser(overtaken)) return;
         }
         this.frontDoor = "enrol";
       }
@@ -2436,26 +2438,35 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
   }
 
-  async #readKitchenScreen(screens: readonly ResolvedKitchenScreen[]): Promise<void> {
+  /** Reads ahead the board the device's kitchen screen opens on; what it answers shows that board. */
+  async #readKitchenScreen(screens: readonly ResolvedKitchenScreen[]): Promise<() => void> {
     const screen = kitchenDisplayScreen(screens);
-    if (screen.kind === "station")
-      this.initialDeviceStation = await this.api.getDeviceStationScreen();
-    else if (screen.kind === "pass") this.initialDevicePass = await this.api.getDevicePassScreen();
-    else if (screen.kind === "pass_monitor")
-      this.initialDevicePassMonitor = await this.api.getDevicePassMonitor();
-    else this.kitchenScreenNotice = screen.notice;
+    if (screen.kind === "station") {
+      const board = await this.api.getDeviceStationScreen();
+      return () => (this.initialDeviceStation = board);
+    }
+    if (screen.kind === "pass") {
+      const board = await this.api.getDevicePassScreen();
+      return () => (this.initialDevicePass = board);
+    }
+    if (screen.kind === "pass_monitor") {
+      const board = await this.api.getDevicePassMonitor();
+      return () => (this.initialDevicePassMonitor = board);
+    }
+    return () => (this.kitchenScreenNotice = screen.notice);
   }
 
-  /** True when dev mode answered, so the boot stops here. */
-  async #openDevChooser(): Promise<boolean> {
+  /** True when the boot stops here: dev mode answered, or a newer boot overtook this one. */
+  async #openDevChooser(overtaken: () => boolean): Promise<boolean> {
     try {
-      this.devDevices = await this.api.getDevDevices();
-      if (!this.isConnected) return true;
+      const devices = await this.api.getDevDevices();
+      if (overtaken()) return true;
+      this.devDevices = devices;
       this.frontDoor = "chooser";
       return true;
     } catch {
       // Not dev mode, or a transient failure.
-      return false;
+      return overtaken();
     }
   }
 
