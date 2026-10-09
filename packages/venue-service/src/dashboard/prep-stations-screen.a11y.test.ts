@@ -90,11 +90,6 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       ),
       setCell: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
       enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      readStationHealth: vi.fn().mockResolvedValue({
-        capturedAt: "2026-10-05T12:00:00Z",
-        stations: [],
-        outputsDown: { printersDown: [], screensDark: [] },
-      }),
       load: vi.fn().mockResolvedValue(
         state === "empty"
           ? empty
@@ -378,32 +373,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     ];
     el.api = {
       updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      readStationHealth: vi.fn().mockResolvedValue({
-        capturedAt: "2026-10-05T12:00:00Z",
-        stations: stations.map((station) => ({
-          id: station.id,
-          name: station.name,
-          hasScreen: false,
-          waiting: 0,
-          preparing: null,
-          ready: null,
-          late: { warm: 0, overdue: 0, forgotten: 0 },
-          oldestMinutes: null,
-          items: [],
-        })),
-        outputsDown: {
-          printersDown: [
-            {
-              stationId: "bar",
-              stationName: "Upstairs bar",
-              printerId: "epson",
-              printerName: "Epson",
-              since: "2026-10-01T20:14:00",
-            },
-          ],
-          screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
-        },
-      }),
       load: vi.fn().mockResolvedValue({
         ...empty,
         stations,

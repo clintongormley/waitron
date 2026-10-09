@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
+import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
 
@@ -63,39 +63,6 @@ const view: PrepStationsView = {
   watchers: [],
   disabledWatchers: [],
 };
-const snapshot: StationHealthSnapshot = {
-  capturedAt: "2026-10-05T12:00:00Z",
-  outputsDown: {
-    printersDown: [],
-    screensDark: [{ stationId: "bar", stationName: "Bar", lastSeenAt: null }],
-  },
-  stations: [
-    {
-      id: "bar",
-      name: "Bar",
-      hasScreen: true,
-      waiting: 1,
-      preparing: 0,
-      ready: 0,
-      late: { warm: 0, overdue: 1, forgotten: 0 },
-      oldestMinutes: 12,
-      items: [
-        {
-          id: "soup",
-          name: "KITCHEN SOUP",
-          orderId: "order",
-          orderNumber: 7,
-          label: "Terrace",
-          tableNames: ["Table 5"],
-          state: "queued",
-          queuedAt: "2026-10-05T11:48:00Z",
-          remainingQuantity: "1.000",
-          band: "overdue",
-        },
-      ],
-    },
-  ],
-};
 it.each([
   { locale: "en", theme: "light", width: 390 },
   { locale: "en", theme: "dark", width: 390 },
@@ -124,10 +91,7 @@ it.each([
       document.documentElement.style.background = getComputedStyle(host).backgroundColor;
       const screen = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
       screen.readOnly = true;
-      screen.api = {
-        load: vi.fn().mockResolvedValue(view),
-        readStationHealth: vi.fn().mockResolvedValue(snapshot),
-      } as unknown as PrepStationsApi;
+      screen.api = { load: vi.fn().mockResolvedValue(view) } as unknown as PrepStationsApi;
       host.append(screen);
       await vi.waitFor(() =>
         expect(
@@ -140,6 +104,8 @@ it.each([
       const health = screen.shadowRoot!.querySelector("prep-station-health-table")!;
       const table = health.shadowRoot!.querySelector("wt-data-table")!;
       expect(table.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+      expect(table.shadowRoot!.querySelector('[part~="number"]')).toBeNull();
+      expect(table.shadowRoot!.querySelectorAll("thead th")).toHaveLength(2);
       expect(screen.shadowRoot!.querySelector('[data-test="new-station"]')).toBeNull();
       expect(screen.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);

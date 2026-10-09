@@ -1,57 +1,43 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { html } from "lit";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import type { StationHealthSnapshot } from "./routing-client.js";
+import type { PrepStation } from "./routing-client.js";
 import "./station-health-table.js";
 afterEach(() => {
   cleanup();
   setLocale("en");
 });
 
-describe.each(["light", "dark"] as const)("station health (%s)", (theme) => {
-  it.each(["empty", "screen"])("checks %s", async (state) => {
+const stations = [
+  { id: "bar", name: "Bar", active: true, isDefault: true, displayOrder: 0 },
+  { id: "old", name: "Old kitchen", active: false, isDefault: false, displayOrder: 1 },
+] as PrepStation[];
+
+describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
+  it.each(["manager", "supervisor", "empty"] as const)("checks %s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("prep-station-health-table");
-    const snapshot: StationHealthSnapshot = {
-      capturedAt: "2026-10-05T12:00:00Z",
-      outputsDown: { printersDown: [], screensDark: [] },
-      stations:
-        state === "empty"
-          ? []
-          : [
-              {
-                id: "bar",
-                name: "Bar",
-                hasScreen: true,
-                waiting: 1,
-                preparing: 0,
-                ready: 0,
-                oldestMinutes: 12,
-                late: { warm: 0, overdue: 1, forgotten: 0 },
-                items: [
-                  {
-                    id: "soup",
-                    name: "Soup",
-                    orderId: "o1",
-                    orderNumber: 7,
-                    label: null,
-                    tableNames: ["Table 5"],
-                    state: "queued",
-                    queuedAt: "2026-10-05T11:48:00Z",
-                    remainingQuantity: "1.000",
-                    band: "overdue",
-                  },
-                ],
-              },
-            ],
-    };
-    el.snapshot = snapshot;
-    el.today = { bar: "Always open" };
+    el.stations = state === "empty" ? [] : stations;
+    el.today = { bar: "Always open", old: "Disabled" };
+    el.actions =
+      state === "manager"
+        ? Object.fromEntries(
+            stations.map((station) => [
+              station.id,
+              html`<button type="button" aria-label=${`${station.name} actions`}>⋮</button>`,
+            ]),
+          )
+        : {};
     host.append(el);
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve, 0));
+    const rows = el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(state === "empty" ? 0 : 2);
     await expectNoA11yViolations(host);
   });
 });

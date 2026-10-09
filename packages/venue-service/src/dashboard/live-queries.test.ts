@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
+it("declares no health query: Prep stations reads no live kitchen numbers", () => {
+  expect(Object.keys(QUERY_DEPENDENCIES)).not.toContain("health");
+});
+
 it("refreshes the routing grid and the operations screen on a routing cell change", () => {
   expect(QUERY_DEPENDENCIES.routing).toEqual([
     "kitchen_timing_defaults",

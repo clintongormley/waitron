@@ -50,7 +50,6 @@ import type {
   PrepStationsApi,
   PrepStationsView,
   StationInput,
-  StationHealthSnapshot,
   WatcherInput,
 } from "./routing-client.js";
 import { watchersOfStation, type WatcherView } from "./watchers-seen.js";
@@ -276,8 +275,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationEdit?: { token: object; station: PrepStation };
   @state() private stationEditBusy = false;
   @state() private stationEditRefusal?: StationRefusal;
-  @state() private health?: StationHealthSnapshot;
-  #healthTimer?: ReturnType<typeof setInterval>;
   #routingTimer?: ReturnType<typeof setInterval>;
   readonly #url = new UrlStateController(
     this,
@@ -739,9 +736,7 @@ export class PrepStationsScreen extends LitElement {
     super.connectedCallback();
     this.requestUpdate();
     void this.#load();
-    void this.#loadHealth();
     if (!this.api.liveData) {
-      this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
       this.#routingTimer = setInterval(() => void this.#load(), 60_000);
     }
   }
@@ -793,28 +788,9 @@ export class PrepStationsScreen extends LitElement {
     this.#stationScope = undefined;
     this.#stationIdentity = undefined;
     this.#leave = undefined;
-    if (this.#healthTimer) clearInterval(this.#healthTimer);
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
     this.#endStationDrag();
-  }
-  async #loadHealth() {
-    try {
-      await this.#queries.watch(
-        "health",
-        {
-          key: "venue-service:station-health",
-          dependencies: QUERY_DEPENDENCIES.health.map((type) => ({ type })),
-          refreshMs: 15_000,
-          read: () => this.api.readStationHealth(),
-        },
-        (value) => {
-          this.health = value;
-        },
-      );
-    } catch {
-      this.#showReadError(t("prep.load_error"));
-    }
   }
   async #load() {
     try {
@@ -1081,7 +1057,7 @@ export class PrepStationsScreen extends LitElement {
         .map((station) => station.id)
     );
   }
-  #healthTable() {
+  #stationTable() {
     return this.renderRoot
       .querySelector("prep-station-health-table")
       ?.shadowRoot?.querySelector("wt-data-table");
@@ -1104,9 +1080,9 @@ export class PrepStationsScreen extends LitElement {
     await this.#act(() => this.api.reorderStations(ids));
     this.stationOrder = undefined;
     await this.updateComplete;
-    const health = this.renderRoot.querySelector("prep-station-health-table");
-    if (health) await health.updateComplete;
-    const table = this.#healthTable();
+    const stations = this.renderRoot.querySelector("prep-station-health-table");
+    if (stations) await stations.updateComplete;
+    const table = this.#stationTable();
     if (table) await table.updateComplete;
     table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
   }
@@ -1119,7 +1095,7 @@ export class PrepStationsScreen extends LitElement {
     this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
     this.#stationPoint = { x: event.clientX, y: event.clientY };
     this.#stationScroll.start(event.currentTarget as Element, this.#stationPoint, () => {
-      const root = this.#healthTable()?.shadowRoot;
+      const root = this.#stationTable()?.shadowRoot;
       const row = pointerElementsAt(this.#stationPoint.x, this.#stationPoint.y).find(
         (element) => element.matches("tbody tr") && root?.contains(element),
       );
@@ -1139,7 +1115,7 @@ export class PrepStationsScreen extends LitElement {
     this.#trackStationDrag();
   };
   #trackStationDrag(
-    rows: Iterable<Element> = this.#healthTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
+    rows: Iterable<Element> = this.#stationTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
   ): void {
     const drag = this.#stationDrag;
     if (!drag) return;
@@ -3115,7 +3091,6 @@ export class PrepStationsScreen extends LitElement {
                   ${this.stationAnnouncement}
                 </div>
                 <prep-station-health-table
-                  .snapshot=${this.health}
                   .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
                   .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .today=${Object.fromEntries(

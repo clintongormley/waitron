@@ -115,11 +115,6 @@ async function mount(write?: Promise<void>, refresh?: Promise<void>) {
       if (++reads > 1 && refresh) await refresh;
       return structuredClone(view);
     },
-    readStationHealth: async () => ({
-      capturedAt: "2026-10-07T08:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     preview: async () => [move],
     setCell: async (address: unknown, target: unknown) => {
       writes.push({ address, target });

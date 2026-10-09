@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
-import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
+import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { WatcherView } from "./watchers-seen.js";
 import "./prep-stations-screen.js";
@@ -88,24 +88,6 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   const load = overrides.load ?? vi.fn().mockResolvedValue(view);
   return {
     load,
-    readStationHealth: vi.fn(async () => {
-      const loaded: PrepStationsView = (await vi.mocked(load).mock.results.at(-1)?.value) ?? view;
-      return {
-        capturedAt: "2026-10-05T12:00:00Z",
-        stations: loaded.stations.map((station) => ({
-          id: station.id,
-          name: station.name,
-          hasScreen: false,
-          waiting: 0,
-          preparing: null,
-          ready: null,
-          late: { warm: 0, overdue: 0, forgotten: 0 },
-          oldestMinutes: null,
-          items: [],
-        })),
-        outputsDown: { printersDown: [], screensDark: [] },
-      };
-    }),
     preview: vi.fn().mockResolvedValue([]),
     createStation: vi.fn(),
     updateStation: vi.fn(),
@@ -461,20 +443,6 @@ it.each(
     const el = await mount(
       api({
         load: vi.fn().mockResolvedValue(visualView),
-        readStationHealth: vi.fn().mockResolvedValue(
-          healthFor(visualView, {
-            printersDown: [
-              {
-                stationId: "upstairs",
-                stationName: "Upstairs bar",
-                printerId: "epson",
-                printerName: "Epson",
-                since: "2026-10-01T20:14:00",
-              },
-            ],
-            screensDark: [{ stationId: "retired", stationName: "Retired", lastSeenAt: null }],
-          }),
-        ),
       }),
       theme,
     );
@@ -666,7 +634,6 @@ it("keeps station status in Stations instead of repeating it in Routing", async 
   };
   const a = api({
     load: vi.fn().mockResolvedValue(next),
-    readStationHealth: vi.fn().mockResolvedValue(healthFor(next, outputs)),
     listOutputsDown: vi.fn().mockResolvedValue(outputs),
   });
   const el = await mount(a);
@@ -685,26 +652,70 @@ it("makes no outputs-down read", async () => {
   expect(healthRow(el, "bar").textContent).toContain("Bar");
   expect(a.listOutputsDown).not.toHaveBeenCalled();
 });
-function healthFor(
-  loaded: PrepStationsView,
-  outputsDown: StationHealthSnapshot["outputsDown"],
-): StationHealthSnapshot {
-  return {
-    capturedAt: "2026-10-05T12:00:00Z",
-    stations: loaded.stations.map((station) => ({
-      id: station.id,
-      name: station.name,
-      hasScreen: false,
-      waiting: 0,
-      preparing: null,
-      ready: null,
-      late: { warm: 0, overdue: 0, forgotten: 0 },
-      oldestMinutes: null,
-      items: [],
-    })),
-    outputsDown,
-  };
+function stationHeadings(el: PrepStationsScreen) {
+  return [...(healthSummary(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
+    th.textContent?.trim(),
+  );
 }
+it("draws the Stations rows from the stations list with no health read and no health subscription", async () => {
+  setLocale("en");
+  const liveData = new LiveData();
+  const a = api({
+    liveData,
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+  });
+  expect("readStationHealth" in a).toBe(false);
+  const el = await mount(a);
+  expect(healthRow(el, "bar").textContent).toContain("Bar");
+  expect(healthRow(el, "upstairs").textContent).toContain("Upstairs bar");
+  expect(stationHeadings(el)).toEqual(["Name", "Today"]);
+  for (const word of ["Waiting", "Being made", "Ready", "Late", "Oldest"])
+    expect(healthSummary(el)!.querySelector("thead")!.textContent).not.toContain(word);
+  expect(healthSummary(el)!.querySelector('[part~="number"]')).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
+  const watched = liveData.interests.map((interest) => interest.type);
+  for (const type of ["ticket_items", "working_orders", "print_jobs"])
+    expect(watched).not.toContain(type);
+});
+it("without live data, starts no fifteen-second refresh", async () => {
+  const interval = vi.spyOn(window, "setInterval");
+  try {
+    const el = await mount(api());
+    expect(healthRow(el, "bar").textContent).toContain("Bar");
+    expect(interval.mock.calls.map(([, delay]) => delay)).not.toContain(15_000);
+  } finally {
+    interval.mockRestore();
+  }
+});
+it("a manager's drag reorder saves the new order with no health read", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const order = vi.fn().mockResolvedValue(undefined);
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    reorderStations: order,
+  } as Partial<PrepStationsApi>);
+  expect("readStationHealth" in a).toBe(false);
+  const el = await mount(a);
+  const summary = healthSummary(el)!;
+  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
+  const target = summary
+    .querySelector('[data-test="station-menu-bar"]')!
+    .closest("tr")!
+    .getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 93,
+      clientY: handle.getBoundingClientRect().top,
+      bubbles: true,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 93, clientY: target.top + target.height / 2 }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 93 }));
+  await settle(el);
+  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
+});
 function healthRow(el: PrepStationsScreen, stationId: string) {
   return healthSummary(el)!
     .querySelector(`[data-test="station-menu-${stationId}"]`)!
@@ -1438,12 +1449,6 @@ it("switches an inactive station on from its Stations row", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue(next),
     activateStation: vi.fn(),
-    readStationHealth: vi.fn().mockResolvedValue(
-      healthFor(next, {
-        printersDown: [],
-        screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-      }),
-    ),
   });
   const el = await mount(a);
   expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(
@@ -1528,36 +1533,6 @@ it("localizes the fallback search field in Spanish", async () => {
   );
 });
 
-const healthSnapshot: StationHealthSnapshot = {
-  capturedAt: "2026-10-05T12:00:00Z",
-  outputsDown: { printersDown: [], screensDark: [] },
-  stations: [
-    {
-      id: "bar",
-      name: "Bar",
-      hasScreen: true,
-      waiting: 1,
-      preparing: 0,
-      ready: 0,
-      late: { warm: 0, overdue: 0, forgotten: 0 },
-      oldestMinutes: 4,
-      items: [
-        {
-          id: "soup",
-          name: "KITCHEN SOUP",
-          orderId: "o1",
-          orderNumber: 7,
-          label: null,
-          tableNames: ["Table 5"],
-          state: "queued",
-          queuedAt: "2026-10-05T11:56:00Z",
-          remainingQuantity: "1.000",
-          band: "fresh",
-        },
-      ],
-    },
-  ],
-};
 function healthSummary(el: PrepStationsScreen) {
   return el.shadowRoot
     ?.querySelector("prep-station-health-table")
@@ -1565,8 +1540,7 @@ function healthSummary(el: PrepStationsScreen) {
 }
 it("a ticket change keeps an open station draft", async () => {
   const liveData = new LiveData();
-  const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
-  const el = await mount(api({ liveData, readStationHealth }));
+  const el = await mount(api({ liveData }));
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   const name =
@@ -1583,8 +1557,7 @@ it("releases its interests and clock on detach", async () => {
   try {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(view);
-    const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
-    const el = await mount(api({ liveData, load, readStationHealth }));
+    const el = await mount(api({ liveData, load }));
     expect(healthRow(el, "bar").textContent).toContain("Bar");
     el.remove();
     expect(liveData.interests).toEqual([]);
@@ -1629,7 +1602,6 @@ it("routing recovery clears a read failure and retains an action refusal", async
 it("a station whose status has not arrived leaves Today blank", async () => {
   const el = await mount(
     api({
-      readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
       load: vi.fn().mockResolvedValue({ ...view, routing: { ...view.routing, stationTimes: [] } }),
     }),
   );
@@ -1841,7 +1813,6 @@ it.each([
     const el = await mount(
       api({
         load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-        readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
       }),
     );
     el.parentElement!.style.width = `${width}px`;
@@ -1886,7 +1857,6 @@ it.each([
       const el = await mount(
         api({
           load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-          readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
         }),
         theme,
       );
@@ -1927,14 +1897,6 @@ async function mountToday(
   history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(next),
-    readStationHealth: vi.fn().mockResolvedValue({
-      ...healthSnapshot,
-      stations: next.stations.map((station) => ({
-        ...healthSnapshot.stations[0]!,
-        id: station.id,
-        name: station.name,
-      })),
-    }),
     ...overrides,
   });
   return { a, el: await mount(a, theme) };
@@ -3760,18 +3722,11 @@ it("Watchers keeps a conflict while another selected printer still serves a stat
 
 it("a supervisor sees the stations read-only", async () => {
   const liveData = new LiveData();
-  const read = vi.fn().mockResolvedValue({
-    ...healthSnapshot,
-    stations: [
-      healthSnapshot.stations[0]!,
-      { ...healthSnapshot.stations[0]!, id: "upstairs", name: "Upstairs bar" },
-    ],
-  });
   const a = api({
     liveData,
     load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-    readStationHealth: read,
   });
+  expect("readStationHealth" in a).toBe(false);
   const host = document.createElement("div");
   applyTokens(host);
   document.body.append(host);
@@ -3793,12 +3748,14 @@ it("a supervisor sees the stations read-only", async () => {
   expect(summary.querySelector("wt-row-actions")).toBeNull();
   expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
   expect(summary.querySelector("[data-station-id]")).toBeNull();
+  expect(summary.querySelector('[part~="number"]')).toBeNull();
+  expect(stationHeadings(el)).toEqual(["Name", "Today"]);
   expect(a.updateStation).not.toHaveBeenCalled();
 });
 
 it("moves a configuration panel back to the overview when the screen becomes read-only", async () => {
   history.replaceState(null, "", "/manage/prep-stations/view/settings/test/bread");
-  const a = api({ readStationHealth: vi.fn().mockResolvedValue(healthSnapshot) });
+  const a = api();
   const el = await mount(a);
   expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
     "settings",

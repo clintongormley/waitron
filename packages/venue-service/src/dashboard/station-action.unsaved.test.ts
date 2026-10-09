@@ -118,21 +118,6 @@ async function mount(write?: Promise<void>, refreshFails = false, deactivate?: P
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(model);
     },
-    readStationHealth: async () => ({
-      capturedAt: "2026-10-06T08:00:00Z",
-      stations: model.stations.map(({ id, name }) => ({
-        id,
-        name,
-        hasScreen: false,
-        waiting: 0,
-        preparing: null,
-        ready: null,
-        late: { warm: 0, overdue: 0, forgotten: 0 },
-        oldestMinutes: null,
-        items: [],
-      })),
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     setStationFallback: async (id: string, choice: string | null) => {
       writes.push({ fallback: id, choice });
       await write;

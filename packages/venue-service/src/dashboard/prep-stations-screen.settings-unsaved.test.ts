@@ -124,11 +124,6 @@ async function mount(write?: Promise<void>, refreshFails = false, initial = view
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(initial);
     },
-    readStationHealth: async () => ({
-      capturedAt: "2026-10-06T12:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     updateStation: async (id: string, body: unknown) => {
       writes.push({ id, body });
       await write;

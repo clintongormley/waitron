@@ -1,4 +1,4 @@
-import type { StationThresholds, TimingBand } from "@waitron/shared";
+import type { StationThresholds } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { RouteTarget, RoutingModel } from "../routing.js";
@@ -20,35 +20,6 @@ export interface OutputsDown {
     since: string;
   }[];
   screensDark: { stationId: string; stationName: string; lastSeenAt: string | null }[];
-}
-
-export interface StationHealthItem {
-  id: string;
-  name: string;
-  orderId: string;
-  orderNumber: number;
-  label: string | null;
-  tableNames: string[];
-  state: "queued" | "preparing" | "ready";
-  queuedAt: string;
-  remainingQuantity: string;
-  band: TimingBand;
-}
-export interface StationHealth {
-  id: string;
-  name: string;
-  hasScreen: boolean;
-  waiting: number;
-  preparing: number | null;
-  ready: number | null;
-  late: { warm: number; overdue: number; forgotten: number };
-  oldestMinutes: number | null;
-  items: StationHealthItem[];
-}
-export interface StationHealthSnapshot {
-  capturedAt: string;
-  stations: StationHealth[];
-  outputsDown: OutputsDown;
 }
 
 export interface PrepStation {
@@ -238,16 +209,6 @@ export class PrepStationsApi {
     });
   }
 
-  readStationHealth(): Promise<StationHealthSnapshot> {
-    return this.request<StationHealthSnapshot>(
-      "/management-api/stations/health",
-      "GET",
-      undefined,
-      {
-        passive: true,
-      },
-    );
-  }
   listOutputsDown(): Promise<OutputsDown> {
     return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {
       passive: true,

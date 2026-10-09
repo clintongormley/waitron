@@ -81,11 +81,6 @@ const view: PrepStationsView = {
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   return {
     load: vi.fn().mockResolvedValue(view),
-    readStationHealth: vi.fn().mockResolvedValue({
-      capturedAt: "2026-10-05T12:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     preview: vi.fn().mockResolvedValue([]),
     createStation: vi.fn(),
     updateStation: vi.fn(),
