@@ -1414,7 +1414,7 @@ subtracted from `test-light-a`'s selection in `.github/workflows/ci.yml` — exa
 `@waitron/bench-pglite` is wired. Three root guards go red without that wiring —
 `scripts/changed-scope.test.mjs`, `scripts/ci-workflow.test.mjs` and
 `scripts/coverage-thresholds.test.ts`, the last by crashing rather than asserting. They live in the root Vitest project, which CI's ungated
-`lint` job and `.husky/pre-push` both run. The general rule, for whoever adds the next workspace
+`root-guards` job and `.husky/pre-push` both run. The general rule, for whoever adds the next workspace
 member, is in [ci-and-gates.md](../../docs/developers/ci-and-gates.md).
 
 The package's gate is `typecheck` + `pnpm format:check` + `pnpm lint`, plus those three root guards —

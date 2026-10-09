@@ -31,15 +31,17 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
 
 /**
  * Root-scope files a workspace member depends on, each mapped to the member DIRECTORIES that depend
- * on it: a member file reads it, or the ci.yml job that tests the member runs it first (the
- * `test-server-stream` job's two binary installers). A change to one selects those members as well as the
+ * on it: a member file reads it, the ci.yml job that tests the member runs it first (the
+ * `test-server-stream` job's two binary installers), or that job's test command loads it as a
+ * Vitest reporter (`vitest-file-progress.mjs`). A change to one selects those members as well as the
  * root project. Without an entry, root scope emits `code=false` and ci.yml runs neither
  * `bundle-smoke` nor any member's build or tests.
  *
  * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a root `scripts/` file is named
- * by a member file through a relative path, or run by a line starting `node scripts/` in a ci.yml
- * job that tests a member through one quoted `pnpm --filter`, and is not listed here for that
- * member — or when an entry here is neither. Weaker than its name in the ways its header states —
+ * by a member file through a relative path, run by a line starting `node scripts/` in a ci.yml
+ * job that tests a member through one quoted `pnpm --filter`, or named by a `--reporter=` flag on
+ * a ci.yml test command, and is not listed here for that member — or when an entry here is none
+ * of these. Weaker than its name in the ways its header states —
  * it reads member files and ci.yml as text, so among other gaps a path built from parts, or a
  * script fed from a pipe in ci.yml, is invisible to it.
  */
@@ -52,6 +54,64 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/npm-bundle-notices.mjs", ["apps/dashboard", "apps/setup", "apps/till"]],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
+  [
+    "scripts/vitest-file-progress.mjs",
+    [
+      "apps/dashboard",
+      "apps/print-agent",
+      "apps/server",
+      "apps/setup",
+      "apps/till",
+      "packages/adjustments",
+      "packages/bookings",
+      "packages/catalogue",
+      "packages/composition",
+      "packages/core",
+      "packages/country",
+      "packages/country-es",
+      "packages/country-gb",
+      "packages/country-packs",
+      "packages/credentials",
+      "packages/dashboard-kit",
+      "packages/dashboard-modules",
+      "packages/db",
+      "packages/diagnostics",
+      "packages/fiscal",
+      "packages/fiscal-none",
+      "packages/fiscal-verifactu",
+      "packages/identity",
+      "packages/layouts",
+      "packages/media",
+      "packages/membership",
+      "packages/migrations",
+      "packages/module",
+      "packages/payments",
+      "packages/payments-stripe",
+      "packages/payments-sumup",
+      "packages/print-agent",
+      "packages/printing",
+      "packages/provisioning",
+      "packages/purchasing",
+      "packages/recipes",
+      "packages/reporting",
+      "packages/scheduler",
+      "packages/server-kit",
+      "packages/shared",
+      "packages/store",
+      "packages/stream",
+      "packages/sync-enrolment",
+      "packages/tunnel",
+      "packages/ui",
+      "packages/ui-core",
+      "packages/venue-service",
+      "packages/workforce",
+      "packages/workforce-es",
+    ],
+  ],
+  [
+    "scripts/vitest-shard-coverage-merge.mjs",
+    ["apps/dashboard", "apps/till", "packages/venue-service"],
+  ],
 ]);
 
 /**

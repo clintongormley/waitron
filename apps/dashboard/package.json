@@ -9,6 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:shard": "vitest run --coverage --reporter=default --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",
+    "test:merge": "vitest --merge-reports .vitest-reports --coverage --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },

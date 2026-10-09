@@ -255,6 +255,19 @@ function artifactUploadBase(body) {
   return line === undefined ? undefined : /name: (\S+?)-\$\{\{/.exec(line)?.[1];
 }
 
+/** The non-comment lines of the step uploading the matrix-named blob artifact, or undefined. */
+function artifactUploadStep(body) {
+  const named = body.findIndex((line) =>
+    /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
+  );
+  if (named === -1) return undefined;
+  const start = body.findLastIndex((line, index) => index < named && /^ {6}- /.test(line));
+  const next = body.findIndex((line, index) => index > named && /^ {6}- /.test(line));
+  return body
+    .slice(start, next === -1 ? body.length : next)
+    .filter((line) => !line.trim().startsWith("#"));
+}
+
 /** The blob artifact's base name from a `download-artifact` `pattern: <base>-*`. */
 function artifactDownloadBase(body) {
   const line = body.find((candidate) => /^ {10}pattern: \S+-\*\s*$/.test(candidate));
@@ -278,10 +291,18 @@ function expectGatedOnCodePlusOneScope(read) {
   expect(names).toContain(own[0]);
 }
 
+let listing;
+
+/** `pnpm ls -r --depth -1 --json`, run once on first use and shared by every caller. */
+function workspaceListing() {
+  listing ??= pnpmLs(["ls", "-r", "--depth", "-1", "--json"]);
+  return listing;
+}
+
 /** Every workspace member's package.json `scripts`, keyed by package name (never the root). */
 function scriptsByPackage() {
   const map = new Map();
-  for (const pkg of pnpmLs(["ls", "-r", "--depth", "-1", "--json"])) {
+  for (const pkg of workspaceListing()) {
     if (resolve(pkg.path) === resolve(repoRoot)) continue;
     map.set(
       pkg.name,
@@ -343,7 +364,7 @@ function selects(filters) {
 
 /** Every workspace member (never the root) that declares a `test:coverage` script. */
 function membersDeclaringTests() {
-  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
+  return workspaceListing()
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter(
       (pkg) =>
@@ -356,7 +377,7 @@ function membersDeclaringTests() {
 
 /** Every workspace member that declares the Vitest browser provider. */
 function browserPackages() {
-  return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
+  return workspaceListing()
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter((pkg) => {
       const manifest = JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8"));
@@ -934,14 +955,16 @@ describe("the test shards", () => {
     expect(LIGHT_B_PACKAGES).not.toContain(name);
   });
 
-  it("bounds every test job, including startup and teardown", () => {
+  // The owner's bound (2026-10-09): no test job should run past about four minutes. These limits
+  // sit above that so a slow runner is not cut off, and well below GitHub's six hours.
+  it("bounds every test job at ten minutes, every merge job at five, and lint and the root guards at eight", () => {
+    const minutesOf = (body) => Number(/^ {4}timeout-minutes: (\d+)$/m.exec(body.join("\n"))?.[1]);
     const testJobs = jobs.filter(({ id }) => id.startsWith("test-"));
     expect(testJobs.length).toBeGreaterThan(0);
     for (const { id, body } of testJobs) {
-      const minutes = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(body.join("\n"))?.[1]);
-      expect(minutes, id).toBeGreaterThan(0);
-      expect(minutes, id).toBeLessThanOrEqual(15);
+      expect(minutesOf(body), id).toBe(id.endsWith("-merge") ? 5 : 10);
     }
+    for (const id of ["lint", "root-guards"]) expect(minutesOf(job(id).body), id).toBe(8);
   });
 
   it("caps light-bin package concurrency explicitly", () => {
@@ -1025,6 +1048,45 @@ describe("the test shards", () => {
     },
     PNPM_LS_TEST_TIMEOUT_MS,
   );
+
+  it("print each test file's progress, keeping the default reporter beside it", () => {
+    const progress = '--reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"';
+    expect(existsSync(join(repoRoot, "scripts", "vitest-file-progress.mjs"))).toBe(true);
+
+    const streamStep = job(STREAM_JOB).body;
+    const steps = [
+      ...jobs.map(({ id, body }) => ({ id, step: shardStep(body) })),
+      {
+        id: STREAM_JOB,
+        step: streamStep.slice(streamStep.findIndex((l) => /- name: Run the stream/.test(l))),
+      },
+    ].filter(({ step }) => step !== undefined);
+
+    const commands = [];
+    for (const { id, step } of steps) {
+      const logical = step
+        .filter((line) => !line.trim().startsWith("#"))
+        .join("\n")
+        .replace(/\\\n\s*/g, " ")
+        .split("\n")
+        .map((line) => line.trim());
+      for (const command of logical) {
+        // The selection guard (`pnpm … ls | node … runnable test:coverage`) runs no tests.
+        if (command.includes(" runnable ")) continue;
+        const script = /^pnpm .*\b(test:coverage|test:shard)\b/.exec(command)?.[1];
+        if (script !== undefined) commands.push({ id, script, command });
+      }
+    }
+
+    // Every shard job, and the stream step, runs exactly one test command.
+    expect(commands.map(({ id }) => id).sort()).toEqual(steps.map(({ id }) => id).sort());
+    for (const { id, script, command } of commands) {
+      expect(command, id).toContain(progress);
+      // test:coverage passes no reporter of its own, so a lone --reporter would REPLACE the
+      // default one; test:shard's script already names it.
+      if (script === "test:coverage") expect(command, id).toContain("--reporter=default");
+    }
+  });
 });
 
 describe("the scope gates", () => {
@@ -1215,8 +1277,90 @@ describe("the sharded jobs", () => {
     }
   });
 
+  // No shard job checks that its package has a test:shard script to run, so a shard that ran
+  // nothing writes no blob and only a failing upload turns it red.
+  it("fail a shard whose blob upload finds no file", () => {
+    for (const shard of shardedJobs) {
+      const step = artifactUploadStep(shard.body);
+      expect(step, `${shard.id} uploads no matrix-named blob artifact`).toBeDefined();
+      expect(
+        step.map((line) => line.trim()),
+        shard.id,
+      ).toContain("if-no-files-found: error");
+    }
+  });
+
   it("gate every merge job on `code` plus exactly one scope gate", () => {
     for (const merge of mergeJobs) expectGatedOnCodePlusOneScope(gatesRead(merge.body));
+  });
+
+  // A shard given no files exits 1 ("No test files found"). Weaker than its name: it counts files
+  // named `*.test.ts` under the package, not what the package's Vitest config includes.
+  it(
+    "run no more shards than the package has test files",
+    () => {
+      const paths = new Map(workspaceListing().map((pkg) => [pkg.name, pkg.path]));
+      const testFiles = (dir) =>
+        readdirSync(dir, { withFileTypes: true })
+          .filter((entry) => !entry.name.startsWith(".") && entry.name !== "node_modules")
+          .reduce(
+            (count, entry) =>
+              count +
+              (entry.isDirectory()
+                ? testFiles(join(dir, entry.name))
+                : Number(entry.isFile() && entry.name.endsWith(".test.ts"))),
+            0,
+          );
+      for (const { id, body, pkg } of shardedJobs) {
+        expect(shardDenominator(body), id).toBeLessThanOrEqual(testFiles(paths.get(pkg)));
+      }
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
+
+  // db's three date from 2026-09-04; the rest were set for the owner's four-minute bound
+  // (2026-10-09).
+  it("pin each sharded package's shard count", () => {
+    const counts = Object.fromEntries(
+      shardedJobs.map(({ pkg, body }) => [pkg, shardDenominator(body)]),
+    );
+    expect(counts).toEqual({
+      "@waitron/dashboard": 4,
+      "@waitron/db": 3,
+      "@waitron/server": 6,
+      "@waitron/venue-service": 4,
+      "@waitron/till": 2,
+    });
+  });
+
+  // `--merge-reports` runs no test, so a merge job installing a browser would pay for nothing.
+  it("install no browser in a merge job", () => {
+    for (const merge of mergeJobs) {
+      expect(merge.body.join("\n"), merge.id).not.toContain("playwright install");
+    }
+  });
+});
+
+describe("the lint and root-guards jobs", () => {
+  // The repo-level project runs in a job of its own so its time runs beside lint's rather than
+  // inside it.
+  it("run the repo-level Vitest project only in root-guards, which nothing gates", () => {
+    const runsRoot = (body) =>
+      body.some((line) => !line.trim().startsWith("#") && /pnpm vitest run --coverage/.test(line));
+    expect(jobs.filter(({ body }) => runsRoot(body)).map(({ id }) => id)).toEqual(["root-guards"]);
+    for (const id of ["lint", "root-guards"]) {
+      expect(
+        job(id).body.some((line) => /^ {4}(if|needs):/.test(line)),
+        id,
+      ).toBe(false);
+    }
+  });
+
+  it("leave lint running exactly lint and the format check", () => {
+    const runs = job("lint")
+      .body.map((line) => /^ {6}- run: (.*)$/.exec(line)?.[1])
+      .filter((run) => run !== undefined);
+    expect(runs).toEqual(["pnpm install --frozen-lockfile", "pnpm lint", "pnpm format:check"]);
   });
 });
 
@@ -1363,10 +1507,26 @@ describe("the sharded packages' scripts", () => {
     }
   });
 
-  it("share one test:shard and one test:merge across every sharded package", () => {
+  it("share one test:shard across every sharded package", () => {
     // They are hand-copied across packages.
     expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:shard"])).size).toBe(1);
-    expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:merge"])).size).toBe(1);
+  });
+
+  it("merge a browser-mode package's blobs through the shard coverage merge, and the rest through plain v8", () => {
+    // A browser package's plain merge reads coverage LOWER than an unsharded run: see
+    // scripts/vitest-shard-coverage-merge.mjs.
+    const plain = "vitest --merge-reports .vitest-reports --coverage";
+    const browser = `${plain} --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs`;
+    const browserMode = new Set(browserPackages());
+    const expected = new Map(
+      shardedPackages.map((pkg) => [pkg, browserMode.has(pkg) ? browser : plain]),
+    );
+
+    expect(new Map(shardedPackages.map((pkg) => [pkg, scripts.get(pkg)?.["test:merge"]]))).toEqual(
+      expected,
+    );
+    expect([...expected.values()]).toContain(browser);
+    expect([...expected.values()]).toContain(plain);
   });
 });
 

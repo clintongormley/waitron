@@ -4767,12 +4767,17 @@ describe("add a device", () => {
         expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
         expect(q(el, "[data-test=asked-again]")).toBeNull();
 
-        q(el, "[data-test=pair-cancel]")!.click();
-        await vi.waitFor(() =>
-          expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
-            createdAt: "2026-09-08T10:04:00.000Z",
-          }),
+        // Chromium fires the native close event, which sends the discard, only with the next
+        // rendered frame, so this waits for the event rather than for vi.waitFor's one second.
+        const modal = q(el, "[data-test=pair-modal]")!;
+        const closed = new Promise((resolve) =>
+          modal.addEventListener("wt-close", resolve, { once: true }),
         );
+        q(el, "[data-test=pair-cancel]")!.click();
+        await closed;
+        expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+          createdAt: "2026-09-08T10:04:00.000Z",
+        });
       });
 
       it("an ask that left the list keeps the dialog open, and Cancel says nothing", async () => {

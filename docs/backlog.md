@@ -4241,7 +4241,24 @@ the tree. What remains, largest first:
 - **A419 dashboard CI stall remains unexplained (#1474).** Run `37932573955` left
   `catalogue-screen.test.ts` unfinished; local focused and full-package runs and diagnostic
   CI `37936013331` completed. No repair was established. Next: if it recurs, retain per-test
-  progress and locate the waiting operation before changing the browser harness.
+  progress and locate the waiting operation before changing the browser harness. Since A441 every
+  package test job prints each file's start and end and, every 60 s, the files still running
+  (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
+  output.
+
+- **Seven tests in `apps/server/src/bill-payments.test.ts` take 16–27 s each in CI** — about 150 s of
+  the file's 175 s, and the floor under the six server shards (A441, #1477). In a Linux container
+  with four CPUs they take about 2 s each, with or without a reachable DNS server, and the file 37 s
+  with coverage; so they are probably CPU-heavy whole-table reads and comparisons that slow down
+  under CI's four workers; that cause is not measured on a CI runner. Next: narrow what they read, or move them to a file of
+  their own, after lane E's departments slice (which edits the file) lands.
+
+- **Nine places in `apps/dashboard/src/screens/devices-screen.test.ts` click the Pair dialog's Cancel
+  and then wait up to one second for an effect.** Chromium reports a dialog closing only with its
+  next rendered frame, which a busy CI runner can hold back longer than that; one such test failed
+  in A441's CI (#1477) and now waits for the dialog's `wt-close` instead. Other suites that wait for
+  an effect after a dialog closes are probably exposed the same way. Fixing it once in `wt-dialog`
+  would change when every dialog reports closing, so it is an owner decision; no action queued.
 
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
@@ -4274,11 +4291,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
   runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
-
-- **Would the package suites' databases gain from memory too?** Not measured for them. Next
-  action: time one database-heavy package's `test:coverage` in CI with its folders on the disk and
-  under `/dev/shm`, and adopt it in `useVenueDb` only if the shard times move and a suite's
-  databases fit in `/dev/shm` (Docker's default is 64 MiB). [Detail](backlog/ci.md#would-the-package-suites-databases-gain-from-memory-too)
 
 - **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)` holds every probe until
   the last port is drawn, but a port is still released before the server binds it, so another test
@@ -5149,7 +5161,7 @@ the reason that is left is the `@vitest/coverage-v8` cross-fork branch-merge art
 is in #558's first commit message (2026-09-24). `packages/db` keeps `maxWorkers: 4`, which CI's
 `test-heavy` shards inherit because they pass no worker count of their own. Either way a new package
 that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) — anything else and
-`scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
+`scripts/coverage-thresholds.test.ts` fails it in the ungated `root-guards` job.
 
 **Specs still in the tree** (checked against the code 2026-09-27). A spec whose work is built is
 deleted once nothing points at it; one stays while a developer doc or code comment points at it, or

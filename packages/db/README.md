@@ -55,7 +55,7 @@ which includes this helper's reset and its close.
 
 ## What CI runs
 
-- `pnpm lint` runs ESLint; the CI lint job also runs the root guard tests and `pnpm format:check`.
+- `pnpm lint` runs ESLint; the CI `lint` job also runs `pnpm format:check`, and the `root-guards` job runs the root guard tests.
 - `pnpm typecheck` runs `tsc --noEmit` across the workspace.
 - DB coverage runs in the `test-heavy` shards with `test:shard`; `test:merge` combines their reports
   and enforces the package thresholds. Locally, `pnpm test:coverage` runs the package with those
