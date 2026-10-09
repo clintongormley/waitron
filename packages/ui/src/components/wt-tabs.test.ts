@@ -1,4 +1,4 @@
-import { afterEach, expect, onTestFinished, test, vi } from "vitest";
+import { afterEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, host, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
@@ -843,23 +843,24 @@ function fade(el: WtTabs): string {
   return getComputedStyle(tablist(el)).maskImage;
 }
 
-test("fades only the cut end of the strip, over the space-6 token", async () => {
+test("fades only the cut end of the strip, over twice the space-6 token", async () => {
   const el = await setup();
   host.style.setProperty("--wt-space-6", "13px");
+  host.style.setProperty("--wt-color-bg", "rgb(1, 2, 3)");
   host.style.width = "900px";
   await frames();
   expect(fade(el)).toBe("none");
   await resizeStrip(el, "220px");
   expect(fade(el)).toBe(
-    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(247, 247, 248) 0px, rgb(247, 247, 248) calc(100% - 13px), rgba(0, 0, 0, 0) 100%)",
+    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(1, 2, 3) 0px, rgb(1, 2, 3) calc(100% - 26px), rgba(0, 0, 0, 0) 100%)",
   );
   await scrollStrip(el, padding(el) + 1);
   expect(fade(el)).toBe(
-    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(247, 247, 248) 13px, rgb(247, 247, 248) calc(100% - 13px), rgba(0, 0, 0, 0) 100%)",
+    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(1, 2, 3) 26px, rgb(1, 2, 3) calc(100% - 26px), rgba(0, 0, 0, 0) 100%)",
   );
   await scrollStrip(el, maxScroll(el));
   expect(fade(el)).toBe(
-    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(247, 247, 248) 13px, rgb(247, 247, 248) 100%, rgba(0, 0, 0, 0) 100%)",
+    "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(1, 2, 3) 26px, rgb(1, 2, 3) 100%, rgba(0, 0, 0, 0) 100%)",
   );
 });
 
@@ -888,7 +889,7 @@ test("a marked tab keeps its colour under the fade, which masks the strip and no
 });
 
 function fadeWidth(el: WtTabs): number {
-  return parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6"));
+  return 2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6"));
 }
 /** The selected tab lies clear of each faded end, so no part of it is drawn faint. */
 function expectSelectedClearOfFade(el: WtTabs) {
@@ -920,3 +921,95 @@ test.each(["ltr", "rtl"] as const)(
     expect(el.dataset.overflow).toBe("both");
   },
 );
+
+test.each(["ltr", "rtl"] as const)(
+  "%s, a middle tab brought in from the far end stops the fade's width short of the near end, read from the token",
+  async (dir) => {
+    const el = await setup();
+    host.dir = dir;
+    host.style.setProperty("--wt-space-6", "20px");
+    host.style.width = "260px";
+    el.value = "routes";
+    await el.updateComplete;
+    await frames();
+    el.value = "menus";
+    await el.updateComplete;
+    await frames();
+    const strip = tablist(el).getBoundingClientRect();
+    const box = buttons(el)[1]!.getBoundingClientRect();
+    expect(el.dataset.overflow).toBe("both");
+    if (dir === "ltr") expect(box.left - strip.left).toBeCloseTo(40, 0);
+    else expect(strip.right - box.right).toBeCloseTo(40, 0);
+  },
+);
+
+const longMiddle = [
+  { key: "a", label: "Alpha" },
+  { key: "b", label: "Puntos de seguimiento largo" },
+  { key: "c", label: "Charlie" },
+  { key: "d", label: "Delta" },
+];
+/** Selects the long middle tab from `from` in a strip `slack` px wider than that tab. */
+async function middleWithSlack(dir: "ltr" | "rtl", slack: number, from: string) {
+  const el = (await mountThemed(
+    `<wt-tabs label="Probe"><p slot="a">A</p><p slot="b">B</p></wt-tabs>`,
+  )) as WtTabs;
+  el.items = longMiddle;
+  host.dir = dir;
+  host.style.width = "1200px";
+  el.value = "b";
+  await el.updateComplete;
+  await frames();
+  host.style.width = `${buttons(el)[1]!.getBoundingClientRect().width + slack}px`;
+  el.value = from;
+  await el.updateComplete;
+  await frames();
+  el.value = "b";
+  await el.updateComplete;
+  await frames();
+  return el;
+}
+
+describe.each(["ltr", "rtl"] as const)("%s, a middle tab nearly as wide as the strip", (dir) => {
+  test.each([
+    [20, "a"],
+    [20, "d"],
+    [40, "a"],
+    [40, "d"],
+    [80, "a"],
+    [80, "d"],
+    [120, "a"],
+    [120, "d"],
+  ] as const)("shows whole with %s px to spare, chosen after %s", async (slack, from) => {
+    const el = await middleWithSlack(dir, slack, from);
+    const strip = tablist(el).getBoundingClientRect();
+    const box = buttons(el)[1]!.getBoundingClientRect();
+    expect(tablist(el).scrollWidth).toBeGreaterThan(tablist(el).clientWidth);
+    expect(box.left).toBeGreaterThanOrEqual(strip.left - 1);
+    expect(box.right).toBeLessThanOrEqual(strip.right + 1);
+  });
+});
+
+test.each(["ltr", "rtl"] as const)(
+  "%s, in a strip with little room beside the selected tab, the fade narrows to leave that tab clear",
+  async (dir) => {
+    const el = await middleWithSlack(dir, 40, "a");
+    const strip = tablist(el).getBoundingClientRect();
+    const box = buttons(el)[1]!.getBoundingClientRect();
+    expect(el.dataset.overflow).toBe("both");
+    const room = strip.width - box.width;
+    const stops = [...fade(el).matchAll(/rgb\([\d, ]+\) (?:calc\(100% - )?([\d.]+)px/g)].map(
+      (match) => Number(match[1]),
+    );
+    expect(stops).toHaveLength(2);
+    for (const stop of stops) expect(stop).toBeLessThanOrEqual(room / 2 + 0.5);
+    expect(box.left - strip.left).toBeGreaterThanOrEqual(stops[0]! - 1);
+    expect(strip.right - box.right).toBeGreaterThanOrEqual(stops[1]! - 1);
+  },
+);
+
+test("control: in a roomy strip the fade keeps its full width", async () => {
+  const el = await middleWithSlack("ltr", 160, "a");
+  expect(tablist(el).scrollWidth).toBeGreaterThan(tablist(el).clientWidth);
+  expect(fade(el)).toContain(` ${fadeWidth(el)}px`);
+});

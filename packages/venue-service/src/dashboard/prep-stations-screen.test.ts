@@ -1852,7 +1852,7 @@ it("at 390 px in Spanish, the tab row fades its cut end and keeps the selected t
   expect(getComputedStyle(strip).maskImage).not.toBe("none");
   expect(selected.left).toBeGreaterThanOrEqual(bounds.left - 1);
   expect(selected.right).toBeLessThanOrEqual(
-    bounds.right - parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6")) + 1,
+    bounds.right - 2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6")) + 1,
   );
   expect(q(el, '[data-test="new-station"]')!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
     bounds.right - 1,
