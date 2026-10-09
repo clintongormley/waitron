@@ -26,6 +26,13 @@ asked (2026-10-09) for every search to follow the new rule.
    exclusion and `or` are removed.
 6. **The Orders list, Find a bill and Find an invoice follow the same rule**, accents included. An
    invoice number such as `A/12`, or a bare number, still finds that number exactly, as today.
+7. **A search looks at names only; other fields are reached through the filters.** A product is
+   found by its own name and its variants' names — not its category, price, extras or "sold
+   separately". Staff keep their names, email and telephone (owner's answer). Readings applied the
+   same way, for the owner to correct: a modifier list by its name and its extras' or options'
+   names, not its "used by" text; a unit by its name and abbreviation; a device by its name; an
+   order or bill by its party name, delivery label and table labels (the till's Find a bill has no
+   table filter, so its search is the only way to find a bill by table).
 
 ## The rule, precisely
 
@@ -69,19 +76,36 @@ is deleted.
 ### Shared components (`packages/ui`)
 
 - **`wt-data-table`** — its search (the box it draws, and a `searchTerm` a screen hands it) uses the
-  matcher, with each column's search value (or sort value, where it gives none) as one part, in
-  column order. While a search is typed, a flat table lists rows by match order; a column heading
+  matcher, with each column's search value as one part, in column order. **A column with no search
+  value is not searched** — the table no longer falls back to the sort value — so each screen
+  declares a search value on its name columns alone (decision 7). While a search is typed, a flat table lists rows by match order; a column heading
   still changes the sort indicator, and that sort applies once the search is cleared. In tree mode,
   every row above a match stays open as today, and the rows under each parent are ordered by match
   — a parent that does not match itself, but holds matches, is ordered among its siblings by its
   best match beneath it. Rows a tree draws as part of their parent's row, and children a screen asks
   to keep in `rows` order, keep that rule.
 - **`wt-combobox`** — its filter uses the matcher over each option's label and lists matches in
-  match order. The row offering to add a new value appears only when no option's label equals the
+  match order. Where options are grouped under headings (the VAT return's period choice, adding a
+  content language), matches are ranked within each group and the groups keep their order, as a
+  tree ranks under each parent. The row offering to add a new value appears only when no option's label equals the
   query once both are folded. Type-ahead on a closed list (jump to the first label starting with the
   keys pressed) is not a search and is unchanged.
 - Every screen that uses either component — products, menu prices, modifiers, units, devices,
   the menu structure, and the table column filters — follows from these two.
+
+### What each table searches (decision 7)
+
+- Products (`product-list.ts`): the name column, holding the product's name and its variants'
+  names; a category row by its name. The price, extras and ordering ("sold separately") columns,
+  and the category text inside the name column's search value, stop being searched.
+- Menu prices (`menu-prices-table.ts`): the item's and the variant's names; not the price or the
+  category.
+- Modifiers (`modifiers-screen.ts`): the list's name and its items' or labels' names; not the
+  "used by" text.
+- Units (`units-screen.ts`): name and abbreviation, as today.
+- Devices (`devices-screen.ts`): it declares no search value today, so it searches every sort value;
+  its name column gains one and is the only one searched.
+- The menu structure (`menu-structure-table.ts`): the row's name, as today.
 
 ### Screens with their own filter code
 
@@ -90,14 +114,17 @@ Each moves to the matcher, with match order:
 - adding products to a section (`apps/dashboard/src/widgets/section-add-products.ts`);
 - the menu structure's choice of which rows get a checkbox (`menu-structure-table.ts`
   `#rowSelectable`), which must agree with the table's own rule;
-- the products that use a unit (`units-screen.ts`, `inUseSearch`);
+- the products that use a unit (`units-screen.ts`, `inUseSearch`), handed to its table as a
+  search rather than filtered beforehand;
 - staff (`staff-screen.ts`), with display name, first names, last names, email and telephone as
-  parts;
+  parts, searched by the staff table itself (`searchTerm`) so a remembered heading sort cannot
+  re-order the matches; the units-in-use list the same way;
 - content translations (`content-translations-dialog.ts`);
 - the allergen picker (`allergen-picker.ts`);
-- the dashboard's navigation search (`dashboard-app.ts`): a group whose heading matches still shows
-  its whole group; groups keep their place in the navigation, and the matching pages inside a group
-  are listed in match order.
+- the dashboard's navigation search (`dashboard-app.ts`): each page is searched on two parts, its
+  label and its group's heading, so "menu prices" finds Prices under a Menu heading and a group
+  whose heading matches still shows its whole group; groups keep their place in the navigation,
+  and the pages inside a group are listed in match order, those matching on their own label first.
 
 ### Image library (`packages/media`)
 
@@ -123,6 +150,9 @@ gives its match order as a sortable value. Both run the shared matcher. The thre
 order with them inside SQL, so paging, counting and the existing `limit` stay in the database. The
 invoice-number and bare-number forms keep their exact match and are checked first, as today. With a
 search typed, rows come in match order, then newest first; with none, newest first as today.
+
+A typed trailing space reaches the SQL: the boxes, the requests and the routes stop trimming the
+search, and trim only to decide that it is blank, its length, and the number forms.
 
 This was chosen over two alternatives: storing a folded copy of each searchable column (a migration,
 and a copy to keep in step on every write) and reading every candidate row into the server's code
@@ -151,6 +181,9 @@ rule, keeping what each checks.
 - The open backlog entry about the image library reading every image inside the write lock.
 
 ## Backlog
+
+This branch also deletes the entry "`wt-data-table` searches a column's sort value when it has no
+search value": a column with no search value is no longer searched.
 
 This branch deletes the entry "Product search and image search follow different rules, and a search
 of only punctuation lists every product" from `docs/backlog.md` and its detail in
