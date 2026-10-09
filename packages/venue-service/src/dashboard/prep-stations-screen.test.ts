@@ -191,7 +191,6 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
   expect(follows.querySelector("a")?.getAttribute("href")).toBe(
     "/manage/prep-stations/view/watchers",
   );
-  q(el, '[data-test="new-watcher"]');
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')?.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "bread" } }),
   );
@@ -200,7 +199,7 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
 
-it("creates, edits and confirms removal of a watcher", async () => {
+it("edits and confirms removal of a watcher", async () => {
   setLocale("en");
   const pass = {
     id: "pass",
@@ -217,30 +216,10 @@ it("creates, edits and confirms removal of a watcher", async () => {
   };
   const a = api({
     load: vi.fn().mockResolvedValue({ ...view, watchers: [pass] }),
-    createWatcher: vi.fn(),
     updateWatcher: vi.fn(),
     removeWatcher: vi.fn(),
   });
   const el = await mount(a);
-  q(el, '[data-test="new-watcher"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="watcher-modal"]')).not.toBeNull();
-  q(el, '[data-test="watcher-modal"] watcher-form')!.dispatchEvent(
-    new CustomEvent("watcher-save", {
-      detail: {
-        input: {
-          name: "Runner",
-          everyStation: true,
-          stationIds: [],
-          everyZone: true,
-          zoneIds: [],
-          runsPass: false,
-        },
-      },
-    }),
-  );
-  await settle(el);
-  expect(a.createWatcher).toHaveBeenCalled();
   q(el, '[data-test="rename-watcher-pass"]')!.click();
   await settle(el);
   const rename = q(el, '[data-test="watcher-rename-name"]') as WtInput;
@@ -2540,7 +2519,7 @@ it("a health snapshot ahead of routing metadata leaves Today blank until the sta
   expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });
 
-it("opens the default Stations tab and places create actions beside the tabs", async () => {
+it("opens the default Stations tab and places New station, the only create action, beside the tabs", async () => {
   setLocale("en");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
@@ -2557,11 +2536,10 @@ it("opens the default Stations tab and places create actions beside the tabs", a
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
-  expect(q(el, '[data-test="new-watcher"]')!.closest('[slot="actions"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelectorAll('[data-test="new-watcher"]')).toHaveLength(1);
-  q(el, '[data-test="new-watcher"]')!.click();
-  await settle(el);
-  expect(el.shadowRoot!.querySelector("watcher-form")).not.toBeNull();
+  expect(
+    [...q(el, '[slot="actions"]')!.children].map((child) => child.getAttribute("data-test")),
+  ).toEqual(["new-station"]);
+  expect(q(el, '[data-test="new-watcher"]')).toBeNull();
 });
 
 it.each(["tickets", "watchers", "settings"])(
@@ -2743,7 +2721,7 @@ it.each([
     const selected = tabs
       .shadowRoot!.querySelector('[aria-selected="true"]')!
       .getBoundingClientRect();
-    expect(tabs.querySelectorAll('[slot="actions"] wt-button')).toHaveLength(2);
+    expect(tabs.querySelectorAll('[slot="actions"] wt-button')).toHaveLength(1);
     expect(strip.width).toBeGreaterThanOrEqual(row.width / 2 - 1);
     expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
     expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
@@ -5044,20 +5022,6 @@ it("failed watcher removal explains itself and retains confirmation for retry", 
   expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
 });
 
-it.each(["cancel", "dismiss"])("%s abandons new watcher creation without writing", async (how) => {
-  const create = vi.fn();
-  const { el } = await mountWatcherPrinters({ createWatcher: create });
-  q(el, '[data-test="new-watcher"]')!.click();
-  await settle(el);
-  const modal = q(el, '[data-test="watcher-modal"]')!;
-  expect(modal).not.toBeNull();
-  if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
-  else modal.querySelector("watcher-form")!.dispatchEvent(new CustomEvent("watcher-cancel"));
-  await expect.poll(() => modal.isConnected).toBe(false);
-  expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
-  expect(create).not.toHaveBeenCalled();
-});
-
 it("keeps an attempted watcher Rename invalid through whitespace until a name is supplied", async () => {
   const save = vi.fn();
   const { el } = await mountWatcherPrinters({ updateWatcher: save });
@@ -5092,61 +5056,6 @@ it("keeps an attempted watcher Rename invalid through whitespace until a name is
   });
   expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
 });
-
-it.each(["watcher.name_taken", "connection.failed"])(
-  "new watcher creation retains a retryable form after %s",
-  async (code) => {
-    const create = vi.fn().mockRejectedValueOnce({ code }).mockResolvedValue({ id: "new" });
-    const { el } = await mountWatcherPrinters({ createWatcher: create });
-    q(el, '[data-test="new-watcher"]')!.click();
-    await settle(el);
-    const form = q(el, '[data-test="watcher-modal"]')!.querySelector(
-      "watcher-form",
-    )! as HTMLElement & { updateComplete: Promise<boolean> };
-    await form.updateComplete;
-    form
-      .shadowRoot!.querySelector('[name="name"]')!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Runner" } }));
-    for (const name of ["everyStation", "everyZone"])
-      form
-        .shadowRoot!.querySelector(`[name="${name}"]`)!
-        .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
-    await form.updateComplete;
-    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher"]')!.click();
-    await settle(el);
-    await form.updateComplete;
-    expect(q(el, '[data-test="watcher-modal"]')).not.toBeNull();
-    const name = form.shadowRoot!.querySelector('[name="name"]') as WtInput;
-    expect(name.value).toBe("Runner");
-    expect(name.getAttribute("aria-invalid")).toBe(
-      code === "watcher.name_taken" ? "true" : "false",
-    );
-    if (code === "watcher.name_taken")
-      expect(form.shadowRoot!.querySelector('[data-field-error="name"]')!.textContent).toBe(
-        "A watcher already has this name.",
-      );
-    if (code === "connection.failed")
-      expect(form.shadowRoot!.querySelector('[data-test="watcher-error"]')!.textContent).toBe(
-        "The change could not be saved.",
-      );
-    expect(
-      form.shadowRoot!.querySelector('[data-test="save-watcher"]')!.hasAttribute("disabled"),
-    ).toBe(false);
-    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Runner two" } }));
-    await form.updateComplete;
-    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher"]')!.click();
-    await settle(el);
-    expect(create).toHaveBeenNthCalledWith(2, {
-      name: "Runner two",
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: false,
-    });
-    expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
-  },
-);
 
 it("Tickets names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
   setLocale("en");

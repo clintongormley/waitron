@@ -67,7 +67,6 @@ import { rowInModel } from "./routing-grid-model.js";
 import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
-import { watcherInputErrors, type WatcherForm } from "./watcher-form.js";
 
 type StationAction =
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
@@ -96,6 +95,14 @@ type SettingsDraft = {
   attempted: boolean;
 };
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
+
+function watcherInputErrors(input: WatcherInput) {
+  return {
+    name: input.name.trim() ? "" : t("venue.field_required"),
+    stationIds: input.everyStation || input.stationIds.length ? "" : t("watchers.need_station"),
+    zoneIds: input.everyZone || input.zoneIds.length ? "" : t("watchers.need_zone"),
+  };
+}
 
 /** One line per active device whose kitchen screens show the station, naming those screens' kinds. */
 function screenDevices(devices: PrepStationsView["devices"], stationId: string) {
@@ -127,10 +134,6 @@ export class PrepStationsScreen extends LitElement {
       :host {
         display: block;
         min-width: 0;
-      }
-      /* Two add buttons share the action area, so the tabs keep half the row (A424). */
-      wt-tabs::part(tab-actions) {
-        max-width: 50%;
       }
       wt-data-table::part(watcher-cell),
       wt-data-table::part(printer-cell),
@@ -251,7 +254,6 @@ export class PrepStationsScreen extends LitElement {
   };
   @state() private watcherCellBusy = false;
   @state() private editor?: Editor;
-  @state() private watcherEditor?: { id?: string };
   @state() private watcherRename?: {
     id: string;
     name: string;
@@ -260,7 +262,6 @@ export class PrepStationsScreen extends LitElement {
     error: string;
   };
   @state() private watcherRemoval?: WatcherView;
-  @state() private watcherRefusal?: { code: string; params?: { field?: string } };
   @state() private watcherRemoveError = "";
   @state() private draft: StationInput = {
     name: "",
@@ -809,7 +810,6 @@ export class PrepStationsScreen extends LitElement {
       this.pending !== undefined ||
       this.cellChoice !== null ||
       this.stationAction !== undefined ||
-      this.watcherEditor ||
       this.#watcherRenameIdentity
     )
       this.busy = false;
@@ -817,7 +817,6 @@ export class PrepStationsScreen extends LitElement {
     this.#stationActionScope?.dispose();
     this.#stationActionScope = undefined;
     this.#stationActionIdentity = undefined;
-    this.watcherEditor = undefined;
     this.watcherCellEditor = undefined;
     this.watcherPrinterEditor = undefined;
     this.watcherCellBusy = false;
@@ -2976,40 +2975,6 @@ export class PrepStationsScreen extends LitElement {
       </wt-modal>`,
     );
   }
-  readonly #beforeWatcherClose = async (reason: LeaveReason): Promise<boolean> => {
-    const editor = this.watcherEditor;
-    const form = this.shadowRoot!.querySelector<WatcherForm>("watcher-form");
-    if (!editor || !form) return false;
-    const allowed = await form.requestLeave(reason);
-    return allowed && this.watcherEditor === editor && form.isConnected;
-  };
-
-  async #saveWatcher(input: WatcherInput, form: WatcherForm, editor: { id?: string }) {
-    if (this.busy || !this.isConnected || !form.isConnected || this.watcherEditor !== editor)
-      return;
-    this.busy = true;
-    this.#showError("");
-    try {
-      if (editor.id) await this.api.updateWatcher(editor.id, input);
-      else await this.api.createWatcher(input);
-    } catch (error) {
-      if (this.isConnected && this.watcherEditor === editor && form.isConnected) {
-        this.watcherRefusal = error as { code: string; params?: { field?: string } };
-        this.busy = false;
-      }
-      return;
-    }
-    if (!this.isConnected || this.watcherEditor !== editor || !form.isConnected) return;
-    const clean = form.commitSubmitted(input);
-    this.busy = false;
-    if (clean) {
-      this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-        "[data-test=watcher-modal]",
-      )!.closeAfter("saved");
-      this.watcherEditor = undefined;
-    }
-    await this.#load();
-  }
   /** A Disable only ever disables; a Delete disables instead a watcher something has come to name. */
   async #removeWatcher() {
     if (this.busy || !this.watcherRemoval) return;
@@ -3029,52 +2994,7 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   #watcherDialogs() {
-    const editor = this.watcherEditor;
-    const watcher = this.view?.watchers.find((row) => row.id === editor?.id);
     return html`${
-      editor
-        ? keyed(
-            editor,
-            html`<wt-modal
-              size="standard"
-              open
-              data-test="watcher-modal"
-              heading=${watcher?.name ?? t("watchers.new")}
-              .dismissible=${!this.busy}
-              .beforeClose=${this.#beforeWatcherClose}
-              @wt-close=${(event: Event) => {
-                event.stopPropagation();
-                if (
-                  this.isConnected &&
-                  this.watcherEditor === editor &&
-                  (event.currentTarget as HTMLElement).isConnected
-                )
-                  this.watcherEditor = undefined;
-              }}
-            >
-              <watcher-form
-                .watcher=${watcher}
-                .stations=${this.view?.stations ?? []}
-                .zones=${this.view?.zones ?? []}
-                .refusal=${this.watcherRefusal}
-                .busy=${this.busy}
-                @watcher-save=${(event: CustomEvent<{ input: WatcherInput }>) => void this.#saveWatcher(event.detail.input, event.currentTarget as WatcherForm, editor)}
-                @watcher-cancel=${(event: Event) => {
-                  if (
-                    this.isConnected &&
-                    this.watcherEditor === editor &&
-                    (event.currentTarget as HTMLElement).isConnected
-                  )
-                    void (event.currentTarget as HTMLElement)
-                      .closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
-                      .requestClose("cancel");
-                }}
-              ></watcher-form>
-            </wt-modal>`,
-          )
-        : nothing
-    }
-    ${
       this.watcherRemoval
         ? html`<wt-modal
             size="compact"
@@ -3404,14 +3324,6 @@ export class PrepStationsScreen extends LitElement {
                   : html`<div slot="actions">
                       <wt-button @click=${() => this.#openStation()} data-test="new-station"
                         >${t("prep.new_station")}</wt-button
-                      >
-                      <wt-button
-                        data-test="new-watcher"
-                        @click=${() => {
-                          this.watcherEditor = {};
-                          this.watcherRefusal = undefined;
-                        }}
-                        >${t("watchers.new")}</wt-button
                       >
                     </div>`
               }

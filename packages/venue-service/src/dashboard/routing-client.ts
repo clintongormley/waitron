@@ -213,9 +213,6 @@ export class PrepStationsApi {
   async createStation(input: StationInput): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);
   }
-  createWatcher(input: WatcherInput): Promise<{ id: string }> {
-    return this.request("/management-api/watchers", "POST", input);
-  }
   updateWatcher(id: string, input: WatcherInput): Promise<void> {
     return this.request(`/management-api/watchers/${id}`, "PUT", input);
   }
