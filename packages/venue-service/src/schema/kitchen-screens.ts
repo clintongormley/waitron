@@ -191,8 +191,8 @@ export const deviceKitchenScreenZones = table(
 
 /**
  * What a profile narrowing took from a device: a station, a zone, or (neither set) the kind itself.
- * Keyed to the device rather than its kitchen screen row, because the narrowing may delete that row
- * and the removal must outlive it. No unique index: it would have to be an expression over the
+ * Keyed to the device rather than its kitchen screen row, because a kind may be recorded for a
+ * device that stores no row of it. No unique index: it would have to be an expression over the
  * nullable columns, so the writer inserts only what is not already recorded.
  */
 export const deviceKitchenScreenRemovals = table(

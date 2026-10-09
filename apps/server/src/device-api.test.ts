@@ -259,6 +259,13 @@ function deviceCookieFrom(res: Response): string {
 /** A per-file counter keeps the unique name from colliding with the profiles a single test seeds
  *  alongside it. */
 let profileCounter = 0;
+async function removalCount(deviceId: string): Promise<number> {
+  const { rows } = await suite.db.execute<{ n: number }>(
+    sql`select count(*) as n from device_kitchen_screen_removals where device_id = ${deviceId}`,
+  );
+  return Number(rows[0]!.n);
+}
+
 async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
@@ -2026,7 +2033,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       ]);
     });
 
-    it("a kitchen display whose pass screen a narrowing took, moved to a till without naming kitchen screens, is a till whose pass screen reads as taken", async () => {
+    it("a kitchen display whose pass screen a narrowing took, moved to a till without naming kitchen screens, gets its pass screen back: a till profile with no pass row bounds nothing", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const kds = await seedProfile("kds");
@@ -2048,8 +2055,61 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         204,
       );
       expect(await shown(venue, deviceId)).toEqual([
-        { kind: "pass", available: false, stations: [], zones: null },
+        {
+          kind: "pass",
+          available: true,
+          stations: [
+            {
+              id: venue.defaultStationId,
+              name: expect.any(String),
+              available: true,
+              switchedOff: false,
+            },
+          ],
+          zones: null,
+        },
       ]);
+      expect(await removalCount(deviceId)).toBe(0);
+    });
+
+    it("a PATCH moving a till to a profile without a station it chose, and a second moving it back, gives the station back", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const deli = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Deli" }),
+      );
+      const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, narrow, {
+          station: { stationIds: [venue.defaultStationId], zoneIds: null },
+        }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, {
+        name: "Caja",
+        profileId: wide,
+        kitchenScreens: [
+          { kind: "station", stationIds: [venue.defaultStationId, deli.id], zoneIds: null },
+        ],
+      });
+      const deliSlot = async () =>
+        (await shown(venue, deviceId))[0]!.stations.find((slot) => slot.id === deli.id);
+
+      expect((await edit(app, venue.managerCookie, deviceId, { profileId: narrow })).status).toBe(
+        204,
+      );
+      expect(await deliSlot()).toMatchObject({ available: false, switchedOff: false });
+      expect(await removalCount(deviceId)).toBe(1);
+
+      expect((await edit(app, venue.managerCookie, deviceId, { profileId: wide })).status).toBe(
+        204,
+      );
+      expect(await deliSlot()).toEqual({
+        id: deli.id,
+        name: "Deli",
+        available: true,
+        switchedOff: false,
+      });
+      expect(await removalCount(deviceId)).toBe(0);
     });
 
     it("a PATCH may keep a station switched off since, but not choose another", async () => {
@@ -3637,6 +3697,66 @@ describe("a device's approved profiles and switching its active one", () => {
           zones: null,
         },
       ]);
+    });
+
+    it("switching to a profile without a station the till chose and back gives the station back, unless the till was picked on in between", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const deli = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Deli" }),
+      );
+      const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, narrow, {
+          station: { stationIds: [venue.defaultStationId], zoneIds: null },
+        }),
+      );
+      const both: DeviceKitchenScreen = {
+        kind: "station",
+        stationIds: [venue.defaultStationId, deli.id],
+        zoneIds: null,
+      };
+      const kept = await knockAndAccept(app, venue, {
+        name: "Caja",
+        profileId: wide,
+        kitchenScreens: [both],
+      });
+      const picked = await knockAndAccept(app, venue, {
+        name: "Otra caja",
+        profileId: wide,
+        kitchenScreens: [both],
+      });
+      const deliSlot = async (deviceId: string) =>
+        (
+          await withTransaction(suite.db, (tx) =>
+            VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+          )
+        )[0]!.stations.find((slot) => slot.id === deli.id);
+      for (const { deviceId } of [kept, picked]) {
+        await approve(app, venue, deviceId, [wide, narrow]);
+        const me = await signIn(deviceId);
+        expect((await switchTo(app, me.cookie, narrow)).status).toBe(200);
+        expect(await deliSlot(deviceId)).toMatchObject({ available: false, switchedOff: false });
+      }
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setDeviceKitchenScreens(tx, venue.cfg, {
+          deviceId: picked.deviceId,
+          profileId: narrow,
+          screens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
+        }),
+      );
+      for (const { deviceId } of [kept, picked]) {
+        const me = await signIn(deviceId);
+        expect((await switchTo(app, me.cookie, wide)).status).toBe(200);
+        expect(await removalCount(deviceId)).toBe(0);
+      }
+      expect(await deliSlot(kept.deviceId)).toEqual({
+        id: deli.id,
+        name: "Deli",
+        available: true,
+        switchedOff: false,
+      });
+      expect(await deliSlot(picked.deviceId)).toBeUndefined();
     });
 
     it("a shared display with nobody signed in cannot switch", async () => {

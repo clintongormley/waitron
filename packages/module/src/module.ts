@@ -722,7 +722,8 @@ export interface VenueServiceContribution {
   /** Replaces all of a profile's kitchen screens. Refused `device_profile.access_invalid`, naming
    *  the field, for zones on a station screen, an explicit empty list, or a station or zone
    *  unknown here or switched off and not already stored for that screen. Narrows every device on the profile, switched off or not, at
-   *  every location, in the same transaction, recording what each lost; answers those devices. */
+   *  every location, in the same transaction, recording what each lost, and gives each back what
+   *  the profile allows again of what it had lost; answers the devices it narrowed. */
   setProfileKitchenScreens(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -730,8 +731,8 @@ export interface VenueServiceContribution {
     screens: ProfileKitchenScreens,
   ): Promise<NarrowedDevice[]>;
   /** Narrows the device from its current profile to `profileId`, before a switch writes it,
-   *  recording what it lost as a profile save does, against the profiles' lists at the device's
-   *  own location; never refuses. Null: it lost nothing, or the device is unknown. */
+   *  recording what it lost and giving back what `profileId` allows again, as a profile save does,
+   *  against the profiles' lists at the device's own location; never refuses. Null: it lost nothing, or the device is unknown. */
   narrowDeviceKitchenScreens(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -759,8 +760,8 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     deviceIds: readonly string[],
   ): Promise<Map<string, ResolvedKitchenScreen[]>>;
-  /** Refuses `kitchen_screen.required` when `profileId` is a kitchen display's and the device
-   *  stores no kitchen screen. */
+  /** Refuses `kitchen_screen.required` when `profileId` is a kitchen display's and the device's
+   *  choice, less what narrowings took, holds no kitchen screen. */
   assertKitchenDisplayHasScreen(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -789,7 +790,8 @@ export interface VenueServiceContribution {
     deviceId?: string,
   ): Promise<void>;
   /** Refuses an order's zone (null: an order in no zone) the device's pass screen does not show,
-   *  and any order on a device storing no pass screen (`kitchen_screen.not_allowed`). */
+   *  and any order on a device with no pass screen once narrowings' removals are taken out
+   *  (`kitchen_screen.not_allowed`). */
   assertPassScreenZone(
     tx: Transaction,
     cfg: { locationId: LocationId },

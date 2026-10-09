@@ -1107,7 +1107,7 @@ describe("an order's zone checked against a device's pass screen", () => {
       { kind: "pass", stationIds: [venue.cold], zoneIds: null },
     ]);
     await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: null } });
-    expect(await storedKindsOf(screen)).toEqual([]);
+    expect(await storedKindsOf(screen)).toEqual(["pass"]);
     for (const zoneId of [venue.dining, null]) {
       await expect(check(venue, screen, zoneId)).resolves.toEqual({
         code: "kitchen_screen.not_allowed",
@@ -1350,7 +1350,7 @@ describe("a profile save narrowing its devices", () => {
     await expect(
       set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } }),
     ).resolves.toEqual([lost(deli, "Deli", { stations: [named(venue.pastry, "Pastry")] })]);
-    expect(await storedKindsOf(deli)).toEqual([]);
+    expect(await storedKindsOf(deli)).toEqual(["station"]);
     await expect(shown(venue, deli)).resolves.toEqual([
       {
         kind: "station",
@@ -1380,8 +1380,11 @@ describe("a profile save narrowing its devices", () => {
       lost(awayPass, "Away pass", { screens: ["pass"] }),
     ]);
     expect(await storedKindsOf(line)).toEqual(["station"]);
-    expect(await storedKindsOf(away)).toEqual([]);
-    expect(await storedKindsOf(awayPass)).toEqual([]);
+    expect(await storedKindsOf(away)).toEqual(["station"]);
+    expect(await storedKindsOf(awayPass)).toEqual(["pass"]);
+    await expect(shown(elsewhere, awayPass)).resolves.toEqual([
+      { kind: "pass", available: false, stations: [], zones: null },
+    ]);
     await expect(shown(elsewhere, away)).resolves.toEqual([
       {
         kind: "station",
@@ -1455,7 +1458,15 @@ describe("a profile save narrowing its devices", () => {
     await expect(
       set(venue, venue.till, { pass: { stationIds: null, zoneIds: [venue.dining] } }),
     ).resolves.toEqual([lost(till, "Till", { zones: [named(venue.counter, "Counter")] })]);
-    expect(await storedKindsOf(till)).toEqual([]);
+    expect(await storedKindsOf(till)).toEqual(["pass"]);
+    await expect(shown(venue, till)).resolves.toEqual([
+      {
+        kind: "pass",
+        available: true,
+        stations: [],
+        zones: [slot(venue.counter, "Counter", false)],
+      },
+    ]);
   });
 
   it("takes a kind the profile stops offering off its devices, recording the kind", async () => {
@@ -1468,32 +1479,139 @@ describe("a profile save narrowing its devices", () => {
     await expect(set(venue, venue.kds, { station: every })).resolves.toEqual([
       lost(wall, "Wall", { screens: ["pass_monitor"] }),
     ]);
-    expect(await storedKindsOf(wall)).toEqual([]);
+    expect(await storedKindsOf(wall)).toEqual(["pass_monitor"]);
     await expect(shown(venue, wall)).resolves.toEqual([
       { kind: "pass_monitor", available: false, stations: [], zones: null },
     ]);
     expect(await removalsOf(line)).toEqual([]);
   });
 
-  it("restores nothing when a station is added back", async () => {
+  it("gives a station added back to each device still showing it as lost, and not to one picked on since", async () => {
     const { venue, line, all } = await narrowing();
+    const picked = await seedDevice(venue, venue.kds, "Picked");
+    await choose(venue, picked, venue.kds, [station([venue.grill, venue.pastry])]);
     await set(venue, venue.kds, {
       station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
     });
+    await choose(venue, picked, venue.kds, [station([venue.grill])]);
     await expect(
       set(venue, venue.kds, {
         station: { stationIds: [venue.grill, venue.cold, venue.pastry], zoneIds: null },
       }),
     ).resolves.toEqual([]);
-    expect((await shown(venue, all))[0]!.stations).toContainEqual(
-      slot(venue.pastry, "Pastry", false),
-    );
-    expect((await shown(venue, line))[0]!.stations).toEqual([
-      slot(venue.grill, "Grill"),
-      slot(venue.pastry, "Pastry", false),
+    await expect(shown(venue, line)).resolves.toEqual([
+      {
+        kind: "station",
+        available: true,
+        stations: [slot(venue.grill, "Grill"), slot(venue.pastry, "Pastry")],
+        zones: null,
+      },
     ]);
-    expect(await removalsOf(all)).toHaveLength(1);
-    expect(await removalsOf(line)).toHaveLength(1);
+    expect((await shown(venue, all))[0]!.stations).toEqual([
+      slot(venue.cold, "Cold"),
+      slot(venue.grill, "Grill"),
+      slot(venue.pastry, "Pastry"),
+    ]);
+    expect((await shown(venue, picked))[0]!.stations).toEqual([slot(venue.grill, "Grill")]);
+    for (const device of [line, all, picked]) expect(await removalsOf(device)).toEqual([]);
+    await expect(
+      outcome(choose(venue, picked, venue.kds, [station([venue.grill, venue.pastry])])),
+    ).resolves.toEqual({ resolved: undefined });
+  });
+
+  it("gives a kind offered again back as the device chose it, with no line", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, {
+      pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.terrace, venue.dining] },
+    });
+    const pass = await seedDevice(venue, venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill], zoneIds: [venue.terrace] },
+    ]);
+    await expect(set(venue, venue.kds, { station: every })).resolves.toEqual([
+      lost(pass, "Pass", { screens: ["pass"] }),
+    ]);
+    await expect(set(venue, venue.kds, { station: every, pass: every })).resolves.toEqual([]);
+    await expect(shown(venue, pass)).resolves.toEqual([
+      {
+        kind: "pass",
+        available: true,
+        stations: [slot(venue.grill, "Grill")],
+        zones: [slot(venue.terrace, "Terrace")],
+      },
+    ]);
+    expect(await removalsOf(pass)).toEqual([]);
+  });
+
+  it("restores a kind and narrows its stations in one save", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { pass: every });
+    const pass = await seedDevice(venue, venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: [venue.terrace] },
+    ]);
+    await set(venue, venue.kds, { station: every });
+    await expect(
+      set(venue, venue.kds, { pass: { stationIds: [venue.cold], zoneIds: null } }),
+    ).resolves.toEqual([lost(pass, "Pass", { stations: [named(venue.grill, "Grill")] })]);
+    await expect(shown(venue, pass)).resolves.toEqual([
+      {
+        kind: "pass",
+        available: true,
+        stations: [slot(venue.cold, "Cold"), slot(venue.grill, "Grill", false)],
+        zones: [slot(venue.terrace, "Terrace")],
+      },
+    ]);
+    expect(
+      (await removalsOf(pass)).map(({ screen, stationId, zoneId }) => ({
+        screen,
+        stationId,
+        zoneId,
+      })),
+    ).toEqual([{ screen: "pass", stationId: venue.grill, zoneId: null }]);
+  });
+
+  it("gives a zone added back to a till still showing it as lost", async () => {
+    const venue = await seedVenue();
+    const till = await seedDevice(venue, venue.till, "Till");
+    await choose(venue, till, venue.till, [
+      { kind: "pass", stationIds: null, zoneIds: [venue.dining, venue.terrace] },
+    ]);
+    await set(venue, venue.till, { pass: { stationIds: null, zoneIds: [venue.dining] } });
+    await expect(set(venue, venue.till, { pass: every })).resolves.toEqual([]);
+    expect((await shown(venue, till))[0]!.zones).toEqual([
+      slot(venue.terrace, "Terrace"),
+      slot(venue.dining, "Dining room"),
+    ]);
+    expect(await removalsOf(till)).toEqual([]);
+  });
+
+  it("keeps a display a narrowing emptied out of the station screens, refused as having no screen and not following every station", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { station: every, pass_monitor: every });
+    const deli = await seedDevice(venue, venue.kds, "Deli");
+    const wall = await seedDevice(venue, venue.kds, "Wall");
+    const open = await seedDevice(venue, venue.kds, "Open");
+    await choose(venue, deli, venue.kds, [station([venue.pastry])]);
+    await choose(venue, wall, venue.kds, [{ kind: "pass_monitor", ...every }]);
+    await choose(venue, open, venue.kds, [station(null)]);
+    await set(venue, venue.kds, { pass: every });
+    await expect(
+      scoped((tx) => readStationScreens(tx, venue.cfg, { withSwitchedOff: true })),
+    ).resolves.toEqual([]);
+    expect(await scoped((tx) => followsEveryStation(tx, venue.cfg, open, "station"))).toBe(false);
+    for (const device of [deli, wall, open]) {
+      await expect(
+        outcome(scoped((tx) => assertKitchenDisplayHasScreen(tx, venue.cfg, device, venue.kds))),
+      ).resolves.toEqual({ code: "kitchen_screen.required", params: {} });
+    }
+    await set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } });
+    await expect(
+      outcome(scoped((tx) => assertKitchenDisplayHasScreen(tx, venue.cfg, deli, venue.kds))),
+    ).resolves.toEqual({ code: "kitchen_screen.required", params: {} });
+    await expect(
+      outcome(scoped((tx) => assertKitchenDisplayHasScreen(tx, venue.cfg, open, venue.kds))),
+    ).resolves.toEqual({ resolved: undefined });
   });
 
   it("answers nothing and records nothing for a save that narrows nothing a device shows", async () => {
@@ -1528,7 +1646,7 @@ describe("a profile save narrowing its devices", () => {
     await expect(
       set(venue, venue.till, { pass: { stationIds: null, zoneIds: [venue.dining] } }),
     ).resolves.toEqual([]);
-    expect(await storedKindsOf(wall)).toEqual([]);
+    expect(await storedKindsOf(wall)).toEqual(["pass_monitor"]);
     expect(await removalsOf(wall)).toHaveLength(1);
     expect(await removalsOf(till)).toHaveLength(1);
     expect((await shown(venue, till))[0]!.zones).toEqual([
@@ -1572,11 +1690,44 @@ describe("a device narrowed against another profile", () => {
       deviceName: "Pass",
       lost: { screens: ["pass"], stations: [], zones: [] },
     });
-    expect(await storedKindsOf(pass)).toEqual([]);
+    expect(await storedKindsOf(pass)).toEqual(["pass"]);
+    await expect(shown(venue, pass)).resolves.toEqual([
+      { kind: "pass", available: false, stations: [], zones: null },
+    ]);
     await expect(narrow(venue, randomUUID(), strict)).resolves.toBeNull();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
     await expect(narrow(venue, till, await seedProfile("till"))).resolves.toBeNull();
+  });
+
+  it("gives back on a switch back what a switch took, unless the device was picked on since", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { station: every });
+    const strict = await seedProfile("kds");
+    await set(venue, strict, { station: { stationIds: [venue.grill], zoneIds: null } });
+    const line = await seedDevice(venue, venue.kds, "Line");
+    const picked = await seedDevice(venue, venue.kds, "Picked");
+    for (const device of [line, picked]) {
+      await choose(venue, device, venue.kds, [
+        { kind: "station", stationIds: [venue.grill, venue.cold], zoneIds: null },
+      ]);
+      await narrow(venue, device, strict);
+      await db.update(devices).set({ deviceProfileId: strict }).where(eq(devices.id, device));
+    }
+    await choose(venue, picked, strict, [
+      { kind: "station", stationIds: [venue.grill], zoneIds: null },
+    ]);
+    for (const device of [line, picked]) {
+      await expect(narrow(venue, device, venue.kds)).resolves.toBeNull();
+      expect(await removalsOf(device)).toEqual([]);
+    }
+    expect((await shown(venue, line))[0]!.stations).toEqual([
+      { id: venue.cold, name: "Cold", available: true, switchedOff: false },
+      { id: venue.grill, name: "Grill", available: true, switchedOff: false },
+    ]);
+    expect((await shown(venue, picked))[0]!.stations).toEqual([
+      { id: venue.grill, name: "Grill", available: true, switchedOff: false },
+    ]);
   });
 
   it("narrows a device at another location against that location's stations", async () => {
