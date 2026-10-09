@@ -2695,7 +2695,6 @@ it.each([
   },
 );
 
-// Two add buttons share the tab action area here, so the strip keeps half the row (A424).
 it.each([
   { locale: "en", width: 310 },
   { locale: "en", width: 390 },
