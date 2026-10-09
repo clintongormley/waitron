@@ -82,18 +82,20 @@ export function foldForSearch(text: string): string {
 const WORD = "[\\p{L}\\p{N}]";
 
 /** A pattern for `word` at the start of a word of a folded name, and, with `whole`, at its end too.
- * A word holds only letters and digits, so it needs no escaping inside a pattern. */
+ * A word holds only letters and numbers, so it needs no escaping inside a pattern. */
 function wordPattern(word: string, whole: boolean): RegExp {
   return new RegExp(`(?<!${WORD})${word}${whole ? `(?!${WORD})` : ""}`, "u");
 }
 
+export type NameSearch = <T>(named: readonly (readonly [T, string])[]) => T[];
+
 /** Searches names already passed through `foldForSearch`, each beside the value it names. A name
  * matches when it holds every word typed, in any order, so "gin tonic" finds "Gin & Tonic". A word
- * followed by a space or punctuation must be a whole word of the name; the word still being typed
- * may be any part of one, so "gin" finds "Ginger Ale" and "gin " does not. The last word typed
+ * followed by anything but a letter or number must be a whole word of the name; the word still being
+ * typed may be any part of one, so "gin" finds "Ginger Ale" and "gin " does not. The last word typed
  * orders the matches: a whole word, then the start of a word, then the middle of one; then the
  * earlier match, then the shorter name; then the order given. */
-export function searchFor(query: string): <T>(named: readonly (readonly [T, string])[]) => T[] {
+export function searchFor(query: string): NameSearch {
   const folded = foldForSearch(query);
   const words = folded.match(new RegExp(`${WORD}+`, "gu")) ?? [];
   const typing = new RegExp(`${WORD}$`, "u").test(folded) ? words.pop() : undefined;

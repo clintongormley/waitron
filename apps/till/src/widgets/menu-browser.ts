@@ -21,6 +21,7 @@ import {
   tileFill,
   tilePaths,
   type HomeIndex,
+  type NameSearch,
   type SectionStep,
 } from "@waitron/catalogue/src/device-home.js";
 import type {
@@ -422,7 +423,7 @@ export class TillMenuBrowser extends LitElement {
     </div>`;
   }
 
-  #matches(index: MenuIndex, search: ReturnType<typeof searchFor>): TillProduct[] {
+  #matches(index: MenuIndex, search: NameSearch): TillProduct[] {
     let names = this.#searchable.get(index);
     if (names === undefined) {
       names = [...index.products.values()].map((product): [TillProduct, string] => [
