@@ -99,6 +99,82 @@ const suite = useVenueDb({
 });
 
 describe("order flow from sale policies", () => {
+  it("creates a counter department without reading an obsolete style input", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Retired create input")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(
+        tx,
+        cfg,
+        Object.assign({ name: "Counter" }, { defaultServiceMode: "table_tab" }),
+      );
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Counter",
+        departmentId: department.id,
+      });
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+        orderStart: "counter",
+        paidWhen: "prepay",
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: "prepay" });
+    });
+  });
+
+  it("renames a department without reading an obsolete style input", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Retired update input")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Dining",
+        departmentId: department.id,
+      });
+      await setDepartmentSalePolicyField(tx, cfg, department.id, "paidWhen", "ticket_then_pay");
+      await updateDepartment(
+        tx,
+        cfg,
+        department.id,
+        Object.assign({ name: "Renamed" }, { defaultServiceMode: "prepay" }),
+      );
+      expect(await listDepartments(tx, cfg)).toContainEqual(
+        expect.objectContaining({ id: department.id, name: "Renamed", tradingName: "Dining" }),
+      );
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+        orderStart: "table",
+        paidWhen: "ticket_then_pay",
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+        serviceMode: "table_tab",
+      });
+    });
+  });
+
+  it("moves a zone without reading an obsolete style input", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Retired zone input")) };
+    await scoped(async (tx) => {
+      const source = await createDepartment(tx, cfg, { name: "Source", orderStart: "counter" });
+      const target = await createDepartment(tx, cfg, { name: "Target", orderStart: "counter" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Dining",
+        departmentId: source.id,
+        orderStart: "table",
+      });
+      await setZoneSalePolicyOverride(tx, cfg, zone.id, "paidWhen", "ticket_then_pay");
+      await configureZone(
+        tx,
+        cfg,
+        Object.assign({ zoneId: zone.id, departmentId: target.id }, { serviceMode: "prepay" }),
+      );
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+        departmentId: target.id,
+        orderStart: "table",
+        paidWhen: "ticket_then_pay",
+      });
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+        departmentId: target.id,
+        serviceMode: "table_tab",
+      });
+    });
+  });
+
   it.each([
     {
       old: "prepay",
