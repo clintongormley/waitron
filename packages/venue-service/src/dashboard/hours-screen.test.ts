@@ -4,7 +4,6 @@ import { LiveConnection, LiveData, setLocale, type DashboardRequest } from "@wai
 import { applyTokens } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
-import type { LocalHolidayModel } from "../holiday-types.js";
 import type {
   CalendarDay,
   HourPeriod,
@@ -137,35 +136,10 @@ function model(): HoursModel {
 /** A value to answer with, a promise of one, or `{ reject }` to refuse with. */
 type Answer = unknown;
 
-function localModel(): LocalHolidayModel {
-  const geography = {
-    id: "g-sevilla",
-    country: "ES",
-    provinceCode: "41",
-    city: "Sevilla",
-    areaKey: null,
-    matchesVenue: true,
-  };
-  return {
-    venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
-    localEntryLimit: 2,
-    areaOptions: [],
-    areaRequired: false,
-    geographies: [geography],
-    entries: [{ id: "e1", geographyId: geography.id, date: "2026-10-15", name: "Feria" }],
-  };
-}
-
-/**
- * A request stub: Hours reads answer the current model (or a queued failure), local holiday reads
- * the current local model (or their own queue); writes answer their queue.
- */
 function server(liveData?: LiveData) {
   const state = {
     model: structuredClone(model()),
-    local: localModel(),
     reads: [] as Answer[],
-    localReads: [] as Answer[],
     writes: [] as Answer[],
   };
   const request = vi.fn<
@@ -176,9 +150,8 @@ function server(liveData?: LiveData) {
       options?: { passive?: boolean },
     ) => Promise<unknown>
   >(async (path, method) => {
-    const local = method === "GET" && path.endsWith("/local-holidays");
-    const queue = local ? state.localReads : method === "GET" ? state.reads : state.writes;
-    const answer = local ? state.local : method === "GET" ? state.model : undefined;
+    const queue = method === "GET" ? state.reads : state.writes;
+    const answer = method === "GET" ? state.model : undefined;
     const next = queue.length > 0 ? queue.shift() : answer;
     const value = await next;
     if (typeof value === "object" && value !== null && "reject" in value)
@@ -1581,8 +1554,8 @@ describe("Hours: named-day live reads", () => {
       const reads = calls("GET")
         .slice(before)
         .map(([path]) => path);
-      expect(reads).toHaveLength(2);
-      expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(1);
+      expect(reads).toHaveLength(1);
+      expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(0);
       await selectTab(el, "dates");
       await listTable(el).updateComplete;
       expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Red"]);
@@ -1618,9 +1591,9 @@ describe("Hours: named-day live reads", () => {
       const reads = calls("GET")
         .slice(before)
         .map(([path]) => path);
-      expect(reads).toHaveLength(4);
-      expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(2);
-      expect(new Set(reads).size).toBe(2);
+      expect(reads).toHaveLength(2);
+      expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(0);
+      expect(new Set(reads).size).toBe(1);
     } finally {
       connection.stop();
     }
@@ -1665,65 +1638,6 @@ describe("Hours: named-day live reads", () => {
     el.shadowRoot!.append(probe);
     expect(getComputedStyle(swatch).backgroundColor).toBe(getComputedStyle(probe).color);
     probe.remove();
-  });
-});
-
-describe("Hours: public holidays", () => {
-  it("puts Local holidays at the foot of the Special dates tab, read-only for a viewer", async () => {
-    const { api } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    const section = el.shadowRoot!.querySelector<HTMLElement & { readOnly: boolean }>(
-      "local-holidays-editor",
-    )!;
-    expect(section).not.toBeNull();
-    const table = listTable(el);
-    expect(table.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(section.readOnly).toBe(false);
-    await selectTab(el, "week");
-    expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
-
-    const viewer = await mount(server().api, true);
-    await selectTab(viewer, "dates");
-    expect(
-      viewer.shadowRoot!.querySelector<HTMLElement & { readOnly: boolean }>(
-        "local-holidays-editor",
-      )!.readOnly,
-    ).toBe(true);
-  });
-
-  it("follows another client's address change into the local section, reading passively and posting nothing", async () => {
-    const liveData = new LiveData();
-    const { api, state, request } = server(liveData);
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    const section = () => el.shadowRoot!.querySelector("local-holidays-editor")!;
-    await vi.waitFor(() =>
-      expect(text(section().shadowRoot!.querySelector('[data-test="local-allowance"]'))).toBe(
-        "2026: 1 of 2 local holidays entered.",
-      ),
-    );
-    state.local = {
-      ...localModel(),
-      venue: { country: "ES", provinceCode: "41", city: "Utrera" },
-      geographies: [{ ...localModel().geographies[0]!, matchesVenue: false }],
-      entries: [],
-    };
-    liveData.invalidate([{ type: "locations" }]);
-    await vi.waitFor(() =>
-      expect(text(section().shadowRoot!.querySelector('[data-test="retained"]'))).toBe(
-        "These local holidays were for Sevilla. Remove",
-      ),
-    );
-    expect(request.mock.calls.every(([, method]) => method === "GET")).toBe(true);
-    expect(request.mock.calls.every((call) => call[3]?.passive === true)).toBe(true);
-
-    const reads = request.mock.calls.length;
-    el.remove();
-    liveData.invalidate([{ type: "local_holidays" }, { type: "locations" }]);
-    liveData.refresh();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(request.mock.calls.length).toBe(reads);
   });
 });
 
@@ -1815,7 +1729,7 @@ it.each([false, true])(
     expect(calls("POST")).toEqual([]);
     expect(calls("PUT")).toEqual([]);
     expect(calls("DELETE")).toEqual([]);
-    expect(el.shadowRoot!.querySelector("local-holidays-editor")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
   },
 );
 
@@ -1979,3 +1893,12 @@ it.each(["en", "es"] as const)(
     ).toBe(true);
   },
 );
+
+it("Station named days makes no local-holiday request and shows no retired editor", async () => {
+  const { api, request } = server();
+  const el = await mount(api);
+  await selectTab(el, "dates");
+  expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
+  expect(request.mock.calls.some(([path]) => path.includes("local-holidays"))).toBe(false);
+  expect(listTable(el)).not.toBeNull();
+});

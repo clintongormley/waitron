@@ -2589,10 +2589,9 @@ describe("Hours with the holiday store", () => {
     });
   });
 
-  /** The fixture's venue, placed in the invented country with a local holiday of its own. */
-  async function placed(): Promise<Fixture & { town: string }> {
+  async function placed(): Promise<Fixture> {
     const f = await fixture();
-    const town = await withTransaction(db, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await tx
         .insert(tenants)
         .values({ id: 1, country: "ZZ", taxId: "X0000000", legalName: "Invented SL" })
@@ -2601,11 +2600,8 @@ describe("Hours with the holiday store", () => {
         .update(locations)
         .set({ province: "Northshire", city: "Villa Real" })
         .where(eq(locations.id, f.cfg.locationId));
-      return (
-        await store.saveLocalHoliday(tx, f.cfg, null, { date: "2026-12-25", name: "Town label" })
-      ).id;
     });
-    return { ...f, town };
+    return f;
   }
 
   const named = (
@@ -2649,7 +2645,6 @@ describe("Hours with the holiday store", () => {
           scope: "regional",
           sourceId: "ZZ-ANNEX",
         },
-        expect.objectContaining({ id: `local:${f.town}`, name: "Town label", scope: "local" }),
       ],
       tone: "standard",
     });
@@ -2669,11 +2664,7 @@ describe("Hours with the holiday store", () => {
     const days = await withTransaction(db, (tx) =>
       readCalendarDays(tx, f.cfg, "2026-12-25", "2026-12-25", repeating.readHolidayFacts),
     );
-    expect(days[0]!.holidays.map(({ id }) => id)).toEqual([
-      "shipped:feast",
-      "shipped:north",
-      `local:${f.town}`,
-    ]);
+    expect(days[0]!.holidays.map(({ id }) => id)).toEqual(["shipped:feast", "shipped:north"]);
   });
 
   it("keeps a holiday's facts while a special date there is saved, renamed, moved and deleted", async () => {
@@ -2769,7 +2760,7 @@ describe("Hours with the holiday store", () => {
         ownHours: false,
         id: expect.any(String),
         date: "2026-12-25",
-        name: "National label · Regional label · Town label",
+        name: "National label · Regional label",
         colour: "blue",
         closeWholeVenue: true,
       },
@@ -2812,43 +2803,19 @@ describe("Hours with the holiday store", () => {
     );
   });
 
-  it("reads holidays on the caller's transaction, so an entry it has not yet committed names the copy", async () => {
-    const f = await placed();
-    const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
-    const [copy] = await withTransaction(db, async (tx) => {
-      await store.saveLocalHoliday(tx, f.cfg, null, { date: "2026-12-29", name: "Uncommitted" });
-      return store.duplicateHolidayNamedSpecialDates(tx, f.cfg, source.id, ["2026-12-29"], AT);
-    });
-    expect(copy!.name).toBe("Uncommitted");
-  });
-
   it("names targets more than a year apart, keeping the source name where the year is not shipped", async () => {
     const f = await placed();
     const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
     const copies = await named(f, source.id, ["2028-01-05", "2026-12-25"]);
     expect(copies.map(({ date, name }) => [date, name])).toEqual([
       ["2028-01-05", "Summer opening"],
-      ["2026-12-25", "National label · Regional label · Town label"],
+      ["2026-12-25", "National label · Regional label"],
     ]);
     const read = await withTransaction(db, (tx) =>
       store.readHolidays(tx, f.cfg, "2028-01-05", "2028-01-05"),
     );
     expect(read.facts).toEqual([]);
     expect(read.coverage).toMatchObject([{ year: 2028, nationalRegional: "missing_year" }]);
-  });
-
-  it("names a copy after a local holiday in a year the pack does not ship, the others keeping the source name", async () => {
-    const f = await placed();
-    await withTransaction(db, (tx) =>
-      store.saveLocalHoliday(tx, f.cfg, null, { date: "2028-01-05", name: "Town 2028" }),
-    );
-    const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
-    const copies = await named(f, source.id, ["2028-01-05", "2028-01-06", "2026-12-29"]);
-    expect(copies.map(({ date, name }) => [date, name])).toEqual([
-      ["2028-01-05", "Town 2028"],
-      ["2028-01-06", "Summer opening"],
-      ["2026-12-29", "Summer opening"],
-    ]);
   });
 
   it("reads holidays once per calendar year the targets touch, not once per target", async () => {
@@ -2870,14 +2837,11 @@ describe("Hours with the holiday store", () => {
     expect(reads.sort()).toEqual(["2026-11-02..2026-12-29", "2028-01-05..2028-01-05"]);
   });
 
-  it("keeps a joined name of three 200-character labels whole", async () => {
+  it("keeps a joined name of two 200-character public labels whole", async () => {
     const f = await placed();
-    await withTransaction(db, (tx) =>
-      store.saveLocalHoliday(tx, f.cfg, null, { date: "2026-08-03", name: long("c") }),
-    );
     const source = await saveDate(f, null, specialInput());
     const [copy] = await named(f, source.id, ["2026-08-03"]);
-    const joined = `${long("a")} · ${long("b")} · ${long("c")}`;
+    const joined = `${long("a")} · ${long("b")}`;
     expect(copy!.name).toBe(joined);
     expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, copy!.id))).name).toBe(
       joined,

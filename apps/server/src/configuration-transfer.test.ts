@@ -102,14 +102,13 @@ import {
   departmentSalePolicies,
   departments,
   readHolidays,
-  readLocalHolidayModel,
+  readHolidayAreaModel,
   readProfileServiceAccess,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
   readHoursModel,
   saveHolidayArea,
-  saveLocalHoliday,
   saveSpecialDate,
   saveMenuPeriod,
   replaceMenuWeek,
@@ -4525,11 +4524,6 @@ describe("public holidays in a configuration transfer", () => {
     };
   }
 
-  /**
-   * A Madrid venue with local holidays in two years, one of them on Epiphany, and a special date on
-   * Epiphany; it then moved to Vielha, chose Arán and entered a day there, and moved back, spelling
-   * Madrid differently. So it exports a matching geography and a retained one with an area.
-   */
   async function preparedWithHolidays(taxId: string) {
     const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: suite.db,
@@ -4537,21 +4531,27 @@ describe("public holidays in a configuration transfer", () => {
     });
     const cfg = scope(source);
     await withTransaction(suite.db, async (tx) => {
-      await saveLocalHoliday(tx, cfg, null, { date: "2026-01-06", name: "Reyes en el barrio" });
-      await saveLocalHoliday(tx, cfg, null, { date: "2026-05-15", name: "San Isidro" });
-      await saveLocalHoliday(tx, cfg, null, { date: "2027-05-15", name: "San Isidro" });
+      await tx.execute(
+        sql`insert into holiday_geographies (id, location_id, country, province_code, city, city_key) values (${randomUUID()}, ${cfg.locationId}, 'ES', '28', 'Madrid', 'madrid')`,
+      );
       await saveSpecialDate(
         tx,
         cfg,
         null,
-        { date: "2026-01-06", name: "Reyes", colour: "red", closeWholeVenue: true, cells: [] },
+        {
+          date: "2026-01-06",
+          name: "Reyes",
+          kind: "holiday",
+          colour: "red",
+          closeWholeVenue: true,
+          cells: [],
+        },
         AT,
       );
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
       await saveHolidayArea(tx, cfg, { areaKey: "aran" });
-      await saveLocalHoliday(tx, cfg, null, { date: "2026-07-20", name: "Santa Margarida" });
     });
     await moveTo(suite.db, source, "Madrid", "  MADRID ");
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4559,10 +4559,10 @@ describe("public holidays in a configuration transfer", () => {
     return { source, versions, transferred };
   }
 
-  it("carries matching and retained geographies with their areas and entries, under fresh ids", async () => {
+  it("carries holiday areas and named holidays under fresh ids without retired local entries", async () => {
     const { source, versions, transferred } = await preparedWithHolidays("B45001122");
     expect(transferred.tables.holiday_geographies).toHaveLength(2);
-    expect(transferred.tables.local_holidays).toHaveLength(4);
+    expect(transferred.tables.local_holidays).toBeUndefined();
     for (const row of transferred.tables.holiday_geographies!)
       expect(Object.keys(row).sort()).toEqual([
         "area_key",
@@ -4573,7 +4573,7 @@ describe("public holidays in a configuration transfer", () => {
         "location_id",
         "province_code",
       ]);
-    // Shipped facts, their hashes and their data version are the receiving build's, never the bundle's.
+
     const text = JSON.stringify(transferred);
     expect(text).not.toContain("shipped:");
     expect(text).not.toContain("f85e22b21de215dafdc2491eab6a535b0c92e744c8d2ae79d3d4c0532c9770e0");
@@ -4605,16 +4605,11 @@ describe("public holidays in a configuration transfer", () => {
     ]);
     expect(await holidaysByCity(targetSuite.db)).toEqual(expected);
 
-    const sourceIds = new Set(
-      [...transferred.tables.holiday_geographies!, ...transferred.tables.local_holidays!].map(
-        (row) => row.id,
-      ),
-    );
+    const sourceIds = new Set(transferred.tables.holiday_geographies!.map((row) => row.id));
     const imported = await targetSuite.db.execute<{ id: string; owner: string }>(sql`
       select id, location_id as owner from holiday_geographies
-      union all select l.id, g.location_id from local_holidays l
-        join holiday_geographies g on g.id = l.geography_id`);
-    expect(imported.rows).toHaveLength(6);
+`);
+    expect(imported.rows).toHaveLength(2);
     for (const row of imported.rows) {
       expect(sourceIds.has(row.id)).toBe(false);
       expect(row.id).toMatch(UUID);
@@ -4622,34 +4617,17 @@ describe("public holidays in a configuration transfer", () => {
     }
     expect(target.locationId).not.toBe(source.locationId);
 
-    // The target was set up in Madrid, so Madrid's entries are current and Vielha's are retained.
     const cfg = scope(target);
     const read = () =>
       withTransaction(targetSuite.db, async (tx) => ({
-        model: await readLocalHolidayModel(tx, cfg),
+        model: await readHolidayAreaModel(tx, cfg),
         epiphany: await readHolidays(tx, cfg, "2026-01-06", "2026-01-06"),
         aran: await readHolidays(tx, cfg, "2026-06-17", "2026-06-17"),
       }));
     const inMadrid = await read();
-    expect(inMadrid.model.entries.map(({ date, name }) => ({ date, name }))).toEqual([
-      { date: "2026-01-06", name: "Reyes en el barrio" },
-      { date: "2026-05-15", name: "San Isidro" },
-      { date: "2027-05-15", name: "San Isidro" },
-    ]);
-    expect(
-      inMadrid.model.geographies.map(({ city, areaKey, matchesVenue }) => ({
-        city,
-        areaKey,
-        matchesVenue,
-      })),
-    ).toEqual([
-      { city: "Madrid", areaKey: null, matchesVenue: true },
-      { city: "Vielha e Mijaran", areaKey: "aran", matchesVenue: false },
-    ]);
-    // The shipped Epiphany and the venue's own entry on the same date stay two facts.
+
     expect(inMadrid.epiphany.facts.map(({ scope, name }) => ({ scope, name }))).toEqual([
       { scope: "national", name: "Epifanía del Señor" },
-      { scope: "local", name: "Reyes en el barrio" },
     ]);
     expect(inMadrid.epiphany.coverage).toEqual([
       expect.objectContaining({
@@ -4664,29 +4642,19 @@ describe("public holidays in a configuration transfer", () => {
       select name, close_whole_venue from special_dates where date = '2026-01-06'`);
     expect(special.rows).toEqual([{ name: "Reyes", close_whole_venue: 1 }]);
 
-    // Moving the target to Vielha makes that geography, its area and its entry current.
     await moveTo(targetSuite.db, target, "Lleida", "Vielha e Mijaran");
     const inVielha = await read();
-    expect(inVielha.model.entries.map(({ date, name }) => ({ date, name }))).toEqual([
-      { date: "2026-07-20", name: "Santa Margarida" },
-    ]);
     expect(inVielha.model.areaRequired).toBe(false);
     expect(inVielha.aran.facts.map(({ scope, name }) => ({ scope, name }))).toEqual([
       { scope: "regional", name: "Fiesta de Arán" },
     ]);
     expect(inVielha.epiphany.facts.map(({ scope }) => scope)).toEqual(["national"]);
 
-    // And moving back restores Madrid's entries under the same ids.
     await moveTo(targetSuite.db, target, "Madrid", "Madrid");
-    expect((await read()).model.entries).toEqual(inMadrid.model.entries);
+    expect((await read()).model.chosen).toEqual(inMadrid.model.chosen);
   });
 
   it.each<[string, (tables: ConfigurationBundle["tables"]) => void, string]>([
-    [
-      "an entry whose geography is not in the bundle",
-      (t) => (t.local_holidays![0]!.geography_id = randomUUID()),
-      "local_holidays.geography_id",
-    ],
     [
       "a second geography for the same place",
       (t) =>
@@ -4698,35 +4666,9 @@ describe("public holidays in a configuration transfer", () => {
       "holiday_geographies.city_key",
     ],
     [
-      "an impossible date",
-      (t) => (t.local_holidays![0]!.date = "2026-02-29"),
-      "local_holidays.date",
-    ],
-    [
-      "two entries of one geography on one date",
-      (t) =>
-        t.local_holidays!.push({
-          ...t.local_holidays!.find((row) => row.date === "2027-05-15")!,
-          id: randomUUID(),
-          name: "Otra fiesta",
-        }),
-      "local_holidays.date",
-    ],
-    [
       "an area the data does not offer for the province",
       (t) => (t.holiday_geographies!.find((row) => row.area_key === "aran")!.area_key = "tenerife"),
       "holiday_geographies.area_key",
-    ],
-    ["a blank name", (t) => (t.local_holidays![0]!.name = "  "), "local_holidays.name"],
-    [
-      "a third Spanish local holiday in 2026, past the two Spain allows",
-      (t) =>
-        t.local_holidays!.push({
-          ...t.local_holidays!.find((row) => row.date === "2026-05-15")!,
-          id: randomUUID(),
-          date: "2026-11-09",
-        }),
-      "local_holidays",
     ],
   ])("refuses an edited bundle with %s, and writes no venue", async (_, edit, field) => {
     const { versions, transferred } = await preparedWithHolidays("B45002211");
