@@ -79,6 +79,23 @@ export function foldForSearch(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
 
+/** Tests a name already passed through `foldForSearch`: it matches when it holds every word typed,
+ * in any order, so "gin tonic" finds "Gin & Tonic". A word followed by a space or punctuation must
+ * be a whole word of the name; the word still being typed may be any part of one, so "gin" finds
+ * "Ginger Ale" and "gin " does not. */
+export function searchMatcher(query: string): (foldedName: string) => boolean {
+  const folded = foldForSearch(query);
+  const words = folded.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const typing = /[\p{L}\p{N}]$/u.test(folded) ? words.pop() : undefined;
+  // A word holds only letters and digits, so it needs no escaping inside a pattern.
+  const whole = words.map(
+    (word) => new RegExp(`(?<![\\p{L}\\p{N}])${word}(?![\\p{L}\\p{N}])`, "u"),
+  );
+  return (foldedName) =>
+    whole.every((pattern) => pattern.test(foldedName)) &&
+    (typing === undefined || foldedName.includes(typing));
+}
+
 type DocumentSection = Extract<DocumentMember, { kind: "section" }>;
 
 /** The members a device draws for `members`: an include shown directly gives way to its own

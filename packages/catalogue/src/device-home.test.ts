@@ -9,6 +9,7 @@ import {
   homeDisplayProblem,
   indexDocument,
   openedSection,
+  searchMatcher,
   sectionTrail,
   shownMembers,
   tileFill,
@@ -85,6 +86,47 @@ describe("tileFill", () => {
 
 it("folds case and accents, so jamon finds Jamón", () => {
   expect(foldForSearch("Jamón Ibérico")).toBe("jamon iberico");
+});
+
+describe("searchMatcher", () => {
+  const name = foldForSearch("Gin & Tónic");
+
+  it("finds a name holding every typed word, whatever lies between them", () => {
+    expect(searchMatcher("gin tonic")(name)).toBe(true);
+  });
+
+  it("finds a name whatever order the words are typed in", () => {
+    expect(searchMatcher("TONIC  gin")(name)).toBe(true);
+  });
+
+  it("finds a name from the middle of the word still being typed", () => {
+    expect(searchMatcher("onic")(name)).toBe(true);
+  });
+
+  it("finds a name from the start of the word still being typed", () => {
+    expect(searchMatcher("gin")(foldForSearch("Ginger Ale"))).toBe(true);
+  });
+
+  it("finds only a whole word once the word is followed by a space", () => {
+    expect(searchMatcher("gin ")(foldForSearch("Ginger Ale"))).toBe(false);
+    expect(searchMatcher("gin ")(name)).toBe(true);
+    expect(searchMatcher("ginger ale")(foldForSearch("Ginger Ale"))).toBe(true);
+    expect(searchMatcher("ton gin")(name)).toBe(false);
+  });
+
+  it("treats punctuation like a space, in what is typed and in the name", () => {
+    expect(searchMatcher("gin&ton")(name)).toBe(true);
+    expect(searchMatcher("gin & tonic")(name)).toBe(true);
+    expect(searchMatcher("gin-")(foldForSearch("Ginger Ale"))).toBe(false);
+  });
+
+  it("does not find a name missing one of the typed words", () => {
+    expect(searchMatcher("gin lemon")(name)).toBe(false);
+  });
+
+  it("finds every name when nothing is typed", () => {
+    expect(searchMatcher("  ")(name)).toBe(true);
+  });
 });
 
 describe("indexDocument", () => {

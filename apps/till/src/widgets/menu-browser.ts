@@ -15,6 +15,7 @@ import {
   foldForSearch,
   indexDocument,
   openedSection,
+  searchMatcher,
   sectionTrail,
   shownMembers,
   tileFill,
@@ -421,7 +422,7 @@ export class TillMenuBrowser extends LitElement {
     </div>`;
   }
 
-  #matches(index: MenuIndex, wanted: string): TillProduct[] {
+  #matches(index: MenuIndex, matches: (foldedName: string) => boolean): TillProduct[] {
     let names = this.#searchable.get(index);
     if (names === undefined) {
       names = [...index.products.values()].map((product): [TillProduct, string] => [
@@ -430,7 +431,7 @@ export class TillMenuBrowser extends LitElement {
       ]);
       this.#searchable.set(index, names);
     }
-    return names.filter(([, name]) => name.includes(wanted)).map(([product]) => product);
+    return names.filter(([, name]) => matches(name)).map(([product]) => product);
   }
 
   #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
@@ -582,11 +583,11 @@ export class TillMenuBrowser extends LitElement {
   /** A menu's group carries no accessible name: two menus may share one, and two same-named
    * regions fail axe's landmark-unique. */
   #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
-    const wanted = foldForSearch(this.query.trim());
-    const found = this.#matches(index, wanted);
+    const matches = searchMatcher(this.query);
+    const found = this.#matches(index, matches);
     const otherMenus = orderableMenus(this.menus).filter((other) => other.id !== menu.id);
     const others = otherMenus
-      .map((other) => ({ menu: other, found: this.#matches(this.#otherIndex(other), wanted) }))
+      .map((other) => ({ menu: other, found: this.#matches(this.#otherIndex(other), matches) }))
       .filter((other) => other.found.length > 0);
     const tiles = (products: TillProduct[]) =>
       this.#grid(

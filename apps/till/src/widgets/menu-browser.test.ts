@@ -910,6 +910,14 @@ describe("till-menu-browser", () => {
       expect(names(entries(el, "results"))).toEqual(["Jamón"]);
     });
 
+    it("matches a name holding every word typed", async () => {
+      const { el } = await mount();
+      await search(el, "lemonade lem");
+      expect(names(entries(el, "results"))).toEqual(["Lemonade"]);
+      await search(el, "lemonade col");
+      expect(names(entries(el, "results"))).toEqual([]);
+    });
+
     it("folds the product names once for a menu's offers, and only the query at each keystroke", async () => {
       const { el } = await mount();
       await search(el, "c");
