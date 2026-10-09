@@ -332,16 +332,16 @@ it.each(["target", "each"])(
         .set({ active: false, pricingUnit: "weight" })
         .where(inArray(products.id, [archived]));
     });
-    await expect(
-      app((tx) =>
-        reassignProductsToUnit(
-          tx,
-          source.id,
-          [active, archived],
-          destination === "each" ? null : target.id,
-        ),
+    const reassignment = app((tx) =>
+      reassignProductsToUnit(
+        tx,
+        source.id,
+        [active, archived],
+        destination === "each" ? null : target.id,
       ),
-    ).rejects.toMatchObject({ code: "product.archived" });
+    );
+    await expect(reassignment).rejects.toMatchObject({ code: "product.archived" });
+    await expect(reassignment).rejects.toHaveProperty("params", { productId: archived });
     expect(await app((tx) => storedUnitId(tx, active))).toBe(source.id);
     expect(await app((tx) => storedUnitId(tx, archived))).toBe(source.id);
     expect(
