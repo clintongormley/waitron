@@ -632,7 +632,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(snapshottedLine).toEqual([
       {
         quantity: "200",
-        unit_name: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
+        unit_name: { en: "kg", es: "kg", ca: "kg", "ca-ES-valencia": "kg", gl: "kg", eu: "kg" },
         unit_precision: 3,
       },
     ]);
