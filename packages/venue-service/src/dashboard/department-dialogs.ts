@@ -78,6 +78,8 @@ export class DepartmentDialogs extends LitElement {
   private generation = {};
   override connectedCallback() {
     super.connectedCallback();
+    if (this.dialog && this.opened === this.dialog && this.confirming && !this.impact)
+      void this.loadImpact(this.dialog, this.generation);
     this.requestUpdate();
   }
   override disconnectedCallback() {

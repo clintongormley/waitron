@@ -657,3 +657,61 @@ it.each([
     expect(event.composed).toBe(true);
   },
 );
+
+it.each([6, 7])(
+  "restarts unfinished removal impact after reconnect for Disable kind %s",
+  async (index) => {
+    const reads: ((value: unknown) => void)[] = [];
+    const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(
+      async (_path, method) => {
+        if (method === "GET")
+          return new Promise((resolve) => {
+            reads.push(resolve);
+          });
+        return undefined;
+      },
+    );
+    const { el } = await mount(dialogs[index]!, request);
+    expect(reads).toHaveLength(1);
+    expect(save(el).disabled).toBe(true);
+    const parent = el.parentNode!;
+    el.remove();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    parent.append(el);
+    await el.updateComplete;
+    await expect.poll(() => reads.length).toBe(2);
+    reads[0]!({ zones: [{ id: "z1", name: "Old impact", activeTableCount: 9 }] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).not.toContain("Old impact");
+    expect(save(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-modal")!.dismissible).toBe(false);
+    reads[1]!({ zones: [{ id: "z1", name: "Fresh impact", activeTableCount: 2 }] });
+    await expect.poll(() => save(el).disabled).toBe(false);
+    expect(el.shadowRoot!.textContent).toContain("Fresh impact");
+    expect(el.shadowRoot!.textContent).toContain("2 active tables");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.dismissible).toBe(true);
+    save(el).click();
+    await expect.poll(() => el.dialog).toBeUndefined();
+    expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([
+      [
+        index === 6 ? "/management-api/venue-service/departments/d1" : "/management-api/zones/z1",
+        "DELETE",
+      ],
+    ]);
+  },
+);
+
+it("clean native Escape closes, emits closed and performs no write", async () => {
+  const { el, request } = await mount(dialogs[0]!);
+  const closed = vi.fn();
+  el.addEventListener("closed", closed);
+  const box = field(el, "name");
+  await box.updateComplete;
+  box.shadowRoot!.querySelector<HTMLInputElement>("input")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => el.dialog).toBeUndefined();
+  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(request).not.toHaveBeenCalled();
+});
