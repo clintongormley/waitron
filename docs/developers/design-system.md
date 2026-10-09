@@ -918,8 +918,8 @@ a match, and including rows a closed branch hides.
 the menu itself (owner, A337, 2026-10-07: that row only repeated the page heading and made the
 hierarchy read wrongly): the menu's members are the top-level rows, in menu order, with no sort, and
 any of them can close. The menu's own adds — Add section, Include a menu and Add products — are
-in a menu behind a plus button at the toolbar's end, bordered like the toolbar's icon buttons, "Add to this menu" ("Añadir a esta carta"), before
-Reorder's Done; while the menu is empty there is no toolbar, so the table's empty box says
+in a menu behind a plus button, "Add to this menu" ("Añadir a esta carta"), at the toolbar's end before
+Reorder's Done, with the toolbar icon buttons' border but not their pressed look; while the menu is empty there is no toolbar, so the table's empty box says
 "Nothing is on this menu yet." with the same three adds as buttons under it, and Reorder and Select
 turn off. A row's key
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
@@ -965,8 +965,8 @@ ticked row it takes away, or one the search or the Available filter no longer sh
 row inside a section the person closed stays), from the selection and from an open confirm or
 dialog, which closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
 travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
-the confirm and the dialog count what is sent. Remove from menu asks first, naming how many items
-leave their sections and listing each with the list it leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a
+the confirm and the dialog count what is sent. Remove from menu asks first ("Remove 2 items?", "¿Quitar 2 elementos?")
+and lists each item with the list it leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a
 section is deleted from its own row's ⋮, because a section the menu owns is deleted, never removed.
 Move to section… opens a dialog with one required destination: "Top level" first, then every section
 the menu owns, by its path joined with " › ", leaving out each selected section and every section

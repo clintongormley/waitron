@@ -119,8 +119,7 @@ export class MenuStructureTable extends LitElement {
       :host {
         display: block;
       }
-      /* Drawn like the toolbar's icon buttons (iconButtonStyles). */
-      [data-test="toolbar-adds"]::part(trigger) {
+      wt-row-actions.toolbar-adds::part(trigger) {
         border: 1px solid var(--wt-color-border);
         background: var(--wt-color-surface);
       }
@@ -1054,6 +1053,7 @@ export class MenuStructureTable extends LitElement {
                 slot="toolbar-end"
                 align="end"
                 icon="plus"
+                class="toolbar-adds"
                 data-test="toolbar-adds"
                 label=${t("menus.add_to_menu")}
                 >${this.#adds([], "top")}</wt-row-actions

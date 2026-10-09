@@ -25,6 +25,7 @@ export const treeDragStyles = css`
       inset 0 var(--wt-field-line-width-active) 0 var(--wt-color-primary),
       inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
   }
+  /* A shadow has no logical offset: this draws the right-hand edge. */
   wt-data-table::part(drop-into-end) {
     box-shadow:
       inset 0 var(--wt-field-line-width-active) 0 var(--wt-color-primary),
@@ -113,7 +114,6 @@ export function markDragging(row: HTMLElement | null): void {
   row?.setAttribute("aria-disabled", "true");
 }
 
-/** The row a drop would go into: its first cell keeps the `drop-target` edge, and every cell is tinted. */
 export function markInto(row: HTMLElement | null): void {
   const cells = [...(row?.querySelectorAll<HTMLElement>(":scope > td") ?? [])];
   cells[0]?.part.add("drop-target");

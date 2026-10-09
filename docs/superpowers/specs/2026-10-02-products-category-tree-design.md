@@ -105,6 +105,8 @@ like any menu; it does not reopen until the screen is next opened empty.
   their own — the owner confirmed this — so this shows the result, it does not choose a position.
 - **The target category is marked with a thin bar on its left edge** in the accent colour, instead
   of today's whole-row highlight (`::part(drop-target)` in `product-list.ts`).
+  _2026-10-09 (A442): the owner asked for a stronger mark; the whole row is now tinted inside a
+  primary ring, keeping the bar on its first cell (`markInto`, `apps/dashboard/src/widgets/tree-drag.ts`)._
 - **A closed category opens after a short hover** while dragging over it, so a product can be moved
   into a category several levels down. The delay is a named constant, stated in the PR.
 - **Dropping on "All products"** takes the product out of every category, as dropping on the
