@@ -980,9 +980,12 @@ coverage remain outstanding.
 **Files:**
 - Create: `packages/venue-service/src/dashboard/department-page.ts`, `department-settings.ts`, and
   `.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts` for each
-- Modify: `dashboard/strings.ts`; move `department-transfers.a11y.test.ts`'s cases onto the
-  Settings tab (and the transfer cases of `venue-operations-screen.test.ts:3813`, assertions
-  unchanged, re-pointed from the modal to the section)
+- Modify: `dashboard/strings.ts`; carry the surviving transfer assertions into the Settings
+  suites. Keep `department-transfers.a11y.test.ts` and the transfer describe in
+  `venue-operations-screen.test.ts` unchanged until Task A10 replaces their shell. Their
+  modal, transfer-only write and page-wide load-error assertions describe behavior this
+  slice removes; Task A10 retires those pins and retains the destination, profile, refusal,
+  bounds and accessibility checks.
 
 **Behaviour:** `department-page`: decision 13's parent link and heading (the link always shows), the Setup line (decision 7), "(Disabled)" and an Enable button for a disabled department, and
 `wt-tabs` Settings / Zones from a `view` property (it fires `view-change`; the shell owns the URL,
@@ -993,7 +996,7 @@ for the name and the transfers) beside that field. Transfers load from `loadDepa
 (`client.ts:135`) when shown; a load failure says so in that section only, and the rest of the form
 still saves (without `transfers`).
 
-- [ ] **Step 1: Failing tests** (Chromium) — Review focus 1 and 4: the trail's link and the `h1`;
+- [x] **Step 1: Failing tests** (Chromium) — Review focus 1 and 4: the trail's link and the `h1`;
   parent link present even with one department, modified-click browser handling, long-name h1 wrap;
   Cancel before Save; Save quiet until a change, sends one request with every field; "Zones that differ" names exactly
   the zones whose stored overrides differ, each a link firing the zone; transfers hidden with one
@@ -1001,8 +1004,15 @@ still saves (without `transfers`).
   refusal beside the destinations; a disabled department read-only with Enable; the unsaved file:
   the leave question on a tab switch event and on reconnect. a11y both themes: Settings with and
   without transfers, disabled, a refusal shown. Run; watch them fail.
-- [ ] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the department page and its Settings tab (A366)`.
+- [x] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
+- [x] **Step 4: Commit** — `feat(venue-service): the department page and its Settings tab (A366)`.
+
+**2026-10-09 checkpoint:** standalone page and Settings form reviewed at `b4279ae1397c3433affc9a9aa51c7883b443b307`.
+The final A8 Chromium run passed 80 cases, including both transfer-read/save completion orders,
+reconciliation of deactivated destinations and the zone-link capture boundary. Real dashboard
+navigation, Back, Enable requests and unknown-department handling remain Task A10 checks.
+The unchanged layout was inspected in EN/ES, both themes, at measured 1280/390 CSS pixels;
+its captured images are scaled. Package-wide coverage and current-head CI remain final gates.
 
 ---
 
