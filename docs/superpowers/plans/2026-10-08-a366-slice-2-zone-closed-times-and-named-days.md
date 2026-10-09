@@ -1286,7 +1286,8 @@ Lane D `receipts/a366-2/task27-*`; Tasks 28–29 and whole-branch gates remain.
 **Behaviour:** decision 23: after its sales, the seed gives the Terrace (`floor.ts:34`, M) a closed
 time from 23:00 to the changeover on every weekday.
 
-- [ ] Steps: failing test (the seeded Terrace week holds 23:00–06:00 on all seven days — fails
+- [ ] Steps: failing test (the seeded Terrace week holds 23:00–06:00 on all seven days with an
+  explicit 06:00 fixture, and 23:00–05:00 with the existing demo's 05:00 changeover — fails
   today: no closed times are seeded; the step runs after the sales); watch it fail
   (`pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.test.ts`); implement; the
   server package; commit `feat(demo): the Terrace closes at 23:00 (A366)`.

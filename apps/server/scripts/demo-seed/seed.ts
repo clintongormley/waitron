@@ -1,7 +1,11 @@
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
 
-import { withTransaction } from "@waitron/db";
+import { and, eq } from "drizzle-orm";
+import { floorZones, withTransaction } from "@waitron/db";
+import { readLocationClock } from "@waitron/reporting";
+import { replaceZoneClosedWeek } from "@waitron/venue-service";
+import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
@@ -102,5 +106,25 @@ export async function seedDemoRestaurant(
     invoiceLocale,
     days: salesDays,
     products: salesProducts,
+  });
+
+  // Install zone restrictions only after practice sales finish.
+  await withTransaction(db, async (tx) => {
+    const terrace = dataSet.floor.zones.find((zone) => zone.key === "terrace")!;
+    const [zone] = await tx
+      .select({ id: floorZones.id })
+      .from(floorZones)
+      .where(and(eq(floorZones.locationId, locationId), eq(floorZones.name, terrace.name[locale])));
+    if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
+    const { dayCutover } = await readLocationClock(tx, locationId);
+    await replaceZoneClosedWeek(
+      tx,
+      { locationId: brandLocationId(locationId) },
+      zone.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        ranges: [{ startsAt: "23:00", endsAt: dayCutover }],
+      })),
+    );
   });
 }
