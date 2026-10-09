@@ -170,6 +170,352 @@ async function send(
   });
 }
 
+const departmentSettings = {
+  name: "New dining",
+  tradingName: "Dining receipt",
+  printTradingName: true,
+  orderStart: "counter",
+  paidWhen: "ticket_then_pay",
+  collectionNumber: "numbered",
+  receiptPrintMode: "on_request",
+} as const;
+const zoneSettings = {
+  orderStart: "counter",
+  paidWhen: "ticket_then_pay",
+  collectionNumber: "numbered",
+  receiptPrintMode: "on_request",
+} as const;
+
+async function settingsFixture() {
+  const fx = await fixture();
+  const department = await withTransaction(db, async (tx) => {
+    const department = await createDepartment(tx, fx, {
+      name: "Dining",
+      defaultServiceMode: "table_tab",
+    });
+    await configureZone(tx, fx, {
+      zoneId: fx.zoneId,
+      departmentId: department.id,
+      serviceMode: "table_tab",
+    });
+    return department;
+  });
+  return {
+    ...fx,
+    departmentId: department.id,
+    departmentPath: `/management-api/venue-service/departments/${department.id}/settings`,
+    zonePath: `/management-api/venue-service/zones/${fx.zoneId}/service-settings`,
+  };
+}
+
+async function settingsSnapshot(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+  const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+  expect(model.status).toBe(200);
+  const transfers = await send(
+    fx.app,
+    "GET",
+    `/management-api/venue-service/departments/${fx.departmentId}/transfers`,
+    fx.managerCookie,
+  );
+  expect(transfers.status).toBe(200);
+  return { model: await model.json(), transfers: await transfers.json() };
+}
+
+describe("whole service settings saves", () => {
+  it("saves every department field and optional transfers in one PUT", async () => {
+    const fx = await settingsFixture();
+    const destination = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, {
+        name: "Bar",
+        defaultServiceMode: "prepay",
+      }),
+    );
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      transfers: { receivingProfileId: null, destinationDepartmentIds: [destination.id] },
+    });
+    expect(saved.status).toBe(204);
+    const { model, transfers } = await settingsSnapshot(fx);
+    expect(model.departments.find((row: { id: string }) => row.id === fx.departmentId)).toEqual({
+      id: fx.departmentId,
+      name: "New dining",
+      tradingName: "Dining receipt",
+      defaultServiceMode: "prepay",
+      active: true,
+    });
+    expect(
+      model.salePolicies.departments.find(
+        (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+      ),
+    ).toEqual({
+      departmentId: fx.departmentId,
+      orderStart: "counter",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+      receiptPrintMode: "on_request",
+      printTradingName: true,
+    });
+    expect(transfers).toEqual({
+      departmentId: fx.departmentId,
+      receivingProfileId: null,
+      destinationDepartmentIds: [destination.id],
+    });
+    expect(
+      (
+        await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+          ...departmentSettings,
+          orderStart: "table",
+          receiptPrintMode: "auto",
+          printTradingName: false,
+        })
+      ).status,
+    ).toBe(204);
+    const read = await settingsSnapshot(fx);
+    expect(read.transfers).toEqual(transfers);
+    expect(
+      read.model.departments.find((row: { id: string }) => row.id === fx.departmentId)
+        .defaultServiceMode,
+    ).toBe("table_tab");
+    expect(
+      read.model.salePolicies.departments.find(
+        (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+      ).receiptPrintMode,
+    ).toBe("auto");
+    await db
+      .update(departments)
+      .set({ defaultServiceMode: "ticket_then_pay" })
+      .where(eq(departments.id, fx.departmentId));
+    expect(
+      (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
+    ).toBe(204);
+    const retained = await settingsSnapshot(fx);
+    expect(
+      retained.model.departments.find((row: { id: string }) => row.id === fx.departmentId)
+        .defaultServiceMode,
+    ).toBe("ticket_then_pay");
+  });
+
+  it.each([true, false])(
+    "refuses a name clash with active=%s without writing any settings",
+    async (active) => {
+      const fx = await settingsFixture();
+      const other = await withTransaction(db, (tx) =>
+        createDepartment(tx, fx, { name: "Taken", defaultServiceMode: "prepay" }),
+      );
+      await db.update(departments).set({ active }).where(eq(departments.id, other.id));
+      const before = await settingsSnapshot(fx);
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        name: "Taken",
+        transfers: { receivingProfileId: null, destinationDepartmentIds: [other.id] },
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        error: { code: active ? "department.name_taken" : "department.name_disabled" },
+      });
+      expect(await settingsSnapshot(fx)).toEqual(before);
+    },
+  );
+
+  it("rolls back the department and sale policy when a transfer names itself", async () => {
+    const fx = await settingsFixture();
+    const other = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Bar", defaultServiceMode: "prepay" }),
+    );
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/departments/${fx.departmentId}/transfers`,
+          fx.managerCookie,
+          {
+            receivingProfileId: null,
+            destinationDepartmentIds: [other.id],
+          },
+        )
+      ).status,
+    ).toBe(204);
+    const before = await settingsSnapshot(fx);
+    const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      transfers: { receivingProfileId: null, destinationDepartmentIds: [fx.departmentId] },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "department_transfer.settings_invalid",
+        params: { field: "destinationDepartmentIds" },
+      },
+    });
+    expect(await settingsSnapshot(fx)).toEqual(before);
+  });
+
+  it.each([
+    { patch: { name: "  " }, field: "name" },
+    { patch: { unexpected: true }, field: "unexpected" },
+    { patch: { receiptPrintMode: "never" }, field: "receiptPrintMode" },
+    { patch: { receiptPrintMode: null }, field: "receiptPrintMode" },
+    { patch: { orderStart: null }, field: "orderStart" },
+    { patch: { paidWhen: ["prepay"] }, field: "paidWhen" },
+    { patch: { collectionNumber: ["none"] }, field: "collectionNumber" },
+    { patch: { printTradingName: null }, field: "printTradingName" },
+    { patch: { transfers: null }, field: "transfers" },
+    {
+      patch: { transfers: { receivingProfileId: null, destinationDepartmentIds: [], extra: true } },
+      field: "extra",
+    },
+    {
+      patch: { transfers: { receivingProfileId: null, destinationDepartmentIds: "invalid" } },
+      field: "destinationDepartmentIds",
+    },
+    {
+      patch: { transfers: { receivingProfileId: 1, destinationDepartmentIds: [] } },
+      field: "receivingProfileId",
+    },
+    {
+      patch: { transfers: { receivingProfileId: null, destinationDepartmentIds: [1] } },
+      field: "destinationDepartmentIds",
+    },
+  ])(
+    "refuses malformed department settings at $field without writes ($patch)",
+    async ({ patch, field }) => {
+      const fx = await settingsFixture();
+      const before = await settingsSnapshot(fx);
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        ...patch,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+      expect(await settingsSnapshot(fx)).toEqual(before);
+    },
+  );
+
+  it.each(["foreign", "disabled"])("refuses a %s department without writes", async (kind) => {
+    const fx = await settingsFixture();
+    let path = fx.departmentPath;
+    if (kind === "foreign") {
+      const foreign = await fixture();
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, foreign, { name: "Foreign", defaultServiceMode: "prepay" }),
+      );
+      path = `/management-api/venue-service/departments/${department.id}/settings`;
+    } else
+      await db
+        .update(departments)
+        .set({ active: false })
+        .where(eq(departments.id, fx.departmentId));
+    const before = await settingsSnapshot(fx);
+    const response = await send(fx.app, "PUT", path, fx.managerCookie, departmentSettings);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "department.not_found" } });
+    expect(await settingsSnapshot(fx)).toEqual(before);
+  });
+
+  it("saves all four zone overrides and clears all four to inherit", async () => {
+    const fx = await settingsFixture();
+    expect(
+      (
+        await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+          ...departmentSettings,
+          orderStart: "table",
+        })
+      ).status,
+    ).toBe(204);
+    for (const [input, style, effective] of [
+      [zoneSettings, "prepay", zoneSettings],
+      [
+        {
+          orderStart: "table",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          receiptPrintMode: "auto",
+        },
+        "table_tab",
+        {
+          orderStart: "table",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          receiptPrintMode: "auto",
+        },
+      ],
+      [
+        { orderStart: null, paidWhen: null, collectionNumber: null, receiptPrintMode: null },
+        null,
+        {
+          orderStart: "table",
+          paidWhen: "ticket_then_pay",
+          collectionNumber: "numbered",
+          receiptPrintMode: "on_request",
+        },
+      ],
+    ] as const) {
+      expect((await send(fx.app, "PUT", fx.zonePath, fx.managerCookie, input)).status).toBe(204);
+      const { model } = await settingsSnapshot(fx);
+      expect(model.salePolicies.zones).toEqual([
+        { zoneId: fx.zoneId, ...input, effective: { ...effective, printTradingName: true } },
+      ]);
+      const [stored] = await db
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
+      expect(stored!.serviceMode).toBe(style);
+    }
+    await db
+      .update(zoneServicePolicies)
+      .set({ serviceMode: "ticket_then_pay" })
+      .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
+    expect((await send(fx.app, "PUT", fx.zonePath, fx.managerCookie, zoneSettings)).status).toBe(
+      204,
+    );
+    const [retained] = await db
+      .select()
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
+    expect(retained!.serviceMode).toBe("ticket_then_pay");
+  });
+
+  it.each([
+    { receiptPrintMode: "never" },
+    { unexpected: true },
+    { paidWhen: ["prepay"] },
+    { orderStart: "table_tab" },
+    { collectionNumber: true },
+  ])("refuses invalid zone settings without writes (%j)", async (patch) => {
+    const fx = await settingsFixture();
+    const before = await settingsSnapshot(fx);
+    const response = await send(fx.app, "PUT", fx.zonePath, fx.managerCookie, {
+      ...zoneSettings,
+      ...patch,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: Object.keys(patch)[0] } },
+    });
+    expect(await settingsSnapshot(fx)).toEqual(before);
+  });
+
+  it("refuses a disabled zone with service_zone.not_found", async () => {
+    const fx = await settingsFixture();
+    await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, fx.zoneId));
+    const before = await settingsSnapshot(fx);
+    const response = await send(fx.app, "PUT", fx.zonePath, fx.managerCookie, zoneSettings);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
+    expect(await settingsSnapshot(fx)).toEqual(before);
+  });
+
+  it.each(["departmentPath", "zonePath"] as const)("requires a manager for %s", async (path) => {
+    const fx = await settingsFixture();
+    const body = path === "departmentPath" ? departmentSettings : zoneSettings;
+    expect((await send(fx.app, "PUT", fx[path], undefined, body)).status).toBe(401);
+    expect((await send(fx.app, "PUT", fx[path], fx.staffCookie, body)).status).toBe(403);
+  });
+});
+
 describe("venue service management routes", () => {
   it("saves directional transfer settings only for a manager", async () => {
     const fx = await fixture();

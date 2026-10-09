@@ -14,6 +14,10 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import {
+  saveDepartmentSettings,
+  saveZoneServiceSettings,
+  type DepartmentSettingsInput,
+  type ZoneServiceSettingsInput,
   configureZone,
   createServiceZone,
   activateDepartment,
@@ -153,6 +157,21 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
 function onlyKeys(body: object, allowed: readonly string[]): void {
   const extra = Object.keys(body).find((key) => !allowed.includes(key));
   if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
+}
+
+function requireTransferSettings(value: unknown) {
+  if (!isRecord(value)) throw new AppError("management.request_invalid", { field: "transfers" });
+  onlyKeys(value, ["receivingProfileId", "destinationDepartmentIds"]);
+  const receivingProfileId = requireNullableBodyUuid(
+    value.receivingProfileId,
+    "receivingProfileId",
+  );
+  if (!Array.isArray(value.destinationDepartmentIds))
+    throw new AppError("management.request_invalid", { field: "destinationDepartmentIds" });
+  const destinationDepartmentIds = value.destinationDepartmentIds.map((id) =>
+    requireBodyUuid(id, "destinationDepartmentIds"),
+  );
+  return { receivingProfileId, destinationDepartmentIds };
 }
 
 function requireMode(value: unknown, field: string): ServiceMode {
@@ -636,6 +655,91 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.put("/management-api/venue-service/departments/:departmentId/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, [
+          "name",
+          "tradingName",
+          "printTradingName",
+          "orderStart",
+          "paidWhen",
+          "collectionNumber",
+          "receiptPrintMode",
+          "transfers",
+        ]);
+        const input: DepartmentSettingsInput = {
+          name: requireName(body.name, "name"),
+          tradingName: requireName(body.tradingName, "tradingName"),
+          printTradingName: requireSalePolicyField(
+            "printTradingName",
+            body.printTradingName,
+            false,
+          ) as boolean,
+          orderStart: requireSalePolicyField(
+            "orderStart",
+            body.orderStart,
+            false,
+          ) as DepartmentSettingsInput["orderStart"],
+          paidWhen: requireSalePolicyField(
+            "paidWhen",
+            body.paidWhen,
+            false,
+          ) as DepartmentSettingsInput["paidWhen"],
+          collectionNumber: requireSalePolicyField(
+            "collectionNumber",
+            body.collectionNumber,
+            false,
+          ) as DepartmentSettingsInput["collectionNumber"],
+          receiptPrintMode: requireSalePolicyField(
+            "receiptPrintMode",
+            body.receiptPrintMode,
+            false,
+          ) as DepartmentSettingsInput["receiptPrintMode"],
+          ...(body.transfers === undefined
+            ? {}
+            : { transfers: requireTransferSettings(body.transfers) }),
+        };
+        await gated(sessionId, (tx) => saveDepartmentSettings(tx, ctx.cfg, departmentId, input));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/zones/:zoneId/service-settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
+        const input: ZoneServiceSettingsInput = {
+          orderStart: requireSalePolicyField(
+            "orderStart",
+            body.orderStart,
+            true,
+          ) as ZoneServiceSettingsInput["orderStart"],
+          paidWhen: requireSalePolicyField(
+            "paidWhen",
+            body.paidWhen,
+            true,
+          ) as ZoneServiceSettingsInput["paidWhen"],
+          collectionNumber: requireSalePolicyField(
+            "collectionNumber",
+            body.collectionNumber,
+            true,
+          ) as ZoneServiceSettingsInput["collectionNumber"],
+          receiptPrintMode: requireSalePolicyField(
+            "receiptPrintMode",
+            body.receiptPrintMode,
+            true,
+          ) as ZoneServiceSettingsInput["receiptPrintMode"],
+        };
+        await gated(sessionId, (tx) => saveZoneServiceSettings(tx, ctx.cfg, zoneId, input));
+        return c.body(null, 204);
+      }),
+    );
+
     app.patch("/management-api/venue-service/departments/:departmentId", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -873,21 +977,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["receivingProfileId", "destinationDepartmentIds"]);
-        const receivingProfileId = requireNullableBodyUuid(
-          body.receivingProfileId,
-          "receivingProfileId",
-        );
-        if (!Array.isArray(body.destinationDepartmentIds))
-          throw new AppError("management.request_invalid", { field: "destinationDepartmentIds" });
-        const destinationDepartmentIds = body.destinationDepartmentIds.map((value) =>
-          requireBodyUuid(value, "destinationDepartmentIds"),
-        );
+        const input = requireTransferSettings(body);
         await gated(sessionId, (tx) =>
-          setDepartmentTransferSettings(tx, ctx.cfg, departmentId, {
-            receivingProfileId,
-            destinationDepartmentIds,
-          }),
+          setDepartmentTransferSettings(tx, ctx.cfg, departmentId, input),
         );
         return c.body(null, 204);
       }),

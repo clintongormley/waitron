@@ -1,3 +1,4 @@
+import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -3213,5 +3214,64 @@ describe("reserved venue names", () => {
     expect(await db.select().from(floorZones).where(eq(floorZones.id, zone.id))).toEqual([
       expect.objectContaining({ name: "Terrace", active: false }),
     ]);
+  });
+});
+
+describe("combined settings operations", () => {
+  it("writes department fields and zone overrides through the caller transaction", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation(`Settings ${randomUUID()}`)) };
+    const { department, zone } = await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, cfg, {
+        name: "Terrace",
+        departmentId: department.id,
+      });
+      return { department, zone };
+    });
+    await scoped(async (tx) => {
+      await settingsOperations.saveDepartmentSettings(tx, cfg, department.id, {
+        name: "Restaurant",
+        tradingName: "Receipt",
+        printTradingName: true,
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+      await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
+        orderStart: "table",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+      });
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
+        zoneId: zone.id,
+        departmentId: department.id,
+        departmentName: "Restaurant",
+        tradingName: "Receipt",
+        printTradingName: true,
+        orderStart: "table",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+      });
+      await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      });
+      expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
+        zoneId: zone.id,
+        departmentId: department.id,
+        departmentName: "Restaurant",
+        tradingName: "Receipt",
+        printTradingName: true,
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+    });
   });
 });

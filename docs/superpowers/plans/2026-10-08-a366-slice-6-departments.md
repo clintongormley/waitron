@@ -832,7 +832,7 @@ export interface ZoneServiceSettingsInput {
 export async function saveZoneServiceSettings(tx: Transaction, cfg: VenueScope, zoneId: string, input: ZoneServiceSettingsInput): Promise<void>;
 ```
 
-- [ ] **Step 1: Failing tests:** one PUT saves every field and reads back through
+- [x] **Step 1: Failing tests:** one PUT saves every field and reads back through
   `GET /management-api/venue-service`; a name taken by another department → 409
   `department.name_taken`, and NOTHING of the body is written (the sale policy and transfers read
   back unchanged — the one-transaction check); a disabled department's name → 409
@@ -845,10 +845,10 @@ export async function saveZoneServiceSettings(tx: Transaction, cfg: VenueScope, 
   department receipt null refuses and all writes remain unchanged on refusal; a disabled zone → today's refusal
   (`operations.ts:705-719`); the old-style mirror (Task A2) also happens through these routes. Run;
   watch them fail (404, no route).
-- [ ] **Step 2: Implement**, reusing the existing validators (`requireName`, the sale-policy value
+- [x] **Step 2: Implement**, reusing the existing validators (`requireName`, the sale-policy value
   sets, the transfer body checks at `routes.ts:913-936`).
-- [ ] **Step 3: Run** focused affected venue-service/server behavioural files; typecheck.
-- [ ] **Step 4: Commit** — `feat(venue-service): save a department's settings and a zone's service settings in one request each (A366)`.
+- [x] **Step 3: Run** focused affected venue-service/server behavioural files; typecheck.
+- [x] **Step 4: Commit** — `feat(venue-service): save a department's settings and a zone's service settings in one request each (A366)`.
 
 ---
 

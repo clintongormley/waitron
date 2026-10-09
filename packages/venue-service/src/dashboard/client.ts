@@ -39,6 +39,13 @@ export interface ZoneSalePolicy {
   receiptPrintMode: ReceiptPrintMode | null;
   effective: Omit<DepartmentSalePolicy, "departmentId">;
 }
+export interface DepartmentSettingsInput extends Omit<DepartmentSalePolicy, "departmentId"> {
+  name: string;
+  tradingName: string;
+  transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
+}
+export type ZoneServiceSettingsInput = Omit<ZoneSalePolicy, "zoneId" | "effective">;
+
 export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
@@ -149,6 +156,22 @@ export class VenueServiceApi {
   ): Promise<void> {
     return this.request(
       `/management-api/venue-service/departments/${departmentId}/transfers`,
+      "PUT",
+      input,
+    );
+  }
+
+  saveDepartmentSettings(departmentId: string, input: DepartmentSettingsInput): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/departments/${departmentId}/settings`,
+      "PUT",
+      input,
+    );
+  }
+
+  saveZoneServiceSettings(zoneId: string, input: ZoneServiceSettingsInput): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/zones/${zoneId}/service-settings`,
       "PUT",
       input,
     );

@@ -401,3 +401,76 @@ describe("VenueServiceApi", () => {
     expect(onSuccess).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("combined settings requests", () => {
+  it("sends every department field and optional transfers in one active PUT", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }))
+      .background;
+    await api.saveDepartmentSettings("d1", {
+      name: "Dining",
+      tradingName: "Receipt",
+      printTradingName: true,
+      orderStart: "table",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+      receiptPrintMode: "on_request",
+      transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
+    });
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/settings",
+        "PUT",
+        {
+          name: "Dining",
+          tradingName: "Receipt",
+          printTradingName: true,
+          orderStart: "table",
+          paidWhen: "ticket_then_pay",
+          collectionNumber: "numbered",
+          receiptPrintMode: "on_request",
+          transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
+        },
+      ],
+    ]);
+  });
+
+  it("sends four inherited zone settings in one PUT and preserves a refusal", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "service_zone.not_found" } }, 404));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await expect(
+      api.saveZoneServiceSettings("z1", {
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      }),
+    ).rejects.toMatchObject({ code: "service_zone.not_found" });
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/zones/z1/service-settings",
+        "PUT",
+        {
+          orderStart: null,
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+        },
+      ],
+    ]);
+  });
+});

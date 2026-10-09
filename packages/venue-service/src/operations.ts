@@ -5,6 +5,7 @@ import {
   withoutZoneExtension,
   zoneExtensionForRange,
 } from "./zone-closed-times.js";
+import { setDepartmentTransferSettings } from "./department-transfers.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
@@ -843,6 +844,59 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     .update(zoneSalePolicies)
     .set({ [field]: value })
     .where(eq(zoneSalePolicies.zoneId, zoneId));
+}
+
+export interface DepartmentSettingsInput extends DepartmentPolicyField {
+  name: string;
+  tradingName: string;
+  transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
+}
+
+export async function saveDepartmentSettings(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  input: DepartmentSettingsInput,
+): Promise<void> {
+  await setDepartmentSalePolicyField(
+    tx,
+    cfg,
+    departmentId,
+    "printTradingName",
+    input.printTradingName,
+  );
+  await updateDepartment(tx, cfg, departmentId, input);
+  await setDepartmentSalePolicyField(tx, cfg, departmentId, "paidWhen", input.paidWhen);
+  await setDepartmentSalePolicyField(
+    tx,
+    cfg,
+    departmentId,
+    "collectionNumber",
+    input.collectionNumber,
+  );
+  await setDepartmentSalePolicyField(
+    tx,
+    cfg,
+    departmentId,
+    "receiptPrintMode",
+    input.receiptPrintMode,
+  );
+  if (input.transfers !== undefined)
+    await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
+}
+
+export type ZoneServiceSettingsInput = ZonePolicyField;
+
+export async function saveZoneServiceSettings(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  input: ZoneServiceSettingsInput,
+): Promise<void> {
+  await setZoneSalePolicyOverride(tx, cfg, zoneId, "orderStart", input.orderStart);
+  await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", input.paidWhen);
+  await setZoneSalePolicyOverride(tx, cfg, zoneId, "collectionNumber", input.collectionNumber);
+  await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", input.receiptPrintMode);
 }
 
 async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
