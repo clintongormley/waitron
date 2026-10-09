@@ -60,7 +60,7 @@ const holds = (members: MenuStructureNode[], ref: MemberRef): boolean =>
   members.some((member) => sameRef(member.ref, ref));
 
 /** A section can be drawn in several places, so what lies inside a member is told by section id. */
-function sectionIdsWithin(node: MenuStructureNode): string[] {
+export function sectionIdsWithin(node: MenuStructureNode): string[] {
   return node.ref.kind === "section"
     ? [node.ref.sectionId, ...(node.children ?? []).flatMap(sectionIdsWithin)]
     : [];

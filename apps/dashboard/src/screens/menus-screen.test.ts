@@ -2994,6 +2994,143 @@ it("sends nothing for a move whose lists another change has taken off the menu, 
   expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
 });
 
+/** Lunch as another change leaves it: Favourites taken off the menu. */
+function lunchWithoutFavourites(): MenuStructure {
+  return {
+    rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [productNode("m-burger", "p-burger"), drinksNode("m-drinks")],
+  };
+}
+
+it("checks a move into another section's lists when it is sent, so one queued while its destination leaves the menu sends nothing and reads the menu again", async () => {
+  const live = new LiveData();
+  const reordering = deferred<SectionMember[]>();
+  const client = api({ liveData: live, moveSectionMember: vi.fn(() => reordering.promise) });
+  const el = await mountLunch(client);
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
+  emit(structure(el), "wt-member-move-into", {
+    from: [],
+    memberId: "m-burger",
+    to: ["m-fav"],
+    position: 0,
+  });
+  client.getMenuStructure.mockResolvedValue(lunchWithoutFavourites());
+  live.invalidate([{ type: "section_members" }]);
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-burger", "m-drinks"]));
+  const reads = client.getMenuStructure.mock.calls.length;
+  // The order the screen now shows, so the reorder's answer alone reads nothing.
+  reordering.resolve([
+    productMember("m-burger", 0, "p-burger"),
+    sectionMember("m-drinks", 1, "s-drinks"),
+  ]);
+  await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(reads + 1));
+  await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+  expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
+});
+
+it("sends nothing for a move into another section that was still queued when the person went to another menu", async () => {
+  const reordering = deferred<SectionMember[]>();
+  const client = api({ moveSectionMember: vi.fn(() => reordering.promise) });
+  const el = await mountLunch(client);
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
+  emit(structure(el), "wt-member-move-into", {
+    from: [],
+    memberId: "m-burger",
+    to: ["m-fav"],
+    position: 0,
+  });
+  await visit(el, DINNER_PATH, "Dinner Menu");
+  reordering.resolve([
+    sectionMember("m-drinks", 0, "s-drinks"),
+    productMember("m-burger", 1, "p-burger"),
+    sectionMember("m-fav", 2, "s-fav"),
+  ]);
+  await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+  expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
+  expect(currentPlace(el)).toBe("Dinner Menu");
+});
+
+it("says a move was saved into a section that another change took off the menu while the move was out", async () => {
+  const live = new LiveData();
+  const moving = deferred<void>();
+  const client = api({ liveData: live, moveSectionMembersInto: vi.fn(() => moving.promise) });
+  const el = await mountLunch(client);
+  emit(structure(el), "wt-member-move-into", {
+    from: [],
+    memberId: "m-burger",
+    to: ["m-fav"],
+    position: 0,
+  });
+  await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+  client.getMenuStructure.mockResolvedValue(lunchWithoutFavourites());
+  live.invalidate([{ type: "section_members" }]);
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-burger", "m-drinks"]));
+  moving.resolve();
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.list_gone_saved").replace("{name}", "Favourites"),
+    ),
+  );
+  await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+  expect(currentPlace(el)).toBe("Lunch Menu");
+});
+
+it("finishes a move into another section quietly when the person has gone to another menu, leaving that menu's place alone", async () => {
+  const moving = deferred<void>();
+  const client = api({ moveSectionMembersInto: vi.fn(() => moving.promise) });
+  const el = await mountLunch(client);
+  emit(structure(el), "wt-member-move-into", {
+    from: [],
+    memberId: "m-burger",
+    to: ["m-fav"],
+    position: 0,
+  });
+  await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+  await visit(el, DINNER_PATH, "Dinner Menu");
+  moving.resolve();
+  await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+  await el.updateComplete;
+  expect(structure(el).current).toEqual([]);
+  expect(currentPlace(el)).toBe("Dinner Menu");
+  expect(q(el, '[data-test="member-error"]')).toBeNull();
+});
+
+it("names the destination with a refused move into another section when the person has gone to another menu", async () => {
+  const moving = deferred<void>();
+  const client = api({ moveSectionMembersInto: vi.fn(() => moving.promise) });
+  const el = await mountLunch(client);
+  emit(structure(el), "wt-member-move-into", {
+    from: [],
+    memberId: "m-burger",
+    to: ["m-fav"],
+    position: 0,
+  });
+  await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+  await visit(el, DINNER_PATH, "Dinner Menu");
+  moving.reject({ code: "menu_section.member_duplicate" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Favourites")
+        .replace("{reason}", codeMessage("menu_section.member_duplicate")),
+    ),
+  );
+  await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+  expect(currentPlace(el)).toBe("Dinner Menu");
+});
+
 it("moves a product into the section above it with ArrowRight on its grip, and focus follows it once the menu is read again", async () => {
   const client = api();
   const el = await mountLunch(client);

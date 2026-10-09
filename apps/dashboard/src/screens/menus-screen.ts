@@ -32,7 +32,11 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
-import { ownPresentation, type StructureAddAction } from "../widgets/menu-structure-table.js";
+import {
+  ownPresentation,
+  sectionIdsWithin,
+  type StructureAddAction,
+} from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -235,13 +239,6 @@ function ownedSections(
       ];
     })
     .filter(({ sectionId }) => !seen.has(sectionId) && !!seen.add(sectionId));
-}
-
-/** The ids of every section at or below `node`, wherever it appears inside it. */
-function sectionIdsWithin(node: MenuStructureNode): string[] {
-  return node.ref.kind === "section"
-    ? [node.ref.sectionId, ...(node.children ?? []).flatMap(sectionIdsWithin)]
-    : [];
 }
 
 function listIdOf(structure: MenuStructure | null, trail: MenuStructureNode[]): string | null {
@@ -1526,19 +1523,22 @@ export class MenusScreen extends LitElement {
   }
 
   /** Moves one member into another list of the menu, as the bulk Move does, and opens that list so
-   * the moved row is drawn; the table restores focus once `busy` falls after the menu is read. */
+   * the moved row is drawn. Its paths are checked when it is sent, not when it is queued, since a
+   * change that lands while it waits can take either list off the menu. */
   #moveInto(from: string[], memberId: string, to: string[], position: number | undefined): void {
-    const source = this.#targetAt(from);
-    const destination = this.#targetAt(to);
+    const menuId = this.menuId;
     // `#targetAt` falls back to an ancestor for a path that no longer leads anywhere.
     const resolves = (path: string[]) => trailOf(this.structure, path).length === path.length;
     this.memberError = null;
-    if (!resolves(from) || !resolves(to)) {
-      void this.#refresh(false);
-      return;
-    }
     this.busy = true;
-    this.#writes.run(destination.listId, async () => {
+    this.#writes.run(this.#targetAt(to).listId, async () => {
+      if (this.menuId !== menuId || !resolves(from) || !resolves(to)) {
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      const source = this.#targetAt(from);
+      const destination = this.#targetAt(to);
       try {
         await this.api.moveSectionMembersInto(
           destination.listId,
@@ -1553,7 +1553,8 @@ export class MenusScreen extends LitElement {
         return;
       }
       await this.#refresh();
-      this.#edit(to);
+      if (destination.menuId === this.menuId && this.#holds(destination)) this.#edit(to);
+      else this.#reportSavedToLost(destination);
       this.busy = false;
     });
   }
