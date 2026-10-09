@@ -34,6 +34,9 @@ export interface RoutingRules {
   readonly activeStationIds: ReadonlySet<string>;
   readonly defaultStationId: string | null; // the active default, or null
   readonly timing: ReadonlyMap<string, StationTiming>;
+  /** By cell key, then period id: what the cell sends work to while that period runs. */
+  readonly cellPeriods?: ReadonlyMap<string, ReadonlyMap<string, RouteTarget>>;
+  readonly zoneDepartment?: ReadonlyMap<string, string>; // zoneId → departmentId
 }
 
 /** One weekly interval. Only the HH:MM portion of each endpoint counts. */
@@ -65,6 +68,8 @@ export interface RoutingMoment {
   readonly timeOfDay: string;
   /** The calendar date that owns `timeOfDay`; without one only the standard week applies. */
   readonly civilDate?: string;
+  /** The running period by department id, null when none runs; absent: Any other time. */
+  readonly periods?: ReadonlyMap<string, string | null>;
 }
 
 export type StationStatus =
@@ -144,14 +149,18 @@ function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCe
  * effective category is null), All categories, and within each row its zone cell before Every
  * zone. All categories × Every zone is the implicit default station, never a stored cell. A
  * product row's `categoryId` is its effective category. `skipOwn` ignores the cell at exactly the
- * asked coordinate: what that coordinate shows with no setting of its own.
+ * asked coordinate: what that coordinate shows with no setting of its own. The chosen cell's line
+ * for the period running in the zone's department, if it has one, replaces the cell's own target.
  */
 export function selectRoutingCell(
   rules: RoutingSelectionRules,
   row: RoutingRow,
   zoneId: string | null,
   categoryId: string | null = null,
-  { skipOwn = false }: { readonly skipOwn?: boolean } = {},
+  {
+    skipOwn = false,
+    periods,
+  }: { readonly skipOwn?: boolean; readonly periods?: RoutingMoment["periods"] } = {},
 ): SelectedCell {
   const lineage: RoutingRow[] = row.kind === "product" ? [row] : [];
   if (row.kind === "no_category" || (row.kind === "product" && categoryId === null)) {
@@ -176,10 +185,14 @@ export function selectRoutingCell(
     if (best !== undefined) break;
   }
   if (best !== undefined) {
-    return {
-      target: best.target,
-      decidedBy: { kind: "cell", address: { row: best.row, zoneId: best.zoneId } },
-    };
+    const address = { row: best.row, zoneId: best.zoneId };
+    const departmentId = zoneId === null ? undefined : rules.zoneDepartment?.get(zoneId);
+    const periodId = departmentId === undefined ? null : (periods?.get(departmentId) ?? null);
+    const line =
+      periodId === null ? undefined : rules.cellPeriods?.get(cellKey(best))?.get(periodId);
+    return line === undefined || periodId === null
+      ? { target: best.target, decidedBy: { kind: "cell", address } }
+      : { target: line, decidedBy: { kind: "cell", address, periodId } };
   }
   if (rules.defaultStationId !== null && rules.activeStationIds.has(rules.defaultStationId)) {
     return {
@@ -305,6 +318,7 @@ export function chooseMaker(
     { kind: "product", productId: product.routedProductId },
     zoneId,
     product.categoryId,
+    { periods: moment?.periods },
   );
   if (target === null || decidedBy === null || decidedBy.kind === "default") {
     return { route: target, decidedBy, fallbacks: [], noReplacement: false };

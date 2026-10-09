@@ -56,7 +56,8 @@ import {
 } from "./routing-store.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
-import { routingCells } from "./schema/routing.js";
+import { routingCellPeriods, routingCells } from "./schema/routing.js";
+import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { closeStationForToday, setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/station-week.js";
@@ -2949,5 +2950,124 @@ describe("routing on repeating named days", () => {
       expect(model.stationTimes.find((row) => row.stationId === f.terraceBar)).toMatchObject({
         specialDateRestricts: true,
       });
+    }));
+});
+
+describe("routing during a service period", () => {
+  /** Cocktails' Every zone cell: Upstairs bar, and Downstairs bar during Lunch (12:00–14:00 UTC);
+   * Afternoon (14:00–18:00) has no line. */
+  async function periodFixture(tx: Transaction) {
+    const f = await fixture(tx);
+    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+    const [dining] = await tx
+      .insert(floorZones)
+      .values({ ...f.cfg, name: "Dining room" })
+      .returning();
+    await configureZone(tx, f.cfg, { zoneId: dining!.id, departmentId: f.department });
+    const [upstairs, downstairs] = await tx
+      .insert(kitchenStations)
+      .values([
+        { ...f.cfg, name: "Upstairs bar" },
+        { ...f.cfg, name: "Downstairs bar" },
+      ])
+      .returning();
+    const period = async (name: string) =>
+      (await saveMenuPeriod(tx, f.cfg, f.department, { name, menuId: f.menu, staffMenuIds: [] }))
+        .id;
+    const lunch = await period("Lunch");
+    const afternoon = await period("Afternoon");
+    await replaceMenuWeek(
+      tx,
+      f.cfg,
+      f.department,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [
+          { periodId: lunch, startsAt: "12:00", endsAt: "14:00" },
+          { periodId: afternoon, startsAt: "14:00", endsAt: "18:00" },
+        ],
+      })),
+      fridayAt("10:00"),
+    );
+    await setCategoryCell(tx, f.cfg, f.cocktails, station(upstairs!.id));
+    const [cell] = await tx
+      .select({ id: routingCells.id })
+      .from(routingCells)
+      .where(eq(routingCells.categoryId, f.cocktails));
+    await tx.insert(routingCellPeriods).values({
+      cellId: cell!.id,
+      periodId: lunch,
+      departmentId: f.department,
+      stationId: downstairs!.id,
+    });
+    return { ...f, dining: dining!.id, upstairs: upstairs!.id, downstairs: downstairs!.id };
+  }
+  const fridayAt = (time: string) => new Date(`2026-10-02T${time}:00Z`);
+  const made = (stationId: string) => ({ kind: "made", route: station(stationId) });
+
+  it("routes a cocktail Downstairs inside Lunch and Upstairs inside Afternoon, which has no line", async () =>
+    scoped(async (tx) => {
+      const f = await periodFixture(tx);
+      const lunch = await routingAt(tx, f.cfg, fridayAt("13:00"));
+      expect(await lunch.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, made(f.downstairs)]]),
+      );
+      expect(
+        await lunch.extraMakers(f.terrace, [
+          { key: "x", productId: f.mojito, dishStationId: f.bar },
+        ]),
+      ).toEqual(new Map([["x", { kind: "made", stationId: f.downstairs }]]));
+      expect(await lunch.makers(null, [f.mojito])).toEqual(new Map([[f.mojito, made(f.upstairs)]]));
+      const afternoon = await routingAt(tx, f.cfg, fridayAt("14:10"));
+      expect(await afternoon.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, made(f.upstairs)]]),
+      );
+      expect(await resolveMakers(tx, f.cfg, f.dining, [f.mojito], fridayAt("12:30"))).toEqual(
+        new Map([[f.mojito, made(f.downstairs)]]),
+      );
+    }));
+
+  it("reads a department's period once per routing call, however many dishes and zones", async () =>
+    scoped(async (tx) => {
+      const f = await periodFixture(tx);
+      const at = fridayAt("13:00");
+      const asked: string[] = [];
+      const resolver = await routingAt(tx, f.cfg, at, {
+        runningPeriod: async (departmentId) => {
+          asked.push(departmentId);
+          return (await resolveDepartmentService(tx, f.cfg, departmentId, at)).periodId;
+        },
+      });
+      expect(await resolver.makers(f.terrace, [f.mojito, f.variant])).toEqual(
+        new Map([
+          [f.mojito, made(f.downstairs)],
+          [f.variant, made(f.downstairs)],
+        ]),
+      );
+      await resolver.makers(f.dining, [f.mojito]);
+      await resolver.extraMakers(f.terrace, [
+        { key: "x", productId: f.mojito, dishStationId: f.bar },
+      ]);
+      expect(asked).toEqual([f.department]);
+    }));
+
+  it("uses Any other time and asks for no period while the venue's clock cannot be read", async () =>
+    scoped(async (tx) => {
+      const f = await periodFixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      const asked: string[] = [];
+      const resolver = await routingAt(tx, f.cfg, fridayAt("13:00"), {
+        runningPeriod: async (departmentId) => {
+          asked.push(departmentId);
+          return null;
+        },
+      });
+      expect(await resolver.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, made(f.upstairs)]]),
+      );
+      expect(asked).toEqual([]);
     }));
 });

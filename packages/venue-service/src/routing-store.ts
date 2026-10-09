@@ -45,7 +45,8 @@ import type {
   RoutingModel,
   RoutingMove,
 } from "./routing-types.js";
-import { routingCells } from "./schema/routing.js";
+import { resolveDepartmentService } from "./menu-timetable.js";
+import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 import type {
@@ -240,6 +241,15 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     .from(routingCells)
     .where(eq(routingCells.locationId, cfg.locationId))
     .orderBy(asc(routingCells.id));
+  const periodRows = await tx
+    .select({
+      cellId: routingCellPeriods.cellId,
+      periodId: routingCellPeriods.periodId,
+      stationId: routingCellPeriods.stationId,
+    })
+    .from(routingCellPeriods)
+    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
+    .where(eq(routingCells.locationId, cfg.locationId));
   const folders = await tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
     .from(categories)
@@ -294,12 +304,22 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
       },
     ]),
   );
+  const cells = cellRows.map(readCell);
+  const keyOfCell = new Map(cellRows.map((row, index) => [row.id, cellKey(cells[index]!)]));
+  const cellPeriods = new Map<string, Map<string, RouteTarget>>();
+  for (const row of periodRows) {
+    const key = keyOfCell.get(row.cellId)!;
+    const lines = cellPeriods.get(key) ?? new Map<string, RouteTarget>();
+    lines.set(row.periodId, readTarget(row));
+    cellPeriods.set(key, lines);
+  }
   const rules: RoutingRules = {
-    cells: Object.freeze(cellRows.map(readCell)),
+    cells: Object.freeze(cells),
     parentOf: new Map(folders.map((row) => [row.id, row.parentId])),
     activeStationIds: new Set(stations.filter((row) => row.active).map((row) => row.id)),
     defaultStationId: stations.find((row) => row.active && row.isDefault)?.id ?? null,
     timing,
+    cellPeriods,
   };
   return { rules, folders, stations };
 }
@@ -524,13 +544,33 @@ function storedUuid(id: string): string {
   return normaliseUuid(id, "ProductId");
 }
 
+/**
+ * `runningPeriod` answers a department's running period at `at`; it is asked at most once per
+ * department, the first time a dish in one of its zones is routed.
+ */
 export async function routingAt(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
+  {
+    runningPeriod = async (departmentId: string) =>
+      (await resolveDepartmentService(tx, cfg, departmentId, at)).periodId,
+  }: { runningPeriod?: (departmentId: string) => Promise<string | null> } = {},
 ): Promise<MakerResolver> {
   const { moment } = await clockAt(tx, cfg, at);
-  const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
+  const snapshotted = await snapshot(tx, cfg, scopeAt(moment));
+  const { stations } = snapshotted;
+  const zoneDepartment = new Map<string, string>();
+  const periods = new Map<string, string | null>();
+  const rules: RoutingRules = { ...snapshotted.rules, zoneDepartment };
+  const routedMoment: RoutingMoment | null = moment === null ? null : { ...moment, periods };
+  const enterZone = async (zoneId: string | null) => {
+    if (zoneId === null) return;
+    const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
+    zoneDepartment.set(zoneId, departmentId);
+    if (moment !== null && !periods.has(departmentId))
+      periods.set(departmentId, await runningPeriod(departmentId));
+  };
   let stationNames: ReadonlyMap<string, StationTodayState> | undefined;
   const productFacts = async (productIds: readonly string[]) => {
     const spellingByUuid = new Map<string, string>();
@@ -582,10 +622,10 @@ export async function routingAt(
     async makers(zoneId, productIds) {
       const outcomes = new Map<string, MakerOutcome>();
       if (productIds.length === 0) return outcomes;
-      if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
+      await enterZone(zoneId);
       const { spellingByUuid, facts } = await productFacts(productIds);
       for (const [uuid, id] of spellingByUuid) {
-        const choice = chooseMaker(rules, facts.get(uuid)!, zoneId, moment);
+        const choice = chooseMaker(rules, facts.get(uuid)!, zoneId, routedMoment);
         outcomes.set(
           id,
           choice.route !== null
@@ -600,14 +640,14 @@ export async function routingAt(
     async extraMakers(zoneId, extras) {
       const outcomes = new Map<string, ExtraMakerOutcome>();
       if (extras.length === 0) return outcomes;
-      if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
+      await enterZone(zoneId);
       const { facts } = await productFacts(extras.map((extra) => extra.productId));
       for (const extra of extras) {
         const choice = chooseExtraMaker(
           rules,
           facts.get(storedUuid(extra.productId))!,
           zoneId,
-          moment,
+          routedMoment,
           extra.dishStationId,
         );
         outcomes.set(extra.key, choice.outcome);

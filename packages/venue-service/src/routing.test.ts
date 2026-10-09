@@ -1683,3 +1683,136 @@ describe("changeReach", () => {
     expect(columns.filter((zoneId) => everything.reachesZone(zoneId))).toEqual(["z3"]);
   });
 });
+
+describe("a cell's period lines", () => {
+  const cocktailsEverywhere: CellAddress = { row: category("cocktails"), zoneId: null };
+  const periodRules: RoutingRules = {
+    ...base,
+    cells: cells(
+      [category("cocktails"), null, station("upstairs")],
+      [category("cocktails"), "garden", station("pastry")],
+    ),
+    activeStationIds: new Set(["upstairs", "downstairs", "pastry", "patioBar", "kitchen"]),
+    cellPeriods: new Map([
+      [
+        cellKey(cocktailsEverywhere),
+        new Map<string, RouteTarget>([
+          ["lunch", station("downstairs")],
+          ["patioLunch", station("patioBar")],
+        ]),
+      ],
+    ]),
+    zoneDepartment: new Map([
+      ["dining", "restaurant"],
+      ["terrace", "restaurant"],
+      ["garden", "restaurant"],
+      ["patio", "bar"],
+    ]),
+  };
+  const during = (periods: Record<string, string | null>, timeOfDay = "13:00"): RoutingMoment => ({
+    weekday: FRI,
+    timeOfDay,
+    periods: new Map(Object.entries(periods)),
+  });
+  const byLunch = { ...decidedByCell(category("cocktails"), null), periodId: "lunch" };
+
+  it("sends a cocktail where the running period's line says, and elsewhere where the cell does", () => {
+    expect(chooseMaker(periodRules, mojito, "dining", during({ restaurant: "lunch" }))).toEqual({
+      route: station("downstairs"),
+      decidedBy: byLunch,
+      fallbacks: [],
+      noReplacement: false,
+    });
+    for (const moment of [
+      during({ restaurant: "afternoon" }, "14:10"),
+      during({ restaurant: null }, "17:00"),
+      at(FRI, "13:00"),
+      null,
+    ]) {
+      const choice = chooseMaker(periodRules, mojito, "dining", moment);
+      expect(choice.route).toEqual(station("upstairs"));
+      expect(choice.decidedBy).toStrictEqual(decidedByCell(category("cocktails"), null));
+    }
+  });
+
+  it("uses Any other time for a dish with no zone", () => {
+    expect(chooseMaker(periodRules, mojito, null, during({ restaurant: "lunch" })).route).toEqual(
+      station("upstairs"),
+    );
+  });
+
+  it("lets a zone that sets nothing inherit the line, and a zone with its own setting keep it", () => {
+    expect(chooseMaker(periodRules, mojito, "terrace", during({ restaurant: "lunch" }))).toEqual({
+      route: station("downstairs"),
+      decidedBy: byLunch,
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseMaker(periodRules, mojito, "garden", during({ restaurant: "lunch" }))).toEqual({
+      route: station("pastry"),
+      decidedBy: decidedByCell(category("cocktails"), "garden"),
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("applies each department's period only in that department's zones", () => {
+    const both = during({ restaurant: "lunch", bar: "patioLunch" });
+    expect(chooseMaker(periodRules, mojito, "dining", both).route).toEqual(station("downstairs"));
+    expect(chooseMaker(periodRules, mojito, "patio", both)).toMatchObject({
+      route: station("patioBar"),
+      decidedBy: { ...decidedByCell(category("cocktails"), null), periodId: "patioLunch" },
+    });
+    const barOnly = during({ restaurant: null, bar: "patioLunch" });
+    expect(chooseMaker(periodRules, mojito, "dining", barOnly).route).toEqual(station("upstairs"));
+    const restaurantOnly = during({ restaurant: "lunch", bar: null });
+    expect(chooseMaker(periodRules, mojito, "patio", restaurantOnly).route).toEqual(
+      station("upstairs"),
+    );
+  });
+
+  it("tells selectRoutingCell the period line, and the cell's own target without periods", () => {
+    const periods = new Map([["restaurant", "lunch"]]);
+    expect(
+      selectRoutingCell(periodRules, product("mojito"), "dining", "cocktails", { periods }),
+    ).toEqual({ target: station("downstairs"), decidedBy: byLunch });
+    expect(selectRoutingCell(periodRules, product("mojito"), "dining", "cocktails")).toStrictEqual({
+      target: station("upstairs"),
+      decidedBy: decidedByCell(category("cocktails"), null),
+    });
+  });
+
+  it("sends an extra on a cell with a Lunch line where the line says during Lunch", () => {
+    expect(
+      chooseExtraMaker(periodRules, mojito, "dining", during({ restaurant: "lunch" }), "kitchen"),
+    ).toEqual({
+      outcome: { kind: "made", stationId: "downstairs" },
+      decidedBy: byLunch,
+      fallbacks: [],
+    });
+    expect(
+      chooseExtraMaker(periodRules, mojito, "dining", during({ restaurant: null }), "kitchen")
+        .outcome,
+    ).toEqual({ kind: "made", stationId: "upstairs" });
+  });
+
+  it("follows a closed-for-today station's destination when a period line names it", () => {
+    const closedDownstairs: RoutingRules = {
+      ...periodRules,
+      timing: new Map([
+        [
+          "downstairs",
+          { fallbackId: "pastry", hours: [], today: "closed", todaySendsTo: "patioBar" },
+        ],
+      ]),
+    };
+    expect(
+      chooseMaker(closedDownstairs, mojito, "dining", during({ restaurant: "lunch" })),
+    ).toEqual({
+      route: station("patioBar"),
+      decidedBy: byLunch,
+      fallbacks: [{ stationId: "downstairs", why: "closed_by_hand" }],
+      noReplacement: false,
+    });
+  });
+});

@@ -17,13 +17,15 @@ export type CellAddress = { row: RoutingRow; zoneId: string | null };
 
 export type RoutingCell = CellAddress & { target: RouteTarget };
 
-export type RoutingDecision = { kind: "cell"; address: CellAddress } | { kind: "default" };
+/** `periodId`: the running period's line on that cell chose the target. */
+export type RoutingDecision =
+  { kind: "cell"; address: CellAddress; periodId?: string } | { kind: "default" };
 
 export type SelectedCell = { target: RouteTarget | null; decidedBy: RoutingDecision | null };
 
 export type RoutingSelectionRules = Pick<
   RoutingRules,
-  "cells" | "parentOf" | "activeStationIds" | "defaultStationId"
+  "cells" | "parentOf" | "activeStationIds" | "defaultStationId" | "cellPeriods" | "zoneDepartment"
 >;
 
 export type GridProduct = { id: string; name: string; categoryId: string | null };
