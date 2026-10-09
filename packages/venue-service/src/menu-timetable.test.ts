@@ -8,6 +8,7 @@ import {
   requireMenuRoot,
   buildMenuDocument,
   createCatalogue,
+  createCategory,
   createProduct,
   menuDocumentHash,
   publishMenu,
@@ -3597,6 +3598,74 @@ describe("the routing that names a period", () => {
     ).toHaveLength(6);
     expect((await uses()).get(periods.mediodia)).toEqual([
       { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+    ]);
+  });
+
+  it("names each row by its path and lists the cells in the Routing tab's order", async () => {
+    const v = await timed();
+    const { periods } = v;
+    await db.update(floorZones).set({ displayOrder: 5 }).where(eq(floorZones.id, v.sala));
+    const [cocina] = await db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, v.locationId));
+    const { drinksCocktails, brunchCocktails, mojito, bread } = await scoped(async (tx) => {
+      const drinks = (await createCategory(tx, { name: "Drinks" })).id;
+      const brunch = (await createCategory(tx, { name: "Brunch" })).id;
+      const product = async (name: string, categoryId: string | null) =>
+        (
+          await createProduct(tx, {
+            catalogueId: v.menus.Copas,
+            categoryId,
+            name,
+            pricingUnit: "each",
+            unitPrice: "9.00",
+            vatClass: "general",
+          })
+        ).id;
+      const drinksCocktails = (await createCategory(tx, { name: "Cocktails", parentId: drinks }))
+        .id;
+      return {
+        drinksCocktails,
+        brunchCocktails: (await createCategory(tx, { name: "Cocktails", parentId: brunch })).id,
+        mojito: await product("Mojito", drinksCocktails),
+        bread: await product("Bread", null),
+      };
+    });
+    for (const values of [
+      { productId: bread },
+      { noCategory: true },
+      { productId: mojito, zoneId: v.terraza },
+      { categoryId: drinksCocktails, zoneId: v.sala },
+      { categoryId: drinksCocktails, zoneId: v.terraza },
+      { categoryId: drinksCocktails },
+      { categoryId: brunchCocktails },
+      { zoneId: v.sala },
+    ]) {
+      const [cell] = await db
+        .insert(routingCells)
+        .values({ locationId: v.locationId, stationId: cocina!.id, ...values })
+        .returning({ id: routingCells.id });
+      await db.insert(routingCellPeriods).values({
+        cellId: cell!.id,
+        periodId: periods.noches,
+        departmentId: v.restaurant,
+        stationId: cocina!.id,
+      });
+    }
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    const noches = model.departments
+      .find((department) => department.id === v.restaurant)!
+      .periods.find((period) => period.id === periods.noches)!;
+    expect(noches.routingUses).toEqual([
+      { rowKind: "all", rowLabel: null, zoneName: "Sala" },
+      { rowKind: "category", rowLabel: "Brunch › Cocktails", zoneName: null },
+      { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: null },
+      { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: "Terraza" },
+      { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: "Sala" },
+      { rowKind: "product", rowLabel: "Drinks › Cocktails › Mojito", zoneName: "Terraza" },
+      { rowKind: "no_category", rowLabel: null, zoneName: null },
+      { rowKind: "product", rowLabel: "Bread", zoneName: null },
     ]);
   });
 });

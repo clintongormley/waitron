@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
 import { catalogues, categories, floorZones, newId, products, type Transaction } from "@waitron/db";
-import { directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
+import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, createLabelComparator } from "@waitron/shared";
 
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
@@ -839,9 +839,57 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   async beforeDelete() {},
 };
 
-const ROW_ORDER = { all: 0, no_category: 1, category: 2, product: 3 } as const;
+type Folder = { id: string; name: string; parentId: string | null };
 
-/** Each period's routing cells that hold a line for it, by row and then zone (Every zone first). */
+/**
+ * The Routing tab's row order and each category's path, as `visibleRoutingRows` lays the rows out:
+ * a category, then its child categories, then its products; No category and its products last.
+ * `productSlot` is where a category's products sit, `null` keyed for the uncategorised.
+ */
+function routingRowPlaces(folders: readonly Folder[]) {
+  const known = new Map(folders.map((folder) => [folder.id, folder]));
+  const compare = createLabelComparator();
+  const children = new Map<string, Folder[]>();
+  const roots: Folder[] = [];
+  for (const folder of folders) {
+    const parent = folder.parentId;
+    if (parent === null || parent === folder.id || !known.has(parent)) roots.push(folder);
+    else children.set(parent, [...(children.get(parent) ?? []), folder]);
+  }
+  const byName = (a: Folder, b: Folder) => compare(a.name, b.name);
+  roots.sort(byName);
+  for (const list of children.values()) list.sort(byName);
+  const categorySlot = new Map<string, number>();
+  const productSlot = new Map<string | null, number>();
+  const path = new Map<string, string[]>();
+  let next = 1;
+  const place = (folder: Folder, above: string[]) => {
+    const own = [...above, folder.name];
+    categorySlot.set(folder.id, next++);
+    path.set(folder.id, own);
+    for (const child of children.get(folder.id) ?? [])
+      if (!categorySlot.has(child.id)) place(child, own);
+    productSlot.set(folder.id, next++);
+  };
+  for (const root of roots) place(root, []);
+  // What is left sits on or below a parent cycle; a cycle member is placed as a root.
+  for (const folder of folders) {
+    if (categorySlot.has(folder.id)) continue;
+    const seen = new Set<string>();
+    let member = folder;
+    while (!seen.has(member.id)) {
+      seen.add(member.id);
+      member = known.get(member.parentId!)!;
+    }
+    place(member, []);
+  }
+  const noCategorySlot = next++;
+  productSlot.set(null, next);
+  return { categorySlot, productSlot, noCategorySlot, path, compare };
+}
+
+/** Each period's routing cells that hold a line for it, in the Routing tab's row order, then by
+ * zone (Every zone first). */
 async function readRoutingUses(
   tx: Transaction,
   cfg: VenueScope,
@@ -850,34 +898,66 @@ async function readRoutingUses(
     .select({
       periodId: routingCellPeriods.periodId,
       noCategory: routingCells.noCategory,
-      categoryName: categories.name,
+      categoryId: routingCells.categoryId,
+      productId: routingCells.productId,
       productName: products.name,
+      productCategoryId: products.categoryId,
       zoneName: floorZones.name,
       zoneOrder: floorZones.displayOrder,
     })
     .from(routingCellPeriods)
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
-    .leftJoin(categories, eq(categories.id, routingCells.categoryId))
     .leftJoin(products, eq(products.id, routingCells.productId))
     .leftJoin(floorZones, eq(floorZones.id, routingCells.zoneId))
     .where(eq(routingCells.locationId, cfg.locationId));
+  if (rows.length === 0) return new Map();
+  const folders = await tx
+    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
+    .from(categories)
+    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+    .orderBy(asc(categories.name), asc(categories.id));
+  const { categorySlot, productSlot, noCategorySlot, path, compare } = routingRowPlaces(folders);
   const placed = rows.map((row) => {
-    const use: PeriodRoutingUse =
-      row.categoryName !== null
-        ? { rowKind: "category", rowLabel: row.categoryName, zoneName: row.zoneName }
-        : row.productName !== null
-          ? { rowKind: "product", rowLabel: row.productName, zoneName: row.zoneName }
-          : {
-              rowKind: row.noCategory ? "no_category" : "all",
-              rowLabel: null,
-              zoneName: row.zoneName,
-            };
-    return { periodId: row.periodId, use, zoneOrder: row.zoneOrder };
+    let use: PeriodRoutingUse;
+    let slot: number;
+    if (row.categoryId !== null) {
+      use = {
+        rowKind: "category",
+        rowLabel: path.get(row.categoryId)!.join(" › "),
+        zoneName: row.zoneName,
+      };
+      slot = categorySlot.get(row.categoryId)!;
+    } else if (row.productId !== null) {
+      const folder =
+        row.productCategoryId !== null && path.has(row.productCategoryId)
+          ? row.productCategoryId
+          : null;
+      use = {
+        rowKind: "product",
+        rowLabel: [...(folder === null ? [] : path.get(folder)!), row.productName!].join(" › "),
+        zoneName: row.zoneName,
+      };
+      slot = productSlot.get(folder)!;
+    } else {
+      use = {
+        rowKind: row.noCategory ? "no_category" : "all",
+        rowLabel: null,
+        zoneName: row.zoneName,
+      };
+      slot = row.noCategory ? noCategorySlot : 0;
+    }
+    return {
+      periodId: row.periodId,
+      use,
+      slot,
+      name: row.productName ?? "",
+      zoneOrder: row.zoneOrder,
+    };
   });
   placed.sort(
     (a, b) =>
-      ROW_ORDER[a.use.rowKind] - ROW_ORDER[b.use.rowKind] ||
-      (a.use.rowLabel ?? "").localeCompare(b.use.rowLabel ?? "") ||
+      a.slot - b.slot ||
+      compare(a.name, b.name) ||
       (a.zoneOrder ?? -1) - (b.zoneOrder ?? -1) ||
       (a.use.zoneName ?? "").localeCompare(b.use.zoneName ?? ""),
   );

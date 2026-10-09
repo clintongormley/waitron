@@ -83,6 +83,7 @@ export const QUERY_DEPENDENCIES = {
     "routing_cells",
     "routing_cell_periods",
     "categories",
+    "category_details",
     "products",
   ],
   operations: [
