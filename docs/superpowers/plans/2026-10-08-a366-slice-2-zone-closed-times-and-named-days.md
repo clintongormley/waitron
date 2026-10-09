@@ -689,17 +689,24 @@ one named-day read, one closed-times read, however many zones. `listZoneOffers` 
 every period menu without reading ranges, dates or the venue clock" (`menu-timetable.test.ts:1702-1742`)
 passes unchanged, and a new case beside it asserts no statement names `zone_closed_times`.
 
-- [ ] **Step 1: Failing tests:** review focus 1 at 23:29, 23:30, 02:00 and 06:00 (fails today:
+- [x] **Step 1: Failing tests:** review focus 1 at 23:29, 23:30, 02:00 and 06:00 (fails today:
   `closedZoneIdsAt` does not exist); a named day with own hours and no Terrace ranges leaves the
   Terrace open while its weekday would close it; a whole-venue closure leaves `zoneOpen` true; an
   unreadable time zone → open; `assertZoneTakesNewOrders` throws `service_zone.closed`
   `{ zoneId }`; `menuState` and `listZoneOffers` answer `zoneOpen`; the new pricing case.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/operations.test.ts src/menu-timetable.test.ts`.
-- [ ] **Step 3: Implement.** Register `service_zone.closed`.
-- [ ] **Step 4: Run; see them pass;** the venue-service node project and the server package;
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/operations.test.ts src/menu-timetable.test.ts`.
+- [x] **Step 3: Implement.** Register `service_zone.closed`.
+- [x] **Step 4: Run; see them pass;** the venue-service node project and the server package;
   the till's whole suite; typecheck `@waitron/module`, `@waitron/catalogue`,
   `@waitron/venue-service`, `@waitron/server` and `@waitron/till`.
-- [ ] **Step 5: Commit** — `feat(venue-service): which zones are closed now (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): which zones are closed now (A366)`.
+
+Task 10 receipt (2026-10-09): closure state is a separate `zoneOpen` field; the till client
+already derives both response service types from `MenuState["service"]`, so its type alias needs
+no edit. Counter and table screen indicators remain Task 13. New real-database cases cover the
+start, an overnight end inside the day, changeover, own-hours replacement, location and zone
+selection, whole-venue closure, unreadable clock, refusal and a three-statement batch. Existing
+service shapes gain the field; the availability batch count gains those three reads.
 
 ---
 

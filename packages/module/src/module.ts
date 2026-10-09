@@ -267,6 +267,7 @@ export interface ZoneUnavailable {
 export interface ZoneMenuState {
   readonly service: {
     readonly open: boolean;
+    readonly zoneOpen: boolean;
     readonly periodName: string | null;
     readonly keepOpen: {
       readonly periodId: string;
@@ -472,6 +473,18 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
+  closedZoneIdsAt(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    at: Date,
+    zoneIds?: readonly string[],
+  ): Promise<ReadonlySet<string>>;
+  assertZoneTakesNewOrders(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at: Date,
+  ): Promise<void>;
   resolveDepartmentService(
     tx: Transaction,
     cfg: { locationId: LocationId },

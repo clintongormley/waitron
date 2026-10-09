@@ -1,3 +1,4 @@
+import { closedZoneIdsAt } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
@@ -838,10 +839,13 @@ export async function listZoneOffers(
     published.map((menu) => menu.document),
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
   );
+  const at = options.at ?? new Date();
   const service =
     options.withDefault === false
       ? null
-      : await resolveDepartmentService(tx, cfg, context.departmentId, options.at ?? new Date());
+      : await resolveDepartmentService(tx, cfg, context.departmentId, at);
+  const zoneOpen =
+    options.withDefault === false || !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId);
   const defaultMenuId = service?.open
     ? servedDefault(
         service.customerMenuId,
@@ -867,6 +871,7 @@ export async function listZoneOffers(
     defaultMenuId,
     service: {
       open: service?.open ?? true,
+      zoneOpen,
       periodName: service?.periodName ?? null,
       keepOpen: service?.keepOpen ?? null,
     },
@@ -892,14 +897,14 @@ export async function menuState(
     );
   if (zone?.departmentId == null)
     return {
-      service: { open: false, periodName: null, keepOpen: null },
+      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
     };
   const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
   const published = await zoneLiveDocuments(tx, zoneId);
   return {
-    service: { open: service.open, periodName: service.periodName, keepOpen: service.keepOpen },
+    service: { open: service.open, zoneOpen: !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId), periodName: service.periodName, keepOpen: service.keepOpen },
     menus: published.map(({ menuId, versionId }) => ({
       menuId,
       versionId,

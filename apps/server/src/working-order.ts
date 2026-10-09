@@ -448,7 +448,7 @@ export async function priceOrderLines(
       identities: [],
       lineContexts: [],
       offers: {
-        service: { open: false, periodName: null, keepOpen: null },
+        service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
         defaultMenuId: null,
         menus: [],
         offers: [],

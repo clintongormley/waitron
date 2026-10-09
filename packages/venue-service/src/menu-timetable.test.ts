@@ -1710,6 +1710,27 @@ describe("the offers a zone lists at an instant", () => {
 });
 
 describe("statements", () => {
+  it("pricing skips zone closed times and reports neutral zone state", async () => {
+    const v = await timed();
+    await scoped(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        const offers = await listZoneOffers(tx, v.cfg, v.barra, { withDefault: false });
+        expect(offers.service.zoneOpen).toBe(true);
+        expect(
+          spy.mock.calls
+            .map(([query]) => (query as unknown as { sql: string }).sql)
+            .filter((text) => text.includes('"zone_closed_times"')),
+        ).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   const sessionOf = (tx: Transaction) =>
     (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
   const statementsOf = async <T>(fn: (tx: Transaction) => Promise<T>) =>

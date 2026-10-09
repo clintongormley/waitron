@@ -2441,7 +2441,7 @@ export class TillApp extends LitElement {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
       this.#loadCounterOffers(
-        { offers: [], menus: [], service: { open: false, periodName: null, keepOpen: null } },
+        { offers: [], menus: [], service: { open: false, zoneOpen: true, periodName: null, keepOpen: null } },
         false,
       );
       this.counterServiceZones = [];
@@ -4972,7 +4972,7 @@ export class TillApp extends LitElement {
         if (offerRequest !== this.#tableOfferRequest) return;
         this.#loadTableOffers(
           undefined,
-          { offers: [], menus: [], service: { open: false, periodName: null, keepOpen: null } },
+          { offers: [], menus: [], service: { open: false, zoneOpen: true, periodName: null, keepOpen: null } },
           false,
         );
         this.tableSelectedCatalogueId = "";
@@ -4986,7 +4986,7 @@ export class TillApp extends LitElement {
     } else {
       this.#loadTableOffers(
         undefined,
-        { offers: [], menus: [], service: { open: false, periodName: null, keepOpen: null } },
+        { offers: [], menus: [], service: { open: false, zoneOpen: true, periodName: null, keepOpen: null } },
         false,
       );
       this.tableSelectedCatalogueId = "";

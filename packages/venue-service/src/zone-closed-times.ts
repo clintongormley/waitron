@@ -1,9 +1,10 @@
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { floorZones, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
-import { parseClosedRanges, type ClosedRange, rangeSpan } from "./service-day.js";
+import { parseClosedRanges, type ClosedRange, rangeSpan, serviceMomentAt } from "./service-day.js";
+import { namedDaysOn } from "./named-days.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { zoneServicePolicies } from "./schema/service.js";
@@ -132,4 +133,51 @@ export async function readZoneClosedTimes(tx: Transaction, cfg: VenueScope, cuto
         })),
     };
   });
+}
+
+export async function closedZoneIdsAt(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+  zoneIds?: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const closed = new Set<string>();
+  if (zoneIds?.length === 0) return closed;
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  if (moment === null) return closed;
+  const day = (await namedDaysOn(tx, cfg, [moment.businessDay])).get(moment.businessDay);
+  if (day?.closeWholeVenue) return closed;
+  const rows = await tx
+    .select({
+      zoneId: zoneClosedTimes.zoneId,
+      startsAt: zoneClosedTimes.startsAt,
+      endsAt: zoneClosedTimes.endsAt,
+    })
+    .from(zoneClosedTimes)
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
+    .where(
+      and(
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        day?.ownHours
+          ? eq(zoneClosedTimes.specialDateId, day.id)
+          : eq(zoneClosedTimes.weekday, moment.weekday),
+        zoneIds === undefined ? undefined : inArray(zoneClosedTimes.zoneId, [...zoneIds]),
+      ),
+    );
+  for (const row of rows) {
+    const { start, end } = rangeSpan(row, clock.dayCutover);
+    if (start <= moment.minute && moment.minute < end) closed.add(row.zoneId);
+  }
+  return closed;
+}
+
+export async function assertZoneTakesNewOrders(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  at: Date,
+): Promise<void> {
+  if ((await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId))
+    throw new AppError("service_zone.closed", { zoneId });
 }
