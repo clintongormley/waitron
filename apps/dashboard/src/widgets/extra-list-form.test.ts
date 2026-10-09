@@ -2789,3 +2789,14 @@ it("decimal input extra portion shows Spanish and submits the exact portion", as
   expect(submitted).toHaveLength(1);
   expect(submitted[0]!.items[0]!.portion).toBe("0.125");
 });
+
+it("leaves archived products out of the extras picker while keeping active products", async () => {
+  const { el } = await mount({ products: [product({ active: false }), products[1]!] });
+  const combobox = await openPicker(el);
+  expect(combobox.options).toEqual([{ value: EGG, label: "Fried egg" }]);
+  expect(
+    [...combobox.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+      row.textContent!.trim(),
+    ),
+  ).toEqual(["Fried egg"]);
+});
