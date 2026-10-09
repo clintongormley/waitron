@@ -33,8 +33,8 @@ change the server, in which case stop and say so.
       no arrow), and the pointer is in the MIDDLE HALF of R's height → INTO R, at the end. This
       applies to a sibling section too: the owner's request says dropping on a collapsed section's
       own row puts the item at its end. R's first cell is marked `drop-target` (as the Products tree
-      marks a category); no gap is drawn. Pointer in R's top or bottom quarter → treat R as an
-      ordinary row (rules 4 and 5).
+      marks a category); no gap is drawn. Pointer in R's top or bottom quarter → the rules after
+      this one decide. A product that no longer exists is never offered INTO a section.
    4. R is D's SIBLING (same `parentKey`) → today's reorder, unchanged: the gap before R when R is
       above D, after R's last drawn row when below; release sends `wt-member-move`.
    5. R is in D's own list but is not D's sibling (the same list shown in another place) → nothing.
@@ -50,9 +50,9 @@ change the server, in which case stop and say so.
    - Today a row inside an open sibling section stands for that sibling (reorder), and a closed
      sibling section's row means "reorder beside it". Both change (rules 6 and 3). List each test
      check this changes.
-2. **Release.** Rule 3 sends `wt-member-move` exactly as today. Rules 4 and 5 send a new
+2. **Release.** Rule 4 sends `wt-member-move` exactly as today. Rules 3 and 6 send a new
    `wt-member-move-into` — `detail: { from: string[] /* D's list path */, memberId, to: string[]
-   /* destination list path; [] for the top level */, position: number /* omitted for rule 4 */ }` —
+   /* destination list path; [] for the top level */, position: number /* omitted for rule 3 */ }` —
    bubbling and composed like the others. No optimistic reorder for a cross-list move: the screen
    waits for the answer.
 3. **Keyboard.** ArrowUp and ArrowDown keep moving within the list (unchanged, including sending
