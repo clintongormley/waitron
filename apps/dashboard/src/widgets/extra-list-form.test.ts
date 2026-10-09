@@ -702,7 +702,11 @@ it("sends one wt-cancel when its dialog is dismissed with Escape while the form 
   let cancels = 0;
   host.addEventListener("wt-cancel", () => cancels++);
 
+  const closed = new Promise((resolve) =>
+    el.shadowRoot!.querySelector("wt-modal")!.addEventListener("wt-close", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(cancels).toBe(1));
   await closeReportsDelivered();
 

@@ -475,7 +475,11 @@ it("shuts only the chooser on Escape, leaving the unit and the editor as they we
   const dialog = unitChooser(el);
   await dialog.updateComplete;
   expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(unitChooser(el).open).toBe(false));
   const price = priceInput(el);
   await expect

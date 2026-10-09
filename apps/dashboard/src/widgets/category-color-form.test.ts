@@ -82,7 +82,11 @@ it("sends a cancel, and no colour, on Cancel and on Esc", async () => {
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
   expect(sent).toEqual(["cancel"]);
   swatch(el, "#256bb1").focus();
+  const closed = new Promise((resolve) =>
+    el.shadowRoot!.querySelector("wt-modal")!.addEventListener("wt-close", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(sent).toEqual(["cancel", "cancel"]));
 });
 

@@ -355,7 +355,11 @@ describe("add content language dialog", () => {
     expect(dialog.open).toBe(true);
     expect(dialog.matches(":modal")).toBe(true);
     expect(closed).not.toHaveBeenCalled();
+    const closeReported = new Promise((resolve) =>
+      modal.addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closeReported;
     await vi.waitFor(() => expect(closed).toHaveBeenCalled());
     expect(el.open).toBe(false);
     expect(dialog.open).toBe(false);
