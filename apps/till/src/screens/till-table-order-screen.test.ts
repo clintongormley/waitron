@@ -4496,7 +4496,13 @@ describe("closed department ordering", () => {
         lines: [pendingLine],
         orderId: "wo-closed-zone",
         zoneName: "Terrace",
-        service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+        service: {
+          open: true,
+          zoneOpen: false,
+          periodName: "Lunch",
+          keepOpen: null,
+          zoneKeepOpen: null,
+        },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
         "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
@@ -4537,7 +4543,13 @@ describe("closed department ordering", () => {
     const { el } = await mount({
       draftStore: draft,
       lines: [pendingLine],
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       departmentName: "Restaurant",
     });
     expect(el.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(

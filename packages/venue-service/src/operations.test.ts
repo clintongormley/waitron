@@ -816,6 +816,7 @@ describe("venue service routing", () => {
         service: {
           open: true,
           zoneOpen: true,
+          zoneKeepOpen: null,
           periodName: "Always",
           keepOpen: {
             periodId: expect.any(String),
@@ -2340,6 +2341,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: true,
           zoneOpen: true,
+          zoneKeepOpen: null,
           periodName: "Always",
           keepOpen: {
             periodId: expect.any(String),
@@ -2439,6 +2441,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: true,
           zoneOpen: true,
+          zoneKeepOpen: null,
           periodName: "Always",
           keepOpen: {
             periodId: expect.any(String),
@@ -2473,7 +2476,13 @@ describe("zone offers from the published menus", () => {
     await expect(
       scoped((tx) => menuState(tx, { locationId: otherLocation }, venue.diningZone)),
     ).resolves.toEqual({
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        zoneKeepOpen: null,
+        periodName: null,
+        keepOpen: null,
+      },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
     });
@@ -2491,6 +2500,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: true,
           zoneOpen: true,
+          zoneKeepOpen: null,
           periodName: "Always",
           keepOpen: {
             periodId: expect.any(String),
@@ -2550,14 +2560,20 @@ describe("zone offers from the published menus", () => {
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.cfg, venue.diningZone);
-      expect(prepared).toHaveBeenCalledTimes(17);
+      expect(prepared).toHaveBeenCalledTimes(22);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
       });
       await expect(menuState(tx, venue.cfg, UNKNOWN_ID)).resolves.toEqual({
-        service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+        service: {
+          open: false,
+          zoneOpen: true,
+          zoneKeepOpen: null,
+          periodName: null,
+          keepOpen: null,
+        },
         menus: [],
         unavailable: { products: [], optionLabels: [] },
       });

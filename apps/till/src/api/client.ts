@@ -2531,7 +2531,9 @@ export class TillApi {
     );
   }
 
-  keepOpen(zoneId: string): Promise<{ period: KeepOpenPeriod | null }> {
+  keepOpen(
+    zoneId: string,
+  ): Promise<{ period: KeepOpenPeriod | null; zone: KeepOpenPeriod | null }> {
     return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
   }
 

@@ -2486,7 +2486,13 @@ export class TillApp extends LitElement {
         {
           offers: [],
           menus: [],
-          service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+          service: {
+            open: false,
+            zoneOpen: true,
+            periodName: null,
+            keepOpen: null,
+            zoneKeepOpen: null,
+          },
         },
         false,
       );
@@ -5032,7 +5038,13 @@ export class TillApp extends LitElement {
           {
             offers: [],
             menus: [],
-            service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+            service: {
+              open: false,
+              zoneOpen: true,
+              periodName: null,
+              keepOpen: null,
+              zoneKeepOpen: null,
+            },
           },
           false,
         );
@@ -5050,7 +5062,13 @@ export class TillApp extends LitElement {
         {
           offers: [],
           menus: [],
-          service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+          service: {
+            open: false,
+            zoneOpen: true,
+            periodName: null,
+            keepOpen: null,
+            zoneKeepOpen: null,
+          },
         },
         false,
       );

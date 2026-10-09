@@ -107,7 +107,13 @@ describe("closed zone ordering", () => {
       const { el } = await mount({
         store,
         zoneName: "Terrace",
-        service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+        service: {
+          open: true,
+          zoneOpen: false,
+          periodName: "Lunch",
+          keepOpen: null,
+          zoneKeepOpen: null,
+        },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
         "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
@@ -118,7 +124,13 @@ describe("closed zone ordering", () => {
       expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
       expect(cards.shadowRoot!.querySelector("till-basket")).not.toBeNull();
       expect(store.lines.map((line) => [line.product.id, line.quantity])).toEqual([["p1", "2"]]);
-      el.service = { open: true, zoneOpen: true, periodName: "Lunch", keepOpen: null };
+      el.service = {
+        open: true,
+        zoneOpen: true,
+        periodName: "Lunch",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      };
       await el.updateComplete;
       await cards.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")).toBeNull();

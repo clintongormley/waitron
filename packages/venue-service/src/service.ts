@@ -1,4 +1,4 @@
-import { readKeepOpen, keepPeriodOpen } from "./keep-open.js";
+import { readKeepOpen, keepPeriodOpen, keepZoneOpen } from "./keep-open.js";
 import { assertZoneTakesNewOrders, closedZoneIdsAt } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
@@ -98,6 +98,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveDepartmentService,
   readKeepOpen,
   keepPeriodOpen,
+  keepZoneOpen,
   resolveSalePolicy,
   recordSaleReceiptHeader,
   readSaleReceiptHeader,

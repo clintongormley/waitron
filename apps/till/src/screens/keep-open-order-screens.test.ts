@@ -81,6 +81,7 @@ for (const kind of ["counter", "table"] as const) {
         open: true,
         zoneOpen: true,
         periodName: "Lunch",
+        zoneKeepOpen: null,
         keepOpen: { ...subject, extendedUntil },
       });
       const line = el.shadowRoot!.querySelector("[data-service-period]")!;
@@ -98,6 +99,7 @@ for (const kind of ["counter", "table"] as const) {
         open: false,
         zoneOpen: true,
         periodName: null,
+        zoneKeepOpen: null,
         keepOpen: { ...subject, running: false },
       });
       const notice = el.shadowRoot!.querySelector("[data-service-closed]")!;
@@ -120,7 +122,13 @@ for (const kind of ["counter", "table"] as const) {
       ]);
     });
     it("omits both the period line and recovery control when no period ran today", async () => {
-      const { el } = await mount({ open: false, zoneOpen: true, periodName: null, keepOpen: null });
+      const { el } = await mount({
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      });
       expect(el.shadowRoot!.querySelector("[data-service-period]")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
     });

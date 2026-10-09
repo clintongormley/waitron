@@ -152,6 +152,7 @@ export class TillCounterScreen extends LitElement {
     open: true,
     zoneOpen: true,
     periodName: null,
+    zoneKeepOpen: null,
     keepOpen: null,
   };
   @property() departmentName = "";

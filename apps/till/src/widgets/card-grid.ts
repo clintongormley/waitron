@@ -188,6 +188,7 @@ export class TillCardGrid extends LitElement {
     open: true,
     zoneOpen: true,
     periodName: null,
+    zoneKeepOpen: null,
     keepOpen: null,
   };
   @property() zoneId = "";

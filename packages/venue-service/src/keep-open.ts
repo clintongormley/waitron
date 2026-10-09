@@ -5,6 +5,9 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { departmentDay, keepOpenSubject, serviceRuns } from "./menu-timetable.js";
 import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
+import { floorZones } from "@waitron/db";
+import { zoneClosureDay, withoutZoneExtension } from "./zone-closed-times.js";
+import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import {
   clockTimeSkipped,
@@ -49,9 +52,10 @@ export async function readKeepOpen(
   cfg: VenueScope,
   zoneId: string,
   at: Date,
-): Promise<{ period: KeepOpenSubject | null }> {
+): Promise<{ period: KeepOpenSubject | null; zone: KeepOpenSubject | null }> {
   const c = await context(tx, cfg, zoneId, at);
-  if (c.subject === null || c.moment === null) return { period: null };
+  const zone = await readZoneKeepOpen(tx, cfg, zoneId, at);
+  if (c.subject === null || c.moment === null) return { period: null, zone };
   const start = Math.max(c.moment.minute, endMinute(scheduledEnd(c), c.clock.dayCutover));
   const cutoverMinute =
     Number(c.clock.dayCutover.slice(0, 2)) * 60 + Number(c.clock.dayCutover.slice(3, 5));
@@ -76,6 +80,7 @@ export async function readKeepOpen(
         (choices.length === 0 ? 0 : endMinute(choices.at(-1)!, c.clock.dayCutover)),
   );
   return {
+    zone,
     period: {
       id: c.subject.periodId,
       name: c.subject.periodName,
@@ -159,5 +164,137 @@ export async function keepPeriodOpen(
     .onConflictDoUpdate({
       target: [periodExtensions.departmentId, periodExtensions.businessDay],
       set: { periodId: values.periodId, startsAt: values.startsAt, endsAt: values.endsAt },
+    });
+}
+
+async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
+  const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
+  const c = await zoneClosureDay(tx, cfg, zoneId, at);
+  const closure =
+    c.moment === null
+      ? undefined
+      : c.ranges.find((range) => rangeSpan(range, c.clock.dayCutover).end > c.moment!.minute);
+  const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock);
+  const openRanges =
+    day.ranges.length === 0 ? [] : withExtension(day.ranges, day.extension, c.clock.dayCutover);
+  return { ...c, closure, openRanges };
+}
+
+function departmentCovers(
+  ranges: readonly { startsAt: string; endsAt: string }[],
+  start: number,
+  end: number,
+  cutover: string,
+): boolean {
+  let cursor = start;
+  for (const range of ranges) {
+    const span = rangeSpan(range, cutover);
+    if (span.end <= cursor) continue;
+    if (span.start > cursor) return false;
+    cursor = span.end;
+    if (cursor >= end) return true;
+  }
+  return false;
+}
+
+export async function readZoneKeepOpen(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  at: Date,
+): Promise<KeepOpenSubject | null> {
+  const c = await zoneContext(tx, cfg, zoneId, at);
+  if (c.moment === null || c.closure === undefined) return null;
+  const [zone] = await tx
+    .select({ name: floorZones.name })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
+  const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.clock.dayCutover).start);
+  const choices: string[] = [];
+  for (let minute = start + 1; minute <= 1440; minute++) {
+    const time = clockTime(minute, c.clock.dayCutover);
+    if (!/:(00|15|30|45)$/.test(time)) continue;
+    if (!departmentCovers(c.openRanges, start, minute, c.clock.dayCutover)) continue;
+    if (!clockTimeSkipped(c.moment.businessDay, time, c.clock.dayCutover, c.clock.timeZone, true))
+      choices.push(time);
+  }
+  const extended =
+    c.extension !== null && c.extension.startsAt === c.closure.startsAt ? c.extension : null;
+  const effective = withoutZoneExtension(c.ranges, c.extension, c.clock.dayCutover);
+  return {
+    id: zoneId,
+    name: zone!.name,
+    endsAt: extended?.endsAt ?? c.closure.startsAt,
+    running: !effective.some((range) => {
+      const span = rangeSpan(range, c.clock.dayCutover);
+      return span.start <= c.moment!.minute && c.moment!.minute < span.end;
+    }),
+    extendedUntil: extended?.endsAt ?? null,
+    dayEndsAt: c.clock.dayCutover.slice(0, 5),
+    choices,
+    next: null,
+  };
+}
+
+export async function keepZoneOpen(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  input: { until: string | null },
+  at: Date,
+): Promise<void> {
+  const c = await zoneContext(tx, cfg, zoneId, at);
+  if (c.moment === null) throw new AppError("time_zone.unreadable", {});
+  if (input.until !== null) {
+    if (c.closure === undefined)
+      throw new AppError("zone_extension.not_allowed", { zoneId, reason: "not_closing" });
+    const invalid = (reason: "step" | "not_later" | "clock_skips"): never => {
+      throw new AppError("zone_extension.invalid", { field: "until", reason });
+    };
+    if (!/^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/.test(input.until)) invalid("step");
+    const end = endMinute(input.until, c.clock.dayCutover);
+    const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.clock.dayCutover).start);
+    if (end <= start) invalid("not_later");
+    if (
+      clockTimeSkipped(
+        c.moment.businessDay,
+        input.until,
+        c.clock.dayCutover,
+        c.clock.timeZone,
+        true,
+      )
+    )
+      invalid("clock_skips");
+    if (!departmentCovers(c.openRanges, start, end, c.clock.dayCutover))
+      throw new AppError("zone_extension.not_allowed", { zoneId, reason: "department_closed" });
+  }
+  await tx
+    .delete(zoneExtensions)
+    .where(
+      and(eq(zoneExtensions.zoneId, zoneId), ne(zoneExtensions.businessDay, c.moment.businessDay)),
+    );
+  if (input.until === null) {
+    await tx
+      .delete(zoneExtensions)
+      .where(
+        and(
+          eq(zoneExtensions.zoneId, zoneId),
+          eq(zoneExtensions.businessDay, c.moment.businessDay),
+        ),
+      );
+    return;
+  }
+  const values = {
+    zoneId,
+    businessDay: c.moment.businessDay,
+    startsAt: storedTime(c.closure!.startsAt),
+    endsAt: storedTime(input.until),
+  };
+  await tx
+    .insert(zoneExtensions)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [zoneExtensions.zoneId, zoneExtensions.businessDay],
+      set: { startsAt: values.startsAt, endsAt: values.endsAt },
     });
 }

@@ -78,7 +78,7 @@ function offers(
   serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "prepay",
 ): ZoneOfferCatalogue {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId,
@@ -117,7 +117,7 @@ const TERRAZA = offers("zone-terraza", [CENA, ALMUERZO, DESAYUNOS], "cena");
 
 function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenuId?: string } {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
     menus: menus.map((menu) => ({
       menuId: menu.id,
       versionId: "v1",
@@ -293,7 +293,13 @@ describe("period service at the counter", () => {
   it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
     const running = {
       ...BARRA,
-      service: { open: true, zoneOpen: true, periodName: "Breakfast", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Breakfast",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
     };
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => running) });
     await signIn(el);
@@ -354,7 +360,13 @@ describe("period service at the counter", () => {
     const closed = {
       ...TERRAZA,
       context: { ...TERRAZA.context, departmentId: "department-deli", departmentName: "Deli" },
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: TERRAZA.menus.map((menu) => ({ ...menu, orderable: false })),
     };
     const { el } = await mountApp({ listZoneOffers: vi.fn(async () => closed) });
@@ -407,7 +419,13 @@ describe("period service at the counter", () => {
   it("shows the initial closed department and refuses additions while retaining offers", async () => {
     const closed = {
       ...BARRA,
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       defaultMenuId: null,
       menus: BARRA.menus.map((menu) => ({ ...menu, orderable: false, isDefault: false })),
     };
@@ -436,7 +454,13 @@ describe("period service at the counter", () => {
     await flush(el);
     const closed = {
       ...BARRA,
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       defaultMenuId: null,
       menus: BARRA.menus.map((menu) => ({ ...menu, isDefault: false, orderable: false })),
     };
@@ -463,13 +487,25 @@ describe("period service at the counter", () => {
   it("refreshes unchanged versions on a period change, chooses the running menu and keeps every basket line", async () => {
     const breakfast = {
       ...BARRA,
-      service: { open: true, zoneOpen: true, periodName: "Breakfast", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Breakfast",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: BARRA.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
     const lunch = {
       ...BARRA,
       defaultMenuId: "almuerzo",
-      service: { open: true, zoneOpen: true, periodName: "Lunch", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Lunch",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: BARRA.menus.map((menu) => ({
         ...menu,
         isDefault: menu.id === "almuerzo",
@@ -766,7 +802,13 @@ describe("an open table's order", () => {
     const closed = {
       ...COMEDOR,
       context: { ...COMEDOR.context, departmentId: "department-deli", departmentName: "Deli" },
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: false })),
     };
     const { el } = await mountApp({
@@ -800,12 +842,24 @@ describe("an open table's order", () => {
   it("moves a table off an ended menu while retaining its draft and the counter's selection", async () => {
     const breakfast = {
       ...COMEDOR,
-      service: { open: true, zoneOpen: true, periodName: "Breakfast", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Breakfast",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
     const lunch = {
       ...COMEDOR,
-      service: { open: true, zoneOpen: true, periodName: "Lunch", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Lunch",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       defaultMenuId: "almuerzo",
       menus: COMEDOR.menus.map((menu) => ({
         ...menu,
@@ -874,7 +928,13 @@ describe("an open table's order", () => {
   it("end-offset table poll hides selection and retains sendable grace before expiry", async () => {
     const breakfast = {
       ...COMEDOR,
-      service: { open: true, zoneOpen: true, periodName: "Breakfast", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Breakfast",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
     const lunch = {

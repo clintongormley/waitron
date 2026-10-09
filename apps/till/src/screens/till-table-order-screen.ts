@@ -1110,6 +1110,7 @@ export class TillTableOrderScreen extends LitElement {
     open: true,
     zoneOpen: true,
     periodName: null,
+    zoneKeepOpen: null,
     keepOpen: null,
   };
   @property({ attribute: false }) api?: TillApi;

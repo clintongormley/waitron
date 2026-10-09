@@ -37,6 +37,7 @@ describe("VENUE_SERVICE", () => {
       "findOrderZones",
       "getOrderContext",
       "keepPeriodOpen",
+      "keepZoneOpen",
       "listDepartmentSentTransfers",
       "listDepartmentTransferDestinations",
       "listIncomingDepartmentTransfers",

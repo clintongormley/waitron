@@ -265,7 +265,7 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
   context: {
     departmentName: "Restaurant",
     zoneId: zone.id,

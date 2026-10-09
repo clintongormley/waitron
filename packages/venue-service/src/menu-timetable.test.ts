@@ -176,6 +176,7 @@ describe("Always fixture periods", () => {
         expect(offers.service).toEqual({
           open: true,
           zoneOpen: true,
+          zoneKeepOpen: null,
           periodName: "Always",
           keepOpen: {
             periodId: expect.any(String),
@@ -776,6 +777,7 @@ describe("the menu a zone starts on", () => {
     expect(offers.service).toEqual({
       open: true,
       zoneOpen: true,
+      zoneKeepOpen: null,
       periodName: "Mañanas",
       keepOpen: {
         periodId: periods.mananas,
@@ -1865,6 +1867,7 @@ describe("statements", () => {
     expect(priced.service).toEqual({
       open: true,
       zoneOpen: true,
+      zoneKeepOpen: null,
       periodName: null,
       keepOpen: null,
     });
@@ -2459,6 +2462,7 @@ describe("department service periods", () => {
     expect(result.service).toEqual({
       open: true,
       zoneOpen: true,
+      zoneKeepOpen: null,
       periodName: "Lunch",
       keepOpen: {
         periodId: v.lunch,
@@ -2492,6 +2496,7 @@ describe("department service periods", () => {
     expect(afternoon.service).toEqual({
       open: true,
       zoneOpen: true,
+      zoneKeepOpen: null,
       periodName: "Afternoon",
       keepOpen: {
         periodId: v.afternoon,
@@ -2575,7 +2580,13 @@ describe("department service periods", () => {
     );
     expect(result).toEqual({
       defaultMenuId: null,
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        zoneKeepOpen: null,
+        periodName: null,
+        keepOpen: null,
+      },
       menus: [],
       offers: [],
     });
@@ -2594,6 +2605,7 @@ describe("department service periods", () => {
     expect(result.service).toEqual({
       open: false,
       zoneOpen: true,
+      zoneKeepOpen: null,
       periodName: null,
       keepOpen: {
         periodId: v.afternoon,
@@ -2622,6 +2634,7 @@ describe("department service periods", () => {
     expect(result.service).toEqual({
       open: true,
       zoneOpen: true,
+      zoneKeepOpen: null,
       periodName: null,
       keepOpen: null,
     });

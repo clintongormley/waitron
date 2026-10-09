@@ -1,4 +1,5 @@
-import { closedZoneIdsAt } from "./zone-closed-times.js";
+import { rangeSpan } from "./service-day.js";
+import { closedZoneIdsAt, zoneClosureDay, withoutZoneExtension } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
@@ -874,6 +875,8 @@ export async function listZoneOffers(
       zoneOpen,
       periodName: service?.periodName ?? null,
       keepOpen: service?.keepOpen ?? null,
+      zoneKeepOpen:
+        options.withDefault === false ? null : await zoneKeepOpenState(tx, cfg, zoneId, at),
     },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
@@ -897,7 +900,13 @@ export async function menuState(
     );
   if (zone?.departmentId == null)
     return {
-      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+      service: {
+        open: false,
+        zoneOpen: true,
+        periodName: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
     };
@@ -909,6 +918,7 @@ export async function menuState(
       zoneOpen: !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId),
       periodName: service.periodName,
       keepOpen: service.keepOpen,
+      zoneKeepOpen: await zoneKeepOpenState(tx, cfg, zoneId, at),
     },
     menus: published.map(({ menuId, versionId }) => ({
       menuId,
@@ -1300,4 +1310,28 @@ export async function copyWorkingLineContext(
     ...context,
     workingOrderLineId: toWorkingOrderLineId,
   });
+}
+
+async function zoneKeepOpenState(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
+  const c = await zoneClosureDay(tx, cfg, zoneId, at);
+  if (c.moment === null) return null;
+  const closure = c.ranges.find(
+    (range) => rangeSpan(range, c.clock.dayCutover).end > c.moment!.minute,
+  );
+  if (closure === undefined) return null;
+  const [zone] = await tx
+    .select({ name: floorZones.name })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
+  const extended = c.extension?.startsAt === closure.startsAt ? c.extension : null;
+  return {
+    zoneId,
+    zoneName: zone!.name,
+    closesAt: extended?.endsAt ?? closure.startsAt,
+    running: !withoutZoneExtension(c.ranges, c.extension, c.clock.dayCutover).some((range) => {
+      const span = rangeSpan(range, c.clock.dayCutover);
+      return span.start <= c.moment!.minute && c.moment!.minute < span.end;
+    }),
+    extendedUntil: extended?.endsAt ?? null,
+  };
 }

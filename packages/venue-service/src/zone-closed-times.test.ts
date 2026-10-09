@@ -334,12 +334,32 @@ describe("zones closed at an instant", () => {
         ]);
         expect([...closed]).toEqual([v.terrace]);
         const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-        for (const table of ["locations", "special_dates", "zone_closed_times"])
+        for (const table of ["locations", "special_dates", "zone_closed_times", "zone_extensions"])
           expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
-        expect(texts).toHaveLength(3);
+        expect(texts).toHaveLength(4);
       } finally {
         spy.mockRestore();
       }
     });
   });
+});
+
+it.each([
+  { extension: null, want: [{ startsAt: "23:30", endsAt: "06:00" }] },
+  {
+    extension: { startsAt: "21:00", endsAt: "22:00" },
+    want: [{ startsAt: "23:30", endsAt: "06:00" }],
+  },
+  { extension: { startsAt: "23:30", endsAt: "06:00" }, want: [] },
+  {
+    extension: { startsAt: "00:00", endsAt: "01:30" },
+    want: [
+      { startsAt: "23:30", endsAt: "00:00" },
+      { startsAt: "01:30", endsAt: "06:00" },
+    ],
+  },
+])("carves only the extension span from closed ranges $extension", ({ extension, want }) => {
+  expect(
+    closures.withoutZoneExtension([{ startsAt: "23:30", endsAt: "06:00" }], extension, "06:00"),
+  ).toEqual(want);
 });

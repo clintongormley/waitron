@@ -411,7 +411,7 @@ function fixtureOffers(
     courseId: product.courseId ?? null,
   }));
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -1466,7 +1466,7 @@ describe("till-app", () => {
 
   it("loads the default zone's offers and orders two menu identities for one product", async () => {
     const listDefaultZoneOffers = vi.fn().mockResolvedValue({
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",
@@ -5645,7 +5645,7 @@ describe("till-app", () => {
       },
     };
     const catalogue = {
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",
@@ -5736,7 +5736,13 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
-        service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+        service: {
+          open: true,
+          zoneOpen: true,
+          periodName: null,
+          keepOpen: null,
+          zoneKeepOpen: null,
+        },
         context: {
           departmentName: "Restaurant",
           zoneId: "zone-counter",
