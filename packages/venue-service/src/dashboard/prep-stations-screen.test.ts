@@ -27,6 +27,7 @@ const view: PrepStationsView = {
       { id: "food", name: "Food", parentId: null },
     ],
     products: [{ id: "bread", name: "Bread", categoryId: null }],
+    periods: [],
     cells: [
       {
         row: { kind: "category", categoryId: "cocktails" },

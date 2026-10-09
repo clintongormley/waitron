@@ -112,6 +112,7 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
           ],
           routing: {
             stationTimes: [],
+            periods: [],
             todayEnds: null,
             clockReadable: true,
             zones: [],
@@ -243,6 +244,7 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
           ? null
           : {
               stationTimes: [],
+              periods: [],
               todayEnds: null,
               clockReadable: true,
               zones: [],

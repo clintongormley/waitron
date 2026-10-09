@@ -481,6 +481,7 @@ it("loads the supervisor overview without requesting management-only context, in
     categories: [],
     products: [],
     cells: [],
+    periods: [],
     canMakeDefault: false,
   });
   for (const key of [

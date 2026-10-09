@@ -48,6 +48,7 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
         closedSendsTo: "kitchen",
       },
     ],
+    periods: [],
     todayEnds: null,
     clockReadable: true,
     zones: [

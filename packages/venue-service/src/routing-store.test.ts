@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -13,9 +13,12 @@ import {
   publishMenu,
   updateProduct,
   writeProductModifiers,
+  sectionMembers,
+  sections,
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  catalogues,
   categories,
   floorZones,
   kitchenStations,
@@ -57,7 +60,12 @@ import {
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
+import {
+  replaceMenuWeek,
+  resolveDepartmentService,
+  saveMenuPeriod,
+  updateMenuPeriod,
+} from "./menu-timetable.js";
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { closeStationForToday, setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/station-week.js";
@@ -560,6 +568,7 @@ describe("stored preparation rules", () => {
           { id: f.mojito, name: "Mojito", categoryId: f.cocktails },
         ],
         cells: sortCells(written),
+        periods: [],
         defaultStationId: f.bar,
         stations: [
           { id: f.bar, name: "Bar", active: true },
@@ -1231,6 +1240,7 @@ describe("routing previews", () => {
           from: station(f.bar),
           to: null,
           toNoReplacement: true,
+          periodIds: null,
         },
       ]);
       expect(await storedCells(tx)).toEqual(before);
@@ -1254,6 +1264,7 @@ describe("routing previews", () => {
           from: null,
           to: null,
           toNoReplacement: false,
+          periodIds: null,
         }),
       ]);
     }));
@@ -1273,6 +1284,7 @@ describe("routing previews", () => {
           from: station(f.bar),
           to: noPrep,
           toNoReplacement: false,
+          periodIds: null,
         }),
       ]);
       expect(await storedCells(tx)).toEqual(before);
@@ -1295,6 +1307,7 @@ describe("routing previews", () => {
           from: noPrep,
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         }),
       ]);
       expect(await storedCells(tx)).toEqual(before);
@@ -1321,6 +1334,7 @@ describe("routing previews", () => {
           from: station(f.bar),
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         }),
       ]);
       expect(before).toHaveLength(1);
@@ -1377,6 +1391,7 @@ describe("routing previews", () => {
           from: noPrep,
           to: station(f.bar),
           toNoReplacement: false,
+          periodIds: null,
         },
         {
           productId: f.variant,
@@ -1386,6 +1401,7 @@ describe("routing previews", () => {
           from: noPrep,
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         },
         {
           productId: f.mojito,
@@ -1395,6 +1411,7 @@ describe("routing previews", () => {
           from: noPrep,
           to: station(f.bar),
           toNoReplacement: false,
+          periodIds: null,
         },
         {
           productId: f.mojito,
@@ -1404,6 +1421,7 @@ describe("routing previews", () => {
           from: noPrep,
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         },
       ]);
       expect(await storedCells(tx)).toEqual(before);
@@ -1489,6 +1507,7 @@ describe("routing previews", () => {
           from: station(f.bar),
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         },
       ]);
       expect(moves.some((m) => m.productId === f.variant && m.zoneId === f.terrace)).toBe(true);
@@ -1501,6 +1520,7 @@ describe("routing previews", () => {
           from: station(f.bar),
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         },
         {
           productId: lager.id,
@@ -1510,6 +1530,7 @@ describe("routing previews", () => {
           from: station(f.bar),
           to: station(f.terraceBar),
           toNoReplacement: false,
+          periodIds: null,
         },
       ]);
       expect(moves.some((m) => m.productId === f.bread)).toBe(false);
@@ -1556,6 +1577,7 @@ describe("routing previews", () => {
           from: station(f.terraceBar),
           to: noPrep,
           toNoReplacement: false,
+          periodIds: null,
         },
         {
           productId: half,
@@ -1565,6 +1587,7 @@ describe("routing previews", () => {
           from: station(f.terraceBar),
           to: noPrep,
           toNoReplacement: false,
+          periodIds: null,
         },
       ]);
       expect(set.filter((m) => categorised.includes(m.productId))).toEqual([]);
@@ -1674,6 +1697,7 @@ describe("routing previews", () => {
             from: station(f.terraceBar),
             to: station(f.bar),
             toNoReplacement: false,
+            periodIds: null,
             dish: { productId: f.burger, productName: "Burger" },
           },
         ]);
@@ -1698,6 +1722,7 @@ describe("routing previews", () => {
             from: station(f.bar),
             to: station(f.terraceBar),
             toNoReplacement: false,
+            periodIds: null,
             dish: { productId: f.burger, productName: "Burger" },
           },
         ]);
@@ -1760,6 +1785,7 @@ describe("routing previews", () => {
             from: station(f.terraceBar),
             to: station(f.bar),
             toNoReplacement: false,
+            periodIds: null,
             dish: { productId: f.burger, productName: "Burger" },
           },
         ]);
@@ -1880,6 +1906,7 @@ describe("routing previews", () => {
             from: station(f.bar),
             to: null,
             toNoReplacement: true,
+            periodIds: null,
             dish: { productId: f.burger, productName: "Burger" },
           },
         ]);
@@ -3069,5 +3096,439 @@ describe("routing during a service period", () => {
         new Map([[f.mojito, made(f.upstairs)]]),
       );
       expect(asked).toEqual([]);
+    }));
+});
+
+describe("saving a cell's period choices", () => {
+  /** Cocktails hold Mojito (with its Large variant) and Daiquiri. Dining's Lunch menu holds Mojito
+   * alone; Brunch's menus hold only Bread; Staff lunch's customer menu holds Bread and its
+   * staff-only menu is Lunch's. The Patio serves the Bar department, whose own Lunch exists too. */
+  async function choicesFixture(tx: Transaction) {
+    const f = await fixture(tx);
+    const [upstairs, downstairs] = await tx
+      .insert(kitchenStations)
+      .values([
+        { ...f.cfg, name: "Upstairs bar" },
+        { ...f.cfg, name: "Downstairs bar" },
+      ])
+      .returning();
+    const daiquiri = (
+      await createProduct(tx, {
+        catalogueId: f.menu,
+        name: "Daiquiri",
+        categoryId: f.cocktails,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      })
+    ).id;
+    const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
+    await addProductToMenu(tx, { menuId: lunchMenu, productId: f.mojito });
+    const breadMenu = (await createCatalogue(tx, { name: "Bread menu" })).id;
+    await addProductToMenu(tx, { menuId: breadMenu, productId: f.bread });
+    const period = async (
+      departmentId: string,
+      name: string,
+      menuId: string,
+      staffMenuIds: string[] = [],
+    ) =>
+      (
+        await saveMenuPeriod(tx, f.cfg, departmentId, {
+          name,
+          menuId,
+          staffMenuIds,
+          colour: "blue",
+        })
+      ).id;
+    const lunch = await period(f.department, "Lunch", lunchMenu);
+    const brunch = await period(f.department, "Brunch", breadMenu);
+    const staffLunch = await period(f.department, "Staff lunch", breadMenu, [lunchMenu]);
+    const barDepartment = (
+      await createDepartment(tx, f.cfg, { name: "Bar", defaultServiceMode: "table_tab" })
+    ).id;
+    const [patio] = await tx
+      .insert(floorZones)
+      .values({ ...f.cfg, name: "Patio" })
+      .returning();
+    await configureZone(tx, f.cfg, { zoneId: patio!.id, departmentId: barDepartment });
+    const barLunch = await period(barDepartment, "Lunch", lunchMenu);
+    return {
+      ...f,
+      upstairs: upstairs!.id,
+      downstairs: downstairs!.id,
+      daiquiri,
+      lunchMenu,
+      breadMenu,
+      lunch,
+      brunch,
+      staffLunch,
+      barDepartment,
+      barLunch,
+      patio: patio!.id,
+    };
+  }
+  type Choices = Awaited<ReturnType<typeof choicesFixture>>;
+  const at = new Date("2026-10-02T13:00:00Z");
+  const everyZone = (f: Choices): CellAddress => ({ row: categoryRow(f.cocktails), zoneId: null });
+  const terraceCell = (f: Choices): CellAddress => ({
+    row: categoryRow(f.cocktails),
+    zoneId: f.terrace,
+  });
+  const line = (periodId: string, target: RouteTarget) => ({ periodId, target });
+  const modelCell = async (tx: Transaction, f: Choices, address: CellAddress) =>
+    (await routingModel(tx, f.cfg, at)).cells.find(
+      (cell) => cellKey(cell) === cellKey({ ...address, target: noPrep }),
+    );
+  const storedLines = (tx: Transaction) =>
+    tx
+      .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
+      .from(routingCellPeriods);
+
+  it("keeps a cell's lines when a save leaves them out, and clears them with an empty list", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+        ...everyZone(f),
+        target: station(f.upstairs),
+        periods: [line(f.lunch, station(f.downstairs))],
+      });
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.bar));
+      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+        ...everyZone(f),
+        target: station(f.bar),
+        periods: [line(f.lunch, station(f.downstairs))],
+      });
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.bar), []);
+      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+        ...everyZone(f),
+        target: station(f.bar),
+      });
+      expect(await storedLines(tx)).toEqual([]);
+    }));
+
+  it("deletes a cell's lines when the cell is cleared", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+        line(f.staffLunch, noPrep),
+      ]);
+      expect(await storedLines(tx)).toHaveLength(2);
+      await clearRoutingCell(tx, f.cfg, everyZone(f));
+      expect(await storedLines(tx)).toEqual([]);
+      expect(await modelCell(tx, f, everyZone(f))).toBeUndefined();
+    }));
+
+  it("refuses another department's period, an unknown or repeated period, a period offering none of the row and a switched-off station, writing nothing", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      const unknown = randomUUID();
+      for (const [address, lines, code, params] of [
+        [
+          terraceCell(f),
+          [line(f.barLunch, station(f.downstairs))],
+          "route.period_invalid",
+          { periodId: f.barLunch, reason: "other_department" },
+        ],
+        [
+          everyZone(f),
+          [line(unknown, station(f.downstairs))],
+          "route.subject_not_found",
+          { subject: "period", id: unknown },
+        ],
+        [
+          everyZone(f),
+          [line(f.lunch, station(f.downstairs)), line(f.lunch, noPrep)],
+          "route.period_invalid",
+          { periodId: f.lunch, reason: "repeated" },
+        ],
+        [
+          everyZone(f),
+          [line(f.brunch, station(f.downstairs))],
+          "route.period_invalid",
+          { periodId: f.brunch, reason: "not_offered" },
+        ],
+        [
+          everyZone(f),
+          [line(f.lunch, station(f.switchedOff))],
+          "route.station_inactive",
+          { stationId: f.switchedOff },
+        ],
+      ] as const) {
+        await expect(
+          setRoutingCell(tx, f.cfg, address, station(f.upstairs), [...lines]),
+          JSON.stringify(params),
+        ).rejects.toMatchObject({ code, params });
+      }
+      expect(await storedLines(tx)).toEqual([]);
+      expect((await routingModel(tx, f.cfg, at)).cells).toEqual([]);
+    }));
+
+  it("accepts a period whose staff-only menu alone reaches the row, and lets Every zone hold two departments' periods", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.staffLunch, station(f.downstairs)),
+        line(f.barLunch, noPrep),
+      ]);
+      expect((await modelCell(tx, f, everyZone(f)))?.periods).toEqual(
+        expect.arrayContaining([
+          line(f.staffLunch, station(f.downstairs)),
+          line(f.barLunch, noPrep),
+        ]),
+      );
+    }));
+
+  it("keeps a stored line its period's menus no longer offer while its station is unchanged, and checks it once its station changes", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      await updateMenuPeriod(tx, f.cfg, f.lunch, { menuId: f.breadMenu, staffMenuIds: [] });
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.bar), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+        ...everyZone(f),
+        target: station(f.bar),
+        periods: [line(f.lunch, station(f.downstairs))],
+      });
+      await expect(
+        setRoutingCell(tx, f.cfg, everyZone(f), station(f.bar), [
+          line(f.lunch, station(f.upstairs)),
+        ]),
+      ).rejects.toMatchObject({
+        code: "route.period_invalid",
+        params: { periodId: f.lunch, reason: "not_offered" },
+      });
+      expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: f.downstairs }]);
+    }));
+
+  it("checks every line sent to pin an inherited cell, as the cell stores none of them", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+        line(f.barLunch, station(f.downstairs)),
+      ]);
+      await expect(
+        setRoutingCell(tx, f.cfg, terraceCell(f), station(f.upstairs), [
+          line(f.lunch, station(f.downstairs)),
+          line(f.barLunch, station(f.downstairs)),
+        ]),
+      ).rejects.toMatchObject({
+        code: "route.period_invalid",
+        params: { periodId: f.barLunch, reason: "other_department" },
+      });
+      await expect(
+        setRoutingCell(
+          tx,
+          f.cfg,
+          { row: productRow(f.daiquiri), zoneId: null },
+          station(f.upstairs),
+          [line(f.lunch, station(f.downstairs))],
+        ),
+      ).rejects.toMatchObject({
+        code: "route.period_invalid",
+        params: { periodId: f.lunch, reason: "not_offered" },
+      });
+      await updateMenuPeriod(tx, f.cfg, f.lunch, { menuId: f.breadMenu, staffMenuIds: [] });
+      await expect(
+        setRoutingCell(tx, f.cfg, terraceCell(f), station(f.upstairs), [
+          line(f.lunch, station(f.downstairs)),
+        ]),
+      ).rejects.toMatchObject({
+        code: "route.period_invalid",
+        params: { periodId: f.lunch, reason: "not_offered" },
+      });
+      expect(await storedLines(tx)).toHaveLength(2);
+      expect(await modelCell(tx, f, terraceCell(f))).toBeUndefined();
+    }));
+
+  it("drops a zone's lines for its old department's periods when the zone moves department, keeping its plain choices", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, terraceCell(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      await configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: f.barDepartment });
+      expect(await modelCell(tx, f, terraceCell(f))).toEqual({
+        ...terraceCell(f),
+        target: station(f.upstairs),
+      });
+      expect((await modelCell(tx, f, everyZone(f)))?.periods).toEqual([
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      await configureZone(tx, f.cfg, { zoneId: f.patio, departmentId: f.barDepartment });
+      expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: f.downstairs }]);
+    }));
+
+  it("routes by a saved No preparation line while its period runs, an extra then following its dish", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.department,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" }],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+      );
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [line(f.lunch, noPrep)]);
+      const lunch = await routingAt(tx, f.cfg, at);
+      expect(await lunch.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, { kind: "made", route: noPrep }]]),
+      );
+      expect(
+        await lunch.extraMakers(f.terrace, [
+          { key: "x", productId: f.mojito, dishStationId: f.bar },
+        ]),
+      ).toEqual(new Map([["x", { kind: "follows_dish", why: "no_preparation" }]]));
+      const later = await routingAt(tx, f.cfg, new Date("2026-10-02T15:00:00Z"));
+      expect(await later.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, { kind: "made", route: station(f.upstairs) }]]),
+      );
+    }));
+
+  it("previews adding a Lunch line as moves during Lunch alone, merging periods that move alike", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs));
+      const summary = (moves: RoutingMove[]) =>
+        moves.map((move) => [move.productId, move.zoneId, move.from, move.to, move.periodIds]);
+      const lunchOnly = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: everyZone(f),
+        target: station(f.upstairs),
+        periods: [line(f.lunch, station(f.downstairs))],
+      });
+      expect(summary(lunchOnly)).toEqual(
+        [f.daiquiri, f.variant, f.mojito].map((productId) => [
+          productId,
+          f.terrace,
+          station(f.upstairs),
+          station(f.downstairs),
+          [f.lunch],
+        ]),
+      );
+      const both = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: everyZone(f),
+        target: station(f.bar),
+        periods: [line(f.lunch, station(f.downstairs)), line(f.staffLunch, station(f.downstairs))],
+      });
+      expect(
+        both
+          .filter((move) => move.productId === f.mojito)
+          .map((move) => [
+            move.zoneId,
+            move.from,
+            move.to,
+            move.periodIds && [...move.periodIds].sort(),
+          ]),
+      ).toEqual(
+        expect.arrayContaining([
+          [f.terrace, station(f.upstairs), station(f.downstairs), [f.lunch, f.staffLunch].sort()],
+          [f.terrace, station(f.upstairs), station(f.bar), null],
+          [f.patio, station(f.upstairs), station(f.bar), null],
+        ]),
+      );
+      expect(both.filter((move) => move.productId === f.mojito)).toHaveLength(3);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      const dropped = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: everyZone(f),
+        target: station(f.upstairs),
+        periods: [],
+      });
+      expect(summary(dropped.filter((move) => move.productId === f.mojito))).toEqual([
+        [f.mojito, f.terrace, station(f.downstairs), station(f.upstairs), [f.lunch]],
+      ]);
+      const kept = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: everyZone(f),
+        target: station(f.upstairs),
+      });
+      expect(kept).toEqual([]);
+    }));
+
+  it("gives each period its department and the products its menus reach, a variant by its parent, in the department's period order", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.department,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots:
+            weekday === 0
+              ? [{ periodId: f.brunch, startsAt: "09:00", endsAt: "10:00" }]
+              : weekday === 1
+                ? [{ periodId: f.staffLunch, startsAt: "13:00", endsAt: "15:00" }]
+                : weekday === 2
+                  ? [{ periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" }]
+                  : [],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+      );
+      const [root] = await tx
+        .select({ id: sections.id })
+        .from(sections)
+        .where(and(eq(sections.ownerMenuId, f.breadMenu), eq(sections.role, "menu_root")));
+      await tx
+        .insert(sectionMembers)
+        .values({ sectionId: root!.id, position: 9, productId: f.variant });
+      const [rootless] = await tx.insert(catalogues).values({ name: "No root" }).returning();
+      const aperitivo = (
+        await saveMenuPeriod(tx, f.cfg, f.department, {
+          name: "Aperitivo",
+          menuId: rootless!.id,
+          staffMenuIds: [],
+          colour: "blue",
+        })
+      ).id;
+      const { periods } = await routingModel(tx, f.cfg, at);
+      const dining = { departmentId: f.department, departmentName: "Dining" };
+      // Monday first: Sunday's Brunch is the week's last, though weekday 0; Aperitivo, placed on no
+      // day, comes after every placed period.
+      expect(periods.filter((period) => period.departmentId === f.department)).toEqual([
+        {
+          id: f.staffLunch,
+          ...dining,
+          name: "Staff lunch",
+          colour: "blue",
+          productIds: [f.bread, f.mojito],
+        },
+        { id: f.lunch, ...dining, name: "Lunch", colour: "blue", productIds: [f.mojito] },
+        {
+          id: f.brunch,
+          ...dining,
+          name: "Brunch",
+          colour: "blue",
+          productIds: [f.bread, f.mojito],
+        },
+        { id: aperitivo, ...dining, name: "Aperitivo", colour: "blue", productIds: [] },
+      ]);
+      expect(periods.find((period) => period.id === f.barLunch)).toEqual({
+        id: f.barLunch,
+        departmentId: f.barDepartment,
+        departmentName: "Bar",
+        name: "Lunch",
+        colour: "blue",
+        productIds: [f.mojito],
+      });
     }));
 });

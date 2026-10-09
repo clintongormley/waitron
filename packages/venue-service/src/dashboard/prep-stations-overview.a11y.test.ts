@@ -16,6 +16,7 @@ const view: PrepStationsView = {
     zones: [],
     categories: [],
     products: [],
+    periods: [],
     cells: [],
     canMakeDefault: false,
     defaultStationId: "bar",

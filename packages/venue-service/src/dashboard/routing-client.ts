@@ -122,6 +122,7 @@ export class PrepStationsApi {
           zones: [],
           categories: [],
           products: [],
+          periods: [],
           cells: [],
           canMakeDefault: false,
         },

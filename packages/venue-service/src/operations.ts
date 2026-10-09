@@ -47,7 +47,7 @@ import {
 } from "./schema/service.js";
 import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
-import { routingCells } from "./schema/routing.js";
+import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
 
@@ -514,6 +514,21 @@ export async function configureZone(
       target: [zoneServicePolicies.zoneId],
       set: { departmentId: input.departmentId },
     });
+  // A zone cell may name only its department's periods.
+  await tx
+    .delete(routingCellPeriods)
+    .where(
+      and(
+        ne(routingCellPeriods.departmentId, input.departmentId),
+        inArray(
+          routingCellPeriods.cellId,
+          tx
+            .select({ id: routingCells.id })
+            .from(routingCells)
+            .where(eq(routingCells.zoneId, input.zoneId)),
+        ),
+      ),
+    );
   if (input.orderStart === undefined && existing !== undefined) {
     await tx
       .insert(zoneSalePolicies)

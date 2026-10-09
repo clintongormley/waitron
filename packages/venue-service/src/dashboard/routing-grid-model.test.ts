@@ -53,6 +53,7 @@ function model(
 ): RoutingModel {
   return {
     stationTimes: [],
+    periods: [],
     todayEnds: null,
     clockReadable: true,
     zones: [{ id: "terrace", name: "Terrace" }],

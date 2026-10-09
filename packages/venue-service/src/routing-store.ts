@@ -40,11 +40,13 @@ import type { LocalDate } from "./hours-types.js";
 import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import type {
   CellAddress,
+  PeriodLine,
   RoutingCell,
   RoutingChange,
   RoutingModel,
   RoutingMove,
 } from "./routing-types.js";
+import { periodProductIds, readPeriods, readRoutingPeriods } from "./routing-periods.js";
 import { resolveDepartmentService } from "./menu-timetable.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -93,15 +95,16 @@ async function validateRoutingCell(
   cfg: VenueScope,
   address: CellAddress,
   target: RouteTarget | null,
-): Promise<{ address: CellAddress; target: RouteTarget | null }> {
+): Promise<{ address: CellAddress; target: RouteTarget | null; departmentId: string | null }> {
   const { row } = address;
   if (row.kind === "all" && address.zoneId === null)
     throw new AppError("management.request_invalid", { field: "address" });
   const zoneId = address.zoneId === null ? null : normaliseUuid(address.zoneId, "ZoneId");
+  let departmentId: string | null = null;
   if (zoneId !== null) {
     // resolveZoneContext's check, and the zone switched on, which it does not ask.
     const [zone] = await tx
-      .select({ id: floorZones.id })
+      .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
       .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
@@ -114,6 +117,7 @@ async function validateRoutingCell(
         ),
       );
     if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+    departmentId = zone.departmentId;
   }
   let canonicalRow = row;
   if (row.kind === "category") {
@@ -135,23 +139,126 @@ async function validateRoutingCell(
       throw new AppError("route.subject_not_found", { subject: "product", id: productId });
     canonicalRow = { kind: "product", productId };
   }
-  let canonicalTarget = target;
-  if (target?.kind === "station") {
-    const stationId = normaliseUuid(target.stationId, "StationId");
-    const [station] = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(
-        and(
-          eq(kitchenStations.locationId, cfg.locationId),
-          eq(kitchenStations.id, stationId),
-          eq(kitchenStations.active, true),
-        ),
-      );
-    if (station === undefined) throw new AppError("route.station_inactive", { stationId });
-    canonicalTarget = { kind: "station", stationId };
+  return {
+    address: { row: canonicalRow, zoneId },
+    target: target === null ? null : await activeTarget(tx, cfg, target),
+    departmentId,
+  };
+}
+
+async function activeTarget(
+  tx: Transaction,
+  cfg: VenueScope,
+  target: RouteTarget,
+): Promise<RouteTarget> {
+  if (target.kind !== "station") return target;
+  const stationId = normaliseUuid(target.stationId, "StationId");
+  const [station] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.id, stationId),
+        eq(kitchenStations.active, true),
+      ),
+    );
+  if (station === undefined) throw new AppError("route.station_inactive", { stationId });
+  return { kind: "station", stationId };
+}
+
+type StoredLine = PeriodLine & { departmentId: string };
+
+/** The cell's stored period lines, by period id. */
+async function storedLines(
+  tx: Transaction,
+  cfg: VenueScope,
+  address: CellAddress,
+): Promise<Map<string, RouteTarget>> {
+  const rows = await tx
+    .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
+    .from(routingCellPeriods)
+    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
+    .where(cellAt(cfg, address));
+  return new Map(rows.map((row) => [row.periodId, readTarget(row)]));
+}
+
+/**
+ * Refuses a line no cell at this address may store. The menu check passes over a line the cell
+ * already stores with the same target: a later menu change does not invalidate a saved line.
+ */
+async function validatePeriodLines(
+  tx: Transaction,
+  cfg: VenueScope,
+  cell: { address: CellAddress; departmentId: string | null },
+  lines: readonly PeriodLine[],
+): Promise<StoredLine[]> {
+  const invalid = (periodId: string, reason: "other_department" | "repeated" | "not_offered") =>
+    new AppError("route.period_invalid", { periodId, reason });
+  const seen = new Set<string>();
+  const canonical = lines.map((line) => {
+    const periodId = normaliseUuid(line.periodId, "PeriodId");
+    if (seen.has(periodId)) throw invalid(periodId, "repeated");
+    seen.add(periodId);
+    return { periodId, target: line.target };
+  });
+  const periods = new Map((await readPeriods(tx, cfg, [...seen])).map((row) => [row.id, row]));
+  const valid: StoredLine[] = [];
+  for (const line of canonical) {
+    const period = periods.get(line.periodId);
+    if (period === undefined)
+      throw new AppError("route.subject_not_found", { subject: "period", id: line.periodId });
+    if (cell.departmentId !== null && period.departmentId !== cell.departmentId)
+      throw invalid(line.periodId, "other_department");
+    valid.push({
+      periodId: line.periodId,
+      departmentId: period.departmentId,
+      target: await activeTarget(tx, cfg, line.target),
+    });
   }
-  return { address: { row: canonicalRow, zoneId }, target: canonicalTarget };
+  const stored = await storedLines(tx, cfg, cell.address);
+  const unchecked = valid.filter(
+    (line) => targetKey(stored.get(line.periodId) ?? null) !== targetKey(line.target),
+  );
+  if (unchecked.length === 0) return valid;
+  const rowProducts = await rowProductIds(tx, cell.address);
+  const offered = await periodProductIds(
+    tx,
+    unchecked.map((line) => periods.get(line.periodId)!),
+  );
+  for (const line of unchecked)
+    if (!offered.get(line.periodId)!.some((productId) => rowProducts.has(productId)))
+      throw invalid(line.periodId, "not_offered");
+  return valid;
+}
+
+/** The active products a row covers, variants by their parent's id. */
+async function rowProductIds(tx: Transaction, address: CellAddress): Promise<Set<string>> {
+  const folders = await tx
+    .select({ id: categories.id, parentId: categoryDetails.parentId })
+    .from(categories)
+    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id));
+  const reach = changeReach(new Map(folders.map((row) => [row.id, row.parentId])), address);
+  const covered = new Set<string>();
+  for (const product of await activeProducts(tx)) {
+    const facts = rowFacts(product);
+    if (reach.covers(facts)) covered.add(facts.routedProductId);
+  }
+  return covered;
+}
+
+function activeProducts(tx: Transaction) {
+  return tx
+    .select({
+      id: products.id,
+      name: products.name,
+      parentName: parentProducts.name,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(eq(products.active, true));
 }
 
 function cellAt(cfg: VenueScope, { row, zoneId }: CellAddress) {
@@ -168,29 +275,51 @@ function cellAt(cfg: VenueScope, { row, zoneId }: CellAddress) {
   );
 }
 
+/** `periods` replaces the cell's period lines; omitted, the stored lines stay. */
 export async function setRoutingCell(
   tx: Transaction,
   cfg: VenueScope,
   address: CellAddress,
   target: RouteTarget,
+  periods?: readonly PeriodLine[],
 ): Promise<void> {
   const valid = await validateRoutingCell(tx, cfg, address, target);
+  const lines =
+    periods === undefined ? undefined : await validatePeriodLines(tx, cfg, valid, periods);
   const stored = storedTarget(valid.target!);
-  const updated = await tx
+  const [updated] = await tx
     .update(routingCells)
     .set(stored)
     .where(cellAt(cfg, valid.address))
     .returning({ id: routingCells.id });
-  if (updated.length > 0) return;
   const { row, zoneId } = valid.address;
-  await tx.insert(routingCells).values({
-    locationId: cfg.locationId,
-    categoryId: row.kind === "category" ? row.categoryId : null,
-    productId: row.kind === "product" ? row.productId : null,
-    noCategory: row.kind === "no_category",
-    zoneId,
-    ...stored,
-  });
+  const cellId =
+    updated?.id ??
+    (
+      await tx
+        .insert(routingCells)
+        .values({
+          locationId: cfg.locationId,
+          categoryId: row.kind === "category" ? row.categoryId : null,
+          productId: row.kind === "product" ? row.productId : null,
+          noCategory: row.kind === "no_category",
+          zoneId,
+          ...stored,
+        })
+        .returning({ id: routingCells.id })
+    )[0]!.id;
+  if (lines === undefined) return;
+  // Nothing outside the table points at a line, so the set is replaced whole.
+  await tx.delete(routingCellPeriods).where(eq(routingCellPeriods.cellId, cellId));
+  if (lines.length > 0)
+    await tx.insert(routingCellPeriods).values(
+      lines.map((line) => ({
+        cellId,
+        periodId: line.periodId,
+        departmentId: line.departmentId,
+        ...storedTarget(line.target),
+      })),
+    );
 }
 
 export async function clearRoutingCell(
@@ -349,69 +478,123 @@ export async function previewRoutingChange(
   change: RoutingChange,
 ): Promise<RoutingMove[]> {
   const { rules } = await snapshot(tx, cfg);
-  const { address, target } = await validateRoutingCell(tx, cfg, change.address, change.target);
+  const valid = await validateRoutingCell(tx, cfg, change.address, change.target);
+  const { address, target } = valid;
+  const lines =
+    change.periods === undefined
+      ? undefined
+      : await validatePeriodLines(tx, cfg, valid, change.periods);
   const key = cellKey(address);
   const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
   if (target !== null) cells.push({ ...address, target });
-  const after: RoutingRules = { ...rules, cells: Object.freeze(cells) };
+  const cellPeriods = new Map(rules.cellPeriods);
+  if (target === null || lines?.length === 0) cellPeriods.delete(key);
+  else if (lines !== undefined)
+    cellPeriods.set(key, new Map(lines.map((line) => [line.periodId, line.target])));
+  const after: RoutingRules = { ...rules, cells: Object.freeze(cells), cellPeriods };
   const zones = await activeZones(tx, cfg);
-  const productsToCheck = await tx
-    .select({
-      id: products.id,
-      name: products.name,
-      parentName: parentProducts.name,
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(eq(products.active, true));
+  const productsToCheck = await activeProducts(tx);
   const reach = changeReach(rules.parentOf, address);
   const zoneList = (zones.length ? zones : [{ id: null, name: null }]).filter((zone) =>
     reach.reachesZone(zone.id),
   );
-  const moves: RoutingMove[] = [];
-  const dishChoices = new Map<string, { before: MakerChoice; after: MakerChoice }>();
-  for (const product of productsToCheck) {
-    const facts = rowFacts(product);
-    if (!reach.covers(facts)) continue;
-    for (const zone of zoneList) {
-      const previous = chooseMaker(rules, facts, zone.id, null);
-      const from = previous.route;
-      const next = chooseMaker(after, facts, zone.id, null);
-      const to = next.route;
-      dishChoices.set(choiceKey(product.id, zone.id), { before: previous, after: next });
-      if (!sameRoute(from, to) || previous.noReplacement !== next.noReplacement)
-        moves.push({
-          productId: product.id,
-          productName: product.name,
-          zoneId: zone.id,
-          zoneName: zone.name,
-          from,
-          to,
-          toNoReplacement: next.noReplacement,
-        });
+  const offers = await readExtraOffers(tx, cfg, productsToCheck, zoneList);
+  const compare = (
+    before: RoutingRules,
+    after: RoutingRules,
+    inZones: readonly { id: string | null; name: string | null }[],
+  ): Omit<RoutingMove, "periodIds">[] => {
+    const moves: Omit<RoutingMove, "periodIds">[] = [];
+    const dishChoices = new Map<string, { before: MakerChoice; after: MakerChoice }>();
+    for (const product of productsToCheck) {
+      const facts = rowFacts(product);
+      if (!reach.covers(facts)) continue;
+      for (const zone of inZones) {
+        const previous = chooseMaker(before, facts, zone.id, null);
+        const from = previous.route;
+        const next = chooseMaker(after, facts, zone.id, null);
+        const to = next.route;
+        dishChoices.set(choiceKey(product.id, zone.id), { before: previous, after: next });
+        if (!sameRoute(from, to) || previous.noReplacement !== next.noReplacement)
+          moves.push({
+            productId: product.id,
+            productName: product.name,
+            zoneId: zone.id,
+            zoneName: zone.name,
+            from,
+            to,
+            toNoReplacement: next.noReplacement,
+          });
+      }
     }
+    moves.push(
+      ...extraMoves({ before, after }, productsToCheck, offers, inZones, reach, dishChoices),
+    );
+    return moves;
+  };
+  const moves: RoutingMove[] = compare(rules, after, zoneList).map((move) => ({
+    ...move,
+    periodIds: null,
+  }));
+  const periodIds = new Set([
+    ...(rules.cellPeriods?.get(key)?.keys() ?? []),
+    ...(cellPeriods.get(key)?.keys() ?? []),
+  ]);
+  if (periodIds.size > 0) {
+    const departmentOf = new Map(
+      (await readPeriods(tx, cfg, [...periodIds])).map((row) => [row.id, row.departmentId]),
+    );
+    const zoneDepartment = await zoneDepartments(tx, cfg);
+    const timed = new Map<string, RoutingMove>();
+    for (const periodId of [...periodIds].sort()) {
+      const inPeriod = zoneList.filter(
+        (zone) => zone.id !== null && zoneDepartment.get(zone.id) === departmentOf.get(periodId),
+      );
+      for (const move of compare(during(rules, periodId), during(after, periodId), inPeriod)) {
+        const same = JSON.stringify([
+          move.productId,
+          move.dish?.productId ?? null,
+          move.zoneId,
+          targetKey(move.from),
+          targetKey(move.to),
+          move.toNoReplacement,
+        ]);
+        const merged = timed.get(same);
+        if (merged === undefined) timed.set(same, { ...move, periodIds: [periodId] });
+        else merged.periodIds!.push(periodId);
+      }
+    }
+    moves.push(...timed.values());
   }
-  moves.push(
-    ...(await extraMoves(
-      tx,
-      cfg,
-      { before: rules, after },
-      productsToCheck,
-      zoneList,
-      reach,
-      dishChoices,
-    )),
-  );
   return moves.sort(
     (a, b) =>
       a.productName.localeCompare(b.productName) ||
       (a.dish?.productName ?? "").localeCompare(b.dish?.productName ?? "") ||
       (a.zoneName ?? "").localeCompare(b.zoneName ?? "") ||
       a.productId.localeCompare(b.productId) ||
-      (a.dish?.productId ?? "").localeCompare(b.dish?.productId ?? ""),
+      (a.dish?.productId ?? "").localeCompare(b.dish?.productId ?? "") ||
+      (a.periodIds?.join() ?? "").localeCompare(b.periodIds?.join() ?? ""),
   );
+}
+
+/**
+ * The rules as they stand while `periodId` runs, for zones of its department alone: each cell's
+ * line for it replaces the cell's own target.
+ */
+function during(rules: RoutingRules, periodId: string): RoutingRules {
+  const cells = rules.cells.map((cell) => {
+    const line = rules.cellPeriods?.get(cellKey(cell))?.get(periodId);
+    return line === undefined ? cell : { ...cell, target: line };
+  });
+  return { ...rules, cells: Object.freeze(cells), cellPeriods: undefined };
+}
+
+async function zoneDepartments(tx: Transaction, cfg: VenueScope): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ zoneId: zoneServicePolicies.zoneId, departmentId: zoneServicePolicies.departmentId })
+    .from(zoneServicePolicies)
+    .where(eq(zoneServicePolicies.locationId, cfg.locationId));
+  return new Map(rows.map((row) => [row.zoneId, row.departmentId]));
 }
 
 const rowFacts = (product: { id: string; routedId: string; categoryId: string | null }) => ({
@@ -423,29 +606,27 @@ const rowFacts = (product: { id: string; routedId: string; categoryId: string | 
 const choiceKey = (productId: string, zoneId: string | null) =>
   `${storedUuid(productId)}\u0000${zoneId ?? ""}`;
 
+type PreviewProduct = {
+  id: string;
+  name: string;
+  parentName: string | null;
+  routedId: string;
+  categoryId: string | null;
+};
+/** By dish, then extra: the zones the extra is offered in with the dish. */
+type ExtraOffers = Map<string, Map<string, Set<string | null>>>;
+
 /**
- * Where each offered extra is made before and after a change. An extra that follows its dish in
- * both states is left out, since the dish's own move already says where it goes.
- *
  * A dish offers an extra when the live catalogue attaches it, in every zone, or when a published
  * menu a zone serves offers it with the dish, in that zone: an order sells from the published
  * menu, and a catalogue edit is asked about before it is published.
  */
-async function extraMoves(
+async function readExtraOffers(
   tx: Transaction,
   cfg: VenueScope,
-  rules: { before: RoutingRules; after: RoutingRules },
-  dishes: readonly {
-    id: string;
-    name: string;
-    parentName: string | null;
-    routedId: string;
-    categoryId: string | null;
-  }[],
-  zones: readonly { id: string | null; name: string | null }[],
-  reach: ChangeReach,
-  dishChoices: Map<string, { before: MakerChoice; after: MakerChoice }>,
-): Promise<RoutingMove[]> {
+  dishes: readonly PreviewProduct[],
+  zones: readonly { id: string | null }[],
+): Promise<ExtraOffers> {
   const extrasByDish = new Map<string, Map<string, Set<string | null>>>();
   const offer = (dishId: string, extraId: string, zoneIds: readonly (string | null)[]) => {
     const dish = storedUuid(dishId);
@@ -473,6 +654,21 @@ async function extraMoves(
       for (const modifier of served.offeredModifiers)
         if (modifier.kind === "extras")
           for (const item of modifier.items) offer(served.productId, item.productId, [zoneId]);
+  return extrasByDish;
+}
+
+/**
+ * Where each offered extra is made before and after a change. An extra that follows its dish in
+ * both states is left out, since the dish's own move already says where it goes.
+ */
+function extraMoves(
+  rules: { before: RoutingRules; after: RoutingRules },
+  dishes: readonly PreviewProduct[],
+  extrasByDish: ExtraOffers,
+  zones: readonly { id: string | null; name: string | null }[],
+  reach: ChangeReach,
+  dishChoices: Map<string, { before: MakerChoice; after: MakerChoice }>,
+): Omit<RoutingMove, "periodIds">[] {
   // Every Active product is a dish here, so an Inactive extra, which cannot be picked whatever a
   // published menu still lists, is not found.
   const active = new Map(dishes.map((dish) => [storedUuid(dish.id), dish]));
@@ -491,7 +687,7 @@ async function extraMoves(
         }
       : { follows: true, target: dishChoice.route, noReplacement: dishChoice.noReplacement };
   };
-  const moves: RoutingMove[] = [];
+  const moves: Omit<RoutingMove, "periodIds">[] = [];
   // A dish the change cannot reach keeps its choice, so it is worked out once, for both states.
   const choiceBeside = (dish: ProductFacts, zoneId: string | null) => {
     const key = choiceKey(dish.productId, zoneId);
@@ -790,13 +986,25 @@ export async function routingModel(
     .where(and(eq(products.active, true), isNull(products.parentId)))
     .orderBy(asc(products.name), asc(products.id));
   const shown = new Set(gridProducts.map((product) => product.id));
+  const periods = await readRoutingPeriods(tx, cfg, clock.dayCutover);
+  const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
   return {
     zones,
     categories: folders,
     products: gridProducts,
-    cells: rules.cells.filter(
-      (cell) => cell.row.kind !== "product" || shown.has(cell.row.productId),
-    ),
+    cells: rules.cells
+      .filter((cell) => cell.row.kind !== "product" || shown.has(cell.row.productId))
+      .map((cell) => {
+        const lines = rules.cellPeriods?.get(cellKey(cell));
+        if (lines === undefined) return cell;
+        return {
+          ...cell,
+          periods: [...lines]
+            .map(([periodId, target]) => ({ periodId, target }))
+            .sort((a, b) => periodOrder.get(a.periodId)! - periodOrder.get(b.periodId)!),
+        };
+      }),
+    periods,
     defaultStationId: rules.defaultStationId,
     stations: stations.map(({ id, name, active }) => ({ id, name, active })),
     stationTimes: stations.map(({ id }) => ({

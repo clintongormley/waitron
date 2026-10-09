@@ -50,6 +50,7 @@ const STATIONS = [
 function routing(overrides: Partial<RoutingModel> = {}): RoutingModel {
   return {
     stationTimes: [],
+    periods: [],
     todayEnds: null,
     clockReadable: true,
     zones: [{ id: "terrace-zone", name: "Terrace" }],

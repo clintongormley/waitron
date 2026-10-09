@@ -5,6 +5,7 @@ import type {
   StationTransition,
   WeeklyInterval,
 } from "./routing.js";
+import type { CalendarColour } from "./hours-types.js";
 
 export type RoutingRow =
   | { kind: "all" }
@@ -60,8 +61,19 @@ export interface StationTimes {
   closedSendsTo: string | null;
 }
 
-/** `target: null` clears the cell; No preparation is an explicit saved value. */
-export type RoutingChange = { kind: "cell"; address: CellAddress; target: RouteTarget | null };
+/** What a cell sends work to while one period runs. */
+export type PeriodLine = { periodId: string; target: RouteTarget };
+
+/**
+ * `target: null` clears the cell; No preparation is an explicit saved value. `periods` replaces
+ * the cell's period lines; omitted, the stored lines stay.
+ */
+export type RoutingChange = {
+  kind: "cell";
+  address: CellAddress;
+  target: RouteTarget | null;
+  periods?: readonly PeriodLine[];
+};
 
 export interface RoutingMove {
   productId: string;
@@ -73,7 +85,22 @@ export interface RoutingMove {
   toNoReplacement: boolean;
   /** Present only on an extra's move: the dish that offers it. */
   dish?: { productId: string; productName: string };
+  /** The periods during which the move happens; null: at any other time. */
+  periodIds: string[] | null;
 }
+
+/** A period a routing line can name, with the products its menus reach, variants by parent. */
+export interface RoutingPeriod {
+  id: string;
+  departmentId: string;
+  departmentName: string;
+  name: string;
+  colour: CalendarColour;
+  productIds: string[];
+}
+
+/** `periods` is present only on a cell with period lines. */
+export type RoutingModelCell = RoutingCell & { periods?: PeriodLine[] };
 
 export interface RoutingModel {
   stationTimes: StationTimes[];
@@ -84,7 +111,9 @@ export interface RoutingModel {
   categories: GridCategory[];
   /** Active top-level products; a disabled product's stored cells are left out of `cells` too. */
   products: GridProduct[];
-  cells: readonly RoutingCell[];
+  cells: readonly RoutingModelCell[];
+  /** Each department's periods in the order its week first runs them; one never placed last. */
+  periods: RoutingPeriod[];
   defaultStationId: string | null;
   /** Includes referenced inactive stations, which the active-station management list omits. */
   stations: { id: string; name: string; active: boolean }[];
