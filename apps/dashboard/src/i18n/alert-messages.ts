@@ -51,6 +51,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "{station}, the default station, has dishes waiting, and none of its kitchen screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view.",
     es: "{station}, la estación predeterminada, tiene platos pendientes y ninguna de sus pantallas de cocina se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV.",
   },
+  "kitchen_screen.pass_dark": {
+    en: "Pass screen {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
+    es: "La pantalla de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísala; mientras tanto, usa la vista de pase del TPV.",
+  },
+  "kitchen_screen.pass_monitor_dark": {
+    en: "Pass monitor {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
+    es: "El monitor de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísalo; mientras tanto, usa la vista de pase del TPV.",
+  },
   "backup.destination_overdue": {
     en: "Backups to “{destination}” are overdue — no recent good backup. Check the destination on the Backups page.",
     es: "Las copias de seguridad en «{destination}» están atrasadas: no hay ninguna correcta reciente. Revisa el destino en la página de Copias.",

@@ -29,7 +29,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
-import { stationOutputAlertSource } from "./alert-sources.js";
+import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
@@ -747,5 +747,50 @@ describe("passScreensDark", () => {
       ),
     ).toMatchObject([{ kind: "pass", available: false }]);
     expect(await read(f)).toEqual([]);
+  });
+
+  describe("passScreenAlertSource", () => {
+    const alerts = (f: Awaited<ReturnType<typeof passFixture>>) => {
+      const source = passScreenAlertSource({ cfg: f.venue.cfg });
+      return withTransaction(suite.db, (tx) => source.read({ tx, now: at }));
+    };
+
+    it("is a kitchen alert for venue_service.manage", async () => {
+      const f = await passFixture();
+      const source = passScreenAlertSource({ cfg: f.venue.cfg });
+      expect([source.area, source.permission]).toEqual(["kitchen", "venue_service.manage"]);
+    });
+
+    it("raises one warning for a dark pass screen with a dish waiting", async () => {
+      const f = await passFixture();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      const pass = await passDevice(f, "pass", { label: "Pase" });
+      expect(await alerts(f)).toEqual([
+        {
+          key: `kitchen_screen.pass_dark:${pass}`,
+          code: "kitchen_screen.pass_dark",
+          params: { device: "Pase" },
+          severity: "warning",
+          since: dark,
+          screen: "devices",
+        },
+      ]);
+    });
+
+    it("raises pass_monitor_dark for a monitor, since now when it was never seen", async () => {
+      const f = await passFixture();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      const monitor = await passDevice(f, "pass_monitor", { label: "Monitor", lastSeenAt: null });
+      expect(await alerts(f)).toEqual([
+        {
+          key: `kitchen_screen.pass_dark:${monitor}`,
+          code: "kitchen_screen.pass_monitor_dark",
+          params: { device: "Monitor" },
+          severity: "warning",
+          since: at.toISOString(),
+          screen: "devices",
+        },
+      ]);
+    });
   });
 });

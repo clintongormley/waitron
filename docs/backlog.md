@@ -1530,10 +1530,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   product folders work. The ordinary embedded pass card still shows All stations; a device's Pass
   tab shows the pass screen or pass monitor it chose.
 
-- **Alert when a pass screen or pass monitor goes dark — OPEN.** — left open by A366 slice 5 Part
-  A. The dark-screen alert reads station screens only (`stationScreensDark`), so a kitchen display
-  showing a pass screen or pass monitor that stops polling raises nothing.
-
 - **Keep pass screen Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
   product folders work. `pass_item_marks` cascades from `ticket_items`, so a rebuild empties those
   marks.
