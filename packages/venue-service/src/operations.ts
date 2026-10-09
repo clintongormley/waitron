@@ -183,15 +183,11 @@ export async function createDepartment(
   input: {
     name: string;
     tradingName?: string;
-    defaultServiceMode?: ServiceMode;
     orderStart?: OrderStart;
   },
 ): Promise<Department> {
   await requireDepartmentName(tx, cfg, input.name);
-  const style =
-    input.orderStart === undefined
-      ? (input.defaultServiceMode ?? "prepay")
-      : styleForStart(input.orderStart, input.defaultServiceMode ?? null)!;
+  const style = styleForStart(input.orderStart ?? "counter", null)!;
   const [row] = await tx
     .insert(departments)
     .values({
@@ -225,7 +221,6 @@ export async function updateDepartment(
   input: {
     name?: string;
     tradingName?: string;
-    defaultServiceMode?: ServiceMode;
     orderStart?: OrderStart;
   },
 ): Promise<void> {
@@ -237,7 +232,7 @@ export async function updateDepartment(
   if (existing === undefined) throw new AppError("department.not_found", { departmentId });
   const style =
     input.orderStart === undefined
-      ? (input.defaultServiceMode ?? (existing.style as ServiceMode))
+      ? (existing.style as ServiceMode)
       : styleForStart(input.orderStart, existing.style as ServiceMode)!;
   const [row] = await tx
     .update(departments)
@@ -249,7 +244,7 @@ export async function updateDepartment(
     .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
     .returning({ id: departments.id });
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
-  if (input.orderStart === undefined && input.defaultServiceMode === undefined) return;
+  if (input.orderStart === undefined) return;
   await tx
     .update(departmentSalePolicies)
     .set({ orderStart: startForStyle(style)! })
@@ -504,7 +499,6 @@ export async function configureZone(
   input: {
     zoneId: string;
     departmentId: string;
-    serviceMode?: ServiceMode | null;
     orderStart?: OrderStart | null;
   },
 ): Promise<void> {
@@ -529,9 +523,7 @@ export async function configureZone(
     .where(eq(zoneServicePolicies.zoneId, input.zoneId));
   const style =
     input.orderStart === undefined
-      ? input.serviceMode === undefined
-        ? ((existing?.style as ServiceMode | null) ?? null)
-        : input.serviceMode
+      ? ((existing?.style as ServiceMode | null) ?? null)
       : styleForStart(input.orderStart, (existing?.style as ServiceMode | null) ?? null);
   await tx
     .insert(zoneServicePolicies)
@@ -545,8 +537,7 @@ export async function configureZone(
       target: [zoneServicePolicies.zoneId],
       set: { departmentId: input.departmentId, serviceMode: style },
     });
-  if (input.orderStart === undefined && input.serviceMode === undefined && existing !== undefined)
-    return;
+  if (input.orderStart === undefined && existing !== undefined) return;
   await tx
     .insert(zoneSalePolicies)
     .values({ zoneId: input.zoneId, orderStart: startForStyle(style) })

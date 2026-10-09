@@ -1183,9 +1183,9 @@ column is `NOT NULL` until Task A14). The greps also match drizzle inserts' `def
 keys; those stay until Task A14. If `operations.test.ts`'s inputs alone pass about 60
 changes, commit it separately from the other files.
 
-- [ ] **Step 1:** change; run focused affected venue-service/server behavioural files: green; any
+- [x] **Step 1:** change; run focused affected venue-service/server behavioural files: green; any
   `expect` that pinned a removed input or answer is a listed changed check.
-- [ ] **Step 2: Commit** — `refactor(venue-service): the configuration writers take how orders start (A366)`.
+- [x] **Step 2: Commit** — `refactor(venue-service): the configuration writers take how orders start (A366)`.
 
 ---
 
