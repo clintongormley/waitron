@@ -12,6 +12,11 @@ export interface PayWaitingOrderDetail {
   serviceMode: CounterWaitingOrder["serviceMode"];
 }
 
+/** How a row, its buttons' names and the move dialog's heading name the order: `#12 Mesa 4`. */
+export function waitingScope(order: CounterWaitingOrder): string {
+  return `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
+}
+
 /**
  * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
@@ -87,7 +92,7 @@ export class TillCounterWaiting extends LitElement {
   }
 
   #row(order: CounterWaitingOrder): TemplateResult {
-    const scope = `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
+    const scope = waitingScope(order);
     const pay = order.status === "placed";
     return html`
       <div class="order" data-waiting-order=${order.id}>

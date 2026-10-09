@@ -180,6 +180,46 @@ describe("till-station-choice-dialog", () => {
     expect(body.lastElementChild?.textContent?.trim()).toBe(spanish);
   });
 
+  it.each([
+    [
+      "ticket.already_started",
+      "The kitchen has started, finished or sent out a dish of this order, so nothing was moved",
+      "La cocina ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
+    ],
+    [
+      "tab.line_not_found",
+      "A dish of this order is no longer on it, so nothing was moved",
+      "Un plato de este pedido ya no está en él, así que no se ha pasado nada",
+    ],
+    [
+      "ticket.not_sent",
+      "A dish of this order has not gone to the kitchen yet, so nothing was moved",
+      "Un plato de este pedido aún no ha ido a cocina, así que no se ha pasado nada",
+    ],
+    [
+      "ticket.made_here",
+      "A dish of this order is made here at the till, so nothing was moved",
+      "Un plato de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
+    ],
+    ["working_order.not_open", "This order has been discarded", "Este pedido se ha descartado"],
+    [
+      "working_order.already_collected",
+      "This order has already been handed over",
+      "Este pedido ya se ha entregado",
+    ],
+  ])(
+    "moving a whole order, shows the refusal %s as the order's",
+    async (code, english, spanish) => {
+      const el = await mount({ mode: "move", wholeOrder: true, refusal: code });
+      const body = root(el).querySelector("[data-body]")!;
+      expect(body.lastElementChild?.textContent?.trim()).toBe(english);
+      setLocale("es");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(body.lastElementChild?.textContent?.trim()).toBe(spanish);
+    },
+  );
+
   it("uses the shared sentence for another refusal", async () => {
     const el = await mount({ mode: "move", refusal: "station.not_found" });
     expect(root(el).querySelector("[data-body]")?.lastElementChild?.textContent?.trim()).toBe(

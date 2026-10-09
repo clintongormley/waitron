@@ -152,7 +152,8 @@ import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
 import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
-import type { PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
+import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
+import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -305,6 +306,8 @@ registerIcons({
  * stopped when the wait began is killed before the till gives up.
  */
 const TABLE_REQUEST_LIMIT_MS = 150_000;
+/** The most dishes one move request may name (`POST /api/working-orders/:id/lines/move-station`). */
+const MOVE_STATION_MAX_LINES = 100;
 
 /** The reader the device pays on now: switched on, and on a provider the till can pay through. */
 function payReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
@@ -768,6 +771,32 @@ function lateChangeMessage(late: LateChange): string {
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
 function drawerErrorKey(code: string | undefined): StringKey {
   return code === "drawer.not_attached" ? code : "drawer.error";
+}
+
+/** One dish of a table's or the counter basket's order, moving to another station. */
+interface DishMove {
+  kind?: undefined;
+  workingOrderId: string;
+  lineId: string;
+  name: string;
+  stationId: string | null;
+  refusal: string | null;
+  busy: boolean;
+  counter?: boolean;
+  basketRevision?: number;
+  basketGeneration?: number;
+}
+
+/** Every dish of a paid order in the counter's waiting list that can still move. `stationId` is
+ * the station they all share, or null. */
+interface WaitingOrderMove {
+  kind: "waiting";
+  workingOrderId: string;
+  name: string;
+  stationId: string | null;
+  refusal: string | null;
+  busy: boolean;
+  session: number;
 }
 
 /** A banner's string key, a refusal shown through its code's own message, a save refused because
@@ -1919,17 +1948,7 @@ export class TillApp extends LitElement {
   #moveStationOpening: object | null = null;
   #makeAtOpening: object | null = null;
   #counterMoveSubmitting: object | null = null;
-  @state() private movingStation: {
-    workingOrderId: string;
-    lineId: string;
-    name: string;
-    stationId: string | null;
-    refusal: string | null;
-    busy: boolean;
-    counter?: boolean;
-    basketRevision?: number;
-    basketGeneration?: number;
-  } | null = null;
+  @state() private movingStation: DishMove | WaitingOrderMove | null = null;
   @state() private makingAt: {
     index: number;
     line: OrderLine;
@@ -6156,10 +6175,7 @@ export class TillApp extends LitElement {
       this.#store.setLineMakeAt(open.index, stationId ?? undefined);
   }
 
-  async #onStationChosen(
-    event: Event,
-    open: NonNullable<typeof this.movingStation>,
-  ): Promise<void> {
+  async #onStationChosen(event: Event, open: DishMove): Promise<void> {
     if (this.movingStation !== open) return;
     const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
     if (open.busy || stationId === null || stationId === open.stationId) return;
@@ -6224,6 +6240,109 @@ export class TillApp extends LitElement {
       unlock();
       if (this.#counterMoveSubmitting === counterSubmission) this.#counterMoveSubmitting = null;
     }
+  }
+
+  /** The waiting row for `id` while it is a paid order with a dish that can still move. */
+  #movableWaitingRow(id: string): CounterWaitingOrder | undefined {
+    return this.counterWaiting.find(
+      (row) => row.id === id && row.status === "settled" && row.movableDishes.length > 0,
+    );
+  }
+
+  async #onMoveWaitingOrder(event: Event): Promise<void> {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    if (
+      this.movingStation !== null ||
+      this.#moveStationOpening !== null ||
+      this.makingAt !== null ||
+      this.#makeAtOpening !== null ||
+      this.#movableWaitingRow(id) === undefined
+    )
+      return;
+    const opening = {};
+    this.#moveStationOpening = opening;
+    const session = this.#operatorSession;
+    try {
+      await this.#loadStations();
+      const row = this.#movableWaitingRow(id);
+      if (
+        this.#moveStationOpening !== opening ||
+        session !== this.#operatorSession ||
+        row === undefined
+      )
+        return;
+      const at = new Set(row.movableDishes.map((dish) => dish.stationId));
+      this.movingStation = {
+        kind: "waiting",
+        workingOrderId: id,
+        name: waitingScope(row),
+        stationId: at.size === 1 ? [...at][0]! : null,
+        refusal: null,
+        busy: false,
+        session,
+      };
+    } finally {
+      if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
+    }
+  }
+
+  /**
+   * Names the dishes the waiting list holds NOW, not when the dialog opened. The move is all or
+   * nothing, so a refusal is said as the order's; once the list is read again it stays in the dialog
+   * only while the order still has a dish to move.
+   */
+  async #onWaitingStationChosen(event: Event, open: WaitingOrderMove): Promise<void> {
+    if (this.movingStation !== open) return;
+    const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
+    if (open.busy || stationId === null || stationId === open.stationId) return;
+    const row = this.#movableWaitingRow(open.workingOrderId);
+    if (row === undefined) {
+      this.movingStation = null;
+      return;
+    }
+    const body = {
+      submissionId: crypto.randomUUID(),
+      lineIds: row.movableDishes.slice(0, MOVE_STATION_MAX_LINES).map((dish) => dish.lineId),
+      stationId,
+    };
+    const busy = { ...open, busy: true, refusal: null };
+    this.movingStation = busy;
+    this.errorKey = undefined;
+    const live = () => open.session === this.#operatorSession;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let refusal: string | null = null;
+    try {
+      await resendUnanswered(
+        (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
+        limit.signal,
+        live,
+      );
+    } catch (error) {
+      refusal = (error as { code?: string } | undefined)?.code ?? "server.internal";
+    } finally {
+      limit.done();
+    }
+    if (!live()) return;
+    if (refusal === null) {
+      if (this.movingStation === busy) this.movingStation = null;
+      await this.#refreshAfterWrite("station", "refresh.station_after_move");
+      if (!live()) return;
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_move");
+      return;
+    }
+    const refused = { ...open, refusal };
+    if (this.movingStation === busy) this.movingStation = refused;
+    await this.#refreshAfterWrite("station", "refresh.station");
+    if (!live()) return;
+    await this.#refreshAfterWrite("waiting", "refresh.waiting");
+    if (
+      !live() ||
+      this.movingStation !== refused ||
+      this.#movableWaitingRow(open.workingOrderId) !== undefined
+    )
+      return;
+    this.movingStation = null;
+    this.errorKey = moveRefusalKey(refusal, true) ?? { code: refusal };
   }
 
   /** Cancel, Give away or Discount pressed, or Cancel offered: the reasons are read, then the dialog
@@ -8542,6 +8661,7 @@ export class TillApp extends LitElement {
         .counterTab=${tab}
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
+        .canMoveStation=${this.capabilities.includes("take-orders")}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
         .cardAttemptsOver=${this.cardAttemptsOver}
@@ -8576,6 +8696,7 @@ export class TillApp extends LitElement {
       .stage=${this.stage}
       .cardProvider=${this.#cardReader()}
       .takesCash=${this.#takesCash()}
+      .canMoveStation=${this.capabilities.includes("take-orders")}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
       .cardAttemptsOver=${this.cardAttemptsOver}
@@ -8732,7 +8853,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  #renderMoveStationDialog(open: NonNullable<typeof this.movingStation>) {
+  #renderMoveStationDialog(open: DishMove | WaitingOrderMove) {
     return html`<till-station-choice-dialog
       mode="move"
       .dishName=${open.name}
@@ -8740,7 +8861,11 @@ export class TillApp extends LitElement {
       .currentStationId=${open.stationId}
       .busy=${open.busy}
       .refusal=${open.refusal}
-      @station-chosen=${(event: Event) => void this.#onStationChosen(event, open)}
+      .wholeOrder=${open.kind === "waiting"}
+      @station-chosen=${(event: Event) =>
+        void (open.kind === "waiting"
+          ? this.#onWaitingStationChosen(event, open)
+          : this.#onStationChosen(event, open))}
       @close=${() => {
         if (this.movingStation === open) this.movingStation = null;
       }}
@@ -8796,6 +8921,7 @@ export class TillApp extends LitElement {
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
         @pay-waiting-order=${(event: Event) => this.#replaceBasket(() => this.#onPayWaitingOrder(event))}
         @cancel-credit-waiting-order=${(event: Event) => this.#onCancelCreditWaitingOrder(event)}
+        @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}
         @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}
         @switch-device=${() => void this.#onSwitchDevice()}

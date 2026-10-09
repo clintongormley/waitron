@@ -755,6 +755,14 @@ export const en = {
   "move_station.refused.ticket.not_sent": "This dish has not gone to the kitchen yet",
   "move_station.refused.ticket.made_here":
     "This dish is made here at the till, so it has no ticket at a station to move",
+  "move_station.order_refused.ticket.already_started":
+    "The kitchen has started, finished or sent out a dish of this order, so nothing was moved",
+  "move_station.order_refused.tab.line_not_found":
+    "A dish of this order is no longer on it, so nothing was moved",
+  "move_station.order_refused.ticket.not_sent":
+    "A dish of this order has not gone to the kitchen yet, so nothing was moved",
+  "move_station.order_refused.ticket.made_here":
+    "A dish of this order is made here at the till, so nothing was moved",
   "dead_end.choose_or_remove": "Choose where to make each dish, or remove it.",
   "dead_end.choose": "Choose where to make each dish.",
   "table.preview_fire": "Fire now: {n} items.",
@@ -864,6 +872,7 @@ export const en = {
   "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
   "refresh.station_after_hand_over":
     "The order was handed over, but the kitchen queue could not refresh.",
+  "refresh.station_after_move": "The dishes were moved, but the kitchen queue could not refresh.",
   "refresh.station_after_sale": "The sale was recorded, but the kitchen queue could not refresh.",
   "refresh.station_after_cancel":
     "The order was cancelled and credited, but the kitchen queue could not refresh.",
@@ -874,6 +883,8 @@ export const en = {
     "The order was placed, but the list of waiting orders could not refresh.",
   "refresh.waiting_after_hand_over":
     "The order was handed over, but the list of waiting orders could not refresh.",
+  "refresh.waiting_after_move":
+    "The dishes were moved, but the list of waiting orders could not refresh.",
   "refresh.waiting_after_cancel":
     "The order was cancelled and credited, but the list of waiting orders could not refresh.",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
@@ -1862,6 +1873,14 @@ export const es: Record<StringKey, string> = {
   "move_station.refused.ticket.not_sent": "Este plato aún no ha ido a cocina",
   "move_station.refused.ticket.made_here":
     "Este plato se prepara aquí en la caja, así que no tiene comanda en ninguna estación que pasar",
+  "move_station.order_refused.ticket.already_started":
+    "La cocina ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
+  "move_station.order_refused.tab.line_not_found":
+    "Un plato de este pedido ya no está en él, así que no se ha pasado nada",
+  "move_station.order_refused.ticket.not_sent":
+    "Un plato de este pedido aún no ha ido a cocina, así que no se ha pasado nada",
+  "move_station.order_refused.ticket.made_here":
+    "Un plato de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
   "dead_end.choose_or_remove": "Elige dónde preparar cada plato o quítalo.",
   "dead_end.choose": "Elige dónde preparar cada plato.",
   "table.preview_fire": "Marchar ya: {n} artículos.",
@@ -1966,6 +1985,8 @@ export const es: Record<StringKey, string> = {
     "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
   "refresh.station_after_hand_over":
     "El pedido se entregó, pero la cola de cocina no se pudo actualizar.",
+  "refresh.station_after_move":
+    "Los platos se pasaron, pero la cola de cocina no se pudo actualizar.",
   "refresh.station_after_sale":
     "La venta se registró, pero la cola de cocina no se pudo actualizar.",
   "refresh.station_after_cancel":
@@ -1977,6 +1998,8 @@ export const es: Record<StringKey, string> = {
     "El pedido se envió, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_hand_over":
     "El pedido se entregó, pero la lista de pedidos pendientes no se pudo actualizar.",
+  "refresh.waiting_after_move":
+    "Los platos se pasaron, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_cancel":
     "El pedido se canceló y se abonó, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.retry_in": "Se reintentará en {n} segundos.",
