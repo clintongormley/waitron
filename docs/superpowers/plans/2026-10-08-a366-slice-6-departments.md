@@ -1208,18 +1208,18 @@ changes, commit it separately from the other files.
   `configuration-import.test.ts` fails on its `default_service_mode` (read the failure first: an old
   bundle is already refused for its migration version, `apps/server/src/configuration-transfer.ts:573-577`)
 
-- [ ] **Step 1:** list the foreign keys that point at `departments` and `zone_service_policies` and
+- [x] **Step 1:** list the foreign keys that point at `departments` and `zone_service_policies` and
   their `ON DELETE` (`rg -n 'foreignColumns: \[departments.id\]|foreignColumns: \[zoneServicePolicies' packages --glob '*.ts'`);
   write the list into the commit message.
-- [ ] **Step 2:** drop the columns in the schema; generate; read the SQL (two rebuilds).
-- [ ] **Step 3:** run `pnpm exec vitest run scripts/migration-upgrade.test.ts`; retain actual
+- [x] **Step 2:** drop the columns in the schema; generate; read the SQL (two rebuilds).
+- [x] **Step 3:** run `pnpm exec vitest run scripts/migration-upgrade.test.ts`; retain actual
   output. The retirement refusal is expected, not measured. Any RESETS entry is limited to the observed
   retirement refusal under the pre-live reset authorization; no blanket guard exemption. If these rebuilds carry rows,
   add no entry; Part A still requires a pre-live reset for obsolete receipt modes. Report the
   separate reset reasons accurately.
-- [ ] **Step 4: Run** the migration guards listed in Task A1, the fiscal pair unedited, focused affected venue-service/server node files,
+- [x] **Step 4: Run** the migration guards listed in Task A1, the fiscal pair unedited, focused affected venue-service/server node files,
   the server's `configuration-import.test.ts` and `configuration-transfer.test.ts`; typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): the service style is retired (A366) — venue reset needed`.
+- [x] **Step 5: Commit** — `feat(venue-service): the service style is retired (A366) — venue reset needed`.
   If the task passes about 100 calls, commit the insert and assertion moves first (they can be
   written while the column still exists only for inserts that do not need it — otherwise keep one
   commit and hand over).
@@ -1835,3 +1835,37 @@ Unused legacy translation keys are removed; the dynamic department/zone name-ref
 Current documentation points to the replacement tests. Task A13 retires the route/client/writer
 fields next; A14/A15 and the branch review, hook, CI and authorised landing remain. This is a
 passing public-switch checkpoint, not branch readiness.
+
+
+### Implementation checkpoint: A14 service-style storage retirement (2026-10-09)
+
+The generated `0040_retire_service_style` rebuilds `departments` and
+`zone_service_policies` without their old style columns or checks. Configuration writers and
+provisioning now write only the sale-policy `order_start`; the recorded order-mode vocabulary
+and its check stay. Direct/raw fixtures remove the old required column or redundant write while
+keeping their new policy setup. Historical configuration-v1 JSON remains unchanged.
+
+Two new retired-column write tests failed before generation, then passed. In an independently
+installed candidate, removing the last migration journal entry reproduced both failures;
+restoring it passed all 29 migration tests. The synthetic-row upgrade walk first refused
+`DROP TABLE departments` with `FOREIGN KEY constraint failed`. Only that measured refusal is
+recorded in its reset list; the walk and the other six A1 migration guards then passed (382 cases).
+The incoming-key inventory from the previous snapshot names the department keys from sale policies,
+zone assignments, profile access, recorded order contexts, receipt headers, week/special-date hours,
+menu periods/timetables, transfer desks/destinations/log and period extensions, and the zone-policy
+key from zone sale policies. Each declares `ON DELETE no action`.
+
+Verification: 35 venue node files / 1450 cases passed. The first affected server run passed 649
+cases and failed one old-column write in a table-state fixture; that fixture was corrected,
+then the table-state and served-at fiscal fixture files passed 128 cases. The latter loses only
+an obsolete assignment field, with all captured assertions unchanged. Configuration import and
+transfer passed in the first server run. The fiscal gate pair passed 20 cases without edits.
+Three scoped types, touched-source lint, and the pointer/journal/column guards passed.
+
+Existing test changes are signed separately in `70ff1cf3`: mirror checks become exact
+`order_start` checks, obsolete invoice-first writes target the new policy checks, authored
+provisioning reads retain counter/paid-at-collection, and the schema guard lists remove only
+A14's named checks. Local before/after inventory and logs are retained under Lane E's
+`receipts/a366-6a/a14-retirement/`; the captured-expression audit does not prove semantic
+equivalence or enumerate all parameter rows. A15, final branch reconciliation, both completed
+Claude reviews, the normal hook, current-head CI and authorised locked landing remain.

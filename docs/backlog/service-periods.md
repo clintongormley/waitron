@@ -47,8 +47,10 @@ their full text.
   [recorded separately](../superpowers/plans/2026-10-09-a366-6a-screen-case-map.md); public mounted
   navigation and the EN/ES light/dark 390/1280 look pass ran on that destination. A13a now narrows
   the department and zone requests, removes the old answer fields and preserves settings when
-  renaming or moving. A13b–A15 and
-  the branch reviews, normal hook and current-head CI remain. Parts B/C remain Lane D work after
+  renaming or moving. A13b also retires the writer inputs; A14 drops the old style columns.
+  The synthetic-row upgrade walk refused the generated `0040_retire_service_style` at
+  `DROP TABLE departments` with a foreign-key error, recorded by the walk's reset entry.
+  A15 and the branch reviews, normal hook and current-head CI remain. Parts B/C remain Lane D work after
   slice 2/A429. Lane E's slice 7 follows 6A, with no current branch. The explicit overlap waiver
   permits independent slice 2/5 checkouts; whoever lands second reconciles source and regenerates
   migration clashes. No conversion of obsolete receipt data, only pre-live reset. The 6A branch has not landed.

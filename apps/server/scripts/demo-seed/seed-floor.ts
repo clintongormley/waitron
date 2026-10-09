@@ -92,7 +92,6 @@ export async function seedFloor(
       locationId,
       name: floor.departmentNames.deli[locale],
       tradingName: departmentTradingNames.deli,
-      defaultServiceMode: "prepay",
       active: true,
     })
     .returning({ id: departments.id });

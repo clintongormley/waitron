@@ -38,7 +38,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
               locationId: node.locationId,
               name: location[0]!.name,
               tradingName: location[0]!.name,
-              defaultServiceMode: "prepay",
               isDefault: true,
             })
             .returning({ id: departments.id })
@@ -75,7 +74,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             locationId: node.locationId,
             zoneId: zone[0]!.id,
             departmentId,
-            serviceMode: null,
             isCounterDefault: true,
           })
           .onConflictDoUpdate({

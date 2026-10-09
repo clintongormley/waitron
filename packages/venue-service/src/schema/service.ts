@@ -28,10 +28,6 @@ export const departments = table(
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     tradingName: label("trading_name").notNull(),
-    // Not the enumText/enumCheck pair, here or in the four other checked value-set columns in this
-    // file: enumCheck joins the values with ", " and these constraints have no space, so
-    // substituting it rewrites the constraint.
-    defaultServiceMode: label("default_service_mode").notNull(),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
@@ -46,10 +42,6 @@ export const departments = table(
       foreignColumns: [locations.id],
       name: "departments_location_fk",
     }),
-    check(
-      "departments_service_mode_ck",
-      sql`${t.defaultServiceMode} in ('table_tab','prepay','ticket_then_pay')`,
-    ),
   ],
 );
 
@@ -59,8 +51,6 @@ export const zoneServicePolicies = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // Not enumText: see departments.default_service_mode.
-    serviceMode: label("service_mode"),
     isCounterDefault: flag("is_counter_default").notNull().default(false),
   },
   (t) => [
@@ -83,10 +73,6 @@ export const zoneServicePolicies = table(
     uniqueIndex("zone_service_policies_one_counter_default_key")
       .on(t.locationId)
       .where(sql`${t.isCounterDefault}`),
-    check(
-      "zone_service_policies_mode_ck",
-      sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','ticket_then_pay')`,
-    ),
   ],
 );
 
@@ -226,7 +212,7 @@ export const orderServiceContexts = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // Not enumText: see departments.default_service_mode.
+    // Keep the checked vocabulary's SQL spelling: enumCheck adds spaces and would rebuild the table.
     serviceMode: label("service_mode").notNull(),
   },
   (t) => [
@@ -271,9 +257,7 @@ export const workingLineContexts = table(
     unitName: json<Record<string, string>>("unit_name").notNull(),
     unitPrecision: count("unit_precision").notNull(),
     soldInEach: flag("sold_in_each").notNull().default(false),
-    // Not enumText: see departments.default_service_mode.
     hardwareUnit: label("hardware_unit"),
-    // Not enumText: see departments.default_service_mode.
     vatClass: label("vat_class").notNull(),
     allergens:
       json<Record<string, { presence: "contains" | "may_contain"; source?: string }>>("allergens"),

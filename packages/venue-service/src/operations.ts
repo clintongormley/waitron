@@ -167,16 +167,6 @@ async function requireDepartmentName(
 
 type OrderStart = "table" | "counter";
 
-function startForStyle(style: ServiceMode | null): OrderStart | null {
-  return style === null ? null : style === "table_tab" ? "table" : "counter";
-}
-
-function styleForStart(start: OrderStart | null, previous: ServiceMode | null): ServiceMode | null {
-  if (start === null) return null;
-  if (start === "table") return "table_tab";
-  return previous === "ticket_then_pay" ? "ticket_then_pay" : "prepay";
-}
-
 export async function createDepartment(
   tx: Transaction,
   cfg: VenueScope,
@@ -187,14 +177,12 @@ export async function createDepartment(
   },
 ): Promise<Department> {
   await requireDepartmentName(tx, cfg, input.name);
-  const style = styleForStart(input.orderStart ?? "counter", null)!;
   const [row] = await tx
     .insert(departments)
     .values({
       locationId: cfg.locationId,
       name: input.name,
       tradingName: input.tradingName ?? input.name,
-      defaultServiceMode: style,
     })
     .returning({
       id: departments.id,
@@ -204,7 +192,7 @@ export async function createDepartment(
     });
   await tx
     .insert(departmentSalePolicies)
-    .values({ departmentId: row!.id, orderStart: startForStyle(style)! });
+    .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
   const [location] = await tx
     .select({ menuId: locations.catalogueId })
     .from(locations)
@@ -226,28 +214,22 @@ export async function updateDepartment(
 ): Promise<void> {
   if (input.name !== undefined) await requireDepartmentName(tx, cfg, input.name, departmentId);
   const [existing] = await tx
-    .select({ style: departments.defaultServiceMode })
+    .select({ id: departments.id })
     .from(departments)
     .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
   if (existing === undefined) throw new AppError("department.not_found", { departmentId });
-  const style =
-    input.orderStart === undefined
-      ? (existing.style as ServiceMode)
-      : styleForStart(input.orderStart, existing.style as ServiceMode)!;
-  const [row] = await tx
-    .update(departments)
-    .set({
-      ...(input.name === undefined ? {} : { name: input.name }),
-      ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
-      defaultServiceMode: style,
-    })
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
-    .returning({ id: departments.id });
-  if (row === undefined) throw new AppError("department.not_found", { departmentId });
+  if (input.name !== undefined || input.tradingName !== undefined)
+    await tx
+      .update(departments)
+      .set({
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
+      })
+      .where(eq(departments.id, departmentId));
   if (input.orderStart === undefined) return;
   await tx
     .update(departmentSalePolicies)
-    .set({ orderStart: startForStyle(style)! })
+    .set({ orderStart: input.orderStart })
     .where(eq(departmentSalePolicies.departmentId, departmentId));
 }
 
@@ -518,32 +500,27 @@ export async function configureZone(
     throw new AppError("zone.department_inactive", { zoneId: input.zoneId });
   }
   const [existing] = await tx
-    .select({ style: zoneServicePolicies.serviceMode })
+    .select({ zoneId: zoneServicePolicies.zoneId })
     .from(zoneServicePolicies)
     .where(eq(zoneServicePolicies.zoneId, input.zoneId));
-  const style =
-    input.orderStart === undefined
-      ? ((existing?.style as ServiceMode | null) ?? null)
-      : styleForStart(input.orderStart, (existing?.style as ServiceMode | null) ?? null);
   await tx
     .insert(zoneServicePolicies)
     .values({
       locationId: cfg.locationId,
       zoneId: input.zoneId,
       departmentId: input.departmentId,
-      serviceMode: style,
     })
     .onConflictDoUpdate({
       target: [zoneServicePolicies.zoneId],
-      set: { departmentId: input.departmentId, serviceMode: style },
+      set: { departmentId: input.departmentId },
     });
   if (input.orderStart === undefined && existing !== undefined) return;
   await tx
     .insert(zoneSalePolicies)
-    .values({ zoneId: input.zoneId, orderStart: startForStyle(style) })
+    .values({ zoneId: input.zoneId, orderStart: input.orderStart ?? null })
     .onConflictDoUpdate({
       target: zoneSalePolicies.zoneId,
-      set: { orderStart: startForStyle(style) },
+      set: { orderStart: input.orderStart ?? null },
     });
 }
 
@@ -786,7 +763,7 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
   value: DepartmentPolicyField[K],
 ): Promise<void> {
   const [department] = await tx
-    .select({ id: departments.id, style: departments.defaultServiceMode })
+    .select({ id: departments.id })
     .from(departments)
     .where(
       and(
@@ -796,13 +773,6 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
       ),
     );
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
-  if (field === "orderStart")
-    await tx
-      .update(departments)
-      .set({
-        defaultServiceMode: styleForStart(value as OrderStart, department.style as ServiceMode)!,
-      })
-      .where(eq(departments.id, departmentId));
   await tx
     .update(departmentSalePolicies)
     .set({ [field]: value })
@@ -818,21 +788,6 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
 ): Promise<void> {
   if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId)) {
     throw new AppError("service_zone.not_found", { zoneId });
-  }
-  if (field === "orderStart") {
-    const [existing] = await tx
-      .select({ style: zoneServicePolicies.serviceMode })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
-    await tx
-      .update(zoneServicePolicies)
-      .set({
-        serviceMode: styleForStart(
-          value as OrderStart | null,
-          existing!.style as ServiceMode | null,
-        ),
-      })
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
   }
   await tx
     .update(zoneSalePolicies)
