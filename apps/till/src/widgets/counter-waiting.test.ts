@@ -16,6 +16,7 @@ const paid: CounterWaitingOrder = {
   total: "18.00",
   canHandOver: true,
   serviceMode: null,
+  movableDishes: [],
 };
 
 const sent: CounterWaitingOrder = {
@@ -29,6 +30,7 @@ const sent: CounterWaitingOrder = {
   total: "7.50",
   canHandOver: true,
   serviceMode: "ticket_then_pay",
+  movableDishes: [],
 };
 
 const handedOver: CounterWaitingOrder = {
