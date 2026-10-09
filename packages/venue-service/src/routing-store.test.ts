@@ -3214,9 +3214,8 @@ describe("saving a cell's period choices", () => {
     const lunch = await period(f.department, "Lunch", lunchMenu);
     const brunch = await period(f.department, "Brunch", breadMenu);
     const staffLunch = await period(f.department, "Staff lunch", breadMenu, [lunchMenu]);
-    const barDepartment = (
-      await createDepartment(tx, f.cfg, { name: "Bar", defaultServiceMode: "table_tab" })
-    ).id;
+    const barDepartment = (await createDepartment(tx, f.cfg, { name: "Bar", orderStart: "table" }))
+      .id;
     const [patio] = await tx
       .insert(floorZones)
       .values({ ...f.cfg, name: "Patio" })

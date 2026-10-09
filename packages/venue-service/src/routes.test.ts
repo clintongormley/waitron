@@ -2898,7 +2898,7 @@ describe("a routing cell's period choices on the routes", () => {
       const cfg = { locationId: fx.locationId };
       const dining = await createDepartment(tx, cfg, {
         name: "Dining",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       await configureZone(tx, cfg, { zoneId: fx.zoneId, departmentId: dining.id });
       const product = await createProduct(tx, {

@@ -3889,7 +3889,7 @@ it("carries a cell's period choices with their cell, including a period whose me
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Comedor de periodos",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const terraza = await createServiceZone(tx, scope, {
       name: "Terraza de periodos",

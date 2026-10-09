@@ -1418,9 +1418,9 @@ describe("kitchen routing follows the period running when a dish goes on the ord
   async function cocktailVenue() {
     const v = await mealVenue();
     await suite.db
-      .update(departments)
-      .set({ defaultServiceMode: "table_tab" })
-      .where(eq(departments.id, v.restaurant));
+      .update(departmentSalePolicies)
+      .set({ orderStart: "table" })
+      .where(eq(departmentSalePolicies.departmentId, v.restaurant));
     const setup = await withTransaction(suite.db, async (tx) => {
       const periods = await tx
         .select()
