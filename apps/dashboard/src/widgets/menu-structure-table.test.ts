@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { registerIcons } from "@waitron/ui";
+import { iconButtonStyles, registerIcons } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -361,6 +361,44 @@ it("keeps a button the host puts in the toolbar's end after the Add ⋮", async 
   expect(
     toolbar.compareDocumentPosition(done.assignedSlot!) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+});
+
+it("draws the Add ⋮ with the border and fill of the toolbar's icon buttons beside it", async () => {
+  const el = await mount();
+  // The menus screen's Reorder and Select are icon buttons it puts in the toolbar's end.
+  const neighbour = document.createElement("span");
+  neighbour.slot = "toolbar-end";
+  const shadow = neighbour.attachShadow({ mode: "open" });
+  shadow.adoptedStyleSheets = [iconButtonStyles.styleSheet!];
+  shadow.innerHTML = `<button class="icon-button">R</button>`;
+  el.append(neighbour);
+  const bare = document.createElement("wt-row-actions");
+  bare.icon = "plus";
+  bare.label = "Bare";
+  document.body.append(bare);
+  onTestFinished(() => bare.remove());
+  await settle(el);
+  await bare.updateComplete;
+  const look = (button: Element): Record<string, string> => {
+    const style = getComputedStyle(button);
+    return {
+      background: style.backgroundColor,
+      ...Object.fromEntries(
+        ["top", "right", "bottom", "left"].flatMap((side) =>
+          ["width", "style", "color"].map((what) => [
+            `${side}-${what}`,
+            style.getPropertyValue(`border-${side}-${what}`),
+          ]),
+        ),
+      ),
+    };
+  };
+  const trigger = (actions: Element) => actions.shadowRoot!.querySelector('[part~="trigger"]')!;
+  const plus = look(trigger(own(el, "toolbar-adds")!));
+  expect(plus).toEqual(look(shadow.querySelector("button")!));
+  expect(plus["top-style"]).toBe("solid");
+  // A row's ⋮ draws no border, so the match above is the class's doing.
+  expect(look(trigger(bare))).not.toEqual(plus);
 });
 
 it("offers Edit and Delete on an owned section and Remove on a product, naming the holding list", async () => {
