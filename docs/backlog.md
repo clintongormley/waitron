@@ -3042,8 +3042,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **A449 — a dashboard tab left open through a box reset keeps retrying every request.** Seen
   2026-10-09 on the owner's box: across `waitron.sh reset`, the setup wizard and a new venue, the
   open tab's console filled with 401s, refused connections, then 404s from every route (the wizard
-  serves no `/management-api`), then 401s again, until reloaded by hand. Decide what the tab should
-  do instead, such as telling the person the box was reset and offering a reload.
+  serves no `/management-api`), then 401s again, until reloaded by hand. At the least it should sign
+  the person out and return them to the login screen (owner, 2026-10-09); better still, say the box
+  was reset and offer a reload.
 
 - **A398 — device-profile editor heading remains to align with the sub-page pattern.**
   The editor repeats the list title and has no parent link above the heading
