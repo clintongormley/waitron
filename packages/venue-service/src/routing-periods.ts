@@ -77,11 +77,7 @@ export async function periodProductIds(
   return found;
 }
 
-/**
- * The venue's periods with their products: departments default first, then by name; within one,
- * by each period's earliest start in the normal week, Monday first and each day from the
- * changeover, a period the week never places last, then by name.
- */
+/** The venue's periods with their products, in `inPeriodOrder`. */
 export async function readRoutingPeriods(
   tx: Transaction,
   cfg: VenueScope,
@@ -89,6 +85,29 @@ export async function readRoutingPeriods(
 ): Promise<RoutingPeriod[]> {
   const periods = await readPeriods(tx, cfg);
   const productIds = await periodProductIds(tx, periods);
+  return (await inPeriodOrder(tx, cfg, periods, dayCutover)).map(
+    ({ id, departmentId, departmentName, name, colour }) => ({
+      id,
+      departmentId,
+      departmentName,
+      name,
+      colour,
+      productIds: productIds.get(id)!,
+    }),
+  );
+}
+
+/**
+ * Departments default first, then by name; within one, by each period's earliest start in the
+ * normal week, Monday first and each day from the changeover, a period the week never places last,
+ * then by name.
+ */
+export async function inPeriodOrder<T extends { id: string; departmentId: string; name: string }>(
+  tx: Transaction,
+  cfg: VenueScope,
+  periods: readonly T[],
+  dayCutover: string,
+): Promise<T[]> {
   const departmentRows = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -116,20 +135,11 @@ export async function readRoutingPeriods(
     firstStart.set(slot.periodId, Math.min(start, firstStart.get(slot.periodId) ?? start));
   }
   const startOf = (id: string) => firstStart.get(id) ?? Number.POSITIVE_INFINITY;
-  return periods
-    .sort(
-      (a, b) =>
-        departmentOrder.get(a.departmentId)! - departmentOrder.get(b.departmentId)! ||
-        startOf(a.id) - startOf(b.id) ||
-        // A department's period names are unique (`menu_periods_department_name_key`).
-        a.name.localeCompare(b.name),
-    )
-    .map(({ id, departmentId, departmentName, name, colour }) => ({
-      id,
-      departmentId,
-      departmentName,
-      name,
-      colour,
-      productIds: productIds.get(id)!,
-    }));
+  return [...periods].sort(
+    (a, b) =>
+      departmentOrder.get(a.departmentId)! - departmentOrder.get(b.departmentId)! ||
+      startOf(a.id) - startOf(b.id) ||
+      // A department's period names are unique (`menu_periods_department_name_key`).
+      a.name.localeCompare(b.name),
+  );
 }

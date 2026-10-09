@@ -1703,6 +1703,45 @@ describe("routing previews", () => {
         ]);
       }));
 
+    it("lists an extra's move during a period its dish's cell has a line for", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const [downstairs] = await tx
+          .insert(kitchenStations)
+          .values({ ...f.cfg, name: "Downstairs bar" })
+          .returning();
+        const lunch = (
+          await saveMenuPeriod(tx, f.cfg, f.department, {
+            name: "Lunch",
+            menuId: f.menu,
+            staffMenuIds: [],
+          })
+        ).id;
+        const [burgerCell] = await tx
+          .select({ id: routingCells.id })
+          .from(routingCells)
+          .where(eq(routingCells.productId, f.burger));
+        await tx.insert(routingCellPeriods).values({
+          cellId: burgerCell!.id,
+          periodId: lunch,
+          departmentId: f.department,
+          stationId: downstairs!.id,
+        });
+        const address: CellAddress = { row: productRow(f.cheese), zoneId: null };
+        await setRoutingCell(tx, f.cfg, address, station(f.bar));
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address,
+          target: null,
+        });
+        expect(
+          extraMoves(moves).map((move) => [move.productId, move.from, move.to, move.periodIds]),
+        ).toEqual([
+          [f.cheese, station(f.bar), station(f.terraceBar), null],
+          [f.cheese, station(f.bar), station(downstairs!.id), [lunch]],
+        ]);
+      }));
+
     it("lists an extra that goes back to following its dish when its cell is cleared", async () =>
       scoped(async (tx) => {
         const f = await withExtras(tx);
@@ -3267,6 +3306,32 @@ describe("saving a cell's period choices", () => {
       expect((await routingModel(tx, f.cfg, at)).cells).toEqual([]);
     }));
 
+  it("checks a product row's line against that product alone", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      const lunchLine = [line(f.lunch, station(f.downstairs))];
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: productRow(f.mojito), zoneId: null },
+        station(f.upstairs),
+        lunchLine,
+      );
+      await expect(
+        setRoutingCell(
+          tx,
+          f.cfg,
+          { row: productRow(f.daiquiri), zoneId: null },
+          station(f.upstairs),
+          lunchLine,
+        ),
+      ).rejects.toMatchObject({
+        code: "route.period_invalid",
+        params: { periodId: f.lunch, reason: "not_offered" },
+      });
+      expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: f.downstairs }]);
+    }));
+
   it("accepts a period whose staff-only menu alone reaches the row, and lets Every zone hold two departments' periods", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);
@@ -3462,6 +3527,93 @@ describe("saving a cell's period choices", () => {
         target: station(f.upstairs),
       });
       expect(kept).toEqual([]);
+    }));
+
+  it("previews pinning a zone cell that leaves out an inherited Lunch line as a move during Lunch", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      await setRoutingCell(tx, f.cfg, { row: productRow(f.bread), zoneId: null }, station(f.bar), [
+        line(f.brunch, station(f.downstairs)),
+      ]);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: terraceCell(f),
+        target: station(f.bar),
+        periods: [],
+      });
+      // Brunch, named only by Bread's cell, adds no copy of the untimed moves.
+      expect(
+        moves.map((move) => [move.productId, move.zoneId, move.from, move.to, move.periodIds]),
+      ).toEqual(
+        [f.daiquiri, f.variant, f.mojito].flatMap((productId) => [
+          [productId, f.terrace, station(f.upstairs), station(f.bar), null],
+          [productId, f.terrace, station(f.downstairs), station(f.bar), [f.lunch]],
+        ]),
+      );
+    }));
+
+  it("previews clearing a pinned zone cell whose parent has a Lunch line as a move during Lunch", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      await setRoutingCell(tx, f.cfg, { row: productRow(f.bread), zoneId: null }, station(f.bar), [
+        line(f.brunch, station(f.downstairs)),
+      ]);
+      await setRoutingCell(tx, f.cfg, terraceCell(f), station(f.upstairs));
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: terraceCell(f),
+        target: null,
+      });
+      expect(
+        moves.map((move) => [move.productId, move.zoneId, move.from, move.to, move.periodIds]),
+      ).toEqual(
+        [f.daiquiri, f.variant, f.mojito].map((productId) => [
+          productId,
+          f.terrace,
+          station(f.upstairs),
+          station(f.downstairs),
+          [f.lunch],
+        ]),
+      );
+    }));
+
+  it("lists a merged move's periods in the routing model's period order", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      // Whichever id sorts first runs later in the week, so id order and period order disagree.
+      const [late, early] = [f.lunch, f.staffLunch].sort();
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.department,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: early!, startsAt: "11:00", endsAt: "12:00" },
+            { periodId: late!, startsAt: "12:00", endsAt: "13:00" },
+          ],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+      );
+      const order = (await routingModel(tx, f.cfg, at)).periods
+        .map((period) => period.id)
+        .filter((id) => id === early || id === late);
+      expect(order).toEqual([early, late]);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs));
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: everyZone(f),
+        target: station(f.upstairs),
+        periods: [line(late!, station(f.downstairs)), line(early!, station(f.downstairs))],
+      });
+      const mojito = moves.filter((move) => move.productId === f.mojito);
+      expect(mojito.map((move) => move.periodIds)).toEqual([order]);
     }));
 
   it("gives each period its department and the products its menus reach, a variant by its parent, in the department's period order", async () =>

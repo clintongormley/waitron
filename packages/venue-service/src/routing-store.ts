@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { categories, floorZones, kitchenStations, products, type Transaction } from "@waitron/db";
 import {
   categoryDetails,
@@ -19,6 +19,7 @@ import {
   chooseExtraMaker,
   chooseExtraMakerBeside,
   closedSendsTo,
+  selectRoutingCell,
   stationDayHours,
   stationStatus,
   targetKey,
@@ -46,7 +47,12 @@ import type {
   RoutingModel,
   RoutingMove,
 } from "./routing-types.js";
-import { periodProductIds, readPeriods, readRoutingPeriods } from "./routing-periods.js";
+import {
+  inPeriodOrder,
+  periodProductIds,
+  readPeriods,
+  readRoutingPeriods,
+} from "./routing-periods.js";
 import { resolveDepartmentService } from "./menu-timetable.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -213,8 +219,33 @@ async function validatePeriodLines(
     valid.push({
       periodId: line.periodId,
       departmentId: period.departmentId,
-      target: await activeTarget(tx, cfg, line.target),
+      target:
+        line.target.kind === "station"
+          ? { kind: "station", stationId: normaliseUuid(line.target.stationId, "StationId") }
+          : line.target,
     });
+  }
+  const stationIds = valid.flatMap(({ target }) =>
+    target.kind === "station" ? [target.stationId] : [],
+  );
+  if (stationIds.length > 0) {
+    const active = new Set(
+      (
+        await tx
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(
+            and(
+              eq(kitchenStations.locationId, cfg.locationId),
+              inArray(kitchenStations.id, stationIds),
+              eq(kitchenStations.active, true),
+            ),
+          )
+      ).map((row) => row.id),
+    );
+    const inactive = stationIds.find((stationId) => !active.has(stationId));
+    if (inactive !== undefined)
+      throw new AppError("route.station_inactive", { stationId: inactive });
   }
   const stored = await storedLines(tx, cfg, cell.address);
   const unchecked = valid.filter(
@@ -234,20 +265,31 @@ async function validatePeriodLines(
 
 /** The active products a row covers, variants by their parent's id. */
 async function rowProductIds(tx: Transaction, address: CellAddress): Promise<Set<string>> {
-  const folders = await tx
-    .select({ id: categories.id, parentId: categoryDetails.parentId })
-    .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id));
-  const reach = changeReach(new Map(folders.map((row) => [row.id, row.parentId])), address);
+  const { row } = address;
+  const folders =
+    row.kind === "category"
+      ? await tx
+          .select({ id: categories.id, parentId: categoryDetails.parentId })
+          .from(categories)
+          .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+      : [];
+  const reach = changeReach(
+    new Map(folders.map((folder) => [folder.id, folder.parentId])),
+    address,
+  );
   const covered = new Set<string>();
-  for (const product of await activeProducts(tx)) {
+  for (const product of await activeProducts(
+    tx,
+    row.kind === "product" ? row.productId : undefined,
+  )) {
     const facts = rowFacts(product);
     if (reach.covers(facts)) covered.add(facts.routedProductId);
   }
   return covered;
 }
 
-function activeProducts(tx: Transaction) {
+/** Every active product, or only `routedId`'s own row and its variants'. */
+function activeProducts(tx: Transaction, routedId?: string) {
   return tx
     .select({
       id: products.id,
@@ -258,7 +300,14 @@ function activeProducts(tx: Transaction) {
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .where(eq(products.active, true));
+    .where(
+      and(
+        eq(products.active, true),
+        routedId === undefined
+          ? undefined
+          : or(eq(products.id, routedId), eq(products.parentId, routedId)),
+      ),
+    );
 }
 
 function cellAt(cfg: VenueScope, { row, zoneId }: CellAddress) {
@@ -536,36 +585,28 @@ export async function previewRoutingChange(
     ...move,
     periodIds: null,
   }));
-  const periodIds = new Set([
-    ...(rules.cellPeriods?.get(key)?.keys() ?? []),
-    ...(cellPeriods.get(key)?.keys() ?? []),
-  ]);
-  if (periodIds.size > 0) {
-    const departmentOf = new Map(
-      (await readPeriods(tx, cfg, [...periodIds])).map((row) => [row.id, row.departmentId]),
-    );
-    const zoneDepartment = await zoneDepartments(tx, cfg);
-    const timed = new Map<string, RoutingMove>();
-    for (const periodId of [...periodIds].sort()) {
-      const inPeriod = zoneList.filter(
-        (zone) => zone.id !== null && zoneDepartment.get(zone.id) === departmentOf.get(periodId),
-      );
-      for (const move of compare(during(rules, periodId), during(after, periodId), inPeriod)) {
-        const same = JSON.stringify([
-          move.productId,
-          move.dish?.productId ?? null,
-          move.zoneId,
-          targetKey(move.from),
-          targetKey(move.to),
-          move.toNoReplacement,
-        ]);
-        const merged = timed.get(same);
-        if (merged === undefined) timed.set(same, { ...move, periodIds: [periodId] });
-        else merged.periodIds!.push(periodId);
-      }
+  const timedPeriods = await periodsDeciding(tx, cfg, [rules, after], {
+    productsToCheck,
+    offers,
+    zoneList,
+    reach,
+  });
+  const timed = new Map<string, RoutingMove>();
+  for (const { id: periodId, inZones } of timedPeriods)
+    for (const move of compare(during(rules, periodId), during(after, periodId), inZones)) {
+      const same = JSON.stringify([
+        move.productId,
+        move.dish?.productId ?? null,
+        move.zoneId,
+        targetKey(move.from),
+        targetKey(move.to),
+        move.toNoReplacement,
+      ]);
+      const merged = timed.get(same);
+      if (merged === undefined) timed.set(same, { ...move, periodIds: [periodId] });
+      else merged.periodIds!.push(periodId);
     }
-    moves.push(...timed.values());
-  }
+  moves.push(...timed.values());
   return moves.sort(
     (a, b) =>
       a.productName.localeCompare(b.productName) ||
@@ -575,6 +616,81 @@ export async function previewRoutingChange(
       (a.dish?.productId ?? "").localeCompare(b.dish?.productId ?? "") ||
       (a.periodIds?.join() ?? "").localeCompare(b.periodIds?.join() ?? ""),
   );
+}
+
+/**
+ * The periods whose line, in either state, is on the cell that decides a product the preview
+ * compares, in a zone of the period's department; each with those zones, in the routing model's
+ * period order. A dish the change reaches brings its offered extras, and an extra it reaches its
+ * dishes, as `extraMoves` compares them.
+ */
+async function periodsDeciding(
+  tx: Transaction,
+  cfg: VenueScope,
+  states: readonly RoutingRules[],
+  {
+    productsToCheck,
+    offers,
+    zoneList,
+    reach,
+  }: {
+    productsToCheck: readonly PreviewProduct[];
+    offers: ExtraOffers;
+    zoneList: readonly { id: string | null; name: string | null }[];
+    reach: ChangeReach;
+  },
+): Promise<{ id: string; inZones: { id: string | null; name: string | null }[] }[]> {
+  if (!states.some((state) => state.cellPeriods !== undefined && state.cellPeriods.size > 0))
+    return [];
+  const byId = new Map(productsToCheck.map((product) => [storedUuid(product.id), product]));
+  const compared = new Map<string, ProductFacts>();
+  for (const dish of productsToCheck) {
+    const dishFacts = rowFacts(dish);
+    const dishInReach = reach.covers(dishFacts);
+    if (dishInReach) compared.set(dishFacts.productId, dishFacts);
+    for (const extraId of offers.get(dishFacts.productId)?.keys() ?? []) {
+      const extra = byId.get(extraId);
+      if (extra === undefined) continue;
+      const facts = rowFacts(extra);
+      if (!dishInReach && !reach.covers(facts)) continue;
+      compared.set(dishFacts.productId, dishFacts);
+      compared.set(facts.productId, facts);
+    }
+  }
+  const periods = await readPeriods(tx, cfg);
+  const departmentOf = new Map(periods.map((period) => [period.id, period.departmentId]));
+  const zoneDepartment = await zoneDepartments(tx, cfg);
+  const named = new Set<string>();
+  for (const zone of zoneList) {
+    const departmentId = zone.id === null ? undefined : zoneDepartment.get(zone.id);
+    if (departmentId === undefined) continue;
+    for (const facts of compared.values())
+      for (const state of states) {
+        const { decidedBy } = selectRoutingCell(
+          state,
+          { kind: "product", productId: facts.routedProductId },
+          zone.id,
+          facts.categoryId,
+        );
+        if (decidedBy?.kind !== "cell") continue;
+        for (const periodId of state.cellPeriods?.get(cellKey(decidedBy.address))?.keys() ?? [])
+          if (departmentOf.get(periodId) === departmentId) named.add(periodId);
+      }
+  }
+  if (named.size === 0) return [];
+  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
+  const ordered = await inPeriodOrder(
+    tx,
+    cfg,
+    periods.filter((period) => named.has(period.id)),
+    dayCutover,
+  );
+  return ordered.map((period) => ({
+    id: period.id,
+    inZones: zoneList.filter(
+      (zone) => zone.id !== null && zoneDepartment.get(zone.id) === period.departmentId,
+    ),
+  }));
 }
 
 /**
