@@ -4200,6 +4200,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **A419 dashboard CI stall remains unexplained (#1474).** Run `37932573955` left
+  `catalogue-screen.test.ts` unfinished; local focused and full-package runs and diagnostic
+  CI `37936013331` completed. No repair was established. Next: if it recurs, retain per-test
+  progress and locate the waiting operation before changing the browser harness.
+
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;

@@ -1111,7 +1111,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/dashboard" test:coverage --reporter=verbose
+          pnpm --filter "@waitron/dashboard" test:coverage
 
   # apps/setup alone: the setup-wizard browser app, the workspace's FOURTH Chromium consumer after
   # packages/ui, apps/till and apps/dashboard. It has a shard of its own for the same reason
