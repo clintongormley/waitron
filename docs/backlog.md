@@ -4703,12 +4703,17 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   PATH location answers `location.not_found`** — left open by A394-3 (#1447). If workforce moves to
   the new code, declare it in `packages/db/src/errors.ts`.
 
-- **A394-5 to A394-22 — refusal statuses by one rule** — OPEN, low priority, not queued — owner
+- **A394-5 to A394-18 and A394-20 to A394-22 — refusal statuses by one rule** — OPEN, low priority, not queued — owner
   2026-10-08: take them from here when a lane has room. (A394-1 to A394-4 landed as #1441, #1444,
   #1447 and #1455.) Read, not run: of 49 boundaries, 96 status rows break the rule
   (`docs/developers/conventions-data.md`); 17 defects answer 500 or success for a missing id (A394-1
   to -6 first); 16 owner questions; A394-8 settles A374's. The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+
+- **Purchase invoice create/edit refusal tests do not pin the original failure** — OPEN, carried
+  from A394-4. In `packages/purchasing/src/operations.test.ts`, the “other refusal passes through” cases
+  assert `isAppError(error)` is false. Next: assert the original refusal's identity
+  or cause so a different non-domain error cannot satisfy them.
 
 - **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26). A
   pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)") was fixed only
