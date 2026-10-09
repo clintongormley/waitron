@@ -934,14 +934,16 @@ describe("the test shards", () => {
     expect(LIGHT_B_PACKAGES).not.toContain(name);
   });
 
-  it("bounds every test job, including startup and teardown", () => {
+  // The owner's bound (2026-10-09): no test job should run past about four minutes. These limits
+  // sit above that so a slow runner is not cut off, and well below GitHub's six hours.
+  it("bounds every test job at ten minutes, every merge job at five, and lint and the root guards at eight", () => {
+    const minutesOf = (body) => Number(/^ {4}timeout-minutes: (\d+)$/m.exec(body.join("\n"))?.[1]);
     const testJobs = jobs.filter(({ id }) => id.startsWith("test-"));
     expect(testJobs.length).toBeGreaterThan(0);
     for (const { id, body } of testJobs) {
-      const minutes = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(body.join("\n"))?.[1]);
-      expect(minutes, id).toBeGreaterThan(0);
-      expect(minutes, id).toBeLessThanOrEqual(15);
+      expect(minutesOf(body), id).toBe(id.endsWith("-merge") ? 5 : 10);
     }
+    for (const id of ["lint", "root-guards"]) expect(minutesOf(job(id).body), id).toBe(8);
   });
 
   it("caps light-bin package concurrency explicitly", () => {
@@ -1256,6 +1258,73 @@ describe("the sharded jobs", () => {
 
   it("gate every merge job on `code` plus exactly one scope gate", () => {
     for (const merge of mergeJobs) expectGatedOnCodePlusOneScope(gatesRead(merge.body));
+  });
+
+  // A shard given no files exits 1 ("No test files found"). Weaker than its name: it counts files
+  // named `*.test.ts` under the package, not what the package's Vitest config includes.
+  it(
+    "run no more shards than the package has test files",
+    () => {
+      const paths = new Map(
+        pnpmLs(["ls", "-r", "--depth", "-1", "--json"]).map((pkg) => [pkg.name, pkg.path]),
+      );
+      const testFiles = (dir) =>
+        readdirSync(dir, { withFileTypes: true })
+          .filter((entry) => !entry.name.startsWith(".") && entry.name !== "node_modules")
+          .reduce(
+            (count, entry) =>
+              count +
+              (entry.isDirectory()
+                ? testFiles(join(dir, entry.name))
+                : Number(entry.isFile() && entry.name.endsWith(".test.ts"))),
+            0,
+          );
+      for (const { id, body, pkg } of shardedJobs) {
+        expect(shardDenominator(body), id).toBeLessThanOrEqual(testFiles(paths.get(pkg)));
+      }
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
+
+  // The packages the owner's four-minute bound (2026-10-09) split, at the counts it was split to.
+  it("shard the dashboard and venue service four ways and the till two ways", () => {
+    const counts = Object.fromEntries(
+      shardedJobs.map(({ pkg, body }) => [pkg, shardDenominator(body)]),
+    );
+    expect(counts).toMatchObject({
+      "@waitron/dashboard": 4,
+      "@waitron/venue-service": 4,
+      "@waitron/till": 2,
+    });
+  });
+
+  // `--merge-reports` runs no test, so a merge job installing a browser would pay for nothing.
+  it("install no browser in a merge job", () => {
+    for (const merge of mergeJobs) {
+      expect(merge.body.join("\n"), merge.id).not.toContain("playwright install");
+    }
+  });
+});
+
+describe("the lint and root-guards jobs", () => {
+  // The repo-level project runs in a job of its own so lint is not the slowest ungated job.
+  it("run the repo-level Vitest project only in root-guards, which nothing gates", () => {
+    const runsRoot = (body) =>
+      body.some((line) => !line.trim().startsWith("#") && /pnpm vitest run --coverage/.test(line));
+    expect(jobs.filter(({ body }) => runsRoot(body)).map(({ id }) => id)).toEqual(["root-guards"]);
+    for (const id of ["lint", "root-guards"]) {
+      expect(
+        job(id).body.some((line) => /^ {4}(if|needs):/.test(line)),
+        id,
+      ).toBe(false);
+    }
+  });
+
+  it("leave lint running exactly lint and the format check", () => {
+    const runs = job("lint")
+      .body.map((line) => /^ {6}- run: (.*)$/.exec(line)?.[1])
+      .filter((run) => run !== undefined);
+    expect(runs).toEqual(["pnpm install --frozen-lockfile", "pnpm lint", "pnpm format:check"]);
   });
 });
 

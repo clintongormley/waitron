@@ -466,12 +466,26 @@ Before calling a package green, verify its CI coverage result on the current hea
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way file shards each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — `apps/server`'s two stream tests run in `test-server-stream` instead, whose
-blob joins the same merge — plus `test-fiscal-verifactu`, dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-venue-service`,
-`test-payments-stripe`, `test-payments-sumup`, `test-adjustments`),
-the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
+blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
+two-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
+coverage bars are enforced in the merge job, not in a shard. Then `test-fiscal-verifactu`,
+dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
+`test-payments-sumup`, `test-adjustments`), the unsharded browser jobs (`test-ui`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
-package's test-file count.
+package's test-file count (guard: "run no more shards than the package has test files" in
+`scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts`, not what
+the Vitest config includes).
+
+The three browser packages were sharded because no CI test job should run past about four minutes
+(owner, 2026-10-09); on main they took 510 s (dashboard), 469 s (venue service) and 294 s (till) on
+average. A merge job installs no browser: `--merge-reports` runs no test. Measured 2026-10-09 on
+apps/till, locally: `pnpm --filter "@waitron/till" test:shard --shard=1/2
+--outputFile=.vitest-reports/blob-1.json` (112 files) and `--shard=2/2 …blob-2.json` (111 files)
+read 81.54% and 86.63% statements alone; `PLAYWRIGHT_BROWSERS_PATH=<empty folder> pnpm --filter
+"@waitron/till" test:merge` exited 0 with 223 files, 6,328 tests and 98.03 / 95.46 / 98.97 / 99.38
+(statements / branches / functions / lines), the same as an unsharded `test:coverage`. The control,
+one till test file run under the same empty folder, failed with "Executable doesn't exist".
 
 ### Every test job prints which file is running
 
@@ -648,8 +662,8 @@ on a `pnpm … test:shard` or `test:coverage` line, and for the light shards' `p
 the members are derived (every member with `test:coverage` that the job's literal `!` filters do
 not remove), not read from what the shell builds; and only root `scripts/` is scanned.
 
-`lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
-project — so a regression in a skipped path is caught there only as far as the root suites
+`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) are ungated
+and run on every push, so a regression in a skipped path is caught there only as far as the root suites
 exercise it.
 
 A merge to `main` runs the unfiltered suite whenever its `code` output is true — anything but a
@@ -790,7 +804,8 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | file               | job                               | longest measured (min)         | limit |
 | ------------------ | --------------------------------- | ------------------------------ | ----- |
 | ci.yml             | changes                           | 0.9                            | 5     |
-| ci.yml             | lint                              | 5.1                            | 15    |
+| ci.yml             | lint                              | 5.1 (root guards then included) | 8     |
+| ci.yml             | root-guards                       | not yet measured               | 8     |
 | ci.yml             | typecheck                         | 2.1                            | 5     |
 | ci.yml             | mutation-shared                   | 3.1                            | 10    |
 | ci.yml             | ci                                | 0.7                            | 5     |
@@ -802,6 +817,10 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch)  | 20    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
+
+`lint` and `root-guards`, every package test job and shard leg (10) and every `-merge` job (5)
+follow the owner's four-minute bound for test jobs (2026-10-09) instead of the doubling rule; the
+"bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
 
 ui's figure is run `37267389722`; `mutation-db`'s are runs `36380351019` and `37267389722`, the
 two weekly runs since the SQLite switch.
@@ -1241,7 +1260,7 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 
 ### Adding a workspace package breaks the root guards until it is wired in
 
-Three guards in the root Vitest project read workspace members BY NAME, and the ungated `lint` job and
+Three guards in the root Vitest project read workspace members BY NAME, and the ungated `root-guards` job and
 `.husky/pre-push` both run that project on every non-documentation push. So a new member that is not
 wired in fails the hook, on a branch that may have nothing else wrong with it.
 
@@ -1505,7 +1524,7 @@ workflow, 20 runners each, 2026-09-29:
   36553496623): 17 to 34 seconds on the disk and 4 to 8 seconds in memory, the memory run under half
   the disk run's time on every runner. 300 separate `create table` commits took 128 to 709 ms on the
   disk and 8 to 22 ms in memory.
-- With this change, `pnpm vitest run --coverage`, the `lint` job's own command (run 36554428373):
+- With this change, `pnpm vitest run --coverage`, the command the `lint` job then ran (run 36554428373):
   the test took 6.2 to 11.5 seconds on all 20, three of them in `centralus`, and every run printed
   `Scratch directory under /dev/shm.`
 

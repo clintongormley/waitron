@@ -669,8 +669,8 @@ browser test** — most of these rules exist because a test passed while proving
   marker that only provider-verified adoption clears.
 - **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
   screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
-- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated `lint`
-  job and the hook run on every non-docs push. The root project does not typecheck, and a module
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated
+  `root-guards` job and the hook run on every non-docs push. The root project does not typecheck, and a module
   tested only from there must be in the root `coverage.include` (a `scripts/**/*.mjs` pattern plus named
   paths) to be measured at all, and excluded from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.

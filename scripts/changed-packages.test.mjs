@@ -487,7 +487,7 @@ describe("formatScope", () => {
   });
 
   // `code=false` is what makes a `scope=root` pull request skip every code-gated job in ci.yml —
-  // the ungated `lint` job runs the repo-level project there — and `scope=root` is what makes the
+  // the ungated `root-guards` job runs the repo-level project there — and `scope=root` is what makes the
   // hook skip package typechecks while still running the root guards.
   it("emits its own line for a root-only push", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(

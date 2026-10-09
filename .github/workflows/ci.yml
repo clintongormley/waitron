@@ -307,8 +307,7 @@ jobs:
           fi
 
   # Always runs, on every path, including a documentation-only change — Prettier is the only tool
-  # here that reads prose, and the repo-level suite is what proves the `changes` job's own
-  # classifier still works. Both are cheap enough that gating them would save nothing.
+  # here that reads prose. Cheap enough that gating it would save nothing.
   #
   # Worth knowing precisely what `format:check` covers: .prettierignore lists `docs/`, so
   # root-level Markdown (CLAUDE.md, README.md, CONTRIBUTING.md) IS checked and nothing under docs/
@@ -316,7 +315,7 @@ jobs:
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
 
@@ -335,8 +334,27 @@ jobs:
 
       - run: pnpm format:check
 
+  # Always runs, on every path: the repo-level suite is what proves the `changes` job's own
+  # classifier still works.
+  root-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
-      # every package). Three reasons it belongs in the one job nothing gates:
+      # every package). Three reasons it belongs in a job nothing gates:
       #
       #   the two CLASSIFIERS under `scripts/` — if either is wrong, every gating decision below is
       #   wrong, so they must run even on the paths they would otherwise skip;
@@ -636,7 +654,7 @@ jobs:
   # failure cancelling its siblings. scripts/ci-workflow.test.mjs pins the matrix size against the
   # `--shard=i/N` denominator and the merge job against its shards, so the two cannot drift.
   test-heavy:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     # Gated on `heavy`, not on the scope filter. Two inclusion filters are OR-ed rather than
     # intersected, so adding `--filter "@waitron/db"` to the scope's own filters would run this suite on
@@ -703,7 +721,7 @@ jobs:
   # `heavy` output as its shards, so it skips exactly when they do. See test-heavy above for why `ci`
   # must name both this job and the matrix it depends on.
   test-heavy-merge:
-    timeout-minutes: 15
+    timeout-minutes: 5
     needs: [changes, test-heavy]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
@@ -747,7 +765,7 @@ jobs:
   #
   # `test-server-merge` below is the coverage gate.
   test-server:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -809,7 +827,7 @@ jobs:
   # why). Its blob joins the shards' in test-server-merge, so the
   # coverage gate counts what these tests reach.
   test-server-stream:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -867,7 +885,7 @@ jobs:
   # package's real thresholds on the TOTAL. No tests, no container — `vitest --merge-reports` replays
   # from the blobs. It gates on the SAME `server` output as its shards.
   test-server-merge:
-    timeout-minutes: 15
+    timeout-minutes: 5
     needs: [changes, test-server, test-server-stream]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -905,7 +923,7 @@ jobs:
   # multi-forks (packages/fiscal-verifactu/vitest.config.ts). See FISCAL_VERIFACTU_PACKAGE in
   # scripts/changed-scope.mjs.
   test-fiscal-verifactu:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
     runs-on: ubuntu-latest
@@ -949,7 +967,7 @@ jobs:
   # What isolating it does buy with certainty is that a wedged browser can no longer take twelve
   # other packages' results down with it — before this, the whole shard reported nothing.
   test-ui:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
@@ -1027,10 +1045,14 @@ jobs:
   # it buys with certainty is that a second wedged browser can never take the other packages'
   # test-light results down with it.
   test-till:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -1068,9 +1090,52 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/till" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/till" test:coverage \
-            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/till" test:shard \
+            --shard=${{ matrix.shard }}/2 \
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
+      # No blob means the shard ran nothing; see test-heavy's upload step.
+      - name: Upload the till coverage blob
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: till-blob-${{ matrix.shard }}
+          path: apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # The coverage gate for @waitron/till: merges the test-till blobs and enforces the
+  # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
+  test-till-merge:
+    timeout-minutes: 5
+    needs: [changes, test-till]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download the till coverage blobs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: till-blob-*
+          path: apps/till/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge the till coverage blobs and enforce thresholds
+        run: pnpm --filter "@waitron/till" test:merge
 
   # apps/dashboard alone: the admin/reporting dashboard app, the workspace's THIRD Chromium consumer
   # after packages/ui and apps/till. It has a shard of its own for the same reason test-till does — a
@@ -1081,10 +1146,14 @@ jobs:
   # scripts/changed-scope.mjs for the honest framing. What it buys with certainty is that a third
   # wedged browser can never take the other packages' test-light results down with it.
   test-dashboard:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
 
@@ -1122,9 +1191,52 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/dashboard" test:coverage \
-            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/dashboard" test:shard \
+            --shard=${{ matrix.shard }}/4 \
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
+      # No blob means the shard ran nothing; see test-heavy's upload step.
+      - name: Upload the dashboard coverage blob
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dashboard-blob-${{ matrix.shard }}
+          path: apps/dashboard/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # The coverage gate for @waitron/dashboard: merges the test-dashboard blobs and enforces the
+  # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
+  test-dashboard-merge:
+    timeout-minutes: 5
+    needs: [changes, test-dashboard]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download the dashboard coverage blobs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: dashboard-blob-*
+          path: apps/dashboard/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge the dashboard coverage blobs and enforce thresholds
+        run: pnpm --filter "@waitron/dashboard" test:merge
 
   # apps/setup alone: the setup-wizard browser app, the workspace's FOURTH Chromium consumer after
   # packages/ui, apps/till and apps/dashboard. It has a shard of its own for the same reason
@@ -1135,7 +1247,7 @@ jobs:
   # scripts/changed-scope.mjs for the honest framing. What it buys with certainty is that a fourth
   # wedged browser can never take the other packages' test-light results down with it.
   test-setup:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true'
     runs-on: ubuntu-latest
@@ -1183,10 +1295,14 @@ jobs:
   # Venue service combines server-side configuration tests with a Chromium dashboard project.
   # Its own runner installs Chromium and keeps browser execution out of the light package bins.
   test-venue-service:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
 
@@ -1219,14 +1335,57 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/venue-service" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/venue-service" test:coverage \
-            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/venue-service" test:shard \
+            --shard=${{ matrix.shard }}/4 \
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
+      # No blob means the shard ran nothing; see test-heavy's upload step.
+      - name: Upload the venue-service coverage blob
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: venue-service-blob-${{ matrix.shard }}
+          path: packages/venue-service/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # The coverage gate for @waitron/venue-service: merges the test-venue-service blobs and enforces the
+  # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
+  test-venue-service-merge:
+    timeout-minutes: 5
+    needs: [changes, test-venue-service]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download the venue-service coverage blobs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: venue-service-blob-*
+          path: packages/venue-service/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge the venue-service coverage blobs and enforce thresholds
+        run: pnpm --filter "@waitron/venue-service" test:merge
 
   # Adjustments combines database-backed policy tests with a Chromium dashboard project.
   # Its own runner installs Chromium and keeps browser execution out of the light package bins.
   test-adjustments:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true'
     runs-on: ubuntu-latest
@@ -1269,7 +1428,7 @@ jobs:
   # Bookings owns both a browser project and a database project. Its own runner keeps
   # Chromium out of the database bins and gives failures a package-specific job result.
   test-bookings:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true'
     runs-on: ubuntu-latest
@@ -1315,7 +1474,7 @@ jobs:
   # Media splits into a database project and a Chromium one, so its runner installs both test
   # prerequisites. The database half opens SQLite files through useVenueDb.
   test-media:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true'
     runs-on: ubuntu-latest
@@ -1362,7 +1521,7 @@ jobs:
   # dashboard-panel project. Its own runner keeps Chromium out of the database bins and gives failures
   # a package-specific job result. The node half opens SQLite files through useVenueDb.
   test-payments-stripe:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true'
     runs-on: ubuntu-latest
@@ -1408,7 +1567,7 @@ jobs:
   # The SumUp payment module, same shape as payments-stripe: a database-backed node project plus a
   # Chromium dashboard-panel project, on a runner of its own for the same reasons.
   test-payments-sumup:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true'
     runs-on: ubuntu-latest
@@ -1456,7 +1615,7 @@ jobs:
   # inclusion would union the whole bin into a scoped run. The runnable guard rejects
   # empty selections, and ci-workflow.test.mjs checks the actual pnpm partition.
   test-light-a:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true'
     runs-on: ubuntu-latest
@@ -1534,7 +1693,7 @@ jobs:
 
   # The second bin subtracts OWN_SHARD_PACKAGES and LIGHT_A_PACKAGES.
   test-light-b:
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true'
     runs-on: ubuntu-latest
@@ -1663,6 +1822,7 @@ jobs:
     needs:
       - changes
       - lint
+      - root-guards
       - bundle-smoke
       - image
       - typecheck
@@ -1674,9 +1834,12 @@ jobs:
       - test-fiscal-verifactu
       - test-ui
       - test-till
+      - test-till-merge
       - test-dashboard
+      - test-dashboard-merge
       - test-setup
       - test-venue-service
+      - test-venue-service-merge
       - test-bookings
       - test-media
       - test-payments-stripe

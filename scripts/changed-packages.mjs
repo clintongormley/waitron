@@ -210,7 +210,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * Renders a scope as the five lines its two callers read.
  *
  * `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE, which
- * is why `kind: "root"` answers it false alongside `documentation`: ci.yml's UNGATED `lint` job is
+ * is why `kind: "root"` answers it false alongside `documentation`: ci.yml's UNGATED `root-guards` job is
  * what runs the repo-level project a root change does reach. `root=` is emitted for the record and
  * read by no consumer today.
  *
