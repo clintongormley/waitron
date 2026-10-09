@@ -40,6 +40,21 @@ their full text.
   on its Zones tab after slice 2; the floor plan on the Zones tab after A429's editor — with its
   open decisions at its top.
 
+## Opening hours dated-save refusal presentation
+
+Reproduce a server refusal with no field on a week with multiple own-hours named days. The slice 2
+Task 22 review reported the same general refusal beside unrelated dates' Save actions
+(`opening-hours-week.ts` / `opening-hours-zone-week.ts`). Keep the failed date's retry and draft
+scope while limiting the message to the action that failed. Receipt: Lane D
+`receipts/a366-2/task22-review.md`; final reviewers did not run this presentation case.
+
+## Opening hours real-week headings
+
+Remove the repeated weekday from a real-week row's heading: it combines the full weekday with a
+formatted date that also names the weekday. Keep the date and Today marker readable in EN/ES,
+both themes, at 1280 and 390. Receipt: Lane D `receipts/a366-2/task22-review.md` and final visual
+captures under `receipts/a366-2/finish-visuals`.
+
 ## Who authorised today's station or period change
 
 The approved [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md)
