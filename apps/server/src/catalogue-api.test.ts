@@ -1398,7 +1398,7 @@ describe("unique category and product names", () => {
     expect((await send(app, "GET", `/management-api/categories/${first}`)).status).toBe(200);
   });
 
-  it("answers a duplicate Active product on create, editor rename and reactivation with product.name_taken (409)", async () => {
+  it("refuses duplicate Active product names on create and rename, and refuses reactivation of an archived duplicate", async () => {
     const app = mountApp();
     const name = `Café ${tag()}`;
     await createNamedProductVia(app, name);
@@ -1426,11 +1426,9 @@ describe("unique category and product names", () => {
     });
     expect(inactive.status).toBe(201);
     const inactiveId = ((await inactive.json()) as { id: string }).id;
-    await refused(
-      await saveEditorFixture(app, inactiveId, { active: true }),
-      "product.name_taken",
-      { field: "name", name: name.toLowerCase() },
-    );
+    await refused(await saveEditorFixture(app, inactiveId, { active: true }), "product.archived", {
+      productId: inactiveId,
+    });
   });
 
   it("refuses sibling variant clashes while accepting a variant named like another product", async () => {
@@ -2273,7 +2271,7 @@ describe("mountCatalogueApi — products", () => {
       return { ...seeded, plantCategory, storedCategory };
     }
 
-    it("is removed and restored by reading its editor value and saving it back", async () => {
+    it("clears its own stored value on save, and refuses restoring it after archive", async () => {
       const app = mountApp("es-ES");
       const { variantId, categoryId, ownCategoryId, plantCategory, storedCategory } =
         await withStoredCategory(app);
@@ -2288,17 +2286,19 @@ describe("mountCatalogueApi — products", () => {
         send(app, "PUT", `/management-api/products/${variantId}/editor`, {
           body: { ...value, active },
         });
-      const removed = await put(false);
+      const removed = await put(true);
       expect(removed.status).toBe(200);
-      expect(await removed.json()).toMatchObject({ active: false, primaryCategoryId: null });
+      expect(await removed.json()).toMatchObject({ active: true, primaryCategoryId: null });
       expect(await storedCategory()).toBeNull();
-      // Removing cleared it, so it is planted again for Restore to start from a leftover too.
+      expect((await put(false)).status).toBe(200);
       await plantCategory();
       expect(await storedCategory()).toBe(ownCategoryId);
       const restored = await put(true);
-      expect(restored.status).toBe(200);
-      expect(await restored.json()).toMatchObject({ active: true, primaryCategoryId: null });
-      expect(await storedCategory()).toBeNull();
+      expect(restored.status).toBe(409);
+      expect(await restored.json()).toEqual({
+        error: { code: "product.archived", params: { productId: variantId } },
+      });
+      expect(await storedCategory()).toBe(ownCategoryId);
     });
 
     it("refuses a save naming a category of its own, and keeps the row as it was", async () => {
@@ -2345,7 +2345,7 @@ describe("mountCatalogueApi — products", () => {
       return { ...seeded, kgUnitId, plantUnit, storedUnit };
     }
 
-    it("is removed and restored by reading its editor value and saving it back", async () => {
+    it("clears its own stored value on save, and refuses restoring it after archive", async () => {
       const app = mountApp("es-ES");
       const { variantId, kgUnitId, plantUnit, storedUnit } = await withStoredUnit(app);
       const value = (await (
@@ -2358,17 +2358,19 @@ describe("mountCatalogueApi — products", () => {
         send(app, "PUT", `/management-api/products/${variantId}/editor`, {
           body: { ...value, active },
         });
-      const removed = await put(false);
+      const removed = await put(true);
       expect(removed.status).toBe(200);
-      expect(await removed.json()).toMatchObject({ active: false, unitId: null });
+      expect(await removed.json()).toMatchObject({ active: true, unitId: null });
       expect(await storedUnit()).toEqual({ unit_id: null, pricing_unit: null });
-      // Removing cleared it, so it is planted again for Restore to start from a leftover too.
+      expect((await put(false)).status).toBe(200);
       await plantUnit();
       expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
       const restored = await put(true);
-      expect(restored.status).toBe(200);
-      expect(await restored.json()).toMatchObject({ active: true, unitId: null });
-      expect(await storedUnit()).toEqual({ unit_id: null, pricing_unit: null });
+      expect(restored.status).toBe(409);
+      expect(await restored.json()).toEqual({
+        error: { code: "product.archived", params: { productId: variantId } },
+      });
+      expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
     });
 
     it("refuses a save naming a unit of its own, and keeps the row as it was", async () => {
@@ -2388,7 +2390,7 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  it("keeps a removed variant Inactive through the parent's page, and restores it when sent Active", async () => {
+  it("keeps an archived variant through the parent's page, and refuses restoring it", async () => {
     const app = mountApp("es-ES");
     const { parentId } = await parentWithVariant(app);
     type Editor = { variants: Record<string, unknown>[] };
@@ -2431,11 +2433,14 @@ describe("mountCatalogueApi — products", () => {
       ...saved,
       variants: [saved.variants[0], { ...saved.variants[1], active: true }],
     });
-    expect(restored.status).toBe(200);
-    expect(flags(await read())).toEqual([
-      { name: "Café doble", active: true },
-      { name: "Café corto", active: true },
-    ]);
+    expect(restored.status).toBe(409);
+    expect(await restored.json()).toEqual({
+      error: {
+        code: "product.archived",
+        params: { productId: saved.variants[1]!.id, field: "variants.1.active" },
+      },
+    });
+    expect(flags(await read())).toEqual(flags(saved));
   });
 
   it("checks a variant's customer name against the default language only when it is saved Active", async () => {
@@ -2465,13 +2470,30 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  it("saves a variant's own page Inactive without the default language, and refuses it Active", async () => {
+  it("reads an archived variant without the default language, and refuses either save state", async () => {
     const app = mountApp("es-ES");
     const { parentId } = await parentWithVariant(app);
     const editor = async (id: string) =>
       (await (await send(app, "GET", `/management-api/products/${id}/editor`)).json()) as {
         variants: { id: string; name: string }[];
       } & Record<string, unknown>;
+    const activeVariant = (await editor(parentId)).variants[0]!.id;
+    const untranslated = await send(
+      app,
+      "PUT",
+      `/management-api/products/${activeVariant}/editor`,
+      {
+        body: {
+          ...(await editor(activeVariant)),
+          customerName: { fr: "Café double" },
+          active: true,
+        },
+      },
+    );
+    expect(untranslated.status).toBe(400);
+    expect(await untranslated.json()).toMatchObject({
+      error: { code: "content.translation_required" },
+    });
     const parent = await editor(parentId);
     const french = {
       name: "Café corto",
@@ -2493,17 +2515,15 @@ describe("mountCatalogueApi — products", () => {
     const own = await editor(id);
     const put = (active: boolean) =>
       send(app, "PUT", `/management-api/products/${id}/editor`, { body: { ...own, active } });
-    const removed = await put(false);
-    expect(removed.status).toBe(200);
-    expect(await removed.json()).toMatchObject({
-      customerName: { fr: "Café court" },
-      active: false,
-    });
-    const refused = await put(true);
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "content.translation_required" },
-    });
+    expect(own).toMatchObject({ customerName: { fr: "Café court" }, active: false });
+    for (const active of [false, true]) {
+      const refused = await put(active);
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toEqual({
+        error: { code: "product.archived", params: { productId: id } },
+      });
+    }
+    expect(await editor(id)).toEqual(own);
   });
 
   it("lists every variant, a removed one too, with its own price and its effective price, VAT and category", async () => {
@@ -2685,6 +2705,22 @@ describe("mountCatalogueApi — products", () => {
     const saved = (await created.json()) as { id: string };
     expect(saved).toMatchObject({ active: true, available: false });
 
+    const withoutActive = await editorBody(app);
+    delete withoutActive.active;
+    const refused = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: withoutActive,
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "active" } },
+    });
+
+    const available = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: await editorBody(app, { active: true, available: true }),
+    });
+    expect(available.status).toBe(200);
+    expect(await available.json()).toMatchObject({ active: true, available: true });
+
     const updated = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
       body: await editorBody(app, { active: false, available: true }),
     });
@@ -2696,16 +2732,6 @@ describe("mountCatalogueApi — products", () => {
     expect(await listed.json()).toEqual([
       expect.objectContaining({ id: saved.id, active: false, available: true }),
     ]);
-
-    const withoutActive = await editorBody(app);
-    delete withoutActive.active;
-    const refused = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
-      body: withoutActive,
-    });
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "product.invalid", params: { field: "active" } },
-    });
   });
 
   it("keeps an Unavailable product on the menu's price list with its Active state, and takes an Inactive one off it", async () => {
@@ -4044,7 +4070,7 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
     });
     expect(fromOwnPage.status).toBe(409);
     expect(await fromOwnPage.json()).toEqual({
-      error: { code: "product.offered_as_extra", params: { field: "active", extraLists } },
+      error: { code: "product.archived", params: { productId: variantId } },
     });
 
     expect(
@@ -5860,23 +5886,30 @@ it("refuses format-2 menus through management status, preview and publish routes
     .update(menuPublications)
     .set({ versionId: old!.id })
     .where(eq(menuPublications.menuId, menuId));
-  for (const [method, route] of [
-    ["GET", "/management-api/catalogues/status"],
-    ["GET", `${path}/status`],
-    ["GET", `${path}/preview`],
-    ["POST", `${path}/publish`],
-  ] as const) {
-    const response = await send(app, method!, route!, {
-      body: method === "POST" ? { expectedHash: hash } : undefined,
-    });
-    expect(await response.json(), route).toEqual({
-      error: { code: "menu.reset_required", params: { menuId } },
-    });
-    expect(response.status, route).toBe(400);
+  try {
+    for (const [method, route] of [
+      ["GET", "/management-api/catalogues/status"],
+      ["GET", `${path}/status`],
+      ["GET", `${path}/preview`],
+      ["POST", `${path}/publish`],
+    ] as const) {
+      const response = await send(app, method!, route!, {
+        body: method === "POST" ? { expectedHash: hash } : undefined,
+      });
+      expect(await response.json(), route).toEqual({
+        error: { code: "menu.reset_required", params: { menuId } },
+      });
+      expect(response.status, route).toBe(400);
+    }
+    expect(
+      (await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, menuId))).length,
+    ).toBe(2);
+  } finally {
+    await suite.db
+      .update(menuPublications)
+      .set({ versionId: row!.id })
+      .where(eq(menuPublications.menuId, menuId));
   }
-  expect(
-    (await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, menuId))).length,
-  ).toBe(2);
 });
 
 describe("shared menu reads", () => {
@@ -5976,24 +6009,31 @@ describe("shared menu reads", () => {
       .update(menuPublications)
       .set({ versionId: old!.id })
       .where(eq(menuPublications.menuId, id));
-    const response = await send(
-      app,
-      "GET",
-      `${path}/read?part=structure&part=home&part=preview&part=status`,
-    );
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.structure).toMatchObject({
-      status: 200,
-      body: { root: { internalName: "Old publication with usable editor" } },
-    });
-    expect(body.home).toMatchObject({ status: 200, body: { shortcuts: [] } });
-    const refusal = {
-      status: 400,
-      body: { error: { code: "menu.reset_required", params: { menuId: id } } },
-    };
-    expect(body.preview).toEqual(refusal);
-    expect(body.status).toEqual(refusal);
+    try {
+      const response = await send(
+        app,
+        "GET",
+        `${path}/read?part=structure&part=home&part=preview&part=status`,
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.structure).toMatchObject({
+        status: 200,
+        body: { root: { internalName: "Old publication with usable editor" } },
+      });
+      expect(body.home).toMatchObject({ status: 200, body: { shortcuts: [] } });
+      const refusal = {
+        status: 400,
+        body: { error: { code: "menu.reset_required", params: { menuId: id } } },
+      };
+      expect(body.preview).toEqual(refusal);
+      expect(body.status).toEqual(refusal);
+    } finally {
+      await suite.db
+        .update(menuPublications)
+        .set({ versionId: row!.id })
+        .where(eq(menuPublications.menuId, id));
+    }
   });
 
   it("returns structure, home and preview from one authorised request", async () => {

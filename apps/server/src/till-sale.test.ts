@@ -384,7 +384,7 @@ describe("recordTillSale", () => {
       variants: true,
     });
     await withTransaction(suite.db, async (tx) => {
-      await setProductVariants(tx, waterProductId, [], LOCALE);
+      await tx.execute(sql`update products set active = 0 where parent_id = ${waterProductId}`);
       await republishMenus(tx);
     });
     const deps = { db: suite.db, backend, clock };
@@ -2102,7 +2102,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // The control: the same list still sells the item that is both Active and Available.
     await expect(recordTillSale(deps, v.cfg, burgerWith(v.quesoId))).resolves.toBeDefined();
 
-    await withTransaction(suite.db, (tx) => updateProduct(tx, v.quesoId, { active: false }));
+    await suite.db.execute(sql`update products set active = 0 where id = ${v.quesoId}`);
     await expect(recordTillSale(deps, v.cfg, burgerWith(v.quesoId))).rejects.toMatchObject({
       code: "extras.invalid",
       params: { field: "productId" },

@@ -1984,12 +1984,14 @@ describe("updateHeldOrder", () => {
 
   it.each([
     ["Unavailable", { available: false }],
-    ["Inactive", { active: false }],
+    ["Archived", { active: false }],
   ])(
     "refuses raising the quantity of an offer line whose dish is %s, and keeps an unchanged one",
     async (_state, patch) => {
       const { cfg, cafeId, premiumCafeOfferId, extras, id, before } = await parkWithExtra("1");
-      await withTransaction(db, (tx) => catalogue.updateProduct(tx, cafeId, patch));
+      await withTransaction(db, (tx) =>
+        tx.update(products).set(patch).where(eq(products.id, cafeId)),
+      );
       const edit = async (quantity: string) =>
         updateHeldOrder({ db }, cfg, id, {
           revision: await revisionOf(id),
@@ -2022,6 +2024,72 @@ describe("updateHeldOrder", () => {
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafeId } });
     expect(await readLines(id)).toEqual(before);
   });
+
+  it.each(["dish", "variant", "extras item"] as const)(
+    "refuses adding an archived %s and paying its unsent line while it remains available",
+    async (kind) => {
+      const extraVenue = kind === "extras item" ? await parkWithExtra("1") : null;
+      const venue = extraVenue ?? (await setupVenue());
+      const { cfg, zoneId, catalogueId, cafeId, premiumCafeOfferId } = venue;
+      let productId = cafeId;
+      let line: {
+        menuItemId: string;
+        quantity: string;
+        variantId?: string;
+        extras?: ExtraSelection[];
+      } = {
+        menuItemId: premiumCafeOfferId,
+        quantity: "1",
+      };
+      let id = randomUUID();
+      if (kind === "variant") {
+        const offer = await withTransaction(db, (tx) => seedVariantOffer(tx, catalogueId));
+        productId = offer.variantId;
+        line = { menuItemId: offer.offerId, variantId: offer.variantId, quantity: "1" };
+      }
+      if (extraVenue) {
+        productId = extraVenue.extra.productId;
+        line.extras = extraVenue.extras;
+        id = extraVenue.id;
+      } else {
+        await parkOrder({ db }, cfg, { id, zoneId, lines: [line] });
+      }
+      const before = await readLines(id);
+      await db.update(products).set({ active: false }).where(eq(products.id, productId));
+      expect(
+        (
+          await db
+            .select({ active: products.active, available: products.available })
+            .from(products)
+            .where(eq(products.id, productId))
+        )[0],
+      ).toEqual({ active: false, available: true });
+      await expect(
+        parkOrder({ db }, cfg, {
+          id: randomUUID(),
+          zoneId,
+          lines: [line],
+        }),
+      ).rejects.toMatchObject({
+        code:
+          kind === "variant"
+            ? "product.variant_unavailable"
+            : kind === "extras item"
+              ? "extras.invalid"
+              : "product.unavailable",
+        params:
+          kind === "variant"
+            ? { variantId: productId }
+            : kind === "extras item"
+              ? { field: "productId" }
+              : { productId },
+      });
+      await expect(
+        withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, id)),
+      ).rejects.toMatchObject({ code: "product.unavailable", params: { productId } });
+      expect(await readLines(id)).toEqual(before);
+    },
+  );
 
   it("refuses a new line for a product not sold separately, and keeps the line already held", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
@@ -8571,7 +8639,7 @@ describe("a variant is sold as the product it is", () => {
     });
 
     await withTransaction(db, async (tx) => {
-      await setProductVariants(tx, wine.parentId, [], LOCALE);
+      await tx.update(products).set({ active: false }).where(eq(products.parentId, wine.parentId));
       await publishWorkingMenu(tx, catalogueId);
     });
     const id = randomUUID();
@@ -9081,9 +9149,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     cafeId: string,
     wine: { parentId: string; wine125: string },
   ) {
-    // The catalogue refuses a list offering a product with Active variants
-    // (`extras.product_has_variants`), so the wine's variants are Inactive while the list is saved
-    // and made Active again by writing their rows.
+    // The fixture needs links the editor refuses: a parent with variants and an archived variant.
     await tx.update(products).set({ active: false }).where(eq(products.parentId, wine.parentId));
     const list = await catalogue.createExtraList(
       tx,
@@ -9094,7 +9160,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         minPicks: 0,
         maxPicks: null,
         active: true,
-        items: [wine.parentId, wine.wine125].map((productId) => ({
+        items: [wine.parentId].map((productId) => ({
           productId,
           maxQuantity: 1,
           preselected: false,
@@ -9103,6 +9169,8 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       },
       LOCALE,
     );
+    await tx.execute(sql`insert into extra_list_items (id, list_id, product_id, sort, max_quantity, preselected, price, portion)
+      values (${randomUUID()}, ${list.id}, ${wine.wine125}, 1, 1, 0, 100, 1000)`);
     await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
 
     await tx.update(products).set({ active: true }).where(eq(products.parentId, wine.parentId));
@@ -9227,9 +9295,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    await withTransaction(db, (tx) =>
-      setProductVariants(tx, coffee.id, [{ ...coffee.doble, active: true }], LOCALE),
-    );
+    await db.update(products).set({ active: true }).where(eq(products.id, coffee.doble.id));
     const edit = (quantity: string) =>
       updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: parked!.id, productId: coffee.id, quantity }],
@@ -9333,7 +9399,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     await withTransaction(db, async (tx) => {
-      await setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE);
+      await tx.update(products).set({ active: true }).where(eq(products.id, doble!.id));
       await republishMenus(tx);
     });
     const edit = async (quantity: string) =>
