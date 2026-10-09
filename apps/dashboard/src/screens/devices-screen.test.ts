@@ -313,6 +313,21 @@ async function flush(el: DevicesScreen): Promise<void> {
 }
 
 const q = (el: DevicesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+
+/**
+ * Clicks a dialog's button and waits for the dialog's `wt-close`, which everything a screen does on
+ * close follows. Chromium reports a native dialog's close only with its next rendered frame, which a
+ * busy runner can hold back past `vi.waitFor`'s one second.
+ */
+async function clickAndAwaitClose(el: DevicesScreen, modal: string, button: string): Promise<void> {
+  const dialog = q(el, `[data-test=${modal}]`)!;
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
+  q(el, `[data-test=${button}]`)!.click();
+  await closed;
+}
+
 const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
 /** Table cells live in the table's own shadow root, so a row's hooks are found through it. */
@@ -1683,7 +1698,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     expect(api.getDeviceReader).toHaveBeenCalledTimes(1);
 
-    q(el, "[data-test=edit-cancel]")!.click();
+    await clickAndAwaitClose(el, "edit-device-modal", "edit-cancel");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
     await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));
@@ -2037,7 +2052,7 @@ describe("the Edit dialog", () => {
     }
 
     async function cancelEdit(el: DevicesScreen): Promise<void> {
-      q(el, "[data-test=edit-cancel]")!.click();
+      await clickAndAwaitClose(el, "edit-device-modal", "edit-cancel");
       await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     }
 
@@ -2367,7 +2382,7 @@ describe("the Edit dialog", () => {
     await userEvent.click(menu.querySelector<HTMLElement>("[data-test=edit-device-t1]")!);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
     await flush(el);
-    q(el, "[data-test=edit-cancel]")!.click();
+    await clickAndAwaitClose(el, "edit-device-modal", "edit-cancel");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(table.shadowRoot!.activeElement).toBe(menu);
@@ -2852,7 +2867,7 @@ describe("add a device", () => {
     const decoy = document.createElement("button");
     el.shadowRoot!.prepend(decoy);
 
-    q(el, "[data-test=joined-close]")!.click();
+    await clickAndAwaitClose(el, "joined-modal", "joined-close");
     await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).toBeNull());
     await flush(el);
     expect(el.shadowRoot!.activeElement).toBe(q(el, ".heading [data-test=open-add-device]"));
@@ -2942,7 +2957,7 @@ describe("add a device", () => {
     const api = stubApi();
     const el = await openAdd(api);
 
-    q(el, "[data-test=add-device-close]")!.click();
+    await clickAndAwaitClose(el, "add-device-modal", "add-device-close");
 
     await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
@@ -3212,10 +3227,15 @@ describe("add a device", () => {
       await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
       q(el, "[data-test=pair-submit]")!.click();
       await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
-      if (dismissal === "close") q(el, "[data-test=joined-close]")!.click();
+      if (dismissal === "close") await clickAndAwaitClose(el, "joined-modal", "joined-close");
       else {
-        q(el, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.focus();
+        const modal = q(el, "[data-test=joined-modal]")!;
+        const closed = new Promise((resolve) =>
+          modal.addEventListener("wt-close", resolve, { once: true }),
+        );
+        modal.shadowRoot!.querySelector("dialog")!.focus();
         await userEvent.keyboard("{Escape}");
+        await closed;
       }
       await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).toBeNull());
       expect(q(el, "[data-test=add-device-modal]")).toBeNull();
@@ -3811,7 +3831,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
     await toSettings(el);
 
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("r1", {
@@ -3829,7 +3849,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
     await openPair(el);
 
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
@@ -3846,7 +3866,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
     await toSettings(el);
 
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
@@ -3866,7 +3886,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
     await openPair(el);
 
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     await vi.waitFor(async () =>
@@ -3876,7 +3896,7 @@ describe("add a device", () => {
     );
 
     await openPair(el);
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.denyJoinRequest).toHaveBeenCalledTimes(2);
     await flush(el);
@@ -3890,7 +3910,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
     await openPair(el);
 
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
@@ -3912,7 +3932,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
     await openPair(el);
 
-    q(el, "[data-test=add-device-close]")!.click();
+    await clickAndAwaitClose(el, "add-device-modal", "add-device-close");
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
     expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
       createdAt: "2026-09-08T10:02:00.000Z",
@@ -3946,7 +3966,7 @@ describe("add a device", () => {
     await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalled());
     await flush(el);
     await openPair(el);
-    q(el, "[data-test=pair-cancel]")!.click();
+    await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
     await vi.waitFor(async () =>
       expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
         codeMessage("connection.failed"),
@@ -4407,14 +4427,7 @@ describe("add a device", () => {
         expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
         expect(q(el, "[data-test=asked-again]")).toBeNull();
 
-        // Chromium fires the native close event, which sends the discard, only with the next
-        // rendered frame, so this waits for the event rather than for vi.waitFor's one second.
-        const modal = q(el, "[data-test=pair-modal]")!;
-        const closed = new Promise((resolve) =>
-          modal.addEventListener("wt-close", resolve, { once: true }),
-        );
-        q(el, "[data-test=pair-cancel]")!.click();
-        await closed;
+        await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
         expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
           createdAt: "2026-09-08T10:04:00.000Z",
         });
@@ -4432,7 +4445,7 @@ describe("add a device", () => {
         await flush(el);
         expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
 
-        q(el, "[data-test=pair-cancel]")!.click();
+        await clickAndAwaitClose(el, "pair-modal", "pair-cancel");
         await vi.waitFor(() =>
           expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
             createdAt: "2026-09-08T10:04:00.000Z",
