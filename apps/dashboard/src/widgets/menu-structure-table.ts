@@ -531,14 +531,14 @@ export class MenuStructureTable extends LitElement {
   }
 
   /** Focuses the row's ⋮, or the nearest drawn ancestor's; for the top level (`""`), or when no
-   * ancestor is drawn, the toolbar's Add ⋮; in an empty menu, which draws no toolbar, the empty
+   * ancestor is drawn, the toolbar's Add menu; in an empty menu, which draws no toolbar, the empty
    * box's first add. */
   focusRowMenu(key: string): void {
     const table = this.#table();
     const root = table?.shadowRoot;
     if (!table || !root) return;
     // A host asks from its own `updated`, before the rows it just handed over are drawn: emptying
-    // the menu swaps the toolbar's Add ⋮ for the empty box's adds.
+    // the menu swaps the toolbar's Add menu for the empty box's adds.
     if (this.isUpdatePending || table.isUpdatePending) {
       void (async () => {
         await this.updateComplete;

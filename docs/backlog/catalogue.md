@@ -251,7 +251,7 @@ the layout existed only at phone width, #1193)_; and a desktop window narrow eno
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
 and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
-component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed`
+component — the Products table's Select is a native `<button>` because `wt-button` does not pass `aria-pressed`
 through, and the Structure tab's Reorder and Select toggles are hand-built icon buttons for the same
 reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just

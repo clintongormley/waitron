@@ -2546,6 +2546,8 @@ export class MenusScreen extends LitElement {
    * Available filter still show (a closed section hides none), once the tree has drawn a change: a
    * row renamed out of the search, or a product the filter now hides, can no longer be unticked. */
   async #keepSelectionShown(): Promise<void> {
+    if (this.structureSelected.length === 0 && !this.removingSelected && !this.movingSelected)
+      return;
     const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
     if (!tree) return;
     await tree.updateComplete;

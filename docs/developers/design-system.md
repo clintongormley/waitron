@@ -960,7 +960,7 @@ Select and Done cannot be pressed while a change is being saved. While a search 
 shown only because something inside it matches has no box, so Select all never ticks a section whose
 hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
 the Available filter, which no section answers. The selection clears when the mode turns off, the
-search or a filter changes, another menu opens, or a bulk change succeeds; a live update drops a
+search or a filter changes, another menu opens, or a bulk change succeeds; a re-read of the menu or its products (a live update, or the screen's own after a save) drops a
 ticked row it takes away, or one the search or the Available filter no longer shows with a box (a
 row inside a section the person closed stays), from the selection and from an open confirm or
 dialog, which closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
