@@ -1552,3 +1552,22 @@ all 19. The final affected sources matched the candidate's hashes. These checks 
 package coverage or current-head CI. No UI changed in A12b; A10/A11's final LOOK remains open.
 A10's assertion audit, public screen switch and mounted dashboard integration, A11 and A13–A15
 remain unfinished. Part A still needs its whole-branch reviews, normal push hook and CI.
+
+
+### Implementation checkpoint — Task A10 mounted dashboard staging (2026-10-09)
+
+`dashboard-app.test.ts`, "mounted staged department pages", mounts the staged loader through
+the contribution's `create` function while keeping DashboardApp's permissions, navigation,
+leave questions and history real. The contribution spy is restored after each case. Vite's
+glob loaders keep these local fixtures outside the dashboard compiler's source tree.
+
+The cases cover the name link, parent link, native Back/Forward, receipt department query,
+Settings/ Zones leave questions, zone replacement, disabled and unknown departments, old
+bookmarks and permission refusal. They do not establish that the public wrapper uses the loader.
+The unmodified public wrapper produced four missing-page failures in the initial six-case probe;
+the staged contribution passed those cases. The expanded dashboard file ran 379 cases successfully
+with `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`.
+
+A10 remains incomplete: finish the full old assertion mapping, retire only the approved removed
+checks, switch the public wrapper and remove the staged contribution spy. Then run these cases
+through the public screen, followed by A11 and A13–A15 and the branch gates.
