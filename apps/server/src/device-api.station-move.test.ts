@@ -9,6 +9,8 @@ import type { DeviceKitchenScreen } from "@waitron/module";
 import { listStationNotices, setStationToday } from "@waitron/venue-service";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { SESSION_COOKIE } from "./till-session.js";
+import { loginWithPin } from "@waitron/identity";
 import { createPairingMode } from "./pairing-mode.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createStation, deactivateStation } from "./kitchen.js";
@@ -46,14 +48,15 @@ useVenueDb({
   },
 });
 
-/** A kitchen display running `screen`, whose profile lists `capabilities`. */
+/** A device of `formFactor` running `screen`, whose profile lists `capabilities`. */
 async function display(
   screen: DeviceKitchenScreen,
   capabilities: readonly string[] = ["take-orders", "prepare-orders"],
+  formFactor: "kds" | "till" = "kds",
 ): Promise<{ id: string; cookie: string }> {
   const [profile] = await venue.db
     .insert(deviceProfiles)
-    .values({ name: `Display ${randomUUID()}`, formFactor: "kds", capabilities: [...capabilities] })
+    .values({ name: `Display ${randomUUID()}`, formFactor, capabilities: [...capabilities] })
     .returning({ id: deviceProfiles.id });
   const joined = await enrolDeviceForTest(venue.db, venue.cfg, {
     name: `Display ${randomUUID()}`,
@@ -61,6 +64,15 @@ async function display(
     kitchenScreen: screen,
   });
   return { id: joined.deviceId, cookie: `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}` };
+}
+
+/** A till running a station screen at Bar, with the operator signed in on it. */
+async function tillAtBar(): Promise<string> {
+  const till = await display(stationScreen(bar), ["take-orders", "prepare-orders"], "till");
+  const session = await inTx(venue, (tx) =>
+    loginWithPin(tx, { deviceId: till.id, personId: venue.operatorId, pin: "5555" }),
+  );
+  return `${SESSION_COOKIE}=${session.token}; ${till.cookie}`;
 }
 
 const stationScreen = (...stationIds: string[]): DeviceKitchenScreen => ({
@@ -156,10 +168,10 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     });
   });
 
-  it("refuses a till, even with a session, and a display with only a pass screen", async () => {
+  it("refuses a till with a session and a station screen, and a display with only a pass screen", async () => {
     const { tabId, item } = await paella();
     const pass = await display(passScreen);
-    for (const cookie of [venue.cookie, pass.cookie]) {
+    for (const cookie of [await tillAtBar(), pass.cookie]) {
       const answer = await move(cookie, tabId, {
         lineIds: [item.workingOrderLineId],
         stationId: grill,
@@ -268,9 +280,9 @@ describe("GET /api/device/stations", () => {
     }
   });
 
-  it("refuses a till and a display with only a pass screen", async () => {
+  it("refuses a till with a station screen and a display with only a pass screen", async () => {
     const pass = await display(passScreen);
-    for (const cookie of [venue.cookie, pass.cookie]) {
+    for (const cookie of [await tillAtBar(), pass.cookie]) {
       const answer = await send(app, cookie, "GET", "/api/device/stations");
       expect({ status: answer.status, code: answer.json.code }).toEqual({
         status: 401,
