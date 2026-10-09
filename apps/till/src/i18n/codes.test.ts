@@ -489,3 +489,12 @@ it("explains a pending invoice delivery and a refused original instead of the ge
     "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable",
   );
 });
+
+it("explains the closed-zone refusal while preserving payment and move choices in both languages", () => {
+  expect(codeMessage("service_zone.closed", "en")).toBe(
+    "That area is closed now, so nothing new can be ordered there. Bills there can still be paid or moved.",
+  );
+  expect(codeMessage("service_zone.closed", "es")).toBe(
+    "Esa zona está cerrada ahora, así que no se puede pedir nada nuevo. Las cuentas se pueden cobrar o mover.",
+  );
+});

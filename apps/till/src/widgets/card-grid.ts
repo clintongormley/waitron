@@ -184,11 +184,13 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
   @property({ attribute: false }) service: MenuState["service"] | null = {
     open: true,
+    zoneOpen: true,
     periodName: null,
     keepOpen: null,
   };
   @property() zoneId = "";
   @property() departmentName = "";
+  @property() zoneName = "";
   @property() selectedMenuId = "";
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
@@ -327,7 +329,7 @@ export class TillCardGrid extends LitElement {
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
       case "product-grid": {
-        if (this.service?.open !== true) return nothing;
+        if (this.service?.open !== true || !this.service.zoneOpen) return nothing;
         const configured = card.config.columns;
         const menu = shownMenu(this.menus, this.selectedMenuId);
         if (menu === undefined) return nothing;
@@ -439,6 +441,7 @@ export class TillCardGrid extends LitElement {
           .menus=${this.menus}
           .service=${this.service}
           .departmentName=${this.departmentName}
+          .zoneName=${this.zoneName}
           .selectedMenuId=${this.selectedMenuId}
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}

@@ -2987,6 +2987,7 @@ export class TillApp extends LitElement {
       if (state.defaultMenuId !== undefined) this.#polledDefaults.set(zoneId, state.defaultMenuId);
       const serviceMoved =
         state.service.open !== this.counterService?.open ||
+        state.service.zoneOpen !== this.counterService?.zoneOpen ||
         state.service.periodName !== this.counterService?.periodName ||
         keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen);
       const busy = this.submitting || this.parking || this.placing;
@@ -3006,6 +3007,7 @@ export class TillApp extends LitElement {
       }
       const serviceMoved =
         state.service.open !== this.tableService?.open ||
+        state.service.zoneOpen !== this.tableService?.zoneOpen ||
         state.service.periodName !== this.tableService?.periodName ||
         keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen);
       if (!menusMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
@@ -8473,6 +8475,7 @@ export class TillApp extends LitElement {
         .menus=${this.menus}
         .service=${this.counterService}
         .departmentName=${this.counterDepartmentName}
+        .zoneName=${this.counterServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? ""}
         .selectedMenuId=${this.selectedCatalogueId}
         .serviceZones=${this.counterServiceZones}
         .selectedServiceZoneId=${this.counterServiceZoneId}
@@ -8543,6 +8546,7 @@ export class TillApp extends LitElement {
       .zoneId=${tableTab ? (this.#tableZoneId ?? "") : this.counterServiceZoneId}
       .service=${tableTab ? this.tableService : this.counterService}
       .departmentName=${tableTab ? this.tableDepartmentName : this.counterDepartmentName}
+      .zoneName=${tableTab ? (this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? "") : (this.counterServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? "")}
       .selectedMenuId=${tableTab ? this.tableSelectedCatalogueId : this.selectedCatalogueId}
       .selectedDiet=${this.selectedDiet}
       .statuses=${this.statuses}
@@ -8599,6 +8603,7 @@ export class TillApp extends LitElement {
           .menus=${this.tableMenus}
           .service=${this.tableService}
           .departmentName=${this.tableDepartmentName}
+          .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
           .selectedMenuId=${this.tableSelectedCatalogueId}
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}

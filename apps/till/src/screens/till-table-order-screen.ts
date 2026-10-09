@@ -1108,12 +1108,14 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
   @property({ attribute: false }) service: MenuState["service"] | null = {
     open: true,
+    zoneOpen: true,
     periodName: null,
     keepOpen: null,
   };
   @property({ attribute: false }) api?: TillApi;
   @property() zoneId = "";
   @property() departmentName = "";
+  @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
@@ -2816,6 +2818,12 @@ export class TillTableOrderScreen extends LitElement {
 
   #gridRegion(draft: WorkingOrderStore): TemplateResult {
     if (this.service === null) return html`<div class="grid-region"></div>`;
+    if (this.service.zoneOpen === false)
+      return html`<div class="grid-region">
+        <p role="status" data-zone-closed>
+          ${t("menu.zone_closed").replace("{zone}", () => this.zoneName)}
+        </p>
+      </div>`;
     if (this.service?.open === false)
       return html`<div class="grid-region">
         ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}

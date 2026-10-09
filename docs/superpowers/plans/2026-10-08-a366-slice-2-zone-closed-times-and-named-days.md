@@ -792,7 +792,9 @@ Accepting a department transfer into a closed zone is refused; the request stays
   menu-state comparisons `:2952-2954` and `:2970-2972`, which look only at `open` and
   `periodName`; add `zoneOpen` so an open order screen notices the zone closing), `i18n/codes.ts` (beside
   `service_zone.not_allowed :74`), `i18n/strings.ts` (beside `menu.department_closed :1059`)
-- Test: `till-counter-screen.test.ts`, `till-table-order-screen.test.ts`,
+- Modify: `apps/till/src/widgets/card-grid.ts` (the counter product-card gate and table
+  screen properties; the zone name travels from the app’s existing zone lists)
+- Test: `i18n/codes.test.ts`, `till-app-menu-refresh.test.ts`, `till-counter-screen.test.ts`, `till-table-order-screen.test.ts`,
   `screens/service-periods.a11y.test.ts`
 
 **Behaviour:** decision 17's notice replaces the add buttons on both screens when
@@ -801,7 +803,7 @@ Accepting a department transfer into a closed zone is refused; the request stays
 there can still be paid or moved." / "Esa zona está cerrada ahora, así que no se puede pedir nada
 nuevo. Las cuentas se pueden cobrar o mover."
 
-- [ ] Steps: failing tests (with `zoneOpen: false` the counter screen shows the notice and no add
+- [x] Steps: failing tests (with `zoneOpen: false` the counter screen shows the notice and no add
   button — fails today because the screen reads only `service.open`; a menu-state poll that
   changes only `zoneOpen` redraws the open order screen (`till-app-menu-refresh.test.ts`); the
   table bill keeps Pay and Move; the refusal's sentence; axe for both notices in both themes); watch them fail

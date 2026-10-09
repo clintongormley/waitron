@@ -2103,7 +2103,7 @@ describe("a device behind the live version (§9)", () => {
 
 describe("keep-open changes refresh the order screen", () => {
   const initialService = {
-    open: true,
+    open: true, zoneOpen: true,
     periodName: "Lunch",
     keepOpen: {
       periodId: "lunch",
@@ -2212,7 +2212,7 @@ describe("keep-open changes refresh the order screen", () => {
 
 it("passes keep-open recovery through a standalone table drill", async () => {
   const service = {
-    open: false,
+    open: false, zoneOpen: true,
     periodName: null,
     keepOpen: {
       periodId: "lunch",
@@ -2235,7 +2235,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
         ...menuState("v1"),
         service: {
           ...service,
-          open: true,
+          open: true, zoneOpen: true,
           periodName: "Lunch",
           keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
         },
@@ -2250,7 +2250,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
             ...DINING,
             service: {
               ...service,
-              open: true,
+              open: true, zoneOpen: true,
               periodName: "Lunch",
               keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
             },
@@ -2271,4 +2271,55 @@ it("passes keep-open recovery through a standalone table drill", async () => {
     .poll(() => screen.shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim())
     .toBe("Lunch · kept open until 14:30");
   expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
+});
+
+describe("zone-only menu-state changes", () => {
+  it("redraws the counter when only its zone closes and reopens", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    const closed = { ...V1, service: { ...V1.service, zoneOpen: false } };
+    api.listZoneOffers.mockResolvedValue(closed);
+    api.menuState.mockResolvedValue({ ...menuState("v1"), service: closed.service });
+    await poll(el);
+    await vi.waitFor(() =>
+      expect(counter(el).shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull(),
+    );
+    expect(counter(el).shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+    api.listZoneOffers.mockResolvedValue(V1);
+    api.menuState.mockResolvedValue(menuState("v1"));
+    await poll(el);
+    await vi.waitFor(() =>
+      expect(counter(el).shadowRoot!.querySelector("[data-zone-closed]")).toBeNull(),
+    );
+    expect(counter(el).shadowRoot!.querySelector("till-menu-switcher")).not.toBeNull();
+  });
+
+  it("redraws the open table when only its zone closes and reopens", async () => {
+    const { el } = await mountApp(tableStubs());
+    await toTable(el);
+    const closed = { ...DINING, service: { ...DINING.service, zoneOpen: false } };
+    api.listZoneOffers.mockImplementation((id: string) =>
+      Promise.resolve(id === "zone-dining" ? closed : V1),
+    );
+    api.menuState.mockImplementation((id: string) =>
+      Promise.resolve({
+        ...menuState("v1"),
+        service: id === "zone-dining" ? closed.service : V1.service,
+      }),
+    );
+    await poll(el);
+    await vi.waitFor(() =>
+      expect(tableScreen(el).shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull(),
+    );
+    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    api.listZoneOffers.mockImplementation((id: string) =>
+      Promise.resolve(id === "zone-dining" ? DINING : V1),
+    );
+    api.menuState.mockResolvedValue(menuState("v1"));
+    await poll(el);
+    await vi.waitFor(() =>
+      expect(tableScreen(el).shadowRoot!.querySelector("[data-zone-closed]")).toBeNull(),
+    );
+    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
+  });
 });

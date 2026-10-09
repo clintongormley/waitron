@@ -96,6 +96,38 @@ async function shownText(select: WtCombobox): Promise<string> {
 
 afterEach(cleanupWidgets);
 
+describe("closed zone ordering", () => {
+  it("replaces add controls with the area notice and retains the counter basket", async () => {
+    const previous = currentLocale();
+    try {
+      setLocale("en-GB");
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "2");
+      const { el } = await mount({
+        store,
+        zoneName: "Terrace",
+        service: { open: true, zoneOpen: false, periodName: "Lunch" },
+      });
+      expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
+        "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
+      );
+      const cards = cardGrid(el)!;
+      await cards.updateComplete;
+      expect(cards.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+      expect(cards.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+      expect(store.lines.map((line) => [line.product.id, line.quantity])).toEqual([["p1", "2"]]);
+      el.service = { open: true, zoneOpen: true, periodName: "Lunch" };
+      await el.updateComplete;
+      await cards.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-zone-closed]")).toBeNull();
+      expect(cards.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
+    } finally {
+      setLocale(previous);
+    }
+  });
+});
+
 describe("till-counter-screen", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-counter-screen")).toBe(TillCounterScreen);

@@ -150,10 +150,12 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
   @property({ attribute: false }) service: MenuState["service"] | null = {
     open: true,
+    zoneOpen: true,
     periodName: null,
     keepOpen: null,
   };
   @property() departmentName = "";
+  @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
@@ -286,10 +288,12 @@ export class TillCounterScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId)}
-      ${this.service?.open === true && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
+      ${this.service?.zoneOpen === false
+        ? html`<p role="status" data-zone-closed>${t("menu.zone_closed").replace("{zone}", () => this.zoneName)}</p>`
+        : servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId)}
+      ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${
-        this.service?.open === true
+        this.service?.open === true && this.service.zoneOpen
           ? html`<till-menu-switcher
               class="menu-switcher"
               .menus=${this.menus}
@@ -298,7 +302,7 @@ export class TillCounterScreen extends LitElement {
           : nothing
       }
       ${
-        this.service?.open === true && this.#hasDietData()
+        this.service?.open === true && this.service.zoneOpen && this.#hasDietData()
           ? html`<till-diet-filter
               class="diet-filter"
               .selected=${this.selectedDiet}
@@ -325,6 +329,7 @@ export class TillCounterScreen extends LitElement {
         .menus=${this.menus}
         .service=${this.service}
         .departmentName=${this.departmentName}
+        .zoneName=${this.zoneName}
         .selectedMenuId=${this.selectedMenuId}
         .selectedDiet=${this.selectedDiet}
         .handheld=${this.handheld}
