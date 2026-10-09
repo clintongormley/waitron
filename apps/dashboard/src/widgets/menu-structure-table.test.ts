@@ -936,7 +936,11 @@ function focusedInTable(el: MenuStructureTable): string | undefined {
   return (table(el).shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
 }
 
-async function press(el: MenuStructureTable, key: string, which: "ArrowUp" | "ArrowDown") {
+async function press(
+  el: MenuStructureTable,
+  key: string,
+  which: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
+) {
   grip(el, key).focus();
   await userEvent.keyboard(`{${which}}`);
   await settle(el);
@@ -1071,6 +1075,223 @@ it("moves nothing by key while busy", async () => {
   expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
 });
 
+describe("moving into or out of a section by key", () => {
+  const movedInto = (item: string, section: string) =>
+    t("action.moved_into").replace("{item}", item).replace("{section}", section);
+  const movedOut = (item: string, list: string) =>
+    t("action.moved_out").replace("{item}", item).replace("{list}", list);
+
+  /** Lunch after Lemonade left Drinks for the top level, after Drinks. */
+  function lemonadeOutNodes(): MenuStructureNode[] {
+    const drinks = drinksNode("m-drinks");
+    drinks.children = drinks.children!.filter((child) => child.memberId !== "m-lemonade");
+    return [
+      productNode("m-burger", "p-burger"),
+      drinks,
+      productNode("m-lemonade", "p-lemonade"),
+      favourites(),
+    ];
+  }
+
+  it("lists all four arrows as the grip's shortcuts", async () => {
+    const el = await mount();
+    expect(grip(el, "m-burger").getAttribute("aria-keyshortcuts")).toBe(
+      "ArrowUp ArrowDown ArrowLeft ArrowRight",
+    );
+  });
+
+  it("keeps ArrowLeft and ArrowRight on a grip from scrolling the page, even when they move nothing", async () => {
+    const el = await mount();
+    expect(keyOn(el, "m-burger", "ArrowLeft").defaultPrevented).toBe(true);
+    expect(keyOn(el, "m-burger", "ArrowRight").defaultPrevented).toBe(true);
+  });
+
+  it("ArrowRight moves a member into the section drawn directly above it, at its end, and announces it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-drinks/m-lemonade", "ArrowRight");
+    expect(intos).toEqual([
+      { from: ["m-drinks"], memberId: "m-lemonade", to: ["m-drinks", "m-beer"] },
+    ]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe(movedInto("Lemonade", "Beer"));
+    // The host answers with the menu read again; nothing moves before that.
+    expect(shown(el)).toEqual([
+      "m-burger",
+      "m-drinks",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer",
+      "m-drinks/m-lemonade",
+      "m-fav",
+    ]);
+  });
+
+  it.each([
+    ["the first member, with nothing above it", lunchNodes, "m-burger"],
+    ["a product above", lunchNodes, "m-drinks"],
+    ["a section above that sits inside the moved section elsewhere", lunchNodes, "m-fav"],
+    [
+      "an included menu above",
+      () => [...lunchNodes(), wines(), productNode("m-rioja", "p-rioja")],
+      "m-rioja",
+    ],
+    [
+      "a section above already holding the product",
+      () => [drinksNode("m-drinks"), productNode("m-lager-top", "p-lager")],
+      "m-lager-top",
+    ],
+    [
+      "a product no longer in the catalogue",
+      () => [drinksNode("m-drinks"), productNode("m-gone", "p-gone")],
+      "m-gone",
+    ],
+  ])("ArrowRight sends and announces nothing with %s", async (_, nodes, key) => {
+    const el = await mount({ nodes: nodes() });
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, key, "ArrowRight");
+    expect(intos).toEqual([]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe("");
+  });
+
+  it("ArrowLeft moves a member out of its section to the place after that section, and announces it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    expect(intos).toEqual([{ from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 2 }]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe(movedOut("Lemonade", "Lunch Menu"));
+  });
+
+  it("ArrowLeft out of a nested section names that section's list and counts the order on screen", async () => {
+    const el = await mount();
+    await toggle(el, "m-fav");
+    await toggle(el, "m-fav/m-fav-drinks");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-fav/m-fav-drinks/m-beer", "ArrowLeft");
+    expect(intos).toEqual([
+      { from: ["m-fav", "m-fav-drinks"], memberId: "m-beer", to: ["m-fav"], position: 2 },
+    ]);
+    expect(announced(el)).toBe(movedOut("Beer", "Favourites"));
+
+    // Drinks moves above Burger on screen before the host answers; the place counts that order.
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks", "ArrowUp");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    expect(intos.at(-1)).toEqual({
+      from: ["m-drinks"],
+      memberId: "m-lemonade",
+      to: [],
+      position: 1,
+    });
+  });
+
+  it.each([
+    ["at the top level", lunchNodes, [], "m-burger"],
+    [
+      "into a list already holding the product",
+      lunchNodes,
+      ["m-drinks", "m-drinks/m-beer"],
+      "m-drinks/m-beer/m-lager-2",
+    ],
+    [
+      "for a product no longer in the catalogue",
+      () => {
+        const drinks = drinksNode("m-drinks");
+        drinks.children!.push(productNode("m-gone", "p-gone"));
+        return [drinks];
+      },
+      ["m-drinks"],
+      "m-drinks/m-gone",
+    ],
+  ])("ArrowLeft sends and announces nothing %s", async (_, nodes, open, key) => {
+    const el = await mount({ nodes: nodes() });
+    for (const section of open) await toggle(el, section);
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, key, "ArrowLeft");
+    expect(intos).toEqual([]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe("");
+  });
+
+  it("focuses the moved row's grip once the host is no longer busy after the menu is read again", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    el.busy = true;
+    await settle(el);
+    el.nodes = lemonadeOutNodes();
+    await settle(el);
+    expect(shown(el)).toContain("m-lemonade");
+    expect(focusedInTable(el)).not.toBe("drag-m-lemonade");
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-lemonade");
+  });
+
+  it("waits for the menu read again, not only for the host to stop being busy", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    el.busy = true;
+    await settle(el);
+    el.busy = false;
+    await settle(el);
+    grip(el, "m-burger").focus();
+    el.busy = true;
+    await settle(el);
+    el.nodes = lemonadeOutNodes();
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-lemonade");
+  });
+
+  it("focuses the moved row's grip inside the section the host opens for it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowRight");
+    el.busy = true;
+    await settle(el);
+    const drinks = drinksNode("m-drinks");
+    const lemonade = drinks.children!.pop()!;
+    drinks.children![1]!.children!.push(lemonade);
+    el.nodes = [productNode("m-burger", "p-burger"), drinks, favourites()];
+    el.current = ["m-drinks", "m-beer"];
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-drinks/m-beer/m-lemonade");
+  });
+
+  it("focuses the grip where the member was when the menu read again does not move it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    // Focus can leave the grip while the host waits; it comes back all the same.
+    grip(el, "m-burger").focus();
+    el.busy = true;
+    await settle(el);
+    el.nodes = lunchNodes();
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-drinks/m-lemonade");
+  });
+
+  it("leaves a same-list move's focus alone when a later read of the menu arrives", async () => {
+    const el = await mount();
+    await press(el, "m-burger", "ArrowDown");
+    grip(el, "m-fav").focus();
+    el.nodes = [drinksNode("m-drinks"), productNode("m-burger", "p-burger"), favourites()];
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-fav");
+  });
+});
+
 /** Sends a pointer event from `target`, placed over `over` (by default the target itself). */
 function pointer(
   target: Element,
@@ -1108,6 +1329,40 @@ function ghost(el: MenuStructureTable): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-ghost"]');
 }
 
+type Band = "top" | "middle" | "bottom";
+
+/** A pointer height inside the row: its top quarter, its middle, or its bottom quarter. */
+function at(el: MenuStructureTable, key: string, band: Band): PointerEventInit {
+  const box = row(el, key)!.getBoundingClientRect();
+  const y = {
+    top: box.top + box.height / 8,
+    middle: box.top + box.height / 2,
+    bottom: box.bottom - box.height / 8,
+  }[band];
+  return { clientY: y };
+}
+
+async function dragOver(
+  el: MenuStructureTable,
+  from: Element,
+  key: string,
+  band: Band,
+): Promise<void> {
+  pointer(from, "pointermove", nameAt(el, key), at(el, key, band));
+  await settle(el);
+}
+
+/** Every drop mark drawn: the gaps and the row a drop would go into. */
+function drops(el: MenuStructureTable) {
+  return {
+    before: marked(el, "drop-gap-before"),
+    after: marked(el, "drop-gap-after"),
+    into: marked(el, "drop-target"),
+  };
+}
+
+const noDrop = { before: [], after: [], into: [] };
+
 describe("with reordering off", () => {
   it.each([1280, 390])(
     "draws no grip or grip space on any row, and puts the Name heading over the first top-level name (%ipx)",
@@ -1136,7 +1391,7 @@ describe("with reordering off", () => {
     const moves = listen(el, "wt-member-move");
     const from = grip(el, "m-burger");
     pointer(from, "pointerdown");
-    pointer(from, "pointermove", nameAt(el, "m-fav"));
+    pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
     await settle(el);
     expect(marked(el, "dragging")).toEqual(["m-burger"]);
     el.reordering = false;
@@ -1200,29 +1455,356 @@ it("shows the gap before the sibling when dragging upwards", async () => {
   expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 0 }]);
 });
 
-it("offers no gap over a row outside the dragged member's own list, and a release there sends nothing", async () => {
+it("offers a gap beside a row outside the dragged member's own list by the pointer's half, and a release there sends one move into that list", async () => {
   const el = await mount();
   await toggle(el, "m-drinks");
   await toggle(el, "m-fav");
   const moves = listen(el, "wt-member-move");
+  const intos = listen(el, "wt-member-move-into");
   const from = grip(el, "m-drinks/m-lager");
   pointer(from, "pointerdown");
   pointer(from, "pointermove", nameAt(el, "m-drinks/m-lemonade"));
   await settle(el);
-  expect(marked(el, "drop-gap-after")).toEqual(["m-drinks/m-lemonade"]);
-  for (const key of ["m-fav/m-fav-lemonade", "m-burger", "m-drinks", "m-fav"]) {
-    pointer(from, "pointermove", nameAt(el, key));
-    await settle(el);
-    expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")], key).toEqual([]);
+  expect(drops(el)).toEqual({ ...noDrop, after: ["m-drinks/m-lemonade"] });
+  const visits: [string, Band, Partial<ReturnType<typeof drops>>][] = [
+    ["m-fav/m-fav-lemonade", "top", { before: ["m-fav/m-fav-lemonade"] }],
+    ["m-fav/m-fav-lemonade", "bottom", { after: ["m-fav/m-fav-lemonade"] }],
+    ["m-burger", "top", { before: ["m-burger"] }],
+    ["m-burger", "bottom", { after: ["m-burger"] }],
+    ["m-drinks", "top", { before: ["m-drinks"] }],
+    ["m-drinks", "bottom", { after: ["m-drinks/m-lemonade"] }],
+    ["m-fav", "top", { before: ["m-fav"] }],
+    ["m-fav", "bottom", { after: ["m-fav/m-fav-drinks"] }],
+  ];
+  for (const [key, band, expected] of visits) {
+    await dragOver(el, from, key, band);
+    expect(drops(el), `${key} ${band}`).toEqual({ ...noDrop, ...expected });
   }
-  pointer(from, "pointerup", nameAt(el, "m-burger"));
+  pointer(from, "pointerup", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   expect(moves).toEqual([]);
-  expect(shown(el).filter((key) => key.startsWith("m-drinks/"))).toEqual([
+  expect(intos).toEqual([{ from: ["m-drinks"], memberId: "m-lager", to: [], position: 3 }]);
+  expect(shown(el)).toEqual([
+    "m-burger",
+    "m-drinks",
     "m-drinks/m-lager",
     "m-drinks/m-beer",
     "m-drinks/m-lemonade",
+    "m-fav",
+    "m-fav/m-fav-lemonade",
+    "m-fav/m-fav-drinks",
   ]);
+});
+
+describe("dragging into another list", () => {
+  it("offers a gap before or after a row inside another open section, and sends its place there", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-lemonade", "top");
+    expect(drops(el)).toEqual({ ...noDrop, before: ["m-drinks/m-lemonade"] });
+    await dragOver(el, from, "m-drinks/m-lemonade", "bottom");
+    expect(drops(el)).toEqual({ ...noDrop, after: ["m-drinks/m-lemonade"] });
+    // The gap drawn under the row makes it taller; the same pointer still means after it.
+    pointer(from, "pointermove", nameAt(el, "m-drinks/m-lemonade"), {
+      clientY: at(el, "m-drinks/m-lemonade", "top").clientY! + 30,
+    });
+    await settle(el);
+    expect(drops(el)).toEqual({ ...noDrop, after: ["m-drinks/m-lemonade"] });
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-lemonade"));
+    await settle(el);
+    expect(moves).toEqual([]);
+    expect(intos).toEqual([{ from: [], memberId: "m-burger", to: ["m-drinks"], position: 3 }]);
+    expect(shown(el)[0]).toBe("m-burger");
+    expect(drops(el)).toEqual(noDrop);
+
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-lemonade", "top");
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-lemonade"));
+    expect(intos.at(-1)).toEqual({ from: [], memberId: "m-burger", to: ["m-drinks"], position: 2 });
+    expect(moves).toEqual([]);
+  });
+
+  it("puts the gap after an open section's last drawn row, and counts the place in the order on screen", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await toggle(el, "m-drinks/m-beer");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-beer", "bottom");
+    expect(drops(el)).toEqual({ ...noDrop, after: ["m-drinks/m-beer/m-lager-2"] });
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-beer"));
+    expect(intos).toEqual([{ from: [], memberId: "m-burger", to: ["m-drinks"], position: 2 }]);
+
+    // Lager moves below Beer on screen before the host answers; the place counts that order.
+    await press(el, "m-drinks/m-lager", "ArrowDown");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-lager", "top");
+    expect(drops(el)).toEqual({ ...noDrop, before: ["m-drinks/m-lager"] });
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-lager"));
+    expect(intos.at(-1)).toEqual({ from: [], memberId: "m-burger", to: ["m-drinks"], position: 1 });
+  });
+
+  it("moves a product out of a section beside a top-level row, sending the top level as an empty path", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-drinks/m-lemonade");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-burger", "top");
+    expect(drops(el)).toEqual({ ...noDrop, before: ["m-burger"] });
+    pointer(from, "pointerup", nameAt(el, "m-burger"));
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-burger", "bottom");
+    expect(drops(el)).toEqual({ ...noDrop, after: ["m-burger"] });
+    pointer(from, "pointerup", nameAt(el, "m-burger"));
+    expect(intos).toEqual([
+      { from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 0 },
+      { from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 1 },
+    ]);
+    expect(moves).toEqual([]);
+  });
+
+  it("marks a closed section in another list over its middle and drops into it at the end, and offers the gap beside it over its quarters", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-beer", "middle");
+    expect(drops(el)).toEqual({ ...noDrop, into: ["m-drinks/m-beer"] });
+    const cells = row(el, "m-drinks/m-beer")!.querySelectorAll("td");
+    expect(cells[0]!.part.contains("drop-target")).toBe(true);
+    expect([...cells].slice(1).some((cell) => cell.part.contains("drop-target"))).toBe(false);
+    expect(getComputedStyle(cells[0]!).borderInlineStartStyle).toBe("solid");
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-beer"));
+    await settle(el);
+    expect(intos).toStrictEqual([{ from: [], memberId: "m-burger", to: ["m-drinks", "m-beer"] }]);
+    expect(drops(el)).toEqual(noDrop);
+
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-beer", "top");
+    expect(drops(el)).toEqual({ ...noDrop, before: ["m-drinks/m-beer"] });
+    await dragOver(el, from, "m-drinks/m-beer", "bottom");
+    expect(drops(el)).toEqual({ ...noDrop, after: ["m-drinks/m-beer"] });
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-beer"));
+    expect(intos.at(-1)).toEqual({ from: [], memberId: "m-burger", to: ["m-drinks"], position: 2 });
+    expect(moves).toEqual([]);
+  });
+
+  it("drops into a closed sibling section over its middle, and reorders beside it over its quarters", async () => {
+    const el = await mount();
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    expect(drops(el)).toEqual({ ...noDrop, into: ["m-fav"] });
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    await settle(el);
+    expect(intos).toStrictEqual([{ from: [], memberId: "m-burger", to: ["m-fav"] }]);
+    expect(moves).toEqual([]);
+    expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+
+    for (const band of ["top", "bottom"] as const) {
+      pointer(from, "pointerdown");
+      await dragOver(el, from, "m-fav", band);
+      expect(drops(el), band).toEqual({ ...noDrop, after: ["m-fav"] });
+      pointer(from, "pointerup", nameAt(el, "m-fav"));
+      await settle(el);
+      el.nodes = lunchNodes();
+      await settle(el);
+    }
+    expect(moves).toEqual([
+      { path: [], memberId: "m-burger", to: 2 },
+      { path: [], memberId: "m-burger", to: 2 },
+    ]);
+    expect(intos).toHaveLength(1);
+  });
+
+  it("drops into an empty section, which draws no arrow, over its middle", async () => {
+    const empty: MenuStructureNode = {
+      memberId: "m-empty",
+      ref: { kind: "section", sectionId: "s-empty" },
+      internalName: "Specials",
+      names: {},
+      image: null,
+      color: null,
+      ownerMenuId: "menu-lunch",
+      children: [],
+    };
+    const el = await mount({ nodes: [...lunchNodes(), empty] });
+    await toggle(el, "m-drinks");
+    expect(row(el, "m-empty")!.hasAttribute("aria-expanded")).toBe(false);
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-drinks/m-lager");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-empty", "middle");
+    expect(drops(el)).toEqual({ ...noDrop, into: ["m-empty"] });
+    pointer(from, "pointerup", nameAt(el, "m-empty"));
+    expect(intos).toStrictEqual([{ from: ["m-drinks"], memberId: "m-lager", to: ["m-empty"] }]);
+  });
+
+  it("offers a gap beside an included menu's own row in another list", async () => {
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    await toggle(el, "m-drinks");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-drinks/m-lemonade");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "included-wine", "middle");
+    expect(drops(el).into).toEqual([]);
+    await dragOver(el, from, "included-wine", "top");
+    expect(drops(el)).toEqual({ ...noDrop, before: ["included-wine"] });
+    await dragOver(el, from, "included-wine", "bottom");
+    expect(drops(el)).toEqual({ ...noDrop, after: ["included-wine"] });
+    pointer(from, "pointerup", nameAt(el, "included-wine"));
+    expect(intos).toEqual([{ from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 4 }]);
+  });
+
+  describe("refuses, drawing nothing and sending nothing on release", () => {
+    async function refused(
+      el: MenuStructureTable,
+      dragged: string,
+      places: [string, Band][],
+    ): Promise<void> {
+      const moves = listen(el, "wt-member-move");
+      const intos = listen(el, "wt-member-move-into");
+      const from = grip(el, dragged);
+      for (const [key, band] of places) {
+        pointer(from, "pointerdown");
+        await dragOver(el, from, key, band);
+        expect(marked(el, "dragging"), `${key} ${band}`).toEqual([dragged]);
+        expect(drops(el), `${key} ${band}`).toEqual(noDrop);
+        pointer(from, "pointerup", nameAt(el, key), at(el, key, band));
+        await settle(el);
+        // The click a release sends is held back until the next task.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      expect(moves).toEqual([]);
+      expect(intos).toEqual([]);
+    }
+
+    it("a section over its own descendants", async () => {
+      const el = await mount();
+      await toggle(el, "m-drinks");
+      await refused(el, "m-drinks", [
+        ["m-drinks/m-lager", "top"],
+        ["m-drinks/m-lager", "bottom"],
+        ["m-drinks/m-beer", "middle"],
+        ["m-drinks/m-beer", "bottom"],
+      ]);
+    });
+
+    it("a section over a list inside it that is drawn somewhere else", async () => {
+      const el = await mount();
+      await toggle(el, "m-drinks");
+      await refused(el, "m-fav", [
+        ["m-drinks/m-lager", "top"],
+        ["m-drinks/m-lager", "bottom"],
+        ["m-drinks/m-beer", "middle"],
+        ["m-drinks/m-beer", "top"],
+      ]);
+    });
+
+    it("a row inside an included menu", async () => {
+      const el = await mount({ nodes: [...lunchNodes(), wines()] });
+      await toggle(el, "included-wine");
+      await refused(el, "m-burger", [
+        ["included-wine/wine-lager", "top"],
+        ["included-wine/wine-lager", "bottom"],
+        ["included-wine/wine-red", "middle"],
+        ["included-wine/wine-red", "bottom"],
+      ]);
+    });
+
+    it("a product over an open or closed list already holding that product", async () => {
+      const el = await mount();
+      await toggle(el, "m-drinks");
+      await toggle(el, "m-fav");
+      await refused(el, "m-drinks/m-lemonade", [
+        ["m-fav/m-fav-lemonade", "top"],
+        ["m-fav/m-fav-lemonade", "bottom"],
+      ]);
+      await toggle(el, "m-fav");
+      await refused(el, "m-drinks/m-lemonade", [["m-fav", "middle"]]);
+      // Beer, a closed sibling, already holds Lager.
+      await refused(el, "m-drinks/m-lager", [["m-drinks/m-beer", "middle"]]);
+    });
+
+    it("a product over the top level already holding that product", async () => {
+      const el = await mount({
+        nodes: [...lunchNodes(), productNode("m-top-lemonade", "p-lemonade")],
+      });
+      await toggle(el, "m-drinks");
+      await refused(el, "m-drinks/m-lemonade", [
+        ["m-burger", "top"],
+        ["m-burger", "bottom"],
+      ]);
+    });
+
+    it("a section over a list already holding that section", async () => {
+      const el = await mount();
+      await refused(el, "m-drinks", [["m-fav", "middle"]]);
+      await toggle(el, "m-fav");
+      await refused(el, "m-drinks", [
+        ["m-fav/m-fav-lemonade", "top"],
+        ["m-fav/m-fav-lemonade", "bottom"],
+      ]);
+    });
+
+    it("a row of the dragged member's own list drawn in another place", async () => {
+      const el = await mount();
+      await toggle(el, "m-drinks");
+      await toggle(el, "m-fav");
+      await toggle(el, "m-fav/m-fav-drinks");
+      await refused(el, "m-drinks/m-lager", [
+        ["m-fav/m-fav-drinks/m-lemonade", "top"],
+        ["m-fav/m-fav-drinks/m-lemonade", "bottom"],
+      ]);
+    });
+
+    it("a product no longer in the catalogue, over another list", async () => {
+      const el = await mount({ nodes: [productNode("m-gone", "p-gone"), ...lunchNodes()] });
+      await toggle(el, "m-drinks");
+      await refused(el, "m-gone", [
+        ["m-drinks/m-lager", "top"],
+        ["m-drinks/m-lager", "bottom"],
+        ["m-drinks/m-beer", "middle"],
+      ]);
+    });
+  });
+
+  it("reorders a section beside a closed sibling section that lies inside it elsewhere, never into it", async () => {
+    const el = await mount();
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-fav");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks", "middle");
+    expect(drops(el)).toEqual({ ...noDrop, before: ["m-drinks"] });
+    pointer(from, "pointerup", nameAt(el, "m-drinks"));
+    expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 1 }]);
+    expect(intos).toEqual([]);
+  });
+
+  it("still reorders a product no longer in the catalogue among its siblings, never into one", async () => {
+    const el = await mount({ nodes: [productNode("m-gone", "p-gone"), ...lunchNodes()] });
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-gone");
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    expect(drops(el)).toEqual({ ...noDrop, after: ["m-fav"] });
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(moves).toEqual([{ path: [], memberId: "m-gone", to: 3 }]);
+    expect(intos).toEqual([]);
+  });
 });
 
 it("cancels a drag on Escape, sending nothing, and the click that ends it toggles nothing", async () => {
@@ -1230,7 +1812,7 @@ it("cancels a drag on Escape, sending nothing, and the click that ends it toggle
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-drinks"));
+  pointer(from, "pointermove", nameAt(el, "m-drinks"), at(el, "m-drinks", "bottom"));
   await settle(el);
   expect(marked(el, "dragging")).toEqual(["m-burger"]);
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
@@ -1275,7 +1857,7 @@ it("sends nothing when the pointer is cancelled", async () => {
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   pointer(from, "pointercancel", nameAt(el, "m-fav"));
   await settle(el);
   expect(moves).toEqual([]);
@@ -1296,7 +1878,7 @@ it("sends nothing when a drag is released where it started", async () => {
   expect(moves).toEqual([]);
 });
 
-it("maps a row to the sibling holding it by whole member ids, not by a shared prefix", async () => {
+it("tells a row inside the dragged section by whole member ids, not by a shared prefix", async () => {
   const el = await mount({
     nodes: [
       productNode("m-burger", "p-burger"),
@@ -1306,13 +1888,14 @@ it("maps a row to the sibling holding it by whole member ids, not by a shared pr
   });
   await toggle(el, "m-fav-drinks");
   const moves = listen(el, "wt-member-move");
-  const from = grip(el, "m-burger");
+  const intos = listen(el, "wt-member-move-into");
+  const from = grip(el, "m-fav");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav-drinks/m-lager"));
-  await settle(el);
-  expect(marked(el, "drop-gap-after")).toEqual(["m-fav-drinks/m-lemonade"]);
+  await dragOver(el, from, "m-fav-drinks/m-lager", "bottom");
+  expect(drops(el)).toEqual({ ...noDrop, after: ["m-fav-drinks/m-lager"] });
   pointer(from, "pointerup", nameAt(el, "m-fav-drinks/m-lager"));
-  expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
+  expect(intos).toEqual([{ from: [], memberId: "m-fav", to: ["m-fav-drinks"], position: 1 }]);
+  expect(moves).toEqual([]);
 });
 
 it("draws a grip on every top-level row, and no grip space on any", async () => {
@@ -1328,7 +1911,7 @@ it("starts no drag while busy or from a button other than the main one", async (
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   expect(marked(el, "dragging")).toEqual([]);
   pointer(from, "pointerup", nameAt(el, "m-fav"));
@@ -1336,7 +1919,7 @@ it("starts no drag while busy or from a button other than the main one", async (
   el.busy = false;
   await settle(el);
   pointer(from, "pointerdown", from, { button: 2 });
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   expect(marked(el, "dragging")).toEqual([]);
   pointer(from, "pointerup", nameAt(el, "m-fav"));
@@ -1348,7 +1931,7 @@ it("sends nothing from a drag released after the tree turned busy", async () => 
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   el.busy = true;
   await settle(el);
   pointer(from, "pointerup", nameAt(el, "m-fav"));
@@ -1384,10 +1967,10 @@ it("follows only the pointer that started the drag", async () => {
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"), { pointerId: 2 });
+  pointer(from, "pointermove", nameAt(el, "m-fav"), { ...at(el, "m-fav", "bottom"), pointerId: 2 });
   await settle(el);
   expect(marked(el, "dragging")).toEqual([]);
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   pointer(from, "pointerup", nameAt(el, "m-fav"), { pointerId: 2 });
   await settle(el);
   expect(marked(el, "dragging")).toEqual(["m-burger"]);
@@ -1400,7 +1983,7 @@ it("keeps the marks on the right rows when a refresh redraws the tree mid-drag",
   const el = await mount();
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   el.nodes = [favourites(), productNode("m-burger", "p-burger"), drinksNode("m-drinks")];
   await settle(el);
@@ -1416,7 +1999,7 @@ it("offers no gap while the pointer is over no row", async () => {
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   expect(marked(el, "drop-gap-after")).toEqual(["m-fav"]);
   const below = table(el).getBoundingClientRect().bottom + 40;
@@ -1434,7 +2017,7 @@ it("sends nothing for a drag whose member a refresh removed", async () => {
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   el.nodes = [drinksNode("m-drinks"), favourites()];
   await settle(el);
@@ -1453,7 +2036,7 @@ it("sends nothing when released straight after a refresh removed the dragged mem
   const moves = listen(el, "wt-member-move");
   const from = grip(el, "m-burger");
   pointer(from, "pointerdown");
-  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   el.nodes = [drinksNode("m-drinks"), favourites()];
   await settle(el);
@@ -1491,7 +2074,7 @@ it("sends nothing when released after a refresh removed the sibling it would hav
   const el = await mount();
   const moves = listen(el, "wt-member-move");
   pointer(grip(el, "m-burger"), "pointerdown");
-  pointer(grip(el, "m-burger"), "pointermove", nameAt(el, "m-fav"));
+  pointer(grip(el, "m-burger"), "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
   await settle(el);
   expect(marked(el, "drop-gap-after")).toEqual(["m-fav"]);
   el.nodes = [productNode("m-burger", "p-burger"), drinksNode("m-drinks")];

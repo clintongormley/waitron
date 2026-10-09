@@ -306,6 +306,37 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     at(grip, "pointercancel", over);
   });
 
+  it("renders accessibly mid-drag over a closed section a drop would go into", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      { nodes, products, menuName: "Lunch Menu", current: ["m-drinks"] },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    for (let round = 0; round < 3; round++) await table.updateComplete;
+    const grip = table.shadowRoot!.querySelector('[data-test="drag-m-burger"]')!;
+    const beer = table.shadowRoot!.querySelector('tr[data-row-key="m-drinks/m-beer"]')!;
+    const move = (type: string, over: Element = beer) => {
+      const box = over.getBoundingClientRect();
+      grip.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          clientX: box.x + 8,
+          clientY: box.y + box.height / 2,
+        }),
+      );
+    };
+    move("pointerdown", grip);
+    move("pointermove");
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(beer.querySelector("td")!.part.contains("drop-target")).toBe(true);
+    await expectNoA11yViolations(host);
+    move("pointercancel");
+  });
+
   it("renders accessibly after a move by key, with its announcement", async () => {
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",

@@ -15,6 +15,9 @@ export const treeDragStyles = css`
   wt-data-table::part(dragging) {
     opacity: var(--wt-opacity-disabled);
   }
+  wt-data-table::part(drop-target) {
+    border-inline-start: var(--wt-selected-ring);
+  }
   wt-data-table::part(drop-gap-before) {
     padding-block-start: calc(var(--wt-space-3) + var(--wt-tap-min));
     border-block-start: var(--wt-field-line-width-active) dashed var(--wt-color-primary);

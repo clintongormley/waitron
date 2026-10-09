@@ -32,7 +32,11 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
-import { ownPresentation, type StructureAddAction } from "../widgets/menu-structure-table.js";
+import {
+  ownPresentation,
+  sectionIdsWithin,
+  type StructureAddAction,
+} from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -235,13 +239,6 @@ function ownedSections(
       ];
     })
     .filter(({ sectionId }) => !seen.has(sectionId) && !!seen.add(sectionId));
-}
-
-/** The ids of every section at or below `node`, wherever it appears inside it. */
-function sectionIdsWithin(node: MenuStructureNode): string[] {
-  return node.ref.kind === "section"
-    ? [node.ref.sectionId, ...(node.children ?? []).flatMap(sectionIdsWithin)]
-    : [];
 }
 
 function listIdOf(structure: MenuStructure | null, trail: MenuStructureNode[]): string | null {
@@ -1525,6 +1522,44 @@ export class MenusScreen extends LitElement {
     );
   }
 
+  /** Moves one member into another list of the menu, as the bulk Move does, and opens that list so
+   * the moved row is drawn while the menu on screen still has it there. Its paths are checked when
+   * it is sent: while it waits, a change can move either list or take it off the menu, or the
+   * person can open another menu. */
+  #moveInto(from: string[], memberId: string, to: string[], position: number | undefined): void {
+    const menuId = this.menuId;
+    // `#targetAt` falls back to an ancestor for a path that no longer leads anywhere.
+    const resolves = (path: string[]) => trailOf(this.structure, path).length === path.length;
+    this.memberError = null;
+    this.busy = true;
+    this.#writes.run(this.#targetAt(to).listId, async () => {
+      if (this.menuId !== menuId || !resolves(from) || !resolves(to)) {
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      const source = this.#targetAt(from);
+      const destination = this.#targetAt(to);
+      try {
+        await this.api.moveSectionMembersInto(
+          destination.listId,
+          [{ listId: source.listId, memberId }],
+          position,
+        );
+      } catch (error) {
+        if (!this.#reportRefusedElsewhere(destination, error))
+          this.memberError = codeMessage(codeOf(error));
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      await this.#refresh();
+      if (destination.menuId === this.menuId && this.#holds(destination)) this.#edit(to);
+      else this.#reportSavedToLost(destination);
+      this.busy = false;
+    });
+  }
+
   #edit(path: string[]): void {
     this.path = path;
     this.memberError = null;
@@ -2386,6 +2421,18 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           const { path, memberId, to } = event.detail;
           this.#move(path, memberId, to);
+        }}
+        @wt-member-move-into=${(
+          event: CustomEvent<{
+            from: string[];
+            memberId: string;
+            to: string[];
+            position?: number;
+          }>,
+        ) => {
+          event.stopPropagation();
+          const { from, memberId, to, position } = event.detail;
+          this.#moveInto(from, memberId, to, position);
         }}
         @wt-member-edit=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
           event.stopPropagation();

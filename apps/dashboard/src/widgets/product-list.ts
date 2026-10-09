@@ -167,9 +167,6 @@ export class ProductList extends LitElement {
       wt-data-table::part(variant-cell) {
         display: block;
       }
-      wt-data-table::part(drop-target) {
-        border-inline-start: var(--wt-selected-ring);
-      }
       wt-data-table[narrow]::part(tree-heading) {
         margin-inline-start: var(--tree-arrow-width);
       }

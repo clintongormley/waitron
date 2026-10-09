@@ -4,6 +4,9 @@
 "Carta: {name}" in the Structure tree and shortcut picker. Search fields now say "Search" /
 "Buscar". See [the current wording contract](../../developers/design-system.md#structure).
 
+**2026-10-09:** every statement below that a grip or a drag moves a member only among its siblings
+is superseded by A338, see `2026-10-09-a338-cross-section-drag.md`.
+
 
 > **For agentic workers:** implement each task test-first: write the failing test, run it and watch
 > it fail for the reason you expect, then write the least code that passes. Use
@@ -473,6 +476,7 @@ on screen. Grips are disabled while `busy`, as today (`reorder-table.ts` handle,
    `to: 2`; nothing is sent per row crossed.
 5. Pointer over a row outside the dragged row's siblings (a child of another section, the root)
    offers no gap and a release there sends nothing.
+   (2026-10-09: superseded by A338, see `2026-10-09-a338-cross-section-drag.md`.)
 6. Escape during a drag cancels it, sends nothing, and the following click does not toggle the row it
    ended on. `pointercancel` sends nothing.
 7. A release where the drag started sends nothing.
