@@ -91,30 +91,13 @@ interface GoneEntry {
   name: string | null;
 }
 
-function sameIds(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((id) => b.includes(id));
-}
-
-/** A read's available slots, or null (Every) when they are all the profile allows. */
-function everyOrList(
-  slots: readonly ScreenSlot[],
-  allowed: readonly { id: string }[],
-): string[] | null {
-  const ids = slots.filter((slot) => slot.available).map((slot) => slot.id);
-  return sameIds(
-    ids,
-    allowed.map((place) => place.id),
-  )
-    ? null
-    : ids;
-}
-
-/** The entries a read marks no longer available, each kind's after it, a kind taken whole alone. */
+/** What a narrowing took, as the read marks it, each kind's after it, a kind taken whole alone.
+ * A station or zone switched off on its own page is not among them: it stays in the choice. */
 function goneFromRead(read: readonly ResolvedKitchenScreen[]): GoneEntry[] {
   return read.flatMap((screen): GoneEntry[] =>
     screen.available
       ? [...screen.stations, ...(screen.zones ?? [])]
-          .filter((slot) => !slot.available)
+          .filter((slot) => !slot.available && !slot.switchedOff)
           .map((slot) => ({ kind: screen.kind, name: slot.name }))
       : [{ kind: screen.kind, name: null }],
   );
@@ -197,12 +180,10 @@ const CHOICE_FIELD: Record<string, KitchenField> = {
 
 /**
  * The field a refusal is about, when it is one of `shown` (CLAUDE.md §3: by what the error carries).
- * A till's choice may hold two station lists; a refusal naming stations goes under the one that
- * holds the station, or the only explicit one.
+ * A till's choice may hold two station lists; a refusal about stations names its screen.
  */
 function refusedField(
   error: unknown,
-  screens: KitchenDraft,
   sharedDisplay: boolean,
   shown: readonly EditField[],
 ): EditField | null {
@@ -222,15 +203,10 @@ function refusedField(
     field = !sharedDisplay && params.screen === "station" ? "kitchenStations" : "screen";
   else if (code === "kitchen_screen.invalid") {
     field = typeof params.field === "string" ? CHOICE_FIELD[params.field] : undefined;
-    const onlyTillList =
-      Array.isArray(screens.station?.stationIds) &&
-      !PASS_KINDS.some((kind) => Array.isArray(screens[kind]?.stationIds));
-    if (field === "stations" && !sharedDisplay && onlyTillList) field = "kitchenStations";
+    if (field === "stations" && !sharedDisplay && params.screen === "station")
+      field = "kitchenStations";
   } else if (code === "station.not_allowed")
-    field =
-      !sharedDisplay && screens.station?.stationIds?.includes(String(params.stationId))
-        ? "kitchenStations"
-        : "stations";
+    field = !sharedDisplay && params.screen === "station" ? "kitchenStations" : "stations";
   else field = FIELD_BY_CODE[code];
   return field !== undefined && shown.includes(field) ? field : null;
 }
@@ -1001,7 +977,7 @@ export class DevicesScreen extends LitElement {
       if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
       const profileId = this.chosenProfileId;
-      const field = refusedField(error, this.chosenScreens, this.#sharedDisplay(profileId), [
+      const field = refusedField(error, this.#sharedDisplay(profileId), [
         "name",
         "profile",
         ...this.#kitchenShown(profileId, this.chosenScreens),
@@ -1072,7 +1048,7 @@ export class DevicesScreen extends LitElement {
   }
 
   /** "Station screen: Cocina, Barra (Deli no longer available)", one per screen the read holds. */
-  #screenLine(device: DeviceRow, screen: ResolvedKitchenScreen): string {
+  #screenLine(screen: ResolvedKitchenScreen): string {
     const kind = t(`device_profiles.kitchen_screen.${screen.kind}`);
     const gone = (names: string[]) =>
       t(names.length === 1 ? "devices.readout_gone_one" : "devices.readout_gone_many").replace(
@@ -1080,14 +1056,9 @@ export class DevicesScreen extends LitElement {
         names.join(", "),
       );
     if (!screen.available) return `${kind} ${gone([kind])}`;
-    const profileId = device.deviceProfileId ?? "";
-    const named = (
-      slots: readonly ScreenSlot[],
-      allowed: readonly { id: string }[],
-      every: string,
-    ) =>
-      everyOrList(slots, allowed) === null
-        ? every
+    const named = (slots: readonly ScreenSlot[], every: boolean, label: string) =>
+      every
+        ? label
         : slots
             .filter((slot) => slot.available)
             .map((slot) => slot.name)
@@ -1099,18 +1070,14 @@ export class DevicesScreen extends LitElement {
     if (!screen.stations.some((slot) => slot.available)) return `${kind}${tail}`;
     const stations = named(
       screen.stations,
-      this.#allowedStations(profileId, screen.kind),
+      screen.everyStation,
       t("devices.readout_every_station"),
     );
     if (screen.kind === "station") return `${kind}: ${stations}${tail}`;
     const zones =
       screen.zones === null
         ? t("devices.readout_every_zone")
-        : named(
-            screen.zones,
-            this.#allowedZones(profileId, screen.kind),
-            t("devices.readout_every_zone"),
-          );
+        : named(screen.zones, screen.everyZone, t("devices.readout_every_zone"));
     return `${kind}: ${stations} · ${zones}${tail}`;
   }
 
@@ -1124,7 +1091,7 @@ export class DevicesScreen extends LitElement {
               (screen, index) =>
                 html`${index === 0 ? nothing : html`<br />`}<span
                     data-test=${`device-screen-${device.id}-${screen.kind}`}
-                    >${this.#screenLine(device, screen)}</span
+                    >${this.#screenLine(screen)}</span
                   >`,
             )
       }</span
@@ -1170,7 +1137,7 @@ export class DevicesScreen extends LitElement {
     const epoch = ++this.#editEpoch;
     this.editing = device;
     const profileId = device.deviceProfileId ?? "";
-    const screens = this.#draftFromRead(device.kitchenScreens, profileId);
+    const screens = this.#draftFromRead(device.kitchenScreens, profileId, true);
     this.editGone = goneFromRead(device.kitchenScreens);
     this.#editSavedScreens = JSON.stringify(this.#screensPayload(screens));
     this.#editOpenProfileId = profileId;
@@ -1252,11 +1219,10 @@ export class DevicesScreen extends LitElement {
     this.editSaving = false;
   }
 
-  /** Sent when the choice changed, the profile differs from the one the dialog opened on, or the
-   * read holds entries no longer available, since a save is what clears them. */
+  /** Sent only when the choice or the profile changed: the server replaces the whole stored choice
+   * and forgets the device's removals, which only a pick may do (decision 21). */
   #sendScreens(): boolean {
     return (
-      this.editGone.length > 0 ||
       this.editForm.profileId !== this.#editOpenProfileId ||
       JSON.stringify(this.#screensPayload(this.editForm.screens)) !== this.#editSavedScreens
     );
@@ -1477,7 +1443,7 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#editEpoch) return;
       this.editSaving = false;
-      const field = refusedField(error, form.screens, this.#sharedDisplay(form.profileId), [
+      const field = refusedField(error, this.#sharedDisplay(form.profileId), [
         "name",
         "profile",
         ...this.#kitchenShown(form.profileId, form.screens),
@@ -1974,21 +1940,25 @@ export class DevicesScreen extends LitElement {
   }
 
   /**
-   * The draft a device's read gives: only what the read marks available, so a save never sends back
-   * what a narrowing took, and a list holding all the profile allows as Every.
+   * The draft a device's read gives, "every" exactly where the read says so, never what a narrowing
+   * took. Edit keeps a station or zone switched off on its own page, which the server lets the
+   * device keep; Pair, re-enabling a device, starts without them.
    */
-  #draftFromRead(read: readonly ResolvedKitchenScreen[], profileId: string): KitchenDraft {
+  #draftFromRead(
+    read: readonly ResolvedKitchenScreen[],
+    profileId: string,
+    keepSwitchedOff = false,
+  ): KitchenDraft {
     const draft: KitchenDraft = {};
+    const kept = (slots: readonly ScreenSlot[]) =>
+      slots
+        .filter((slot) => slot.available || (keepSwitchedOff && slot.switchedOff))
+        .map((slot) => slot.id);
     for (const screen of read) {
       if (!screen.available) continue;
-      const stationIds = everyOrList(
-        screen.stations,
-        this.#allowedStations(profileId, screen.kind),
-      );
+      const stationIds = screen.everyStation ? null : kept(screen.stations);
       const zoneIds =
-        screen.kind === "station" || screen.zones === null
-          ? null
-          : everyOrList(screen.zones, this.#allowedZones(profileId, screen.kind));
+        screen.kind === "station" || screen.everyZone ? null : kept(screen.zones ?? []);
       if (stationIds?.length === 0 || zoneIds?.length === 0) continue;
       draft[screen.kind] = { stationIds, zoneIds };
     }
@@ -1998,8 +1968,7 @@ export class DevicesScreen extends LitElement {
   /**
    * The draft within what `profileId` offers: a kind it does not offer goes, lists lose what it does
    * not allow, and a list left empty takes its kind with it. A kitchen display keeps one kind, a till
-   * one pass kind; a till's station screen on Every is kept as none, which the dialog labels
-   * "Every station the profile allows".
+   * one pass kind. A switched-off entry stays while the profile's list allows it.
    */
   #fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
     const shared = this.#sharedDisplay(profileId);
@@ -2008,12 +1977,22 @@ export class DevicesScreen extends LitElement {
       const scope = screens[kind];
       if (scope === undefined) continue;
       if (shared ? Object.keys(out).length > 0 : kind === "pass_monitor" && out.pass) continue;
-      const within = (ids: readonly string[] | null, allowed: readonly { id: string }[]) =>
-        ids === null ? null : ids.filter((id) => allowed.some((place) => place.id === id));
-      const stationIds = within(scope.stationIds, this.#allowedStations(profileId, kind));
-      const zoneIds = within(scope.zoneIds, this.#allowedZones(profileId, kind));
+      const bound = this.#bound(profileId, kind)!;
+      const within = (
+        ids: readonly string[] | null,
+        places: readonly { id: string }[],
+        allowed: readonly string[] | null,
+      ) =>
+        ids === null
+          ? null
+          : ids.filter(
+              (id) =>
+                places.some((place) => place.id === id) &&
+                (allowed === null || allowed.includes(id)),
+            );
+      const stationIds = within(scope.stationIds, this.stations, bound.stationIds);
+      const zoneIds = within(scope.zoneIds, this.zones, bound.zoneIds);
       if (stationIds?.length === 0 || zoneIds?.length === 0) continue;
-      if (!shared && kind === "station" && stationIds === null) continue;
       out[kind] = { stationIds, zoneIds };
     }
     return out;
@@ -2047,7 +2026,10 @@ export class DevicesScreen extends LitElement {
     return fields;
   }
 
-  /** "Every …", then, once it is off, a switch for each entry the profile allows. */
+  /**
+   * "Every …", then, once it is off, a switch for each entry the profile allows, and each entry
+   * the list keeps that is switched off on its own page, marked and fixed.
+   */
   #choiceList(list: {
     test: string;
     heading: string;
@@ -2058,10 +2040,15 @@ export class DevicesScreen extends LitElement {
     itemTest: string;
     ids: readonly string[] | null;
     allowed: readonly { id: string; name: string }[];
+    all: readonly { id: string; name: string; active: boolean }[];
+    /** What a switched-off entry's label adds, as the profile editor marks it. */
+    mark: string;
     disabled: boolean;
     set(ids: string[] | null): void;
   }): TemplateResult {
     const { ids } = list;
+    const switchedOff =
+      ids === null ? [] : list.all.filter((place) => !place.active && ids.includes(place.id));
     return this.#switchGroup(list.test, list.heading, list.error, [
       html`<wt-switch
         data-test=${list.everyTest}
@@ -2091,6 +2078,16 @@ export class DevicesScreen extends LitElement {
                 }}
               ></wt-switch>`,
           )),
+      ...switchedOff.map(
+        (place) =>
+          html`<wt-switch
+            data-test=${`${list.itemTest}-${place.id}`}
+            name=${list.name}
+            label=${`${place.name} (${list.mark})`}
+            .checked=${true}
+            disabled
+          ></wt-switch>`,
+      ),
     ]);
   }
 
@@ -2169,7 +2166,7 @@ export class DevicesScreen extends LitElement {
             searchPlaceholder=${common.searchPlaceholder}
             noResultsLabel=${common.noResultsLabel}
             .options=${[
-              { value: "", label: t("devices.every_station_profile") },
+              { value: "", label: t("device_profiles.every_station") },
               ...passKinds.map((kind) => ({ value: kind, label: kindLabel(kind) })),
             ]}
             .value=${main}
@@ -2188,10 +2185,17 @@ export class DevicesScreen extends LitElement {
             error: errors.kitchenStations,
             name: "kitchenStations",
             everyTest: `${prefix}-station-every`,
-            everyLabel: t("devices.every_station_profile"),
+            // With no choice a till's Station screen lists all `/api/stations` returns, which reads
+            // no profile.
+            everyLabel:
+              screens.station?.stationIds === null
+                ? t("devices.every_station_profile")
+                : t("device_profiles.every_station"),
             itemTest: `${prefix}-station-station`,
             ids: screens.station?.stationIds ?? null,
             allowed: this.#allowedStations(profileId, "station"),
+            all: this.stations,
+            mark: t("devices.station_disabled_mark"),
             disabled,
             set: (stationIds) =>
               set(
@@ -2218,6 +2222,8 @@ export class DevicesScreen extends LitElement {
               itemTest: `${prefix}-screen-station`,
               ids: scope.stationIds,
               allowed: this.#allowedStations(profileId, main),
+              all: this.stations,
+              mark: t("devices.station_disabled_mark"),
               disabled,
               set: (stationIds) =>
                 set({ ...screens, [main]: { ...scope, stationIds } }, "stations"),
@@ -2235,6 +2241,8 @@ export class DevicesScreen extends LitElement {
                     itemTest: `${prefix}-screen-zone`,
                     ids: scope.zoneIds,
                     allowed: this.#allowedZones(profileId, main),
+                    all: this.zones,
+                    mark: t("device_profiles.zone_disabled_mark"),
                     disabled,
                     set: (zoneIds) => set({ ...screens, [main]: { ...scope, zoneIds } }, "zones"),
                   })

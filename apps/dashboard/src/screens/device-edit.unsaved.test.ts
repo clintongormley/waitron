@@ -538,6 +538,9 @@ const kitchenDisplay = {
         {
           kind: "station" as const,
           available: true,
+          everyStation: false,
+          everyZone: true,
+          profileEveryStation: true,
           stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
           zones: null,
         },

@@ -783,6 +783,12 @@ export interface ResolvedKitchenScreen {
   kind: KitchenScreenKind;
   /** False when a profile narrowing took this kind from the device. */
   available: boolean;
+  /** The device's own station list is "every"; false on a kind it no longer holds. */
+  everyStation: boolean;
+  /** As `everyStation`, for zones; a station screen's is true. */
+  everyZone: boolean;
+  /** The profile's station list for this kind is "every", or it has no row for it. */
+  profileEveryStation: boolean;
   /** Display order, the device's own list or else what its profile allows it. */
   stations: ScreenSlot[];
   /** null: no zone filter. */

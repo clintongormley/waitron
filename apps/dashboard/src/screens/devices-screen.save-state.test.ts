@@ -152,6 +152,9 @@ const onOffStation: DeviceRow = {
     {
       kind: "station",
       available: true,
+      everyStation: false,
+      everyZone: true,
+      profileEveryStation: false,
       stations: [
         { id: "s1", name: "Cocina", available: true, switchedOff: false },
         { id: "s-off", name: "Old", available: false, switchedOff: true },
@@ -170,8 +173,44 @@ const screenTaken: DeviceRow = {
   ...onOffStation,
   id: "k2",
   label: "Pantalla Pase",
-  kitchenScreens: [{ kind: "pass_monitor", available: false, stations: [], zones: null }],
+  kitchenScreens: [
+    {
+      kind: "pass_monitor",
+      available: false,
+      everyStation: false,
+      everyZone: false,
+      profileEveryStation: false,
+      stations: [],
+      zones: null,
+    },
+  ],
 };
+
+/** A kitchen display holding a station switched off on its own page and one a narrowing took. */
+const heldAndGone: DeviceRow = {
+  ...onOffStation,
+  id: "k3",
+  label: "Pantalla Fría",
+  kitchenScreens: [
+    {
+      kind: "station",
+      available: true,
+      everyStation: false,
+      everyZone: true,
+      profileEveryStation: false,
+      stations: [
+        { id: "s1", name: "Cocina", available: true, switchedOff: false },
+        { id: "s-gone", name: "Deli", available: false, switchedOff: false },
+        { id: "s-off", name: "Old", available: false, switchedOff: true },
+      ],
+      zones: null,
+    },
+  ],
+};
+const withHeldAndGone = () =>
+  stubApi({
+    listDevices: vi.fn().mockResolvedValue([till, onOffStation, screenTaken, heldAndGone]),
+  });
 
 const returning: JoinRequestRow = {
   id: "j1",
@@ -353,12 +392,12 @@ describe("the Edit dialog's Save", () => {
   });
 
   it.each([
-    ["a switched-off station", "k1", "station"],
-    ["a screen its profile took", "k2", ""],
-  ])("opens quiet on a kitchen display holding %s", async (_, id, screen) => {
+    ["a switched-off station", "k1", "station", "[data-test=edit-screen-station-s-off]"],
+    ["a screen its profile took", "k2", "", "[data-test=edit-gone]"],
+  ])("opens quiet on a kitchen display holding %s", async (_, id, screen, listed) => {
     const { el, api } = await openEdit(id);
     expect(value(el, "edit-screen")).toBe(screen);
-    expect(q(el, "[data-test=edit-gone]")).not.toBeNull();
+    expect(q(el, listed)).not.toBeNull();
     expect(value(el, "edit-receipt-printer")).toBe("pr1");
     expect(checked(el, "edit-approved-profiles")).toEqual([["pl", true]]);
     expect(await state(el, "edit-save")).toEqual(quiet);
@@ -448,7 +487,7 @@ describe("the Edit dialog's Save", () => {
     expect(api.setDeviceReader).not.toHaveBeenCalled();
   });
 
-  it("a kitchen display's switched-off station is not sent back once another field changes", async () => {
+  it("a kitchen screen's held switched-off station is kept once another field changes: the choice is not sent, so the server keeps it", async () => {
     const { el, api } = await openEdit("k1");
     await typeName(el, "Pantalla 2");
     await press(el, "edit-save");
@@ -456,7 +495,51 @@ describe("the Edit dialog's Save", () => {
     expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k1", {
       name: "Pantalla 2",
       profileId: "pk",
-      kitchenScreens: [{ kind: "station", stationIds: ["s1"], zoneIds: null }],
+      receiptPrinterId: "pr1",
+      paymentSlipPrinterId: "pr2",
+    });
+  });
+
+  it("a rename of a device holding a switched-off station and a removal sends no kitchen screens, so the removal stays recorded", async () => {
+    const { el, api } = await openEdit("k3", withHeldAndGone());
+    expect(await state(el, "edit-save")).toEqual(quiet);
+    const off = q<HTMLElement & { checked: boolean; disabled: boolean; label: string }>(
+      el,
+      "[data-test=edit-screen-station-s-off]",
+    )!;
+    expect([off.checked, off.disabled, off.label]).toEqual([
+      true,
+      true,
+      `Old (${t("devices.station_disabled_mark")})`,
+    ]);
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[data-test=edit-gone-item]")].map((item) =>
+        item.textContent!.trim(),
+      ),
+    ).toEqual([
+      `${t("device_profiles.kitchen_screen.station")}: Deli (${t("devices.no_longer_available")})`,
+    ]);
+    await typeName(el, "Pantalla 3");
+    await press(el, "edit-save");
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k3", {
+      name: "Pantalla 3",
+      profileId: "pk",
+      receiptPrinterId: "pr1",
+      paymentSlipPrinterId: "pr2",
+    });
+  });
+
+  it("a changed station choice sends the switched-off station with it, and not the one a narrowing took", async () => {
+    const { el, api } = await openEdit("k3", withHeldAndGone());
+    await tick(el, "[data-test=edit-screen-station-s2]");
+    expect(await state(el, "edit-save")).toEqual(ready);
+    await press(el, "edit-save");
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k3", {
+      name: "Pantalla Fría",
+      profileId: "pk",
+      kitchenScreens: [{ kind: "station", stationIds: ["s1", "s2", "s-off"], zoneIds: null }],
       receiptPrinterId: "pr1",
       paymentSlipPrinterId: "pr2",
     });

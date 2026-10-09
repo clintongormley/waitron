@@ -56,6 +56,9 @@ const devices: DeviceRow[] = [
       {
         kind: "station",
         available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },
@@ -437,7 +440,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
   );
 
   it.each([390, 1280])(
-    "renders a kitchen display's Edit dialog with a pass monitor's lists and a station no longer available accessibly at %ipx",
+    "renders a kitchen display's Edit dialog with a pass monitor's lists, a station no longer available and a zone switched off accessibly at %ipx",
     async (width) => {
       await page.viewport(width, 900);
       const slot = (id: string, name: string, available = true) => ({
@@ -454,8 +457,11 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
           {
             kind: "pass_monitor",
             available: true,
+            everyStation: false,
+            everyZone: false,
+            profileEveryStation: true,
             stations: [slot("s1", "Cocina"), slot("s9", "Deli", false)],
-            zones: [slot("z1", "Terraza")],
+            zones: [slot("z1", "Terraza"), { ...slot("z3", "Patio", false), switchedOff: true }],
           },
         ],
       };
@@ -467,6 +473,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
             listZones: vi.fn().mockResolvedValue([
               { id: "z1", name: "Terraza", displayOrder: 0, active: true },
               { id: "z2", name: "Salón", displayOrder: 1, active: true },
+              { id: "z3", name: "Patio", displayOrder: 2, active: false },
             ]),
             listProfileKitchenScreens: vi.fn().mockResolvedValue([
               {
@@ -485,6 +492,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z2]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z3]")).not.toBeNull();
       const dialog = el
         .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
         .shadowRoot!.querySelector("dialog")!;
@@ -746,6 +754,9 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
             {
               kind: "station",
               available: true,
+              everyStation: false,
+              everyZone: true,
+              profileEveryStation: true,
               stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
               zones: null,
             },

@@ -81,6 +81,9 @@ const devices: DeviceRow[] = [
       {
         kind: "station",
         available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
         zones: null,
       },
@@ -4095,6 +4098,9 @@ describe("add a device", () => {
           {
             kind: "station",
             available: true,
+            everyStation: false,
+            everyZone: true,
+            profileEveryStation: false,
             stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
             zones: null,
           },
@@ -4245,6 +4251,9 @@ describe("add a device", () => {
             {
               kind: "pass",
               available: true,
+              everyStation: true,
+              everyZone: true,
+              profileEveryStation: true,
               stations: [slot("s1", "Cocina"), slot("s2", "Barra")],
               zones: null,
             },
@@ -4324,6 +4333,9 @@ describe("add a device", () => {
             {
               kind: "station",
               available: true,
+              everyStation: false,
+              everyZone: true,
+              profileEveryStation: false,
               stations: [{ id: "s1", name: "Cocina", available: false, switchedOff: true }],
               zones: null,
             },
@@ -4697,7 +4709,7 @@ describe("a device's kitchen screens", () => {
     const pass = field(el, "pair-pass");
     expect([pass.label, pass.value]).toEqual([t("devices.pass_screen_shows"), ""]);
     expect(pass.options).toEqual([
-      { value: "", label: t("devices.every_station_profile") },
+      { value: "", label: t("device_profiles.every_station") },
       { value: "pass", label: t("device_profiles.kitchen_screen.pass") },
       { value: "pass_monitor", label: t("device_profiles.kitchen_screen.pass_monitor") },
     ]);
@@ -4759,6 +4771,9 @@ describe("a device's kitchen screens", () => {
       {
         kind: "pass_monitor",
         available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [slot("s1"), slot("s2"), slot("s3")],
         zones: null,
       },
@@ -4779,7 +4794,15 @@ describe("a device's kitchen screens", () => {
 
   it("Edit lists a removal as no longer available, outside the draft: it opens quiet and its save does not send it back", async () => {
     const row = kds("k1", [
-      { kind: "station", available: true, stations: [slot("s1"), slot("s3", false)], zones: null },
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [slot("s1"), slot("s3", false)],
+        zones: null,
+      },
     ]);
     const api = ksApi([row]);
     const el = await openEdit(api, "k1");
@@ -4809,15 +4832,21 @@ describe("a device's kitchen screens", () => {
     await flush(el);
     await saveEdit(el);
     await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
-      name: "Pantalla 2",
-      kitchenScreens: [{ kind: "station", stationIds: ["s1"], zoneIds: null }],
-    });
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({ name: "Pantalla 2" });
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
   });
 
   it("Edit lists a screen kind the profile took as no longer available, and opens with no Pass choice", async () => {
     const row = tillRow("t1", [
-      { kind: "pass_monitor", available: false, stations: [], zones: null },
+      {
+        kind: "pass_monitor",
+        available: false,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: false,
+        stations: [],
+        zones: null,
+      },
     ]);
     const el = await openEdit(ksApi([row]), "t1");
     expect(field(el, "edit-pass").value).toBe("");
@@ -4833,9 +4862,17 @@ describe("a device's kitchen screens", () => {
     expect(button.variant).toBe("secondary");
   });
 
-  it("Edit reads a list matching the profile's as Every, and a rename leaves the stored choice alone", async () => {
+  it("Edit reads a list the read calls every as Every, and a rename leaves the stored choice alone", async () => {
     const row = kds("k1", [
-      { kind: "station", available: true, stations: [slot("s1"), slot("s2")], zones: null },
+      {
+        kind: "station",
+        available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [slot("s1"), slot("s2")],
+        zones: null,
+      },
     ]);
     const api = ksApi([row]);
     const el = await openEdit(api, "k1");
@@ -4856,7 +4893,15 @@ describe("a device's kitchen screens", () => {
 
   it("Edit sends a changed choice, and a changed choice turns Save on", async () => {
     const row = kds("k1", [
-      { kind: "station", available: true, stations: [slot("s1"), slot("s2")], zones: null },
+      {
+        kind: "station",
+        available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [slot("s1"), slot("s2")],
+        zones: null,
+      },
     ]);
     const api = ksApi([row]);
     const el = await openEdit(api, "k1");
@@ -4871,6 +4916,148 @@ describe("a device's kitchen screens", () => {
       kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: null }],
     });
   });
+
+  it("Edit keeps an explicit list holding all its profile allows as that list, and a rename sends no kitchen screens", async () => {
+    const row = kds("k1", [
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [slot("s1"), slot("s2"), slot("s3", false)],
+        zones: null,
+      },
+    ]);
+    const api = ksApi([row]);
+    const el = await openEdit(api, "k1");
+    expect(switchesIn(el, "edit-screen-stations")).toEqual([
+      ["edit-screen-every-station", false],
+      ["edit-screen-station-s1", true],
+      ["edit-screen-station-s2", true],
+    ]);
+    q(el, "[data-test=edit-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Pantalla 2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    await saveEdit(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
+  });
+
+  describe("a till whose profile bounds its Kitchen screen", () => {
+    const bounded = [
+      ...offered.filter((entry) => entry.profileId !== "pa"),
+      {
+        profileId: "pa",
+        screens: {
+          station: { stationIds: ["s1", "s2"], zoneIds: null },
+          pass_monitor: { stationIds: null, zoneIds: null },
+        },
+      },
+    ];
+    const tillWith = (everyStation: boolean) =>
+      tillRow("t1", [
+        {
+          kind: "station",
+          available: true,
+          everyStation,
+          everyZone: true,
+          profileEveryStation: false,
+          stations: [slot("s1"), slot("s2")],
+          zones: null,
+        },
+      ]);
+
+    it.each([
+      ["an explicit list holding all it allows", false, ["s1", "s2"]],
+      ["every station the profile allows", true, null],
+    ])(
+      "keeps %s in what it sends when only the Pass choice changes",
+      async (_, everyStation, stationIds) => {
+        const api = ksApi([tillWith(everyStation)], {
+          listProfileKitchenScreens: vi.fn().mockResolvedValue(bounded),
+        });
+        const el = await openEdit(api, "t1");
+        expect(sw(el, "edit-station-every").checked).toBe(everyStation);
+        await chooseOption(q(el, "[data-test=edit-pass]")!, "pass_monitor");
+        await flush(el);
+        await saveEdit(el);
+        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+          kitchenScreens: [
+            { kind: "station", stationIds, zoneIds: null },
+            { kind: "pass_monitor", stationIds: null, zoneIds: null },
+          ],
+        });
+      },
+    );
+
+    it("labels an explicit every as the profile's stations, and no choice as every station", async () => {
+      const api = ksApi([tillWith(true), tillRow("t2", [])], {
+        listProfileKitchenScreens: vi.fn().mockResolvedValue(bounded),
+      });
+      const chosen = await openEdit(api, "t1");
+      expect(sw(chosen, "edit-station-every").label).toBe(t("devices.every_station_profile"));
+      const none = await openEdit(api, "t2");
+      expect(sw(none, "edit-station-every").label).toBe(t("device_profiles.every_station"));
+      expect(field(none, "edit-pass").options[0]).toEqual({
+        value: "",
+        label: t("device_profiles.every_station"),
+      });
+    });
+  });
+
+  it.each([
+    [{ code: "station.not_allowed", params: { stationId: "s2", screen: "pass_monitor" } }, "pass"],
+    [{ code: "station.not_allowed", params: { stationId: "s2", screen: "station" } }, "station"],
+    [
+      {
+        code: "kitchen_screen.invalid",
+        params: { field: "stationIds", reason: "not_found", screen: "station" },
+      },
+      "station",
+    ],
+    [
+      {
+        code: "kitchen_screen.invalid",
+        params: { field: "stationIds", reason: "not_found", screen: "pass_monitor" },
+      },
+      "pass",
+    ],
+  ])(
+    "a till holding two station lists places %o under the %s list it names",
+    async (error, under) => {
+      const list = (kind: "station" | "pass_monitor") => ({
+        kind,
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
+        stations: [slot("s1"), slot("s2")],
+        zones: null,
+      });
+      const api = ksApi([tillRow("t1", [list("station"), list("pass_monitor")])], {
+        updateDevice: vi.fn().mockRejectedValue(error),
+      });
+      const el = await openEdit(api, "t1");
+      toggle(el, "edit-station-station-s3", true);
+      await flush(el);
+      await saveEdit(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      await flush(el);
+      const message = codeMessage(error.code);
+      const other = under === "pass" ? "edit-station-shows" : "edit-screen-stations";
+      expect(groupError(el, under === "pass" ? "edit-screen-stations" : "edit-station-shows")).toBe(
+        message,
+      );
+      expect(groupError(el, other)).toBe("");
+    },
+  );
 
   it.each([
     [{ code: "kitchen_screen.required", params: {} }, "screen"],
@@ -4894,6 +5081,9 @@ describe("a device's kitchen screens", () => {
       {
         kind: "pass_monitor",
         available: true,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: true,
         stations: [slot("s1"), slot("s2")],
         zones: [slot("z1")],
       },
@@ -4913,13 +5103,24 @@ describe("a device's kitchen screens", () => {
   it.each([
     [{ code: "kitchen_screen.not_allowed", params: { screen: "pass_monitor" } }, "pass"],
     [{ code: "kitchen_screen.not_allowed", params: { screen: "station" } }, "station"],
-    [{ code: "station.not_allowed", params: { stationId: "s2" } }, "station"],
+    [{ code: "station.not_allowed", params: { stationId: "s2", screen: "station" } }, "station"],
   ])("a till's refusal %o shows under its %s choice", async (error, under) => {
     const row = tillRow("t1", [
-      { kind: "station", available: true, stations: [slot("s1"), slot("s2")], zones: null },
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
+        stations: [slot("s1"), slot("s2")],
+        zones: null,
+      },
       {
         kind: "pass_monitor",
         available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: true,
         stations: [slot("s1"), slot("s2"), slot("s3")],
         zones: null,
       },
@@ -4938,7 +5139,15 @@ describe("a device's kitchen screens", () => {
 
   it("an explicit list emptied is marked under it and holds Save", async () => {
     const row = kds("k1", [
-      { kind: "station", available: true, stations: [slot("s1")], zones: null },
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [slot("s1")],
+        zones: null,
+      },
     ]);
     const api = ksApi([row]);
     const el = await openEdit(api, "k1");
@@ -4960,12 +5169,23 @@ describe("a device's kitchen screens", () => {
         const liveData = new LiveData();
         const rows = [
           kds("k1", [
-            { kind: "station", available: true, stations: [slot("s1"), slot("s2")], zones: null },
+            {
+              kind: "station",
+              available: true,
+              everyStation: false,
+              everyZone: true,
+              profileEveryStation: false,
+              stations: [slot("s1"), slot("s2")],
+              zones: null,
+            },
           ]),
           tillRow("t1", [
             {
               kind: "pass",
               available: true,
+              everyStation: true,
+              everyZone: false,
+              profileEveryStation: true,
               stations: [slot("s1"), slot("s2"), slot("s3")],
               zones: [slot("z1")],
             },
@@ -4974,6 +5194,9 @@ describe("a device's kitchen screens", () => {
             {
               kind: "pass_monitor",
               available: true,
+              everyStation: true,
+              everyZone: true,
+              profileEveryStation: true,
               stations: [slot("s1"), slot("s2"), slot("s3")],
               zones: null,
             },
@@ -4982,6 +5205,9 @@ describe("a device's kitchen screens", () => {
             {
               kind: "station",
               available: true,
+              everyStation: false,
+              everyZone: true,
+              profileEveryStation: false,
               stations: [slot("s1"), slot("s3", false)],
               zones: null,
             },
@@ -5018,7 +5244,15 @@ describe("a device's kitchen screens", () => {
 
         vi.mocked(api.listDevices).mockResolvedValue([
           kds("k2", [
-            { kind: "station", available: true, stations: [slot("s1"), slot("s3")], zones: null },
+            {
+              kind: "station",
+              available: true,
+              everyStation: false,
+              everyZone: true,
+              profileEveryStation: false,
+              stations: [slot("s1"), slot("s3")],
+              zones: null,
+            },
           ]),
         ]);
         liveData.invalidate([{ type: "devices", id: "k2" }]);
