@@ -2064,29 +2064,32 @@ describe("updateHeldOrder", () => {
             .where(eq(products.id, productId))
         )[0],
       ).toEqual({ active: false, available: true });
-      await expect(
+      const addError = (await captureError(() =>
         parkOrder({ db }, cfg, {
           id: randomUUID(),
           zoneId,
           lines: [line],
         }),
-      ).rejects.toMatchObject({
-        code:
-          kind === "variant"
-            ? "product.variant_unavailable"
-            : kind === "extras item"
-              ? "extras.invalid"
-              : "product.unavailable",
-        params:
-          kind === "variant"
-            ? { variantId: productId }
-            : kind === "extras item"
-              ? { field: "productId" }
-              : { productId },
-      });
-      await expect(
+      )) as { code: string; params: unknown };
+      expect(addError.code).toBe(
+        kind === "variant"
+          ? "product.variant_unavailable"
+          : kind === "extras item"
+            ? "extras.invalid"
+            : "product.unavailable",
+      );
+      expect(addError.params).toEqual(
+        kind === "variant"
+          ? { variantId: productId }
+          : kind === "extras item"
+            ? { field: "productId" }
+            : { productId },
+      );
+      const paymentError = (await captureError(() =>
         withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, id)),
-      ).rejects.toMatchObject({ code: "product.unavailable", params: { productId } });
+      )) as { code: string; params: unknown };
+      expect(paymentError.code).toBe("product.unavailable");
+      expect(paymentError.params).toEqual({ productId });
       expect(await readLines(id)).toEqual(before);
     },
   );

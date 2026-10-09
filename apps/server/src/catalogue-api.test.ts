@@ -1426,8 +1426,10 @@ describe("unique category and product names", () => {
     });
     expect(inactive.status).toBe(201);
     const inactiveId = ((await inactive.json()) as { id: string }).id;
-    await refused(await saveEditorFixture(app, inactiveId, { active: true }), "product.archived", {
-      productId: inactiveId,
+    const restore = await saveEditorFixture(app, inactiveId, { active: true });
+    expect(restore.status).toBe(409);
+    expect(await restore.json()).toEqual({
+      error: { code: "product.archived", params: { productId: inactiveId } },
     });
   });
 
