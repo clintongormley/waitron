@@ -3553,6 +3553,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       displayOrder: 0,
       active: true,
       closed: false,
+      closesAt: null,
     });
 
     // Read this table's occupancy row out of the state read.

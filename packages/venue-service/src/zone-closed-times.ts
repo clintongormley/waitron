@@ -6,6 +6,7 @@ import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js
 import { parseClosedRanges, type ClosedRange, rangeSpan, serviceMomentAt } from "./service-day.js";
 import { namedDaysOn } from "./named-days.js";
 import { specialDates } from "./schema/hours.js";
+import { zoneExtensions } from "./schema/zone-extensions.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
@@ -135,6 +136,77 @@ export async function readZoneClosedTimes(tx: Transaction, cfg: VenueScope, cuto
   });
 }
 
+export function withoutZoneExtension(
+  ranges: readonly ClosedRange[],
+  extension: ClosedRange | null,
+  cutover: string,
+): ClosedRange[] {
+  if (extension === null) return [...ranges];
+  const extended = rangeSpan(extension, cutover);
+  return ranges.flatMap((range) => {
+    const span = rangeSpan(range, cutover);
+    if (span.end <= extended.start || span.start >= extended.end) return [range];
+    return [
+      ...(span.start < extended.start
+        ? [{ startsAt: range.startsAt, endsAt: extension.startsAt }]
+        : []),
+      ...(span.end > extended.end ? [{ startsAt: extension.endsAt, endsAt: range.endsAt }] : []),
+    ];
+  });
+}
+
+export function zoneExtensionForRange(
+  extension: ClosedRange | null,
+  closure: ClosedRange,
+  cutover: string,
+): ClosedRange | null {
+  if (extension === null) return null;
+  const span = rangeSpan(extension, cutover);
+  const closed = rangeSpan(closure, cutover);
+  return span.start < closed.end && span.end > closed.start ? extension : null;
+}
+
+export async function zoneClosureDay(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  if (moment === null) return { clock, moment, ranges: [], extension: null };
+  const day = (await namedDaysOn(tx, cfg, [moment.businessDay])).get(moment.businessDay);
+  const rows = day?.closeWholeVenue
+    ? []
+    : await tx
+        .select({
+          startsAt: zoneClosedTimes.startsAt,
+          endsAt: zoneClosedTimes.endsAt,
+        })
+        .from(zoneClosedTimes)
+        .where(
+          and(
+            eq(zoneClosedTimes.zoneId, zoneId),
+            day?.ownHours
+              ? eq(zoneClosedTimes.specialDateId, day.id)
+              : eq(zoneClosedTimes.weekday, moment.weekday),
+          ),
+        );
+  const [row] = await tx
+    .select({ startsAt: zoneExtensions.startsAt, endsAt: zoneExtensions.endsAt })
+    .from(zoneExtensions)
+    .where(
+      and(eq(zoneExtensions.zoneId, zoneId), eq(zoneExtensions.businessDay, moment.businessDay)),
+    );
+  const wire = (range: ClosedRange) => ({
+    startsAt: range.startsAt.slice(0, 5),
+    endsAt: range.endsAt.slice(0, 5),
+  });
+  return {
+    clock,
+    moment,
+    ranges: rows
+      .map(wire)
+      .sort((a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start),
+    extension: row === undefined ? null : wire(row),
+  };
+}
+
 export async function closedZoneIdsAt(
   tx: Transaction,
   cfg: VenueScope,
@@ -165,9 +237,27 @@ export async function closedZoneIdsAt(
         zoneIds === undefined ? undefined : inArray(zoneClosedTimes.zoneId, [...zoneIds]),
       ),
     );
+  const extensions = await tx
+    .select({
+      zoneId: zoneExtensions.zoneId,
+      startsAt: zoneExtensions.startsAt,
+      endsAt: zoneExtensions.endsAt,
+    })
+    .from(zoneExtensions)
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
+    .where(
+      and(
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(zoneExtensions.businessDay, moment.businessDay),
+        zoneIds === undefined ? undefined : inArray(zoneExtensions.zoneId, [...zoneIds]),
+      ),
+    );
   for (const row of rows) {
-    const { start, end } = rangeSpan(row, clock.dayCutover);
-    if (start <= moment.minute && moment.minute < end) closed.add(row.zoneId);
+    const extension = extensions.find((entry) => entry.zoneId === row.zoneId) ?? null;
+    for (const range of withoutZoneExtension([row], extension, clock.dayCutover)) {
+      const { start, end } = rangeSpan(range, clock.dayCutover);
+      if (start <= moment.minute && moment.minute < end) closed.add(row.zoneId);
+    }
   }
   return closed;
 }

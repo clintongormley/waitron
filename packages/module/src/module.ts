@@ -269,6 +269,13 @@ export interface ZoneMenuState {
     readonly open: boolean;
     readonly zoneOpen: boolean;
     readonly periodName: string | null;
+    readonly zoneKeepOpen: {
+      readonly zoneId: string;
+      readonly zoneName: string;
+      readonly closesAt: string;
+      readonly running: boolean;
+      readonly extendedUntil: string | null;
+    } | null;
     readonly keepOpen: {
       readonly periodId: string;
       readonly periodName: string;
@@ -501,7 +508,20 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
     at: Date,
-  ): Promise<{ period: KeepOpenSubject | null }>;
+  ): Promise<{ period: KeepOpenSubject | null; zone: KeepOpenSubject | null }>;
+  readZoneKeepOpenState(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at: Date,
+  ): Promise<ZoneOffers["service"]["zoneKeepOpen"]>;
+  keepZoneOpen(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    input: { until: string | null },
+    at: Date,
+  ): Promise<void>;
   keepPeriodOpen(
     tx: Transaction,
     cfg: { locationId: LocationId },

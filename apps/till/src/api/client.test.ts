@@ -1740,8 +1740,8 @@ describe("TillApi", () => {
 
   it("listZones GETs the venue's active floor-plan zones and returns them", async () => {
     const zones: FloorZone[] = [
-      { id: "z1", name: "Terraza", displayOrder: 0, active: true, closed: false },
-      { id: "z2", name: "Interior", displayOrder: 1, active: true, closed: false },
+      { id: "z1", name: "Terraza", displayOrder: 0, active: true, closesAt: null, closed: false },
+      { id: "z2", name: "Interior", displayOrder: 1, active: true, closesAt: null, closed: false },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(zones));
 

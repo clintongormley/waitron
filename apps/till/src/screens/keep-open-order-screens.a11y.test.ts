@@ -48,6 +48,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                     open: state !== "closed",
                     zoneOpen: true,
                     periodName: state === "closed" ? null : name,
+                    zoneKeepOpen: null,
                     keepOpen: subject,
                   },
                   departmentName: "Restaurant",

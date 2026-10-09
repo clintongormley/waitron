@@ -113,6 +113,7 @@ const floorZone: FloorZone = {
   name: "Comedor",
   displayOrder: 0,
   active: true,
+  closesAt: null,
   closed: false,
 };
 
@@ -411,7 +412,7 @@ function fixtureOffers(
     courseId: product.courseId ?? null,
   }));
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -1466,7 +1467,7 @@ describe("till-app", () => {
 
   it("loads the default zone's offers and orders two menu identities for one product", async () => {
     const listDefaultZoneOffers = vi.fn().mockResolvedValue({
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",
@@ -5645,7 +5646,7 @@ describe("till-app", () => {
       },
     };
     const catalogue = {
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",
@@ -5736,7 +5737,13 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
-        service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+        service: {
+          open: true,
+          zoneOpen: true,
+          periodName: null,
+          keepOpen: null,
+          zoneKeepOpen: null,
+        },
         context: {
           departmentName: "Restaurant",
           zoneId: "zone-counter",
@@ -6412,6 +6419,25 @@ describe("till-app", () => {
       await flush(el);
 
       expect(gridPermissions(el)).toEqual([]);
+    });
+
+    it("a keep-open write refreshes the floor closure without waiting to revisit it", async () => {
+      const listZones = vi
+        .fn()
+        .mockResolvedValueOnce([{ ...floorZone, closed: true, closesAt: "22:00" }])
+        .mockResolvedValue([{ ...floorZone, closed: false, closesAt: "22:30" }]);
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones,
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(true);
+      emit(floor(el)!, "keep-open-changed", { zoneId: floorZone.id });
+      await flush(el);
+      await expect.poll(() => floor(el)!.zones[0]!.closed).toBe(false);
+      expect(floor(el)!.zones[0]!.closesAt).toBe("22:30");
     });
 
     it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write (FP-2)", async () => {

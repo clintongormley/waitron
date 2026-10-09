@@ -30,6 +30,7 @@ export class TillKeepOpenDialog extends LitElement {
   ];
   @property({ attribute: false }) period?: KeepOpenPeriod;
   @property() selected = "";
+  @property() subject: "period" | "zone" = "period";
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
   @property() refusalField: string | null = null;
@@ -116,7 +117,7 @@ export class TillKeepOpenDialog extends LitElement {
   #delay(): string | null {
     const p = this.period!,
       next = p.next;
-    if (!next || !this.selected) return null;
+    if (this.subject === "zone" || !next || !this.selected) return null;
     const clockMinute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
     const serviceMinute = (time: string) =>
       (clockMinute(time) - clockMinute(p.dayEndsAt) + 1440) % 1440;
@@ -144,12 +145,21 @@ export class TillKeepOpenDialog extends LitElement {
       ${trackDialog()}
       .open=${this.active}
       .beforeClose=${this.#leave ? this.#beforeClose : () => !this.busy}
-      .heading=${t("keep_open.heading").replace("{period}", () => p.name)}
+      .heading=${this.subject === "zone" ? t("keep_open.zone_heading").replace("{zone}", () => p.name) : t("keep_open.heading").replace("{period}", () => p.name)}
       @wt-close=${(e: Event) => this.#closed(e)}
     >
       <div class="body">
         <p data-ends>
-          ${t(p.running ? "keep_open.ends" : "keep_open.ended")
+          ${t(
+            this.subject === "zone"
+              ? p.running
+                ? "keep_open.zone_closes"
+                : "keep_open.zone_closed"
+              : p.running
+                ? "keep_open.ends"
+                : "keep_open.ended",
+          )
+            .replace("{zone}", () => p.name)
             .replace("{period}", () => p.name)
             .replace("{time}", () => p.endsAt)}
         </p>

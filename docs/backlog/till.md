@@ -1040,6 +1040,10 @@ with the seven files named in `~/waitron-campaign-e/receipts/a366-3a/a13-final-f
 reported 1,406 passing tests and logged the same rejection from `#switchProfile`. The cause
 remains unverified.
 
+2026-10-09: A366-3B's affected-file run reported 1,373 passing tests and logged the same
+`#holdIdentity` rejection. Receipt: Lane D `receipts/a366-3b/b4-consumers.log`; no profile-switch
+fix or new cause is claimed.
+
 ## A card payment stuck `attempting` holds its device's profile switch
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:

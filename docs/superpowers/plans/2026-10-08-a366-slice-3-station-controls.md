@@ -1223,6 +1223,19 @@ Commit `docs: live station controls and keeping a period open (A366 slice 3)`.
 
 ## Part B — the zone extension (second pull request, after slice 2)
 
+> **Part B grounding, 2026-10-09 (Lane D).** Part A landed as
+> `87b46b024fcac68a6240949964768b9fbc7d4972` (#1469); slice 2 landed as
+> `974f7170e4c7bae0eb4199a20caafbdb94eaad00` (#1470), this branch's base.
+> The slice 2 interfaces below exist under the planned names: `zoneClosedTimes`,
+> `closedZoneIdsAt`, `assertZoneTakesNewOrders`, `service.zoneOpen`, and `/api/zones`'s `closed`.
+> Part A supplies `keep-open.ts`, `keep-open-api.ts` and the till's keep-open widgets.
+> Task B1 generates a new table and unique index; it does not rebuild a table.
+> The runner's focused local checks and CI package coverage rule overrides the earlier
+> whole-package-per-task instruction. Parts A and B use separate registered worktrees.
+> Slice 5 and slice 6 overlap schema, classification, migration and server paths; the queue's
+> explicit overlap waiver applies. The later branch regenerates colliding migration numbers.
+
+
 Re-ground every task against slice 2 as landed: `zone_closed_times`, `closedZoneIdsAt` and
 `assertZoneTakesNewOrders` (slice 2 Task 10), `service.zoneOpen`, the closed-zone notice (Task 13),
 `GET /api/zones`' `closed` and the floor (Task 14). Names below are slice 2's planned names.
@@ -1240,7 +1253,7 @@ Re-ground every task against slice 2 as landed: `zone_closed_times`, `closedZone
 `zone_extensions_day_key` (`zone_id`, `business_day`); check `zone_extensions_step_ck`. `state`;
 not transferred.
 
-- [ ] Steps: as Task A1 (failing migration test; generate; read the SQL — only `CREATE TABLE`;
+- [x] Steps: as Task A1 (failing migration test; generate; read the SQL — only `CREATE TABLE`;
   classification, guards, clear list; the guard and upgrade runs; commit
   `feat(venue-service): zone extensions (A366)`).
 
@@ -1266,7 +1279,7 @@ same shape of pure function as `withExtension`, applied to closed ranges. `keepZ
 department is open at every minute from `max(now, starts_at)` to `until` through Task A9's
 `departmentDay` with its extension applied.
 
-- [ ] Steps: failing tests (review focus 7; a zone with no closed time left today → `not_closing`;
+- [x] Steps: failing tests (review focus 7; a zone with no closed time left today → `not_closing`;
   a zone whose department is closed now → `department_closed`; `null` removes the row; the
   pricing path reads no `zone_extensions` row; `closedZoneIdsAt` at 01:00 leaves the Terrace open,
   at 01:30 closed — fails today: no extension is read); watch them fail
@@ -1285,7 +1298,7 @@ department is open at every minute from `max(now, starts_at)` to `until` through
 **Route:** `PUT /api/service-zones/:zoneId/zone-extension` — `{ until | null }`, optional
 `override`; same authorization, gating and map rows as Task A11.
 
-- [ ] Steps: failing tests through the real routes (seat a Terrace table at 01:00 after keeping
+- [x] Steps: failing tests through the real routes (seat a Terrace table at 01:00 after keeping
   the Terrace open until 01:30 → 200; at 01:30 → 409 `service_zone.closed`; with the department
   closing at 01:00 the PUT → 409 `zone_extension.not_allowed` `department_closed`; a staff PUT → 403
   then 204 with an override; `/api/zones` answers `closesAt`); watch them fail; implement; the
@@ -1303,11 +1316,11 @@ notice and the period line), `screens/till-floor-screen.ts` (the zone bar), `til
 **Wording:** `keep_open.zone_button` "Keep {zone} open later" / "Ampliar el horario de {zone}";
 `keep_open.zone_closes` "{zone} closes at {time} today." / "Hoy {zone} cierra a las {time}.";
 `keep_open.zone_closed` "{zone} is closed now." / "{zone} está cerrada ahora."; code
-`zone_extension.not_allowed` "This area cannot stay open after {department} closes, or has no
-closing time left today." / "Esta zona no puede seguir abierta cuando {department} ha cerrado, o
+`zone_extension.not_allowed` "This area cannot stay open after its department closes, or has no
+closing time left today." / "Esta zona no puede seguir abierta cuando su departamento ha cerrado, o
 hoy ya no tiene hora de cierre."; code `zone_extension.invalid` as `period_extension.invalid`.
 
-- [ ] Steps: failing tests (the zone button in the closed-zone notice and beside the period line
+- [x] Steps: failing tests (the zone button in the closed-zone notice and beside the period line
   while the zone closes later today; the floor's zone bar; the dialog and override paths; axe in
   both themes; save-state and unsaved cases); watch them fail; implement; the till's whole suite;
   LOOK at the counter, table order and floor screens in EN and ES, both themes, 1280 and 390, with

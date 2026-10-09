@@ -5,7 +5,15 @@ import { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
-  return { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false, ...over };
+  return {
+    id: "z1",
+    name: "Comedor",
+    displayOrder: 0,
+    active: true,
+    closesAt: null,
+    closed: false,
+    ...over,
+  };
 }
 
 /** Defaults to a free, unstatused, UNPLACED table in zone z1, so the screen defaults to the LIST view. */

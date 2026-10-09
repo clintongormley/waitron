@@ -688,10 +688,22 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
       menus: [lunchMenu],
       products: [salad, steak],
       selectedMenuId: "lunch",
-      service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: false,
+        periodName: "Lunch",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
     });
     expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
-    el.service = { open: true, zoneOpen: true, periodName: "Lunch", keepOpen: null };
+    el.service = {
+      open: true,
+      zoneOpen: true,
+      periodName: "Lunch",
+      keepOpen: null,
+      zoneKeepOpen: null,
+    };
     await el.updateComplete;
     const browser = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
     expect(browser).not.toBeNull();

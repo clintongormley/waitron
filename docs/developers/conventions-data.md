@@ -1300,13 +1300,26 @@ finds no open station, the active venue default receives the work. A failed walk
 followed today's destination keeps its previous no-replacement result. Opening the station does not move already sent work back.
 Period extensions also belong to one business date: the resolver overlays the stored range
 before choosing the running and ended menus. The extension read offers future quarter-hours
-through the business-day boundary. Configuration exports omit both `station_day_states` and
-`period_extensions`; these are today's service choices, rather than a venue template.
+through the business-day boundary. Configuration exports omit `station_day_states`,
+`period_extensions` and `zone_extensions`; these are today's service choices, rather than a venue template.
 
 Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
 `routing-store.test.ts`, `service-day.test.ts`, `menu-timetable.test.ts`, `keep-open.test.ts`,
 and `configuration-transfer.test.ts`. The approved slice 3 decision 14 leaves the authorising
 person unstored; the open history decision is in `docs/backlog/service-periods.md`.
+
+To keep a zone open through its next closed range, choose **Keep Terrace open later** beside
+the till's period line, in its closed-zone notice or on the floor's selected-zone bar. Choose
+a later quarter-hour and confirm; staff without the service permission can ask a manager to
+approve with a PIN. **End the extension** removes today's zone override. The server checks that
+the department stays open throughout the requested range, so extend its period first when needed.
+The zone override lifts its closed times; it changes no menu timetable or price.
+
+The real-route cases in `apps/server/src/till-api.keep-open.test.ts` seat a table during the
+extension and refuse it at the endpoint. `packages/venue-service/src/keep-open.test.ts` checks
+a department gap, an extension spanning two closed ranges, and the pricing path without zone-extension queries. The till's
+`zone-keep-open.test.ts`, `zone-keep-open-screens.test.ts` and menu-refresh cases check the
+zone write, manager retry and refreshed controls.
 
 **Transactions**
 

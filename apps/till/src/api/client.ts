@@ -1673,6 +1673,7 @@ export interface MyAbsence {
 
 /** One active floor-plan zone from `GET /api/zones`. */
 export interface FloorZone {
+  closesAt: string | null;
   closed: boolean;
   id: string;
   name: string;
@@ -2531,13 +2532,26 @@ export class TillApi {
     );
   }
 
-  keepOpen(zoneId: string): Promise<{ period: KeepOpenPeriod | null }> {
+  keepOpen(
+    zoneId: string,
+  ): Promise<{ period: KeepOpenPeriod | null; zone: KeepOpenPeriod | null }> {
     return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
   }
 
   keepPeriodOpen(zoneId: string, body: PeriodExtensionWrite): Promise<void> {
     return this.#request(
       `/api/service-zones/${encodeURIComponent(zoneId)}/period-extension`,
+      "PUT",
+      body,
+    );
+  }
+
+  keepZoneOpen(
+    zoneId: string,
+    body: { until: string | null; override?: { personId: string; pin: string } },
+  ): Promise<void> {
+    return this.#request(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/zone-extension`,
       "PUT",
       body,
     );

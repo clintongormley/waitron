@@ -48,7 +48,13 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               const store = new WorkingOrderStore();
               store.addProduct(coffee, "2");
               const shared = {
-                service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+                service: {
+                  open: true,
+                  zoneOpen: false,
+                  periodName: "Lunch",
+                  keepOpen: null,
+                  zoneKeepOpen: null,
+                },
                 zoneName: "Terrace",
                 departmentName: "Restaurant",
                 products: [coffee],
@@ -108,7 +114,13 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               const store = new WorkingOrderStore();
               store.addProduct(coffee, "2");
               const shared = {
-                service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
+                service: {
+                  open: false,
+                  zoneOpen: true,
+                  periodName: null,
+                  keepOpen: null,
+                  zoneKeepOpen: null,
+                },
                 departmentName: "Restaurant",
                 products: [coffee],
                 menus,
@@ -174,6 +186,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                     open: state === "last-orders",
                     zoneOpen: true,
                     periodName: state === "last-orders" ? "Breakfast" : null,
+                    zoneKeepOpen: null,
                     keepOpen: null,
                   },
                   departmentName: "Restaurant",

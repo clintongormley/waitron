@@ -40,7 +40,14 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
-const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false };
+const zone: FloorZone = {
+  id: "z1",
+  name: "Comedor",
+  displayOrder: 0,
+  active: true,
+  closesAt: null,
+  closed: false,
+};
 
 function table(over: Partial<TableState> = {}): TableState {
   return {
@@ -202,7 +209,7 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
+  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
   context: {
     departmentName: "Restaurant",
     zoneId: zone.id,

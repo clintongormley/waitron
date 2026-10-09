@@ -467,6 +467,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "time_zone.unreadable": 409,
   "device.forbidden_station": 403,
   "kitchen_notice.not_found": 404,
+  "zone_extension.invalid": 400,
+  "zone_extension.not_allowed": 409,
   "period_extension.invalid": 400,
   "period_extension.not_allowed": 409,
   "service_zone.not_found": 404,
@@ -2248,13 +2250,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const zones = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
+        const at = new Date();
+        const serviceZones = new Set(
+          (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => zone.id),
+        );
         const closed = await VENUE_SERVICE.closedZoneIdsAt(
           tx,
           deps.cfg,
-          new Date(),
+          at,
           visible.map((zone) => zone.id),
         );
-        return visible.map((zone) => ({ ...zone, closed: closed.has(zone.id) }));
+        const answer = [];
+        for (const zone of visible) {
+          const keepOpen = serviceZones.has(zone.id)
+            ? await VENUE_SERVICE.readZoneKeepOpenState(tx, deps.cfg, zone.id, at)
+            : null;
+          answer.push({
+            ...zone,
+            closed: closed.has(zone.id),
+            closesAt: keepOpen?.closesAt ?? null,
+          });
+        }
+        return answer;
       });
       return c.json(zones);
     }),

@@ -9,6 +9,7 @@ import {
   readDeploymentEnvironment,
   stampDeployment,
   kitchenStations,
+  floorZones,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -420,6 +421,40 @@ describe("provisionVenue", () => {
 });
 
 describe("clearProvisionFixture", () => {
+  it("clears today's zone extension before deleting its zone service policy", async () => {
+    const db = ownerDb();
+    const result = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    );
+    const zoneId = randomUUID();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .insert(floorZones)
+        .values({ id: zoneId, locationId: result.locationId, name: "Terrace" });
+      await tx.execute(sql`insert into zone_service_policies (zone_id, location_id, department_id)
+        select ${zoneId}, ${result.locationId}, id from departments
+        where location_id = ${result.locationId} limit 1`);
+      await tx.execute(sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
+        values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`);
+    });
+    expect((await db.execute(sql`select zone_id from zone_extensions`)).rows).toEqual([
+      { zone_id: zoneId },
+    ]);
+
+    await clearProvisionFixture(db);
+
+    expect(
+      (
+        await db.execute(sql`select
+      (select count(*) from zone_extensions) as extensions,
+      (select count(*) from zone_service_policies) as policies,
+      (select count(*) from floor_zones) as zones,
+      (select count(*) from locations) as locations`)
+      ).rows,
+    ).toEqual([{ extensions: 0, policies: 0, zones: 0, locations: 0 }]);
+  });
+
   it("clears a venue's holiday area geography before the venue", async () => {
     const db = ownerDb();
     const request = venueRequest(nextNif());

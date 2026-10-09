@@ -37,6 +37,7 @@ describe("VENUE_SERVICE", () => {
       "findOrderZones",
       "getOrderContext",
       "keepPeriodOpen",
+      "keepZoneOpen",
       "listDepartmentSentTransfers",
       "listDepartmentTransferDestinations",
       "listIncomingDepartmentTransfers",
@@ -62,6 +63,7 @@ describe("VENUE_SERVICE", () => {
       "readProfileZones",
       "readReleaseReminderMinutes",
       "readSaleReceiptHeader",
+      "readZoneKeepOpenState",
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",
@@ -117,6 +119,7 @@ describe("VENUE_SERVICE", () => {
     expect(names).toContain("station_fallbacks");
     expect(names).not.toContain("station_day_states");
     expect(names).not.toContain("period_extensions");
+    expect(names).not.toContain("zone_extensions");
   });
 });
 

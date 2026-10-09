@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 3 Part B and slices 4–7, each planned then built without
+  APPROVED 2026-10-07; remaining work is slices 4–7, each planned then built without
   stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -28,8 +28,6 @@ their full text.
   receipt with translated subtitle and footer, then the department page's Receipt tab after
   slice 6. Lane E's build follows slice 6 Part A before
   slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
-  Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
-  with keeping a zone open after slice 2 remaining in Part B.
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   in two pull requests — combined tickets on shared printers, period choices in routing cells and
   the station editor after slice 1; station hours, fallbacks and the tester removed, with each
@@ -125,6 +123,12 @@ Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2
   `hours.invalid` rather than not found.
 
 ## Decisions and deliberate limits
+
+- **Zone and period extensions remain separate (A366 slice 3 Part B, 2026-10-09).** Cancelling
+  a department's period extension does not delete its zones' overrides. In the server keep-open
+  suite, a retained zone override until 01:30 still leaves the 01:15 dish submission refused
+  with `menu_period.not_running` after the period extension is cancelled. The zone line reports
+  its own closure, rather than the department's combined availability.
 
 - **A department row's arrow (A301, #1335, A261 step 2).** Departments start open, unlike the
   Products, menu Structure and menu prices trees, which start closed, and a folded department is

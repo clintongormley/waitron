@@ -384,6 +384,13 @@ export interface MenuState {
     open: boolean;
     zoneOpen: boolean;
     periodName: string | null;
+    zoneKeepOpen: {
+      zoneId: string;
+      zoneName: string;
+      closesAt: string;
+      running: boolean;
+      extendedUntil: string | null;
+    } | null;
     keepOpen: {
       periodId: string;
       periodName: string;
