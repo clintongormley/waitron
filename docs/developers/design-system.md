@@ -2787,8 +2787,8 @@ rather than assuming this composition applies unchanged.
   this station)" (A366-4A).
 - **An action label starts with a verb** (owner, 2026-10-09, A443): Add, Delete, Move, Remove, Save. A
   button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
-  — "Add" is a verb like "Delete"; "New" is an adjective. A dialog heading is not an action label:
-  a create dialog may still be headed "New unit".
+  — "Add" is a verb like "Delete"; "New" is an adjective. A create action never says "Create" /
+  "Crear", and the dialog it opens is headed "Add …" to match it (owner, 2026-10-09, A450).
 
 ## Event discipline
 
