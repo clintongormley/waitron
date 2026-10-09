@@ -131,6 +131,8 @@ export class RoutingCellEditor extends LitElement {
 
   @state() private draft: Draft = { target: "", lines: [] };
   @state() private attempted = false;
+  /** Names of periods a live update deleted while this draft held them. */
+  @state() private removed: string[] = [];
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
   private identity?: object;
@@ -153,7 +155,7 @@ export class RoutingCellEditor extends LitElement {
     super.disconnectedCallback();
   }
 
-  protected override willUpdate() {
+  protected override willUpdate(changed: Map<PropertyKey, unknown>) {
     if (!this.open) {
       this.scope?.dispose();
       this.scope = undefined;
@@ -175,6 +177,9 @@ export class RoutingCellEditor extends LitElement {
       this.baseline = copy(this.draft);
       this.attempted = false;
       this.refusal = undefined;
+      this.removed = [];
+    } else if (changed.has("periods")) {
+      this.dropDeletedPeriods((changed.get("periods") as readonly RoutingPeriod[]) ?? []);
     }
     if (this.isConnected && !this.scope) {
       const { coordinator, scope } = draftScopeFor(this, {
@@ -189,6 +194,45 @@ export class RoutingCellEditor extends LitElement {
       this.scope = scope;
       this.leave = coordinator;
       scope.commit(this.baseline!);
+    }
+  }
+
+  /**
+   * A period deleted while the editor is open cannot be saved, so it leaves the draft and the
+   * opened values alike: what stays changed is only what the person changed. A line left with no
+   * period goes too.
+   */
+  private dropDeletedPeriods(previous: readonly RoutingPeriod[]) {
+    const live = this.periodById();
+    const prune = (draft: Draft): Draft => ({
+      target: draft.target,
+      lines: draft.lines.flatMap((line) => {
+        const periodIds = line.periodIds.filter((id) => live.has(id));
+        return periodIds.length === 0 && line.periodIds.length > 0 ? [] : [{ ...line, periodIds }];
+      }),
+    });
+    const held = new Set(this.draft.lines.flatMap((line) => line.periodIds));
+    const names = previous.map(({ name }) => name);
+    const gone = previous
+      .filter((period) => !live.has(period.id) && held.has(period.id))
+      .map((period) =>
+        names.indexOf(period.name) !== names.lastIndexOf(period.name)
+          ? format("routing.period_in_department", {
+              period: period.name,
+              department: period.departmentName,
+            })
+          : period.name,
+      );
+    this.leftOut = this.leftOut.filter(({ period }) => live.has(period.id));
+    const refused = this.refusal?.params?.periodId;
+    if (this.refusal?.code === "route.period_invalid" && !live.has(refused as string))
+      this.refusal = undefined;
+    if (gone.length === 0) return;
+    this.removed = [...this.removed, ...gone];
+    this.draft = prune(this.draft);
+    if (this.baseline !== undefined) {
+      this.baseline = prune(this.baseline);
+      this.scope?.commit(this.baseline);
     }
   }
 
@@ -285,7 +329,8 @@ export class RoutingCellEditor extends LitElement {
       candidate.periodIds.includes(periodId as string),
     );
     if (line === undefined) return undefined;
-    const period = this.periodById().get(periodId as string)!.name;
+    const period = this.periodById().get(periodId as string)?.name;
+    if (period === undefined) return undefined;
     const key =
       refusal.params?.reason === "other_department"
         ? "routing.period_other_department"
@@ -578,6 +623,13 @@ export class RoutingCellEditor extends LitElement {
                   }}
                   >${t("routing.add_line")}</wt-button
                 >`
+          }
+          ${
+            this.removed.length > 0
+              ? html`<p class="note" data-test="periods-removed">
+                  ${format("routing.periods_removed", { periods: this.removed.join(", ") })}
+                </p>`
+              : nothing
           }
           ${
             this.leftOut.length > 0

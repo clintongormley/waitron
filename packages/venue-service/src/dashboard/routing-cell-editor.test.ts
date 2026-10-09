@@ -580,3 +580,67 @@ it("says in Spanish which inherited periods were not copied", async () => {
     "Sin copiar: Brunch — no ofrece ninguno de estos productos",
   );
 });
+
+it("takes a period deleted live out of the draft, keeps the other edits, and says so", async () => {
+  const el = await mount({
+    periods: [
+      { periodId: "lunch", target: down },
+      { periodId: "breakfast", target: up },
+      { periodId: "brunch", target: up },
+    ],
+  });
+  expect(linePeriods(el).map((field) => field.values)).toEqual([
+    ["breakfast", "brunch"],
+    ["lunch"],
+  ]);
+  await pick(el, one<Combobox>(el, "[name=target]")!, { value: "station:down" });
+  el.periods = PERIODS.filter((period) => period.id !== "lunch" && period.id !== "brunch");
+  el.cell = { ...el.cell!, periods: [{ periodId: "breakfast", target: up }] };
+  await el.updateComplete;
+  expect(linePeriods(el).map((field) => field.values)).toEqual([["breakfast"]]);
+  expect(one<Combobox>(el, "[name=target]")!.value).toBe("station:down");
+  expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
+    "Removed from your choice because it was deleted: Lunch (Dining), Brunch",
+  );
+  const saves = events(el, "routing-cell-save");
+  await click(el, "save-cell");
+  expect(saves).toEqual([{ target: down, periods: [{ periodId: "breakfast", target: up }] }]);
+});
+
+it("stays quiet when a stored period nobody changed is deleted live", async () => {
+  const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
+  el.periods = PERIODS.filter((period) => period.id !== "lunch");
+  el.cell = { ...el.cell!, periods: [] };
+  await el.updateComplete;
+  expect(linePeriods(el)).toEqual([]);
+  expect(el.dirty).toBe(false);
+  expect(button(el, "save-cell")!.disabled).toBe(true);
+});
+
+it("drops a refusal naming a period deleted live and still draws", async () => {
+  const el = await mount({ periods: [{ periodId: "brunch", target: down }] });
+  el.refusal = {
+    code: "route.period_invalid",
+    params: { periodId: "brunch", reason: "not_offered" },
+  };
+  await el.updateComplete;
+  expect(linePeriods(el)[0]!.error).toBe("Brunch offers none of these products.");
+  el.periods = PERIODS.filter((period) => period.id !== "brunch");
+  el.cell = { ...el.cell!, periods: [] };
+  await el.updateComplete;
+  expect(linePeriods(el)).toEqual([]);
+  expect(bottom(el)).toBe("");
+  expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
+    "Removed from your choice because it was deleted: Brunch",
+  );
+});
+
+it("says in Spanish which deleted periods were taken out", async () => {
+  setLocale("es");
+  const el = await mount({ periods: [{ periodId: "bar-lunch", target: down }] });
+  el.periods = PERIODS.filter((period) => period.id !== "bar-lunch");
+  await el.updateComplete;
+  expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
+    "Quitado de tu elección porque se ha eliminado: Lunch (Bar)",
+  );
+});
