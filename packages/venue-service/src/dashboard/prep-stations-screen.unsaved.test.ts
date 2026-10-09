@@ -345,14 +345,15 @@ for (const [name, changed, reverted] of [
 for (const rename of [false, true]) {
   it(`${rename ? "Edit" : "Add"} reconnects its retained editor with a coordinated Save scope`, async () => {
     const { screen, writes } = await mount();
-    await open(screen, rename);
+    const before = await open(screen, rename);
     screen.remove();
     await screen.updateComplete;
-    if (rename) expect(modalIn(screen)!.isConnected).toBe(false);
-    else expect(modalIn(screen)).toBeNull();
+    if (!rename) expect(modalIn(screen)).toBeNull();
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
     const modal = modalIn(screen)!;
+    // The station editor keeps its own draft while away, but draws a new dialog on its return.
+    if (rename) expect(modal).not.toBe(before);
     const save = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
       `[data-test=${rename ? "save-station-edit" : "save-station"}]`,
     )!;
@@ -386,6 +387,7 @@ for (const rename of [false, true]) {
     await field(before, "Retained edit");
     screen.remove();
     await screen.updateComplete;
+    expect(unload()).toBe(false);
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
     const modal = modalIn(screen)!;
