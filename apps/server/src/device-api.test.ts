@@ -277,7 +277,7 @@ async function seedProfile(
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({
-      name: `Profile ${profileCounter}`,
+      name: `Test profile ${profileCounter}`,
       formFactor,
       capabilities: [...BASIC_ACTIONS, ...capabilities],
     })
