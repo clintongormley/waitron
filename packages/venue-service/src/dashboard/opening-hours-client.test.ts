@@ -62,6 +62,10 @@ describe("OpeningHoursApi", () => {
           "zone_closed_times",
           "zone_service_policies",
           "floor_zones",
+          "routing_cells",
+          "routing_cell_periods",
+          "categories",
+          "products",
         ].map((type) => ({ type })),
       );
       expect(request.mock.calls).toEqual([
@@ -75,6 +79,50 @@ describe("OpeningHoursApi", () => {
     api.rereadWatches();
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it.each(["routing_cell_periods", "routing_cells", "categories", "products", "floor_zones"])(
+    "re-reads opening hours when %s changes, so a period's routing uses stay current",
+    async (type) => {
+      const live = new LiveData();
+      const named: OpeningHoursModel = {
+        ...model,
+        departments: [
+          {
+            id: "d1",
+            name: "Restaurant",
+            active: true,
+            zones: [],
+            week: [],
+            dates: [],
+            periods: [
+              {
+                id: "p1",
+                name: "Lunch",
+                colour: "green",
+                menuId: "lunch",
+                staffMenuIds: [],
+                endOffsetMinutes: 0,
+                weekdays: [],
+                routingUses: [{ rowKind: "category", rowLabel: "Cocktails", zoneName: null }],
+              },
+            ],
+          },
+        ],
+      };
+      const request = vi.fn().mockResolvedValueOnce(model).mockResolvedValueOnce(named);
+      const api = new OpeningHoursApi(request as DashboardRequest, live);
+      const apply = vi.fn();
+      const stop = api.watchOpeningHours(apply, vi.fn(), vi.fn());
+      try {
+        await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(model));
+        live.invalidate([{ type }]);
+        await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(named));
+        expect(request).toHaveBeenCalledTimes(2);
+      } finally {
+        stop();
+      }
+    },
+  );
 
   it("reports offline reads and their recovery without live data and detaches", async () => {
     const offline = new Error("offline");

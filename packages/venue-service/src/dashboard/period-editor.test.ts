@@ -20,6 +20,7 @@ const period = {
   staffMenuIds: ["deli"],
   endOffsetMinutes: 0,
   weekdays: [1, 2],
+  routingUses: [],
 };
 beforeEach(() => setLocale("en"));
 afterEach(() => {

@@ -40,6 +40,7 @@ export function dayFixture(): OpeningHoursModel {
             staffMenuIds: [],
             endOffsetMinutes: 0,
             weekdays: [1, 2],
+            routingUses: [],
           },
         ],
         week: [
@@ -64,6 +65,7 @@ export function dayFixture(): OpeningHoursModel {
             staffMenuIds: [],
             endOffsetMinutes: 0,
             weekdays: [1, 2],
+            routingUses: [],
           },
         ],
         week: [

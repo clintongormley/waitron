@@ -613,6 +613,7 @@ export class OpeningHoursDay extends LitElement {
             staffMenuIds: [...input.staffMenuIds],
             endOffsetMinutes: input.endOffsetMinutes ?? 0,
             weekdays: [],
+            routingUses: [],
           },
         ],
       };

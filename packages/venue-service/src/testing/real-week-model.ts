@@ -42,6 +42,7 @@ export function realWeekModel(): OpeningHoursModel {
             staffMenuIds: [],
             endOffsetMinutes: 0,
             weekdays: [1, 2],
+            routingUses: [],
           },
         ],
         week: [

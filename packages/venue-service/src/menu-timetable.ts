@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { catalogues, newId, type Transaction } from "@waitron/db";
+import { catalogues, categories, floorZones, newId, products, type Transaction } from "@waitron/db";
 import { directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
@@ -26,6 +26,7 @@ import type {
   MenuPeriodInput,
   MenuPeriodUse,
   MenuSlot,
+  PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates, specialDateHours } from "./schema/hours.js";
@@ -33,6 +34,7 @@ import { namedDaysOn } from "./named-days.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
+import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -837,6 +839,53 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   async beforeDelete() {},
 };
 
+const ROW_ORDER = { all: 0, no_category: 1, category: 2, product: 3 } as const;
+
+/** Each period's routing cells that hold a line for it, by row and then zone (Every zone first). */
+async function readRoutingUses(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<Map<string, PeriodRoutingUse[]>> {
+  const rows = await tx
+    .select({
+      periodId: routingCellPeriods.periodId,
+      noCategory: routingCells.noCategory,
+      categoryName: categories.name,
+      productName: products.name,
+      zoneName: floorZones.name,
+      zoneOrder: floorZones.displayOrder,
+    })
+    .from(routingCellPeriods)
+    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
+    .leftJoin(categories, eq(categories.id, routingCells.categoryId))
+    .leftJoin(products, eq(products.id, routingCells.productId))
+    .leftJoin(floorZones, eq(floorZones.id, routingCells.zoneId))
+    .where(eq(routingCells.locationId, cfg.locationId));
+  const placed = rows.map((row) => {
+    const use: PeriodRoutingUse =
+      row.categoryName !== null
+        ? { rowKind: "category", rowLabel: row.categoryName, zoneName: row.zoneName }
+        : row.productName !== null
+          ? { rowKind: "product", rowLabel: row.productName, zoneName: row.zoneName }
+          : {
+              rowKind: row.noCategory ? "no_category" : "all",
+              rowLabel: null,
+              zoneName: row.zoneName,
+            };
+    return { periodId: row.periodId, use, zoneOrder: row.zoneOrder };
+  });
+  placed.sort(
+    (a, b) =>
+      ROW_ORDER[a.use.rowKind] - ROW_ORDER[b.use.rowKind] ||
+      (a.use.rowLabel ?? "").localeCompare(b.use.rowLabel ?? "") ||
+      (a.zoneOrder ?? -1) - (b.zoneOrder ?? -1) ||
+      (a.use.zoneName ?? "").localeCompare(b.use.zoneName ?? ""),
+  );
+  const uses = new Map<string, PeriodRoutingUse[]>();
+  for (const { periodId, use } of placed) uses.set(periodId, [...(uses.get(periodId) ?? []), use]);
+  return uses;
+}
+
 export async function readOpeningHoursModel(
   tx: Transaction,
   cfg: VenueScope,
@@ -938,6 +987,7 @@ export async function readOpeningHoursModel(
     .from(catalogues)
     .orderBy(asc(catalogues.name), asc(catalogues.id));
   const graph = await loadSectionGraph(tx);
+  const routingUses = await readRoutingUses(tx, cfg);
   const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
   return {
     timeZone: clock.timeZone,
@@ -972,6 +1022,7 @@ export async function readOpeningHoursModel(
                   day.weekday !== null && ranges(day.id).some((range) => range.periodId === id),
               )
               .map((day) => day.weekday!),
+            routingUses: routingUses.get(id) ?? [],
           })),
         week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
           const day = days.find((row) => row.weekday === weekday);

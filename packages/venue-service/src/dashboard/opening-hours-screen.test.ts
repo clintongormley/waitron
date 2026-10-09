@@ -52,6 +52,7 @@ function model(): OpeningHoursModel {
             staffMenuIds: ["staff"],
             endOffsetMinutes: 0,
             weekdays: [1, 3],
+            routingUses: [],
           },
         ],
         week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
@@ -215,6 +216,7 @@ it("creates the changed draft and closes it before refreshing the list", async (
         staffMenuIds: [],
         endOffsetMinutes: 0,
         weekdays: [],
+        routingUses: [],
       },
     ];
     return { id: "p2" };
@@ -346,6 +348,8 @@ it("requires confirmation before deletion and refreshes after it succeeds", asyn
   const dialog = await removePeriod(el);
   expect(writes).toEqual([]);
   expect(dialog.textContent).toContain("Delete Lunch?");
+  expect(dialog.querySelector("[data-test=routing-uses]")).toBeNull();
+  expect(dialog.textContent).not.toContain("Routing");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes).toEqual([
@@ -353,6 +357,70 @@ it("requires confirmation before deletion and refreshes after it succeeds", asyn
   ]);
   await expect.poll(() => el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
   await expect.poll(() => table(el).rows.length).toBe(0);
+});
+
+describe("deleting a period that routing names", () => {
+  const uses = () => [...el().shadowRoot!.querySelectorAll("[data-test=routing-uses] li")];
+  let host: Screen | undefined;
+  const el = () => host!;
+
+  it("lists each cell by row and zone, keeps the list current, and deletes on confirming", async () => {
+    const writes: unknown[] = [];
+    const data = model();
+    data.departments[0]!.periods[0]!.routingUses = [
+      { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
+      { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+    ];
+    host = await mount((async (path, method) => {
+      if (method === "GET") return structuredClone(data);
+      writes.push({ path, method });
+      data.departments[0]!.periods = [];
+    }) as DashboardRequest);
+    const dialog = await removePeriod(el());
+    expect(dialog.textContent).toContain("Delete Lunch?");
+    expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
+      "Routing names this period in 2 cells. Their choices for it will be removed:",
+    );
+    expect(uses().map((item) => item.textContent!.trim())).toEqual([
+      "All categories · Terrace",
+      "Cocktails · Every zone",
+    ]);
+
+    data.departments[0]!.periods[0]!.routingUses = [
+      { rowKind: "product", rowLabel: "Mojito", zoneName: "Bar" },
+    ];
+    el().api.rereadWatches();
+    await expect
+      .poll(() => uses().map((item) => item.textContent!.trim()))
+      .toEqual(["Mojito · Bar"]);
+    expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
+      "Routing names this period in 1 cell. Its choice for it will be removed:",
+    );
+
+    el().shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([{ path: "/management-api/venue-service/menu-periods/p1", method: "DELETE" }]);
+    await expect.poll(() => el().shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  });
+
+  it("says it in Spanish, naming the No category row", async () => {
+    setLocale("es");
+    const data = model();
+    data.departments[0]!.periods[0]!.routingUses = [
+      { rowKind: "no_category", rowLabel: null, zoneName: null },
+      { rowKind: "all", rowLabel: null, zoneName: "Terraza" },
+    ];
+    host = await mount((async () => structuredClone(data)) as DashboardRequest);
+    const dialog = await removePeriod(el());
+    expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
+      "La asignación nombra este periodo en 2 celdas. Se quitarán sus opciones para él:",
+    );
+    expect(uses().map((item) => item.textContent!.trim())).toEqual([
+      "Sin categoría · Todas las zonas",
+      "Todas las categorías · Terraza",
+    ]);
+  });
 });
 
 it("explains an in-use deletion in one sentence and read recovery leaves it intact", async () => {

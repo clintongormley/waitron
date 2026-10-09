@@ -84,6 +84,10 @@ export const QUERY_DEPENDENCIES = {
     "zone_closed_times",
     "zone_service_policies",
     "floor_zones",
+    "routing_cells",
+    "routing_cell_periods",
+    "categories",
+    "products",
   ],
   operations: [
     "departments",

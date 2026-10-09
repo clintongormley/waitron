@@ -29,6 +29,7 @@ describe.each(["light", "dark"] as const)("Period editor (%s)", (theme) => {
         staffMenuIds: ["deli"],
         endOffsetMinutes: 0,
         weekdays: [1],
+        routingUses: [],
       };
     }
     el.open = true;
@@ -75,6 +76,7 @@ describe.each(["en", "es"] as const)("Offset form (%s)", (locale) => {
             staffMenuIds: ["staff"],
             endOffsetMinutes: offset,
             weekdays: [1],
+            routingUses: [],
           };
           el.open = true;
           await el.updateComplete;

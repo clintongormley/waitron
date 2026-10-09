@@ -75,7 +75,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
   ]);
 });
 
-it("refreshes Opening hours from its periods, ranges, dates and menu names", () => {
+it("refreshes Opening hours from its periods, ranges, dates, menu names and the routing that names a period", () => {
   expect(QUERY_DEPENDENCIES["opening-hours"]).toEqual([
     "menu_periods",
     "menu_period_staff_menus",
@@ -89,5 +89,9 @@ it("refreshes Opening hours from its periods, ranges, dates and menu names", () 
     "zone_closed_times",
     "zone_service_policies",
     "floor_zones",
+    "routing_cells",
+    "routing_cell_periods",
+    "categories",
+    "products",
   ]);
 });

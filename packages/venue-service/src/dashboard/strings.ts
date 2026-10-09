@@ -62,6 +62,11 @@ const en = {
   "opening.range_order": "Choose an end after the start within this business day.",
   "opening.load_error": "Opening hours could not be loaded. It will be tried again.",
   "opening.delete_confirm": "Delete {name}?",
+  "opening.delete_routing":
+    "Routing names this period in {count} cells. Their choices for it will be removed:",
+  "opening.delete_routing_one":
+    "Routing names this period in 1 cell. Its choice for it will be removed:",
+  "opening.routing_use": "{row} · {zone}",
   "opening.tab.periods": "Periods",
   "opening.tab.day": "Day",
   "opening.menu_includes": "{name} · includes {menus}",
@@ -743,6 +748,11 @@ const es: Record<keyof typeof en, string> = {
   "opening.range_order": "Elige un final posterior al inicio dentro de este día de servicio.",
   "opening.load_error": "No se ha podido cargar el horario de apertura. Se volverá a intentar.",
   "opening.delete_confirm": "¿Eliminar {name}?",
+  "opening.delete_routing":
+    "La asignación nombra este periodo en {count} celdas. Se quitarán sus opciones para él:",
+  "opening.delete_routing_one":
+    "La asignación nombra este periodo en 1 celda. Se quitará su opción para él:",
+  "opening.routing_use": "{row} · {zone}",
   "opening.tab.periods": "Periodos",
   "opening.tab.day": "Día",
   "opening.menu_includes": "{name} · incluye {menus}",

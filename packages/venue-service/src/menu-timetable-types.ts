@@ -44,6 +44,12 @@ export interface DepartmentService {
   } | null;
 }
 
+/** A routing cell with a line for a period; `zoneName: null` is Every zone. */
+export type PeriodRoutingUse = (
+  | { rowKind: "all" | "no_category"; rowLabel: null }
+  | { rowKind: "category" | "product"; rowLabel: string }
+) & { zoneName: string | null };
+
 export interface OpeningHoursModel {
   timeZone: string;
   clockReadable: boolean;
@@ -68,6 +74,7 @@ export interface OpeningHoursModel {
       staffMenuIds: readonly string[];
       endOffsetMinutes: number;
       weekdays: readonly number[];
+      routingUses: readonly PeriodRoutingUse[];
     }[];
     week: readonly { weekday: number; slots: readonly ServiceRange[] }[];
     dates: readonly { specialDateId: string; slots: readonly ServiceRange[] }[];
