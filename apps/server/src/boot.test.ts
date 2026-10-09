@@ -3521,7 +3521,10 @@ describe("startServer — what a trading boot wires behind its management routes
     });
     expect(response.status).toBe(200);
     // A Spanish venue with no province: Spain's official languages, nothing required.
-    expect(await response.json()).toEqual({ required: [], official: ["es", "ca", "gl", "eu"] });
+    expect(await response.json()).toEqual({
+      required: [],
+      official: ["es", "ca", "ca-ES-valencia", "gl", "eu"],
+    });
   }, 60_000);
 
   it("raises the backup-disabled alert from the backup supervisor's live status", async () => {
