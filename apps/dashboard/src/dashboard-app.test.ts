@@ -7096,6 +7096,23 @@ describe("mounted public department pages", () => {
     };
     const request: DashboardRequest = async (url) => {
       if (url === "/management-api/venue-service") return structuredClone(model) as never;
+      if (url === "/management-api/venue-service/opening-hours")
+        return {
+          timeZone: "Europe/Madrid",
+          clockReadable: true,
+          dayCutover: "06:00",
+          menus: [],
+          namedDays: [],
+          departments: model.departments.map(({ id, name, active }) => ({
+            id,
+            name,
+            active,
+            zones: [],
+            periods: [],
+            week: [],
+            dates: [],
+          })),
+        } as never;
       if (url.endsWith("/transfers"))
         return {
           departmentId: "d1",
