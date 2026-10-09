@@ -142,6 +142,11 @@ declare module "@waitron/shared" {
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
+    "product.archived": { productId: string; field?: string };
+    "product.on_live_menu": {
+      products: { id: string; name: string }[];
+      menus: { id: string; name: string }[];
+    };
     /** `memberId` names a member the section's list does not hold. */
     "menu_section.not_found": { sectionId: string; memberId?: string };
     /** A section write's value is malformed; `field` names it. */
