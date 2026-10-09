@@ -5012,6 +5012,53 @@ describe("Routing grid", () => {
       },
     );
 
+    it("names a period by its department in the preview where two departments share its name", async () => {
+      const barLunch = {
+        id: "bar-lunch",
+        departmentId: "bar",
+        departmentName: "Bar",
+        colour: "red" as const,
+        name: "Lunch",
+        productIds: ["bread"],
+      };
+      const shared = timedView();
+      shared.routing.periods = [lunch, staff, barLunch];
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(shared),
+        preview: vi.fn().mockResolvedValue([{ ...breadMove, periodIds: ["bar-lunch", "lunch"] }]),
+      });
+      await saveLunchLine(el);
+      expect(
+        q(el, '[data-test="routing-preview"]')!
+          .querySelector("tbody td")!
+          .textContent!.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe("Bread during Lunch (Dining), Lunch (Bar)");
+    });
+
+    it("draws the waiting choice's lines in its cell while its preview is open", async () => {
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(timedView()),
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await saveLunchLine(el);
+      expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+      await gridOf(el).updateComplete;
+      const button = cellCombo(el, "c:food", "every").button();
+      expect([...button.querySelectorAll(".line")].map((line) => line.textContent!.trim())).toEqual(
+        ["Lunch: Kitchen"],
+      );
+    });
+
+    it("closes the default cell's editor once Make default is saved", async () => {
+      const { a, el } = await mountGrid({
+        setDefaultStation: vi.fn().mockResolvedValue(undefined),
+      });
+      await chooseCell(el, "all", "every", "Kitchen");
+      expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("kitchen");
+      await vi.waitFor(() => expect(cellEditor(el)).toBeNull());
+    });
+
     it("hands a refused Make default to the open editor as well as the page", async () => {
       const { el } = await mountGrid({
         setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
@@ -5503,6 +5550,41 @@ describe("Routing grid", () => {
       expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
     },
   );
+
+  it("an editor whose zone a refresh removed with its changes unsaved says they were not saved", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const removed = gridView();
+    removed.routing.zones = [];
+    removed.zones = [];
+    const load = vi.fn(async () => gridView());
+    const { a, el } = await mountGrid({ liveData, load });
+    cellCombo(el, "c:drinks", "terrace").button().click();
+    await gridOf(el).updateComplete;
+    const editor = cellEditor(el)!;
+    await editor.updateComplete;
+    const box = editor.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="target"]')!;
+    box.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "station:kitchen" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await editor.updateComplete;
+    load.mockImplementation(async () => removed);
+    liveData.invalidate([{ type: "floor_zones" }]);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(cellEditor(el)).toBeNull();
+    });
+    await settle(el);
+    expect(await gridMessage(el)).toBe(
+      "Your choice was not saved: its zone is no longer in the grid.",
+    );
+    expect(a.preview).not.toHaveBeenCalled();
+    expect(pageAlert(el)).toBe("");
+  });
 
   it.each([
     {

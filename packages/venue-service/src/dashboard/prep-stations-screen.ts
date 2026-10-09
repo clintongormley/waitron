@@ -983,7 +983,7 @@ export class PrepStationsScreen extends LitElement {
     if (this.busy || this.pending) return;
     const run = ++this.#cellRun;
     const isCurrent = () => this.isConnected && this.#cellRun === run;
-    this.cellChoice = { address, target };
+    this.cellChoice = periods === undefined ? { address, target } : { address, target, periods };
     this.cellRefusal = null;
     await this.#preview(
       periods === undefined
@@ -1016,13 +1016,17 @@ export class PrepStationsScreen extends LitElement {
     else if (this.#addressShown(change.address)) await this.#saveCell(pending);
     else this.#dropChoice(change.address);
   }
-  /**
-   * A refresh removed the choice's row or zone before it could be saved. The All categories row
-   * is always drawn, so only its zone can be gone.
-   */
+  /** A refresh removed the choice's row or zone before it could be saved. */
   #dropChoice(address: CellAddress): void {
-    const { row, zoneId } = address;
     this.cellChoice = null;
+    this.#dropDraft(address);
+  }
+  /**
+   * A refresh removed the row or zone of a choice, or of the open editor's unsaved changes. The All
+   * categories row is always drawn, so only its zone can be gone.
+   */
+  #dropDraft(address: CellAddress): void {
+    const { row, zoneId } = address;
     const zoneGone =
       zoneId !== null && !this.view?.routing.zones.some((zone) => zone.id === zoneId);
     this.cellRefusal = this.#droppedRefusal = {
@@ -3150,6 +3154,8 @@ export class PrepStationsScreen extends LitElement {
                             void this.#chooseCell(event.detail)}
                           @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
                             void this.#makeDefault(event.detail.stationId)}
+                          @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
+                            this.#dropDraft(event.detail.address)}
                         ></venue-routing-grid>
                         <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
                         ${

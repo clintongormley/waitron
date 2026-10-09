@@ -190,6 +190,11 @@ export class RoutingCellEditor extends LitElement {
     }
   }
 
+  /** Whether the draft differs from what the editor opened with. */
+  get dirty(): boolean {
+    return this.baseline !== undefined && !equal(this.draft, this.baseline);
+  }
+
   private get inherited(): boolean {
     return this.cell?.inheritedFrom !== undefined;
   }
@@ -317,7 +322,9 @@ export class RoutingCellEditor extends LitElement {
     const options = this.stationOptions();
     if (value === "" || options.some((option) => option.value === value)) return options;
     const station = this.stations.find((candidate) => `${STATION}${candidate.id}` === value);
-    return [...options, { value, label: station?.name ?? value, disabled: true }];
+    const label =
+      station === undefined ? value : format("routing.disabled_station", { station: station.name });
+    return [...options, { value, label, disabled: true }];
   }
 
   private storedTargets(): Map<string, string> {

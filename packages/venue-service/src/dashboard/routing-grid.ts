@@ -220,7 +220,8 @@ export class RoutingGrid extends LitElement {
       .cell .note {
         margin: 0;
       }
-      .station.inherited {
+      .station.inherited,
+      .line.inherited {
         color: var(--wt-color-text-muted);
         font-style: italic;
       }
@@ -257,7 +258,7 @@ export class RoutingGrid extends LitElement {
   #lines: {
     model: RoutingView;
     locale: string;
-    of: (row: RoutingRow, zoneId: string | null) => CellPeriodLines;
+    of: ReturnType<typeof cellPeriodLines>;
   } | null = null;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
@@ -275,8 +276,13 @@ export class RoutingGrid extends LitElement {
       editing !== null &&
       ((editing.zoneId !== null && !model.zones.some((zone) => zone.id === editing.zoneId)) ||
         !rowInModel(model, editing.row))
-    )
+    ) {
+      const waiting = this.pending !== null && sameAddress(this.pending.address, editing);
+      if (!waiting && this.shadowRoot?.querySelector("routing-cell-editor")?.dirty) {
+        this.#emit("routing-draft-lost", { address: editing });
+      }
       this.editing = null;
+    }
   }
 
   /** Closes the open editor, as its host does once the editor's choice is saved. */
@@ -284,7 +290,7 @@ export class RoutingGrid extends LitElement {
     this.editing = null;
   }
 
-  #periodLines(row: RoutingRow, zoneId: string | null): CellPeriodLines {
+  #periodLines(row: RoutingRow, zoneId: string | null, waiting?: RoutingPending): CellPeriodLines {
     const model = this.model!;
     const locale = currentLocale();
     if (this.#lines?.model !== model || this.#lines.locale !== locale) {
@@ -294,7 +300,7 @@ export class RoutingGrid extends LitElement {
         of: cellPeriodLines(model, (target) => this.#targetText(target)),
       };
     }
-    return this.#lines.of(row, zoneId);
+    return this.#lines.of(row, zoneId, waiting);
   }
 
   #station(id: string) {
@@ -415,7 +421,7 @@ export class RoutingGrid extends LitElement {
     label: string,
     target: RouteTarget | null,
     station: { text: string; inherited: boolean },
-    lines: readonly string[],
+    lines: { texts: readonly string[]; inherited: boolean },
     note: string | null,
   ) {
     return html`<button
@@ -429,7 +435,9 @@ export class RoutingGrid extends LitElement {
       }}
     >
       <span class=${station.inherited ? "station inherited" : "station"}>${station.text}</span>
-      ${lines.map((line) => html`<span class="line">${line}</span>`)}
+      ${lines.texts.map(
+        (line) => html`<span class=${lines.inherited ? "line inherited" : "line"}>${line}</span>`,
+      )}
       ${this.#extraNote(note, { inName: true })}
     </button>`;
   }
@@ -439,15 +447,16 @@ export class RoutingGrid extends LitElement {
     const own = this.#cells.get(cellKey(address));
     const selected = this.#inherited(entry.row, zone.id);
     const inherited = selected.target;
-    const pending = this.pending;
-    const shown =
-      pending !== null && sameAddress(pending.address, address)
-        ? pending.target
-        : (own?.target ?? null);
+    const waiting =
+      this.pending !== null && sameAddress(this.pending.address, address)
+        ? this.pending
+        : undefined;
+    const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
     const note = this.#extraNoteText(shown, selected);
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
-    const lines = this.#periodLines(entry.row, zone.id).lines.map((line) => line.text);
+    const periodLines = this.#periodLines(entry.row, zone.id, waiting);
+    const lines = periodLines.lines.map((line) => line.text);
     const text = this.#targetText(shown ?? inherited);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
@@ -459,7 +468,14 @@ export class RoutingGrid extends LitElement {
       ...lines,
       note,
     );
-    return html`${this.#button(address, label, shown, { text, inherited: shown === null }, lines, note)}${this.#error(address)}${
+    return html`${this.#button(
+      address,
+      label,
+      shown,
+      { text, inherited: shown === null },
+      { texts: lines, inherited: periodLines.inherited },
+      note,
+    )}${this.#error(address)}${
       disabled === null
         ? nothing
         : html`<span class="warning" data-test="disabled-target"
@@ -507,7 +523,7 @@ export class RoutingGrid extends LitElement {
       }),
       note,
     );
-    return html`${this.#button(address, label, target, { text, inherited: false }, [], note)}${this.#error(address)}${repair}`;
+    return html`${this.#button(address, label, target, { text, inherited: false }, { texts: [], inherited: false }, note)}${this.#error(address)}${repair}`;
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */

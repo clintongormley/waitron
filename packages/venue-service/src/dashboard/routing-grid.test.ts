@@ -1099,6 +1099,134 @@ describe("venue-routing-grid", () => {
       expect(editorOf(el)).toBeNull();
     });
 
+    /** Timed, plus Cola × Every zone set to the Terrace bar, with Staff lunch at the Bar. */
+    const colaEvery: CellAddress = { row: { kind: "product", productId: "cola" }, zoneId: null };
+    const withCola = () => ({
+      ...timed(),
+      cells: [
+        ...timed().cells,
+        {
+          ...colaEvery,
+          target: station("tbar"),
+          periods: [{ periodId: "staff", target: station("bar") }],
+        } as RoutingCell,
+      ],
+    });
+    const expanded = async (model: RoutingView) => {
+      const mounted = await mount(model);
+      root(mounted.el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await mounted.el.updateComplete;
+      return mounted;
+    };
+    const lineStyles = (el: RoutingGrid, row: string, zone: string) =>
+      [...combo(el, row, zone)!.querySelectorAll(".line")].map((line) => {
+        const style = getComputedStyle(line);
+        return { italic: style.fontStyle === "italic", color: style.color };
+      });
+
+    it("draws inherited lines muted and italic, as the inherited station above them", async () => {
+      const { el } = await expanded(withCola());
+      const station = combo(el, "p:mojito", "every")!.querySelector(".station")!;
+      const muted = getComputedStyle(station).color;
+      expect(lines(el, "p:mojito", "every")).toEqual(["Lunch: Kitchen"]);
+      expect(lineStyles(el, "p:mojito", "every")).toEqual([{ italic: true, color: muted }]);
+      const own = lineStyles(el, "p:cola", "every");
+      expect(own).toHaveLength(1);
+      expect(own[0]!.italic).toBe(false);
+      expect(own[0]!.color).not.toBe(muted);
+    });
+
+    it("draws a waiting choice's own lines with its station, not the saved lines", async () => {
+      const { el } = await mount(timed());
+      el.pending = {
+        address: drinks,
+        target: station("kitchen"),
+        periods: [{ periodId: "staff", target: station("tbar") }],
+      };
+      await el.updateComplete;
+      const own = combo(el, "c:drinks", "every")!;
+      expect(shown(own)).toEqual({ text: "Kitchen", muted: false });
+      expect(lines(el, "c:drinks", "every")).toEqual(["Staff lunch: Terrace bar"]);
+      expect(own.getAttribute("aria-label")).toBe(
+        "Drinks, Every zone: Kitchen, set here. Staff lunch: Terrace bar",
+      );
+      // A waiting choice with no lines draws none.
+      el.pending = { address: drinks, target: station("kitchen") };
+      await el.updateComplete;
+      expect(lines(el, "c:drinks", "every")).toEqual([]);
+    });
+
+    it("draws a waiting Clear with the station and lines it would inherit, as inherited", async () => {
+      const { el } = await expanded(withCola());
+      expect(lines(el, "p:cola", "every")).toEqual(["Staff lunch: Bar"]);
+      el.pending = { address: colaEvery, target: null };
+      await el.updateComplete;
+      const cola = combo(el, "p:cola", "every")!;
+      expect(shown(cola)).toEqual({ text: "Bar", muted: true });
+      expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
+      expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(true);
+      expect(cola.getAttribute("aria-label")).toBe(
+        "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
+      );
+    });
+
+    it("says when a live update removes the open editor's zone or row with its changes unsaved", async () => {
+      const lost: CellAddress[] = [];
+      const { el } = await mount(timed());
+      el.addEventListener("routing-draft-lost", (event) =>
+        lost.push((event as CustomEvent<{ address: CellAddress }>).detail.address),
+      );
+      const terrace: CellAddress = { ...drinks, zoneId: "terrace" };
+      const noTerrace = () =>
+        routing({ zones: [{ id: "inside", name: "Inside", departmentId: null }] });
+      // Unchanged: nothing is lost.
+      await openEditor(el, combo(el, "c:drinks", "terrace")!);
+      el.model = noTerrace();
+      await el.updateComplete;
+      expect(editorOf(el)).toBeNull();
+      expect(lost).toEqual([]);
+      // Changed: the change is lost, and said so.
+      el.model = timed();
+      await el.updateComplete;
+      await pick(await openEditor(el, combo(el, "c:drinks", "terrace")!), "target", "Kitchen");
+      el.model = noTerrace();
+      await el.updateComplete;
+      expect(editorOf(el)).toBeNull();
+      expect(lost).toEqual([terrace]);
+      // A row removed with the editor's changes in it.
+      const { el: other } = await mount(timed());
+      other.addEventListener("routing-draft-lost", (event) =>
+        lost.push((event as CustomEvent<{ address: CellAddress }>).detail.address),
+      );
+      await pick(await openEditor(other, combo(other, "c:food", "every")!), "target", "Bar");
+      other.model = {
+        ...timed(),
+        categories: timed().categories.filter(({ id }) => id !== "food"),
+        products: timed().products.filter(({ id }) => id !== "burger"),
+        cells: timed().cells.filter(
+          ({ row }) => row.kind !== "category" || row.categoryId !== "food",
+        ),
+      };
+      await other.updateComplete;
+      expect(lost).toEqual([
+        terrace,
+        { row: { kind: "category", categoryId: "food" }, zoneId: null },
+      ]);
+    });
+
+    it("leaves a waiting choice's lost row to its host, which says so itself", async () => {
+      const lost: unknown[] = [];
+      const { el } = await mount(timed());
+      el.addEventListener("routing-draft-lost", (event) => lost.push(event));
+      const terrace: CellAddress = { ...drinks, zoneId: "terrace" };
+      await pick(await openEditor(el, combo(el, "c:drinks", "terrace")!), "target", "Kitchen");
+      el.pending = { address: terrace, target: station("kitchen") };
+      el.model = routing({ zones: [{ id: "inside", name: "Inside", departmentId: null }] });
+      await el.updateComplete;
+      expect(editorOf(el)).toBeNull();
+      expect(lost).toEqual([]);
+    });
+
     it("redraws a cell's lines when a live update brings them", async () => {
       const { el } = await mount(routing({ periods: [lunch, staff] }));
       expect(lines(el, "c:drinks", "every")).toEqual([]);

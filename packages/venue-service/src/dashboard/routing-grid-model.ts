@@ -225,11 +225,13 @@ export interface CellPeriodLines {
 
 /**
  * Three or more periods read "first–last" only when they run on in their one department's order.
- * A name repeated within the line carries its department.
+ * A name repeated anywhere among the cell's lines carries its department.
  */
-function periodsText(periods: readonly RoutingPeriod[], all: readonly RoutingPeriod[]): string {
-  const names = periods.map(({ name }) => name);
-  const repeated = new Set(names.filter((name, i) => names.indexOf(name) !== i));
+function periodsText(
+  periods: readonly RoutingPeriod[],
+  all: readonly RoutingPeriod[],
+  repeated: ReadonlySet<string>,
+): string {
   const named = (period: RoutingPeriod) =>
     repeated.has(period.name)
       ? format("routing.period_in_department", {
@@ -248,16 +250,23 @@ function periodsText(periods: readonly RoutingPeriod[], all: readonly RoutingPer
     : format("routing.period_more", { first: named(first), count: String(periods.length - 1) });
 }
 
+/** A choice not yet saved: its target, and its lines when it has any; a null target clears. */
+export interface WaitingChoice {
+  readonly target: RouteTarget | null;
+  readonly periods?: readonly PeriodLine[];
+}
+
 /**
  * A coordinate's period lines, one per target, each ordered and ordered among themselves by the
  * model's period order. A coordinate with no cell of its own shows the lines of the cell that
  * decides it. A line's period the model does not list is left out, and so, in a zone column, is a
- * line of another department's period, which the server never applies there.
+ * line of another department's period, which the server never applies there. A waiting choice
+ * stands in for the coordinate's own cell.
  */
 export function cellPeriodLines(
   model: RoutingModel,
   targetText: (target: RouteTarget) => string,
-): (row: RoutingRow, zoneId: string | null) => CellPeriodLines {
+): (row: RoutingRow, zoneId: string | null, waiting?: WaitingChoice) => CellPeriodLines {
   const rules = selectionRulesFromModel(model);
   const cells = new Map(model.cells.map((cell) => [cellKey(cell), cell]));
   const order = new Map(model.periods.map((period, i) => [period.id, i]));
@@ -280,21 +289,33 @@ export function cellPeriodLines(
       if (line === undefined) byTarget.set(key, { target, periods: [period] });
       else line.periods.push(period);
     }
+    const names = new Map<string, Set<string>>();
+    for (const { periodId } of known) {
+      const { id, name } = model.periods[order.get(periodId)!]!;
+      names.set(name, (names.get(name) ?? new Set()).add(id));
+    }
+    const repeated = new Set([...names].filter(([, ids]) => ids.size > 1).map(([name]) => name));
     return [...byTarget.values()].map(({ target, periods }) => ({
       periodIds: periods.map(({ id }) => id),
       target,
       text: format("routing.period_line", {
-        periods: periodsText(periods, model.periods),
+        periods: periodsText(periods, model.periods, repeated),
         target: targetText(target),
       }),
     }));
   };
 
-  return (row, zoneId) => {
-    const own = cells.get(cellKey({ row, zoneId }));
-    if (own !== undefined) return { inherited: false, lines: linesOf(own.periods ?? [], zoneId) };
+  return (row, zoneId, waiting) => {
+    const stored = cells.get(cellKey({ row, zoneId }));
+    const own =
+      waiting === undefined
+        ? stored && (stored.periods ?? [])
+        : waiting.target === null
+          ? undefined
+          : (waiting.periods ?? []);
+    if (own !== undefined) return { inherited: false, lines: linesOf(own, zoneId) };
     const category = row.kind === "product" ? (categoryOf.get(row.productId) ?? null) : null;
-    const { decidedBy } = selectRoutingCell(rules, row, zoneId, category);
+    const { decidedBy } = selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
     const deciding = decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
     return { inherited: true, lines: linesOf(deciding?.periods ?? [], zoneId) };
   };

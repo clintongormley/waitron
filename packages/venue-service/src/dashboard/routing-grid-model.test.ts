@@ -858,7 +858,7 @@ describe("cellPeriodLines", () => {
     expect(lines(drinks, "garden")).toEqual({ inherited: true, lines: [] });
   });
 
-  it("names each period's department in brackets only where a name repeats within a line", () => {
+  it("names each period's department in brackets only where its name repeats", () => {
     const named = (id: string, departmentName: string, name: string): RoutingPeriod => ({
       ...period(id, departmentName.toLowerCase(), name),
       departmentName,
@@ -886,6 +886,56 @@ describe("cellPeriodLines", () => {
       "Lunch (Dining), Lunch (Bar): Downstairs bar",
       "Dinner, Aperitivo: Kitchen",
     ]);
+  });
+
+  it("names a period's department wherever its name repeats among the cell's lines", () => {
+    const named = (id: string, departmentName: string, name: string): RoutingPeriod => ({
+      ...period(id, departmentName.toLowerCase(), name),
+      departmentName,
+    });
+    const lines = cellPeriodLines(
+      {
+        ...routing([
+          withLines(categoryCell("drinks"), [
+            ["dining-lunch", downstairs],
+            ["bar-lunch", kitchen],
+            ["dining-dinner", kitchen],
+          ]),
+        ]),
+        periods: [
+          named("dining-lunch", "Dining", "Lunch"),
+          named("dining-dinner", "Dining", "Dinner"),
+          named("bar-lunch", "Bar", "Lunch"),
+        ],
+      },
+      targetText,
+    );
+    expect(lines(drinks, null).lines.map((line) => line.text)).toEqual([
+      "Lunch (Dining): Downstairs bar",
+      "Dinner, Lunch (Bar): Kitchen",
+    ]);
+  });
+
+  it("draws a waiting choice's own lines, and for a waiting Clear the lines it would inherit", () => {
+    const parent = withLines(categoryCell("drinks"), [["p-lunch", downstairs]]);
+    const mojito = withLines(
+      { row: { kind: "product", productId: "mojito" }, zoneId: null, target: kitchen },
+      [["p-dinner", kitchen]],
+    );
+    const of = cellPeriodLines(routing([parent, mojito]), targetText);
+    const row: RoutingRow = { kind: "product", productId: "mojito" };
+    expect(of(row, null)).toMatchObject({ inherited: false, lines: [{ text: "Dinner: Kitchen" }] });
+    expect(
+      of(row, null, { target: kitchen, periods: [{ periodId: "p-supper", target: downstairs }] }),
+    ).toEqual({
+      inherited: false,
+      lines: [{ periodIds: ["p-supper"], target: downstairs, text: "Supper: Downstairs bar" }],
+    });
+    expect(of(row, null, { target: kitchen })).toEqual({ inherited: false, lines: [] });
+    expect(of(row, null, { target: null })).toEqual({
+      inherited: true,
+      lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+    });
   });
 
   it("leaves out a line whose period the model does not list", () => {
