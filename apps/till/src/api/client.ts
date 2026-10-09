@@ -1057,6 +1057,9 @@ export interface CounterWaitingOrder {
   serviceMode: OrderFlow | "table_tab" | null;
   /** Only on a placed order whose invoice is issued: its number ("A/12"). */
   invoiceNumber?: string;
+  /** A paid order's dishes that can still move to another station, in line order; empty on a
+   * placed one. */
+  movableDishes: { lineId: string; stationId: string }[];
 }
 
 /**

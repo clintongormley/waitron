@@ -5922,6 +5922,9 @@ export interface CounterWaitingOrder {
   serviceMode: ServiceMode | null;
   /** Only on a placed order whose invoice is issued: its number. */
   invoiceNumber?: string;
+  /** A settled order's top-level dishes that `stillMovable` accepts, in line order; empty on a
+   * placed one. */
+  movableDishes: { lineId: string; stationId: string }[];
 }
 
 /**
@@ -5974,6 +5977,38 @@ export async function listCounterWaiting(
       tx,
       [...issued.values()].map((sale) => sale.saleId),
     );
+    const settledIds = rows.filter((row) => row.status === "settled").map((row) => row.id);
+    const dishes =
+      settledIds.length === 0
+        ? []
+        : await tx
+            .select({
+              orderId: ticketItems.workingOrderId,
+              lineId: workingOrderLines.id,
+              stationId: ticketItems.stationId,
+              state: ticketItems.state,
+              awayAt: ticketItems.awayAt,
+              madeHere: ticketItems.madeHere,
+              servedAt: workingOrderLines.servedAt,
+              servedQuantity: workingOrderLines.servedQuantity,
+            })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(
+              and(
+                inArray(ticketItems.workingOrderId, settledIds),
+                isNull(workingOrderLines.parentLineId),
+              ),
+            )
+            .orderBy(workingOrderLines.lineNo);
+    const movable = new Map<string, { lineId: string; stationId: string }[]>();
+    for (const dish of dishes) {
+      if (!stillMovable(dish, dish)) continue;
+      movable.set(dish.orderId, [
+        ...(movable.get(dish.orderId) ?? []),
+        { lineId: dish.lineId, stationId: dish.stationId },
+      ]);
+    }
     const waiting: CounterWaitingOrder[] = [];
     for (const row of rows) {
       const placed = row.status === "placed";
@@ -5994,6 +6029,7 @@ export async function listCounterWaiting(
         canHandOver: eligible,
         serviceMode: placed ? (modes.get(row.id) ?? "prepay") : null,
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
+        movableDishes: movable.get(row.id) ?? [],
       });
     }
     return waiting;

@@ -1208,6 +1208,7 @@ describe("TillApi", () => {
         collectedAt: null,
         total: "18.00",
         canHandOver: true,
+        movableDishes: [],
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(rows));

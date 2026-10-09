@@ -12,11 +12,17 @@ export interface PayWaitingOrderDetail {
   serviceMode: CounterWaitingOrder["serviceMode"];
 }
 
+/** How the row's buttons' names and the move dialog's heading name the order: `#12 Mesa 4`. */
+export function waitingScope(order: CounterWaitingOrder): string {
+  return `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
+}
+
 /**
  * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
- * its `hand-over-order` and `pay-waiting-order` events into API calls, and its
- * `cancel-credit-waiting-order` event into the cancel and credit dialog.
+ * its `hand-over-order` and `pay-waiting-order` events into API calls, its
+ * `cancel-credit-waiting-order` event into the cancel and credit dialog, and its
+ * `move-waiting-order` event into the move-to-station dialog.
  */
 @customElement("till-counter-waiting")
 export class TillCounterWaiting extends LitElement {
@@ -73,6 +79,8 @@ export class TillCounterWaiting extends LitElement {
   ];
 
   @property({ attribute: false }) orders: CounterWaitingOrder[] = [];
+  /** The device's profile allows `take-orders`, which the move route requires. */
+  @property({ type: Boolean }) canMoveStation = false;
 
   #emit(type: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -84,7 +92,7 @@ export class TillCounterWaiting extends LitElement {
   }
 
   #row(order: CounterWaitingOrder): TemplateResult {
-    const scope = `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
+    const scope = waitingScope(order);
     const pay = order.status === "placed";
     return html`
       <div class="order" data-waiting-order=${order.id}>
@@ -118,6 +126,17 @@ export class TillCounterWaiting extends LitElement {
                   aria-label=${`${t("waiting.hand_over")} ${scope}`}
                   @click=${() => this.#emit("hand-over-order", { id: order.id })}
                   >${t("waiting.hand_over")}</wt-button
+                >`
+              : nothing
+          }
+          ${
+            this.canMoveStation && !pay && order.movableDishes.length > 0
+              ? html`<wt-button
+                  data-waiting-move-station
+                  variant="secondary"
+                  aria-label=${`${t("table.move_station")} ${scope}`}
+                  @click=${() => this.#emit("move-waiting-order", { id: order.id })}
+                  >${t("table.move_station")}</wt-button
                 >`
               : nothing
           }

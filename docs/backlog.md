@@ -1646,11 +1646,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `getTill` a canvas and assert `till-counter-screen` exists before each scan.
   [Detail](backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
 
-- **Two more till lookups read inherited object properties** — OPEN (found by W24's review,
-  2026-10-03, by reading, not run). Both look a string key up in a plain object, so a key such as
-  `constructor` finds an inherited property — the defect `deviceKindLabel` had. **Next action:**
-  look both keys up on own properties only (`Object.hasOwn`, as `apps/till/src/i18n/codes.ts` does),
-  with a test each. [Detail](backlog/till.md#two-more-till-lookups-read-inherited-object-properties)
+- **Another till lookup reads inherited object properties** — OPEN (found by W24's review,
+  2026-10-03, by reading, not run). `allergenName` looks a string key up in a plain object, so a
+  key such as `constructor` finds an inherited property — the defect `deviceKindLabel` had. **Next
+  action:** look `allergenName`'s key up on own properties only (`Object.hasOwn`, as
+  `apps/till/src/i18n/codes.ts` does), with a test.
+  [Detail](backlog/till.md#another-till-lookup-reads-inherited-object-properties)
 
 - **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
   reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
@@ -2376,11 +2377,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   by the product folders work. The till's Current orders read attaches extras under each dish but
   reads kitchen state only from the dish's record (`readCurrentOrders`,
   `apps/server/src/order-groups.ts`). Show the extra's own progress.
-
-- **Move to station on a paid counter order.** — left open by the product folders work. The move
-  route accepts an order that is paid but not yet handed over (`apps/server/src/station-move.ts`).
-  Add the button to B16's "Paid, not handed over" list ([Task
-  16](superpowers/plans/2026-09-26-service-ordering-and-billing.md)).
 
 - **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
   does not notice a publish that adds a required options list to a dish in the basket, or lowers a

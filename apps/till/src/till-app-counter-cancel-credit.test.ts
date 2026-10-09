@@ -75,6 +75,7 @@ const notInvoiced: CounterWaitingOrder = {
   total: "7.50",
   canHandOver: true,
   serviceMode: "ticket_then_pay",
+  movableDishes: [],
 };
 const invoiced: CounterWaitingOrder = { ...notInvoiced, invoiceNumber: "A/12" };
 

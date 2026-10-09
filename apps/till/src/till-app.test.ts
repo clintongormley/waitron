@@ -13851,6 +13851,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     total: "3.00",
     canHandOver: true,
     serviceMode: "ticket_then_pay",
+    movableDishes: [],
   };
   const handedOrder: CounterWaitingOrder = {
     ...sentOrder,

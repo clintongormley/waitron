@@ -20,6 +20,22 @@ const moveRefusals: Record<string, StringKey> = {
   "ticket.made_here": "move_station.refused.ticket.made_here",
 };
 
+/** One refused dish refuses the whole request, so a sentence about "this dish" would read as if
+ * the others had moved. */
+const orderMoveRefusals: Record<string, StringKey> = {
+  ...moveRefusals,
+  "ticket.already_started": "move_station.order_refused.ticket.already_started",
+  "tab.line_not_found": "move_station.order_refused.tab.line_not_found",
+  "ticket.not_sent": "move_station.order_refused.ticket.not_sent",
+  "ticket.made_here": "move_station.order_refused.ticket.made_here",
+};
+
+/** The move dialog's own sentence for a refusal code, if it has one. */
+export function moveRefusalKey(code: string, wholeOrder: boolean): StringKey | undefined {
+  const table = wholeOrder ? orderMoveRefusals : moveRefusals;
+  return Object.hasOwn(table, code) ? table[code] : undefined;
+}
+
 const NO_STATION = "__station_choice_none__";
 
 @customElement("till-station-choice-dialog")
@@ -45,6 +61,8 @@ export class TillStationChoiceDialog extends LitElement {
   @property() selected: string | null | undefined = undefined;
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
+  /** The move is of a whole order, not one dish. */
+  @property({ type: Boolean }) wholeOrder = false;
 
   @state() private active = true;
   #scope?: DraftScope<string | null>;
@@ -141,7 +159,7 @@ export class TillStationChoiceDialog extends LitElement {
 
   #refusal(): string {
     const code = this.refusal!;
-    const key = this.mode === "move" ? moveRefusals[code] : undefined;
+    const key = this.mode === "move" ? moveRefusalKey(code, this.wholeOrder) : undefined;
     return key === undefined ? codeMessage(code) : t(key);
   }
 
