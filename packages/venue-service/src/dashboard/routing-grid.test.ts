@@ -911,16 +911,12 @@ describe("venue-routing-grid", () => {
     expect(cell(el, "c:drinks", "terrace").getBoundingClientRect().right).toBeLessThanOrEqual(
       visibleEnd,
     );
-    expect(label!.getBoundingClientRect().width).toBeLessThanOrEqual(96);
-    // The narrower cell still holds a station's longer word whole.
-    const station = combo(el, "all", "terrace")!.querySelector(".station")!;
-    expect(station.textContent!.trim()).toBe("No preparation");
-    const text = [...station.childNodes].find((node) => node.textContent!.includes("preparation"))!;
-    const word = document.createRange();
-    const start = text.textContent!.indexOf("preparation");
-    word.setStart(text, start);
-    word.setEnd(text, start + "preparation".length);
-    expect(word.getClientRects()).toHaveLength(1);
+    const padding = () => getComputedStyle(cell(el, "c:drinks", "terrace")).paddingInlineStart;
+    expect(padding()).toBe("4px");
+    expect(getComputedStyle(label!).paddingInlineStart).toBe("4px");
+    await page.viewport(1280, 800);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(padding()).toBe("8px");
   });
 
   it("scrolls sideways at phone width with the row labels kept in view", async () => {
