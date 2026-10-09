@@ -215,6 +215,7 @@ const en = {
   "prep.preview_none": "No product changes where it is made.",
   "prep.preview_product": "Product",
   "prep.preview_extra": "{extra} — with {dish}",
+  "prep.preview_during": "{move} during {periods}",
   "prep.preview_from": "From",
   "prep.preview_to": "To",
   "prep.no_station": "No station",
@@ -687,6 +688,7 @@ const en = {
   "routing.dropped_no_category":
     "Your choice was not saved: the No category row is no longer in the grid.",
   "routing.editor_from": "From {source}",
+  "routing.cell_place": "{row}, {zone}",
   "routing.any_other_time": "Any other time",
   "routing.line_periods": "Periods",
   "routing.line_station": "Station",
@@ -925,6 +927,7 @@ const es: Record<keyof typeof en, string> = {
   "prep.preview_none": "Ningún producto cambia de lugar de preparación.",
   "prep.preview_product": "Producto",
   "prep.preview_extra": "{extra} — con {dish}",
+  "prep.preview_during": "{move} durante {periods}",
   "prep.preview_from": "De",
   "prep.preview_to": "A",
   "prep.no_station": "Sin estación",
@@ -1416,6 +1419,7 @@ const es: Record<keyof typeof en, string> = {
   "routing.dropped_no_category":
     "Tu elección no se ha guardado: la fila Sin categoría ya no está en la cuadrícula.",
   "routing.editor_from": "De {source}",
+  "routing.cell_place": "{row}, {zone}",
   "routing.any_other_time": "El resto del tiempo",
   "routing.line_periods": "Periodos",
   "routing.line_station": "Estación",

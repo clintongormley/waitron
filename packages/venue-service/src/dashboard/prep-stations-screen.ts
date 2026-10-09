@@ -56,7 +56,12 @@ import type {
 import { watchersOfStation, type WatcherView } from "./watchers-seen.js";
 import "./routing-grid.js";
 import { rowInModel } from "./routing-grid-model.js";
-import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
+import type {
+  RoutingCellChange,
+  RoutingDefaultRefusal,
+  RoutingPending,
+  RoutingRefusal,
+} from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
 
@@ -294,6 +299,8 @@ export class PrepStationsScreen extends LitElement {
   /** The grid shows this choice at its address until the preview or save settles. */
   @state() private cellChoice: RoutingPending | null = null;
   @state() private cellRefusal: RoutingRefusal | null = null;
+  /** A refused Make default: shown on the page, as every station action's is, and in the editor. */
+  @state() private defaultRefusal: RoutingDefaultRefusal | null = null;
   /**
    * The refusal `#dropChoice` set, which a refresh that puts its row and zone back in the grid
    * clears.
@@ -741,7 +748,11 @@ export class PrepStationsScreen extends LitElement {
       if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
       this.#writtenChoice = undefined;
     }
-    if (changedState.has("tab")) this.cellRefusal = null;
+    if (changedState.has("tab")) {
+      this.cellRefusal = null;
+      this.defaultRefusal = null;
+      this.#closeCellEditor();
+    }
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       if (this.#url.read("dashboard") === "prep-stations")
@@ -800,6 +811,7 @@ export class PrepStationsScreen extends LitElement {
     this.pending = undefined;
     this.cellChoice = null;
     this.cellRefusal = null;
+    this.defaultRefusal = null;
     this.#writtenChoice = undefined;
     this.#cellRefreshing = undefined;
     this.#releaseCellScope();
@@ -924,12 +936,38 @@ export class PrepStationsScreen extends LitElement {
       { name, date: formatDate(params.date) },
     );
   }
+  /** The grid's open editor closes once its choice is written. */
+  #closeCellEditor(): void {
+    this.renderRoot.querySelector("venue-routing-grid")?.closeEditor();
+  }
   async #makeDefault(stationId: string) {
-    const saved = await this.#act(
-      () => this.api.setDefaultStation(stationId),
-      (error) => this.#defaultRefusal(error),
-    );
-    if (saved && this.isConnected) this.cellRefusal = null;
+    if (this.busy || this.pending) return;
+    const address: CellAddress = { row: { kind: "all" }, zoneId: null };
+    const run = ++this.#cellRun;
+    this.busy = true;
+    this.#showError("");
+    this.defaultRefusal = null;
+    this.cellChoice = { address, target: { kind: "station", stationId } };
+    try {
+      await this.api.setDefaultStation(stationId);
+    } catch (error) {
+      if (this.#cellRun !== run || !this.isConnected) return;
+      const message = this.#defaultRefusal(error);
+      this.cellChoice = null;
+      this.#showError(message);
+      this.defaultRefusal = { code: "", ...this.#refusalCode(error), message };
+      this.busy = false;
+      return;
+    }
+    if (this.#cellRun !== run || !this.isConnected) return;
+    this.cellChoice = null;
+    this.cellRefusal = null;
+    this.#closeCellEditor();
+    try {
+      await this.#load();
+    } finally {
+      if (this.#cellRun === run) this.busy = false;
+    }
   }
   /** Whether the grid still draws this coordinate: a refresh can remove its zone or its row. */
   #addressShown({ row, zoneId }: CellAddress): boolean {
@@ -941,15 +979,20 @@ export class PrepStationsScreen extends LitElement {
   #savedCell(address: CellAddress): RouteTarget | null {
     return this.view?.routing.cells.find((cell) => sameAddress(cell, address))?.target ?? null;
   }
-  async #chooseCell({ address, target }: RoutingCellChange) {
+  async #chooseCell({ address, target, periods }: RoutingCellChange) {
     if (this.busy || this.pending) return;
     const run = ++this.#cellRun;
     const isCurrent = () => this.isConnected && this.#cellRun === run;
     this.cellChoice = { address, target };
     this.cellRefusal = null;
     await this.#preview(
-      { kind: "cell", address, target },
-      () => this.api.setCell(address, target),
+      periods === undefined
+        ? { kind: "cell", address, target }
+        : { kind: "cell", address, target, periods },
+      () =>
+        periods === undefined
+          ? this.api.setCell(address, target)
+          : this.api.setCell(address, target, periods),
       isCurrent,
     );
   }
@@ -995,6 +1038,15 @@ export class PrepStationsScreen extends LitElement {
       ),
     };
   }
+  /** What the cell's editor needs to place a refusal: its code and its params. */
+  #refusalCode(error: unknown): { code?: string; params?: Record<string, unknown> } {
+    const code = codeOf(error);
+    const params = (error as { params?: Record<string, unknown> } | undefined)?.params;
+    return {
+      ...(code === undefined ? {} : { code }),
+      ...(params === undefined ? {} : { params }),
+    };
+  }
   #refuseCell(address: CellAddress, error: unknown): void {
     this.cellChoice = null;
     this.cellRefusal = {
@@ -1002,6 +1054,7 @@ export class PrepStationsScreen extends LitElement {
       message: t(
         codeOf(error) === "route.station_inactive" ? "prep.station_disabled" : "prep.save_error",
       ),
+      ...this.#refusalCode(error),
     };
   }
   async #saveCell(pending: NonNullable<PrepStationsScreen["pending"]>) {
@@ -1017,6 +1070,7 @@ export class PrepStationsScreen extends LitElement {
       return;
     }
     if (!pending.isCurrent()) return;
+    this.#closeCellEditor();
     if (this.#cellScopeOwner === pending) this.#cellScope?.commit(targetKey(pending.change.target));
     this.#cellRefreshing = pending;
     this.pending = undefined;
@@ -2838,6 +2892,29 @@ export class PrepStationsScreen extends LitElement {
       to: name(after),
     });
   }
+  /** The moved product, its dish for an extra, and the periods during which it moves. */
+  #moveName(move: RoutingMove): string {
+    const name = move.dish
+      ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName })
+      : move.productName;
+    if (move.periodIds === null || move.periodIds === undefined) return name;
+    const during = new Set(move.periodIds);
+    const periods = this.view!.routing.periods.filter((period) => during.has(period.id));
+    const names = periods.map((period) => period.name);
+    return format("prep.preview_during", {
+      move: name,
+      periods: periods
+        .map((period) =>
+          names.indexOf(period.name) === names.lastIndexOf(period.name)
+            ? period.name
+            : format("routing.period_in_department", {
+                period: period.name,
+                department: period.departmentName,
+              }),
+        )
+        .join(", "),
+    });
+  }
   #previewDialog() {
     const pending = this.pending;
     if (!pending) return nothing;
@@ -2868,9 +2945,7 @@ export class PrepStationsScreen extends LitElement {
                     ${pending.moves.map(
                       (move) =>
                         html`<tr>
-                          <td>
-                            ${move.dish ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName }) : move.productName}
-                          </td>
+                          <td>${this.#moveName(move)}</td>
                           <td>${move.zoneName ?? t("prep.any_zone")}</td>
                           <td>${move.from ? this.#targetName(move.from) : t("prep.no_station")}</td>
                           <td>
@@ -3070,6 +3145,7 @@ export class PrepStationsScreen extends LitElement {
                           .model=${view.routing}
                           .pending=${this.cellChoice}
                           .refusal=${this.cellRefusal}
+                          .defaultRefusal=${this.defaultRefusal}
                           @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
                             void this.#chooseCell(event.detail)}
                           @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>

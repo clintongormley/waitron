@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import type { CellAddress, RouteTarget, RoutingCell } from "../routing.js";
+import { cellKey } from "../routing.js";
+import type { CellAddress, RouteTarget, RoutingCell, RoutingPeriod } from "../routing.js";
 import type { RoutingView } from "../routing.js";
 import type { RoutingGrid } from "./routing-grid.js";
 import "./routing-grid.js";
@@ -310,8 +311,8 @@ describe("venue-routing-grid", () => {
       ["Kitchen", false, false],
       ["Bar", false, false],
       ["Terrace bar", false, false],
-      ["Old kitchen (Disabled)", true, true],
       ["No preparation", false, false],
+      ["Old kitchen", true, true],
     ]);
     // Saving the disabled station again is not a change, so nothing is sent.
     editorButton(editor, "save-cell")!.click();
@@ -325,7 +326,7 @@ describe("venue-routing-grid", () => {
     setLocale("es");
     const { el } = await mount();
     const old = combo(el, "c:food", "inside")!;
-    await old.updateComplete;
+    await el.updateComplete;
     expect(shown(old)).toEqual({ text: "Old kitchen (Deshabilitada)", muted: false });
   });
 
@@ -908,5 +909,202 @@ describe("venue-routing-grid", () => {
       scroller.getBoundingClientRect().left + scroller.clientLeft,
       0,
     );
+  });
+
+  describe("the cell's button and its editor", () => {
+    const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
+    const lunch: RoutingPeriod = { id: "lunch", ...dining, name: "Lunch", productIds: ["mojito"] };
+    const staff: RoutingPeriod = {
+      id: "staff",
+      ...dining,
+      name: "Staff lunch",
+      productIds: ["cola", "bread"],
+    };
+    const drinks: CellAddress = { row: { kind: "category", categoryId: "drinks" }, zoneId: null };
+    /** Drinks go to the Kitchen during Lunch; the Terrace serves Dining, the Inside no one. */
+    const timed = () =>
+      routing({
+        periods: [lunch, staff],
+        zones: [
+          { id: "terrace", name: "Terrace", departmentId: "dining" },
+          { id: "inside", name: "Inside", departmentId: null },
+        ],
+        cells: routing().cells.map((stored) =>
+          cellKey(stored) === cellKey(drinks)
+            ? { ...stored, periods: [{ periodId: "lunch", target: station("kitchen") }] }
+            : stored,
+        ),
+      });
+    const lines = (el: RoutingGrid, row: string, zone: string) =>
+      [...combo(el, row, zone)!.querySelectorAll(".line")].map((line) => line.textContent!.trim());
+
+    it("draws the station, its period lines beneath and its extras note, and names all three", async () => {
+      const model = {
+        ...timed(),
+        cells: [
+          ...timed().cells,
+          {
+            row: { kind: "product", productId: "bread" },
+            zoneId: "terrace",
+            target: NO_PREP,
+            periods: [{ periodId: "staff", target: station("bar") }],
+          } as RoutingCell,
+        ],
+      };
+      const { el } = await mount(model);
+      const own = combo(el, "c:drinks", "every")!;
+      expect(own.tagName).toBe("BUTTON");
+      expect(shown(own)).toEqual({ text: "Bar", muted: false });
+      expect(lines(el, "c:drinks", "every")).toEqual(["Lunch: Kitchen"]);
+      expect(own.getAttribute("aria-label")).toBe(
+        "Drinks, Every zone: Bar, set here. Lunch: Kitchen",
+      );
+      const bread = combo(el, "p:bread", "terrace")!;
+      expect(lines(el, "p:bread", "terrace")).toEqual(["Staff lunch: Bar"]);
+      expect(bread.querySelector('[data-test="extra-note"]')!.textContent!.trim()).toBe(
+        "No preparation — as an extra, follows its dish",
+      );
+      expect(bread.getAttribute("aria-label")).toBe(
+        "Bread, Terrace: No preparation, set here. Staff lunch: Bar. No preparation — as an extra, follows its dish",
+      );
+      // Inherited: italic, with the lines of the cell that decides it.
+      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await el.updateComplete;
+      const cola = combo(el, "p:cola", "every")!;
+      expect(shown(cola)).toEqual({ text: "Bar", muted: true });
+      expect(getComputedStyle(cola.querySelector(".station")!).fontStyle).toBe("italic");
+      expect(getComputedStyle(own.querySelector(".station")!).fontStyle).toBe("normal");
+      expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
+      expect(cola.getAttribute("aria-label")).toBe(
+        "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
+      );
+    });
+
+    it("opens the editor with the cell's place, choice, lines, products and zone department", async () => {
+      const { el } = await mount(timed());
+      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await el.updateComplete;
+      const own = await openEditor(el, combo(el, "c:drinks", "every")!);
+      expect(own.open).toBe(true);
+      expect(own.cell).toEqual({
+        address: drinks,
+        label: "Drinks, Every zone",
+        target: station("bar"),
+        periods: [{ periodId: "lunch", target: station("kitchen") }],
+      });
+      expect([...own.rowProductIds].sort()).toEqual(["cola", "mojito"]);
+      expect(own.zoneDepartmentId).toBeNull();
+      expect(own.isDefaultCell).toBe(false);
+      expect(own.periods).toEqual([lunch, staff]);
+      expect(own.stations).toEqual(el.model!.stations);
+
+      const cola = await openEditor(el, combo(el, "p:cola", "terrace")!);
+      expect(cola.cell).toEqual({
+        address: { row: { kind: "product", productId: "cola" }, zoneId: "terrace" },
+        label: "Drinks › Cola, Terrace",
+        target: station("bar"),
+        periods: [{ periodId: "lunch", target: station("kitchen") }],
+        inheritedFrom: "Drinks, Every zone",
+      });
+      expect(cola.rowProductIds).toEqual(["cola"]);
+      expect(cola.zoneDepartmentId).toBe("dining");
+
+      const burger = await openEditor(el, combo(el, "p:burger", "terrace")!);
+      expect(burger.cell!.inheritedFrom).toBe("Every zone");
+      const bread = await openEditor(el, combo(el, "p:bread", "every")!);
+      expect(bread.cell!.inheritedFrom).toBe("the default station");
+      expect(bread.cell!.periods).toEqual([]);
+      const none = await openEditor(el, combo(el, "no_category", "inside")!);
+      expect(none.rowProductIds).toEqual(["bread"]);
+      const all = await openEditor(el, combo(el, "all", "inside")!);
+      expect([...all.rowProductIds].sort()).toEqual(["bread", "burger", "cola", "mojito"]);
+      expect(all.zoneDepartmentId).toBeNull();
+
+      const fallback = await openEditor(el, combo(el, "all", "every")!);
+      expect(fallback.isDefaultCell).toBe(true);
+      expect(fallback.cell).toEqual({
+        address: { row: { kind: "all" }, zoneId: null },
+        label: "All categories, Every zone",
+        target: station("kitchen"),
+      });
+    });
+
+    it("saves a period line with the cell's change, and sends no lines where it had and has none", async () => {
+      const { el, emitted } = await mount(timed());
+      const editor = await openEditor(el, combo(el, "c:drinks", "every")!);
+      const periodsField = editor.shadowRoot!.querySelector<Combo>('[name="line-periods"]')!;
+      periodsField.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { values: ["lunch"] },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await editor.updateComplete;
+      await pick(editor, "line-target", "Terrace bar");
+      editorButton(editor, "save-cell")!.click();
+      await el.updateComplete;
+      expect(emitted.changes).toEqual([
+        {
+          address: drinks,
+          target: station("bar"),
+          periods: [{ periodId: "lunch", target: station("tbar") }],
+        },
+      ]);
+      // Removing the last line still sends the now empty list.
+      el.pending = null;
+      editorButton(editor, "remove-line")!.click();
+      await editor.updateComplete;
+      editorButton(editor, "save-cell")!.click();
+      await el.updateComplete;
+      expect(emitted.changes[1]).toEqual({ address: drinks, target: station("bar"), periods: [] });
+    });
+
+    it("hands a refusal at its cell to the open editor, which puts a period's under its line", async () => {
+      const { el } = await mount(timed());
+      const editor = await openEditor(el, combo(el, "c:drinks", "every")!);
+      await pick(editor, "target", "Kitchen");
+      el.refusal = {
+        address: drinks,
+        message: "The change could not be saved.",
+        code: "route.period_invalid",
+        params: { periodId: "lunch", reason: "not_offered" },
+      };
+      await el.updateComplete;
+      await editor.updateComplete;
+      const periodsField = editor.shadowRoot!.querySelector<Combo>('[name="line-periods"]')!;
+      expect(periodsField.error).toBe("Lunch offers none of these products.");
+      // Another cell's refusal is not this editor's.
+      el.refusal = {
+        address: { row: { kind: "all" }, zoneId: "terrace" },
+        message: "This station is disabled. Choose an active station.",
+        code: "route.station_inactive",
+      };
+      await el.updateComplete;
+      await editor.updateComplete;
+      expect(editor.refusal).toBeUndefined();
+    });
+
+    it("waits while its choice is pending, and closes when the host says the choice was saved", async () => {
+      const { el } = await mount(timed());
+      const editor = await openEditor(el, combo(el, "c:drinks", "every")!);
+      el.pending = { address: drinks, target: station("kitchen") };
+      await el.updateComplete;
+      expect(editor.busy).toBe(true);
+      el.pending = null;
+      await el.updateComplete;
+      expect(editor.busy).toBe(false);
+      el.closeEditor();
+      await el.updateComplete;
+      expect(editorOf(el)).toBeNull();
+    });
+
+    it("redraws a cell's lines when a live update brings them", async () => {
+      const { el } = await mount(routing({ periods: [lunch, staff] }));
+      expect(lines(el, "c:drinks", "every")).toEqual([]);
+      el.model = timed();
+      await el.updateComplete;
+      expect(lines(el, "c:drinks", "every")).toEqual(["Lunch: Kitchen"]);
+    });
   });
 });

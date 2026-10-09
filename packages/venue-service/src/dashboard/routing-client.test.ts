@@ -271,6 +271,26 @@ it("writes station changes to core and cells to venue-service", async () => {
     ],
   ]);
 });
+it("setCell sends a cell's period lines when it is given them", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest).background;
+  const address = { row: { kind: "category", categoryId: "drinks" }, zoneId: null } as const;
+  const periods = [{ periodId: "lunch", target: { kind: "no_preparation" } }] as const;
+  await api.setCell(address, { kind: "station", stationId: "bar" }, periods);
+  await api.setCell(address, { kind: "station", stationId: "bar" }, []);
+  expect(request.mock.calls).toEqual([
+    [
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      { address, target: { kind: "station", stationId: "bar" }, periods },
+    ],
+    [
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      { address, target: { kind: "station", stationId: "bar" }, periods: [] },
+    ],
+  ]);
+});
 it("setCell sends PUT …/routing/cell with address and target (or null)", async () => {
   const request = vi.fn(async () => undefined);
   const api = new PrepStationsApi(request as DashboardRequest).background;

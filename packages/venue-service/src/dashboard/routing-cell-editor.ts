@@ -120,7 +120,12 @@ export class RoutingCellEditor extends LitElement {
   /** The zone column's department; null for Every zone. */
   @property({ attribute: false }) zoneDepartmentId: string | null = null;
   @property({ type: Boolean }) isDefaultCell = false;
-  @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
+  /** `message`, when given, is shown at the bottom for a refusal no line takes. */
+  @property({ attribute: false }) refusal?: {
+    code: string;
+    params?: Record<string, unknown>;
+    message?: string;
+  };
 
   @state() private draft: Draft = { target: "", lines: [] };
   @state() private attempted = false;
@@ -432,9 +437,10 @@ export class RoutingCellEditor extends LitElement {
     const marked = own.target !== undefined || own.lines.size > 0 || refused !== undefined;
     const unplaced =
       this.refusal && refused === undefined
-        ? this.refusal.code === "route.station_inactive"
-          ? t("prep.station_disabled")
-          : t("prep.save_error")
+        ? (this.refusal.message ??
+          (this.refusal.code === "route.station_inactive"
+            ? t("prep.station_disabled")
+            : t("prep.save_error")))
         : "";
     const generation = this.generation;
     const current = () =>

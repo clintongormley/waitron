@@ -9,6 +9,7 @@ import "./prep-stations-screen.js";
 afterEach(cleanup);
 const empty = {
   routing: {
+    periods: [],
     zones: [],
     categories: [],
     products: [],

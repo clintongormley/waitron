@@ -50,6 +50,16 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "special_date_hours",
     "special_date_hours_periods",
     "locations",
+    "routing_cell_periods",
+    "menu_periods",
+    "menu_period_staff_menus",
+    "menu_slots",
+    "menu_day_timetables",
+    "departments",
+    "zone_service_policies",
+    "sections",
+    "section_members",
+    "catalogues",
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "departments",

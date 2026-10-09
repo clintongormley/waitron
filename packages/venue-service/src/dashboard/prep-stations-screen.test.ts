@@ -4911,6 +4911,123 @@ describe("Routing grid", () => {
     expect(a.setCell).not.toHaveBeenCalled();
   });
 
+  describe("period lines", () => {
+    const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
+    const lunch = { id: "lunch", ...dining, name: "Lunch", productIds: ["bread"] };
+    const staff = { id: "staff", ...dining, name: "Staff lunch", productIds: ["bread"] };
+    const foodEvery = { row: { kind: "category", categoryId: "food" }, zoneId: null };
+    const lunchLine = [{ periodId: "lunch", target: kitchenTarget }];
+    function timedView(): PrepStationsView {
+      const next = gridView();
+      next.routing.periods = [lunch, staff];
+      return next;
+    }
+    /** Opens Food × Every zone and adds "Lunch: Kitchen", then saves. */
+    async function saveLunchLine(el: PrepStationsScreen) {
+      cellCombo(el, "c:food", "every").button().click();
+      await gridOf(el).updateComplete;
+      const editor = cellEditor(el)!;
+      await editor.updateComplete;
+      const press = (test: string) =>
+        editor.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+      press("add-line");
+      await editor.updateComplete;
+      const send = (name: string, detail: object) =>
+        editor
+          .shadowRoot!.querySelector(`wt-combobox[name="${name}"]`)!
+          .dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
+      send("line-periods", { values: ["lunch"] });
+      await editor.updateComplete;
+      send("line-target", { value: "station:kitchen" });
+      await editor.updateComplete;
+      press("save-cell");
+      await settle(el);
+      return editor;
+    }
+
+    it("saving a Lunch line previews it, then writes the periods once confirmed", async () => {
+      const { a, el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(timedView()),
+        preview: vi.fn().mockResolvedValue([{ ...breadMove, periodIds: ["staff", "lunch"] }]),
+      });
+      const editor = await saveLunchLine(el);
+      expect(a.preview).toHaveBeenCalledExactlyOnceWith({
+        kind: "cell",
+        address: foodEvery,
+        target: { kind: "station", stationId: "bar" },
+        periods: lunchLine,
+      });
+      const preview = q(el, '[data-test="routing-preview"]')!;
+      // The move happens only during those periods, named in the model's order.
+      expect(preview.querySelector("tbody td")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        "Bread during Lunch, Staff lunch",
+      );
+      expect(a.setCell).not.toHaveBeenCalled();
+      expect(editor.isConnected).toBe(true);
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(
+        foodEvery,
+        { kind: "station", stationId: "bar" },
+        lunchLine,
+      );
+      await vi.waitFor(() => expect(cellEditor(el)).toBeNull());
+    });
+
+    it("says during in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(timedView()),
+        preview: vi.fn().mockResolvedValue([{ ...breadMove, periodIds: ["lunch"] }]),
+      });
+      await saveLunchLine(el);
+      expect(
+        q(el, '[data-test="routing-preview"]')!
+          .querySelector("tbody td")!
+          .textContent!.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe("Bread durante Lunch");
+    });
+
+    it.each(["preview", "setCell"] as const)(
+      "a route.period_invalid refusal from %s lands under the line its period is in",
+      async (call) => {
+        const refusal = {
+          code: "route.period_invalid",
+          params: { periodId: "lunch", reason: "not_offered" },
+        };
+        const { a, el } = await mountGrid({
+          load: vi.fn().mockResolvedValue(timedView()),
+          preview:
+            call === "preview" ? vi.fn().mockRejectedValue(refusal) : vi.fn().mockResolvedValue([]),
+          setCell: vi.fn().mockRejectedValue(refusal),
+        });
+        const editor = await saveLunchLine(el);
+        await vi.waitFor(() => expect(editor.refusal).toMatchObject(refusal));
+        await editor.updateComplete;
+        const line = editor.shadowRoot!.querySelector<WtCombobox>('[name="line-periods"]')!;
+        expect(line.error).toBe("Lunch offers none of these products.");
+        expect(cellEditor(el)).toBe(editor);
+        expect(a.setCell).toHaveBeenCalledTimes(call === "preview" ? 0 : 1);
+      },
+    );
+
+    it("hands a refused Make default to the open editor as well as the page", async () => {
+      const { el } = await mountGrid({
+        setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      });
+      await chooseCell(el, "all", "every", "Kitchen");
+      const editor = cellEditor(el)!;
+      await vi.waitFor(() =>
+        expect(
+          editor.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+            .error,
+        ).toBe("The change could not be saved."),
+      );
+      expect(q(el, '[role="alert"]')!.textContent!.trim()).toBe("The change could not be saved.");
+    });
+  });
+
   it("a preview refused for a disabled station shows beside the cell without opening confirmation or writing", async () => {
     const message = "This station is disabled. Choose an active station.";
     const { a, el } = await mountGrid({

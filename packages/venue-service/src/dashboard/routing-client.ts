@@ -2,7 +2,13 @@ import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { RouteTarget, RoutingModel } from "../routing.js";
-import type { CellAddress, RoutingChange, RoutingMove, RoutingView } from "../routing-types.js";
+import type {
+  CellAddress,
+  PeriodLine,
+  RoutingChange,
+  RoutingMove,
+  RoutingView,
+} from "../routing-types.js";
 import type { WatcherView } from "./watchers-seen.js";
 
 export interface OutputsDown {
@@ -244,8 +250,16 @@ export class PrepStationsApi {
   setDefaultStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}/default`, "POST");
   }
-  /** `target: null` clears the cell. */
-  setCell(address: CellAddress, target: RouteTarget | null): Promise<void> {
-    return this.request("/management-api/venue-service/routing/cell", "PUT", { address, target });
+  /** `target: null` clears the cell. Without `periods` the cell keeps its stored lines. */
+  setCell(
+    address: CellAddress,
+    target: RouteTarget | null,
+    periods?: readonly PeriodLine[],
+  ): Promise<void> {
+    return this.request(
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      periods === undefined ? { address, target } : { address, target, periods },
+    );
   }
 }
