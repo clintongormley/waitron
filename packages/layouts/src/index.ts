@@ -98,6 +98,8 @@ export {
   getPrintedReceipt,
   getReceipt,
   getStoredLogoRasters,
+  getVenueReceiptSettings,
+  putVenueReceiptSettings,
   putReceipt,
 } from "./receipt-store.js";
 

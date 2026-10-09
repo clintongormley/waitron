@@ -1,3 +1,4 @@
+import type { DepartmentReceiptConfig, VenueReceiptSettings } from "@waitron/shared";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
 import type {
@@ -30,6 +31,14 @@ import type {
 } from "@waitron/catalogue/src/product-types.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
+export interface DepartmentReceiptSettings {
+  receipt: DepartmentReceiptConfig;
+  venueDefaults: VenueReceiptSettings;
+  languages: string[];
+  warningLanguages: string[];
+  venueAddress: string[];
+}
+
 export interface VenueDetailValues {
   name: string;
   addressLine1: string | null;
@@ -2703,6 +2712,24 @@ export class DashboardApi {
 
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
+  }
+
+  getDepartmentReceipt(id: string): Promise<DepartmentReceiptSettings> {
+    return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "GET");
+  }
+
+  putDepartmentReceipt(id: string, receipt: DepartmentReceiptConfig): Promise<void> {
+    return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "PUT", {
+      receipt,
+    });
+  }
+
+  getVenueReceiptSettings(): Promise<{ settings: VenueReceiptSettings }> {
+    return this.#request("/management-api/receipt-settings", "GET");
+  }
+
+  putVenueReceiptSettings(settings: VenueReceiptSettings): Promise<void> {
+    return this.#request("/management-api/receipt-settings", "PUT", { settings });
   }
 
   getReceiptLanguage(): Promise<ReceiptLanguage> {
