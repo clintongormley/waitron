@@ -387,6 +387,7 @@ it("returns the country's area options and the chosen venue area without inventi
   );
   expect(before.area).toEqual({
     addressKey: JSON.stringify(["ES", "38", "santa cruz"]),
+    readiness: "ready",
     options: [
       { key: "el-hierro", name: "El Hierro" },
       { key: "la-gomera", name: "La Gomera" },

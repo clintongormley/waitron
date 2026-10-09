@@ -280,6 +280,7 @@ describe.each(["light", "dark"] as const)("Named month accessibility (%s)", (the
       holidaySources: [],
       area: {
         addressKey: "fixture-address",
+        readiness: "ready",
         options: [{ key: "aran", name: "Aran" }],
         required: true,
         chosen: null,

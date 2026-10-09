@@ -401,3 +401,27 @@ it("refuses the retained area write to a read-only supervisor, staff, an absent 
   });
   expect(await rows(fx)).toEqual(before);
 });
+
+it("refuses a submitted city on the retained area route and writes nothing", async () => {
+  const fx = await fixture({ province: "Lleida", city: "Vielha" });
+  const before = await rows(fx);
+  await refused(
+    await send(fx, "PUT", "/holiday-area", fx.manager, { areaKey: null, city: "Vielha" }),
+    400,
+    { code: "management.request_invalid", params: { field: "city" } },
+  );
+  expect(await rows(fx)).toEqual(before);
+});
+it.each([
+  { city: null, province: "Lleida" },
+  { city: "Vielha", province: null },
+  { city: null, province: null },
+])("refuses the unresolved address %j at the area route without writes", async (address) => {
+  const fx = await fixture(address);
+  const before = await rows(fx);
+  await refused(await send(fx, "PUT", "/holiday-area", fx.manager, { areaKey: "aran" }), 400, {
+    code: "holiday.invalid",
+    params: { field: "geography" },
+  });
+  expect(await rows(fx)).toEqual(before);
+});

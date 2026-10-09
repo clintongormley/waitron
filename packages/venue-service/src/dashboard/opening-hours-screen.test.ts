@@ -1110,7 +1110,13 @@ it("restores the Calendar month URL and writes month navigation without a depart
         days: [],
         holidayCoverage: [],
         holidaySources: [],
-        area: { addressKey: "fixture-address", options: [], required: false, chosen: null },
+        area: {
+          addressKey: "fixture-address",
+          readiness: "ready",
+          options: [],
+          required: false,
+          chosen: null,
+        },
         localHolidaysPerYear: 2,
       };
     }
@@ -1150,7 +1156,13 @@ describe("Calendar venue month fallback", () => {
       days: [],
       holidayCoverage: [],
       holidaySources: [],
-      area: { addressKey: "fixture-address", options: [], required: false, chosen: null },
+      area: {
+        addressKey: "fixture-address",
+        readiness: "ready",
+        options: [],
+        required: false,
+        chosen: null,
+      },
       localHolidaysPerYear: 2,
     };
   }
@@ -1293,7 +1305,13 @@ describe("Calendar named-day actions", () => {
           ],
           holidayCoverage: [],
           holidaySources: [],
-          area: { addressKey: "fixture-address", options: [], required: false, chosen: null },
+          area: {
+            addressKey: "fixture-address",
+            readiness: "ready",
+            options: [],
+            required: false,
+            chosen: null,
+          },
           localHolidaysPerYear: 2,
         };
       }

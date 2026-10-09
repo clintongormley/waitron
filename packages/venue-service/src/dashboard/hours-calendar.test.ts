@@ -1118,6 +1118,7 @@ describe("Opening hours named month", () => {
       holidaySources: [],
       area: {
         addressKey: "old-city",
+        readiness: "ready",
         options: [
           { key: "aran", name: "Aran" },
           { key: "rest", name: "Rest of province" },
@@ -1438,6 +1439,121 @@ describe("Opening hours named month", () => {
       expect(chooser().error).toBe("");
       expect(chooser().disabled).toBe(false);
       expect(reads).toBe(afterMove);
+    },
+  );
+  it.each(["en", "es"] as const)(
+    "%s explains unresolved area addresses and sends no write",
+    async (locale) => {
+      setLocale(locale);
+      const explanations =
+        locale === "en"
+          ? {
+              missing_city: "The holiday area needs the venue's city. Add it in Venue details.",
+              unresolved_province:
+                "The holiday area needs a recognised province. Correct it in Venue details.",
+              unresolved_address:
+                "The holiday area needs the venue's city and a recognised province. Set them in Venue details.",
+              unsupported_country: "Holiday areas are unavailable for this country.",
+            }
+          : {
+              missing_city:
+                "La zona de festivos necesita la ciudad del local. Añádela en Datos del local.",
+              unresolved_province:
+                "La zona de festivos necesita una provincia reconocida. Corrígela en Datos del local.",
+              unresolved_address:
+                "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+              unsupported_country: "No hay zonas de festivos para este país.",
+            };
+      for (const [readiness, message] of Object.entries(explanations)) {
+        const request = vi.fn(async (_path: string, _method?: string) => {
+          const model = namedModel();
+          Object.assign(model.area, { readiness });
+          if (readiness !== "missing_city") model.area.options = [];
+          return model;
+        });
+        const el = await namedMount(request as DashboardRequest);
+        const chooser =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]");
+        if (readiness === "missing_city") {
+          expect(chooser).not.toBeNull();
+          await chooser!.updateComplete;
+          expect(chooser!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(
+            true,
+          );
+          chooser!.dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: "aran" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+          await el.updateComplete;
+        }
+        expect(el.shadowRoot!.querySelector("[data-test=area-address]")!.textContent).toContain(
+          message,
+        );
+        expect(request.mock.calls.every((call) => call[1] !== "PUT")).toBe(true);
+        el.remove();
+      }
+    },
+  );
+
+  it.each(["en", "es"] as const)(
+    "%s retains actionable area refusals and a generic fallback, with retry",
+    async (locale) => {
+      setLocale(locale);
+      const cases = [
+        [
+          { code: "holiday.invalid", params: { field: "geography" } },
+          locale === "en"
+            ? "The holiday area needs the venue's city and a recognised province. Set them in Venue details."
+            : "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+        ],
+        [
+          { code: "holiday.invalid", params: { field: "areaKey" } },
+          locale === "en"
+            ? "Choose one of the areas offered."
+            : "Elige una de las zonas ofrecidas.",
+        ],
+        [
+          { code: "unrelated.failure" },
+          locale === "en" ? "The change could not be saved." : "No se pudo guardar el cambio.",
+        ],
+      ] as const;
+      for (const [error, message] of cases) {
+        let writes = 0;
+        let chosen: string | null = null;
+        const el = await namedMount((async (_path, method) => {
+          if (method === "PUT") {
+            if (++writes === 1) throw error;
+            chosen = "aran";
+          }
+          const model = namedModel();
+          model.area.chosen = chosen;
+          return model;
+        }) as DashboardRequest);
+        const chooser =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=holidayArea]")!;
+        const pick = () =>
+          chooser.dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: "aran" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        pick();
+        await expect.poll(() => chooser.error).toBe(message);
+        await chooser.updateComplete;
+        expect(chooser.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(
+          false,
+        );
+        pick();
+        await expect.poll(() => chooser.value).toBe("aran");
+        expect(chooser.error).toBe("");
+        expect(writes).toBe(2);
+        el.remove();
+      }
     },
   );
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
@@ -266,6 +266,7 @@ describe("reading a venue's holidays", () => {
     const model = await run((tx) => store.readHolidayAreaModel(tx, cfg));
     expect(model).toEqual({
       venue: { country: "ZZ", provinceCode: "10", city: "Villa Real" },
+      readiness: "ready",
       localHolidaysPerYear: 1,
       areaOptions: [],
       areaRequired: false,
@@ -471,6 +472,7 @@ describe("an address that does not resolve", () => {
     await run((tx) => setCountry(tx, "ZZ"));
     expect(await run((tx) => store.readHolidayAreaModel(tx, unknown))).toEqual({
       venue: { country: "ZZ", provinceCode: null, city: null },
+      readiness: "unresolved_address",
       localHolidaysPerYear: 1,
       areaOptions: [],
       areaRequired: false,
@@ -588,6 +590,7 @@ describe("territorial areas", () => {
     const cfg = await venue({ province: "Isleshire", city: null });
     expect(await run((tx) => store.readHolidayAreaModel(tx, cfg))).toMatchObject({
       venue: { provinceCode: "30", city: null },
+      readiness: "missing_city",
       areaOptions: [
         { key: "isle-a", name: "Isle A" },
         { key: "isle-b", name: "Isle B" },
@@ -940,4 +943,15 @@ it("the area choice keeps cities with different accents and punctuation apart", 
   }
   await moveTo(cfg, { city: "PUERTO I\u0301SLA" });
   expect((await run((tx) => store.readHolidayAreaModel(tx, cfg))).chosen).toBe("isle-a");
+});
+
+it("the retained geography city constraint refuses a corrupt city key", async () => {
+  const cfg = await venue({ province: "Isleshire" });
+  const geography = await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }));
+  const before = await stored();
+  await expect(
+    (async () =>
+      db.execute(sql`update holiday_geographies set city_key = '' where id = ${geography!.id}`))(),
+  ).rejects.toThrow("CHECK constraint failed: holiday_geographies_city_ck");
+  expect(await stored()).toEqual(before);
 });
