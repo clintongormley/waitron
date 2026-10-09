@@ -722,7 +722,13 @@ it("clean native Escape closes, emits closed and performs no write", async () =>
   const box = field(el, "name");
   await box.updateComplete;
   box.shadowRoot!.querySelector<HTMLInputElement>("input")!.focus();
+  const closedEvent = new Promise<void>((resolve) => {
+    el.shadowRoot!.querySelector("wt-modal")!.addEventListener("wt-close", () => resolve(), {
+      once: true,
+    });
+  });
   await userEvent.keyboard("{Escape}");
+  await closedEvent;
   await expect.poll(() => el.dialog).toBeUndefined();
   expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(closed).toHaveBeenCalledTimes(1);

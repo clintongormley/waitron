@@ -48,7 +48,7 @@ their full text.
   navigation and the EN/ES light/dark 390/1280 look pass ran on that destination. A13a now narrows
   the department and zone requests, removes the old answer fields and preserves settings when
   renaming or moving. A13b also retires the writer inputs; A14 drops the old style columns.
-  The synthetic-row upgrade walk refused the generated `0040_retire_service_style` at
+  The synthetic-row upgrade walk refused the generated `0045_retire_service_style` at
   `DROP TABLE departments` with a foreign-key error, recorded by the walk's reset entry.
   The seeded demo shows Restaurant and bar with table service, Deli with counter service,
   and the two bar zones overriding to counter service. A15 updates the service-setting

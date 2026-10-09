@@ -295,6 +295,34 @@
       "when": 1791560456248,
       "tag": "0041_remarkable_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1791583125264,
+      "tag": "0042_order_start_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1791583126375,
+      "tag": "0043_order_start_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1791583127481,
+      "tag": "0044_receipt_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1791583128587,
+      "tag": "0045_retire_service_style",
+      "breakpoints": true
     }
   ]
 }

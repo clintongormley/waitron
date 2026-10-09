@@ -366,7 +366,7 @@ describe("moving into closed zones", () => {
       await configureZone(tx, v.cfg, {
         zoneId: zone.id,
         departmentId: policy!.departmentId,
-        serviceMode: "table_tab",
+        orderStart: "table",
       });
       return zone;
     });

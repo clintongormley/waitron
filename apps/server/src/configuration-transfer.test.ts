@@ -2805,7 +2805,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const terrace = await createServiceZone(tx, cfg, {
       name: "Terrace",
@@ -4050,7 +4050,7 @@ describe("opening hours in a configuration transfer", () => {
     const ids = await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, cfg, {
         name: "Outdoor service",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const zone = await createServiceZone(tx, cfg, {
         name: "Terrace",

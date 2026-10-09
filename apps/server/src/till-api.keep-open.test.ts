@@ -404,7 +404,7 @@ describe("the till keeps a zone open today", () => {
       await configureZone(tx, v.cfg, {
         zoneId: zone,
         departmentId: department,
-        serviceMode: "table_tab",
+        orderStart: "table",
       });
       await replaceMenuWeek(
         tx,

@@ -24,7 +24,7 @@ import * as namedDayReads from "./named-days.js";
 import { namedDaysBetween, namedDaysOn } from "./named-days.js";
 import { specialDateHours, specialDates } from "./schema/hours.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
-import { departments } from "./schema/service.js";
+import { departments, departmentSalePolicies } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -52,17 +52,23 @@ async function fixture() {
           locationId: cfg.locationId,
           name: "Dining",
           tradingName: "Dining",
-          defaultServiceMode: "table_tab",
           isDefault: true,
         },
         {
           locationId: cfg.locationId,
           name: "Terrace",
           tradingName: "Terrace",
-          defaultServiceMode: "table_tab",
         },
       ])
       .returning();
+    await tx
+      .insert(departmentSalePolicies)
+      .values(
+        [department!, other!].map((row) => ({
+          departmentId: row.id,
+          orderStart: "table" as const,
+        })),
+      );
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
     const ids = [];
     for (const owner of [department!, other!]) {
