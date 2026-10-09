@@ -27,6 +27,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
+import { createOpenOrder, fireableLineColumns, fireLines } from "./working-order.js";
 import { inTx, orderForParty, seat, setupPartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({
@@ -216,6 +217,50 @@ describe("the pass screen's device routes", () => {
     expect(
       (await done(f.app, tablesOnly.cookie, { ticketItemIds: [itemId], done: true })).status,
     ).toBe(204);
+  });
+
+  it("lists a counter sale's dish on a pass screen limited to the counter's zone, and accepts its Done", async () => {
+    const f = await fixture();
+    const tableItemId = await burgerOrder(f.v);
+    const counterId = randomUUID();
+    await inTx(f.v, async (tx) => {
+      await createOpenOrder(
+        tx,
+        f.v.cfg,
+        counterId,
+        f.v.counter.toOfferLines([{ productId: f.v.productId("Burger"), quantity: "1" }]),
+        null,
+        { zoneId: f.v.counter.zoneId },
+      );
+      const lines = await tx
+        .select(fireableLineColumns)
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, counterId));
+      await fireLines(tx, f.v.cfg, counterId, lines);
+    });
+    const [counterItem] = await inTx(f.v, (tx) =>
+      tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, counterId)),
+    );
+    const counterOnly = await f.device("Pass Counter", f.kds, {
+      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
+    });
+    expect(items(await read(f.app, counterOnly.cookie))).toEqual([counterItem!.id]);
+    expect(
+      (await done(f.app, counterOnly.cookie, { ticketItemIds: [counterItem!.id], done: true }))
+        .status,
+    ).toBe(204);
+    expect(
+      await inTx(f.v, (tx) =>
+        tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, counterOnly.id)),
+      ),
+    ).toMatchObject([{ ticketItemId: counterItem!.id }]);
+    expect(items(await read(f.app, counterOnly.cookie))).toEqual([]);
+    expect(items(await read(f.app, f.a.cookie)).sort()).toEqual(
+      [tableItemId, counterItem!.id].sort(),
+    );
   });
 
   it("answers a pass screen or pass monitor a narrowing took device.unauthorized, so the display boots to its notice", async () => {

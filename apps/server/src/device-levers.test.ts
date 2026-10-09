@@ -231,6 +231,33 @@ describe("a kitchen display's pass fires as the device", () => {
     ]);
   });
 
+  it("fires, readies and sends away a counter order's course from a pass limited to the counter's zone", async () => {
+    const f = await fixture();
+    const counterPass = await f.device("Pase barra", f.runner, {
+      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
+    });
+    const counter = await counterOrder(f.v, "Caña", "Burger");
+    const placed = await f.app.request(`/api/working-orders/${counter}/place`, {
+      method: "POST",
+      headers: { cookie: await tillCookie(f) },
+    });
+    expect(placed.status).toBe(200);
+    const statuses = [];
+    for (const verb of ["fire", "ready", "away"]) {
+      const answer = await send(f.app, counterPass.cookie, coursePath(counter, f.mains, verb));
+      statuses.push({ verb, status: answer.status, error: answer.body.error });
+    }
+    expect(statuses).toEqual([
+      { verb: "fire", status: 200, error: undefined },
+      { verb: "ready", status: 200, error: undefined },
+      { verb: "away", status: 200, error: undefined },
+    ]);
+    expect((await itemsOf(counter)).every((item) => item.firedAt !== null)).toBe(true);
+    expect(await itemsOf(counter)).toContainEqual(
+      expect.objectContaining({ state: "ready", awayAt: expect.any(String) }),
+    );
+  });
+
   it("moves a group's dishes to ready and away, replays a retried Ready, and refuses its id from another device", async () => {
     const f = await fixture();
     const held = await f.heldBurger();

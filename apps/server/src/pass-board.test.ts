@@ -298,4 +298,13 @@ describe("pass monitor", () => {
     );
     expect(ids(await read(EVERY))).toContain(burger!.id);
   });
+
+  it("limited to the counter's zone, lists the counter sale and no table's order", async () => {
+    const { v, counterId } = await terraceVenue();
+    const board = await inTx(v, (tx) =>
+      listPassMonitor(tx, v.cfg, { stationIds: null, zoneIds: [v.counter.zoneId] }),
+    );
+    expect(board.orders.map((o) => o.orderId)).toEqual([counterId]);
+    expect(names(board)).toEqual(["BURG"]);
+  });
 });
