@@ -174,22 +174,19 @@ their own values, so a deployment rule that overrides `--wt-color-primary` or `-
 must set the matching hover token too, in both
 themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
 
-The Hours calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints dates
-with eight fills. A special date picks one of six palette colours, `--wt-color-palette-red`,
-`-amber`, `-grey`, `-blue`, `-green` and `-purple`: the six keys of `CALENDAR_COLOURS`
-(`packages/venue-service/src/hours-types.ts`), the six names the owner approved with the Hours
-plan (`docs/superpowers/plans/2026-10-05-hours.md`, choice 6). The values below were picked for
-these contrast checks, not copied from the `hours-v3.html` mockup.
+Opening hours → Calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints a
+public holiday red, an own Holiday purple and an own Working day blue. Public-holiday facts take
+precedence for the fill when an own day shares their date; both names remain visible. An ordinary
+open day uses `--wt-color-day-standard`, and an ordinary closed day `--wt-color-day-closed`.
+A named or public date keeps its kind's fill even when closed, adding Closed in words. An own-hours
+date also shows a clock icon and an accessible Own hours label. Text uses the corresponding
+`--wt-color-on-palette-…` or `--wt-color-on-day-…` token. Colour is never the only signal.
 
-**2026-10-09, A366 slice 2:** the named-day writer derives the retained `colour` column from
-`kind` (`red` for `holiday`, `blue` for `working_day`) and ignores a request’s `colour`.
-The existing palette rendering stays until the Calendar replacement in that slice.
-Two more are reserved, so no special date can look like them: `--wt-color-day-standard` for a
-standard day and `--wt-color-day-closed` for a business day with no service ranges in any active
-department, or a whole-venue closure. Text on
-each fill uses its own `--wt-color-on-palette-…` or `--wt-color-on-day-…` colour. A coloured date
-always carries its name in words too, and a Closed one the word Closed, so colour is never the
-only signal.
+**2026-10-09, A366 slice 2:** the date colour picker and transitional stored `colour` are retired
+(`packages/venue-service/src/schema/hours.ts` and migration `0036_hard_jubilee.sql`). The palette
+below remains available as shared tokens; Calendar's named mode uses only the red, purple, blue,
+standard and Closed fills. The earlier six-colour date choice is recorded in the historical
+[Hours plan](../superpowers/plans/2026-10-05-hours.md).
 
 | Fill                        | Light     | Text on it | Dark      | Text on it |
 | --------------------------- | --------- | ---------- | --------- | ---------- |
@@ -3059,7 +3056,7 @@ Stations.
 Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
 at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
 with focus on the station's heading once it is read. Department opening hours belong to
-`/manage/opening-hours`, with Week, Periods and Day tabs; `/department/<id>` selects the
+`/manage/opening-hours`, with Week, Periods, Day and Calendar tabs; `/department/<id>` selects the
 department and `/view/periods` selects its periods. The Week and Day editing contract is in
 Forms above. After provisioning, setup's completion screen shows the first saved Open schedule,
 when it is still Monday to Friday, 09:00–17:00, with a link to that department's Opening hours.
@@ -3074,17 +3071,24 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
   opens a seven-day draft that starts Closed and saves only after a confirmation.
 - **Named days.** A `wt-data-table` of one-off named days from yesterday onward, with prep station
   columns; a value kept from the standard week is muted. Edit changes station cells only; the date
-  and name are text, and the save carries the stored kind, repeat, own-hours, closure and colour
+  and name are text, and the save carries the stored kind, repeat, own-hours, closure
   values unchanged. A whole-venue closure keeps the station cells locked. Create, copy and delete
   lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
 
-**2026-10-09, Task 26 implementation checkpoint, pending review:** Station hours no longer
-shows a Local holidays editor. In Opening hours → Calendar, you choose the holiday area when
-the official list needs it and add your town's holidays as own named days. The country's yearly
-number is information; it does not limit how many own holidays you add. An own holiday occurring
-in the year, including a yearly repeat, supplies that year's owner-entered local coverage.
-Public holidays remain separate from own named days. The full holidays documentation rewrite
-belongs to Task 29; this checkpoint has not landed.
+- **Calendar.** Add, edit, copy and delete named days here. The editor asks for Holiday or
+  Working day, annual repeat and the day's hours choice; name and date are required. Own hours
+  replace that day's schedules as a shared choice, while Keep the normal week follows the week.
+  Copy opens a staged draft for a new date. `named-day-editor.ts`, `named-day-copy.ts` and
+  `opening-hours-screen.ts`, under `packages/venue-service/src/dashboard/`, own these actions.
+  Calendar keeps a selected month across date refreshes and offers one keyboard Tab stop in its
+  grid. Public names remain visible beside your own name.
+- **Local holidays.** Add your town's holidays as own Holiday days in Calendar. There is no separate
+  Local holidays editor. The country's yearly number is information and caps no own entries;
+  a holiday occurring in a year, including a repeat, supplies owner-entered local coverage for
+  that year. Calendar reports official and owner-entered coverage independently, even without
+  official country data or a completed holiday address. Choose a holiday area here when the
+  official list needs it. `hours-calendar.ts` renders the area control and coverage, and
+  `packages/venue-service/src/holidays.ts` reads both sources.
 
 In the week grid and date panel a period stays on one line, so hours wrap only between periods.
 The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
