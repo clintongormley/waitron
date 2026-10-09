@@ -229,9 +229,9 @@ const suite = useVenueDb({
           (location_id, zone_id, department_id, is_counter_default)
         values (${loc!.id}, ${zone!.id}, ${department!.id}, true)`);
         await tx.execute(sql`
-        insert into department_sale_policies (department_id) values (${department!.id})`);
+        insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
-        insert into zone_sale_policies (zone_id) values (${zone!.id})`);
+        insert into zone_sale_policies (zone_id, order_start) values (${zone!.id}, 'counter')`);
         const venueScope = { locationId: brandLocationId(loc!.id) };
         await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
@@ -1744,6 +1744,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       await suite.db.execute(sql`
         update zone_service_policies set service_mode = 'ticket_then_pay'
         where zone_id = ${counterZoneId}`);
+      await suite.db.execute(
+        sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${counterZoneId}`,
+      );
       await suite.db.execute(sql`
         update department_sale_policies set paid_when = ${paidWhen}
         where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
@@ -1762,6 +1765,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         await suite.db.execute(sql`
           update zone_service_policies set service_mode = 'prepay'
           where zone_id = ${counterZoneId}`);
+        await suite.db.execute(
+          sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${counterZoneId}`,
+        );
         await suite.db.execute(sql`
           update department_sale_policies set paid_when = 'prepay'
           where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
@@ -1783,7 +1789,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
       from zone_service_policies where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
-      insert into zone_sale_policies (zone_id, paid_when) values (${second!.id}, 'ticket_then_pay')`);
+      insert into zone_sale_policies (zone_id, order_start, paid_when) values (${second!.id}, 'counter', 'ticket_then_pay')`);
     try {
       for (const [zoneId, serviceMode] of [
         [counterZoneId, "prepay"],
@@ -3509,6 +3515,12 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       insert into zone_service_policies
         (location_id, zone_id, department_id)
       values (${cfg.locationId}, ${zoneId}, ${department!.id})`);
+    await suite.db.execute(
+      sql`insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'table')`,
+    );
+    await suite.db.execute(
+      sql`insert into zone_sale_policies (zone_id, order_start) values (${zoneId}, 'table')`,
+    );
     await withTransaction(suite.db, async (tx) => {
       await offerMenuThroughZone(tx, cfg, zoneId, aguaProduct.catalogueId, { makeDefault: true });
     });
@@ -4328,6 +4340,12 @@ describe("canonical modifier HTTP serialization", () => {
       .returning({ id: departments.id });
     await suite.db.execute(
       sql`insert into zone_service_policies (location_id,zone_id,department_id) values (${cfg.locationId},${zoneId},${modifierDepartment!.id})`,
+    );
+    await suite.db.execute(
+      sql`insert into department_sale_policies (department_id, order_start) values (${modifierDepartment!.id}, 'table')`,
+    );
+    await suite.db.execute(
+      sql`insert into zone_sale_policies (zone_id, order_start) values (${zoneId}, 'table')`,
     );
     await withTransaction(suite.db, async (tx) => {
       await offerMenuThroughZone(tx, cfg, zoneId, aguaProduct.catalogueId, { makeDefault: true });

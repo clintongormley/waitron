@@ -2965,9 +2965,6 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   it("fires the order to its station queue and answers 200 with an empty body", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     // A ticket_then_pay venue settles a walk-up sale without firing it, which leaves prep to do.
-    await suite.db.execute(sql`
-      update departments set default_service_mode = 'ticket_then_pay'
-      where location_id = ${cfg.locationId}`);
     const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -3017,9 +3014,6 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   });
   it("fires a paid order whose product has since sold out: a settled order's lines cannot be removed", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    await suite.db.execute(sql`
-      update departments set default_service_mode = 'ticket_then_pay'
-      where location_id = ${cfg.locationId}`);
     const modeCfg: TillConfig = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();

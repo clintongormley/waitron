@@ -1003,9 +1003,15 @@ describe("listTablesWithState (occupancy)", () => {
           defaultServiceMode: "table_tab",
         })
         .returning({ id: departments.id });
+      await tx.execute(
+        sql`insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'table')`,
+      );
       await tx.execute(sql`update zone_service_policies
         set department_id = ${department!.id}, service_mode = 'table_tab'
         where zone_id = ${zone.id}`);
+      await tx.execute(
+        sql`update zone_sale_policies set order_start = 'table' where zone_id = ${zone.id}`,
+      );
       await offerMenuThroughZone(tx, cfg, zone.id, menuId, { makeDefault: true });
       await setRoutingCell(
         tx,

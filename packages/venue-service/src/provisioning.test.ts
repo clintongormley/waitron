@@ -180,6 +180,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await db.execute(sql`
       update zone_service_policies
       set service_mode = 'ticket_then_pay'`);
+    await db.execute(sql`update zone_sale_policies set order_start = 'counter'`);
     await runSeed();
 
     const departments = await db.execute<{ count: number }>(sql`

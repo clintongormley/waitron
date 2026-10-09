@@ -338,6 +338,9 @@ async function placeTable(shop: Shop): Promise<void> {
     await tx.execute(sql`update zone_service_policies
       set department_id = ${departmentId}, service_mode = 'table_tab'
       where zone_id = ${zone.id}`);
+    await tx.execute(
+      sql`update zone_sale_policies set order_start = 'table' where zone_id = ${zone.id}`,
+    );
     await offerMenuThroughZone(tx, shop.cfg, zone.id, shop.menuId, { makeDefault: true });
     // Through the table definition: `routingCells.id`
     // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
