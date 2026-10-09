@@ -479,8 +479,9 @@ export class TillExpoScreen extends LitElement {
 
   @state() private orders: ExpoOrder[] = [];
   @state() private selected: "all" | "pass" | "monitor" | null = null;
-  /** A narrowing took the device's pass screen itself. */
+  /** A narrowing took the device's pass screen or pass monitor itself. */
   @state() private passGone = false;
+  @state() private goneScreen: "pass" | "pass_monitor" = "pass";
   /** The pass screen's stations and zones a narrowing took, shown above the board. */
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
@@ -543,7 +544,9 @@ export class TillExpoScreen extends LitElement {
     let pass;
     try {
       const { kitchenScreens } = await this.api.getDeviceIdentity();
-      pass = kitchenScreens.find((screen) => screen.kind === "pass");
+      pass = kitchenScreens.find(
+        (screen) => screen.kind === "pass" || screen.kind === "pass_monitor",
+      );
       this.#choiceUnread = false;
     } catch {
       pass = undefined;
@@ -551,7 +554,14 @@ export class TillExpoScreen extends LitElement {
     }
     if (!this.isConnected) return;
     this.passGone = pass?.available === false;
-    const next = this.passGone ? null : pass === undefined ? "all" : "pass";
+    this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";
+    const next = this.passGone
+      ? null
+      : pass === undefined
+        ? "all"
+        : pass.kind === "pass"
+          ? "pass"
+          : "monitor";
     if (next !== this.selected) {
       this.orders = [];
       this.lostLines = [];
@@ -734,7 +744,7 @@ export class TillExpoScreen extends LitElement {
         ${
           this.passGone
             ? html`<p class="unavailable" role="status" data-unavailable>
-                ${kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" })}
+                ${kitchenScreenNoticeText({ kind: "unavailable", screen: this.goneScreen })}
               </p>`
             : this.lostLines.map(
                 (line) => html`<p class="unavailable" role="status" data-unavailable>${line}</p>`,
@@ -786,8 +796,13 @@ export class TillExpoScreen extends LitElement {
     return this.deviceMode || this.monitor;
   }
 
+  /** A kitchen display's monitor, or a till whose device chose one: no button on the board. */
+  #isMonitor(): boolean {
+    return this.monitor || this.selected === "monitor";
+  }
+
   #drawsLevers(): boolean {
-    return this.runsPass && !this.monitor;
+    return this.runsPass && !this.#isMonitor();
   }
 
   #empty(): TemplateResult {
@@ -835,7 +850,7 @@ export class TillExpoScreen extends LitElement {
             >`
           : nothing
       }
-      ${this.#onDevice() ? nothing : this.#reprintAction(order)}
+      ${this.#onDevice() || this.#isMonitor() ? nothing : this.#reprintAction(order)}
     </article>`;
   }
 

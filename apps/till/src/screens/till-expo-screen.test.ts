@@ -2504,3 +2504,100 @@ describe("till-expo-screen — a pass monitor", () => {
     expect(el.shadowRoot!.querySelector(".empty")!.textContent!.trim()).toBe(t("expo.empty"));
   });
 });
+
+describe("till-expo-screen — a till whose device chose a pass monitor", () => {
+  function tillMonitorApi(
+    orders: ExpoOrder[],
+    screen: Partial<Pick<ResolvedKitchenScreen, "available" | "stations" | "zones">> = {},
+  ) {
+    const { available = true, stations = [], zones = null } = screen;
+    return stubApi(orders, {
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue(identity([{ kind: "pass_monitor", available, stations, zones }])),
+      getDevicePassMonitor: vi.fn().mockResolvedValue({ orders, stations, zones }),
+    });
+  }
+
+  /** Every element in the screen's shadow root and below it, leaving out the till's own Back. */
+  function deepQueryAll(root: ShadowRoot | Element, selector: string): Element[] {
+    const found = [...root.querySelectorAll(selector)].filter(
+      (node) => !node.matches("[data-back]"),
+    );
+    for (const node of root.querySelectorAll("*"))
+      if (node.shadowRoot && !node.matches("[data-back]"))
+        found.push(...deepQueryAll(node.shadowRoot, selector));
+    return found;
+  }
+
+  const unavailableLines = (el: TillExpoScreen) =>
+    [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+      line.textContent!.trim(),
+    );
+
+  it("reads the pass monitor route and draws the board with no button, even with Run the pass", async () => {
+    const api = tillMonitorApi([threeCourseOrder, firedNotReadyOrder]);
+    const el = await mount({ api, fireControl: "expo", runsPass: true });
+    expect(api.getDevicePassMonitor).toHaveBeenCalled();
+    expect(api.getExpoQueue).not.toHaveBeenCalled();
+    expect(api.getDevicePassScreen).not.toHaveBeenCalled();
+    expect(orderCard(el, threeCourseOrder.orderNumber)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
+    expect(deepQueryAll(el.shadowRoot!, "button, wt-button, [role='button']")).toEqual([]);
+  });
+
+  it("shows a narrowed station's and zone's no longer available lines above its board", async () => {
+    const api = tillMonitorApi([threeCourseOrder], {
+      stations: [
+        { id: "st-grill", name: "Parrilla", available: true },
+        { id: "st-fryer", name: "Freidora", available: false },
+      ],
+      zones: [
+        { id: "z-room", name: "Sala", available: true },
+        { id: "z-terrace", name: "Terraza", available: false },
+      ],
+    });
+    const el = await mount({ api });
+    expect(unavailableLines(el)).toEqual([
+      t("station.unavailable").replace("{name}", "Freidora"),
+      t("zone.unavailable").replace("{name}", "Terraza"),
+    ]);
+    expect(orderCard(el, threeCourseOrder.orderNumber)).not.toBeNull();
+  });
+
+  it("shows only its lines and no board when a narrowing left it no station", async () => {
+    const api = tillMonitorApi([], {
+      stations: [{ id: "st-fryer", name: "Freidora", available: false }],
+    });
+    const el = await mount({ api });
+    expect(unavailableLines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
+    expect(el.shadowRoot!.querySelector("[data-order], .empty, .board, .stale")).toBeNull();
+  });
+
+  it.each([
+    ["en-GB", "This screen is no longer available: Pass monitor"],
+    ["es-ES", "Esta pantalla ya no está disponible: Monitor del pase"],
+  ])("shows only its line when a narrowing took the monitor itself (%s)", async (locale, line) => {
+    const previousLocale = currentLocale();
+    setLocale(locale);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const api = tillMonitorApi([threeCourseOrder], { available: false });
+      const el = await mount({ api });
+      expect(unavailableLines(el)).toEqual([line]);
+      expect(el.shadowRoot!.querySelector("[data-order], .empty")).toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api.getDevicePassMonitor).not.toHaveBeenCalled();
+      expect(api.getExpoQueue).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      setLocale(previousLocale);
+    }
+  });
+
+  it("a till with a pass choice still draws Done and its levers", async () => {
+    const el = await mount({ api: passApi([threeCourseOrder]), fireControl: "expo" });
+    expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).not.toBeNull();
+  });
+});
