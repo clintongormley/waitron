@@ -142,7 +142,12 @@ import { withInUse } from "./in-use.js";
 import { queryFlag } from "./report-api.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
-import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
+import {
+  requireBodyUuid,
+  requireEnum,
+  requireNullableBodyUuid,
+  requireUuidParam,
+} from "@waitron/server-kit";
 import {
   clearManagementCookie,
   readManagementSessionToken,
@@ -315,6 +320,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.access_invalid": 400,
   "device_profile.admission_invalid": 400,
   "printer.not_found": 404,
+  "printer.makes_and_watches": 409,
   "catalogue.not_found": 404,
   "product.not_found": 404,
   "product.archived": 409,
@@ -415,6 +421,29 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
   }
   /* v8 ignore stop */
   return deps.venueCfg;
+}
+
+/** An absent `printerIds` stays `undefined`; a present one is a list of distinct printer ids. */
+function parseStationPrinterIds(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.some((id) => typeof id !== "string") ||
+    new Set(value).size !== value.length
+  ) {
+    throw new AppError("management.request_invalid", { field: "printerIds" });
+  }
+  return value.map((id: string) => requireUuidParam(id, "PrinterId"));
+}
+
+/** A station's printers need `printer.manage` beside the `venue.configure` the route checks. */
+async function authorizeStationPrinters(
+  tx: Transaction,
+  sessionId: string,
+  printerIds: readonly string[] | undefined,
+): Promise<void> {
+  if (printerIds === undefined) return;
+  await authorizeManager(tx, { managementSessionId: sessionId, permission: "printer.manage" });
 }
 
 /** Runs `fn` in one transaction after confirming the session holds `venue.configure`. */
@@ -1952,6 +1981,7 @@ export function mountManagementApi(
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
+        printerIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1967,9 +1997,11 @@ export function mountManagementApi(
       }
       const { name } = body;
       const thresholds = parseStationTimingPatch(body);
-      const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createStation(tx, cfg, { name, displayOrder, isDefault, thresholds }),
-      );
+      const printerIds = parseStationPrinterIds(body.printerIds);
+      const result = await withVenueAuth(deps, sessionId, async (tx) => {
+        await authorizeStationPrinters(tx, sessionId, printerIds);
+        return createStation(tx, cfg, { name, displayOrder, isDefault, thresholds, printerIds });
+      });
       return c.json(result, 201);
     }),
   );
@@ -2037,6 +2069,7 @@ export function mountManagementApi(
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
+        printerIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -2049,6 +2082,7 @@ export function mountManagementApi(
         warmAfterMinutes?: number | null;
         overdueAfterMinutes?: number | null;
         forgottenAfterMinutes?: number | null;
+        printerIds?: string[];
       } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
@@ -2069,7 +2103,10 @@ export function mountManagementApi(
         patch.showsRestOfOrder = body.showsRestOfOrder;
       }
       Object.assign(patch, parseStationTimingPatch(body));
+      const printerIds = parseStationPrinterIds(body.printerIds);
+      if (printerIds !== undefined) patch.printerIds = printerIds;
       if (
+        patch.printerIds === undefined &&
         patch.name === undefined &&
         patch.displayOrder === undefined &&
         patch.active === undefined &&
@@ -2080,7 +2117,10 @@ export function mountManagementApi(
       ) {
         return c.body(null, 204);
       }
-      await withVenueAuth(deps, sessionId, (tx) => updateStation(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, async (tx) => {
+        await authorizeStationPrinters(tx, sessionId, patch.printerIds);
+        await updateStation(tx, cfg, id, patch);
+      });
       return c.body(null, 204);
     }),
   );

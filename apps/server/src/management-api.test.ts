@@ -13,6 +13,7 @@ import {
   partyTables,
   printers,
   products,
+  stationPrinters,
   watcherPrinters,
   withTransaction,
 } from "@waitron/db";
@@ -62,6 +63,23 @@ import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/wat
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
+
+// No real role holds `venue.configure` without `printer.manage`, so a test can refuse that one
+// permission while every other check stays real.
+const printerGate = vi.hoisted(() => ({ deny: false }));
+vi.mock("@waitron/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/identity")>();
+  const { AppError } = await import("@waitron/shared");
+  return {
+    ...actual,
+    authorizeManager: async (...args: Parameters<typeof actual.authorizeManager>) => {
+      if (printerGate.deny && args[1].permission === "printer.manage") {
+        throw new AppError("authorization.not_permitted", { permission: "printer.manage" });
+      }
+      return actual.authorizeManager(...args);
+    },
+  };
+});
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -2896,6 +2914,211 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(res.status).toBe(401);
       expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
+  });
+
+  describe("a station's printers save with the station", () => {
+    async function addPrinter(active = true): Promise<string> {
+      const [row] = await suite.db
+        .insert(printers)
+        .values({
+          locationId: venue.locationId,
+          name: unique("Ticket printer"),
+          transport: "network_tcp",
+          host: "10.0.0.20",
+          active,
+        })
+        .returning({ id: printers.id });
+      return row!.id;
+    }
+
+    async function printersOf(stationId: string): Promise<string[]> {
+      const rows = await suite.db
+        .select({ printerId: stationPrinters.printerId })
+        .from(stationPrinters)
+        .where(eq(stationPrinters.stationId, stationId));
+      return rows.map((row) => row.printerId).sort();
+    }
+
+    async function stationName(id: string): Promise<string | undefined> {
+      const [row] = await suite.db
+        .select({ name: kitchenStations.name })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, id));
+      return row?.name;
+    }
+
+    function patch(id: string, body: unknown): Promise<Response> {
+      return req(`/stations/${id}`, { method: "PATCH", body: JSON.stringify(body) }, managerCookie);
+    }
+
+    it("a PATCH stores a new name and two printers together", async () => {
+      const id = await createStation(unique("Grill"));
+      const [a, b] = [await addPrinter(), await addPrinter()];
+      const name = unique("Grill renamed");
+      const res = await patch(id, { name, printerIds: [a, b] });
+      expect(res.status).toBe(204);
+      expect(await stationName(id)).toBe(name);
+      expect(await printersOf(id)).toEqual([a, b].sort());
+    });
+
+    it("a PATCH carrying only printerIds is a change: it replaces the station's printers", async () => {
+      const id = await createStation(unique("Fryer"));
+      const [a, b] = [await addPrinter(), await addPrinter()];
+      expect((await patch(id, { printerIds: [a] })).status).toBe(204);
+      expect(await printersOf(id)).toEqual([a]);
+      expect((await patch(id, { printerIds: [b] })).status).toBe(204);
+      expect(await printersOf(id)).toEqual([b]);
+      expect((await patch(id, { printerIds: [] })).status).toBe(204);
+      expect(await printersOf(id)).toEqual([]);
+    });
+
+    it("without printer.manage, a PATCH with printers is refused and writes nothing, while a name alone saves", async () => {
+      const original = unique("Pastry");
+      const id = await createStation(original);
+      const kept = await addPrinter();
+      expect((await patch(id, { printerIds: [kept] })).status).toBe(204);
+      const other = await addPrinter();
+      printerGate.deny = true;
+      try {
+        const refused = await patch(id, { name: unique("Pastry refused"), printerIds: [other] });
+        expect(refused.status).toBe(403);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "authorization.not_permitted", params: { permission: "printer.manage" } },
+        });
+        expect(await stationName(id)).toBe(original);
+        expect(await printersOf(id)).toEqual([kept]);
+
+        const renamed = unique("Pastry renamed");
+        expect((await patch(id, { name: renamed })).status).toBe(204);
+        expect(await stationName(id)).toBe(renamed);
+        expect(await printersOf(id)).toEqual([kept]);
+      } finally {
+        printerGate.deny = false;
+      }
+    });
+
+    it("a watcher's printer is refused printer.makes_and_watches and the old name is kept", async () => {
+      const original = unique("Bar");
+      const id = await createStation(original);
+      const watched = await addPrinter();
+      const created = await req(
+        "/watchers",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: unique("Pass"),
+            everyStation: true,
+            stationIds: [],
+            everyZone: true,
+            zoneIds: [],
+            runsPass: true,
+            displayOrder: 3,
+          }),
+        },
+        managerCookie,
+      );
+      expect(created.status).toBe(201);
+      const watcherId = ((await created.json()) as { id: string }).id;
+      await suite.db.insert(watcherPrinters).values({ watcherId, printerId: watched });
+      const free = await addPrinter();
+
+      const res = await patch(id, { name: unique("Bar refused"), printerIds: [free, watched] });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "printer.makes_and_watches", params: { id: watched } },
+      });
+      expect(await stationName(id)).toBe(original);
+      expect(await printersOf(id)).toEqual([]);
+    });
+
+    it("a switched-off printer is refused printer.not_found and the old name is kept", async () => {
+      const original = unique("Cold");
+      const id = await createStation(original);
+      const off = await addPrinter(false);
+      const res = await patch(id, { name: unique("Cold refused"), printerIds: [off] });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: off } },
+      });
+      expect(await stationName(id)).toBe(original);
+      expect(await printersOf(id)).toEqual([]);
+    });
+
+    it("a switched-off station's name can still be edited when no printers are sent", async () => {
+      const id = await createStation(unique("Retired"));
+      expect((await req(`/stations/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+      const renamed = unique("Retired renamed");
+      expect((await patch(id, { name: renamed })).status).toBe(204);
+      expect(await stationName(id)).toBe(renamed);
+    });
+
+    it("refuses a malformed printerIds before any write", async () => {
+      const original = unique("Wok");
+      const id = await createStation(original);
+      const a = await addPrinter();
+      for (const printerIds of [null, "x", [1], [a, a]]) {
+        const res = await patch(id, { name: unique("Wok refused"), printerIds });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "printerIds" } },
+        });
+      }
+      const res = await patch(id, { name: unique("Wok refused"), printerIds: ["not-a-uuid"] });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+      expect(await stationName(id)).toBe(original);
+      expect(await printersOf(id)).toEqual([]);
+    });
+
+    it("a POST with printers creates the station with them", async () => {
+      const [a, b] = [await addPrinter(), await addPrinter()];
+      const res = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name: unique("New"), printerIds: [a, b] }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(201);
+      const { id } = (await res.json()) as { id: string };
+      expect(await printersOf(id)).toEqual([a, b].sort());
+    });
+
+    it("a POST with printers is refused without printer.manage, or with a switched-off printer, and creates no station", async () => {
+      const a = await addPrinter();
+      const name = unique("Never");
+      printerGate.deny = true;
+      try {
+        const refused = await req(
+          "/stations",
+          { method: "POST", body: JSON.stringify({ name, printerIds: [a] }) },
+          managerCookie,
+        );
+        expect(refused.status).toBe(403);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "authorization.not_permitted", params: { permission: "printer.manage" } },
+        });
+      } finally {
+        printerGate.deny = false;
+      }
+      const off = await addPrinter(false);
+      const notFound = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name, printerIds: [a, off] }) },
+        managerCookie,
+      );
+      expect(notFound.status).toBe(404);
+      expect(
+        await suite.db
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.name, name)),
+      ).toEqual([]);
+      expect(
+        await suite.db
+          .select({ id: stationPrinters.stationId })
+          .from(stationPrinters)
+          .where(eq(stationPrinters.printerId, a)),
+      ).toEqual([]);
+    });
   });
 });
 
