@@ -1219,6 +1219,17 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **A presented bill moved to the counter keeps its recorded zone (A440, 2026-10-09, chosen in
+  the branch's plan review, not an owner ruling).** A presented bill takes the new zone when it
+  moves with its party, into another party or to a free table, but moving a bill to the counter
+  re-zones only an open bill (`moveBill` in
+  `apps/server/src/move-bill.ts`). A bill moved to the counter has no party, and with no delivery
+  table the kitchen side (`orderWatchZones`, `apps/server/src/watch-zones.ts`) reads its recorded
+  zone, as the till's zone limit does (`findOrderZones` via `apps/server/src/zone-access.ts`), so
+  the two agree. Re-zoning a presented table bill into a counter zone whose orders are paid after
+  sending (`ticket_then_pay`) would also let it be handed over before payment, as a counter order
+  sent and unpaid is (`sentUnpaidCounterOrder`, `apps/server/src/working-order.ts`).
+
 - **Part of a weighed line stays refused (Task 11, owner 2026-09-30).** Part of a weighed line
   stays refused for a give-away or a discount (`adjustment.weighed_partial`); staff discount the
   whole line instead.

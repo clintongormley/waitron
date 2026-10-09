@@ -1,5 +1,11 @@
 # Service periods, slice 2 — zone closed times and named days (A366)
 
+> **2026-10-09, A440:** a presented bill moved on its own into another party or to a free table in
+> a zone closed to new orders now takes that zone, because `takeIntoParty` turns off `adoptZone`'s
+> closed-zone check for a presented bill. Decision 13's and Task 12's accounts of `takeIntoParty`
+> skipping `adoptZone` for a bill that is not open describe the earlier code, and Task 12's
+> `retargetOpenBills` is now `retargetUnsettledBills`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Each task is test-first: write the failing behavioural test, run it,

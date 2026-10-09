@@ -330,8 +330,8 @@ const movedRevision = sql`${workingOrders.revision} + 1`;
 
 /**
  * The bill joins the party: no longer delivered to a table, its revision moved on, and, while it is
- * open, its service context taking `zoneId` for what is added later. A presented bill keeps its own
- * zone. Answers the bill's state.
+ * open or presented, its service context taking `zoneId`, so a till limited to that zone may take
+ * its payment. Answers the bill's state.
  */
 export async function takeIntoParty(
   tx: Transaction,
@@ -346,7 +346,9 @@ export async function takeIntoParty(
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
-  if (bill!.status === "open" && zoneId !== null) await adoptZone(tx, cfg, billId, zoneId);
+  if (zoneId !== null && (bill!.status === "open" || bill!.status === "placed")) {
+    await adoptZone(tx, cfg, billId, zoneId, { takesOrders: bill!.status === "open" });
+  }
   return bill!;
 }
 
@@ -385,19 +387,21 @@ export async function leaveParty(
 }
 
 /**
- * The open bill takes `zoneId`'s service context. A bill entering table service from another mode
+ * The bill takes `zoneId`'s service context. A bill entering table service from another mode
  * has its unsent dishes sent now, as a round is: table service sends a dish when it is ordered, and
  * none when the bill is paid. As placing does, the move is refused
- * `product.unavailable` when one cannot be sold now.
+ * `product.unavailable` when one cannot be sold now. Only a bill that `takesOrders` is refused a
+ * zone closed to new orders: a presented bill takes no new order.
  */
 async function adoptZone(
   tx: Transaction,
   cfg: TillConfig,
   billId: string,
   zoneId: string,
+  options: { takesOrders: boolean } = { takesOrders: true },
 ): Promise<void> {
   const previous = await VENUE_SERVICE.findOrderContext(tx, cfg, billId);
-  if (previous?.zoneId !== zoneId)
+  if (options.takesOrders && previous?.zoneId !== zoneId)
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, zoneId, new Date());
   if (previous === null) {
     await VENUE_SERVICE.recordOrderContext(tx, cfg, billId, zoneId);

@@ -93,7 +93,7 @@ export async function moveGuests(
   }
   // The table moved to is now the party's only one.
   if (table.zoneId !== null && table.zoneId !== zoneBefore) {
-    await retargetOpenBills(tx, cfg, partyId, table.zoneId);
+    await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
   }
   await enqueueMovedSlipsFor(tx, cfg, before);
   return { partyId, mainBillId, merged: false };
@@ -336,14 +336,17 @@ async function billsTaking(
   return rows.map((row) => row.id);
 }
 
-/** The party's open bills take `zoneId` for what is added later (P15), as a moved bill does. */
-async function retargetOpenBills(
+/**
+ * The party's open and presented bills take `zoneId`, as a bill moved into a party does; a settled
+ * bill keeps the zone it was paid in.
+ */
+async function retargetUnsettledBills(
   tx: Transaction,
   cfg: TillConfig,
   partyId: string,
   zoneId: string,
 ): Promise<void> {
-  for (const billId of await billsTaking(tx, partyId, ["open"])) {
+  for (const billId of await billsTaking(tx, partyId, ["open", "placed"])) {
     await takeIntoParty(tx, cfg, billId, partyId, zoneId);
   }
 }
