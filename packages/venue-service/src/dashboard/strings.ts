@@ -659,6 +659,9 @@ const en = {
   "routing.inherited": "inherited",
   "routing.default_state": "the default station",
   "routing.no_station": "No station",
+  "routing.cell_label_note": "{label}. {note}",
+  "routing.extra_default": "{station} (default) — as an extra, follows its dish",
+  "routing.extra_no_preparation": "No preparation — as an extra, follows its dish",
   "routing.disabled_station": "{station} (Disabled)",
   "routing.disabled_target": "{station}: Disabled.",
   "routing.default_read_only":
@@ -1358,6 +1361,9 @@ const es: Record<keyof typeof en, string> = {
   "routing.inherited": "heredado",
   "routing.default_state": "la estación predeterminada",
   "routing.no_station": "Sin estación",
+  "routing.cell_label_note": "{label}. {note}",
+  "routing.extra_default": "{station} (predeterminada) — como extra, sigue a su plato",
+  "routing.extra_no_preparation": "Sin preparación — como extra, sigue a su plato",
   "routing.disabled_station": "{station} (Deshabilitada)",
   "routing.disabled_target": "{station}: Deshabilitada.",
   "routing.default_read_only":

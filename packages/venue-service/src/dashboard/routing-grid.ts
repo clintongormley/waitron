@@ -27,6 +27,7 @@ import {
   type RoutingRules,
   type RoutingSelectionRules,
   type RoutingView,
+  type SelectedCell,
 } from "../routing.js";
 import { format } from "./hours-view.js";
 import {
@@ -260,9 +261,33 @@ export class RoutingGrid extends LitElement {
   }
 
   /** What the coordinate would show with no cell of its own. */
-  #inherited(row: RoutingRow, zoneId: string | null) {
-    return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true })
-      .target;
+  #inherited(row: RoutingRow, zoneId: string | null): SelectedCell {
+    return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true });
+  }
+
+  /**
+   * How an extra is made where the cell's choice is the default station's fall-through or No
+   * preparation: with its dish (`chooseExtraMaker`). A cell naming a station sends it there.
+   */
+  #extraNoteText(shown: RouteTarget | null, inherited: SelectedCell): string | null {
+    const choice = shown ?? inherited.target;
+    if (choice?.kind === "no_preparation") return t("routing.extra_no_preparation");
+    if (shown === null && inherited.decidedBy?.kind === "default") {
+      return format("routing.extra_default", { station: this.#targetText(choice) });
+    }
+    return null;
+  }
+
+  /** The note is drawn beside the cell's field and read as part of its accessible name. */
+  #labelWithNote(label: string, note: string | null): string {
+    return note === null ? label : format("routing.cell_label_note", { label, note });
+  }
+
+  #extraNote(note: string | null, { inName }: { inName: boolean }) {
+    if (note === null) return nothing;
+    return html`<span class="note" data-test="extra-note" aria-hidden=${inName ? "true" : nothing}
+      >${note}</span
+    >`;
   }
 
   /** Where a disabled station's work goes, before any opening hours are applied. */
@@ -335,12 +360,14 @@ export class RoutingGrid extends LitElement {
   #editor(entry: GridRow, zone: Zone) {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(cellKey({ row: entry.row, zoneId: zone.id }));
-    const inherited = this.#inherited(entry.row, zone.id);
+    const selected = this.#inherited(entry.row, zone.id);
+    const inherited = selected.target;
     const pending = this.pending;
     const shown =
       pending !== null && sameAddress(pending.address, address)
         ? pending.target
         : (own?.target ?? null);
+    const note = this.#extraNoteText(shown, selected);
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const { cell } = this.#optionLists();
@@ -352,12 +379,15 @@ export class RoutingGrid extends LitElement {
             { value: targetKey(disabled), label: this.#targetText(disabled), disabled: true },
             ...cell.slice(-1),
           ];
-    const label = format("routing.cell_label", {
-      row: this.#rowName(entry),
-      zone: zone.name,
-      value: this.#targetText(shown ?? inherited),
-      state: t(shown === null ? "routing.inherited" : "routing.set_here"),
-    });
+    const label = this.#labelWithNote(
+      format("routing.cell_label", {
+        row: this.#rowName(entry),
+        zone: zone.name,
+        value: this.#targetText(shown ?? inherited),
+        state: t(shown === null ? "routing.inherited" : "routing.set_here"),
+      }),
+      note,
+    );
     return html`<wt-combobox
         name="routing-target"
         hide-label
@@ -376,7 +406,7 @@ export class RoutingGrid extends LitElement {
           this.#emit<RoutingCellChange>("routing-cell-change", { address, target });
         }}
       ></wt-combobox
-      >${
+      >${this.#extraNote(note, { inName: true })}${
         disabled === null
           ? nothing
           : html`<span class="warning" data-test="disabled-target"
@@ -398,16 +428,21 @@ export class RoutingGrid extends LitElement {
     const repair = active
       ? nothing
       : html`<span class="repair" data-test="default-repair">${t("routing.default_repair")}</span>`;
+    const note = active ? format("routing.extra_default", { station: active.name }) : null;
     if (!model.canMakeDefault) {
-      return html`${active ? html`<span>${active.name}</span> ` : nothing}${repair}
-        <span class="note">${t("routing.default_read_only")}</span>`;
+      return html`${active ? html`<span>${active.name}</span> ` : nothing}${this.#extraNote(note, {
+          inName: false,
+        })}${repair} <span class="note">${t("routing.default_read_only")}</span>`;
     }
-    const label = format("routing.cell_label", {
-      row: t("routing.all_categories"),
-      zone: t("routing.every_zone"),
-      value: active?.name ?? t("routing.no_station"),
-      state: t("routing.default_state"),
-    });
+    const label = this.#labelWithNote(
+      format("routing.cell_label", {
+        row: t("routing.all_categories"),
+        zone: t("routing.every_zone"),
+        value: active?.name ?? t("routing.no_station"),
+        state: t("routing.default_state"),
+      }),
+      note,
+    );
     return html`<wt-combobox
         name="routing-target"
         hide-label
@@ -426,7 +461,7 @@ export class RoutingGrid extends LitElement {
           this.#emit("routing-make-default", { stationId: target.stationId });
         }}
       ></wt-combobox
-      >${repair}`;
+      >${this.#extraNote(note, { inName: true })}${repair}`;
   }
 
   #hiddenText(entry: GridRow): string {
