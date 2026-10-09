@@ -97,6 +97,26 @@ type SettingsDraft = {
 };
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
+/** One line per active device whose kitchen screens show the station, naming those screens' kinds. */
+function screenDevices(devices: PrepStationsView["devices"], stationId: string) {
+  const lines = devices.flatMap((device) => {
+    if (!device.active) return [];
+    const kinds = device.kitchenScreens
+      .filter(
+        (screen) =>
+          screen.available &&
+          screen.stations.some((slot) => slot.id === stationId && slot.available),
+      )
+      .map((screen) => t(`prep.screen_kind.${screen.kind}`));
+    return kinds.length === 0
+      ? []
+      : [format("prep.tickets.screen_device", { device: device.label, kinds: kinds.join(", ") })];
+  });
+  return lines.length === 0
+    ? t("prep.none")
+    : lines.map((line) => html`<span data-test="screen-device">${line}</span>`);
+}
+
 @customElement("dashboard-prep-stations-screen")
 export class PrepStationsScreen extends LitElement {
   static override styles = [
@@ -113,7 +133,8 @@ export class PrepStationsScreen extends LitElement {
         max-width: 50%;
       }
       wt-data-table::part(watcher-cell),
-      wt-data-table::part(printer-cell) {
+      wt-data-table::part(printer-cell),
+      wt-data-table::part(screens-cell) {
         display: grid;
         gap: var(--wt-space-2);
         max-width: calc(var(--wt-tap-min) * 5);
@@ -1981,18 +2002,8 @@ export class PrepStationsScreen extends LitElement {
         key: "screens",
         label: t("prep.tickets.screens"),
         cell: (station) =>
-          html`<span data-test=${`screens-${station.id}`}>
-            ${
-              view.devices
-                .filter(
-                  (device) =>
-                    device.stationId === station.id &&
-                    device.kind === "kds_station" &&
-                    device.active,
-                )
-                .map((device) => device.label)
-                .join(", ") || t("prep.none")
-            }
+          html`<span part="screens-cell" data-test=${`screens-${station.id}`}>
+            ${screenDevices(view.devices, station.id)}
             <a href="/manage/devices">${t("prep.devices")}</a></span
           >`,
       },
@@ -2746,26 +2757,6 @@ export class PrepStationsScreen extends LitElement {
         key: "pass",
         label: t("watchers.runs_pass"),
         cell: (watcher) => this.#watcherChoiceCell(watcher, "pass"),
-      },
-      {
-        key: "screens",
-        label: t("watchers.screens"),
-        cell: (watcher) =>
-          html`<span
-            part=${watcher.active ? "watcher-cell" : "watcher-cell disabled-watcher-cell"}
-            data-test=${`watcher-screens-${watcher.id}`}
-          >
-            ${
-              view.devices
-                .filter((device) => device.watcherId === watcher.id)
-                .map(
-                  (device) =>
-                    `${device.label}${device.active ? "" : ` (${t("prep.health.disabled")})`}`,
-                )
-                .join(", ") || t("prep.none")
-            }
-            <a href="/manage/devices">${t("prep.devices")}</a></span
-          >`,
       },
       {
         key: "printers",

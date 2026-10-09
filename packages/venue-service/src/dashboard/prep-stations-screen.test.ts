@@ -159,8 +159,7 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
           label: "Pass screen",
           kind: "kds_station",
           active: true,
-          stationId: null,
-          watcherId: "pass",
+          kitchenScreens: [],
         },
       ],
       watchers: [pass, runner],
@@ -181,7 +180,7 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
     "every service zone",
   );
   expect(q(el, '[data-test="edit-watcher-pass-pass"]')?.textContent?.trim()).toBe("Yes");
-  expect(q(el, '[data-test="watcher-screens-pass"]')?.textContent).toContain("Pass screen");
+  expect(q(el, '[data-test="watcher-screens-pass"]')).toBeNull();
   expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
   expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
   expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
@@ -1326,7 +1325,13 @@ it("shows linked printers and kitchen screens in Tickets", async () => {
       printers: [{ id: "p1", name: "Bar printer" }],
       stationPrinters: [{ stationId: "bar", printerId: "p1" }],
       devices: [
-        { id: "d1", label: "Bar display", stationId: "bar", kind: "kds_station", active: true },
+        {
+          id: "d1",
+          label: "Bar display",
+          kitchenScreens: [stationScreen([slot("bar", "Bar")])],
+          kind: "kds_station",
+          active: true,
+        },
       ],
     }),
   });
@@ -3298,6 +3303,16 @@ it.each([
   },
 );
 
+const slot = (id: string, name: string, available = true) => ({
+  id,
+  name,
+  available,
+  switchedOff: false,
+});
+const stationScreen = (
+  stations: ReturnType<typeof slot>[],
+  kind: "station" | "pass" | "pass_monitor" = "station",
+) => ({ kind, available: true, stations, zones: null });
 const ticketView: PrepStationsView = {
   ...view,
   stations: [...view.stations, upstairs],
@@ -3312,24 +3327,21 @@ const ticketView: PrepStationsView = {
     {
       id: "current",
       label: "Bar screen",
-      stationId: "bar",
-      watcherId: null,
+      kitchenScreens: [stationScreen([slot("bar", "Bar")])],
       kind: "kds_station",
       active: true,
     },
     {
       id: "elsewhere",
       label: "Other screen",
-      stationId: "upstairs",
-      watcherId: null,
+      kitchenScreens: [stationScreen([slot("upstairs", "Upstairs bar")])],
       kind: "kds_station",
       active: true,
     },
     {
       id: "off",
       label: "Disabled screen",
-      stationId: "bar",
-      watcherId: null,
+      kitchenScreens: [stationScreen([slot("bar", "Bar")])],
       kind: "kds_station",
       active: false,
     },
@@ -3386,6 +3398,73 @@ it("Tickets names each station's printed and current screen outputs with separat
   expect(bar.querySelector("wt-combobox")).toBeNull();
   expect(watchers.querySelector("wt-combobox")).toBeNull();
 });
+
+it.each([
+  {
+    locale: "en",
+    bar: ["Bar screen — station screen", "Pass — pass screen", "Till 2 — station screen"],
+    upstairs: ["Other screen — station screen", "Pass — pass screen", "Expo — pass monitor"],
+  },
+  {
+    locale: "es",
+    bar: [
+      "Bar screen — pantalla de estación",
+      "Pass — pantalla de pase",
+      "Till 2 — pantalla de estación",
+    ],
+    upstairs: [
+      "Other screen — pantalla de estación",
+      "Pass — pantalla de pase",
+      "Expo — monitor de pase",
+    ],
+  },
+])(
+  "Tickets names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
+  async ({ locale, bar, upstairs }) => {
+    const server = structuredClone(ticketView);
+    server.devices.push(
+      {
+        id: "pass",
+        label: "Pass",
+        kind: "kds_station",
+        active: true,
+        kitchenScreens: [
+          stationScreen([slot("bar", "Bar"), slot("upstairs", "Upstairs bar")], "pass"),
+        ],
+      },
+      {
+        id: "till-grill",
+        label: "Till 2",
+        kind: "till",
+        active: true,
+        kitchenScreens: [stationScreen([slot("bar", "Bar")])],
+      },
+      { id: "till-none", label: "Till 1", kind: "till", active: true, kitchenScreens: [] },
+      {
+        id: "expo",
+        label: "Expo",
+        kind: "kds_station",
+        active: true,
+        kitchenScreens: [
+          stationScreen(
+            [slot("bar", "Bar", false), slot("upstairs", "Upstairs bar")],
+            "pass_monitor",
+          ),
+        ],
+      },
+    );
+    setLocale(locale);
+    const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
+    const names = (id: string) =>
+      [
+        ...ticketQ(table, `[data-test="screens-${id}"]`)!.querySelectorAll(
+          "[data-test=screen-device]",
+        ),
+      ].map((device) => device.textContent!.trim());
+    expect(names("bar")).toEqual(bar);
+    expect(names("upstairs")).toEqual(upstairs);
+  },
+);
 
 it("Tickets opens its printer cell as a multi-select, explains unavailable choices and saves once", async () => {
   const { el, a, table } = await mountTickets();
@@ -4006,27 +4085,8 @@ async function openWatcherCell(el: PrepStationsScreen, field: string) {
 function chooseWatcherCell(combo: WtCombobox, values: string[]) {
   combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values, value: values[0] ?? "" } }));
 }
-it("Watchers table keeps current and retained screen relationships read-only", async () => {
-  const server = structuredClone(ticketView);
-  server.devices.push(
-    {
-      id: "pass-screen",
-      label: "Pass display",
-      stationId: null,
-      watcherId: "pass",
-      kind: "kds_station",
-      active: true,
-    },
-    {
-      id: "old-screen",
-      label: "Old display",
-      stationId: null,
-      watcherId: "pass",
-      kind: "kds_station",
-      active: false,
-    },
-  );
-  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
+it("Watchers table no longer lists screens: a device chooses its kitchen screens on its own page", async () => {
+  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(ticketView) });
   const table = q(el, '[data-test="watchers-table"]') as unknown as {
     columns: { label: string }[];
   };
@@ -4035,15 +4095,10 @@ it("Watchers table keeps current and retained screen relationships read-only", a
     "Follows",
     "For service zones",
     "Runs the pass",
-    "Screens",
     "Printers",
     "Actions",
   ]);
-  const screens = watcherTableQ(el, '[data-test="watcher-screens-pass"]')!;
-  expect(screens.textContent).toContain("Pass display");
-  expect(screens.textContent).toContain("Old display (Disabled)");
-  expect(screens.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
-  expect(screens.querySelector("wt-combobox, wt-input, wt-switch")).toBeNull();
+  expect(watcherTableQ(el, '[data-test="watcher-screens-pass"]')).toBeNull();
   expect(watcherTableQ(el, '[data-test="edit-watcher-printers-pass"]')).not.toBeNull();
 });
 it.each(["follows", "zones"])(
@@ -4366,8 +4421,7 @@ it.each([
       server.devices.push({
         id: "retained",
         label: "Old display",
-        stationId: null,
-        watcherId: "pass",
+        kitchenScreens: [],
         kind: "kds_station",
         active: false,
       });

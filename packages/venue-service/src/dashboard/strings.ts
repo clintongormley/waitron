@@ -72,6 +72,10 @@ const en = {
   "prep.tickets.printer_count": "{count} printers",
   "prep.tickets.printed_on": "Printed on",
   "prep.tickets.screens": "Shown on screens",
+  "prep.tickets.screen_device": "{device} — {kinds}",
+  "prep.screen_kind.station": "station screen",
+  "prep.screen_kind.pass": "pass screen",
+  "prep.screen_kind.pass_monitor": "pass monitor",
   "prep.tickets.watchers": "Also seen by",
   "prep.tickets.watcher_printer": "Used by watcher {name}",
   "prep.tickets.printer_refused": "Choose active printers that are not used by a watcher.",
@@ -113,7 +117,6 @@ const en = {
   "watchers.runs_pass_hint":
     "Shows Fire (when the pass fires held work), Ready and Away for whole courses and groups.",
   "watchers.fix_fields": "Fix the fields marked above.",
-  "watchers.screens": "Screens",
   "watchers.printers": "Printers",
   "watchers.station_printer": "Used by station {name}",
   "watchers.printer_refused": "Choose available printers that are not used by a station.",
@@ -794,6 +797,10 @@ const es: Record<keyof typeof en, string> = {
   "prep.tickets.printer_count": "{count} impresoras",
   "prep.tickets.printed_on": "Se imprime en",
   "prep.tickets.screens": "Se muestra en pantallas",
+  "prep.tickets.screen_device": "{device} — {kinds}",
+  "prep.screen_kind.station": "pantalla de estación",
+  "prep.screen_kind.pass": "pantalla de pase",
+  "prep.screen_kind.pass_monitor": "monitor de pase",
   "prep.tickets.watchers": "También lo ven",
   "prep.tickets.watcher_printer": "La usa el punto de seguimiento {name}",
   "prep.tickets.printer_refused":
@@ -836,7 +843,6 @@ const es: Record<keyof typeof en, string> = {
   "watchers.runs_pass_hint":
     "Muestra Marchar (cuando el pase marcha el trabajo retenido), Listo y En camino para cursos y grupos enteros.",
   "watchers.fix_fields": "Corrige los campos marcados arriba.",
-  "watchers.screens": "Pantallas",
   "watchers.printers": "Impresoras",
   "watchers.station_printer": "La usa la estación {name}",
   "watchers.printer_refused": "Elige impresoras disponibles que no use una estación.",

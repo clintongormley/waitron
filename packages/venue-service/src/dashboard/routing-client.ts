@@ -1,5 +1,6 @@
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { RouteTarget, RoutingModel, RouteExplanation } from "../routing.js";
 import type { CellAddress, RoutingChange, RoutingMove, RoutingView } from "../routing-types.js";
 import type { RoutingMoment } from "../routing.js";
@@ -70,8 +71,8 @@ export interface PrepStationsView {
   devices: {
     id: string;
     label: string;
-    stationId: string | null;
-    watcherId: string | null;
+    /** As the server resolves them: the device's choice less what profile narrowings took. */
+    kitchenScreens: readonly ResolvedKitchenScreen[];
     kind: string;
     active: boolean;
   }[];
