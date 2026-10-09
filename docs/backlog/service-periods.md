@@ -21,7 +21,7 @@ their full text.
   Slice 2 is in progress in campaign lane D. Its remaining work is the demo and docs (plan Tasks 28–29). Task 26 retires the local-holiday API,
   editor, facts and transfer entries while retaining Calendar holiday-area choice, public holidays
   and own named holidays. Task 26 and its retained-area corrections are reviewed and complete;
-  Task 27's migration implementation awaits controller review; the branch has not landed. Task 29 also corrects the Calendar coverage label and EN/ES wording
+  Task 27's migration is reviewed and complete, with a venue reset required; the branch has not landed. Task 29 also corrects the Calendar coverage label and EN/ES wording
   for an unsupported public-holiday country, so own holidays still show as owner-entered.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired

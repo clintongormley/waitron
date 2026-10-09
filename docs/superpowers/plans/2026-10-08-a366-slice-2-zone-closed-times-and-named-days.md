@@ -1254,18 +1254,28 @@ empty all three on a box that has rows; that is the venue reset the pull request
 partial unique index is not an expression index; read the generated SQL to confirm drizzle wrote
 it as declared.
 
-- [ ] **Step 1: Failing test** in `migrations.test.ts`: `local_holidays` gone from `TABLES`; a
+- [x] **Step 1: Failing test** in `migrations.test.ts`: `local_holidays` gone from `TABLES`; a
   special date with `repeat_on` `12-24` and date `2026-12-25` is refused by the database; two
   repeating days on `12-25` in one venue are refused; a `kind` of `party` is refused.
-- [ ] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. Read the SQL.
-- [ ] **Step 3:** remove the transitional colour writes, the `colour` field and the transfer's
+- [x] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. Read the SQL.
+- [x] **Step 3:** remove the transitional colour writes, the `colour` field and the transfer's
   colour check.
-- [ ] **Step 4: Run** Step 1's test, Task 2's guard list,
+- [x] **Step 4: Run** Step 1's test, Task 2's guard list,
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`, the
   venue-service node project and the server package; typecheck venue-service and server. If
   `scripts/migration-upgrade.test.ts` fails on this step, record the measured refusal or loss in
   `RESETS` with the words the run printed, as slice 1 did for `0033_aromatic_slapstick`.
-- [ ] **Step 5: Commit** — `feat(venue-service): named days are coloured by kind; local holidays table goes (A366) — venue reset needed`.
+- [x] **Step 5: Commit** — `feat(venue-service): named days are coloured by kind; local holidays table goes (A366) — venue reset needed`.
+
+Task 27 reviewed complete at signed `bbf72c66bdc96d4965dc9f21dc9583a673bd5a05` (2026-10-09).
+Generated `0036_hard_jubilee.sql` and the measured reset entries are retained. Four database
+constraint controls failed as intended and restoration passed 30 tests. Venue node 1,441 and
+root guards 439 passed; fiscal immutability 2 and golden 18 passed unedited. The full server
+run had 10,124 passes, one transfer-helper failure and six binary-dependent skips; after the
+helper correction, 105 focused server tests passed. This records the required run, rather than
+claiming a complete current-head server pass. Review closed a formatting failure and two stale
+test titles; final focused Prettier check passed. No venue was reset. Durable receipts are in
+Lane D `receipts/a366-2/task27-*`; Tasks 28–29 and whole-branch gates remain.
 
 ---
 
