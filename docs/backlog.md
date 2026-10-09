@@ -1288,11 +1288,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4 and 7, slice 5 Part B, and slice 6 Parts B/C.**
-  Station-hours and fallback retirement, period routing, combined tickets and department
-  receipts remain; retiring watchers waits for combined tickets. Slice 6's remaining parts
-  add the closed-times summary and floor-plan entry. Slice 7's 2026-10-10 docs revision is complete;
-  its build remains open after landed 3A/6A.
+  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Parts B/C.**
+  Slice 4 Part A is built: combined tickets on shared printers, period choices in routing cells
+  and the station editor, which retiring watchers (slice 5 Part B) waited for. Station-hours and
+  fallback retirement (slice 4 Part B) and department receipts (slice 7) remain. Slice 6's
+  remaining parts add the closed-times summary and floor-plan entry. Slice 7's 2026-10-10 docs
+  revision is complete; its build remains open after landed 3A/6A.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
@@ -1381,20 +1382,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   now needs only `venue.view`, like the stations and courses lists (writes still need
   `venue.configure`).
 
-- **`#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) turns the
-  server's `switched_off` reason into `prep.test_disabled` for both of its callers, and the review
-  found no test for the caller that explains an extra falling back to another station** — a test
-  gap, reported by W110's review (#1255) and not re-checked. W110c's review read #1269 as having
-  added a test for it; not re-checked, so this entry may be stale.
-
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
 
-- **KDS operations — low priority (A9)** — Gaps: a routing read-back / audit view (the station
-  selects are set-only — the most useful to close); no station `type`/`kind`; single-target only (no
-  fan-out, no per-modifier or per-time rules). Table and service statuses have full CRUD; kitchen
-  statuses are partial — `bump_mode` and `fire_control` are configurable fixed enums, but a
-  user-definable kitchen-status list does not exist.
+- **KDS operations — low priority (A9)** — Gaps: a routing audit view (a routing cell keeps no
+  record of who changed it or when — the most useful to close); no station `type`/`kind`;
+  single-target only (no fan-out or per-modifier rules; period choices came with A366 slice 4).
+  Table and service statuses have full CRUD; kitchen statuses are partial — `bump_mode` and
+  `fire_control` are configurable fixed enums, but a user-definable kitchen-status list does not
+  exist.
   [Detail](backlog/kitchen.md#kds-operations--low-priority-a9)
 
 - A party finished while its food is still on the pass keeps its cards there with no group button
@@ -1490,17 +1486,36 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   overview API object still exposes write methods (server routes remain the permission boundary),
   and station reordering repeats an active filter after an active-only read.
 
-- **On the Routing tab, the label above the "Where is this made?" time choice is cut** — seen in
-  A323's look at the demo (2026-10-07), in files A323 did not change; left open by A261-4 (#1363).
-  The label is cut to "W…" ("Cuá…" in Spanish) at 1280 and 390 px, in both themes, because the
-  choice is too narrow for it.
-  [Detail](backlog/kitchen.md#on-the-routing-tab-the-label-above-the-where-is-this-made-time-choice-is-cut)
+- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
+  caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
+  route (`apps/server/src/management-api.ts`) and the client method
+  (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
+  Decide whether to remove them or use them; slice 4 Part A leaves both.
 
-- **At 390 px the routing grid's fixed first column takes about 140 of the grid's roughly 310 px** —
-  seen in A372's look at the demo (2026-10-07), in files A372 did not change; left open by A261-4
-  (#1363). One zone column shows at a time and a saved choice in a zone column is reached only by
-  scrolling sideways.
-  [Detail](backlog/kitchen.md#at-390-px-the-routing-grids-fixed-first-column-takes-about-140-of-the-grids-roughly-310-px)
+- **Spanish and nested routing-grid labels split mid-word at 390 px** — the dashboard sets no
+  `lang` (`apps/dashboard/index.html`), so `hyphens: auto` cannot work
+  (`packages/venue-service/src/dashboard/routing-grid.ts`). Left open by A366 slice 4 Part A.
+
+- **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
+  level** — module screens are not told the person's permissions, so Prep stations always passes
+  `canManagePrinters` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open
+  by A366 slice 4 Part A.
+
+- **New station's printer refusal shows no message above the buttons until another edit**; its
+  name-taken refusal behaves the same (`#saveStation`,
+  `packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open by A366 slice 4 Part A.
+
+- **Until slice 5 Part B, a station printing only through a watcher reads "No printer" on the
+  Stations tab**, and nothing station-side lists the watchers that follow it (`#stationOutputs`,
+  `packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open by A366 slice 4 Part A.
+
+- **The server accepts a routing period line naming the cell's own plain station**; it routes
+  nothing differently (`validatePeriodLines`, `packages/venue-service/src/routing-store.ts`). Left
+  open by A366 slice 4 Part A.
+
+- **The Products folder note ("some items made elsewhere") counts a period line for a department
+  no active zone serves** (`folderMadeAt`, `apps/dashboard/src/widgets/folder-made-at.ts`). Left
+  open by A366 slice 4 Part A.
 
 - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells** — left open
   by A261-4 (#1363). `#saveSettingsCell`
@@ -1543,10 +1558,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Keep pass screen Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
   product folders work. `pass_item_marks` cascades from `ticket_items`, so a rebuild empties those
   marks.
-
-- **Keep the two watcher filtering rules together — OPEN (3d).** — left open by the product folders
-  work. The server's `watcherSees` and Prep Stations' `watchersSeeing` each have a hand-copied test
-  table. Neither test detects a change to the other rule.
 
 - **Three follow-ups 3c-1 left:** — left open by the product folders work. the kitchen screen's
   column view has no per-order card, so it does not show the rest of the order…
@@ -4723,6 +4734,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
   deleted-state uniqueness rules and shared confirmation dialog.
   [Printer delete plan](superpowers/plans/2026-10-09-a435-2-printer-delete.md).
+  The plan cites `apps/server/src/station-health.ts` and
+  `packages/venue-service/src/dashboard/station-health-table.ts`, which A366 slice 4 Part A
+  deleted with the Stations tab's down-printer notes; re-ground those rows before building.
 - **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete.
