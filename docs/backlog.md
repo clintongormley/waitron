@@ -1363,6 +1363,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   now needs only `venue.view`, like the stations and courses lists (writes still need
   `venue.configure`).
 
+- **At 390 px in Spanish, the Prep stations screen's "Añadir estación" button covers the end of
+  the tab strip**, so the third tab shows only its first letter. Seen in A443's look pass
+  (2026-10-09, `prep-stations-es-390.png`); not checked whether the strip scrolls sideways, nor on
+  the old "Nueva estación" label, one character shorter.
+
 - **`#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) turns the
   server's `switched_off` reason into `prep.test_disabled` for both of its callers, and the review
   found no test for the caller that explains an extra falling back to another station** — a test

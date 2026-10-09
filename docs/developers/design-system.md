@@ -2786,8 +2786,8 @@ rather than assuming this composition applies unchanged.
   infer: the kitchen ticket's heading is "Also on this order", not a sentence explaining it.
 - **An action label starts with a verb** (owner, 2026-10-09): Add, Delete, Move, Remove, Save. A
   button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
-  — "Add" is a verb like "Delete"; "New" is an adjective. The rule names action labels; dialog
-  headings such as "New unit" were left as they were (A443).
+  — "Add" is a verb like "Delete"; "New" is an adjective. A dialog heading is not an action label:
+  a create dialog may still be headed "New unit".
 
 ## Event discipline
 
