@@ -8,7 +8,6 @@ export const tillPath: UrlPathConfig = {
       "till-zone": "zone",
       "till-view": "view",
       "till-station": "station",
-      "till-watcher": "watcher",
     },
   },
 };

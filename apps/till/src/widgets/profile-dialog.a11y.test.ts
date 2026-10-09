@@ -20,7 +20,6 @@ const STATES: [string, Partial<TillProfileDialog>][] = [
   ["an order in progress", { notice: "order_open" }],
   ["an unsaved order change", { notice: "draft_unsaved" }],
   ["an order change refused and replaced", { notice: "draft_replaced" }],
-  ["a station the profile does not list", { notice: { code: "station.not_allowed" } }],
   ["a switch out", { busy: true }],
 ];
 

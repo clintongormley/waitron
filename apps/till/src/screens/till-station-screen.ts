@@ -1,9 +1,14 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
 import { clockTime, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import {
+  kitchenScreenNoticeText,
+  lostSlotLine,
+  unavailableStyles,
+} from "../kitchen-screen-notice.js";
 import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
 import "../widgets/station-today.js";
@@ -11,10 +16,13 @@ import type {
   BumpMode,
   FireControlMode,
   FireKitchenGroupDetail,
+  MergedQueueGroup,
 } from "../widgets/station-queue.js";
 import type {
-  DeviceStation,
+  DeviceStationScreen,
   KitchenNotice,
+  ResolvedKitchenScreen,
+  ScreenSlot,
   Station,
   StationQueueGroup,
   StationPrinterDown,
@@ -41,6 +49,21 @@ const REFRESH_MS = 15_000;
  */
 const READ_LIMIT_MS = 25_000;
 
+const viewKey = (deviceId: string): string => `waitron.stationScreenView.${deviceId}`;
+
+type DeviceStation = DeviceStationScreen["stations"][number];
+type WorkedStation = Extract<DeviceStation, { queue: StationQueueGroup[] }>;
+
+/** A station whose queue the display works: available, or switched off on its own page. */
+const worked = (station: DeviceStation): station is WorkedStation =>
+  station.available || station.switchedOff;
+
+/** Whether a station's section draws its queue: available, or switched off with work still waiting
+ *  there (owner 2026-10-09). */
+const drawsQueue = (station: DeviceStation): station is WorkedStation =>
+  station.available ||
+  (worked(station) && (station.queue.length > 0 || station.notices.length > 0));
+
 /**
  * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue
  * widget's events itself, STOPPING them so the app (which handles the counter's own default-station
@@ -51,6 +74,7 @@ const READ_LIMIT_MS = 25_000;
 export class TillStationScreen extends LitElement {
   static override styles = [
     baseStyles,
+    unavailableStyles,
     css`
       :host {
         display: block;
@@ -112,6 +136,23 @@ export class TillStationScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .device-station,
+      .station-controls {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
+      .station-name {
+        margin: 0;
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .choose-again {
+        margin: 0;
+      }
+
       .empty {
         margin: 0;
         padding: var(--wt-space-4);
@@ -136,22 +177,38 @@ export class TillStationScreen extends LitElement {
   @property() bumpMode: BumpMode = "line";
   @property() fireControl: FireControlMode = "waiter";
   /**
-   * An always-on ENROLLED display: no login, one bound station, no picker and no Back-to-counter. A 401
-   * on its probe emits `device-unauthorized` so the app re-boots through the front door.
+   * An always-on ENROLLED display: no login, its kitchen screen's stations, no picker and no
+   * Back-to-counter. A 401 on its probe emits `device-unauthorized` so the app re-boots through the
+   * front door.
    */
   @property() deviceMode = false;
-  /** The station the app already probed at cold boot, adopted ONCE so the mount does not read it again. */
-  @property({ attribute: false }) initialDeviceStation?: DeviceStation;
+  /** The screen the app already probed at cold boot, adopted ONCE so the mount does not read it again. */
+  @property({ attribute: false }) initialDeviceStation?: DeviceStationScreen;
+  /** Keys the remembered stacked-or-merged choice, so each kitchen display keeps its own. */
+  @property({ attribute: false }) deviceId?: string;
   /** Mounted inside a card host, which supplies the header; the view toggle and the out-of-date banner stay. */
   @property({ type: Boolean }) embedded = false;
 
   @state() private stations: Station[] = [];
-  @state() private deviceStation?: DeviceStation["station"];
+  /** The device's chosen stations a narrowing took away, shown above the picker. */
+  @state() private lostStations: ScreenSlot[] = [];
+  /** A narrowing took the device's station screen itself. */
+  @state() private stationScreenGone = false;
+  /** A read of the device's choice has answered; until one does, every station shows. */
+  #choiceRead = false;
+  #choiceRequest = 0;
+  #appliedChoice = 0;
+  /** The stations the device chose, or null when it shows every station. */
+  #chosenIds: ReadonlySet<string> | null = null;
+  /** Every station, chosen or not, so a closed station names where its dishes go. */
+  @state() private allStations: Station[] = [];
   @state() private activeStationId?: string;
   @state() private groups: StationQueueGroup[] = [];
   @state() private printersDown: StationPrinterDown[] = [];
   @state() private notices: KitchenNotice[] = [];
+  @state() private deviceStations: DeviceStationScreen["stations"] = [];
   @state() private view: "kanban" | "rail" = "kanban";
+  @state() private merged = false;
   /**
    * UNLIKE the advance/collect/fire levers, a failed reprint is not swallowed: it changes no order state,
    * so a reload reconciles nothing and a silent failure would leave the operator no feedback.
@@ -202,10 +259,35 @@ export class TillStationScreen extends LitElement {
       this.stations.find((station) => station.isDefault) ??
       this.stations[0];
     if (active === undefined) {
+      this.activeStationId = undefined;
       if (this.#ownsStationPath()) this.#url.write({ "till-station": null }, true);
       return;
     }
     await this.#selectStation(active.id, true);
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("deviceId")) this.merged = this.#rememberedMerged();
+  }
+
+  /** The read is wrapped because localStorage can throw in a private window. */
+  #rememberedMerged(): boolean {
+    if (this.deviceId === undefined) return false;
+    try {
+      return localStorage.getItem(viewKey(this.deviceId)) === "merged";
+    } catch {
+      return false;
+    }
+  }
+
+  #toggleMerged(): void {
+    this.merged = !this.merged;
+    if (this.deviceId === undefined) return;
+    try {
+      localStorage.setItem(viewKey(this.deviceId), this.merged ? "merged" : "stacked");
+    } catch {
+      // no storage → the choice lasts until the next load
+    }
   }
 
   override connectedCallback(): void {
@@ -235,7 +317,8 @@ export class TillStationScreen extends LitElement {
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
     try {
-      await (this.deviceMode ? this.#loadDevice(read.signal) : this.#reload(read.signal, true));
+      if (this.deviceMode) await this.#loadDevice(read.signal);
+      else await this.#load(read.signal);
     } finally {
       clearTimeout(limit);
       this.#refreshReads.delete(read);
@@ -261,22 +344,65 @@ export class TillStationScreen extends LitElement {
   }
 
   #adoptNotices(notices: KitchenNotice[]): void {
-    const listed = new Set(notices.map((notice) => notice.id));
-    for (const id of this.#acknowledged) if (!listed.has(id)) this.#acknowledged.delete(id);
-    this.notices = notices.filter((notice) => !this.#acknowledged.has(notice.id));
+    this.#forgetUnlisted(notices);
+    this.notices = this.#unacknowledged(notices);
   }
 
-  async #load(): Promise<void> {
+  #forgetUnlisted(notices: KitchenNotice[]): void {
+    const listed = new Set(notices.map((notice) => notice.id));
+    for (const id of this.#acknowledged) if (!listed.has(id)) this.#acknowledged.delete(id);
+  }
+
+  #unacknowledged(notices: KitchenNotice[]): KitchenNotice[] {
+    return notices.filter((notice) => !this.#acknowledged.has(notice.id));
+  }
+
+  /**
+   * The picker lists the device's chosen stations, or every station when it has no choice; a choice
+   * a narrowing emptied lists none. Run again at each refresh, keeping the open station when it is
+   * still listed. Once a read has answered, a failed one keeps what it said.
+   */
+  async #load(signal?: AbortSignal): Promise<void> {
+    const request = ++this.#choiceRequest;
+    const choice = this.#readStationChoice(signal);
     try {
-      this.stations = await this.api.listStations();
+      const listed = await this.api.listStations({ signal });
+      const screen = await choice;
+      if (request < this.#appliedChoice) return;
+      this.#appliedChoice = request;
+      if (screen !== null || !this.#choiceRead) {
+        this.#choiceRead = screen !== null;
+        const slots = screen?.stations ?? [];
+        this.#chosenIds = screen
+          ? new Set(slots.filter((slot) => slot.available).map((slot) => slot.id))
+          : null;
+        this.lostStations = slots.filter((slot) => !slot.available);
+        this.stationScreenGone = screen?.available === false;
+      }
+      const chosen = this.#chosenIds;
+      this.allStations = listed;
+      this.stations = chosen === null ? listed : listed.filter((station) => chosen.has(station.id));
       this.#stationsLoaded = true;
     } catch {
-      this.stations = [];
-      this.stale = true;
+      if (request > this.#appliedChoice) this.stale = true;
       return;
     }
     if (!this.isConnected) return;
-    await this.#restoreStation();
+    if (this.stations.some((station) => station.id === this.activeStationId))
+      await this.#reload(signal);
+    else await this.#restoreStation();
+  }
+
+  /** The device's station screen; undefined when it has none, null when the read failed. */
+  async #readStationChoice(
+    signal: AbortSignal | undefined,
+  ): Promise<ResolvedKitchenScreen | undefined | null> {
+    try {
+      const { kitchenScreens } = await this.api.getDeviceIdentity({ signal });
+      return kitchenScreens.find((screen) => screen.kind === "station");
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -305,18 +431,23 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  #readDeviceStation(signal: AbortSignal | undefined): Promise<DeviceStation> {
+  #readDeviceStation(signal: AbortSignal | undefined): Promise<DeviceStationScreen> {
     return signal === undefined
-      ? this.api.getDeviceStation()
-      : this.api.getDeviceStation({ signal });
+      ? this.api.getDeviceStationScreen()
+      : this.api.getDeviceStationScreen({ signal });
   }
 
-  #adoptDeviceStation({ station }: DeviceStation): void {
-    this.activeStationId = station.id;
-    this.deviceStation = station;
-    this.groups = station.queue;
-    this.printersDown = station.printersDown ?? [];
-    this.#adoptNotices(station.notices);
+  #adoptDeviceStation({ stations }: DeviceStationScreen): void {
+    this.#forgetUnlisted(stations.flatMap((station) => (worked(station) ? station.notices : [])));
+    this.deviceStations = stations.map((station) =>
+      worked(station)
+        ? {
+            ...station,
+            printersDown: station.printersDown ?? [],
+            notices: this.#unacknowledged(station.notices),
+          }
+        : station,
+    );
     this.#readSucceeded();
   }
 
@@ -338,10 +469,13 @@ export class TillStationScreen extends LitElement {
         signal === undefined
           ? this.api.getStationQueue(this.activeStationId)
           : this.api.getStationQueue(this.activeStationId, { signal }),
-        refreshStations ? this.api.listStations({ signal }) : Promise.resolve(this.stations),
+        refreshStations ? this.api.listStations({ signal }) : Promise.resolve(this.allStations),
       ]);
       if (this.isConnected && this.#isNewest(request)) {
-        this.stations = stations;
+        const chosen = this.#chosenIds;
+        this.allStations = stations;
+        this.stations =
+          chosen === null ? stations : stations.filter((station) => chosen.has(station.id));
         this.groups = items;
         this.printersDown = printersDown ?? [];
         this.#adoptNotices(notices);
@@ -407,13 +541,19 @@ export class TillStationScreen extends LitElement {
     ).detail;
     await this.#advance(() =>
       this.deviceMode
-        ? this.#deviceAdvanceTicket(orderId, to)
+        ? this.#deviceAdvanceTicket(orderId, stationId, to)
         : this.api.advanceTicket(orderId, stationId, to),
     );
   }
 
-  async #deviceAdvanceTicket(orderId: string, to: Exclude<TicketState, "queued">): Promise<void> {
-    const group = this.groups.find((candidate) => candidate.orderId === orderId);
+  async #deviceAdvanceTicket(
+    orderId: string,
+    stationId: string,
+    to: Exclude<TicketState, "queued">,
+  ): Promise<void> {
+    const station = this.deviceStations.find((candidate) => candidate.id === stationId);
+    if (station === undefined || !worked(station)) return;
+    const group = station.queue.find((candidate) => candidate.orderId === orderId);
     if (group === undefined) return;
     for (const item of group.items) {
       if (item.firedAt !== null && item.state === ADVANCE_FROM[to]) {
@@ -509,6 +649,9 @@ export class TillStationScreen extends LitElement {
     }
     this.#acknowledged.add(noticeId);
     this.notices = this.notices.filter((notice) => notice.id !== noticeId);
+    this.deviceStations = this.deviceStations.map((station) =>
+      worked(station) ? { ...station, notices: this.#unacknowledged(station.notices) } : station,
+    );
   }
 
   override render() {
@@ -518,32 +661,135 @@ export class TillStationScreen extends LitElement {
   #renderOperator(): TemplateResult {
     return this.#renderQueueSurface({
       showBack: true,
-      body: this.stations.length === 0 ? this.#noStations() : this.#body(),
+      body: html`${
+        this.stationScreenGone
+          ? html`<p class="unavailable" role="status" data-unavailable>
+              ${kitchenScreenNoticeText({ kind: "unavailable", screen: "station" })}
+            </p>`
+          : nothing
+      }
+      ${this.lostStations.map((station) => this.#unavailable(station.name))}
+      ${
+        this.stations.length > 0
+          ? this.#body()
+          : this.stationScreenGone || this.lostStations.length > 0
+            ? nothing
+            : this.#noStations()
+      }`,
     });
   }
 
   #renderDevice(): TemplateResult {
-    const bound = this.deviceStation;
-    const today = bound?.today;
-    return this.#renderQueueSurface({
-      showBack: false,
-      body: html`
-        <till-station-today
-          .api=${this.api}
-          .deviceMode=${true}
-          .station=${bound && today ? { id: bound.id, name: bound.name, active: today.why !== "switched_off", isDefault: today.isDefault, open: today.open, byHand: today.byHand, sendsTo: today.sendsTo?.id ?? null, why: today.why } : undefined}
-          .stations=${today?.sendsTo ? [today.sendsTo] : []}
-          @station-today-changed=${(event: Event) => {
-            event.stopPropagation();
-            void this.#reload();
-          }}
-        ></till-station-today>
-        ${this.#queue(true)}
-      `,
-    });
+    const [only] = this.deviceStations;
+    const several = this.deviceStations.length > 1;
+    if (this.deviceStations.length > 0 && !this.deviceStations.some(drawsQueue))
+      return this.#renderQueueSurface({
+        showBack: false,
+        showViews: false,
+        body: html`${this.deviceStations.map((station) => this.#unavailable(station.name))}
+          <p class="choose-again" data-choose-again>${t("kitchen_screen.choose_again")}</p>`,
+      });
+    const body =
+      this.deviceStations.length === 1 && only?.available === true
+        ? html`${this.#today(only)}${this.#queue(true, only)}`
+        : several && this.merged
+          ? this.#mergedBody()
+          : html`${this.deviceStations.map((station) => this.#deviceSection(station))}`;
+    return this.#renderQueueSurface({ showBack: false, showMerge: several, body });
   }
 
-  #renderQueueSurface(opts: { showBack: boolean; body: TemplateResult }): TemplateResult {
+  #mergedBody(): TemplateResult {
+    const available = this.deviceStations.filter(
+      (station): station is WorkedStation & { available: true } => station.available,
+    );
+    const drawn = this.deviceStations.filter(drawsQueue);
+    // A stable sort, so two orders queued at the same moment keep their stations' order.
+    const queue: MergedQueueGroup[] = drawn
+      .flatMap((station) => station.queue.map((group) => ({ ...group, stationId: station.id })))
+      .sort((a, b) => Date.parse(a.queuedAt) - Date.parse(b.queuedAt));
+    return html`${available.map(
+        (station) =>
+          html`<section
+            class="station-controls"
+            data-station-controls=${station.id}
+            aria-label=${station.name}
+          >
+            <h2 class="station-name">${station.name}</h2>
+            ${this.#today(station)}
+          </section>`,
+      )}
+      ${this.deviceStations.map((station) =>
+        station.available
+          ? this.#printersDown(station.printersDown, station.name)
+          : html`${this.#unavailable(station.name)}${
+              drawsQueue(station) ? this.#printersDown(station.printersDown, station.name) : nothing
+            }`,
+      )}
+      <till-station-queue
+        .groups=${queue}
+        .notices=${drawn.flatMap((station) => station.notices)}
+        .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
+        .view=${this.view}
+        .bumpMode=${this.bumpMode}
+        .fireControl=${this.fireControl}
+        .advanceOnly=${true}
+      ></till-station-queue>`;
+  }
+
+  /** The station's state today, and closing or reopening it for today. */
+  #today(station: WorkedStation): TemplateResult {
+    const { today } = station;
+    return html`<till-station-today
+      .api=${this.api}
+      .deviceMode=${true}
+      .station=${{
+        id: station.id,
+        name: station.name,
+        active: today.why !== "switched_off",
+        isDefault: today.isDefault,
+        open: today.open,
+        byHand: today.byHand,
+        sendsTo: today.sendsTo?.id ?? null,
+        why: today.why,
+      }}
+      .stations=${today.sendsTo ? [today.sendsTo] : []}
+      @station-today-changed=${(event: Event) => {
+        event.stopPropagation();
+        void this.#reload();
+      }}
+    ></till-station-today>`;
+  }
+
+  #unavailable(name: string): TemplateResult {
+    return html`<p class="unavailable" role="status" data-station-unavailable>
+      ${lostSlotLine("station", name)}
+    </p>`;
+  }
+
+  #deviceSection(station: DeviceStation): TemplateResult {
+    return html`<section
+      class="device-station"
+      data-device-station=${station.id}
+      aria-label=${station.name}
+    >
+      ${
+        station.available
+          ? html`<h2 class="station-name">${station.name}</h2>
+              ${this.#today(station)} ${this.#queue(true, station)}`
+          : drawsQueue(station)
+            ? html`${this.#unavailable(station.name)} ${this.#today(station)}
+              ${this.#queue(true, station)}`
+            : this.#unavailable(station.name)
+      }
+    </section>`;
+  }
+
+  #renderQueueSurface(opts: {
+    showBack: boolean;
+    showViews?: boolean;
+    showMerge?: boolean;
+    body: TemplateResult;
+  }): TemplateResult {
     return html`
       <section
         class="screen"
@@ -576,14 +822,30 @@ export class TillStationScreen extends LitElement {
               </header>`
         }
         <div class="actions">
-          <wt-button
-            class="view-toggle"
-            data-view-toggle
-            variant="secondary"
-            @click=${() => this.#toggleView()}
-          >
-            ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
-          </wt-button>
+          ${
+            opts.showViews === false
+              ? nothing
+              : html`<wt-button
+                  class="view-toggle"
+                  data-view-toggle
+                  variant="secondary"
+                  @click=${() => this.#toggleView()}
+                >
+                  ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
+                </wt-button>`
+          }
+          ${
+            opts.showMerge === true
+              ? html`<wt-button
+                  class="merge-toggle"
+                  data-merge-toggle
+                  variant="secondary"
+                  @click=${() => this.#toggleMerged()}
+                >
+                  ${this.merged ? t("station.view_stacked") : t("station.view_merged")}
+                </wt-button>`
+              : nothing
+          }
           <p class="stale" role="status" ?data-stale=${this.stale}>
             ${
               this.stale
@@ -626,37 +888,55 @@ export class TillStationScreen extends LitElement {
       <till-station-today
         .api=${this.api}
         .station=${this.stations.find((station) => station.id === this.activeStationId)}
-        .stations=${this.stations}
+        .stations=${this.allStations}
         @station-today-changed=${(event: Event) => {
           event.stopPropagation();
           void this.#reload(undefined, true);
         }}
       ></till-station-today>
-      ${this.#queue(false)}
+      ${this.#queue(false, {
+        id: this.activeStationId,
+        queue: this.groups,
+        notices: this.notices,
+        printersDown: this.printersDown,
+      })}
     `;
   }
 
   /** Reprint shows in OPERATOR mode only: the reprint route is session-guarded and a device holds no
    * session. */
-  #queue(advanceOnly: boolean): TemplateResult {
-    return html` ${this.printersDown.map(
-        (printer) =>
-          html`<p class="printer-down" role="status" data-printer-down>
-            ${t("station.printer_down")
-              .replace("{name}", () => printer.printerName)
-              .replace("{time}", () => clockTime(Date.parse(printer.since)))}
-          </p>`,
-      )}
+  #queue(
+    advanceOnly: boolean,
+    station: {
+      id: string | undefined;
+      queue: StationQueueGroup[];
+      notices: KitchenNotice[];
+      printersDown: StationPrinterDown[];
+    },
+  ): TemplateResult {
+    return html` ${this.#printersDown(station.printersDown)}
       <till-station-queue
-        .groups=${this.groups}
-        .notices=${this.notices}
+        .groups=${station.queue}
+        .notices=${station.notices}
         .view=${this.view}
         .bumpMode=${this.bumpMode}
         .fireControl=${this.fireControl}
-        .stationId=${this.activeStationId}
+        .stationId=${station.id}
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}
       ></till-station-queue>`;
+  }
+
+  /** In the merged view each line names its station, since the queue below mixes them. */
+  #printersDown(printers: StationPrinterDown[], station?: string): TemplateResult[] {
+    return printers.map((printer) => {
+      const line = t("station.printer_down")
+        .replace("{name}", () => printer.printerName)
+        .replace("{time}", () => clockTime(Date.parse(printer.since)));
+      return html`<p class="printer-down" role="status" data-printer-down>
+        ${station === undefined ? line : `${station}: ${line}`}
+      </p>`;
+    });
   }
 
   #pick(station: Station): TemplateResult {

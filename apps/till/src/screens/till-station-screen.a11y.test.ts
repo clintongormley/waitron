@@ -104,6 +104,12 @@ const groups: StationQueueGroup[] = [
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "dev-1",
+      formFactor: "till",
+      name: "Till",
+      kitchenScreens: [],
+    }),
     getStationQueue: vi.fn().mockResolvedValue({ items: groups, notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
@@ -266,24 +272,55 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await flush(el);
     await expectNoA11yViolations(host);
   });
+
+  it.each([
+    [
+      "its chosen stations",
+      { available: true, stations: [{ id: "st-1", name: "Cocina", available: false }] },
+    ],
+    ["the station screen itself", { available: false, stations: [] }],
+  ])("has no violations at a till whose %s a narrowing took", async (_case, screen) => {
+    const { el, host } = await mountWidget<TillStationScreen>(
+      "till-station-screen",
+      {
+        api: stubApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue({
+            deviceId: "dev-1",
+            formFactor: "till",
+            name: "Till 1",
+            kitchenScreens: [{ kind: "station", zones: null, ...screen }],
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-unavailable], [data-station-unavailable]"),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });
 
 function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
-    getDeviceStation: vi.fn().mockResolvedValue({
-      station: {
-        id: "st-dev",
-        name: "Grill",
-        today: {
-          open: true,
-          isDefault: false,
-          byHand: null,
-          sendsTo: null,
-          why: "open" as const,
+    getDeviceStationScreen: vi.fn().mockResolvedValue({
+      stations: [
+        {
+          name: "Cocina",
+          available: true,
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          id: "st-dev",
+          queue: groups,
+          notices: [],
         },
-        queue: groups,
-        notices: [],
-      },
+      ],
     }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -302,22 +339,25 @@ describe.each(["light", "dark"] as const)(
       await flush(el);
       await expectNoA11yViolations(host);
     });
-    it("has no violations with the bound station's notices above its queue", async () => {
+    it("has no violations with its station's notices above its queue", async () => {
       const api = deviceStubApi({
-        getDeviceStation: vi.fn().mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              queue: groups,
+              notices,
             },
-            queue: groups,
-            notices,
-          },
+          ],
         }),
       });
       const { el, host } = await mountWidget<TillStationScreen>(
@@ -331,6 +371,193 @@ describe.each(["light", "dark"] as const)(
   },
 );
 
+describe.each(["light", "dark"] as const)(
+  "till-station-screen device mode stacked a11y (%s theme)",
+  (theme) => {
+    it("has no violations with two stations stacked and one no longer available between them", async () => {
+      const api = deviceStubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              queue: groups,
+              notices,
+              printersDown: [
+                { printerId: "p-1", printerName: "Epson", since: "2026-08-17T18:14:00Z" },
+              ],
+            },
+            { id: "st-deli", name: "Deli", available: false },
+            {
+              id: "st-2",
+              name: "Barra",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              queue: groups,
+              notices: [],
+              printersDown: [],
+            },
+          ],
+        }),
+      });
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api, deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelectorAll("[data-device-station]")).toHaveLength(3);
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations with a station switched off on its own page still holding its dishes", async () => {
+      const today = (why: "open" | "switched_off") => ({
+        open: why === "open",
+        isDefault: false,
+        byHand: null,
+        sendsTo: null,
+        why,
+      });
+      const api = deviceStubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: today("open"),
+              queue: groups,
+              notices: [],
+              printersDown: [],
+            },
+            {
+              id: "st-deli",
+              name: "Deli",
+              available: false,
+              switchedOff: true,
+              today: today("switched_off"),
+              queue: groups,
+              notices,
+              printersDown: [],
+            },
+          ],
+        }),
+      });
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api, deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      const deli = el.shadowRoot!.querySelector('[data-device-station="st-deli"]')!;
+      expect(deli.querySelector("[data-station-unavailable]")).not.toBeNull();
+      expect(deli.querySelector("till-station-queue")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations with no station left available", async () => {
+      const api = deviceStubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            { id: "st-deli", name: "Deli", available: false },
+            { id: "st-2", name: "Barra", available: false },
+          ],
+        }),
+      });
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api, deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(2);
+      await expectNoA11yViolations(host);
+    });
+  },
+);
+
+describe.each(["light", "dark"] as const)(
+  "till-station-screen device mode merged a11y (%s theme)",
+  (theme) => {
+    const threeStations = () =>
+      deviceStubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              queue: groups,
+              notices,
+              printersDown: [
+                { printerId: "p-1", printerName: "Epson", since: "2026-08-17T18:14:00Z" },
+              ],
+            },
+            { id: "st-deli", name: "Deli", available: false },
+            {
+              id: "st-2",
+              name: "Barra",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              queue: groups.map((group) => ({ ...group, orderId: `${group.orderId}-barra` })),
+              notices: [{ ...baseNotice, id: "kn-barra", stationId: "st-2" }],
+              printersDown: [],
+            },
+          ],
+        }),
+      });
+
+    it.each(["kanban", "rail"] as const)(
+      "has no violations on the merged %s with its station labels and the lines above it",
+      async (view) => {
+        const { el, host } = await mountWidget<TillStationScreen>(
+          "till-station-screen",
+          { api: threeStations(), deviceMode: true },
+          theme,
+        );
+        await flush(el);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-merge-toggle]")!.click();
+        if (view === "rail")
+          el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+        await el.updateComplete;
+        const queue = el.shadowRoot!.querySelector("till-station-queue")!;
+        await queue.updateComplete;
+        expect(el.shadowRoot!.querySelectorAll("till-station-queue")).toHaveLength(1);
+        expect(queue.shadowRoot!.querySelector("[data-line-station]")).not.toBeNull();
+        expect(queue.shadowRoot!.querySelector("[data-notice-station]")).not.toBeNull();
+        await expectNoA11yViolations(host);
+      },
+    );
+  },
+);
+
 describe.each(["light", "dark"] as const)("printer warning a11y (%s theme)", (theme) => {
   it.each([false, true])(
     "has no violations with two printer statuses (device mode: %s)",
@@ -341,21 +568,24 @@ describe.each(["light", "dark"] as const)("printer warning a11y (%s theme)", (th
       ];
       const api = deviceMode
         ? deviceStubApi({
-            getDeviceStation: vi.fn().mockResolvedValue({
-              station: {
-                id: "st-dev",
-                name: "Grill",
-                today: {
-                  open: true,
-                  isDefault: false,
-                  byHand: null,
-                  sendsTo: null,
-                  why: "open" as const,
+            getDeviceStationScreen: vi.fn().mockResolvedValue({
+              stations: [
+                {
+                  name: "Cocina",
+                  available: true,
+                  today: {
+                    open: true,
+                    isDefault: false,
+                    byHand: null,
+                    sendsTo: null,
+                    why: "open" as const,
+                  },
+                  id: "st-dev",
+                  queue: groups,
+                  notices: [],
+                  printersDown,
                 },
-                queue: groups,
-                notices: [],
-                printersDown,
-              },
+              ],
             }),
           })
         : stubApi({

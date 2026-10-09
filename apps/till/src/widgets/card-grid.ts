@@ -17,13 +17,16 @@ import "../screens/till-expo-screen.js";
 import "../screens/till-station-screen.js";
 import "../screens/till-table-order-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
+import type { KitchenScreenNotice } from "../kitchen-screen-notice.js";
+import "../kitchen-screen-notice.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
   BillBalance,
   CounterWaitingOrder,
   CurrentOrders,
-  DeviceStation,
-  WatcherBoard,
+  DeviceStationScreen,
+  DevicePassMonitor,
+  DevicePassScreen,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
@@ -124,6 +127,18 @@ export class TillCardGrid extends LitElement {
       margin: 0;
       font-weight: var(--wt-font-weight-bold);
     }
+    .kitchen-screen {
+      display: flex;
+      flex-direction: column;
+      gap: var(--wt-space-2);
+      padding: var(--wt-space-6);
+      font-family: var(--wt-font-family);
+      font-size: var(--wt-font-size-lg);
+      color: var(--wt-color-text);
+    }
+    .kitchen-screen p {
+      margin: 0;
+    }
   `;
 
   @property({ attribute: false }) tab?: TabDef;
@@ -168,12 +183,18 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) permissions: string[] = [];
   @property() bumpMode: BumpMode = "line";
   /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no
-   * login, one bound station) rather than the session-gated operator path. */
+   * login, the device's own station screen) rather than the session-gated operator path. */
   @property({ type: Boolean }) deviceMode = false;
   /** The device station the app already probed at cold boot, handed to the embedded station screen so it
    * does not re-fetch on mount. */
-  @property({ attribute: false }) initialDeviceStation?: DeviceStation;
-  @property({ attribute: false }) initialDeviceWatcher?: WatcherBoard;
+  @property({ attribute: false }) initialDeviceStation?: DeviceStationScreen;
+  @property({ attribute: false }) deviceId?: string;
+  @property({ attribute: false }) initialDevicePass?: DevicePassScreen;
+  @property({ attribute: false }) initialDevicePassMonitor?: DevicePassMonitor;
+  /** The kitchen display's name, its pass screen's title. */
+  @property({ attribute: false }) deviceName?: string;
+  /** Shown on the kds-board card in place of a queue. */
+  @property({ attribute: false }) kitchenScreenNotice?: KitchenScreenNotice;
   @property({ attribute: false }) tabLines: TabLine[] = [];
   @property({ attribute: false }) tabGroups: OrderGroup[] = [];
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
@@ -408,16 +429,36 @@ export class TillCardGrid extends LitElement {
           embedded
           .api=${this.api}
           .fireControl=${this.fireControl}
+          .runsPass=${this.capabilities.includes("run-the-pass")}
         ></till-expo-screen>`;
       case "kds-board":
+        if (this.kitchenScreenNotice !== undefined)
+          return html`<till-kitchen-screen-notice
+            class="kitchen-screen"
+            role="status"
+            .api=${this.api}
+            .notice=${this.kitchenScreenNotice}
+          ></till-kitchen-screen-notice>`;
+        if (this.initialDevicePassMonitor)
+          return html`<till-expo-screen
+            embedded
+            monitor
+            .api=${this.api}
+            .deviceMode=${this.deviceMode}
+            .deviceName=${this.deviceName}
+            .initialDevicePassMonitor=${this.initialDevicePassMonitor}
+          ></till-expo-screen>`;
         // Self-fetching: it reads its own station list and queue. `stationQueue` is the prep-queue
         // card's default-station data, not this display's station, so it is deliberately not passed.
-        return this.initialDeviceWatcher
+        return this.initialDevicePass
           ? html`<till-expo-screen
               embedded
               .api=${this.api}
+              .fireControl=${this.fireControl}
+              .runsPass=${this.capabilities.includes("run-the-pass")}
               .deviceMode=${this.deviceMode}
-              .initialDeviceWatcher=${this.initialDeviceWatcher}
+              .deviceName=${this.deviceName}
+              .initialDevicePass=${this.initialDevicePass}
             ></till-expo-screen>`
           : html`<till-station-screen
               embedded
@@ -426,6 +467,7 @@ export class TillCardGrid extends LitElement {
               .fireControl=${this.fireControl}
               .deviceMode=${this.deviceMode}
               .initialDeviceStation=${this.initialDeviceStation}
+              .deviceId=${this.deviceId}
             ></till-station-screen>`;
       case "table-order":
         // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen

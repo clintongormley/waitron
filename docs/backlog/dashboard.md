@@ -902,8 +902,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   02:30 is reached only by two moves through another time. Owner, 2026-10-08: keep it as built.
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'
-  across the dashboard"): a Delete label can be stale, because the watcher list does not re-read on
-  a watcher's Done marks nor the course list on draft lines, order lines or kitchen items, in which
+  across the dashboard"): a Delete label can be stale, because the course list does not re-read on
+  draft lines, order lines or kitchen items, in which
   case a confirmed Delete switches the row off instead.
 
 - **The sidebar's page search (C46, #836) — left open:** its accessibility case checks the search

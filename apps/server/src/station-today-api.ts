@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import {
   authorize,
   authorizeByPin,
@@ -24,6 +24,22 @@ function stationId(value: string): string {
   return value.toLowerCase();
 }
 
+/** Refuses a station the device's station screen does not show now. */
+async function assertScreenShowsStation(
+  tx: Transaction,
+  cfg: Pick<TillApiDeps["cfg"], "locationId">,
+  deviceId: string,
+  id: string,
+): Promise<void> {
+  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, deviceId)).find(
+    (candidate) => candidate.kind === "station",
+  );
+  const shown =
+    screen?.available === true &&
+    screen.stations.some((station) => station.available && station.id === id);
+  if (!shown) throw new AppError("device.forbidden_station", { stationId: id });
+}
+
 export function mountStationTodayApi(
   app: Hono,
   deps: TillApiDeps,
@@ -36,11 +52,10 @@ export function mountStationTodayApi(
       const device = await requireDevice(deps, c);
       assertProfileAction(device, "prepare-orders");
       const id = stationId(c.req.param("stationId"));
-      if (id !== device.stationId)
-        throw new AppError("device.forbidden_station", { stationId: id });
       const cfg = requestCfg(deps.cfg, device);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
+          await assertScreenShowsStation(tx, cfg, device.deviceId, id);
           const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
           const authorizers = await listActivePersonsWithPermission(tx, "venue_service.manage");
           return { destinations, authorizers };
@@ -53,8 +68,6 @@ export function mountStationTodayApi(
       const device = await requireDevice(deps, c);
       assertProfileAction(device, "prepare-orders");
       const id = stationId(c.req.param("stationId"));
-      if (id !== device.stationId)
-        throw new AppError("device.forbidden_station", { stationId: id });
       const cfg = requestCfg(deps.cfg, device);
       const body = asObject(await readRawJsonBody<unknown>(c));
       if (body.state !== "open" && body.state !== "closed") throw invalid("state");
@@ -71,6 +84,7 @@ export function mountStationTodayApi(
       const attempts = overridePinAttempts(pinThrottle, device.deviceId);
       await withPinCheckAhead(deps.db, authorizer, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
+          await assertScreenShowsStation(tx, cfg, device.deviceId, id);
           await authorizeByPin(
             tx,
             {

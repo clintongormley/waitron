@@ -1684,7 +1684,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   reconnect). Disposing the scope redraws the form, so without that check a form taken out of the
   page takes a new scope while detached, and once put back it does not ask before discarding an
   edit made after that. The till's party name, invoice recipient, extras picker and station
-  dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
+  dialogs, the dashboard's unit, ingredient, extras list, option
   list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
@@ -1698,7 +1698,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   reopened form starts changed. A form that forgets on disconnect which record it opened re-seeds
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
-  The staff edit and new person, variant, purchase, shift, bookings and watcher forms, the product
+  The staff edit and new person, variant, purchase, shift and bookings forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
   dialog, the Home page tab's shortcut picker and the Departments and zones editor window do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
@@ -1774,7 +1774,7 @@ and nothing guards it across screens:
   the tree's switches and choices write at once. See
   [the Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
-  confirmations, and the holiday area saves on choice); the watcher form, New and Edit; and the
+  confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
   the one form that writes its own comparison (`chosen !== activeProfileId`) instead of a draft
   scope: a scope registered with the till's coordinator would be unsaved whenever another profile is
@@ -1828,7 +1828,7 @@ Rename station, station printers, watcher Rename/follows/zones/pass/printers, an
 rest/fallback/timing. An unchanged Settings fallback opens no confirmation; an edited fallback
 keeps its two presses. Routing Confirm and station service operations remain actions;
 [the inventory](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d)
-names their handlers. The delegated watcher form remains covered by batch 4c.
+names their handlers.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
@@ -3239,10 +3239,10 @@ less two touch targets; actions wider than that scroll within it. A selected tab
 strip shows its start: in Spanish at a 390 px window (a 310 px screen), Printers' "Agentes de
 impresión" tab is cut that way beside "Añadir un agente" (the "shows the selected tab whole at
 every window width except the Spanish Agents tab on a phone" case in
-`apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations, which shows both its add
-buttons (New station and New watcher) on every tab rather than only on their own, caps the area at
-half the row through the `tab-actions` part so its tabs keep that half (the "keeps half of a … px
-tab row for the tabs" cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
+`apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations shows its one add button,
+New station, on every tab rather than only on its own, and caps its action area at half the row
+through the `tab-actions` part so its tabs keep that half whatever the font (the "keeps half of a … px tab row for the tabs" cases in
+`packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.
 A tab whose list is a tree puts its adds in the tree rather than the tab's `actions` slot: the Products tree in its All products row's ⋮, and a menu's
 Structure tab in its toolbar's Add menu (A337) and in the ⋮ of
@@ -3368,8 +3368,8 @@ zones and saved canvas tabs extend those paths, such as `/manage/floor/view/plan
 Till Schedule, Kitchen, Pass and Allergens use `/tabs/<key>/view/<destination>`, with destinations
 `schedule`, `station`, `expo` and `allergens`. The operator Kitchen picker adds `/station/<id>`;
 embedded station cards keep their selection local to the enclosing tab. Restore these destinations
-only after login and device validation. Kitchen displays keep their bound station and cannot open
-operator destinations from a path. Unsaved canvas tabs stay out of both URL writes and history,
+only after login and device validation. A kitchen display opens the one kitchen screen its device
+chose and cannot open operator destinations from a path. Unsaved canvas tabs stay out of both URL writes and history,
 including when you reselect them; saved tabs become destinations after persistence.
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
 an automatic return home after payment replaces the current entry. The till holds the menu choice in

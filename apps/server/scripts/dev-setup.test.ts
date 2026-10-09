@@ -20,6 +20,7 @@ import { ALL_MODULES } from "../src/modules.js";
 import {
   ADMIN_PIN,
   buildDevEnv,
+  DEMO_DEVICE_LINES,
   devSetup,
   inspectVenues,
   parseEnvFile,
@@ -196,8 +197,8 @@ describe("devSetup against a real venue directory", () => {
 
   it("provisions a virgin directory, writing a .env with no till id", async () => {
     expect(first.reused).toBe(false);
-    // The till, handheld and two kitchen displays it pairs.
-    expect(await devicesCount()).toBe(4);
+    // The till, handheld and three kitchen displays it pairs.
+    expect(await devicesCount()).toBe(5);
 
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
@@ -287,7 +288,7 @@ describe("devSetup against a real venue directory", () => {
     });
 
     expect(second.reused).toBe(true);
-    expect(await devicesCount()).toBe(4);
+    expect(await devicesCount()).toBe(5);
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
     expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
@@ -322,6 +323,7 @@ describe("devSetup against a real venue directory", () => {
           "hand-keyed-card-payment",
           "prepare-orders",
           "hand-over-orders",
+          "run-the-pass",
         ],
       },
       {
@@ -334,24 +336,40 @@ describe("devSetup against a real venue directory", () => {
           "hand-over-orders",
         ],
       },
-      { name: "Kitchen", canvasId: null, capabilities: ["act-as-kds", "prepare-orders"] },
+      {
+        name: "Kitchen",
+        canvasId: null,
+        capabilities: [
+          "act-as-kds",
+          "prepare-orders",
+          "take-orders",
+          "hand-over-orders",
+          "run-the-pass",
+        ],
+      },
     ]);
   });
 
-  it("enrols a till, handheld and two kitchen displays via the real enrol path", async () => {
+  it("enrols a till, handheld and three kitchen displays via the real enrol path", async () => {
     const rows = await readVenue(async (db) => {
       const result = await db.execute<{
         label: string;
         form_factor: string;
-        station_name: string | null;
-        watcher_name: string | null;
+        screen: string | null;
+        station_names: string | null;
+        every_station: number | null;
+        every_zone: number | null;
       }>(
-        sql`select d.label, dp.form_factor, ks.name as station_name,
-                   w.name as watcher_name
+        sql`select d.label, dp.form_factor, dks.screen, dks.every_station,
+                   (select group_concat(name, ',') from (
+                      select ks.name from device_kitchen_screen_stations s
+                      join kitchen_stations ks on ks.id = s.station_id
+                      where s.device_id = d.id and s.screen = dks.screen
+                      order by ks.name)) as station_names,
+                   dks.every_zone
             from devices d
             join device_profiles dp on dp.id = d.device_profile_id
-            left join kitchen_stations ks on ks.id = d.station_id
-            left join watchers w on w.id = d.watcher_id
+            left join device_kitchen_screens dks on dks.device_id = d.id
             order by d.label`,
       );
       return result.rows;
@@ -360,28 +378,57 @@ describe("devSetup against a real venue directory", () => {
       {
         label: "Camarero 1",
         form_factor: "phone-portrait",
-        station_name: null,
-        watcher_name: null,
+        screen: null,
+        every_station: null,
+        station_names: null,
+        every_zone: null,
+      },
+      {
+        label: "Monitor Pase",
+        form_factor: "kds",
+        screen: "pass_monitor",
+        every_station: 1,
+        station_names: null,
+        every_zone: 1,
       },
       {
         label: "Mostrador",
         form_factor: "till",
-        station_name: null,
-        watcher_name: null,
+        screen: null,
+        every_station: null,
+        station_names: null,
+        every_zone: null,
       },
       {
         label: "Pantalla Cocina",
         form_factor: "kds",
-        station_name: "Kitchen",
-        watcher_name: null,
+        screen: "station",
+        every_station: 0,
+        station_names: "Kitchen",
+        every_zone: 0,
       },
       {
         label: "Pantalla Pase",
         form_factor: "kds",
-        station_name: null,
-        watcher_name: "Pass",
+        screen: "pass",
+        every_station: 0,
+        station_names: "Deli counter,Kitchen",
+        every_zone: 1,
       },
     ]);
+  });
+
+  it("prints every enrolled device, naming what each kitchen display runs", async () => {
+    const labels = await readVenue(async (db) => {
+      const { rows } = await db.execute<{ label: string }>(sql`select label from devices`);
+      return rows.map((row) => row.label);
+    });
+    const printed = DEMO_DEVICE_LINES.join("\n");
+    for (const label of labels) expect(printed).toContain(label);
+    expect(printed).toContain("Pantalla Cocina (station screen)");
+    expect(printed).toContain("Pantalla Pase (pass screen)");
+    expect(printed).toContain("Monitor Pase (pass monitor)");
+    expect(printed).not.toMatch(/watcher/i);
   });
 
   it("refuses to provision a second venue when the .env no longer names the directory's venue", async () => {
@@ -390,7 +437,7 @@ describe("devSetup against a real venue directory", () => {
     await expect(devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} })).rejects.toThrow(
       /already holds a venue/i,
     );
-    expect(await devicesCount()).toBe(4);
+    expect(await devicesCount()).toBe(5);
   });
 });
 

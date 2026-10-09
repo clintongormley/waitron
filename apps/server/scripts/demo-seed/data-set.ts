@@ -131,7 +131,6 @@ export interface DemoDataSet<L extends string = string> {
     readonly upstairsBarZone: StaffText;
     readonly deliCounterZone: StaffText;
   };
-  readonly watcherName: StaffText;
   readonly staff: readonly SeedPerson[];
   readonly adjustmentReasons: readonly SeedReason<L>[];
 }

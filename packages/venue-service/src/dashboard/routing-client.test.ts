@@ -80,7 +80,7 @@ it("enables a disabled watcher through its reactivate route", async () => {
   expect(request.mock.calls).toEqual([["/management-api/watchers/old/reactivate", "POST"]]);
 });
 
-it("creates, updates and removes watchers through management routes", async () => {
+it("updates and removes watchers through management routes", async () => {
   const request = vi.fn(async () => ({ id: "pass" }));
   const api = new PrepStationsApi(request as DashboardRequest);
   const input = {
@@ -91,12 +91,10 @@ it("creates, updates and removes watchers through management routes", async () =
     zoneIds: [],
     runsPass: true,
   };
-  await api.createWatcher(input);
   await api.updateWatcher("pass", input);
   await api.removeWatcher("pass", { disable: false });
   await api.removeWatcher("pass", { disable: true });
   expect(request.mock.calls).toEqual([
-    ["/management-api/watchers", "POST", input],
     ["/management-api/watchers/pass", "PUT", input],
     ["/management-api/watchers/pass", "DELETE"],
     ["/management-api/watchers/pass?disable=true", "DELETE"],

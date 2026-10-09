@@ -643,10 +643,8 @@ export interface DeviceRow {
   /** The profiles staff may switch the device to: its active profile first, then the others. */
   approvedProfileIds: string[];
   kind: string;
-  stationId: string | null;
-  watcherId: string | null;
-  /** The stored station's or watcher's name, and whether it is switched on; null when it holds neither. */
-  binding: { name: string; active: boolean } | null;
+  /** Its kitchen screens as the server resolves them, a kind a narrowing took listed after them. */
+  kitchenScreens: ResolvedKitchenScreen[];
   label: string;
   active: boolean;
   lastSeenAt: string | null;
@@ -727,8 +725,7 @@ export interface DeviceProfile extends ProfileServiceScope {
 
 /** What a profile save may also carry; each part left out stays as stored on an edit. */
 export type ProfileSaveExtras = Partial<
-  ProfileKitchenLists &
-    ProfileServiceScope &
+  { kitchenScreens: ProfileKitchenScreens } & ProfileServiceScope &
     ProfileEquipmentDefaults &
     Pick<DeviceProfile, "startingScreen" | "admittedRoles" | "personExceptions">
 >;
@@ -754,10 +751,60 @@ export interface ProfileScopeChoices {
   zones: { id: string; name: string; departmentId: string; active: boolean }[];
 }
 
-/** The stations and watchers a kitchen screen on the profile may show; an empty list permits none. */
-export interface ProfileKitchenLists {
-  stationIds: string[];
-  watcherIds: string[];
+export const KITCHEN_SCREEN_KINDS = ["station", "pass", "pass_monitor"] as const;
+export type KitchenScreenKind = (typeof KITCHEN_SCREEN_KINDS)[number];
+
+/** null is every station or every zone; a station screen has no zones and is always null. */
+export interface KitchenScreenScope {
+  stationIds: string[] | null;
+  zoneIds: string[] | null;
+}
+
+/**
+ * The kitchen screens a profile's devices may run, by kind. A kitchen display is offered only the
+ * kinds listed; on a till or handheld a missing station or pass screen bounds nothing, while a pass
+ * monitor is offered only when listed.
+ */
+export type ProfileKitchenScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
+
+export interface DeviceKitchenScreen extends KitchenScreenScope {
+  kind: KitchenScreenKind;
+}
+
+/** One station or zone of a device's kitchen screen: shown, or no longer available. */
+export interface ScreenSlot {
+  id: string;
+  name: string;
+  available: boolean;
+  switchedOff: boolean;
+}
+
+/** A device's kitchen screen as the server reads it back. */
+export interface ResolvedKitchenScreen {
+  kind: KitchenScreenKind;
+  /** False when a profile narrowing took this kind from the device. */
+  available: boolean;
+  /** The device's own station list is "every"; false on a kind it no longer holds. */
+  everyStation: boolean;
+  /** As `everyStation`, for zones; a station screen's is true. */
+  everyZone: boolean;
+  /** The profile's station list for this kind is "every", or it has no row for it. */
+  profileEveryStation: boolean;
+  /** Display order, the device's own list or else what its profile allows it. */
+  stations: ScreenSlot[];
+  /** null: no zone filter. */
+  zones: ScreenSlot[] | null;
+}
+
+/** A device a profile save narrowed, and what it lost. */
+export interface NarrowedDevice {
+  deviceId: string;
+  deviceName: string;
+  lost: {
+    screens: KitchenScreenKind[];
+    stations: { id: string; name: string }[];
+    zones: { id: string; name: string }[];
+  };
 }
 
 /** In the order the device's equipment choices offer them. */
@@ -788,8 +835,7 @@ export interface JoinRequestRow {
 export interface ReturningDetails {
   name: string;
   profileId: string;
-  stationId: string | null;
-  watcherId: string | null;
+  kitchenScreens: ResolvedKitchenScreen[];
   /** Its profile was deleted, so Enable must be given another. */
   profileRetired: boolean;
 }
@@ -2907,8 +2953,7 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      stationId?: string;
-      watcherId?: string;
+      kitchenScreens: DeviceKitchenScreen[];
     },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
@@ -2960,12 +3005,12 @@ export class DashboardApi {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "GET");
   }
 
-  /** Every live profile's station and watcher lists, switched-off entries included. */
-  listProfileKitchenLists(): Promise<({ profileId: string } & ProfileKitchenLists)[]> {
-    return this.#request<{ lists: ({ profileId: string } & ProfileKitchenLists)[] }>(
-      "/management-api/device-profile-kitchen-lists",
+  /** Every live profile's kitchen screens, switched-off stations and zones included. */
+  listProfileKitchenScreens(): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]> {
+    return this.#request<{ profiles: { profileId: string; screens: ProfileKitchenScreens }[] }>(
+      "/management-api/device-profile-kitchen-screens",
       "GET",
-    ).then((r) => r.lists);
+    ).then((r) => r.profiles);
   }
 
   createDeviceProfile(
@@ -3000,17 +3045,21 @@ export class DashboardApi {
     printerLists: ProfilePrinterLists,
     /** A part left out stays as stored. */
     extras?: ProfileSaveExtras,
-  ): Promise<DeviceProfile> {
-    return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
-      name,
-      canvasId,
-      capabilities,
-      formFactor,
-      inactivityTimeoutSeconds,
-      receiptPrinterIds: printerLists.receiptPrinterIds,
-      paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
-      ...extras,
-    });
+  ): Promise<DeviceProfile & { narrowedDevices?: NarrowedDevice[] }> {
+    return this.#request<DeviceProfile & { narrowedDevices?: NarrowedDevice[] }>(
+      `/management-api/device-profiles/${id}`,
+      "PUT",
+      {
+        name,
+        canvasId,
+        capabilities,
+        formFactor,
+        inactivityTimeoutSeconds,
+        receiptPrinterIds: printerLists.receiptPrinterIds,
+        paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
+        ...extras,
+      },
+    );
   }
 
   deleteDeviceProfile(id: string): Promise<void> {
@@ -3027,10 +3076,8 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      /** Absent or null clears it; a kitchen screen needs exactly one of this and `watcherId`. */
-      stationId?: string | null;
-      /** Absent or null clears it; a kitchen screen needs exactly one of this and `stationId`. */
-      watcherId?: string | null;
+      /** Replaces the device's kitchen screens and clears what narrowings took; absent leaves them. */
+      kitchenScreens?: DeviceKitchenScreen[];
       /** Null puts the role on Use default. */
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;

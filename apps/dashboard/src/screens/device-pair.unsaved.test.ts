@@ -20,8 +20,7 @@ const request: JoinRequestRow = {
   returning: {
     name: "Counter",
     profileId: "p1",
-    stationId: null,
-    watcherId: null,
+    kitchenScreens: [],
     profileRetired: false,
   },
 };
@@ -130,9 +129,11 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   const api = {
     listDevices: async () => [],
     listStations: async () => [station],
-    listWatchers: async () => [],
+    listZones: async () => [],
     listPrinters: async () => [],
-    listProfileKitchenLists: async () => [],
+    listProfileKitchenScreens: async () => [
+      { profileId: "p2", screens: { station: { stationIds: null, zoneIds: null } } },
+    ],
     listDeviceProfiles: async () => [
       profile,
       { ...profile, id: "p2", name: "Kitchen", canvasId: null, formFactor: "kds" },
@@ -202,21 +203,17 @@ for (const route of ["cancel", "escape", "add-close"] as const) {
     expect(unload()).toBe(false);
   });
 }
-for (const field of ["name", "profile", "binding"] as const) {
+for (const field of ["name", "profile", "screen"] as const) {
   it(`pair ${field} changes and normalized reverts track the submitted settings`, async () => {
     const { screen, deny } = await mount();
     expect(unload()).toBe(false);
-    if (field === "binding") {
+    if (field === "screen") {
       change(screen, "profile", "p2");
       await screen.updateComplete;
-      change(screen, "binding", "station:s1");
+      change(screen, "screen", "station");
     } else change(screen, field, field === "name" ? "Renamed" : "p2");
     expect(unload()).toBe(true);
-    change(
-      screen,
-      field === "binding" ? "profile" : field,
-      field === "name" ? "  Counter  " : "p1",
-    );
+    change(screen, field === "screen" ? "profile" : field, field === "name" ? "  Counter  " : "p1");
     expect(unload()).toBe(false);
     q(screen, "[data-test=pair-cancel]")!.click();
     await expect.poll(() => modal(screen)).toBeNull();
@@ -255,13 +252,13 @@ it("successful pairing commits its exact payload before a failed refresh and ope
   change(screen, "name", " Renamed ");
   change(screen, "profile", "p2");
   await screen.updateComplete;
-  change(screen, "binding", "station:s1");
+  change(screen, "screen", "station");
   q(screen, "[data-test=pair-submit]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(accept).toHaveBeenCalledExactlyOnceWith("j1", {
     name: "Renamed",
     profileId: "p2",
-    stationId: "s1",
+    kitchenScreens: [{ kind: "station", stationIds: null, zoneIds: null }],
   });
   expect(deny).not.toHaveBeenCalled();
   expect(release).toHaveBeenCalledOnce();
@@ -468,4 +465,33 @@ it("late native close reports cannot discard a reopened settings owner", async (
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("Bar");
   expect(deny).toHaveBeenCalledExactlyOnceWith("j1", { createdAt: request.createdAt });
+});
+
+it("#1422 reconnect: a Pair dialog opened after the screen is put back asks before discarding a changed kitchen screen", async () => {
+  const { app, screen } = await mount();
+  screen.remove();
+  app.shadowRoot!.append(screen);
+  await expect.poll(() => q(screen, "[data-test=open-add-device]")).not.toBeNull();
+  q(screen, "[data-test=open-add-device]")!.click();
+  await expect.poll(() => q(screen, "[data-test=pair-j1]")).not.toBeNull();
+  await open(screen);
+  change(screen, "profile", "p2");
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  change(screen, "screen", "station");
+  await screen.updateComplete;
+  q(screen, "[data-test=pair-screen-every-station]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: false } }),
+  );
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=pair-cancel]")!.click();
+  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
+  expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  await choose(app, "keep");
+  expect((q(screen, "[data-test=pair-screen]") as HTMLInputElement).value).toBe("station");
+  q(screen, "[data-test=pair-cancel]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(unload()).toBe(false);
 });

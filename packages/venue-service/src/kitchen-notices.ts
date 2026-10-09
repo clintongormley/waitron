@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenPresentationName } from "@waitron/catalogue";
@@ -181,8 +181,22 @@ export async function listStationNotices(
   cfg: VenueScope,
   stationId: string,
 ): Promise<KitchenNotice[]> {
+  return (await listStationsNotices(tx, cfg, [stationId])).get(stationId)!;
+}
+
+/**
+ * `listStationNotices` for several stations in one statement, the clock read once. Every station
+ * asked for has an entry.
+ */
+export async function listStationsNotices(
+  tx: Transaction,
+  cfg: VenueScope,
+  stationIds: readonly string[],
+): Promise<Map<string, KitchenNotice[]>> {
+  const byStation = new Map<string, KitchenNotice[]>(stationIds.map((id) => [id, []]));
+  if (stationIds.length === 0) return byStation;
   const since = businessDayStart(new Date(), await readLocationClock(tx, cfg.locationId));
-  const rows = await tx
+  const ranked = tx
     .select({
       id: kitchenNotices.id,
       stationId: kitchenNotices.stationId,
@@ -200,20 +214,32 @@ export async function listStationNotices(
       cancelledExtra: kitchenNotices.cancelledExtra,
       reroutedTo: kitchenNotices.reroutedTo,
       createdAt: kitchenNotices.createdAt,
+      newest:
+        sql<number>`row_number() over (partition by ${kitchenNotices.stationId} order by ${kitchenNotices.createdAt} desc, ${INSERTION_ORDER} desc)`.as(
+          "newest",
+        ),
     })
     .from(kitchenNotices)
     .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenNotices.stationId))
     .where(
       and(
-        eq(kitchenNotices.stationId, stationId),
+        inArray(kitchenNotices.stationId, [...stationIds]),
         eq(kitchenStations.locationId, cfg.locationId),
         isNull(kitchenNotices.acknowledgedAt),
         gte(kitchenNotices.createdAt, since),
       ),
     )
-    .orderBy(desc(kitchenNotices.createdAt), desc(INSERTION_ORDER))
-    .limit(NOTICE_LIMIT);
-  return rows.reverse().map((row) => ({ ...row, quantity: thousandthsToDecimal(row.quantity) }));
+    .as("ranked");
+  const rows = await tx
+    .select()
+    .from(ranked)
+    .where(lte(ranked.newest, NOTICE_LIMIT))
+    .orderBy(desc(ranked.newest));
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rank is not part of a notice
+  for (const { newest, ...row } of rows) {
+    byStation.get(row.stationId)!.push({ ...row, quantity: thousandthsToDecimal(row.quantity) });
+  }
+  return byStation;
 }
 
 /**

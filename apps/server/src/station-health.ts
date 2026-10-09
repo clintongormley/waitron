@@ -1,7 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import {
-  devices,
   diningTables,
   assertKitchenTimingPresent,
   kitchenStations,
@@ -15,6 +14,7 @@ import {
 } from "@waitron/db";
 import { classifyBand, thousandthsToDecimal, type TimingBand } from "@waitron/shared";
 import {
+  readStationScreensWithSwitchedOff,
   stationPrintersDown,
   stationScreensDark,
   type DarkScreen,
@@ -109,11 +109,8 @@ export async function readStationHealth(
     )
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
-  const screens = await tx
-    .select({ stationId: devices.stationId })
-    .from(devices)
-    .where(and(eq(devices.locationId, cfg.locationId), eq(devices.active, true)));
-  const selected = new Set(screens.map((s) => s.stationId));
+  const screens = await readStationScreensWithSwitchedOff(tx, cfg);
+  const selected = new Set(screens.flatMap((screen) => screen.stationIds));
   const rows = await stationHealthItemsQuery(tx, cfg.locationId);
   const partyIds = [...new Set(rows.flatMap((r) => (r.partyId === null ? [] : [r.partyId])))];
   const tables =
@@ -178,7 +175,7 @@ export async function readStationHealth(
     stations: [...byStation.values()].map((s) => s.health),
     outputsDown: {
       printersDown: await stationPrintersDown(tx, cfg.locationId, now),
-      screensDark: await stationScreensDark(tx, cfg.locationId, now),
+      screensDark: await stationScreensDark(tx, cfg.locationId, now, screens),
     },
   };
 }

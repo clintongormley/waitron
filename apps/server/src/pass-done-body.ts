@@ -1,7 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { isUuid } from "./till-session.js";
 
-export function parseWatcherDoneBody(body: { ticketItemIds?: unknown; done?: unknown }): {
+export function parsePassDoneBody(body: { ticketItemIds?: unknown; done?: unknown }): {
   ticketItemIds: string[];
   done: boolean;
 } {

@@ -5,8 +5,10 @@ import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillStationScreen } from "./till-station-screen.js";
 import type {
-  DeviceStation,
+  DeviceIdentity,
+  DeviceStationScreen,
   KitchenNotice,
+  ResolvedKitchenScreen,
   Station,
   StationQueue,
   StationQueueGroup,
@@ -95,6 +97,12 @@ const barraQueue: StationQueueGroup[] = [
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "dev-1",
+      formFactor: "till",
+      name: "Till",
+      kitchenScreens: [],
+    }),
     getStationQueue: vi
       .fn()
       .mockResolvedValue({ printersDown: [], items: cocinaQueue, notices: [] }),
@@ -527,21 +535,24 @@ describe("till-station-screen", () => {
   it("suppresses the queue-surface header when embedded", async () => {
     // deviceMode renders the queue surface; embedded drops its own header (the card host supplies chrome).
     const api = stubApi({
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            printersDown: [],
+            queue: [],
+            notices: [],
           },
-          printersDown: [],
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -557,7 +568,8 @@ describe("till-station-screen", () => {
 describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   const boundStation = {
     id: "st-dev",
-    name: "Grill",
+    name: "Cocina",
+    available: true as const,
     today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
     printersDown: [],
     queue: cocinaQueue,
@@ -568,7 +580,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
    * observable. */
   function deviceApi(overrides: Record<string, unknown> = {}): TillApi {
     return {
-      getDeviceStation: vi.fn().mockResolvedValue({ station: boundStation }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [boundStation] }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       listStations: vi.fn().mockResolvedValue(stations),
       getStationQueue: vi
@@ -588,7 +600,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       deviceMode: true,
     });
     await flush(el);
-    expect(api.getDeviceStation).toHaveBeenCalledOnce();
+    expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
     expect(queueWidget(el)!.stationId).toBe("st-dev");
     // The station is fixed by enrolment: NO picker nav, and the session station-list/queue are never read.
@@ -597,35 +609,38 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
-  it("cold boot adopts initialDeviceStation and does NOT re-fetch getDeviceStation (fast-path, §5a)", async () => {
-    // getDeviceStation returns a DISTINCT queue, so losing the fast path would both re-fetch AND render
+  it("cold boot adopts initialDeviceStation and does NOT re-fetch getDeviceStationScreen (fast-path, §5a)", async () => {
+    // getDeviceStationScreen returns a DISTINCT queue, so losing the fast path would both re-fetch AND render
     // the wrong queue.
     const api = deviceApi({
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            printersDown: [],
+            queue: barraQueue,
+            notices: [],
           },
-          printersDown: [],
-          queue: barraQueue,
-          notices: [],
-        },
+        ],
       }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
       deviceMode: true,
-      initialDeviceStation: { station: boundStation }, // boundStation.queue === cocinaQueue
+      initialDeviceStation: { stations: [boundStation] }, // boundStation.queue === cocinaQueue
     });
     await flush(el);
     // No second probe, and the prop's queue rendered — never the fetch's barraQueue.
-    expect(api.getDeviceStation).not.toHaveBeenCalled();
+    expect(api.getDeviceStationScreen).not.toHaveBeenCalled();
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
     expect(queueWidget(el)!.stationId).toBe("st-dev");
   });
@@ -647,7 +662,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     document.addEventListener("device-unauthorized", reboot);
     try {
       const api = deviceApi({
-        getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+        getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
       });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
@@ -668,7 +683,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     document.addEventListener("device-unauthorized", reboot);
     try {
       const api = deviceApi({
-        getDeviceStation: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "server.internal" }),
       });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
@@ -682,7 +697,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     }
   });
 
-  it("a per-line bump routes through deviceAdvance (never the session verb) and reloads via getDeviceStation", async () => {
+  it("a per-line bump routes through deviceAdvance (never the session verb) and reloads via getDeviceStationScreen", async () => {
     const api = deviceApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -699,7 +714,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     await flush(el);
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
     expect(api.advanceTicketItem).not.toHaveBeenCalled();
-    expect(api.getDeviceStation).toHaveBeenCalledTimes(2);
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
   });
 
   it("threads advanceOnly=true to the widget so it hides the collect/fire buttons (device has no such route)", async () => {
@@ -751,21 +766,24 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       },
     ];
     const api = deviceApi({
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            printersDown: [],
+            queue: heldCourseQueue,
+            notices: [],
           },
-          printersDown: [],
-          queue: heldCourseQueue,
-          notices: [],
-        },
+        ],
       }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -832,7 +850,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     ).not.toHaveBeenCalled();
     expect(api.reprintOrder).not.toHaveBeenCalled();
     // Only the initial probe ran — a guarded stray event triggers no reload.
-    expect(api.getDeviceStation).toHaveBeenCalledOnce();
+    expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
   });
 
   it("a failed device reload after a bump leaves the last-known queue in place, shows the out-of-date banner and re-boots nothing", async () => {
@@ -840,11 +858,11 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     const reboot = vi.fn();
     document.addEventListener("device-unauthorized", reboot);
     try {
-      const getDeviceStation = vi
+      const getDeviceStationScreen = vi
         .fn()
-        .mockResolvedValueOnce({ station: boundStation }) // connect
+        .mockResolvedValueOnce({ stations: [boundStation] }) // connect
         .mockRejectedValueOnce({ code: "device.unauthorized" }); // reload after the bump fails
-      const api = deviceApi({ getDeviceStation });
+      const api = deviceApi({ getDeviceStationScreen });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
         deviceMode: true,
@@ -868,7 +886,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     }
   });
 
-  it("a whole-ticket bump expands to a deviceAdvance for each advanceable item at the bound station", async () => {
+  it("a whole-ticket bump expands to a deviceAdvance for each advanceable item at the station", async () => {
     // `bump_mode = ticket` fires `advance-ticket`; the device API has only a per-line advance, so the
     // screen advances every fired item whose legitimate next step is `to` — never the session verb.
     const twoLine: StationQueueGroup[] = [
@@ -902,21 +920,24 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       },
     ];
     const api = deviceApi({
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            printersDown: [],
+            queue: twoLine,
+            notices: [],
           },
-          printersDown: [],
-          queue: twoLine,
-          notices: [],
-        },
+        ],
       }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -983,21 +1004,24 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
 
   function deviceApi(): TillApi {
     return {
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            printersDown: [],
+            queue: mixed,
+            notices: [],
           },
-          printersDown: [],
-          queue: mixed,
-          notices: [],
-        },
+        ],
       }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
@@ -1018,7 +1042,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
         composed: true,
       }),
     );
-    await vi.waitFor(() => expect(api.getDeviceStation).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
   }
 
   it("advances only the fired lines whose next step is the target, skipping held and later lines", async () => {
@@ -1034,6 +1058,973 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
     await bump(api, "wo-gone");
     expect(api.deviceAdvance).not.toHaveBeenCalled();
     expect(api.advanceTicket).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-station-screen device mode with several stations (A366 decision 7)", () => {
+  const cocinaNotice: KitchenNotice = {
+    id: "kn-cocina",
+    stationId: "st-1",
+    workingOrderId: "wo-1",
+    orderLabel: "#5 · Mesa 4",
+    kind: "void",
+    lineName: "Paella",
+    unitName: null,
+    soldInEach: false,
+    quantity: "1.000",
+    note: null,
+    wasStarted: true,
+    movedTo: null,
+    reroutedTo: null,
+    direction: null,
+    cancelledExtra: null,
+    createdAt: "2026-08-17T10:10:00.000Z",
+  };
+  const available = (
+    id: string,
+    name: string,
+    queue: StationQueueGroup[],
+    notices: KitchenNotice[] = [],
+  ) => ({
+    id,
+    name,
+    available: true as const,
+    today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
+    queue,
+    notices,
+    printersDown: [] as { printerId: string; printerName: string; since: string }[],
+  });
+  const gone = (id: string, name: string) => ({
+    id,
+    name,
+    available: false as const,
+    switchedOff: false as const,
+  });
+  /** A station switched off on its own page, still holding the dishes waiting there. */
+  const switchedOff = (
+    id: string,
+    name: string,
+    queue: StationQueueGroup[],
+    notices: KitchenNotice[] = [],
+  ) => ({
+    ...available(id, name, queue, notices),
+    available: false as const,
+    switchedOff: true as const,
+    today: {
+      open: false,
+      isDefault: false,
+      byHand: null,
+      sendsTo: null,
+      why: "switched_off" as const,
+    },
+  });
+  const deliQueue: StationQueueGroup[] = [
+    {
+      ...cocinaQueue[0]!,
+      orderId: "wo-3",
+      orderNumber: 7,
+      queuedAt: "2026-08-17T09:30:00.000Z",
+      items: [{ ...cocinaQueue[0]!.items[0]!, id: "ti-3", workingOrderLineId: "wol-3" }],
+    },
+  ];
+  const deliNotice: KitchenNotice = { ...cocinaNotice, id: "kn-deli", stationId: "st-deli" };
+
+  async function mountDevice(screen: DeviceStationScreen, overrides: Record<string, unknown> = {}) {
+    const api = {
+      getDeviceStationScreen: vi.fn().mockResolvedValue(screen),
+      deviceAdvance: vi.fn().mockResolvedValue(undefined),
+      advanceTicketItem: vi.fn().mockResolvedValue(undefined),
+      advanceTicket: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    } as unknown as TillApi;
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    return { el, api };
+  }
+
+  const sections = (el: TillStationScreen) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-device-station]"),
+  ];
+  const sectionQueue = (section: HTMLElement) =>
+    section.querySelector<TillStationQueue>("till-station-queue");
+
+  it("two stations render two sections, each named and with its own queue and notices", async () => {
+    const printer = { printerId: "p-1", printerName: "Epson", since: "2026-08-17T18:14:00Z" };
+    const { el } = await mountDevice({
+      stations: [
+        { ...available("st-1", "Cocina", cocinaQueue, [cocinaNotice]), printersDown: [printer] },
+        available("st-2", "Barra", barraQueue),
+      ],
+    });
+    const [first, second] = sections(el);
+    expect(sections(el)).toHaveLength(2);
+    expect(first!.dataset.deviceStation).toBe("st-1");
+    expect(first!.querySelector("h2")!.textContent!.trim()).toBe("Cocina");
+    expect(sectionQueue(first!)!.groups).toEqual(cocinaQueue);
+    expect(sectionQueue(first!)!.notices).toEqual([cocinaNotice]);
+    expect(sectionQueue(first!)!.stationId).toBe("st-1");
+    expect(first!.querySelectorAll("[data-printer-down]")).toHaveLength(1);
+    expect(second!.querySelector("h2")!.textContent!.trim()).toBe("Barra");
+    expect(sectionQueue(second!)!.groups).toEqual(barraQueue);
+    expect(sectionQueue(second!)!.notices).toEqual([]);
+    expect(sectionQueue(second!)!.stationId).toBe("st-2");
+    expect(second!.querySelectorAll("[data-printer-down]")).toHaveLength(0);
+  });
+
+  it("one station renders as it does today: no section and no station heading", async () => {
+    const { el } = await mountDevice({ stations: [available("st-1", "Cocina", cocinaQueue)] });
+    expect(sections(el)).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector("h2")).toBeNull();
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+  });
+
+  it("bumping in the second section advances that section's item", async () => {
+    const { el, api } = await mountDevice({
+      stations: [available("st-1", "Cocina", cocinaQueue), available("st-2", "Barra", barraQueue)],
+    });
+    sectionQueue(sections(el)[1]!)!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-2", to: "ready" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-2", "ready");
+    expect(api.advanceTicketItem).not.toHaveBeenCalled();
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it("a whole-ticket bump in a section advances that station's lines of an order both stations hold", async () => {
+    const sameOrderAtBarra: StationQueueGroup[] = [
+      {
+        ...barraQueue[0]!,
+        orderId: "wo-1",
+        items: [{ ...barraQueue[0]!.items[0]!, state: "queued" }],
+      },
+    ];
+    const { el, api } = await mountDevice({
+      stations: [
+        available("st-1", "Cocina", cocinaQueue),
+        available("st-2", "Barra", sameOrderAtBarra),
+      ],
+    });
+    sectionQueue(sections(el)[1]!)!.dispatchEvent(
+      new CustomEvent("advance-ticket", {
+        detail: { orderId: "wo-1", stationId: "st-2", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
+    expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
+    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-2", "preparing");
+  });
+
+  it("a station no longer available keeps its section between its neighbours, holding only its line", async () => {
+    const { el } = await mountDevice({
+      stations: [
+        available("st-1", "Cocina", cocinaQueue),
+        gone("st-deli", "Deli"),
+        available("st-2", "Barra", barraQueue),
+      ],
+    });
+    const all = sections(el);
+    expect(all.map((section) => section.dataset.deviceStation)).toEqual([
+      "st-1",
+      "st-deli",
+      "st-2",
+    ]);
+    const deli = all[1]!;
+    expect(sectionQueue(deli)).toBeNull();
+    expect(deli.querySelector("h2")).toBeNull();
+    expect(deli.querySelector("[data-station-unavailable]")!.textContent!.trim()).toBe(
+      "This station is no longer available: Deli",
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(1);
+  });
+
+  describe("a station switched off on its own page (owner 2026-10-09)", () => {
+    it("shows its line and then the dishes still waiting there, which bump", async () => {
+      const { el, api } = await mountDevice({
+        stations: [
+          available("st-1", "Cocina", cocinaQueue),
+          switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+        ],
+      });
+      const deli = sections(el)[1]!;
+      expect(deli.dataset.deviceStation).toBe("st-deli");
+      const line = deli.querySelector("[data-station-unavailable]")!;
+      expect(line.textContent!.trim()).toBe("This station is no longer available: Deli");
+      const queue = sectionQueue(deli)!;
+      expect(queue.groups).toEqual(deliQueue);
+      expect(queue.notices).toEqual([deliNotice]);
+      expect(queue.stationId).toBe("st-deli");
+      expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      queue.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-3", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
+    });
+
+    it("as the only station, keeps its toggles and its dish until the queue is empty, then guides", async () => {
+      const { el, api } = await mountDevice({
+        stations: [switchedOff("st-deli", "Deli", deliQueue)],
+      });
+      expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+      const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      expect(queue.groups).toEqual(deliQueue);
+      vi.mocked(api.getDeviceStationScreen).mockResolvedValue({
+        stations: [switchedOff("st-deli", "Deli", [])],
+      });
+      queue.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-3", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
+      expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(1);
+    });
+
+    it("acknowledging its notice goes through the device route and removes it", async () => {
+      const { el, api } = await mountDevice(
+        {
+          stations: [
+            available("st-1", "Cocina", cocinaQueue),
+            switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+          ],
+        },
+        { deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined) },
+      );
+      sectionQueue(sections(el)[1]!)!.dispatchEvent(
+        new CustomEvent("acknowledge-notice", {
+          detail: { noticeId: "kn-deli" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAcknowledgeKitchenNotice).toHaveBeenCalledWith("kn-deli");
+      expect(sectionQueue(sections(el)[1]!)!.notices).toEqual([]);
+    });
+  });
+
+  it("reads the line in Spanish", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountDevice({
+        stations: [available("st-1", "Cocina", cocinaQueue), gone("st-deli", "Deli")],
+      });
+      expect(el.shadowRoot!.querySelector("[data-station-unavailable]")!.textContent!.trim()).toBe(
+        "Esta estación ya no está disponible: Deli",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it("with no station left available, shows only the lines", async () => {
+    const { el } = await mountDevice({
+      stations: [gone("st-deli", "Deli"), gone("st-bar", "Barra")],
+    });
+    expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[data-station-unavailable]")].map((line) =>
+        line.textContent!.trim(),
+      ),
+    ).toEqual([
+      "This station is no longer available: Deli",
+      "This station is no longer available: Barra",
+    ]);
+    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).toBeNull();
+    const guidance = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-again]")!;
+    expect(guidance.textContent!.trim()).toBe(
+      "Ask a manager to choose its screens again in Devices.",
+    );
+    const last = [...el.shadowRoot!.querySelectorAll("[data-station-unavailable]")].at(-1)!;
+    expect(last.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("with no station left available, says in Spanish who chooses its screens again", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountDevice({ stations: [gone("st-deli", "Deli")] });
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")!.textContent!.trim()).toBe(
+        "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it("with no station left available and the merged view remembered, shows no queue", async () => {
+    localStorage.setItem("waitron.stationScreenView.dev-gone", "merged");
+    try {
+      const api = {
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [gone("st-deli", "Deli"), gone("st-bar", "Barra")],
+        }),
+      } as unknown as TillApi;
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+        deviceId: "dev-gone",
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
+      expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(2);
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).toBeNull();
+    } finally {
+      localStorage.removeItem("waitron.stationScreenView.dev-gone");
+    }
+  });
+
+  it("with one station still available, offers its view toggle and no guidance", async () => {
+    const { el } = await mountDevice({
+      stations: [gone("st-deli", "Deli"), available("st-1", "Cocina", cocinaQueue)],
+    });
+    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+  });
+
+  it("acknowledging a notice in one section removes it there", async () => {
+    const { el } = await mountDevice(
+      {
+        stations: [
+          available("st-1", "Cocina", cocinaQueue, [cocinaNotice]),
+          available("st-2", "Barra", barraQueue),
+        ],
+      },
+      { deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined) },
+    );
+    sectionQueue(sections(el)[0]!)!.dispatchEvent(
+      new CustomEvent("acknowledge-notice", {
+        detail: { noticeId: "kn-cocina" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(sectionQueue(sections(el)[0]!)!.notices).toEqual([]);
+  });
+
+  describe("the merged view (A12b)", () => {
+    const viewKey = (deviceId: string) => `waitron.stationScreenView.${deviceId}`;
+    afterEach(() => {
+      for (const id of ["dev-1", "dev-2"]) localStorage.removeItem(viewKey(id));
+      vi.restoreAllMocks();
+    });
+
+    const barraOlder: StationQueueGroup[] = [
+      { ...barraQueue[0]!, queuedAt: "2026-08-17T09:00:00.000Z" },
+    ];
+    const barraNotice: KitchenNotice = { ...cocinaNotice, id: "kn-barra", stationId: "st-2" };
+    const twoStations: DeviceStationScreen = {
+      stations: [
+        {
+          ...available("st-1", "Cocina", cocinaQueue, [cocinaNotice]),
+          printersDown: [{ printerId: "p-1", printerName: "Epson", since: "2026-08-17T18:14:00Z" }],
+        },
+        gone("st-deli", "Deli"),
+        available("st-2", "Barra", barraOlder, [barraNotice]),
+      ],
+    };
+
+    async function mountFor(deviceId: string | undefined, screen = twoStations) {
+      const api = {
+        getDeviceStationScreen: vi.fn().mockResolvedValue(screen),
+        deviceAdvance: vi.fn().mockResolvedValue(undefined),
+        advanceTicketItem: vi.fn().mockResolvedValue(undefined),
+        advanceTicket: vi.fn().mockResolvedValue(undefined),
+      } as unknown as TillApi;
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+        deviceId,
+      });
+      await flush(el);
+      return { el, api };
+    }
+
+    const toggle = (el: TillStationScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-merge-toggle]");
+
+    async function merge(el: TillStationScreen) {
+      toggle(el)!.click();
+      await el.updateComplete;
+    }
+
+    it("offers the switch with two stations, beside the view toggle, and opens stacked", async () => {
+      const { el } = await mountFor("dev-1");
+      expect(toggle(el)!.textContent!.trim()).toBe("Merged");
+      expect(toggle(el)!.parentElement).toBe(
+        el.shadowRoot!.querySelector("[data-view-toggle]")!.parentElement,
+      );
+      expect(sections(el)).toHaveLength(3);
+    });
+
+    it("offers no switch with one station", async () => {
+      const { el } = await mountFor("dev-1", {
+        stations: [available("st-1", "Cocina", cocinaQueue)],
+      });
+      expect(toggle(el)).toBeNull();
+    });
+
+    it("merged shows one queue, oldest first, each order labelled by its station", async () => {
+      const { el } = await mountFor("dev-1");
+      await merge(el);
+      expect(sections(el)).toHaveLength(0);
+      const queues = el.shadowRoot!.querySelectorAll<TillStationQueue>("till-station-queue");
+      expect(queues).toHaveLength(1);
+      const queue = queues[0]!;
+      expect(queue.groups.map((group) => [group.orderId, group.stationId])).toEqual([
+        ["wo-2", "st-2"],
+        ["wo-1", "st-1"],
+      ]);
+      expect([...queue.stationNames!]).toEqual([
+        ["st-1", "Cocina"],
+        ["st-2", "Barra"],
+      ]);
+      expect(queue.notices.map((notice) => notice.id)).toEqual(["kn-cocina", "kn-barra"]);
+      expect(toggle(el)!.textContent!.trim()).toBe("Stacked");
+    });
+
+    it("merged keeps the printers-down and no-longer-available lines above the queue, in station order", async () => {
+      const { el } = await mountFor("dev-1");
+      await merge(el);
+      const lines = [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+          "[data-printer-down], [data-station-unavailable]",
+        ),
+      ];
+      expect(lines.map((line) => line.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+        expect.stringMatching(/^Cocina: .*Epson/),
+        "This station is no longer available: Deli",
+      ]);
+      const queue = el.shadowRoot!.querySelector("till-station-queue")!;
+      for (const line of lines)
+        expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("merged takes in a switched-off station's waiting dishes, labelled, under its line", async () => {
+      const { el, api } = await mountFor("dev-1", {
+        stations: [
+          available("st-1", "Cocina", cocinaQueue, [cocinaNotice]),
+          switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+          available("st-2", "Barra", barraOlder),
+        ],
+      });
+      await merge(el);
+      const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      expect(queue.groups.map((group) => [group.orderId, group.stationId])).toEqual([
+        ["wo-2", "st-2"],
+        ["wo-3", "st-deli"],
+        ["wo-1", "st-1"],
+      ]);
+      expect(queue.stationNames!.get("st-deli")).toBe("Deli");
+      expect(queue.notices.map((notice) => notice.id)).toEqual(["kn-cocina", "kn-deli"]);
+      const line = el.shadowRoot!.querySelector("[data-station-unavailable]")!;
+      expect(line.textContent!.trim()).toBe("This station is no longer available: Deli");
+      expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      queue.dispatchEvent(
+        new CustomEvent("advance-ticket-item", {
+          detail: { itemId: "ti-3", to: "preparing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
+    });
+
+    it("a whole-ticket bump in merged advances that order's lines at its own station", async () => {
+      const sameOrderAtBarra: StationQueueGroup[] = [
+        {
+          ...barraQueue[0]!,
+          orderId: "wo-1",
+          items: [{ ...barraQueue[0]!.items[0]!, state: "queued" }],
+        },
+      ];
+      const { el, api } = await mountFor("dev-1", {
+        stations: [
+          available("st-1", "Cocina", cocinaQueue),
+          available("st-2", "Barra", sameOrderAtBarra),
+        ],
+      });
+      await merge(el);
+      const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      queue.bumpMode = "ticket";
+      await queue.updateComplete;
+      queue.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-2"]')!.click();
+      await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
+      expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-2", "preparing");
+    });
+
+    it("a line bump in merged advances that item", async () => {
+      const { el, api } = await mountFor("dev-1");
+      await merge(el);
+      el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!
+        .shadowRoot!.querySelector<HTMLElement>('[data-item="ti-2"]')!
+        .click();
+      await flush(el);
+      expect(api.deviceAdvance).toHaveBeenCalledWith("ti-2", "ready");
+    });
+
+    it("remembers the choice for its device id across a reload, and not for another device", async () => {
+      const first = await mountFor("dev-1");
+      await merge(first.el);
+      cleanupWidgets();
+      const again = await mountFor("dev-1");
+      expect(again.el.shadowRoot!.querySelectorAll("till-station-queue")).toHaveLength(1);
+      expect(toggle(again.el)!.textContent!.trim()).toBe("Stacked");
+      const other = await mountFor("dev-2");
+      expect(sections(other.el)).toHaveLength(3);
+    });
+
+    it("switching back to stacked is remembered too", async () => {
+      const first = await mountFor("dev-1");
+      await merge(first.el);
+      await merge(first.el);
+      cleanupWidgets();
+      const again = await mountFor("dev-1");
+      expect(sections(again.el)).toHaveLength(3);
+    });
+
+    it("a local storage that throws leaves it stacked, and the switch still works", async () => {
+      localStorage.setItem(viewKey("dev-1"), "merged");
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("denied");
+      });
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("denied");
+      });
+      const { el } = await mountFor("dev-1");
+      expect(sections(el)).toHaveLength(3);
+      await merge(el);
+      expect(el.shadowRoot!.querySelectorAll("till-station-queue")).toHaveLength(1);
+    });
+
+    it("reads the switch in Spanish", async () => {
+      setLocale("es-ES");
+      try {
+        const { el } = await mountFor("dev-1");
+        expect(toggle(el)!.textContent!.trim()).toBe("Todo junto");
+        await merge(el);
+        expect(toggle(el)!.textContent!.trim()).toBe("Por estación");
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+  });
+});
+
+describe("till-station-screen follows its device's station screen choice (A366 decision 20)", () => {
+  const venueStations: Station[] = [
+    {
+      id: "st-c",
+      name: "Cocina",
+      displayOrder: 0,
+      isDefault: true,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "default",
+    },
+    {
+      id: "st-g",
+      name: "Grill",
+      displayOrder: 1,
+      isDefault: false,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "open",
+    },
+    {
+      id: "st-f",
+      name: "Fryer",
+      displayOrder: 2,
+      isDefault: false,
+      active: true,
+      open: true,
+      byHand: null,
+      sendsTo: null,
+      why: "open",
+    },
+  ];
+  const identity = (kitchenScreens: ResolvedKitchenScreen[]): DeviceIdentity => ({
+    deviceId: "dev-till",
+    formFactor: "till",
+    name: "Till 1",
+    kitchenScreens,
+  });
+  const stationScreen = (
+    slots: { id: string; name: string; available: boolean }[],
+  ): ResolvedKitchenScreen => ({ kind: "station", available: true, stations: slots, zones: null });
+
+  async function mountOperator(identityRead: () => Promise<DeviceIdentity>) {
+    const api = stubApi({
+      listStations: vi.fn().mockResolvedValue(venueStations),
+      getDeviceIdentity: vi.fn(identityRead),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    return { el, api };
+  }
+
+  const picks = (el: TillStationScreen) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-station]")].map(
+      (pick) => pick.dataset.station,
+    );
+  const lines = (el: TillStationScreen) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-station-unavailable]")].map((line) =>
+      line.textContent!.trim(),
+    );
+
+  it("a till that chose Grill and Fryer shows two picks and opens the first of them", async () => {
+    const { el, api } = await mountOperator(() =>
+      Promise.resolve(
+        identity([
+          stationScreen([
+            { id: "st-g", name: "Grill", available: true },
+            { id: "st-f", name: "Fryer", available: true },
+          ]),
+        ]),
+      ),
+    );
+    expect(picks(el)).toEqual(["st-g", "st-f"]);
+    expect(api.getStationQueue).toHaveBeenCalledWith("st-g");
+    expect(api.getStationQueue).not.toHaveBeenCalledWith("st-c");
+    expect(lines(el)).toEqual([]);
+  });
+
+  it("a narrowed Fryer shows its line above the picker and leaves one pick", async () => {
+    const { el } = await mountOperator(() =>
+      Promise.resolve(
+        identity([
+          stationScreen([
+            { id: "st-g", name: "Grill", available: true },
+            { id: "st-f", name: "Fryer", available: false },
+          ]),
+        ]),
+      ),
+    );
+    expect(picks(el)).toEqual(["st-g"]);
+    expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Fryer")]);
+    const line = el.shadowRoot!.querySelector("[data-station-unavailable]")!;
+    const picker = el.shadowRoot!.querySelector("nav.picker")!;
+    expect(line.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("lists the no longer available lines in station order", async () => {
+    const { el } = await mountOperator(() =>
+      Promise.resolve(
+        identity([
+          stationScreen([
+            { id: "st-c", name: "Cocina", available: false },
+            { id: "st-g", name: "Grill", available: true },
+            { id: "st-f", name: "Fryer", available: false },
+          ]),
+        ]),
+      ),
+    );
+    expect(lines(el)).toEqual(
+      ["Cocina", "Fryer"].map((name) => t("station.unavailable").replace("{name}", name)),
+    );
+  });
+
+  it("with no station screen choice shows every station, the default first", async () => {
+    const { el, api } = await mountOperator(() =>
+      Promise.resolve(identity([{ kind: "pass", available: true, stations: [], zones: null }])),
+    );
+    expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
+    expect(api.getStationQueue).toHaveBeenCalledWith("st-c");
+  });
+
+  it("a choice a narrowing emptied shows only its line: no picker, no queue and no fallback", async () => {
+    const { el, api } = await mountOperator(() =>
+      Promise.resolve(identity([stationScreen([{ id: "st-f", name: "Fryer", available: false }])])),
+    );
+    expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Fryer")]);
+    expect(picks(el)).toEqual([]);
+    expect(el.shadowRoot!.querySelector("nav.picker, till-station-queue, .empty")).toBeNull();
+    expect(api.getStationQueue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["en-GB", "This screen is no longer available: Station screen"],
+    ["es-ES", "Esta pantalla ya no está disponible: Pantalla de estación"],
+  ])("a station screen a narrowing took says so, alone (%s)", async (locale, text) => {
+    setLocale(locale);
+    try {
+      const { el, api } = await mountOperator(() =>
+        Promise.resolve(
+          identity([{ kind: "station", available: false, stations: [], zones: null }]),
+        ),
+      );
+      expect(
+        [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+          line.textContent!.trim(),
+        ),
+      ).toEqual([text]);
+      expect(el.shadowRoot!.querySelector("nav.picker, till-station-queue, .empty")).toBeNull();
+      expect(api.getStationQueue).not.toHaveBeenCalled();
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it("reads the device's choice again at the next refresh after a failed read, and then follows it", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const chosen = identity([
+        stationScreen([
+          { id: "st-g", name: "Grill", available: true },
+          { id: "st-f", name: "Fryer", available: true },
+        ]),
+      ]);
+      const { el, api } = await mountOperator(
+        vi
+          .fn()
+          .mockRejectedValueOnce(Object.assign(new Error("down"), { code: "server.internal" }))
+          .mockResolvedValue(chosen),
+      );
+      expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
+      expect(queueWidget(el)!.stationId).toBe("st-c");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(picks(el)).toEqual(["st-g", "st-f"]);
+      expect(queueWidget(el)!.stationId).toBe("st-g");
+      expect(api.getStationQueue).toHaveBeenLastCalledWith("st-g");
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the open station when the choice read again still lists it", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const { el, api } = await mountOperator(
+        vi
+          .fn()
+          .mockRejectedValueOnce(Object.assign(new Error("down"), { code: "server.internal" }))
+          .mockResolvedValue(
+            identity([
+              stationScreen([
+                { id: "st-c", name: "Cocina", available: true },
+                { id: "st-f", name: "Fryer", available: true },
+              ]),
+            ]),
+          ),
+      );
+      el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-f"]')!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(picks(el)).toEqual(["st-c", "st-f"]);
+      expect(queueWidget(el)!.stationId).toBe("st-f");
+      expect(api.getStationQueue).toHaveBeenLastCalledWith("st-f", expect.anything());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes the open station when the choice read again was emptied by a narrowing", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const { el, api } = await mountOperator(
+        vi
+          .fn()
+          .mockRejectedValueOnce(Object.assign(new Error("down"), { code: "server.internal" }))
+          .mockResolvedValue(
+            identity([stationScreen([{ id: "st-f", name: "Fryer", available: false }])]),
+          ),
+      );
+      expect(queueWidget(el)!.stationId).toBe("st-c");
+      vi.mocked(api.getStationQueue).mockClear();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Fryer")]);
+      expect(el.shadowRoot!.querySelector("nav.picker, till-station-queue")).toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api.getStationQueue).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves the open station at the next refresh when it is taken out of the choice", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const { el, api } = await mountOperator(
+        vi
+          .fn()
+          .mockResolvedValueOnce(
+            identity([
+              stationScreen([
+                { id: "st-g", name: "Grill", available: true },
+                { id: "st-f", name: "Fryer", available: true },
+              ]),
+            ]),
+          )
+          .mockResolvedValue(
+            identity([stationScreen([{ id: "st-f", name: "Fryer", available: true }])]),
+          ),
+      );
+      expect(queueWidget(el)!.stationId).toBe("st-g");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(picks(el)).toEqual(["st-f"]);
+      expect(queueWidget(el)!.stationId).toBe("st-f");
+      expect(api.getStationQueue).toHaveBeenLastCalledWith("st-f");
+      expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe("given back while its line shows", () => {
+    const screenGone = identity([{ kind: "station", available: false, stations: [], zones: null }]);
+    const grillOnly = identity([stationScreen([{ id: "st-g", name: "Grill", available: true }])]);
+    const withFakeTimers = async (run: () => Promise<void>) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+      try {
+        await run();
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    const screenLine = (el: TillStationScreen) =>
+      el.shadowRoot!.querySelector("[data-unavailable]");
+
+    it("a station screen opens its station at the next refresh", () =>
+      withFakeTimers(async () => {
+        const { el, api } = await mountOperator(
+          vi.fn().mockResolvedValueOnce(screenGone).mockResolvedValue(grillOnly),
+        );
+        expect(screenLine(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(screenLine(el)).toBeNull();
+        expect(picks(el)).toEqual(["st-g"]);
+        expect(queueWidget(el)!.stationId).toBe("st-g");
+      }));
+
+    it("a narrowed station is listed again, and the open one stays open", () =>
+      withFakeTimers(async () => {
+        const { el } = await mountOperator(
+          vi
+            .fn()
+            .mockResolvedValueOnce(
+              identity([
+                stationScreen([
+                  { id: "st-g", name: "Grill", available: true },
+                  { id: "st-f", name: "Fryer", available: false },
+                ]),
+              ]),
+            )
+            .mockResolvedValue(
+              identity([
+                stationScreen([
+                  { id: "st-g", name: "Grill", available: true },
+                  { id: "st-f", name: "Fryer", available: true },
+                ]),
+              ]),
+            ),
+        );
+        expect(lines(el)).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(lines(el)).toEqual([]);
+        expect(picks(el)).toEqual(["st-g", "st-f"]);
+        expect(queueWidget(el)!.stationId).toBe("st-g");
+      }));
+
+    it("keeps its line when reading the choice again fails", () =>
+      withFakeTimers(async () => {
+        const { el, api } = await mountOperator(
+          vi
+            .fn()
+            .mockResolvedValueOnce(screenGone)
+            .mockRejectedValue(Object.assign(new Error("down"), { code: "server.internal" })),
+        );
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(screenLine(el)).not.toBeNull();
+        expect(picks(el)).toEqual([]);
+        expect(api.getStationQueue).not.toHaveBeenCalled();
+      }));
+
+    it("ignores an older choice read that answers after a newer one", () =>
+      withFakeTimers(async () => {
+        let answerLate: (value: DeviceIdentity) => void = () => {};
+        const { el } = await mountOperator(
+          vi
+            .fn()
+            .mockResolvedValueOnce(screenGone)
+            .mockImplementationOnce(() => new Promise((resolve) => (answerLate = resolve)))
+            .mockResolvedValue(grillOnly),
+        );
+        await vi.advanceTimersByTimeAsync(30_000);
+        await el.updateComplete;
+        expect(picks(el)).toEqual(["st-g"]);
+        answerLate(screenGone);
+        await flush(el);
+        expect(screenLine(el)).toBeNull();
+        expect(picks(el)).toEqual(["st-g"]);
+      }));
+  });
+
+  it("a failed identity read shows every station, as before a choice existed", async () => {
+    const { el, api } = await mountOperator(() =>
+      Promise.reject(Object.assign(new Error("down"), { code: "server.internal" })),
+    );
+    expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
+    expect(api.getStationQueue).toHaveBeenCalledWith("st-c");
+  });
+
+  it("an address naming a station outside the choice opens the first chosen one", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/station/station/st-c");
+    const { el, api } = await mountOperator(() =>
+      Promise.resolve(
+        identity([
+          stationScreen([
+            { id: "st-g", name: "Grill", available: true },
+            { id: "st-f", name: "Fryer", available: true },
+          ]),
+        ]),
+      ),
+    );
+    expect(queueWidget(el)!.stationId).toBe("st-g");
+    expect(api.getStationQueue).not.toHaveBeenCalledWith("st-c");
+    expect(location.pathname).toBe("/tabs/counter/view/station/station/st-g");
   });
 });
 
@@ -1234,21 +2225,24 @@ describe("till-station-screen kitchen notices", () => {
   describe("device mode", () => {
     function deviceApi(overrides: Record<string, unknown> = {}): TillApi {
       return {
-        getDeviceStation: vi.fn().mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [voidStarted, changed],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [voidStarted, changed],
-          },
+          ],
         }),
         deviceAdvance: vi.fn().mockResolvedValue(undefined),
         deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined),
@@ -1257,7 +2251,7 @@ describe("till-station-screen kitchen notices", () => {
       } as unknown as TillApi;
     }
 
-    it("shows the bound station's notices from the device read", async () => {
+    it("shows its station's notices from the device read", async () => {
       const api = deviceApi();
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
@@ -1273,24 +2267,27 @@ describe("till-station-screen kitchen notices", () => {
         api,
         deviceMode: true,
         initialDeviceStation: {
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [changed],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [changed],
-          },
+          ],
         },
       });
       await flush(el);
-      expect(api.getDeviceStation).not.toHaveBeenCalled();
+      expect(api.getDeviceStationScreen).not.toHaveBeenCalled();
       expect(queueWidget(el)!.notices).toEqual([changed]);
     });
 
@@ -1401,40 +2398,46 @@ describe("till-station-screen 15-second refresh", () => {
 
   it("device mode: a read that never answers does not stop the next tick's read", async () => {
     const api = {
-      getDeviceStation: vi
+      getDeviceStationScreen: vi
         .fn()
         .mockResolvedValueOnce({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [],
-          },
+          ],
         })
         .mockImplementationOnce(() => new Promise(() => {}))
         .mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: barraQueue,
+              notices: later.notices,
             },
-            printersDown: [],
-            queue: barraQueue,
-            notices: later.notices,
-          },
+          ],
         }),
     } as unknown as TillApi;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -1446,7 +2449,7 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     vi.advanceTimersByTime(15_000);
     await flush(el);
-    expect(api.getDeviceStation).toHaveBeenCalledTimes(3);
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(3);
     expect(queueWidget(el)!.notices).toEqual(later.notices);
   });
 
@@ -1490,14 +2493,14 @@ describe("till-station-screen 15-second refresh", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    vi.advanceTimersByTime(30_000); // read 2 set out at 15 s, read 3 at 30 s
+    await vi.advanceTimersByTimeAsync(30_000); // read 2 set out at 15 s, read 3 at 30 s
     await flush(el);
     expect(api.getStationQueue).toHaveBeenCalledTimes(3);
-    vi.advanceTimersByTime(5_000); // read 2 answers at 35 s, after read 3 set out
+    await vi.advanceTimersByTimeAsync(5_000); // read 2 answers at 35 s, after read 3 set out
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-2"]);
-    vi.advanceTimersByTime(15_000); // read 3 answers at 50 s
+    await vi.advanceTimersByTimeAsync(15_000); // read 3 answers at 50 s
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
@@ -1517,11 +2520,11 @@ describe("till-station-screen 15-second refresh", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    vi.advanceTimersByTime(31_000); // read 2 out since 15 s; read 3 set out at 30 s and answered
+    await vi.advanceTimersByTimeAsync(31_000); // read 2 out since 15 s; read 3 set out at 30 s and answered
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
-    vi.advanceTimersByTime(4_000); // read 2 answers at 35 s
+    await vi.advanceTimersByTimeAsync(4_000); // read 2 answers at 35 s
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
@@ -1621,34 +2624,46 @@ describe("till-station-screen 15-second refresh", () => {
 
   it("device mode: a display slower than the interval still updates, and a hung read is cancelled", async () => {
     const signals: AbortSignal[] = [];
-    const station = (n: number): DeviceStation => ({
-      station: {
-        id: "st-dev",
-        name: "Grill",
-        today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
-        printersDown: [],
-        queue: barraQueue,
-        notices: answerNumber(n).notices,
-      },
+    const station = (n: number): DeviceStationScreen => ({
+      stations: [
+        {
+          name: "Cocina",
+          available: true,
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          id: "st-dev",
+          printersDown: [],
+          queue: barraQueue,
+          notices: answerNumber(n).notices,
+        },
+      ],
     });
     const api = {
-      getDeviceStation: vi
+      getDeviceStationScreen: vi
         .fn()
         .mockResolvedValueOnce({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [],
-          },
+          ],
         })
         .mockImplementationOnce(
           () => new Promise((resolve) => setTimeout(() => resolve(station(2)), 20_000)),
@@ -1781,41 +2796,47 @@ describe("till-station-screen 15-second refresh", () => {
     expect(queueWidget(el)!.notices).toEqual(later.notices);
   });
 
-  it("device mode re-reads its bound station on the same timer", async () => {
+  it("device mode re-reads its station screen on the same timer", async () => {
     const api = {
-      getDeviceStation: vi
+      getDeviceStationScreen: vi
         .fn()
         .mockResolvedValueOnce({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [],
-          },
+          ],
         })
         .mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: barraQueue,
+              notices: later.notices,
             },
-            printersDown: [],
-            queue: barraQueue,
-            notices: later.notices,
-          },
+          ],
         }),
       getStationQueue: vi.fn(),
     } as unknown as TillApi;
@@ -1826,49 +2847,55 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     vi.advanceTimersByTime(15_000);
     await flush(el);
-    expect(api.getDeviceStation).toHaveBeenCalledTimes(2);
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
     expect(api.getStationQueue).not.toHaveBeenCalled();
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     expect(queueWidget(el)!.notices).toEqual(later.notices);
   });
 
   it("device mode: a refresh that set out before a bump's reload never overwrites the newer answer", async () => {
-    let answerRefresh!: (station: DeviceStation) => void;
+    let answerRefresh!: (station: DeviceStationScreen) => void;
     const api = {
-      getDeviceStation: vi
+      getDeviceStationScreen: vi
         .fn()
         .mockResolvedValueOnce({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [],
-          },
+          ],
         })
         .mockImplementationOnce(() => new Promise((resolve) => (answerRefresh = resolve)))
         .mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: barraQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: barraQueue,
-            notices: [],
-          },
+          ],
         }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
@@ -1889,56 +2916,71 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     answerRefresh({
-      station: {
-        id: "st-dev",
-        name: "Grill",
-        today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
-        printersDown: [],
-        queue: cocinaQueue,
-        notices: [],
-      },
+      stations: [
+        {
+          name: "Cocina",
+          available: true,
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          id: "st-dev",
+          printersDown: [],
+          queue: cocinaQueue,
+          notices: [],
+        },
+      ],
     });
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
   });
 
   it("device mode: a bump's reload that set out before a refresh never overwrites the newer answer", async () => {
-    let answerReload!: (station: DeviceStation) => void;
+    let answerReload!: (station: DeviceStationScreen) => void;
     const api = {
-      getDeviceStation: vi
+      getDeviceStationScreen: vi
         .fn()
         .mockResolvedValueOnce({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: cocinaQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: cocinaQueue,
-            notices: [],
-          },
+          ],
         })
         .mockImplementationOnce(() => new Promise((resolve) => (answerReload = resolve)))
         .mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              printersDown: [],
+              queue: barraQueue,
+              notices: [],
             },
-            printersDown: [],
-            queue: barraQueue,
-            notices: [],
-          },
+          ],
         }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
@@ -1959,14 +3001,23 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     answerReload({
-      station: {
-        id: "st-dev",
-        name: "Grill",
-        today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
-        printersDown: [],
-        queue: cocinaQueue,
-        notices: [],
-      },
+      stations: [
+        {
+          name: "Cocina",
+          available: true,
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          id: "st-dev",
+          printersDown: [],
+          queue: cocinaQueue,
+          notices: [],
+        },
+      ],
     });
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
@@ -1977,23 +3028,26 @@ describe("till-station-screen 15-second refresh", () => {
     document.addEventListener("device-unauthorized", reboot);
     try {
       const api = {
-        getDeviceStation: vi
+        getDeviceStationScreen: vi
           .fn()
           .mockResolvedValueOnce({
-            station: {
-              id: "st-dev",
-              name: "Grill",
-              today: {
-                open: true,
-                isDefault: false,
-                byHand: null,
-                sendsTo: null,
-                why: "open" as const,
+            stations: [
+              {
+                name: "Cocina",
+                available: true,
+                today: {
+                  open: true,
+                  isDefault: false,
+                  byHand: null,
+                  sendsTo: null,
+                  why: "open" as const,
+                },
+                id: "st-dev",
+                printersDown: [],
+                queue: cocinaQueue,
+                notices: [],
               },
-              printersDown: [],
-              queue: cocinaQueue,
-              notices: [],
-            },
+            ],
           })
           .mockRejectedValue({ code: "device.unauthorized" }),
       } as unknown as TillApi;
@@ -2057,7 +3111,7 @@ describe("till-station-screen out-of-date banner", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-stale]");
 
   async function tick(el: TillStationScreen, ms = 15_000): Promise<void> {
-    vi.advanceTimersByTime(ms);
+    await vi.advanceTimersByTimeAsync(ms);
     await flush(el);
   }
 
@@ -2174,6 +3228,66 @@ describe("till-station-screen out-of-date banner", () => {
     expect(queueWidget(el)!.notices).toEqual(later.notices);
     await tick(el, 4_000); // read 2 fails at 35 s
     expect(banner(el)).toBeNull();
+  });
+
+  it("a late failure of an older refresh's station list, after a newer refresh answered, shows no banner", async () => {
+    const api = stubApi({
+      listStations: vi
+        .fn()
+        .mockResolvedValueOnce(stations)
+        .mockImplementationOnce(
+          () =>
+            new Promise((_resolve, reject) =>
+              setTimeout(() => reject({ code: "server.internal" }), 20_000),
+            ),
+        )
+        .mockResolvedValueOnce(stations)
+        .mockImplementation(() => new Promise(() => {})),
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ printersDown: [], items: cocinaQueue, notices: [] })
+        .mockResolvedValue(later),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    await tick(el, 31_000); // refresh 1's list out since 15 s; refresh 2's set out at 30 s and answered
+    expect(queueWidget(el)!.notices).toEqual(later.notices);
+    await tick(el, 4_000); // refresh 1's list fails at 35 s
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a choice read that never answers is cancelled 25 seconds after it set out, and shows the banner", async () => {
+    // Answers as `fetch` does: at once, refused, when its signal was cancelled before it set out.
+    const answer = (options?: { signal?: AbortSignal }) =>
+      options?.signal?.aborted
+        ? Promise.reject(options.signal.reason)
+        : Promise.resolve({ printersDown: [], items: cocinaQueue, notices: [] });
+    const api = stubApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValueOnce({
+          deviceId: "dev-1",
+          formFactor: "till",
+          name: "Till",
+          kitchenScreens: [],
+        })
+        .mockImplementation(
+          (options?: { signal?: AbortSignal }) =>
+            new Promise((_resolve, reject) =>
+              options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+            ),
+        ),
+      getStationQueue: vi.fn((_stationId: string, options?: { signal?: AbortSignal }) =>
+        answer(options),
+      ),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    await tick(el, 39_999); // the choice read that set out at 15 s is still out
+    expect(banner(el)).toBeNull();
+    await tick(el, 1); // and is cancelled at 40 s
+    expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:19, less than a minute ago");
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
   });
 
   it("switching station clears the banner, and a failure there dates from the switch", async () => {
@@ -2310,20 +3424,29 @@ describe("till-station-screen out-of-date banner", () => {
   });
 
   describe("device mode", () => {
-    const deviceStation = (queue: StationQueueGroup[]): DeviceStation => ({
-      station: {
-        id: "st-dev",
-        name: "Grill",
-        today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
-        printersDown: [],
-        queue,
-        notices: [],
-      },
+    const deviceStation = (queue: StationQueueGroup[]): DeviceStationScreen => ({
+      stations: [
+        {
+          name: "Cocina",
+          available: true,
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          id: "st-dev",
+          printersDown: [],
+          queue,
+          notices: [],
+        },
+      ],
     });
 
     it("a failed refresh shows the banner, and the next good one clears it", async () => {
       const api = {
-        getDeviceStation: vi
+        getDeviceStationScreen: vi
           .fn()
           .mockResolvedValueOnce(deviceStation(cocinaQueue)) // 10:19:50
           .mockResolvedValueOnce(deviceStation(barraQueue)) // 10:20:05
@@ -2347,7 +3470,7 @@ describe("till-station-screen out-of-date banner", () => {
 
     it("a station adopted from the cold boot counts as a good read", async () => {
       const api = {
-        getDeviceStation: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "server.internal" }),
       } as unknown as TillApi;
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
@@ -2364,7 +3487,7 @@ describe("till-station-screen out-of-date banner", () => {
 
     it("a bump whose reload fails shows the banner", async () => {
       const api = {
-        getDeviceStation: vi
+        getDeviceStationScreen: vi
           .fn()
           .mockResolvedValueOnce(deviceStation(cocinaQueue))
           .mockRejectedValue({ code: "server.internal" }),
@@ -2391,7 +3514,7 @@ describe("till-station-screen out-of-date banner", () => {
 
     it("a 401 (the display was removed) shows no banner: the app re-boots instead", async () => {
       const api = {
-        getDeviceStation: vi
+        getDeviceStationScreen: vi
           .fn()
           .mockResolvedValueOnce(deviceStation(cocinaQueue))
           .mockRejectedValue({ code: "device.unauthorized" }),
@@ -2402,7 +3525,7 @@ describe("till-station-screen out-of-date banner", () => {
       });
       await flush(el);
       await tick(el);
-      expect(api.getDeviceStation).toHaveBeenCalledTimes(2);
+      expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
       expect(banner(el)).toBeNull();
     });
   });
@@ -2596,21 +3719,24 @@ describe("till-station-screen — firing a party's held group", () => {
 
   it("device mode ignores a stray fire-kitchen-group: no session verb, no reload", async () => {
     const api = {
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            printersDown: [],
+            queue: cocinaQueue,
+            notices: [],
           },
-          printersDown: [],
-          queue: cocinaQueue,
-          notices: [],
-        },
+        ],
       }),
       fireGroup: vi.fn(),
     } as unknown as TillApi;
@@ -2622,7 +3748,7 @@ describe("till-station-screen — firing a party's held group", () => {
     fireFromWidget(el);
     await flush(el);
     expect(api.fireGroup).not.toHaveBeenCalled();
-    expect(api.getDeviceStation).toHaveBeenCalledOnce();
+    expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
   });
 });
 
@@ -2652,27 +3778,30 @@ describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) 
     const response = (printers: typeof down) =>
       deviceMode
         ? {
-            station: {
-              id: "st-1",
-              name: "Pass",
-              today: {
-                open: true,
-                isDefault: true,
-                byHand: null,
-                sendsTo: null,
-                why: "default" as const,
+            stations: [
+              {
+                name: "Cocina",
+                available: true,
+                today: {
+                  open: true,
+                  isDefault: true,
+                  byHand: null,
+                  sendsTo: null,
+                  why: "default" as const,
+                },
+                id: "st-1",
+                queue: cocinaQueue,
+                notices: [],
+                printersDown: printers,
               },
-              queue: cocinaQueue,
-              notices: [],
-              printersDown: printers,
-            },
+            ],
           }
         : { items: cocinaQueue, notices: [], printersDown: printers };
     const read = vi
       .fn()
       .mockResolvedValueOnce(response(printersDown))
       .mockResolvedValue(response(next));
-    const api = stubApi(deviceMode ? { getDeviceStation: read } : { getStationQueue: read });
+    const api = stubApi(deviceMode ? { getDeviceStationScreen: read } : { getStationQueue: read });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api, deviceMode });
     await flush(el);
     return el;
@@ -2928,14 +4057,17 @@ describe("kitchen display station-today controls", () => {
       why: closed ? ("closed_by_hand" as const) : ("open" as const),
     };
     const answer = () => ({
-      station: {
-        id: "grill",
-        name: "Grill",
-        today,
-        queue: cocinaQueue,
-        notices: [],
-        printersDown: [],
-      },
+      stations: [
+        {
+          id: "grill",
+          name: "Grill",
+          available: true as const,
+          today,
+          queue: cocinaQueue,
+          notices: [],
+          printersDown: [],
+        },
+      ],
     });
     const calls: { path: string; body: unknown }[] = [];
     let fail = false;
@@ -2946,7 +4078,7 @@ describe("kitchen display station-today controls", () => {
           headers: { "content-type": "application/json" },
         });
       calls.push({ path: String(path), body: init?.body ? JSON.parse(String(init.body)) : null });
-      if (String(path) === "/api/device/station")
+      if (String(path) === "/api/device/station-screen")
         return fail
           ? json({ error: { code: "server.internal", params: {} } }, 500)
           : json(answer());
@@ -3005,7 +4137,7 @@ describe("kitchen display station-today controls", () => {
       expect(
         control()!.compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(calls.map((c) => c.path)).toEqual(initial ? [] : ["/api/device/station"]);
+      expect(calls.map((c) => c.path)).toEqual(initial ? [] : ["/api/device/station-screen"]);
     },
   );
   it.each([false, true])(
@@ -3034,7 +4166,7 @@ describe("kitchen display station-today controls", () => {
       if (failed)
         await expect.poll(() => el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
       else await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
-      expect(calls.at(-1)!.path).toBe("/api/device/station");
+      expect(calls.at(-1)!.path).toBe("/api/device/station-screen");
       expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
       expect(control()!.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
       expect(control()!.shadowRoot!.querySelector('[role="alert"]')).toBeNull();

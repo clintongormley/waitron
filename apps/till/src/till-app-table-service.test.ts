@@ -266,9 +266,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
     }),
-    getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue(counterOffers),
     listZoneOffers: vi.fn().mockResolvedValue(diningOffers),
@@ -903,7 +902,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
     });
     await logIn(el);
     emit(shell(el), "tab-select", { key: "order" });
@@ -1286,7 +1285,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
       listStations: vi.fn().mockResolvedValue(stations),
       getTabLines: vi
@@ -1424,7 +1423,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, state: "preparing" }],
@@ -1632,7 +1631,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve({
@@ -1680,7 +1679,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor, stationId: null }),
+          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor }),
         getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve({
@@ -1941,7 +1940,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor, stationId: null }),
+          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor }),
         getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve(

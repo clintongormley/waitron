@@ -13,9 +13,7 @@ const device: DeviceRow = {
   label: "Counter",
   kind: "till",
   active: true,
-  stationId: null,
-  watcherId: null,
-  binding: null,
+  kitchenScreens: [],
   deviceProfileId: "p1",
   approvedProfileIds: ["p1"],
   profileRetired: false,
@@ -96,9 +94,9 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     api: {
       listDevices: async () => [device, { ...device, id: "d2", label: "Bar" }],
       listStations: async () => [station, { ...station, id: "s2", name: "Bar" }],
-      listWatchers: async () => [],
+      listZones: async () => [],
       listPrinters: async () => [],
-      listProfileKitchenLists: async () => [],
+      listProfileKitchenScreens: async () => [],
       listDeviceProfiles: async () => [profile, { ...profile, id: "p2", name: "Phone" }],
       pairingMode: async () => ({
         open: false,
@@ -249,8 +247,6 @@ it("a saved cash drawer choice closes the dialog with nothing left to warn about
       {
         name: "Counter",
         profileId: "p1",
-        stationId: null,
-        watcherId: null,
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
         cashDrawerPrinterId: "printer3",
@@ -312,8 +308,6 @@ it("device success commits before reader failure without committing the reader",
       {
         name: "New counter",
         profileId: "p1",
-        stationId: null,
-        watcherId: null,
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
         madeHereStationIds: ["s1"],
@@ -534,27 +528,55 @@ it("successful device save finishes before a delayed native close report", async
   expect((q(screen, "[data-test=edit-name]") as HTMLInputElement).value).toBe("New bar");
   expect(unload()).toBe(true);
 });
-it("kitchen Shows selection protects the actual station patch and a revert", async () => {
+/** A kitchen display on p1, made a kitchen display profile, showing Kitchen of Kitchen and Bar. */
+const kitchenDisplay = {
+  listDevices: async () => [
+    {
+      ...device,
+      kind: "kds_station",
+      kitchenScreens: [
+        {
+          kind: "station" as const,
+          available: true,
+          everyStation: false,
+          everyZone: true,
+          profileEveryStation: true,
+          stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
+          zones: null,
+        },
+      ],
+    },
+  ],
+  listDeviceProfiles: async () => [{ ...profile, canvasId: null, formFactor: "kds" as const }],
+  listProfileKitchenScreens: async () => [
+    {
+      profileId: "p1",
+      screens: {
+        station: { stationIds: null, zoneIds: null },
+        pass: { stationIds: null, zoneIds: null },
+      },
+    },
+  ],
+} satisfies Partial<DashboardApi>;
+function toggle(screen: DevicesScreen, test: string, checked: boolean) {
+  q(screen, `[data-test=${test}]`)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked } }),
+  );
+}
+it("a kitchen display's screen choice protects the actual patch and a revert", async () => {
   const sent: unknown[] = [];
   const { screen } = await mount({
-    listDevices: async () => [
-      {
-        ...device,
-        kind: "kds_station",
-        stationId: "s1",
-        binding: { name: "Kitchen", active: true },
-      },
-    ],
-    listDeviceProfiles: async () => [{ ...profile, canvasId: null, formFactor: "kds" }],
+    ...kitchenDisplay,
     updateDevice: async (id, body) => {
       sent.push([id, body]);
     },
   });
-  change(screen, "binding", "station:s2");
+  toggle(screen, "edit-screen-station-s2", true);
   expect(unload()).toBe(true);
-  change(screen, "binding", "station:s1");
+  toggle(screen, "edit-screen-station-s2", false);
   expect(unload()).toBe(false);
-  change(screen, "binding", "station:s2");
+  change(screen, "screen", "pass");
+  expect(unload()).toBe(true);
   q(screen, "[data-test=edit-save]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);
@@ -564,13 +586,34 @@ it("kitchen Shows selection protects the actual station patch and a revert", asy
       {
         name: "Counter",
         profileId: "p1",
-        stationId: "s2",
-        watcherId: null,
+        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
       },
     ],
   ]);
+});
+it("#1422 reconnect: an Edit opened after the screen is put back asks before discarding a changed kitchen screen", async () => {
+  const { app, screen } = await mount(kitchenDisplay);
+  screen.remove();
+  app.shadowRoot!.append(screen);
+  await expect.poll(() => q(screen, "[data-test=edit-device-d1]")).not.toBeNull();
+  await open(screen);
+  expect(unload()).toBe(false);
+  toggle(screen, "edit-screen-station-s2", true);
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=edit-cancel]")!.click();
+  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
+  expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  await choose(app, "keep");
+  expect(
+    (q(screen, "[data-test=edit-screen-station-s2]") as HTMLElement & { checked: boolean }).checked,
+  ).toBe(true);
+  q(screen, "[data-test=edit-cancel]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(unload()).toBe(false);
 });
 it("device save captures the reader selection before its first write awaits", async () => {
   let finish!: () => void;
@@ -640,8 +683,6 @@ it("W69 accepted approvals stay clean when the separate reader write fails", asy
     {
       name: "Counter",
       profileId: "p1",
-      stationId: null,
-      watcherId: null,
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
       madeHereStationIds: ["s1"],
@@ -704,8 +745,6 @@ it("W69 an unchanged approved set stays committed when the wire omits it", async
     {
       name: "New counter",
       profileId: "p1",
-      stationId: null,
-      watcherId: null,
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
       madeHereStationIds: ["s1"],

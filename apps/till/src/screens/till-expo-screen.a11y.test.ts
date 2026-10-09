@@ -201,72 +201,119 @@ async function flush(el: TillExpoScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (theme) => {
-  it("has no violations on the unattended watcher board and Undo notice", async () => {
+  it("has no violations on a kitchen display's pass screen with its lost lines, levers, a refusal and Undo notice", async () => {
     const board = {
-      watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
       orders: queue.map((order) => ({
         ...order,
         courses: order.courses.map((course) => ({ ...course, allReady: true })),
         groups: [],
       })),
+      stations: [
+        { id: "st-1", name: "Parrilla", available: true },
+        { id: "st-2", name: "Freidora", available: false },
+      ],
+      zones: [
+        { id: "z-1", name: "Terraza", available: false },
+        { id: "z-2", name: "Sala", available: true },
+      ],
     };
     const api = {
       ...stubApi(),
-      getDeviceWatcher: vi.fn().mockResolvedValue(board),
-      markDeviceWatcherDone: vi.fn().mockResolvedValue(undefined),
+      getDevicePassScreen: vi.fn().mockResolvedValue(board),
+      markDevicePassDone: vi.fn().mockResolvedValue(undefined),
+      fireDeviceCourse: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
+      bumpDeviceCourseReady: vi.fn().mockResolvedValue(undefined),
+      markDeviceCourseAway: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api, deviceMode: true, initialDeviceWatcher: board },
+      {
+        api,
+        deviceMode: true,
+        deviceName: "Pantalla Pase",
+        runsPass: true,
+        fireControl: "expo",
+        initialDevicePass: board,
+      },
       theme,
     );
     await flush(el);
+    expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-fire]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });
-  it("has no violations in the watcher chooser, board and Undo notice", async () => {
+  it("has no violations on a till's pass screen with its lost lines, levers and Undo notice", async () => {
+    const stations = [
+      { id: "st-1", name: "Parrilla", available: true },
+      { id: "st-2", name: "Freidora", available: false },
+    ];
+    const zones = [
+      { id: "z-1", name: "Terraza", available: false },
+      { id: "z-2", name: "Sala", available: true },
+    ];
     const api = {
       ...stubApi(),
-      listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: false }]),
-      getWatcherQueue: vi.fn().mockResolvedValue({
-        watcher: { id: "pass", name: "Pass", runsPass: false, active: true },
-        orders: queue,
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "till",
+        name: "Till 1",
+        kitchenScreens: [{ kind: "pass", available: true, stations, zones }],
       }),
-      markWatcherDone: vi.fn().mockResolvedValue(undefined),
+      getDevicePassScreen: vi.fn().mockResolvedValue({
+        orders: queue.map((order) => ({
+          ...order,
+          courses: order.courses.map((course) => ({
+            ...course,
+            allReady: course.items.every((item) => item.state === "ready"),
+          })),
+          groups: [],
+        })),
+        stations,
+        zones,
+      }),
+      markDevicePassDone: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
-    const { el, host } = await mountWidget<TillExpoScreen>("till-expo-screen", { api }, theme);
+    const { el, host } = await mountWidget<TillExpoScreen>(
+      "till-expo-screen",
+      { api, fireControl: "expo", runsPass: true },
+      theme,
+    );
     await flush(el);
-    await expectNoA11yViolations(host);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
-    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("[data-unavailable]")).toHaveLength(2);
+    expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
     el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
     await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-undo]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations when the selected watcher was disabled", async () => {
+  it("has no violations when a narrowing took a till's pass screen", async () => {
     const api = {
       ...stubApi(),
-      listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),
-      getWatcherQueue: vi.fn().mockResolvedValue({
-        watcher: { id: "pass", name: "Pass", runsPass: true, active: false },
-        orders: [],
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "till",
+        name: "Till 1",
+        kitchenScreens: [{ kind: "pass", available: false, stations: [], zones: null }],
       }),
+      getDevicePassScreen: vi.fn().mockResolvedValue({ orders: [], stations: [], zones: null }),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>("till-expo-screen", { api }, theme);
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
-    await flush(el);
-    expect(el.shadowRoot!.textContent).toContain("watcher was disabled");
+    expect(el.shadowRoot!.querySelector("[data-unavailable]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
   it("has no violations on a populated pass board (all three levers, both age extremes)", async () => {
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api: stubApi(), fireControl: "expo" },
+      { api: stubApi(), fireControl: "expo", runsPass: true },
       theme,
     );
     await flush(el);
@@ -281,7 +328,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api, fireControl: "expo" },
+      { api, fireControl: "expo", runsPass: true },
       theme,
     );
     await flush(el);
@@ -290,6 +337,48 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-group-held]")).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a pass monitor with its lost lines, a party's groups and a stale read", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const board = {
+        orders: [...queue, partyOrder],
+        stations: [
+          { id: "st-1", name: "Parrilla", available: true },
+          { id: "st-2", name: "Freidora", available: false },
+        ],
+        zones: [
+          { id: "z-1", name: "Terraza", available: false },
+          { id: "z-2", name: "Sala", available: true },
+        ],
+      };
+      const api = {
+        getDevicePassMonitor: vi.fn().mockRejectedValue(new Error("offline")),
+      } as unknown as TillApi;
+      const { el, host } = await mountWidget<TillExpoScreen>(
+        "till-expo-screen",
+        {
+          api,
+          deviceMode: true,
+          monitor: true,
+          deviceName: "Pared del pase",
+          runsPass: true,
+          fireControl: "expo",
+          initialDevicePassMonitor: board,
+        },
+        theme,
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll("[data-unavailable]")).toHaveLength(2);
+      expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-order="9"]')).not.toBeNull();
+      vi.useRealTimers();
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("has no violations on an empty pass", async () => {

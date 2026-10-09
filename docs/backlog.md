@@ -1297,9 +1297,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4–7.**
-  Station-hours and fallback retirement, period routing, combined tickets, monitors, department
-  pages and department receipts remain in slices 4–7. Slice 7's plan/spec apply the owner's
+  APPROVED 2026-10-07; remaining work is slices 4, 6 and 7, and slice 5 Part B.**
+  Station-hours and fallback retirement, period routing, combined tickets, department pages and
+  department receipts remain in slices 4, 6 and 7; retiring watchers (slice 5 Part B) waits for
+  slice 4's combined tickets. Slice 7's plan/spec apply the owner's
   2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
@@ -1491,8 +1492,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **On the Routing tab, the label above the "Where is this made?" time choice is cut** — seen in
   A323's look at the demo (2026-10-07), in files A323 did not change; left open by A261-4 (#1363).
   The label is cut to "W…" ("Cuá…" in Spanish) at 1280 and 390 px, in both themes, because the
-  choice is too narrow for it. At 390 px the Prep stations tab row scrolls sideways with both ends
-  cut ("Stations" on the left, "New watcher" on the right) and nothing shows that it scrolls.
+  choice is too narrow for it.
   [Detail](backlog/kitchen.md#on-the-routing-tab-the-label-above-the-where-is-this-made-time-choice-is-cut)
 
 - **At 390 px the routing grid's fixed first column takes about 140 of the grid's roughly 310 px** —
@@ -1535,21 +1535,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   watcher printers in the move flow. Measure the query count on a moved order with a watcher
   printer, then pass one read through the transaction if it repeats unchanged configuration.
 
-- **Show one watcher in a canvas card — OPEN (3d, P15).** — left open by the product folders work.
-  The ordinary embedded pass card still shows All stations; a watcher-bound device opens its own
-  board.
+- **Show a device's own pass screen in a canvas card — OPEN (3d, P15).** — left open by the
+  product folders work. The ordinary embedded pass card still shows All stations; a device's Pass
+  tab shows the pass screen or pass monitor it chose.
 
-- **Alert when a watcher's screens go dark — OPEN (3d, P17).** — left open by the product folders
-  work. The existing dark-screen alert is station scoped, while a watcher can follow several
-  stations.
+- **Alert when a pass screen or pass monitor goes dark — OPEN.** — left open by A366 slice 5 Part
+  A. The dark-screen alert reads station screens only (`stationScreensDark`), so a kitchen display
+  showing a pass screen or pass monitor that stops polling raises nothing.
 
-- **Move an enrolled kitchen screen between stations and watchers without joining again — OPEN (3d,
-  P18).** — left open by the product folders work. Its binding is selected at joining; changing that
-  binding needs a separate action.
-
-- **Keep watcher Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
-  product folders work. `watcher_item_marks` cascades from `ticket_items`, so a rebuild empties
-  those marks.
+- **Keep pass screen Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
+  product folders work. `pass_item_marks` cascades from `ticket_items`, so a rebuild empties those
+  marks.
 
 - **Keep the two watcher filtering rules together — OPEN (3d).** — left open by the product folders
   work. The server's `watcherSees` and Prep Stations' `watchersSeeing` each have a hand-copied test
@@ -1592,11 +1588,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   defect was reproduced for either. Before changing screen caching, exercise those transitions. Left
   open by A331 batch 4d (preparation stations' Save state, #1426).
 
-- **The Prep stations screen's two add buttons ("Nueva estación", "Nuevo punto de seguimiento")
-  share the tab row's action area, which that screen caps at half the row**, so at phone width in
-  Spanish the second button is cut and scrolls within its area. A424 (#1452) kept this screen's old
-  layout rather than squeeze its tabs. A better home — one button per tab, or one Add menu — is the
-  owner's call. Left open by A424.
+- **Kitchen cards: look points seen in A366 slice 5's look pass, and on its base `4f61b4ab9`
+  too** — the overdue badge runs the card's full width; an empty status line leaves a double gap;
+  a held dish shows its own Done, and cards grow tall; Spanish shows "1 atrasados", a plural
+  after one; and at 390 px the cards are of uneven widths. Left open by A366 slice 5 Part A.
+
+- **The till's own Station and Pass screens, left with nothing to show, say nothing** — a kitchen
+  display shows a sentence saying what to do, but a till or handheld whose choice a profile
+  narrowed to nothing shows an empty screen. Left open by A366 slice 5 Part A.
 
 ### The till, devices and table service
 
@@ -1760,6 +1759,21 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   only after an extended logout time (eg 30 minutes)". Today nobody can sign in on one. Left out
   of slice 5 as too large for it.
   [Detail](backlog/till.md#a436--a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
+
+- **Duplicating a till or handheld profile whose station list holds only switched-off stations is
+  refused with the general `device_profile.access_invalid` message.** The copy drops switched-off
+  stations and the server refuses the emptied list; keeping them would need the create route to
+  know it is making a copy. Left open by A366 slice 5 Part A.
+
+- **Two device choices can lose a switched-off entry.** A returning device accepted in Pair starts
+  without its switched-off stations and zones; and in Devices → edit a kitchen screen kind the
+  profile no longer shows is dropped from the draft, so it is lost if the choice is changed and
+  saved. Left open by A366 slice 5 Part A.
+
+- **A profile's explicit station and zone lists for its kitchen screens hold only the saving
+  location's ids**, so saving the profile at one location empties another location's lists and,
+  now that a narrowing is allowed, narrows that location's devices. The flat station list these
+  lists replace was saved the same way, from W97 (#1311). Left open by A366 slice 5 Part A.
 
 - `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
   party).
@@ -2259,9 +2273,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   zone: the relative-time widget receives no venue time zone.
   [Detail](backlog/till.md#what-w106-left-open-the-battery-on-the-devices-list-1240)
 
-- **What W105 left open (#1235)** — left open by A268. (5) the Devices table's Shows column reads
-  "— no station —" for a screen on a switched-off station, because it looks the name up in the
-  switched-on list; `binding.name` could fill it.
+- **What W105 left open (#1235)** — left open by A268: review suggestions #1235 did not take.
   [Detail](backlog/till.md#what-w105-left-open-1235)
 
 - **What W104 left open (#1225)** — left open by A268, not acted on. (1) a Pair save that never
@@ -2598,8 +2610,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   a later one succeeds, shows no printer section and no loading line, even while the next read is
   under way; after an empty printer list loaded and a later refresh failed, that window shows the
   failure but still says "Add a printer first.", because the shared query code does not say which
-  read failed; its kitchen section says "Add a prep station or a watcher first." while stations and
-  watchers load or after their read fails (read, not run); and Cancel in that window clears the
+  read failed; and Cancel in that window clears the
   screen's message without putting back a read failure that is still standing (read, not run).
 
 - Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
@@ -4996,7 +5007,7 @@ payroll (SP13) · online ordering (SP15) · per-seat ordering and multiple tabs 
 settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
 read-back and audit view, station kind, definable kitchen statuses) · recipes depth (nested
 sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
-procurement (SP20; the AI forecast waits for the deterministic system) · the expo device kind ·
+procurement (SP20; the AI forecast waits for the deterministic system) ·
 **Bizum** (research in
 [2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md)).
 A Bizum payment costs a FLAT per-payment fee, not a percentage, so a provider that passes the
@@ -5094,7 +5105,7 @@ partial scope; the detail for a live thread is in its area.
 | 9   | Deployment                   | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272)                                                                                                                                                                                     | USB installer (B3); cloud standby live link + the Waitron Cloud boundary                                                                                                      |
 | 10  | Tabs / table service         | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324)                                                                                                                                                                                                                                                                                                             | core COMPLETE; owner-added extensions parked                                                                                                                                  |
 | 11  | Floor plan                   | FP-1 live floor + FP-2 spatial canvas/editor                                                                                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                             |
-| 12  | KDS / devices                | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts; device identity + profiles (#199, #231, #269)                                                                                                                                                                                                                                                                        | routing audit view; expo device kind; device-scoped fire/collect routes                                                                                                       |
+| 12  | KDS / devices                | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts; device identity + profiles (#199, #231, #269)                                                                                                                                                                                                                                                                        | routing audit view; a device-scoped collect route                                                                                                       |
 | 13  | Tips                         | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen                                                                                                                                                                                                                                                                                                                                 | tip-collection UI for cash / manual card / handheld (_Payments and card readers_); payroll export (integrate-not-build)                                                       |
 | 14  | Bookings                     | Bookings-1, now the `@waitron/bookings` module (#270, #273)                                                                                                                                                                                                                                                                                                                                                                       | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits                                                                                            |
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
@@ -5184,7 +5195,7 @@ while it holds decisions still open.
 | [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | partly built; no clocking in                                                                                                                                               | A10 and _Wages / labour cost (SP16)_ (_Working time and staff_)                 |
 | [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md)                                                                                                                             | partly built; the outage path changed 2026-09-11                                                                                                                           | _Payments and card readers_                                               |
 | [Nested sub-recipes](superpowers/specs/2026-08-16-nested-sub-recipes-design.md) and its plan                                                                                                      | not started; parked; the plan predates SQLite and Vitest 4                                                                                                                 | _Later and parked_ (recipes depth)                                        |
-| [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | not started; parked; written before device profiles                                                                                                                        | _Later and parked_                                                        |
+| [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | superseded by A366 slice 5 Part A (a device's pass screen and pass monitor)                                                                                                  | —                                                                         |
 | [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority                                                                                                                  | _Printers, the print agent and receipts_                                  |
 | [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md)                                                                                                                     | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750)                                                      | _Printers, the print agent and receipts_, _Replication, failover and the cloud_ |
 | [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)                                                                                    | partly built; deferred                                                                                                                                                     | The till, devices and table service                                       |

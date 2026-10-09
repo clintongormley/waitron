@@ -1741,14 +1741,26 @@ export async function ordersWithPrintProblem(
   orderIds: readonly string[],
   now: Date,
 ): Promise<Set<string>> {
-  if (orderIds.length === 0) return new Set();
+  return (await stationOrdersWithPrintProblem(tx, [stationId], orderIds, now)).get(stationId)!;
+}
+
+/** For each of `stationIds`, which of `orderIds` have a printing problem there. */
+export async function stationOrdersWithPrintProblem(
+  tx: Transaction,
+  stationIds: readonly string[],
+  orderIds: readonly string[],
+  now: Date,
+): Promise<Map<string, Set<string>>> {
+  const found = new Map(stationIds.map((id) => [id, new Set<string>()]));
+  if (stationIds.length === 0 || orderIds.length === 0) return found;
   const problems = await readPrintProblems(
     tx,
     and(
-      eq(kitchenPrintJobs.stationId, stationId),
+      inArray(kitchenPrintJobs.stationId, [...stationIds]),
       inArray(kitchenPrintJobs.workingOrderId, [...orderIds]),
     )!,
     now,
   );
-  return new Set(problems.map((problem) => problem.workingOrderId));
+  for (const problem of problems) found.get(problem.stationId)!.add(problem.workingOrderId);
+  return found;
 }

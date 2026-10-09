@@ -17,7 +17,6 @@ import {
   workingOrders,
   nowIso,
   partyTables,
-  kitchenStations,
   printerHolders,
   printers,
   printJobs,
@@ -1423,10 +1422,6 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
         capabilities: [...CAPABILITY_FLAGS],
       })
       .returning({ id: deviceProfiles.id });
-    const [station] = await suite.db
-      .insert(kitchenStations)
-      .values({ locationId: cfg.locationId, name: `Grill ${randomUUID()}` })
-      .returning({ id: kitchenStations.id });
     const [device] = await suite.db
       .insert(devices)
       .values({
@@ -1434,7 +1429,6 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
         label: `Display ${randomUUID()}`,
         tokenHash: "scrypt$00$00",
         deviceProfileId: profile!.id,
-        stationId: station!.id,
         receiptPrinterId: printerId,
         cashDrawerPrinterId: printerId,
       })

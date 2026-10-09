@@ -18,21 +18,11 @@ export async function orderWatchZones(
   orders: readonly ZonedOrder[],
 ): Promise<Map<string, string | null>> {
   if (orders.length === 0) return new Map();
-  const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
-  const partyTablesById = await activePartyZones(tx, cfg, partyIds);
-  const seatless = partyIds.filter((id) => !partyTablesById.has(id));
-  if (seatless.length > 0) {
-    const survivors = await partySurvivors(tx, seatless);
-    const unread = [...new Set(survivors.values())].filter((id) => !partyTablesById.has(id));
-    const survivorTables = await activePartyZones(tx, cfg, unread);
-    for (const id of seatless) {
-      const survivor = survivors.get(id);
-      if (survivor !== undefined) {
-        const zone = partyTablesById.get(survivor) ?? survivorTables.get(survivor);
-        if (zone !== undefined) partyTablesById.set(id, zone);
-      }
-    }
-  }
+  const partyTablesById = await partyWatchZones(
+    tx,
+    cfg,
+    orders.flatMap((order) => order.partyId ?? []),
+  );
 
   const deliveryIds = [...new Set(orders.flatMap((order) => order.deliveryTableId ?? []))];
   const deliveryRows =
@@ -60,6 +50,31 @@ export async function orderWatchZones(
     for (const id of unresolved) zones.set(id, recorded.get(id) ?? null);
   }
   return zones;
+}
+
+/** Each party's zone, read from its first active table, or its survivor's once it has none; a
+ *  party absent from the map sits at no table. */
+export async function partyWatchZones(
+  tx: Transaction,
+  cfg: TillConfig,
+  ids: readonly string[],
+): Promise<Map<string, string | null>> {
+  const partyIds = [...new Set(ids)];
+  const partyTablesById = await activePartyZones(tx, cfg, partyIds);
+  const seatless = partyIds.filter((id) => !partyTablesById.has(id));
+  if (seatless.length > 0) {
+    const survivors = await partySurvivors(tx, seatless);
+    const unread = [...new Set(survivors.values())].filter((id) => !partyTablesById.has(id));
+    const survivorTables = await activePartyZones(tx, cfg, unread);
+    for (const id of seatless) {
+      const survivor = survivors.get(id);
+      if (survivor !== undefined) {
+        const zone = partyTablesById.get(survivor) ?? survivorTables.get(survivor);
+        if (zone !== undefined) partyTablesById.set(id, zone);
+      }
+    }
+  }
+  return partyTablesById;
 }
 
 async function activePartyZones(

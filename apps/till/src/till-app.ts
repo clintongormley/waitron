@@ -173,8 +173,9 @@ import type {
   BillRefundResult,
   CounterWaitingOrder,
   UnpaidDepartureRequest,
-  DeviceStation,
-  WatcherBoard,
+  DeviceStationScreen,
+  DevicePassMonitor,
+  DevicePassScreen,
   DeadEndAnswer,
   DraftSubmission,
   FloorZone,
@@ -219,6 +220,7 @@ import type {
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
+import { type KitchenScreenNotice, kitchenDisplayScreen } from "./kitchen-screen-notice.js";
 import type {
   CanvasDef,
   CapabilityFlag,
@@ -252,6 +254,7 @@ import type {
   EquipmentHolder,
   ProfileChoice,
   ReadOptions,
+  ResolvedKitchenScreen,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -1686,8 +1689,10 @@ export class TillApp extends LitElement {
     this.#saveMakeNow();
   }
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
-  @state() private initialDeviceStation?: DeviceStation;
-  @state() private initialDeviceWatcher?: WatcherBoard;
+  @state() private initialDeviceStation?: DeviceStationScreen;
+  @state() private initialDevicePass?: DevicePassScreen;
+  @state() private initialDevicePassMonitor?: DevicePassMonitor;
+  @state() private kitchenScreenNotice?: KitchenScreenNotice;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,
@@ -2193,9 +2198,7 @@ export class TillApp extends LitElement {
       this.#writeUrl(
         {
           "till-tab": key,
-          ...(retainDestination
-            ? {}
-            : { "till-view": null, "till-station": null, "till-watcher": null }),
+          ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
         },
         replace,
       );
@@ -2234,7 +2237,6 @@ export class TillApp extends LitElement {
       {
         "till-view": destination,
         "till-station": destination === "station" ? this.#url.read("till-station") : null,
-        "till-watcher": destination === "expo" ? this.#url.read("till-watcher") : null,
       },
       true,
     );
@@ -2297,6 +2299,10 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
+    // A boot a newer one has overtaken writes nothing after its reads answer. A torn-down app's boot
+    // writes nothing either: `setLocale` is module-global, and `disconnectedCallback` has already run,
+    // so nothing would stop a battery reporter started now.
+    const overtaken = () => !this.isConnected || bootGeneration !== this.#bootGeneration;
     this.#browserLocale = undefined;
     this.#browserLocaleVenue = undefined;
     this.#localeList = undefined;
@@ -2304,7 +2310,7 @@ export class TillApp extends LitElement {
     void this.api
       .getLocales()
       .then(({ locales, loginDefault, venueDefault }) => {
-        if (!this.isConnected || bootGeneration !== this.#bootGeneration) return;
+        if (overtaken()) return;
         this.#browserLocale = loginDefault;
         this.#browserLocaleVenue = venueDefault;
         this.#localeList = locales;
@@ -2320,9 +2326,7 @@ export class TillApp extends LitElement {
         this.api.getTill(),
         this.#refreshContentLanguages(contentGeneration),
       ]);
-      // `setLocale` changes module-global state, so it must not run for a torn-down app. The state
-      // writes below need no guard: Lit never paints a detached element.
-      if (!this.isConnected) return;
+      if (overtaken()) return;
       this.router?.setServers(till.servers);
       this.#venueLocale = till.locale;
       this.#venueLocaleReady = true;
@@ -2355,14 +2359,16 @@ export class TillApp extends LitElement {
     } catch {
       // Return before the device probe: a till that could not read its own setup is not a display to
       // route into device mode.
-      this.errorKey = "boot.error";
+      if (!overtaken()) this.errorKey = "boot.error";
       return;
     }
     // `#boot` re-runs, and the branches below only ever set a mode, so reset first.
     this.handheldMode = false;
     this.deviceMode = false;
     this.initialDeviceStation = undefined;
-    this.initialDeviceWatcher = undefined;
+    this.initialDevicePass = undefined;
+    this.initialDevicePassMonitor = undefined;
+    this.kitchenScreenNotice = undefined;
     this.#deviceKind = "till";
     this.deviceName = undefined;
     const previousDeviceId = this.deviceId;
@@ -2372,26 +2378,23 @@ export class TillApp extends LitElement {
     this.#setScreen("lock");
     // The till has no server flag for dev mode: the dev-only `GET /api/dev/devices` answers only there,
     // and its list is also the chooser's data.
-    if (!this.devTab && (await this.#openDevChooser())) return;
+    if (!this.devTab && (await this.#openDevChooser(overtaken))) return;
     // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
     // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
     // gets the join screen (a dev tab whose remembered device is refused forgets it and gets the picker
     // below, or the join screen if the device list fails to load), which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
+      if (overtaken()) return;
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
-      // `disconnectedCallback` has already run for a torn-down app, so nothing would stop a reporter
-      // started now; and a boot a later one has overtaken must not start one.
-      if (this.isConnected && bootGeneration === this.#bootGeneration) {
-        const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
-        this.#battery = startBatteryReport(
-          (r, signal) => this.api.reportBattery(r, { signal }),
-          nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
-        );
-      }
+      const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
+      this.#battery = startBatteryReport(
+        (r, signal) => this.api.reportBattery(r, { signal }),
+        nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
+      );
       this.#holdIdentity(identity);
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
@@ -2399,9 +2402,18 @@ export class TillApp extends LitElement {
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
-        if (identity.watcherId) this.initialDeviceWatcher = await this.api.getDeviceWatcher();
-        else this.initialDeviceStation = await this.api.getDeviceStation();
-        if (!this.isConnected) return;
+        let show: () => void;
+        try {
+          show = await this.#readKitchenScreen(identity.kitchenScreens);
+        } catch (error) {
+          if ((error as { code?: string }).code !== "device.unauthorized") throw error;
+          // A narrowing that lands between the two reads refuses the screen it took, from a device
+          // still enrolled: the identity, read again, says what it shows now.
+          const again = await this.api.getDeviceIdentity();
+          show = await this.#readKitchenScreen(again.kitchenScreens);
+        }
+        if (overtaken()) return;
+        show();
         this.deviceMode = true;
         if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
         this.#setScreen("station");
@@ -2411,13 +2423,14 @@ export class TillApp extends LitElement {
       // Only a genuine `device.unauthorized` goes to the join screen. Any other failure is transient,
       // and stranding a sellable till behind an approval it cannot get would block sales, so it falls
       // through to the login screen.
+      if (overtaken()) return;
       if ((error as { code?: string }).code === "device.unauthorized") {
         // A dev tab's remembered device can be gone (a venue reset deletes it). In dev mode the server
         // reads the header instead of the device cookie, so joining from this tab could not recover it.
         if (this.devTab) {
           clearDevDeviceId();
           this.devTab = false;
-          if (await this.#openDevChooser()) return;
+          if (await this.#openDevChooser(overtaken)) return;
         }
         this.frontDoor = "enrol";
       }
@@ -2425,16 +2438,34 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
   }
 
-  /** True when dev mode answered, so the boot stops here. */
-  async #openDevChooser(): Promise<boolean> {
+  async #readKitchenScreen(screens: readonly ResolvedKitchenScreen[]): Promise<() => void> {
+    const screen = kitchenDisplayScreen(screens);
+    if (screen.kind === "station") {
+      const board = await this.api.getDeviceStationScreen();
+      return () => (this.initialDeviceStation = board);
+    }
+    if (screen.kind === "pass") {
+      const board = await this.api.getDevicePassScreen();
+      return () => (this.initialDevicePass = board);
+    }
+    if (screen.kind === "pass_monitor") {
+      const board = await this.api.getDevicePassMonitor();
+      return () => (this.initialDevicePassMonitor = board);
+    }
+    return () => (this.kitchenScreenNotice = screen.notice);
+  }
+
+  /** True when the boot stops here: dev mode answered, or the boot was overtaken. */
+  async #openDevChooser(overtaken: () => boolean): Promise<boolean> {
     try {
-      this.devDevices = await this.api.getDevDevices();
-      if (!this.isConnected) return true;
+      const devices = await this.api.getDevDevices();
+      if (overtaken()) return true;
+      this.devDevices = devices;
       this.frontDoor = "chooser";
       return true;
     } catch {
       // Not dev mode, or a transient failure.
-      return false;
+      return overtaken();
     }
   }
 
@@ -2542,8 +2573,7 @@ export class TillApp extends LitElement {
     // profile starts on its own canvas's first tab, whatever tab the address names.
     this.#setActiveTab(switched ? this.canvas?.tabs[0]?.key : this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
-    if (switched)
-      this.#writeUrl({ "till-view": null, "till-station": null, "till-watcher": null }, true);
+    if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
@@ -8510,7 +8540,7 @@ export class TillApp extends LitElement {
   #pushDrill(drill: Drill): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#writeUrl({ "till-view": drill.kind, "till-station": null, "till-watcher": null });
+      this.#writeUrl({ "till-view": drill.kind, "till-station": null });
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
@@ -8521,7 +8551,7 @@ export class TillApp extends LitElement {
   #popDrill(): void {
     this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
-      this.#writeUrl({ "till-view": null, "till-station": null, "till-watcher": null });
+      this.#writeUrl({ "till-view": null, "till-station": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
     this.drill = undefined;
   }
@@ -8740,7 +8770,11 @@ export class TillApp extends LitElement {
       .bumpMode=${this.bumpMode}
       .deviceMode=${this.deviceMode}
       .initialDeviceStation=${this.initialDeviceStation}
-      .initialDeviceWatcher=${this.initialDeviceWatcher}
+      .deviceId=${this.deviceId}
+      .deviceName=${this.deviceName}
+      .initialDevicePass=${this.initialDevicePass}
+      .initialDevicePassMonitor=${this.initialDevicePassMonitor}
+      .kitchenScreenNotice=${this.kitchenScreenNotice}
       .menus=${tableTab ? this.tableMenus : this.menus}
       .zoneId=${tableTab ? (this.#tableZoneId ?? "") : this.counterServiceZoneId}
       .service=${tableTab ? this.tableService : this.counterService}
@@ -8851,26 +8885,21 @@ export class TillApp extends LitElement {
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
       case "station":
-        return this.initialDeviceWatcher
-          ? html`<till-expo-screen
-              slot="drill"
-              .api=${this.api}
-              .deviceMode=${this.deviceMode}
-              .initialDeviceWatcher=${this.initialDeviceWatcher}
-            ></till-expo-screen>`
-          : html`<till-station-screen
-              slot="drill"
-              .api=${this.api}
-              .bumpMode=${this.bumpMode}
-              .fireControl=${this.fireControl}
-              .deviceMode=${this.deviceMode}
-              .initialDeviceStation=${this.initialDeviceStation}
-            ></till-station-screen>`;
+        return html`<till-station-screen
+          slot="drill"
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+          .deviceId=${this.deviceId}
+        ></till-station-screen>`;
       case "expo":
         return html`<till-expo-screen
           slot="drill"
           .api=${this.api}
           .fireControl=${this.fireControl}
+          .runsPass=${this.capabilities.includes("run-the-pass")}
         ></till-expo-screen>`;
       case "allergens":
         return html`<till-allergen-screen
@@ -8955,6 +8984,7 @@ export class TillApp extends LitElement {
         @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}
         @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}
+        @kitchen-screen-changed=${() => void this.#boot()}
         @switch-device=${() => void this.#onSwitchDevice()}
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
         @show-expo=${() => this.#requestLeave(() => this.#onShowExpo())}

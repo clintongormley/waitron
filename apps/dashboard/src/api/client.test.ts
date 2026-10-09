@@ -2178,36 +2178,23 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     ).rejects.toMatchObject({ code: "device.join_mismatch" });
   });
 
-  it("acceptDeviceJoinRequest POSTs the typed name with the profile and binding", async () => {
+  it("acceptDeviceJoinRequest POSTs the typed name with the profile and kitchen screens", async () => {
     const accepted = { deviceId: "j1", name: "Pantalla pase", formFactor: "kds" };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(accepted));
     const api = new DashboardApi("", fetchImpl);
+    const kitchenScreens = [{ kind: "pass_monitor" as const, stationIds: null, zoneIds: ["z1"] }];
     expect(
       await api.acceptDeviceJoinRequest("j1", {
         name: "Pantalla pase",
         profileId: "dp1",
-        stationId: "s1",
+        kitchenScreens,
       }),
     ).toEqual(accepted);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/accept", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Pantalla pase", profileId: "dp1", stationId: "s1" }),
-    });
-  });
-
-  it("acceptDeviceJoinRequest sends a watcher binding without a station binding", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ deviceId: "j1", name: "Pass", formFactor: "kds" }));
-    const api = new DashboardApi("", fetchImpl);
-    await api.acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp3", watcherId: "w1" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/accept", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Pass", profileId: "dp3", watcherId: "w1" }),
+      body: JSON.stringify({ name: "Pantalla pase", profileId: "dp1", kitchenScreens }),
     });
   });
 
@@ -2217,7 +2204,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       .mockResolvedValue(jsonResponse({ error: { code: "join_request.unclaimed" } }, false, 409));
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp1", stationId: "s1" }),
+      api.acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp1", kitchenScreens: [] }),
     ).rejects.toMatchObject({ code: "join_request.unclaimed" });
   });
 

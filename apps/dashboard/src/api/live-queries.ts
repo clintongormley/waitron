@@ -280,18 +280,16 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_admission_roles",
     "device_profile_admission_persons",
   ],
-  // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts) also filters and orders
-  // by the station and watcher rows.
-  listProfileKitchenLists: [
+  listProfileKitchenScreens: [
     "device_profiles",
-    "device_profile_stations",
-    "device_profile_watchers",
+    "device_profile_kitchen_screens",
+    "device_profile_kitchen_screen_stations",
+    "device_profile_kitchen_screen_zones",
     "kitchen_stations",
-    "watchers",
+    "floor_zones",
   ],
   listDevices: [
     "devices",
-    "watchers",
     "device_profiles",
     "kitchen_stations",
     "device_made_here_stations",
@@ -304,6 +302,15 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_card_readers",
     "printers",
     "card_readers",
+    // Each device's kitchen screens (`readDevicesKitchenScreens`, packages/venue-service).
+    "device_kitchen_screens",
+    "device_kitchen_screen_stations",
+    "device_kitchen_screen_zones",
+    "device_kitchen_screen_removals",
+    "device_profile_kitchen_screens",
+    "device_profile_kitchen_screen_stations",
+    "device_profile_kitchen_screen_zones",
+    "floor_zones",
   ],
   listStations: ["kitchen_stations"],
   listWatchers: ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"],

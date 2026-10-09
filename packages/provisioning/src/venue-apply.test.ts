@@ -357,7 +357,7 @@ describe("applyVenue", () => {
       {
         name: "Cocina",
         canvas_id: null,
-        capabilities: ["act-as-kds", "prepare-orders"],
+        capabilities: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
         inactivity_timeout_seconds: null,
       },
       {
@@ -375,6 +375,7 @@ describe("applyVenue", () => {
           "hand-keyed-card-payment",
           "prepare-orders",
           "hand-over-orders",
+          "run-the-pass",
         ],
         inactivity_timeout_seconds: 300,
       },

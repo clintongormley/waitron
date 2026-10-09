@@ -19,6 +19,7 @@ export {
 export type * from "./menu-timetable-types.js";
 export * from "./kitchen-notices.js";
 export * from "./profile-access.js";
+export * from "./kitchen-screens.js";
 export { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 export { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";

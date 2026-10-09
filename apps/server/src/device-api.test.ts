@@ -2,16 +2,17 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
   devices,
   deviceProfiles,
   kitchenStations,
+  locations,
   printJobs,
   printers,
   stationPrinters,
-  watchers,
+  ticketItems,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -38,6 +39,8 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { kitchenNotices } from "@waitron/venue-service";
+import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal } from "@waitron/shared";
 import {
   deviceProfileAdmissionRoles,
@@ -49,9 +52,6 @@ import {
 import { payments } from "@waitron/payments";
 import { deleteDeviceProfile, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
-import { createWatcher, removeWatcher } from "./watchers.js";
-import type { WatcherBoard } from "./watcher-board.js";
-import { enrolDeviceForTest, listOnProfile } from "./testing/enrol.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
@@ -261,6 +261,13 @@ function deviceCookieFrom(res: Response): string {
 /** A per-file counter keeps the unique name from colliding with the profiles a single test seeds
  *  alongside it. */
 let profileCounter = 0;
+async function removalCount(deviceId: string): Promise<number> {
+  const { rows } = await suite.db.execute<{ n: number }>(
+    sql`select count(*) as n from device_kitchen_screen_removals where device_id = ${deviceId}`,
+  );
+  return Number(rows[0]!.n);
+}
+
 async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
@@ -272,7 +279,7 @@ async function seedProfile(
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({
-      name: `Profile ${profileCounter}`,
+      name: `Test profile ${profileCounter}`,
       formFactor,
       capabilities: [...BASIC_ACTIONS, ...capabilities],
     })
@@ -289,20 +296,23 @@ async function seedProfile(
 async function knockAndAccept(
   app: Hono,
   venue: Venue,
-  input: { name: string; profileId: string; stationId?: string },
+  input: {
+    name: string;
+    profileId: string;
+    kitchenScreens?: readonly DeviceKitchenScreen[];
+  },
 ): Promise<{ deviceId: string; jar: string; formFactor: string }> {
   windows.get(app)!.open();
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
   expect(res.status).toBe(200);
   const knock = (await res.json()) as { joinId: string };
-  const accepted = await withTransaction(suite.db, async (tx) => {
-    await listOnProfile(tx, input.profileId, input);
-    return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
+  const accepted = await withTransaction(suite.db, (tx) =>
+    acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
       label: input.name,
       profileId: input.profileId,
-      stationId: input.stationId ?? null,
-    });
-  });
+      kitchenScreens: input.kitchenScreens,
+    }),
+  );
   return {
     deviceId: accepted.deviceId,
     jar: deviceCookieFrom(res),
@@ -310,18 +320,34 @@ async function knockAndAccept(
   };
 }
 
-/** Enrol a `kds` device bound to `stationId`. Returns the device id + the cookie jar. */
-async function enrolKds(
+/** Enrol a `kds` device running a station screen on `stationId` alone. */
+function enrolKds(
   app: Hono,
   venue: Venue,
   stationId: string,
   name = "Pantalla Cocina",
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
-  const profileId = await seedProfile("kds");
+  return enrolStationScreen(app, venue, [stationId], "kds", name);
+}
+
+/** Enrol a device running a station screen on `stationIds` (null: every station), offered on its
+ *  new profile first. */
+async function enrolStationScreen(
+  app: Hono,
+  venue: Venue,
+  stationIds: string[] | null,
+  formFactor: "kds" | "till" = "kds",
+  name = "Pantalla Cocina",
+): Promise<{ deviceId: string; jar: string; profileId: string }> {
+  const profileId = await seedProfile(formFactor);
+  const screen: DeviceKitchenScreen = { kind: "station", stationIds, zoneIds: null };
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, profileId, screen),
+  );
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name,
     profileId,
-    stationId,
+    kitchenScreens: [screen],
   });
   return { deviceId, jar, profileId };
 }
@@ -350,25 +376,10 @@ async function enrolHandheld(
   return { deviceId, jar, profileId };
 }
 
-/** A kitchen screen showing a new watcher named `name`. */
-async function enrolWatching(venue: Venue, name = "Pass") {
-  const watcher = await withTransaction(suite.db, (tx) =>
-    createWatcher(tx, venue.cfg, {
-      name,
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: false,
-    }),
+const shownOn = (venue: Venue, deviceId: string) =>
+  withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
   );
-  const { deviceId } = await enrolDeviceForTest(suite.db, venue.cfg, {
-    name: "Pass screen",
-    profileId: await seedProfile("kds"),
-    watcherId: watcher.id,
-  });
-  return { deviceId, watcherId: watcher.id };
-}
 
 async function switchStationOff(stationId: string): Promise<void> {
   await suite.db
@@ -819,11 +830,11 @@ describe("Device API — the device-guarded routes", () => {
       deviceId,
       formFactor: "till",
       name: "Caja del bar",
-      stationId: null,
+      kitchenScreens: [],
     });
   });
 
-  it("the bound station's read carries its kitchen notices, and the display acknowledges its own only", async () => {
+  it("the station screen's read carries its kitchen notices, and the display acknowledges its own only", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const fria = await withTransaction(suite.db, (tx) =>
@@ -860,12 +871,12 @@ describe("Device API — the device-guarded routes", () => {
         VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
       )
     )[0]!.id;
-    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+    const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
     const notices = async () => {
-      const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+      const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
       expect(res.status).toBe(200);
-      return ((await res.json()) as { station: { notices: { id: string; kind: string }[] } })
-        .station.notices;
+      return ((await res.json()) as { stations: { notices: { id: string; kind: string }[] }[] })
+        .stations[0]!.notices;
     };
 
     const [own] = await notices();
@@ -928,7 +939,7 @@ describe("Device API — the device-guarded routes", () => {
     const [ownItem, foreignItem] = items;
     await moveItemToStation(foreignItem!, fria.id);
 
-    const { deviceId, jar } = await enrolKds(app, venue, venue.defaultStationId);
+    const { deviceId, jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
 
     const ownPrinter = await seedPrinter(venue.cfg);
     const foreignPrinter = await seedPrinter(venue.cfg);
@@ -947,18 +958,18 @@ describe("Device API — the device-guarded routes", () => {
       });
     }
 
-    const stationRes = await send(app, "GET", "/api/device/station", { cookie: jar });
+    const stationRes = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
     expect(stationRes.status).toBe(200);
-    const station = (await stationRes.json()) as {
-      station: {
+    const { stations } = (await stationRes.json()) as {
+      stations: {
         id: string;
         queue: { items: { id: string }[] }[];
         printersDown: { printerId: string }[];
-      };
+      }[];
     };
-    expect(station.station.id).toBe(venue.defaultStationId);
-    expect(station.station.printersDown).toMatchObject([{ printerId: ownPrinter }]);
-    const queuedItemIds = station.station.queue.flatMap((g) => g.items.map((i) => i.id));
+    expect(stations.map((s) => s.id)).toEqual([venue.defaultStationId]);
+    expect(stations[0]!.printersDown).toMatchObject([{ printerId: ownPrinter }]);
+    const queuedItemIds = stations[0]!.queue.flatMap((g) => g.items.map((i) => i.id));
     expect(queuedItemIds).toContain(ownItem);
     expect(queuedItemIds).not.toContain(foreignItem);
 
@@ -984,7 +995,7 @@ describe("Device API — the device-guarded routes", () => {
     });
     expect(revoke.status).toBe(204);
 
-    const afterRevoke = await send(app, "GET", "/api/device/station", { cookie: jar });
+    const afterRevoke = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
     expect(afterRevoke.status).toBe(401);
     expect((await afterRevoke.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.unauthorized" },
@@ -1003,32 +1014,515 @@ describe("Device API — the device-guarded routes", () => {
       .update(kitchenStations)
       .set({ showsRestOfOrder: true })
       .where(eq(kitchenStations.id, venue.defaultStationId));
-    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+    const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
 
-    const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+    const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      station: {
+      stations: {
         queue: {
           orderId: string;
           elsewhere?: { id: string; stationName: string; soldInEach: boolean }[];
         }[];
-      };
+      }[];
     };
-    expect(body.station.queue.find((group) => group.orderId === orderId)?.elsewhere).toEqual([
+    expect(body.stations[0]!.queue.find((group) => group.orderId === orderId)?.elsewhere).toEqual([
       expect.objectContaining({ id: items[1], stationName: "Fría", soldInEach: true }),
     ]);
+  });
+
+  it("a station screen lists its stations in display order, each with its own queue, and a narrowed one unavailable in its place", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const [fria, postre] = await withTransaction(suite.db, async (tx) => [
+      await createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+      await createStation(tx, venue.cfg, { name: "Postre", isDefault: false }),
+    ]);
+    const { items } = await fireOrder(venue);
+    await moveItemToStation(items[1]!, fria!.id);
+    const all = [venue.defaultStationId, fria!.id, postre!.id];
+    const { jar, profileId } = await enrolStationScreen(app, venue, [
+      postre!.id,
+      fria!.id,
+      venue.defaultStationId,
+    ]);
+    type Read = {
+      stations: { id: string; available: boolean; queue?: { items: { id: string }[] }[] }[];
+    };
+    const read = async () => {
+      const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
+      expect(res.status).toBe(200);
+      return (await res.json()) as Read;
+    };
+    const queued = (station: Read["stations"][number]) =>
+      station.queue!.flatMap((group) => group.items.map((item) => item.id));
+
+    const before = await read();
+    expect(before.stations.map((s) => [s.id, s.available])).toEqual(all.map((id) => [id, true]));
+    expect(queued(before.stations[0]!)).toEqual([items[0]]);
+    expect(queued(before.stations[1]!)).toEqual([items[1]]);
+    expect(queued(before.stations[2]!)).toEqual([]);
+
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        station: { stationIds: [venue.defaultStationId, postre!.id], zoneIds: null },
+      }),
+    );
+    const after = await read();
+    expect(after.stations[1]).toEqual({
+      id: fria!.id,
+      name: "Fría",
+      available: false,
+      switchedOff: false,
+    });
+    expect(after.stations.map((s) => [s.id, s.available])).toEqual([
+      [venue.defaultStationId, true],
+      [fria!.id, false],
+      [postre!.id, true],
+    ]);
+    const narrowed = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
+      cookie: jar,
+      body: { to: "preparing" },
+    });
+    expect(narrowed.status).toBe(403);
+    expect(await narrowed.json()).toMatchObject({
+      error: { code: "device.forbidden_station", params: { stationId: fria!.id } },
+    });
+  });
+
+  describe("a station switched off on its own page keeps its waiting dishes (owner 2026-10-09)", () => {
+    type Entry = {
+      id: string;
+      name: string;
+      available: boolean;
+      switchedOff?: boolean;
+      today?: { why: string };
+      queue?: { items: { id: string }[] }[];
+      notices?: { id: string }[];
+    };
+    const queued = (entry: Entry) =>
+      entry.queue?.flatMap((group) => group.items.map((item) => item.id));
+
+    /** A dish at Grill (the default station) and one, with a void notice, at Fría. */
+    async function seed() {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const fria = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+      );
+      const { orderId, items } = await fireOrder(venue);
+      await moveItemToStation(items[1]!, fria.id);
+      await withTransaction(suite.db, async (tx) => {
+        const { rows } = await tx.execute<{ id: string }>(sql`
+          select id from working_order_lines where working_order_id = ${orderId} order by line_no`);
+        await VENUE_SERVICE.recordKitchenNotices(
+          tx,
+          venue.cfg,
+          orderId,
+          [
+            {
+              workingOrderLineId: rows[1]!.id,
+              stationId: fria.id,
+              quantity: decimal("1"),
+              wasStarted: false,
+            },
+          ],
+          "void",
+        );
+      });
+      const notice = (
+        await withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+        )
+      )[0]!.id;
+      return { venue, app, fria: fria.id, orderId, items, notice };
+    }
+
+    const read = async (app: Hono, jar: string) => {
+      const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { stations: Entry[] }).stations;
+    };
+    const advance = (app: Hono, jar: string, item: string, to: string) =>
+      send(app, "POST", `/api/device/ticket-items/${item}/advance`, { cookie: jar, body: { to } });
+    const acknowledge = (app: Hono, jar: string, notice: string) =>
+      send(app, "POST", `/api/device/kitchen-notices/${notice}/acknowledge`, { cookie: jar });
+
+    it("sends it with its queue, notices and today, and its dish and notice can still be worked", async () => {
+      const { venue, app, fria, orderId, items, notice } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      await switchStationOff(fria);
+
+      const [, off] = await read(app, jar);
+      expect(off).toMatchObject({
+        id: fria,
+        name: "Fría",
+        available: false,
+        switchedOff: true,
+        today: { why: "switched_off" },
+        notices: [{ id: notice }],
+      });
+      expect(queued(off!)).toEqual([items[1]]);
+      expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+      expect((await advance(app, jar, items[1]!, "ready")).status).toBe(204);
+      expect((await acknowledge(app, jar, notice)).status).toBe(204);
+
+      await suite.db.execute(
+        sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${orderId}`,
+      );
+      const [, done] = await read(app, jar);
+      expect(done).toMatchObject({ id: fria, available: false, switchedOff: true, notices: [] });
+      expect(queued(done!)).toEqual([]);
+    });
+
+    it("reads every station's notices together, each station its own", async () => {
+      const { venue, app, fria, orderId, notice } = await seed();
+      const [grillNotice] = await suite.db
+        .insert(kitchenNotices)
+        .values({
+          stationId: venue.defaultStationId,
+          workingOrderId: orderId,
+          orderLabel: "#1",
+          kind: "void",
+          lineName: "Burger",
+          quantity: 1000,
+        })
+        .returning({ id: kitchenNotices.id });
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const perStation = vi.spyOn(VENUE_SERVICE, "listStationNotices");
+      const batched = vi.spyOn(VENUE_SERVICE, "listStationsNotices");
+      try {
+        const stations = await read(app, jar);
+        expect(stations.map((entry) => [entry.id, entry.notices?.map((n) => n.id)])).toEqual([
+          [venue.defaultStationId, [grillNotice!.id]],
+          [fria, [notice]],
+        ]);
+        expect(perStation).not.toHaveBeenCalled();
+        expect(batched).toHaveBeenCalledTimes(1);
+      } finally {
+        perStation.mockRestore();
+        batched.mockRestore();
+      }
+    });
+
+    it("keeps its printers-down line with its waiting dishes", async () => {
+      const { venue, app, fria, items } = await seed();
+      const printerId = await seedPrinter(venue.cfg);
+      await suite.db.insert(stationPrinters).values({ stationId: fria, printerId });
+      await suite.db.insert(printJobs).values({
+        locationId: venue.cfg.locationId,
+        printerId,
+        payload: Uint8Array.of(1),
+        status: "failed",
+        attempts: 5,
+        createdAt: "2026-10-02T18:00:00.000Z",
+      });
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const printersDown = async () =>
+        ((await read(app, jar)) as (Entry & { printersDown?: { printerId: string }[] })[]).find(
+          (entry) => entry.id === fria,
+        );
+      expect((await printersDown())!.printersDown).toMatchObject([{ printerId }]);
+
+      await switchStationOff(fria);
+
+      const off = await printersDown();
+      expect(off).toMatchObject({ switchedOff: true, printersDown: [{ printerId }] });
+      expect(queued(off!)).toEqual([items[1]]);
+    });
+
+    it("sends one a narrowing took with no queue, and refuses its dish and its notice", async () => {
+      const { venue, app, fria, items, notice } = await seed();
+      const { jar, profileId } = await enrolStationScreen(app, venue, [
+        venue.defaultStationId,
+        fria,
+      ]);
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          station: { stationIds: [venue.defaultStationId], zoneIds: null },
+        }),
+      );
+      const [, taken] = await read(app, jar);
+      expect(taken).toEqual({ id: fria, name: "Fría", available: false, switchedOff: false });
+      const refused = await advance(app, jar, items[1]!, "preparing");
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "device.forbidden_station", params: { stationId: fria } },
+      });
+      const ack = await acknowledge(app, jar, notice);
+      expect(ack.status).toBe(404);
+      expect(await ack.json()).toMatchObject({ error: { code: "kitchen_notice.not_found" } });
+    });
+
+    it("lists it on an every-station screen under an every-station profile only while dishes wait there", async () => {
+      const { venue, app, fria, orderId, items } = await seed();
+      const postre = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Postre", isDefault: false }),
+      );
+      const { jar } = await enrolStationScreen(app, venue, null);
+      await switchStationOff(fria);
+      await switchStationOff(postre.id);
+
+      const waiting = await read(app, jar);
+      expect(waiting.map((entry) => entry.id)).not.toContain(postre.id);
+      const off = waiting.find((entry) => entry.id === fria);
+      expect(off).toMatchObject({ name: "Fría", available: false, switchedOff: true });
+      expect(queued(off!)).toEqual([items[1]]);
+      expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+
+      await suite.db.execute(
+        sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${orderId}`,
+      );
+      const done = await read(app, jar);
+      expect(done.map((entry) => entry.id)).toEqual([venue.defaultStationId]);
+      const after = await advance(app, jar, items[1]!, "ready");
+      expect(after.status).toBe(403);
+      expect(await after.json()).toMatchObject({ error: { code: "device.forbidden_station" } });
+    });
+
+    it("refuses, on an every-station screen, a switched-off station's dish at another location", async () => {
+      const { venue, app, fria, items } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, null);
+      const [elsewhere] = await suite.db
+        .insert(locations)
+        .values({ name: "Otro local", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+        .returning({ id: locations.id });
+      await switchStationOff(fria);
+      await suite.db
+        .update(kitchenStations)
+        .set({ locationId: elsewhere!.id })
+        .where(eq(kitchenStations.id, fria));
+
+      const refused = await advance(app, jar, items[1]!, "preparing");
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "device.forbidden_station", params: { stationId: fria } },
+      });
+    });
+
+    it("reads the device's kitchen screens once per request, on an every-station screen too", async () => {
+      const { venue, app, fria, items, notice } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, null);
+      await switchStationOff(fria);
+      const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
+      try {
+        expect((await read(app, jar)).map((entry) => entry.id)).toContain(fria);
+        expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+        expect((await acknowledge(app, jar, notice)).status).toBe(204);
+        expect(single).toHaveBeenCalledTimes(3);
+      } finally {
+        single.mockRestore();
+      }
+    });
+  });
+
+  it("a station screen a narrowing took answers device.unauthorized, and the device's identity says which", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { jar, profileId } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
+    const read = () => send(app, "GET", "/api/device/station-screen", { cookie: jar });
+    expect((await read()).status).toBe(200);
+
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        pass: { stationIds: null, zoneIds: null },
+      }),
+    );
+    const refused = await read();
+    expect(refused.status).toBe(401);
+    expect(await refused.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    const me = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(me.status).toBe(200);
+    expect(((await me.json()) as { kitchenScreens: unknown }).kitchenScreens).toEqual([
+      {
+        kind: "station",
+        available: false,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: false,
+        stations: [],
+        zones: null,
+      },
+    ]);
+  });
+
+  it("a till whose station choice a narrowing emptied reads the kind as kept and every station of it as taken", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const fria = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+    );
+    const { jar, profileId } = await enrolStationScreen(
+      app,
+      venue,
+      [venue.defaultStationId],
+      "till",
+      "Caja",
+    );
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        station: { stationIds: [fria.id], zoneIds: null },
+      }),
+    );
+    const me = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(me.status).toBe(200);
+    expect(((await me.json()) as { kitchenScreens: unknown }).kitchenScreens).toEqual([
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: false,
+        profileEveryStation: false,
+        stations: [
+          {
+            id: venue.defaultStationId,
+            name: expect.any(String),
+            available: false,
+            switchedOff: false,
+          },
+        ],
+        zones: null,
+      },
+    ]);
+  });
+
+  it("a station screen reads its stations' queues and printers together, each station its own", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const [fria, postre] = await withTransaction(suite.db, async (tx) => [
+      await createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+      await createStation(tx, venue.cfg, { name: "Postre", isDefault: false }),
+    ]);
+    const { orderId, items } = await fireOrder(venue);
+    await moveItemToStation(items[1]!, fria!.id);
+    await suite.db
+      .update(kitchenStations)
+      .set({ showsRestOfOrder: true })
+      .where(eq(kitchenStations.id, fria!.id));
+    const printerAt = new Map<string, string>();
+    for (const stationId of [venue.defaultStationId, postre!.id]) {
+      const printerId = await seedPrinter(venue.cfg);
+      printerAt.set(stationId, printerId);
+      await suite.db.insert(stationPrinters).values({ stationId, printerId });
+      await suite.db.insert(printJobs).values({
+        locationId: venue.cfg.locationId,
+        printerId,
+        payload: Uint8Array.of(1),
+        status: "failed",
+        attempts: 5,
+        createdAt: "2026-10-02T18:00:00.000Z",
+      });
+    }
+    const { jar } = await enrolStationScreen(app, venue, [
+      venue.defaultStationId,
+      fria!.id,
+      postre!.id,
+    ]);
+    type Station = {
+      id: string;
+      queue: { orderId: string; items: { id: string }[]; elsewhere?: { id: string }[] }[];
+      printersDown: { printerId: string }[];
+    };
+    const soldInEach = vi.spyOn(VENUE_SERVICE, "readLinesSoldInEach");
+    let stations: Station[];
+    try {
+      const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
+      expect(res.status).toBe(200);
+      stations = ((await res.json()) as { stations: Station[] }).stations;
+      // One read for every station's dishes, and one for the rest of their orders.
+      expect(soldInEach).toHaveBeenCalledTimes(2);
+    } finally {
+      soldInEach.mockRestore();
+    }
+    const byId = new Map(stations.map((station) => [station.id, station]));
+    const queued = (id: string) =>
+      byId.get(id)!.queue.flatMap((group) => group.items.map((item) => item.id));
+    expect(queued(venue.defaultStationId)).toEqual([items[0]]);
+    expect(queued(fria!.id)).toEqual([items[1]]);
+    expect(queued(postre!.id)).toEqual([]);
+    expect(byId.get(venue.defaultStationId)!.queue[0]!.elsewhere).toBeUndefined();
+    expect(byId.get(fria!.id)!.queue).toMatchObject([{ orderId, elsewhere: [{ id: items[0] }] }]);
+    expect(byId.get(venue.defaultStationId)!.printersDown).toMatchObject([
+      { printerId: printerAt.get(venue.defaultStationId) },
+    ]);
+    expect(byId.get(fria!.id)!.printersDown).toEqual([]);
+    expect(byId.get(postre!.id)!.printersDown).toMatchObject([
+      { printerId: printerAt.get(postre!.id) },
+    ]);
+  });
+
+  it("advance refuses an item at a station outside the screen, and an every-station screen advances it", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const [fria, postre] = await withTransaction(suite.db, async (tx) => [
+      await createStation(tx, venue.cfg, { name: "Fría", isDefault: false }),
+      await createStation(tx, venue.cfg, { name: "Postre", isDefault: false }),
+    ]);
+    const { items } = await fireOrder(venue);
+    await moveItemToStation(items[1]!, postre!.id);
+    const two = await enrolStationScreen(app, venue, [venue.defaultStationId, fria!.id]);
+    const refused = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
+      cookie: two.jar,
+      body: { to: "preparing" },
+    });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "device.forbidden_station", params: { stationId: postre!.id } },
+    });
+    const every = await enrolStationScreen(app, venue, null, "kds", "Pantalla Todo");
+    const advanced = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
+      cookie: every.jar,
+      body: { to: "preparing" },
+    });
+    expect(advanced.status).toBe(204);
+    const [item] = await suite.db
+      .select({ state: ticketItems.state })
+      .from(ticketItems)
+      .where(eq(ticketItems.id, items[1]!));
+    expect(item!.state).toBe("preparing");
+  });
+
+  it("a till's station screen needs a signed-in session; the old station route is gone", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { items } = await fireOrder(venue);
+    const till = await enrolStationScreen(app, venue, [venue.defaultStationId], "till", "Caja");
+    const anonymous = await send(app, "GET", "/api/device/station-screen", { cookie: till.jar });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
+    const anonymousAdvance = await send(
+      app,
+      "POST",
+      `/api/device/ticket-items/${items[0]}/advance`,
+      { cookie: till.jar, body: { to: "preparing" } },
+    );
+    expect(anonymousAdvance.status).toBe(401);
+    expect(await anonymousAdvance.json()).toMatchObject({ error: { code: "session.required" } });
+    const signedIn = `${till.jar}; ${await openTillSession(till.deviceId)}`;
+    const res = await send(app, "GET", "/api/device/station-screen", { cookie: signedIn });
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { stations: { id: string }[] }).stations.map((s) => s.id),
+    ).toEqual([venue.defaultStationId]);
+    const advanced = await send(app, "POST", `/api/device/ticket-items/${items[0]}/advance`, {
+      cookie: signedIn,
+      body: { to: "preparing" },
+    });
+    expect(advanced.status).toBe(204);
+
+    const kds = await enrolStationScreen(app, venue, [venue.defaultStationId]);
+    expect((await send(app, "GET", "/api/device/station", { cookie: kds.jar })).status).toBe(404);
   });
 
   it("the device routes refuse a missing / malformed cookie with 401 device.unauthorized", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const noCookie = await send(app, "GET", "/api/device/station", { cookie: null });
+    const noCookie = await send(app, "GET", "/api/device/station-screen", { cookie: null });
     expect(noCookie.status).toBe(401);
     expect((await noCookie.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.unauthorized" },
     });
-    const garbage = await send(app, "GET", "/api/device/station", {
+    const garbage = await send(app, "GET", "/api/device/station-screen", {
       cookie: `${DEVICE_COOKIE}=not-a-valid-cookie`,
     });
     expect(garbage.status).toBe(401);
@@ -1038,7 +1532,7 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
-    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+    const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
 
     const skip = await send(app, "POST", `/api/device/ticket-items/${items[0]}/advance`, {
       cookie: jar,
@@ -1060,7 +1554,7 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
-    const { jar } = await enrolKds(app, venue, venue.defaultStationId);
+    const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
 
     const empty = await app.request(`/api/device/ticket-items/${items[0]}/advance`, {
       method: "POST",
@@ -1124,18 +1618,34 @@ describe("Device management routes (device.manage)", () => {
     const rows = (await res.json()) as {
       id: string;
       kind: string;
-      stationId: string;
+      kitchenScreens: unknown;
       deviceProfileId: string;
       label: string;
       active: boolean;
     }[];
     expect(rows.find((r) => r.id === deviceId)).toMatchObject({
       kind: "kds_station",
-      stationId: venue.defaultStationId,
+      kitchenScreens: [{ kind: "station", stations: [{ id: venue.defaultStationId }] }],
       deviceProfileId: profileId,
       label: "Pantalla Cocina",
       active: true,
     });
+  });
+
+  it("an accepted kitchen display's own read and the list name no station or watcher", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId, jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
+    const me = (await (await send(app, "GET", "/api/device/me", { cookie: jar })).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(me).not.toHaveProperty("stationId");
+    expect(me).not.toHaveProperty("watcherId");
+    const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    const listed = ((await res.json()) as Record<string, unknown>[]).find((r) => r.id === deviceId);
+    expect(listed).toBeDefined();
+    for (const key of ["stationId", "watcherId", "binding"]) expect(listed).not.toHaveProperty(key);
   });
 
   it("GET /management-api/devices names what each kitchen screen shows, and whether it is switched on", async () => {
@@ -1148,18 +1658,55 @@ describe("Device management routes (device.manage)", () => {
     const live = await enrolKds(app, venue, liveStation!.id, "Pantalla plancha");
     const off = await enrolKds(app, venue, offStation!.id, "Pantalla horno");
     await switchStationOff(offStation!.id);
-    const watching = await enrolWatching(venue, "Pase");
-    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watching.watcherId));
     const till = await enrolTill(app, venue, "Caja");
 
     const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
     expect(res.status).toBe(200);
-    const rows = (await res.json()) as { id: string; binding: unknown }[];
-    const bindingOf = (id: string) => rows.find((r) => r.id === id)?.binding;
-    expect(bindingOf(live.deviceId)).toEqual({ name: "Plancha", active: true });
-    expect(bindingOf(off.deviceId)).toEqual({ name: "Horno", active: false });
-    expect(bindingOf(watching.deviceId)).toEqual({ name: "Pase", active: false });
-    expect(bindingOf(till.deviceId)).toBeNull();
+    const rows = (await res.json()) as { id: string; kitchenScreens: unknown }[];
+    const screensOf = (id: string) => rows.find((r) => r.id === id)?.kitchenScreens;
+    const stationScreenOn = (name: string, available: boolean) => [
+      { kind: "station", available: true, stations: [{ name, available }], zones: null },
+    ];
+    expect(screensOf(live.deviceId)).toMatchObject(stationScreenOn("Plancha", true));
+    expect(screensOf(off.deviceId)).toMatchObject(stationScreenOn("Horno", false));
+    expect(screensOf(till.deviceId)).toEqual([]);
+  });
+
+  it("GET /management-api/devices reads every device's kitchen screens in one batch, each its own", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const fria = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Fría" }),
+    );
+    const one = await enrolStationScreen(app, venue, [venue.defaultStationId], "kds", "Uno");
+    const two = await enrolStationScreen(app, venue, [fria.id], "kds", "Dos");
+    const every = await enrolStationScreen(app, venue, null, "kds", "Todo");
+    const till = await enrolTill(app, venue, "Caja");
+    const ids = [one, two, every, till].map((device) => device.deviceId);
+    const expected = new Map<string, unknown>();
+    for (const id of ids)
+      expected.set(
+        id,
+        await withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, id),
+        ),
+      );
+    expect(new Set([...expected.values()].map((screens) => JSON.stringify(screens))).size).toBe(4);
+    const batch = vi.spyOn(VENUE_SERVICE, "readDevicesKitchenScreens");
+    const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
+    try {
+      const res = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as { id: string; kitchenScreens: unknown }[];
+      expect(new Map(rows.map((row) => [row.id, row.kitchenScreens]))).toEqual(expected);
+      expect(batch).toHaveBeenCalledTimes(1);
+      expect(single).not.toHaveBeenCalled();
+    } finally {
+      batch.mockRestore();
+      single.mockRestore();
+    }
   });
 
   it("GET /management-api/devices says whether each device's profile was retired", async () => {
@@ -1208,11 +1755,10 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
   type EditBody = {
     name: string;
     profileId: string;
-    stationId: string | null;
-    watcherId: string | null;
     receiptPrinterId: string | null;
     paymentSlipPrinterId: string | null;
     madeHereStationIds: string[];
+    kitchenScreens?: unknown;
   };
 
   /** The device's stored settings as an edit body, so a case changes only its own field. */
@@ -1221,8 +1767,6 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       .select({
         name: devices.label,
         profileId: devices.deviceProfileId,
-        stationId: devices.stationId,
-        watcherId: devices.watcherId,
         receiptPrinterId: devices.receiptPrinterId,
         paymentSlipPrinterId: devices.paymentSlipPrinterId,
       })
@@ -1490,20 +2034,400 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(await labelOf(deviceId)).toBe("Caja");
   });
 
-  it("a kitchen screen's profile without a station or watcher is device.station_required", async () => {
+  it("a kitchen display edited to no kitchen screen is kitchen_screen.required", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
     const res = await edit(app, venue.managerCookie, deviceId, {
       name: "Renamed",
-      stationId: null,
-      watcherId: null,
+      kitchenScreens: [],
     });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "device.station_required" } });
-    expect(await storedBody(deviceId)).toMatchObject({
-      name: "Pantalla Cocina",
-      stationId: venue.defaultStationId,
+    expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
+    expect(await storedBody(deviceId)).toMatchObject({ name: "Pantalla Cocina" });
+    expect(await shownOn(venue, deviceId)).toMatchObject([
+      { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
+    ]);
+  });
+
+  describe("a device's kitchen screens", () => {
+    /** A kitchen display showing a station screen on Cocina, Off and Grill; the profile then drops
+     * Grill, and Off is switched off. */
+    async function narrowedKds(venue: Venue, app: Hono) {
+      const [off, grill] = await withTransaction(suite.db, async (tx) => [
+        await createStation(tx, venue.cfg, { name: "Off" }),
+        await createStation(tx, venue.cfg, { name: "Grill" }),
+      ]);
+      const profileId = await seedProfile("kds");
+      const offer = (stationIds: string[]) =>
+        withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+            station: { stationIds, zoneIds: null },
+          }),
+        );
+      await offer([venue.defaultStationId, off!.id, grill!.id]);
+      const { deviceId, jar } = await knockAndAccept(app, venue, {
+        name: "Pantalla Cocina",
+        profileId,
+        kitchenScreens: [
+          {
+            kind: "station",
+            stationIds: [venue.defaultStationId, off!.id, grill!.id],
+            zoneIds: null,
+          },
+        ],
+      });
+      await offer([venue.defaultStationId, off!.id]);
+      await switchStationOff(off!.id);
+      return { deviceId, jar, profileId, off: off!.id, grill: grill!.id };
+    }
+
+    const shown = (venue: Venue, deviceId: string) =>
+      withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+      );
+
+    it("a PATCH without kitchenScreens keeps a station switched off since, and what a narrowing took", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, off, grill } = await narrowedKds(venue, app);
+      const before = await shown(venue, deviceId);
+      expect(before).toMatchObject([
+        {
+          kind: "station",
+          stations: [
+            { id: venue.defaultStationId, available: true },
+            { id: grill, available: false },
+            { id: off, available: false },
+          ],
+        },
+      ]);
+
+      const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
+
+      expect(res.status).toBe(204);
+      expect(await labelOf(deviceId)).toBe("Renamed");
+      expect(await shown(venue, deviceId)).toEqual(before);
+    });
+
+    it("a PATCH with kitchenScreens replaces the choice and forgets what a narrowing took", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId } = await narrowedKds(venue, app);
+
+      const res = await edit(app, venue.managerCookie, deviceId, {
+        kitchenScreens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
+      });
+
+      expect(res.status).toBe(204);
+      expect(await shown(venue, deviceId)).toEqual([
+        {
+          kind: "station",
+          available: true,
+          everyStation: false,
+          everyZone: true,
+          profileEveryStation: false,
+          stations: [
+            {
+              id: venue.defaultStationId,
+              name: expect.any(String),
+              available: true,
+              switchedOff: false,
+            },
+          ],
+          zones: null,
+        },
+      ]);
+    });
+
+    it("a kitchen display whose pass screen a narrowing took, moved to a till without naming kitchen screens, gets its pass screen back: a till profile with no pass row bounds nothing", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const kds = await seedProfile("kds");
+      const every = { stationIds: null, zoneIds: null };
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, kds, { pass: every }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, {
+        name: "Pantalla Pase",
+        profileId: kds,
+        kitchenScreens: [{ kind: "pass", ...every }],
+      });
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, kds, { station: every }),
+      );
+      const till = await seedProfile("till");
+
+      expect((await edit(app, venue.managerCookie, deviceId, { profileId: till })).status).toBe(
+        204,
+      );
+      expect(await shown(venue, deviceId)).toEqual([
+        {
+          kind: "pass",
+          available: true,
+          everyStation: true,
+          everyZone: true,
+          profileEveryStation: true,
+          stations: [
+            {
+              id: venue.defaultStationId,
+              name: expect.any(String),
+              available: true,
+              switchedOff: false,
+            },
+          ],
+          zones: null,
+        },
+      ]);
+      expect(await removalCount(deviceId)).toBe(0);
+    });
+
+    it("a PATCH moving a till to a profile without a station it chose, and a second moving it back, gives the station back", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const deli = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Deli" }),
+      );
+      const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, narrow, {
+          station: { stationIds: [venue.defaultStationId], zoneIds: null },
+        }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, {
+        name: "Caja",
+        profileId: wide,
+        kitchenScreens: [
+          { kind: "station", stationIds: [venue.defaultStationId, deli.id], zoneIds: null },
+        ],
+      });
+      const deliSlot = async () =>
+        (await shown(venue, deviceId))[0]!.stations.find((slot) => slot.id === deli.id);
+
+      expect((await edit(app, venue.managerCookie, deviceId, { profileId: narrow })).status).toBe(
+        204,
+      );
+      expect(await deliSlot()).toMatchObject({ available: false, switchedOff: false });
+      expect(await removalCount(deviceId)).toBe(1);
+
+      expect((await edit(app, venue.managerCookie, deviceId, { profileId: wide })).status).toBe(
+        204,
+      );
+      expect(await deliSlot()).toEqual({
+        id: deli.id,
+        name: "Deli",
+        available: true,
+        switchedOff: false,
+      });
+      expect(await removalCount(deviceId)).toBe(0);
+    });
+
+    it("a PATCH may keep a station switched off since, but not choose another", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, off } = await narrowedKds(venue, app);
+      expect(
+        (
+          await edit(app, venue.managerCookie, deviceId, {
+            kitchenScreens: [{ kind: "station", stationIds: [off], zoneIds: null }],
+          })
+        ).status,
+      ).toBe(204);
+      const other = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Other" }),
+      );
+      await switchStationOff(other.id);
+      const res = await edit(app, venue.managerCookie, deviceId, {
+        kitchenScreens: [{ kind: "station", stationIds: [other.id], zoneIds: null }],
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: {
+          code: "kitchen_screen.invalid",
+          params: { field: "stationIds", reason: "not_found" },
+        },
+      });
+    });
+
+    it("answers kitchen_screen.not_allowed 403 for a kind the profile does not offer, and a malformed list 400", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId } = await narrowedKds(venue, app);
+      const refused = await edit(app, venue.managerCookie, deviceId, {
+        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
+      });
+      for (const kitchenScreens of [
+        "station",
+        [{ kind: "nope", stationIds: null, zoneIds: null }],
+        [{ kind: "station", stationIds: ["bad"], zoneIds: null }],
+        [{ kind: "station", stationIds: null, zoneIds: "bad" }],
+        [null],
+      ]) {
+        const res = await edit(app, venue.managerCookie, deviceId, { kitchenScreens });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "kitchenScreens" } },
+        });
+      }
+    });
+
+    /** A kitchen display running a pass monitor on Cocina and Grill, both offered on its profile. */
+    async function monitorKds(venue: Venue, app: Hono) {
+      const grill = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Grill" }),
+      );
+      const profileId = await seedProfile("kds");
+      const monitor: DeviceKitchenScreen = {
+        kind: "pass_monitor",
+        stationIds: [venue.defaultStationId, grill.id],
+        zoneIds: null,
+      };
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, profileId, monitor),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, {
+        name: "Monitor Pase",
+        profileId,
+        kitchenScreens: [monitor],
+      });
+      return { deviceId, profileId, grill: grill.id };
+    }
+
+    it("a PATCH moving a kitchen display's pass monitor onto a till profile takes the monitor", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId } = await monitorKds(venue, app);
+      const till = await seedProfile("till");
+
+      const res = await edit(app, venue.managerCookie, deviceId, { profileId: till });
+
+      expect(res.status).toBe(204);
+      expect((await deviceBindings(deviceId)).deviceProfileId).toBe(till);
+      expect(await shown(venue, deviceId)).toMatchObject([
+        { kind: "pass_monitor", available: false },
+      ]);
+    });
+
+    it("a PATCH moving a kitchen display onto a profile offering fewer stations narrows its screen to them", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, grill } = await monitorKds(venue, app);
+      const fewer = await seedProfile("kds");
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, fewer, {
+          kind: "pass_monitor",
+          stationIds: [venue.defaultStationId],
+          zoneIds: null,
+        }),
+      );
+
+      const res = await edit(app, venue.managerCookie, deviceId, { profileId: fewer });
+
+      expect(res.status).toBe(204);
+      expect(await shown(venue, deviceId)).toMatchObject([
+        {
+          kind: "pass_monitor",
+          available: true,
+          stations: [
+            { id: venue.defaultStationId, available: true },
+            { id: grill, available: false },
+          ],
+        },
+      ]);
+    });
+
+    it("a PATCH moving a kitchen display onto a kitchen display profile offering nothing is kitchen_screen.required, and changes nothing", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, profileId } = await monitorKds(venue, app);
+      const before = await shown(venue, deviceId);
+      const bare = await seedProfile("kds");
+
+      const res = await edit(app, venue.managerCookie, deviceId, { profileId: bare });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
+      expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
+      expect(await shown(venue, deviceId)).toEqual(before);
+    });
+
+    it("a PATCH naming the station of a kitchen display moved onto a profile not offering its station screen is kitchen_screen.required", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, profileId } = await enrolStationScreen(app, venue, [
+        venue.defaultStationId,
+      ]);
+      const before = await shown(venue, deviceId);
+      expect(before).toMatchObject([
+        { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
+      ]);
+      const passOnly = await seedProfile("kds");
+      await withTransaction(suite.db, async (tx) => {
+        await VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, passOnly, {
+          kind: "pass",
+          stationIds: null,
+          zoneIds: null,
+        });
+      });
+
+      const res = await edit(app, venue.managerCookie, deviceId, { profileId: passOnly });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
+      expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
+      expect(await shown(venue, deviceId)).toEqual(before);
+    });
+
+    it("a PATCH moving a till onto a kitchen display profile with no screen chosen is kitchen_screen.required", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, profileId } = await enrolTill(app, venue, "Caja");
+      const kds = await seedProfile("kds");
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, kds, {
+          kind: "station",
+          stationIds: null,
+          zoneIds: null,
+        }),
+      );
+
+      const res = await edit(app, venue.managerCookie, deviceId, { profileId: kds });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
+      expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
+    });
+
+    it("the device list and /api/device/me carry the device's kitchen screens, a removed station not available", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { deviceId, jar, grill } = await narrowedKds(venue, app);
+      const expected = await shown(venue, deviceId);
+      expect(expected).toMatchObject([
+        {
+          kind: "station",
+          stations: expect.arrayContaining([
+            { id: grill, name: "Grill", available: false, switchedOff: false },
+          ]),
+        },
+      ]);
+
+      const listed = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(listed.status).toBe(200);
+      const row = ((await listed.json()) as { id: string; kitchenScreens: unknown }[]).find(
+        (entry) => entry.id === deviceId,
+      );
+      expect(row?.kitchenScreens).toEqual(expected);
+
+      const me = await send(app, "GET", "/api/device/me", { cookie: jar });
+      expect(me.status).toBe(200);
+      expect(((await me.json()) as { kitchenScreens: unknown }).kitchenScreens).toEqual(expected);
     });
   });
 
@@ -1533,98 +2457,40 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(res.status).toBe(204);
     expect(await storedBody(deviceId)).toMatchObject({
       name: "Renamed",
-      stationId: off.id,
-      watcherId: null,
       madeHereStationIds: [venue.defaultStationId],
     });
-  });
-
-  it("renames a kitchen screen whose watcher has since been disabled, keeping the watcher", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const { deviceId, watcherId } = await enrolWatching(venue);
-    expect(
-      (
-        await edit(app, venue.managerCookie, deviceId, {
-          madeHereStationIds: [venue.defaultStationId],
-        })
-      ).status,
-    ).toBe(204);
-    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcherId));
-
-    // As the dashboard sends a kitchen screen's save: without the made-here stations.
-    const { madeHereStationIds: before, ...rest } = await storedBody(deviceId);
-    expect(before).toEqual([venue.defaultStationId]);
-    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
-      cookie: venue.managerCookie,
-      body: { ...rest, name: "Renamed" },
-    });
-    expect(res.status).toBe(204);
-    expect(await storedBody(deviceId)).toMatchObject({
-      name: "Renamed",
-      stationId: null,
-      watcherId,
-      madeHereStationIds: [venue.defaultStationId],
-    });
+    expect(await shownOn(venue, deviceId)).toMatchObject([
+      { kind: "station", stations: [{ id: off.id, available: false }] },
+    ]);
   });
 
   it("refuses switching a kitchen screen to a switched-off station that is not its own", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
     const off = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Off" }),
     );
+    const { deviceId } = await enrolStationScreen(app, venue, null);
     await switchStationOff(off.id);
 
     const res = await edit(app, venue.managerCookie, deviceId, {
       name: "Renamed",
-      stationId: off.id,
+      kitchenScreens: [{ kind: "station", stationIds: [off.id], zoneIds: null }],
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
-      error: { code: "station.not_found", params: { stationId: off.id } },
+      error: {
+        code: "kitchen_screen.invalid",
+        params: { field: "stationIds", reason: "not_found" },
+      },
     });
-    expect(await storedBody(deviceId)).toMatchObject({
-      name: "Pantalla Cocina",
-      stationId: venue.defaultStationId,
-    });
+    expect(await storedBody(deviceId)).toMatchObject({ name: "Pantalla Cocina" });
+    const [shown] = await shownOn(venue, deviceId);
+    expect(shown!.stations.map((station) => station.id)).not.toContain(off.id);
+    expect(shown!.stations.map((station) => station.id)).toContain(venue.defaultStationId);
   });
 
-  it("refuses switching a kitchen screen to a disabled watcher that is not its own", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const { deviceId, watcherId } = await enrolWatching(venue);
-    const other = await withTransaction(suite.db, async (tx) => {
-      const made = await createWatcher(tx, venue.cfg, {
-        name: "Other",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      });
-      await removeWatcher(tx, venue.cfg, made.id, true);
-      return made;
-    });
-    const [stored] = await suite.db
-      .select({ active: watchers.active })
-      .from(watchers)
-      .where(eq(watchers.id, other.id));
-    expect(stored).toEqual({ active: false });
-
-    const res = await edit(app, venue.managerCookie, deviceId, {
-      name: "Renamed",
-      watcherId: other.id,
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({
-      error: { code: "watcher.not_found", params: { watcherId: other.id } },
-    });
-    expect(await storedBody(deviceId)).toMatchObject({ name: "Pass screen", watcherId });
-  });
-
-  describe("a kitchen screen's station or watcher, chosen from its profile's lists", () => {
+  describe("a kitchen screen's station, chosen from its profile's", () => {
     async function kitchenProfile(venue: Venue) {
       const [grill, cold, pastry] = await withTransaction(suite.db, async (tx) => [
         await createStation(tx, venue.cfg, { name: "Grill" }),
@@ -1633,9 +2499,8 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       ]);
       const profileId = await seedProfile("kds", ["prepare-orders"]);
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenLists(tx, venue.cfg, profileId, {
-          stationIds: [grill!.id, cold!.id],
-          watcherIds: [],
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          station: { stationIds: [grill!.id, cold!.id], zoneIds: null },
         }),
       );
       return { profileId, grill: grill!.id, cold: cold!.id, pastry: pastry!.id };
@@ -1645,88 +2510,37 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { profileId, grill, cold, pastry } = await kitchenProfile(venue);
+      const on = (stationId: string): DeviceKitchenScreen[] => [
+        { kind: "station", stationIds: [stationId], zoneIds: null },
+      ];
       const first = await knockAndAccept(app, venue, {
         name: "Screen 1",
         profileId,
-        stationId: grill,
+        kitchenScreens: on(grill),
       });
       const second = await knockAndAccept(app, venue, {
         name: "Screen 2",
         profileId,
-        stationId: grill,
+        kitchenScreens: on(grill),
       });
 
       expect(
-        (await edit(app, venue.managerCookie, second.deviceId, { stationId: cold })).status,
+        (await edit(app, venue.managerCookie, second.deviceId, { kitchenScreens: on(cold) }))
+          .status,
       ).toBe(204);
-      const refused = await edit(app, venue.managerCookie, first.deviceId, { stationId: pastry });
+      const refused = await edit(app, venue.managerCookie, first.deviceId, {
+        kitchenScreens: on(pastry),
+      });
       expect({ status: refused.status, body: await refused.json() }).toEqual({
         status: 400,
-        body: { error: { code: "station.not_allowed", params: { stationId: pastry } } },
+        body: {
+          error: { code: "station.not_allowed", params: { stationId: pastry, screen: "station" } },
+        },
       });
-      expect(await storedBody(first.deviceId)).toMatchObject({ stationId: grill });
-      expect(await storedBody(second.deviceId)).toMatchObject({ stationId: cold });
-    });
-
-    it("gives a screen a listed watcher, which then shows that watcher's stations only, and refuses one not listed", async () => {
-      const venue = await setupVenue(suite.db);
-      const app = mountApp(venue.cfg);
-      const { profileId, grill } = await kitchenProfile(venue);
-      const [pass, bar] = await withTransaction(suite.db, async (tx) => [
-        await createWatcher(tx, venue.cfg, {
-          name: "Pass",
-          everyStation: false,
-          stationIds: [venue.defaultStationId],
-          everyZone: true,
-          zoneIds: [],
-          runsPass: false,
-        }),
-        await createWatcher(tx, venue.cfg, {
-          name: "Bar pass",
-          everyStation: true,
-          stationIds: [],
-          everyZone: true,
-          zoneIds: [],
-          runsPass: false,
-        }),
-      ]);
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenLists(tx, venue.cfg, profileId, {
-          stationIds: [grill],
-          watcherIds: [pass!.id],
-        }),
-      );
-      const screen = await knockAndAccept(app, venue, {
-        name: "Screen",
-        profileId,
-        stationId: grill,
-      });
-
-      const unlisted = await edit(app, venue.managerCookie, screen.deviceId, {
-        stationId: null,
-        watcherId: bar!.id,
-      });
-      expect({ status: unlisted.status, body: await unlisted.json() }).toEqual({
-        status: 400,
-        body: { error: { code: "watcher.not_allowed", params: { watcherId: bar!.id } } },
-      });
-      expect(
-        (
-          await edit(app, venue.managerCookie, screen.deviceId, {
-            stationId: null,
-            watcherId: pass!.id,
-          })
-        ).status,
-      ).toBe(204);
-
-      const { items } = await fireOrder(venue);
-      await moveItemToStation(items[1]!, grill);
-      const board = await send(app, "GET", "/api/device/watcher", { cookie: screen.jar });
-      expect(board.status).toBe(200);
-      const shown = ((await board.json()) as WatcherBoard).orders.flatMap((order) =>
-        [...order.courses, ...order.groups].flatMap((part) => part.items.map((item) => item.id)),
-      );
-      expect(shown).toEqual([items[0]]);
+      const stationsOf = async (deviceId: string) =>
+        (await shownOn(venue, deviceId)).flatMap((screen) => screen.stations.map((st) => st.id));
+      expect(await stationsOf(first.deviceId)).toEqual([grill]);
+      expect(await stationsOf(second.deviceId)).toEqual([cold]);
     });
   });
 
@@ -1809,8 +2623,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const cases: [Partial<Record<keyof EditBody, unknown>>, string][] = [
       [{ profileId: undefined }, "profileId"],
       [{ profileId: null }, "profileId"],
-      [{ stationId: "bad" }, "stationId"],
-      [{ watcherId: "bad" }, "watcherId"],
+      [{ kitchenScreens: "bad" }, "kitchenScreens"],
       [{ receiptPrinterId: undefined }, "receiptPrinterId"],
       [{ paymentSlipPrinterId: "bad" }, "paymentSlipPrinterId"],
       [{ madeHereStationIds: null }, "madeHereStationIds"],
@@ -1855,44 +2668,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
 });
 
 describe("GET /api/device/me + station (SP-A.2 §16)", () => {
-  it("exposes a watcher's binding on the device and management surfaces", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Watch KDS", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
-    const watcher = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, venue.cfg, {
-        name: "Pass",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
-    );
-    const joined = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: "Pass screen",
-      profileId: profile!.id,
-      watcherId: watcher.id,
-    });
-    const me = await send(app, "GET", "/api/device/me", {
-      cookie: `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}`,
-    });
-    expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({ stationId: null, watcherId: watcher.id });
-    const managed = await send(app, "GET", "/management-api/devices", {
-      cookie: venue.managerCookie,
-    });
-    expect(managed.status).toBe(200);
-    expect(
-      ((await managed.json()) as { id: string; watcherId: string | null }[]).find(
-        (d) => d.id === joined.deviceId,
-      ),
-    ).toMatchObject({ watcherId: watcher.id });
-  });
-  it("reports an enrolled handheld's formFactor + name, station null", async () => {
+  it("reports an enrolled handheld's formFactor + name, and no kitchen screen", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolHandheld(app, venue);
@@ -1902,7 +2678,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       deviceId,
       formFactor: "phone-portrait",
       name: "Waiter phone",
-      stationId: null,
+      kitchenScreens: [],
     });
   });
 
@@ -1927,10 +2703,9 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       deviceId,
       formFactor: "till",
       name: "Caja hw",
-      stationId: null,
-      watcherId: null,
       profileId,
       approvedProfiles: [{ id: profileId, name: profileName }],
+      kitchenScreens: [],
     });
     const equipment = await send(app, "GET", "/api/device/equipment", { cookie: jar });
     expect(equipment.status).toBe(200);
@@ -1941,11 +2716,11 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
     expect(receipt).toMatchObject({ selection: "item", chosenId: printerId, choices: [] });
   });
 
-  it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
+  it("GET /api/device/station-screen 401s an enrolled handheld — it runs no station screen", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { jar } = await enrolHandheld(app, venue);
-    const res = await send(app, "GET", "/api/device/station", { cookie: jar });
+    const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.unauthorized" },
@@ -2306,9 +3081,10 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     expect(device).toMatchObject({
       id: deviceId,
       kind: "kds_station",
-      stationId: venue.defaultStationId,
+      label: "Pantalla Cocina",
       active: true,
     });
+    expect(device).not.toHaveProperty("stationId");
     expect(device).not.toHaveProperty("token");
     expect(device).not.toHaveProperty("tokenHash");
     expect(body).not.toHaveProperty("tills");
@@ -2415,8 +3191,6 @@ describe("a device's approved profiles and switching its active one", () => {
       .select({
         name: devices.label,
         profileId: devices.deviceProfileId,
-        stationId: devices.stationId,
-        watcherId: devices.watcherId,
         receiptPrinterId: devices.receiptPrinterId,
         paymentSlipPrinterId: devices.paymentSlipPrinterId,
       })
@@ -2526,6 +3300,22 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(new Set(await approved(t.deviceId))).toEqual(new Set([t.profileId, a, b]));
       expect((await approved(t.deviceId))[0]).toBe(t.profileId);
       expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(t.profileId);
+    });
+
+    it("lists a device's active profile first, then each approved alternative", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const [a, b] = [await seedProfile("till"), await seedProfile("till")];
+      await approve(app, venue, t.deviceId, [a, b]);
+      const listed = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(listed.status).toBe(200);
+      const rows = (await listed.json()) as { id: string; approvedProfileIds: string[] }[];
+      const [first, ...rest] = rows.find((r) => r.id === t.deviceId)!.approvedProfileIds;
+      expect(first).toBe(t.profileId);
+      expect(rest.sort()).toEqual([a, b].sort());
     });
 
     it("an edit without approvedProfileIds leaves the approved set alone", async () => {
@@ -2680,8 +3470,13 @@ describe("a device's approved profiles and switching its active one", () => {
       const t = await till(app, venue);
       const other = await till(app, venue, "Barra");
       const kitchen = await seedProfile("kds");
+      const screen: DeviceKitchenScreen = {
+        kind: "station",
+        stationIds: [venue.defaultStationId],
+        zoneIds: null,
+      };
       await withTransaction(suite.db, (tx) =>
-        listOnProfile(tx, kitchen, { stationId: venue.defaultStationId }),
+        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, kitchen, screen),
       );
       const staff = await signIn(t.deviceId, "staff");
       await signIn(t.deviceId, "manager");
@@ -2689,7 +3484,7 @@ describe("a device's approved profiles and switching its active one", () => {
 
       const moved = await manage(app, venue, t.deviceId, {
         profileId: kitchen,
-        stationId: venue.defaultStationId,
+        kitchenScreens: [screen],
       });
 
       expect(moved.status).toBe(204);
@@ -2969,18 +3764,32 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
     });
 
-    it("a screen moved onto a kitchen profile keeps no session to switch with, and one written there anyway cannot switch to a profile not listing its station", async () => {
+    it("a screen moved onto a kitchen profile keeps no session to switch with, and one written there anyway switches to a profile not offering its station, which it then reads as no longer available", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const t = await till(app, venue);
       const before = await signIn(t.deviceId);
       const [listing, other] = [await seedProfile("kds"), await seedProfile("kds")];
-      await withTransaction(suite.db, (tx) =>
-        listOnProfile(tx, listing, { stationId: venue.defaultStationId }),
+      const grill = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Plancha" }),
       );
+      const stationScreen = (stationId: string): DeviceKitchenScreen => ({
+        kind: "station",
+        stationIds: [stationId],
+        zoneIds: null,
+      });
+      await withTransaction(suite.db, async (tx) => {
+        await VENUE_SERVICE.addProfileKitchenScreen(
+          tx,
+          venue.cfg,
+          listing,
+          stationScreen(venue.defaultStationId),
+        );
+        await VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, other, stationScreen(grill.id));
+      });
       const moved = await manage(app, venue, t.deviceId, {
         profileId: listing,
-        stationId: venue.defaultStationId,
+        kitchenScreens: [stationScreen(venue.defaultStationId)],
         approvedProfileIds: [other],
       });
       expect(moved.status).toBe(204);
@@ -2993,12 +3802,92 @@ describe("a device's approved profiles and switching its active one", () => {
       const me = await signIn(t.deviceId);
       const res = await switchTo(app, me.cookie, other);
       expect({ status: res.status, body: await res.json() }).toEqual({
-        status: 400,
-        body: {
-          error: { code: "station.not_allowed", params: { stationId: venue.defaultStationId } },
-        },
+        status: 200,
+        body: { activeProfileId: other },
       });
-      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(listing);
+      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(other);
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, t.deviceId),
+        ),
+      ).toEqual([
+        {
+          kind: "station",
+          available: true,
+          everyStation: false,
+          everyZone: false,
+          profileEveryStation: false,
+          stations: [
+            {
+              id: venue.defaultStationId,
+              name: expect.any(String),
+              available: false,
+              switchedOff: false,
+            },
+          ],
+          zones: null,
+        },
+      ]);
+    });
+
+    it("switching to a profile without a station the till chose and back gives the station back, unless the till was picked on in between", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const deli = await withTransaction(suite.db, (tx) =>
+        createStation(tx, venue.cfg, { name: "Deli" }),
+      );
+      const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, narrow, {
+          station: { stationIds: [venue.defaultStationId], zoneIds: null },
+        }),
+      );
+      const both: DeviceKitchenScreen = {
+        kind: "station",
+        stationIds: [venue.defaultStationId, deli.id],
+        zoneIds: null,
+      };
+      const kept = await knockAndAccept(app, venue, {
+        name: "Caja",
+        profileId: wide,
+        kitchenScreens: [both],
+      });
+      const picked = await knockAndAccept(app, venue, {
+        name: "Otra caja",
+        profileId: wide,
+        kitchenScreens: [both],
+      });
+      const deliSlot = async (deviceId: string) =>
+        (
+          await withTransaction(suite.db, (tx) =>
+            VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+          )
+        )[0]!.stations.find((slot) => slot.id === deli.id);
+      for (const { deviceId } of [kept, picked]) {
+        await approve(app, venue, deviceId, [wide, narrow]);
+        const me = await signIn(deviceId);
+        expect((await switchTo(app, me.cookie, narrow)).status).toBe(200);
+        expect(await deliSlot(deviceId)).toMatchObject({ available: false, switchedOff: false });
+      }
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setDeviceKitchenScreens(tx, venue.cfg, {
+          deviceId: picked.deviceId,
+          profileId: narrow,
+          screens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
+        }),
+      );
+      for (const { deviceId } of [kept, picked]) {
+        const me = await signIn(deviceId);
+        expect((await switchTo(app, me.cookie, wide)).status).toBe(200);
+        expect(await removalCount(deviceId)).toBe(0);
+      }
+      expect(await deliSlot(kept.deviceId)).toEqual({
+        id: deli.id,
+        name: "Deli",
+        available: true,
+        switchedOff: false,
+      });
+      expect(await deliSlot(picked.deviceId)).toBeUndefined();
     });
 
     it("a shared display with nobody signed in cannot switch", async () => {

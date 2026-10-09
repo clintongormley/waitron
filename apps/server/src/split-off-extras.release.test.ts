@@ -100,7 +100,7 @@ describe("releasing split-off extras", () => {
         null,
         null,
       ]);
-      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, OPERATOR);
+      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
       const fired = await rows(tx, venue.party.tabId);
       expect(fired.items).toHaveLength(2);
       expect(fired.items.every((item) => item.firedAt !== null)).toBe(true);
@@ -253,7 +253,7 @@ describe("releasing split-off extras", () => {
         { ...pick(venue, "water"), courseId, hold: true },
       ]);
       expect((await rows(tx, venue.party.tabId)).items[0]!.firedAt).toBeNull();
-      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, OPERATOR);
+      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
       const result = await rows(tx, venue.party.tabId);
       expect(result.items[0]!.firedAt).not.toBeNull();
       expect(result.lines.find((line) => line.parentLineId === null)!.sentAt).not.toBeNull();
@@ -288,7 +288,7 @@ describe("releasing split-off extras", () => {
         })
         .returning({ id: workingOrderLines.id });
       expect((await rows(tx, venue.party.tabId)).items).toEqual([]);
-      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, OPERATOR);
+      await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
       const result = await rows(tx, venue.party.tabId);
       expect(result.items).toEqual([
         expect.objectContaining({
@@ -351,7 +351,7 @@ describe("releasing split-off extras", () => {
       const makers = vi.spyOn(VENUE_SERVICE, "resolveMakers");
       const extraMakers = vi.spyOn(VENUE_SERVICE, "resolveExtraMakers");
       try {
-        await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, OPERATOR);
+        await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
         expect(snapshot).toHaveBeenCalledTimes(1);
         expect(makers).not.toHaveBeenCalled();
         expect(extraMakers).not.toHaveBeenCalled();
@@ -372,7 +372,7 @@ describe("releasing split-off extras", () => {
       ]);
       const snapshot = vi.spyOn(VENUE_SERVICE, "routingAt");
       try {
-        await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, OPERATOR);
+        await fireCourse(tx, venue.cfg, venue.party.tabId, courseId, { personId: OPERATOR });
         expect(snapshot).not.toHaveBeenCalled();
       } finally {
         snapshot.mockRestore();

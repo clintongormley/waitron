@@ -40,10 +40,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That department has no usable receiving desk. Ask a manager to check its transfer settings.",
     es: "Ese departamento no tiene un mostrador receptor disponible. Pide a un responsable que revise los ajustes de traspaso.",
   },
-  "watcher.not_found": {
-    en: "That watcher no longer exists.",
-    es: "Ese punto de seguimiento ya no existe.",
-  },
   "working_order.out_of_date": {
     en: "Someone else changed this order. Reload it and make your change again",
     es: "Otra persona ha cambiado este pedido. Vuelve a cargarlo y repite el cambio",
@@ -449,6 +445,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This device's profile doesn't allow that. Ask a manager to change it.",
     es: "El perfil de este dispositivo no lo permite. Pide a un responsable que lo modifique.",
   },
+  "kitchen_screen.zone_not_allowed": {
+    en: "This order is in a zone this pass screen doesn't show.",
+    es: "Este pedido es de una zona que esta pantalla de pase no muestra.",
+  },
+  "kitchen_screen.not_allowed": {
+    en: "This device no longer shows that screen. Ask a manager to choose its screens again.",
+    es: "Este dispositivo ya no muestra esa pantalla. Pide a un responsable que vuelva a elegir sus pantallas.",
+  },
   "device.pairing_closed": {
     en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
     es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
@@ -480,14 +484,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device_profile.not_admitted": {
     en: "You can't sign in on that profile. Choose another",
     es: "No puedes iniciar sesión con ese perfil. Elige otro",
-  },
-  "station.not_allowed": {
-    en: "That profile does not list the station this device shows. Choose another, or ask a manager to change the device's station",
-    es: "Ese perfil no incluye la estación que muestra este dispositivo. Elige otro, o pide a un responsable que cambie la estación del dispositivo",
-  },
-  "watcher.not_allowed": {
-    en: "That profile does not list the watcher this device shows. Choose another, or ask a manager to change the device's watcher",
-    es: "Ese perfil no incluye el punto de seguimiento que muestra este dispositivo. Elige otro, o pide a un responsable que cambie el punto de seguimiento del dispositivo",
   },
   "device.payment_in_progress": {
     en: "A card payment on this device is still in progress. Switch once it finishes or is cancelled",

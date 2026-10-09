@@ -12,7 +12,6 @@ import type {
   Printer,
   ProfileScopeChoices,
   Station,
-  Watcher,
 } from "../api/client.js";
 
 /**
@@ -107,8 +106,7 @@ function stubApi(
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
     listStations: vi.fn().mockResolvedValue([]),
-    listWatchers: vi.fn().mockResolvedValue([]),
-    listProfileKitchenLists: vi.fn().mockResolvedValue([]),
+    listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
     listStaff: vi.fn().mockResolvedValue(staff),
     listReaders: vi.fn().mockResolvedValue([]),
@@ -322,7 +320,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
   );
 
   it.each([390, 1280])(
-    "renders a kitchen display's station and watcher lists, and a refusal under them, accessibly at %ipx",
+    "renders a kitchen display's kitchen screens, and a refusal under one, accessibly at %ipx",
     async (width) => {
       await page.viewport(width, 900);
       const kitchen: DeviceProfile = {
@@ -345,18 +343,6 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
       });
-      const watcher: Watcher = {
-        id: "w1",
-        name: "Pass",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-        displayOrder: 0,
-        active: true,
-        printerIds: [],
-      };
       const api = stubApi(venuePrinters, {
         listDeviceProfiles: vi.fn().mockResolvedValue([...profiles, kitchen]),
         getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
@@ -367,13 +353,18 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
             station("s2", "Cold"),
             station("s-off", "Old grill", false),
           ]),
-        listWatchers: vi.fn().mockResolvedValue([watcher]),
-        listProfileKitchenLists: vi
-          .fn()
-          .mockResolvedValue([{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: [] }]),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue([
+          {
+            profileId: "p2",
+            screens: {
+              station: { stationIds: ["s1", "s-off"], zoneIds: null },
+              pass_monitor: { stationIds: null, zoneIds: ["z1"] },
+            },
+          },
+        ]),
         updateDeviceProfile: vi.fn().mockRejectedValue({
-          code: "device_profile.station_in_use",
-          params: { stationId: "s1", deviceId: "d1", deviceName: "Grill screen" },
+          code: "device_profile.access_invalid",
+          params: { field: "stationScreenStations", reason: "not_found" },
         }),
       });
       const { el, host } = await mountWidget<DeviceProfilesScreen>(
@@ -384,15 +375,94 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=profile-station-s-off]")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s-off]"),
+      ).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector("[data-test=profile-pass-monitor-zone-z1]"),
+      ).not.toBeNull();
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
-      el.shadowRoot!.querySelector("[data-test=profile-station-s1]")!.dispatchEvent(
+      el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s1]")!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
       );
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=profile-stations-error]")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector("[data-test=profile-station-screen-stations-error]"),
+      ).not.toBeNull();
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders a till's Kitchen and Pass lists with a pass monitor, and the narrowed devices after a save, accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const till: DeviceProfile = { ...profiles[0]!, capabilities: ["show-station", "show-expo"] };
+      const api = stubApi(venuePrinters, {
+        getDeviceProfile: vi.fn().mockResolvedValue(till),
+        listStations: vi.fn().mockResolvedValue([
+          {
+            id: "s1",
+            name: "Grill",
+            displayOrder: 0,
+            isDefault: false,
+            active: true,
+            showsRestOfOrder: false,
+            warmAfterMinutes: 5,
+            overdueAfterMinutes: 10,
+            forgottenAfterMinutes: 15,
+          },
+        ]),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue([
+          {
+            profileId: "p1",
+            screens: {
+              station: { stationIds: ["s1"], zoneIds: null },
+              pass_monitor: { stationIds: ["s1"], zoneIds: ["z1"] },
+            },
+          },
+        ]),
+        updateDeviceProfile: vi.fn().mockResolvedValue({
+          ...till,
+          narrowedDevices: [
+            {
+              deviceId: "dv1",
+              deviceName: "Pantalla Pase de la terraza",
+              lost: {
+                screens: ["pass_monitor"],
+                stations: [{ id: "s1", name: "Grill" }],
+                zones: [{ id: "z1", name: "Comedor" }],
+              },
+            },
+          ],
+        }),
+      });
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await flush(el);
+      expect(
+        el.shadowRoot!.querySelector("[data-test=profile-pass-monitor-zone-z1]"),
+      ).not.toBeNull();
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector("[data-test=profile-pass-monitor]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await flush(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=narrowed-devices]")).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);

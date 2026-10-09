@@ -2,11 +2,12 @@
 // and reads the committed products.
 
 import { and, eq } from "drizzle-orm";
-import { floorZones, withTransaction } from "@waitron/db";
+import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import { validateCapabilities } from "@waitron/layouts";
 import { readLocationClock } from "@waitron/reporting";
 import { replaceZoneClosedWeek } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
-import type { Database } from "@waitron/db";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -19,7 +20,6 @@ import {
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
-import { seedWatchers } from "./seed-watchers.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
 import { seedMedia } from "./seed-media.js";
@@ -47,14 +47,34 @@ export interface SeedDemoInput {
   salesDays: number;
 }
 
+/** The stations the demo's pass covers. */
+export interface SeedDemoResult {
+  passStationIds: { kitchen: string; deli: string };
+}
+
+/** The default kitchen display profile does not run the pass; the demo's does. */
+async function giveKitchenDisplaysThePass(tx: Transaction): Promise<void> {
+  const profiles = await tx
+    .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.formFactor, "kds"));
+  for (const profile of profiles) {
+    const capabilities = validateCapabilities(
+      [...validateCapabilities(profile.capabilities), "run-the-pass"],
+      "kds",
+    );
+    await tx.update(deviceProfiles).set({ capabilities }).where(eq(deviceProfiles.id, profile.id));
+  }
+}
+
 export async function seedDemoRestaurant(
   db: Database,
   { venue, locale, salesDays, departmentTradingNames, dataSet }: SeedDemoInput,
-): Promise<void> {
+): Promise<SeedDemoResult> {
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
 
-  const { products, invoiceLocale } = await withTransaction(db, async (tx) => {
+  const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
       locationId,
       locale,
@@ -75,7 +95,7 @@ export async function seedDemoRestaurant(
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
     await seedFloor(tx, { locationId, locale, departmentTradingNames, dataSet, menuIds });
-    await seedWatchers(tx, { locationId, locale, dataSet, stationIds });
+    await giveKitchenDisplaysThePass(tx);
     await seedStaff(tx, { dataSet });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
     await seedMedia(tx, { productsByImage });
@@ -87,6 +107,7 @@ export async function seedDemoRestaurant(
     return {
       products: (await listAvailableProducts(tx, locationId)).products,
       invoiceLocale: (await readReceiptLanguage(tx, locationId)).locale,
+      passStationIds: { kitchen: stationIds.kitchen, deli: stationIds.deli },
     };
   });
 
@@ -127,4 +148,5 @@ export async function seedDemoRestaurant(
       })),
     );
   });
+  return { passStationIds };
 }

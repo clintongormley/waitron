@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "./test-helpers.js";
@@ -6,8 +6,12 @@ import { t } from "../i18n/t.js";
 import "./card-grid.js";
 import type { TillCardGrid } from "./card-grid.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
+import type { KitchenScreenNotice } from "../kitchen-screen-notice.js";
 import type {
+  DeviceIdentity,
   DietProfile,
+  ResolvedKitchenScreen,
+  TillApi,
   HeldOrderSummary,
   Station,
   StationQueueGroup,
@@ -18,8 +22,8 @@ import type {
 
 afterEach(cleanupWidgets);
 
-it("renders a bound watcher in the kitchen display card", async () => {
-  const board = { watcher: { id: "pass", name: "Pass", runsPass: true, active: true }, orders: [] };
+it("renders a kitchen display's pass screen in the kitchen display card", async () => {
+  const board = { orders: [], stations: [], zones: null };
   const tab: TabDef = {
     key: "kitchen",
     title: "Kitchen",
@@ -29,16 +33,244 @@ it("renders a bound watcher in the kitchen display card", async () => {
   const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
     tab,
     store: new WorkingOrderStore(),
-    capabilities: ["act-as-kds"],
+    capabilities: ["act-as-kds", "run-the-pass"],
     deviceMode: true,
-    initialDeviceWatcher: board,
+    deviceName: "Pantalla Pase",
+    fireControl: "expo",
+    initialDevicePass: board,
   });
   const screen = el.shadowRoot!.querySelector<
-    HTMLElement & { deviceMode: boolean; initialDeviceWatcher: unknown }
+    HTMLElement & {
+      deviceMode: boolean;
+      initialDevicePass: unknown;
+      runsPass: boolean;
+      deviceName?: string;
+      fireControl: string;
+    }
   >("till-expo-screen");
   expect(screen).not.toBeNull();
   expect(screen!.deviceMode).toBe(true);
-  expect(screen!.initialDeviceWatcher).toBe(board);
+  expect(screen!.initialDevicePass).toBe(board);
+  expect(screen!.runsPass).toBe(true);
+  expect(screen!.deviceName).toBe("Pantalla Pase");
+  expect(screen!.fireControl).toBe("expo");
+});
+
+it("renders a kitchen display's pass monitor in the kitchen display card", async () => {
+  const board = { orders: [], stations: [], zones: null };
+  const tab: TabDef = {
+    key: "kitchen",
+    title: "Kitchen",
+    columns: 24,
+    cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+  };
+  const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+    tab,
+    store: new WorkingOrderStore(),
+    capabilities: ["act-as-kds", "run-the-pass"],
+    deviceMode: true,
+    deviceName: "Pared del pase",
+    initialDevicePassMonitor: board,
+  });
+  const screen = el.shadowRoot!.querySelector<
+    HTMLElement & {
+      monitor: boolean;
+      embedded: boolean;
+      initialDevicePassMonitor: unknown;
+      deviceName?: string;
+    }
+  >("till-expo-screen");
+  expect(screen).not.toBeNull();
+  expect(screen!.monitor).toBe(true);
+  expect(screen!.embedded).toBe(true);
+  expect(screen!.initialDevicePassMonitor).toBe(board);
+  expect(screen!.deviceName).toBe("Pared del pase");
+});
+
+describe("a kitchen display's notice in place of a queue", () => {
+  const kitchenTab: TabDef = {
+    key: "kitchen",
+    title: "Kitchen",
+    columns: 24,
+    cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+  };
+  const identity = (kitchenScreens: ResolvedKitchenScreen[]): DeviceIdentity => ({
+    deviceId: "kd-1",
+    formFactor: "kds",
+    name: "Pantalla Pase",
+    kitchenScreens,
+  });
+  const passGone = identity([{ kind: "pass", available: false, stations: [], zones: null }]);
+  const passBack = identity([{ kind: "pass", available: true, stations: [], zones: null }]);
+
+  const listening: [string, EventListener][] = [];
+  const listen = (type: string) => {
+    const listener = vi.fn();
+    document.addEventListener(type, listener);
+    listening.push([type, listener]);
+    return listener;
+  };
+
+  async function mountNotice(
+    getDeviceIdentity: ReturnType<typeof vi.fn>,
+    kitchenScreenNotice: KitchenScreenNotice = { kind: "unavailable", screen: "pass" },
+  ) {
+    const changed = listen("kitchen-screen-changed");
+    const unauthorized = listen("device-unauthorized");
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: kitchenTab,
+      store: new WorkingOrderStore(),
+      capabilities: ["act-as-kds"],
+      deviceMode: true,
+      api: { getDeviceIdentity } as unknown as TillApi,
+      kitchenScreenNotice,
+    });
+    return { el, changed, unauthorized };
+  }
+
+  async function withFakeTimers(run: () => Promise<void>) {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await run();
+    } finally {
+      vi.useRealTimers();
+      for (const [type, listener] of listening.splice(0))
+        document.removeEventListener(type, listener);
+    }
+  }
+
+  it("reads the device's choice at each refresh and asks for a re-boot once its screen is offered again", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockResolvedValueOnce(passGone).mockResolvedValue(passBack);
+      const { el, changed } = await mountNotice(getDeviceIdentity);
+      expect(el.shadowRoot!.querySelector(".kitchen-screen-message")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("asks for a re-boot when a different screen is chosen in place of the one taken", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockResolvedValue(
+          identity([{ kind: "station", available: false, stations: [], zones: null }]),
+        );
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("says the device was refused when the read answers device.unauthorized, and nothing for another failure", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockRejectedValue({ code: "device.unauthorized" });
+      const { changed, unauthorized } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(unauthorized).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+    }));
+
+  it("with no screen chosen yet, waits for one and asks for a re-boot once it is chosen", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockResolvedValueOnce(identity([]))
+        .mockResolvedValue(passBack);
+      const { el, changed } = await mountNotice(getDeviceIdentity, { kind: "none" });
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("ignores an older read that answers after a newer one", () =>
+    withFakeTimers(async () => {
+      let answerLate: (value: DeviceIdentity) => void = () => {};
+      const getDeviceIdentity = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((resolve) => (answerLate = resolve)))
+        .mockResolvedValue(passGone);
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(30_000);
+      answerLate(passBack);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changed).not.toHaveBeenCalled();
+    }));
+
+  it("asks once when two reads that overlap both say the choice changed", () =>
+    withFakeTimers(async () => {
+      const answers: ((value: DeviceIdentity) => void)[] = [];
+      const getDeviceIdentity = vi.fn(
+        () => new Promise<DeviceIdentity>((resolve) => answers.push(resolve)),
+      );
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(answers).toHaveLength(2);
+      answers[0]!(passBack);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changed).toHaveBeenCalledTimes(1);
+      answers[1]!(passBack);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("asks again at a later refresh while it is still on the page after asking", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockResolvedValue(passBack);
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(changed).toHaveBeenCalledTimes(2);
+    }));
+
+  it("says the device was refused once when two reads that overlap are both refused", () =>
+    withFakeTimers(async () => {
+      const refusals: ((reason: unknown) => void)[] = [];
+      const getDeviceIdentity = vi.fn(
+        () => new Promise<DeviceIdentity>((_resolve, reject) => refusals.push(reject)),
+      );
+      const { changed, unauthorized } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(refusals).toHaveLength(2);
+      refusals[0]!({ code: "device.unauthorized" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      refusals[1]!({ code: "device.unauthorized" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+    }));
+
+  it("says the device was refused again at a later refresh while it is still on the page", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
+      const { unauthorized } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(unauthorized).toHaveBeenCalledTimes(2);
+    }));
+
+  it("stops reading once it is taken off the page", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockResolvedValue(passGone);
+      const { el } = await mountNotice(getDeviceIdentity);
+      el.kitchenScreenNotice = undefined;
+      await el.updateComplete;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).not.toHaveBeenCalled();
+    }));
 });
 
 const counterTab: TabDef = {
@@ -415,6 +647,21 @@ describe("till-card-grid", () => {
       "till-expo-screen",
     )!;
     expect(expo?.embedded).toBe(true);
+  });
+
+  it.each([
+    [["show-expo"], false],
+    [["show-expo", "run-the-pass"], true],
+  ] as const)("gives the expo card Run the pass from %j", async (capabilities, runsPass) => {
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: expoTab,
+      store: new WorkingOrderStore(),
+      capabilities: [...capabilities],
+    });
+    const expo = el.shadowRoot!.querySelector<HTMLElement & { runsPass?: boolean }>(
+      "till-expo-screen",
+    )!;
+    expect(expo.runsPass).toBe(runsPass);
   });
 
   it("renders an embedded table-order screen for a table-order card", async () => {

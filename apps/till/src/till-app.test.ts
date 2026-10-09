@@ -48,6 +48,7 @@ import type {
   PayOutcome,
   PartyBill,
   ProductCatalogue,
+  ResolvedKitchenScreen,
   RoleEquipment,
   ServiceZoneSummary,
   StationQueue,
@@ -277,6 +278,13 @@ const phoneCanvasDef: CanvasDef = {
       cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
     },
   ],
+};
+
+const stationScreen: ResolvedKitchenScreen = {
+  kind: "station",
+  available: true,
+  stations: [],
+  zones: null,
 };
 
 const kdsCanvasDef: CanvasDef = {
@@ -517,9 +525,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
     }),
-    getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     join: vi.fn().mockResolvedValue({ joinId: "dev-1", verificationNumber: "47" }),
     joinStatus: vi.fn().mockResolvedValue({ status: "pending" }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
@@ -1814,7 +1821,7 @@ describe("till-app", () => {
     },
   );
 
-  // Device mode: an enrolled kds display boots straight into its bound station in
+  // Device mode: an enrolled kds display boots straight into its station screen in
   // the kiosk shell (past the login screen); the fuller boot decision (chooser/enrol/login) is exercised
   // by the "Device front door" suite below.
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
@@ -1826,27 +1833,32 @@ describe("till-app", () => {
         canvas: kdsCanvasDef,
         capabilities: ["act-as-kds"],
       }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [stationScreen],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     await flush(el);
-    expect(currentApi.getDeviceStation).toHaveBeenCalled();
+    expect(currentApi.getDeviceStationScreen).toHaveBeenCalled();
     // Straight past the lock screen — a device never logs in; it boots the shell in kiosk mode straight
     // onto the kitchen tab, whose kds-board card mounts the station screen.
     expect(lock(el)).toBeNull();
@@ -1868,23 +1880,28 @@ describe("till-app", () => {
         canvas: kdsCanvasDef,
         capabilities: ["act-as-kds"],
       }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [stationScreen],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     await flush(el);
@@ -1900,7 +1917,7 @@ describe("till-app", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
       // Proves the handheld login LOADS the floor via `#loadFloorData`, not that it merely switches
       // `screen` to an empty one.
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
@@ -1914,7 +1931,7 @@ describe("till-app", () => {
     expect(station(el)).toBeNull();
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
     // A handheld is NOT a KDS display — the kind branch never prefetches the station queue.
-    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    expect(currentApi.getDeviceStationScreen).not.toHaveBeenCalled();
     // After login the waiter lands on the FLOOR, this phone layout's first tab; it has no Counter tab.
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
@@ -1939,7 +1956,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([openTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
         getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
@@ -2028,7 +2045,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas, ...tillOverrides }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         ...overrides,
       });
       await flush(el);
@@ -2384,9 +2401,7 @@ describe("till-app", () => {
           activeReaders: readers,
           defaultReaderId: readers[0]!.id,
         }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "till", stationId: null }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "d1", formFactor: "till" }),
       });
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -2432,7 +2447,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
       });
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -2451,7 +2466,7 @@ describe("till-app", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
     const devices = [
       { device: "till", overrides: () => ({}), home: "counter", other: "floor" },
@@ -2747,7 +2762,7 @@ describe("till-app", () => {
     expect(station(el)).toBeNull();
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
-    expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
+    expect(currentApi.getDeviceStationScreen).not.toHaveBeenCalled();
     expect(lock(el)!.deviceName).toBe("Till 1");
     expect(lock(el)!.deviceId).toBe("till-dev");
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -2794,7 +2809,6 @@ describe("till-app", () => {
           deviceId: "adopted-1",
           name: "Till 2",
           formFactor: "till",
-          stationId: null,
         }),
       });
       await flush(el);
@@ -2891,7 +2905,6 @@ describe("till-app", () => {
           deviceId: "adopted-1",
           name: "Till 2",
           formFactor: "till",
-          stationId: null,
         }),
       });
       await flush(el);
@@ -2920,7 +2933,7 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockRejectedValueOnce({ code: "device.unauthorized" })
-        .mockResolvedValue({ deviceId: "d1", name: "Till 9", formFactor: "till", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", name: "Till 9", formFactor: "till" }),
     });
     await flush(el);
     expect(enrolScreen(el)).not.toBeNull();
@@ -2944,22 +2957,25 @@ describe("till-app", () => {
           deviceId: "dev-1",
           name: "Pass",
           formFactor: "kds",
-          stationId: "st-dev",
+          kitchenScreens: [stationScreen],
         }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     await flush(el);
@@ -2985,22 +3001,29 @@ describe("till-app", () => {
         .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValueOnce({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" })
+        .mockResolvedValueOnce({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        })
         .mockRejectedValue({ code: "device.unauthorized" }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     await flush(el);
@@ -3025,22 +3048,29 @@ describe("till-app", () => {
         .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValueOnce({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" })
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+        .mockResolvedValueOnce({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        })
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     await flush(el);
@@ -3059,7 +3089,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValueOnce({ deviceId: "d1", formFactor: "phone-portrait", stationId: null })
+        .mockResolvedValueOnce({ deviceId: "d1", formFactor: "phone-portrait" })
         .mockRejectedValue({ code: "device.unauthorized" }),
     });
     await flush(el);
@@ -4169,7 +4199,7 @@ describe("till-app", () => {
       }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
       getTablesState: vi.fn().mockResolvedValue([openTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
@@ -6050,7 +6080,6 @@ describe("till-app", () => {
         deviceId: "h1",
         name: "Phone 1",
         formFactor: "phone-portrait",
-        stationId: null,
       }),
     });
     currentApi = api;
@@ -6099,22 +6128,25 @@ describe("till-app", () => {
         deviceId: "kds1",
         name: "Pass",
         formFactor: "kds",
-        stationId: "st-1",
+        kitchenScreens: [stationScreen],
       }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-1",
-          name: "Pass",
-          today: {
-            open: true,
-            isDefault: true,
-            byHand: null,
-            sendsTo: null,
-            why: "default" as const,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-1",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     const { el } = await mountWidget<TillApp>("till-app", { api, sessionActivity: sa as never });
@@ -6811,7 +6843,7 @@ describe("till-app", () => {
           getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
           getDeviceIdentity: vi
             .fn()
-            .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+            .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
@@ -6968,6 +7000,25 @@ describe("till-app", () => {
           expectedPartyRevision: 3,
         });
         expect(getTabLines).toHaveBeenCalledTimes(2);
+      });
+
+      it("fire-group still fires from the order screen on a profile without Run the pass", async () => {
+        const fireGroup = vi.fn().mockResolvedValue({ revision: 4 });
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [heldGroup] }),
+          fireGroup,
+          getTabLines: vi.fn().mockResolvedValue({ lines: [heldCourseLine], revision: 0 }),
+        });
+        expect(till.capabilities).not.toContain("run-the-pass");
+        const screen = await toTableOrder(el, openTable);
+        emit(screen, "fire-group", { groupId: "g1" });
+        await flush(el);
+        expect(fireGroup).toHaveBeenCalledWith("v-2", "g1", {
+          submissionId: expect.any(String),
+          expectedPartyRevision: 3,
+        });
       });
 
       it("a failed fire-group surfaces a non-fatal banner, leaving the screen up", async () => {
@@ -9965,7 +10016,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn(
           () =>
             new Promise<TableState[]>((done) => {
@@ -10050,7 +10101,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
         listStatuses: vi.fn().mockResolvedValue([status]),
@@ -10121,7 +10172,7 @@ describe("till-app", () => {
           .mockResolvedValue({ ...till, canvas: phoneCanvas, capabilities: ["print-receipt"] }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
@@ -10145,23 +10196,28 @@ describe("till-app", () => {
         getTill: vi
           .fn()
           .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              queue: [],
+              notices: [],
             },
-            queue: [],
-            notices: [],
-          },
+          ],
         }),
       });
       await flush(el);
@@ -10186,23 +10242,28 @@ describe("till-app", () => {
       // No-profile device: same KDS canvas, but `capabilities: []` (a device with no device profile).
       const hidden = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: [] }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              queue: [],
+              notices: [],
             },
-            queue: [],
-            notices: [],
-          },
+          ],
         }),
       });
       await flush(hidden.el);
@@ -10217,23 +10278,28 @@ describe("till-app", () => {
         getTill: vi
           .fn()
           .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-        getDeviceStation: vi.fn().mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              queue: [],
+              notices: [],
             },
-            queue: [],
-            notices: [],
-          },
+          ],
         }),
       });
       await flush(shown.el);
@@ -10276,7 +10342,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
         listStatuses: vi.fn().mockResolvedValue([status]),
@@ -10326,7 +10392,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState,
         listZones: vi.fn().mockResolvedValue([floorZone]),
         listStatuses: vi.fn().mockResolvedValue([status]),
@@ -10372,7 +10438,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState,
         listZones: vi.fn().mockResolvedValue([floorZone]),
         listStatuses: vi.fn().mockResolvedValue([status]),
@@ -11131,23 +11197,28 @@ describe("till-app", () => {
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [stationScreen],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
       putLocale,
     });
@@ -11792,24 +11863,33 @@ describe("remembered dietary filters", () => {
 });
 
 describe("persistent till destinations", () => {
-  it("restores a selected watcher on Expo and clears it on another tab", async () => {
+  it("ignores the watcher an old Pass address names and follows the device's choice", async () => {
     history.replaceState(null, "", "/tabs/counter/view/expo/watcher/pass");
     const { el } = await mountApp({
-      listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),
-      getWatcherQueue: vi.fn().mockResolvedValue({
-        watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
-        orders: [],
-      }),
+      getExpoQueue: vi.fn().mockResolvedValue([]),
     });
     await toCounter(el);
     const expo = el.shadowRoot!.querySelector("till-expo-screen")!;
     await flush(el);
-    expect(expo.shadowRoot!.textContent).toContain("Nada pendiente aquí");
-    expect(location.pathname).toBe("/tabs/counter/view/expo/watcher/pass");
-    selectTab(el, "floor");
-    await flush(el);
-    expect(location.pathname).not.toContain("watcher/pass");
+    expect(expo).not.toBeNull();
+    expect(currentApi.getExpoQueue).toHaveBeenCalled();
+    expect(expo.shadowRoot!.textContent).toContain("Nada en el pase");
+    expect(location.pathname).toBe("/tabs/counter/view/expo");
   });
+
+  it.each([
+    ["without", till.capabilities, false],
+    ["with", [...till.capabilities, "run-the-pass"], true],
+  ])("draws the Pass screen's levers %s Run the pass", async (_, capabilities, runsPass) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities }),
+    });
+    await toCounter(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-expo");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")!.runsPass).toBe(runsPass);
+  });
+
   async function traverse(direction: "back" | "forward", el: TillApp) {
     const moved = new Promise<void>((resolve) =>
       window.addEventListener("popstate", () => resolve(), { once: true }),
@@ -11951,21 +12031,24 @@ describe("persistent till destinations", () => {
         .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "kds", stationId: "st-dev" }),
-      getDeviceStation: vi.fn().mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
+        .mockResolvedValue({ deviceId: "d1", formFactor: "kds", kitchenScreens: [stationScreen] }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            name: "Cocina",
+            available: true,
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
+            },
+            id: "st-dev",
+            queue: [],
+            notices: [],
           },
-          queue: [],
-          notices: [],
-        },
+        ],
       }),
     });
     await flush(el);
@@ -11986,7 +12069,7 @@ it.each(["station", "expo", "schedule"])(
         .mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities: ["print-receipt"] }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
     await toCounter(el);
     expect(location.pathname).toBe("/tabs/floor");
@@ -12003,7 +12086,7 @@ describe("the device profile decides which screens a device offers", () => {
     "show-schedule",
   ];
   const handheld = () =>
-    vi.fn().mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null });
+    vi.fn().mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" });
   const affordances = (el: TillApp) =>
     (shell(el) as unknown as { affordances: unknown[] }).affordances;
   const headerButton = (el: TillApp, name: string) =>
@@ -15704,7 +15787,6 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
     });
     const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
     const { el } = await mountApp({
@@ -15850,7 +15932,6 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
         deviceId: "till-dev",
         name: "Till 1",
         formFactor: "till",
-        stationId: null,
         profileId: COUNTER.id,
         approvedProfiles: [COUNTER, BAR],
       }),
@@ -15940,7 +16021,6 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
         deviceId: "till-dev",
         name: "Till 1",
         formFactor: "till",
-        stationId: null,
         profileId: COUNTER.id,
         approvedProfiles: [COUNTER, BAR],
       }),
@@ -15988,7 +16068,6 @@ describe("switching the device's profile from the header", () => {
     deviceId: "till-dev",
     name: "Till 1",
     formFactor: "till",
-    stationId: null,
     profileId: COUNTER.id,
     approvedProfiles: [COUNTER, BAR],
   };

@@ -69,6 +69,9 @@ interface GroupSection {
   items: StationQueueItem[];
 }
 
+/** A merged queue's order: one station's lines of it, so `stationId` names whose. */
+export type MergedQueueGroup = StationQueueGroup & { stationId?: string };
+
 /** What `fire-kitchen-group` carries: the held group, and the party at the revision the card was read. */
 export interface FireKitchenGroupDetail {
   partyId: string;
@@ -366,6 +369,13 @@ export class TillStationQueue extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .line-station,
+      .notice-station {
+        display: block;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       /* Age accents on the rail card's left edge — a data-driven colour, never behind text (a11y).
          Three escalating bands (KDS order-timing alerts, design §7.1): warm (amber-ish primary),
          overdue (red), forgotten (red + a repeating flash, .flash below). 'fresh' gets no override —
@@ -566,7 +576,8 @@ export class TillStationQueue extends LitElement {
         overflow-wrap: anywhere;
       }
 
-      .notice-extra {
+      .notice-extra,
+      .notice-station {
         flex-basis: 100%;
         font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
@@ -587,13 +598,15 @@ export class TillStationQueue extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) groups: StationQueueGroup[] = [];
+  @property({ attribute: false }) groups: MergedQueueGroup[] = [];
   /** Unacknowledged corrections for this station, oldest first as the server sends them. */
   @property({ attribute: false }) notices: KitchenNotice[] = [];
   @property() view: "kanban" | "rail" = "kanban";
   @property() bumpMode: BumpMode = "line";
   /** The station these items are AT — required for the whole-ticket bump's event (ticket mode). */
   @property() stationId?: string;
+  /** Set for a merged queue: each dish and notice is labelled with its station's name. */
+  @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
   @property() fireControl: FireControlMode = "waiter";
   /** For an enrolled device display: the server's device routes are the per-line advance alone, and the
    *  collect and fire routes need a session, so both buttons are hidden. */
@@ -608,16 +621,13 @@ export class TillStationQueue extends LitElement {
    *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
-  #bump(
-    group: StationQueueGroup,
-    item: StationQueueItem,
-    to: Exclude<TicketState, "queued">,
-  ): void {
+  #bump(group: MergedQueueGroup, item: StationQueueItem, to: Exclude<TicketState, "queued">): void {
     if (this.bumpMode === "ticket") {
-      if (this.stationId === undefined) return;
+      const stationId = group.stationId ?? this.stationId;
+      if (stationId === undefined) return;
       this.dispatchEvent(
         new CustomEvent("advance-ticket", {
-          detail: { orderId: group.orderId, stationId: this.stationId, to },
+          detail: { orderId: group.orderId, stationId, to },
           bubbles: true,
           composed: true,
         }),
@@ -780,6 +790,7 @@ export class TillStationQueue extends LitElement {
       reroutedTo === null
         ? null
         : t("station.notice.rerouted_to").replace("{station}", () => reroutedTo);
+    const station = this.stationNames?.get(notice.stationId);
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
       <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
       <span class="notice-body">
@@ -803,6 +814,11 @@ export class TillStationQueue extends LitElement {
               >`
         }
         ${rerouted === null ? nothing : html`<span class="notice-rerouted">${rerouted}</span>`}
+        ${
+          station === undefined
+            ? nothing
+            : html`<span class="notice-station" data-notice-station>${station}</span>`
+        }
       </span>
       <wt-button
         data-acknowledge
@@ -1016,13 +1032,19 @@ export class TillStationQueue extends LitElement {
   }
 
   #renderLine(
-    group: StationQueueGroup,
+    group: MergedQueueGroup,
     item: StationQueueItem,
     secondary: TemplateResult,
   ): TemplateResult {
+    const station =
+      group.stationId === undefined ? undefined : this.stationNames?.get(group.stationId);
     const main = html`<span class="line-main">
-      <span class="line-name">${this.#dish(item)}</span>${secondary}
-    </span>`;
+        <span class="line-name">${this.#dish(item)}</span>${secondary} </span
+      >${
+        station === undefined
+          ? nothing
+          : html`<span class="line-station" data-line-station>${station}</span>`
+      }`;
     const customisation = this.#customisation(item);
     const modifiers = this.#modifiers(item);
     const crossRefs = queueCrossRefs(item, "line");

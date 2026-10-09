@@ -937,7 +937,7 @@ describe("a profile's starting screen and shared-display actions", () => {
     }
   });
 
-  it("refuses a kitchen display an ordering, payment or drawer action on create and update", async () => {
+  it("refuses a kitchen display a payment or drawer action on create and update", async () => {
     try {
       const kds = (capabilities: string[]) =>
         inTx((tx) =>
@@ -949,17 +949,14 @@ describe("a profile's starting screen and shared-display actions", () => {
             capabilities,
           }),
         );
-      for (const flag of [
-        "take-orders",
-        "take-cash",
-        "hand-keyed-card-payment",
-        "open-cash-drawer",
-      ]) {
+      for (const flag of ["take-cash", "hand-keyed-card-payment", "open-cash-drawer"]) {
         const error = await errorOf(() => kds(["act-as-kds", flag]));
         expect(typeof error === "string" ? error : error.params).toEqual({
           reason: "shared_display_action",
         });
       }
+      const taking = await kds(["act-as-kds", "take-orders", "hand-over-orders"]);
+      expect(taking.capabilities).toEqual(["act-as-kds", "take-orders", "hand-over-orders"]);
       const created = await kds(["act-as-kds", "prepare-orders"]);
       const error = await errorOf(() =>
         inTx((tx) =>

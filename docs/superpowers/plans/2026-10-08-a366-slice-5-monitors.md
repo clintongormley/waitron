@@ -909,7 +909,8 @@ its test in the task named.
 
 **Rebase onto slices 2 and 3 (built, 2026-10-09).** The branch was rebased onto `main` `974f7170e`
 as one commit, `5f925a618`. Its venue-service migrations are now `0039_curved_magdalene.sql` and
-`0040_illegal_wolfsbane.sql`. Slice 3's kitchen display station-day routes
+`0040_illegal_wolfsbane.sql` (2026-10-09: the rebase onto slice 3 Part B's `0039_calm_joystick.sql`
+regenerated them as `0040_demonic_patriot.sql` and `0041_remarkable_mordo.sql`, the same SQL). Slice 3's kitchen display station-day routes
 (`GET` and `PUT /api/device/stations/:stationId/today`, `apps/server/src/station-today-api.ts`)
 checked the device's own station, a column Part A drops; on the branch they accept a station the
 device's station screen shows as available (`assertScreenShowsStation`, `:27-41`) and refuse any
@@ -2251,17 +2252,19 @@ when the change is undone; leaving with a changed list asks; #1422's reconnect c
 **Behaviour:** Pair and Edit. For a kitchen display: "Screen" (a `wt-combobox` of the kinds the
 profile offers), then "Every station" or station switches within the profile's list, and for a
 pass screen or pass monitor "Every zone" or zone switches. For a till or handheld: "Kitchen screen
-shows" and "Pass screen shows", each optional ("Every station the profile allows" when not set),
+shows" and "Pass screen shows", each optional ("Every station" when not set),
 offered when the profile shows that screen. **Owner 2026-10-09 (decision 17):** the Pass choice is
 a pass screen or a pass monitor, one or the other, the monitor offered only when the profile
 offers one; choosing it shows its station and zone lists within the profile's monitor row.
 Changing the profile clears a choice the new profile does not offer (as the binding is cleared
-today, `devices-screen.ts:1176-1182`). In Edit, each recorded removal and each switched-off entry
-is listed marked "No longer available" ("Ya no está disponible"), not editable and not part of the
-draft: opening the dialog does not make it changed; saving clears the removals (decision 21).
-Because a narrowing now keeps the device's stored choice (decision 21, owner 2026-10-09), the
-draft must be built only from the entries the read marks `available: true`, never from the stored
-rows, so a save cannot send back an entry the profile took away. The device list reads "Station
+today, `devices-screen.ts:1176-1182`). In Edit, each recorded removal is listed marked "No longer
+available" ("Ya no está disponible"), not editable and not part of the draft, while a switched-off
+entry stays in the choice, marked as switched off: opening the dialog does not make it changed; a
+save that changes the kitchen choice clears the removals, and a save that does not touch it sends
+no kitchen screens and leaves them (decision 21). Because a narrowing now keeps the device's stored
+choice (decision 21, owner 2026-10-09), the draft must be built only from the entries the read
+marks available or switched off, never from the stored rows, so a save cannot send back an entry
+the profile took away. The device list reads "Station
 screen: Grill, Fryer" / "Pass screen: every station · Terrace" / "Pass monitor: every station ·
 every zone", with "(Deli no longer available)" after a list that lost one; after a profile save
 gives Deli back to the device, the list shows Deli with no such note. Save rule: the kitchen

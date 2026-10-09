@@ -3082,11 +3082,11 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         )[0]!.sentAt;
       expect(await ticketItemsFor(tx, id)).toEqual([]);
       expect(await stamp()).toBeNull();
-      await fireCourse(tx, cfg, id, course.id, OPERATOR);
+      await fireCourse(tx, cfg, id, course.id, { personId: OPERATOR });
       const sentAt = await stamp();
       expect(sentAt).toEqual(expect.any(String));
       expect(await ticketItemsFor(tx, id)).toEqual([]);
-      await fireCourse(tx, cfg, id, course.id, OPERATOR);
+      await fireCourse(tx, cfg, id, course.id, { personId: OPERATOR });
       expect(await stamp()).toBe(sentAt);
     });
   });
@@ -4008,7 +4008,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
     expect(await fired()).toEqual([true, false]);
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, OPERATOR));
+    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR }));
 
     expect(await fired()).toEqual([true, true]);
     const lines = await db
@@ -4045,7 +4045,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       )[0]!.revision;
     const placedAt = await revision();
 
-    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, OPERATOR));
+    await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR }));
 
     // Only an open order's revision counts writes: a placed order's lines cannot be edited.
     expect(await revision()).toBe(placedAt);
@@ -4720,7 +4720,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
       ).rejects.toMatchObject({ code: "ticket.item_held" });
 
-      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       const afterFire = await courseItemsFor(tx, orderId);
       expect(byLine(afterFire, steak).firedAt).not.toBeNull();
 
@@ -4772,14 +4772,14 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       // The earliest course (Entrantes) auto-fired; re-firing it must NOT restamp — its WHERE
       // (`fired_at IS NULL`) matches nothing already-fired.
       const beforeEnt = byLine(await courseItemsFor(tx, orderId), starter).firedAt;
-      await fireCourse(tx, cfg, orderId, ent.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, ent.id, { personId: OPERATOR });
       expect(byLine(await courseItemsFor(tx, orderId), starter).firedAt).toBe(beforeEnt);
 
       // Fire the held course, capture its stamp, then fire it AGAIN — the second call is a no-op.
-      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       const firstStamp = byLine(await courseItemsFor(tx, orderId), main).firedAt;
       expect(firstStamp).not.toBeNull();
-      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBe(firstStamp);
     });
   });
@@ -4820,7 +4820,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(items, dessert).firedAt).toBeNull();
 
       // Release Principales explicitly — now fired for the order though it is not the earliest course.
-      await fireCourse(tx, cfg, tabId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, tabId, pri.id, { personId: OPERATOR });
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).not.toBeNull();
 
       // Round 3: another main. Principales is already fired for this order, so this new item joins the
@@ -4882,7 +4882,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
 
       await removeCourse(tx, cfg, pri.id);
-      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
     });
   });
@@ -4895,7 +4895,9 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
 
       const missing = randomUUID();
-      await expect(fireCourse(tx, cfg, orderId, missing, OPERATOR)).rejects.toMatchObject({
+      await expect(
+        fireCourse(tx, cfg, orderId, missing, { personId: OPERATOR }),
+      ).rejects.toMatchObject({
         code: "course.not_found",
         params: { courseId: missing },
       });
@@ -5726,7 +5728,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       // Fire the held course, and mark the earliest course AWAY (KDS-3's dispatch marker). The per-course
       // roll-ups follow: Entrantes now `away`, Principales now `fired`; the order stays (main not away).
-      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       const items = await courseItemsFor(tx, orderId);
       const entItem = items.find((i) => i.courseId === ent.id)!;
       await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
@@ -6001,7 +6003,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 
       // Now the ready-only guard: fire Principales (so its main is fired, still `queued`) and dispatch it.
       // The main is fired but NOT ready, so it does NOT go away.
-      await fireCourse(tx, cfg, orderId, pri.id, OPERATOR);
+      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       await markCourseAway(tx, cfg, orderId, pri.id);
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued"); // fired but not plated
@@ -9488,7 +9490,7 @@ describe("fireCourse on an order with no service context", () => {
         set course_id = case line_no when 1 then ${starters.id} else ${desserts.id} end
         where working_order_id = ${id}`);
       await fireLines(tx, cfg, id, await fireableLines(tx, id));
-      await fireCourse(tx, cfg, id, desserts.id, OPERATOR);
+      await fireCourse(tx, cfg, id, desserts.id, { personId: OPERATOR });
       return { id };
     });
 

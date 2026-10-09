@@ -2,16 +2,12 @@ import { sql } from "drizzle-orm";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
-import { kitchenStations } from "./kitchen-stations.js";
 import { printers } from "./printers.js";
 import { locations } from "./tenants.js";
-import { watchers } from "./watchers.js";
 
 /**
  * An always-on trusted device: a screen that joins and then authenticates with an httpOnly
- * cookie, with no per-person login. Its profile's form factor decides whether it binds a kitchen
- * station or watcher (kds) or neither (every other form factor), enforced by the
- * `device_binding_rule_insert` / `_update` triggers rather than by per-column NOT NULLs.
+ * cookie, with no per-person login.
  *
  * Revoke by setting `active = false`, never a hard DELETE: a device is a durable identity other
  * tables reference. No trigger refuses the DELETE; the rule lives in code.
@@ -24,12 +20,6 @@ export const devices = table(
       .notNull()
       /* v8 ignore start */
       .references(() => locations.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
-    /* v8 ignore start */
-    stationId: id("station_id").references(() => kitchenStations.id),
-    /* v8 ignore stop */
-    /* v8 ignore start */
-    watcherId: id("watcher_id").references(() => watchers.id),
     /* v8 ignore stop */
     deviceProfileId: id("device_profile_id")
       .notNull()

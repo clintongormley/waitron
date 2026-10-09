@@ -6,7 +6,7 @@ import { checkFailed } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
@@ -24,6 +24,7 @@ const MISSING = "bbbbbbbb-3333-4000-8000-0000000000ff";
 describe("order_groups, order_group_events and working_order_lines.group_id", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let nodeId = "";
+  let deviceId = "";
   let orderSeq = 0;
 
   const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -39,6 +40,7 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
       operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db, brandLocationId(LOCATION));
+    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
   });
 
   async function party(): Promise<string> {
@@ -214,5 +216,78 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
         .where(eq(workingOrderLines.workingOrderId, workingOrderId)),
     );
     expect(rows).toEqual([{ groupId }]);
+  });
+
+  it("accepts a group fired by a device, and refuses one naming both a person and a device", async () => {
+    const partyId = await party();
+    const firedAt = new Date().toISOString();
+    const id = await group({ partyId, state: "fired", firedAt, firedByDeviceId: deviceId });
+    const [row] = await inTx((tx) => tx.select().from(orderGroups).where(eq(orderGroups.id, id)));
+    expect(row).toMatchObject({ firedBy: null, firedByDeviceId: deviceId });
+    const error = await captureError(() =>
+      group({ partyId, state: "fired", firedAt, firedBy: OPERATOR, firedByDeviceId: deviceId }),
+    );
+    expect(checkFailed(error, "order_groups_firer_ck")).toBe(true);
+  });
+
+  it("refuses a group fired by a device that does not exist", async () => {
+    const partyId = await party();
+    const error = await captureError(() =>
+      group({
+        partyId,
+        state: "fired",
+        firedAt: new Date().toISOString(),
+        firedByDeviceId: MISSING,
+      }),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("accepts an event by a device alone, and refuses one by both or by neither", async () => {
+    const partyId = await party();
+    const event = { partyId, kind: "fired" as const, detail: {} };
+    await inTx((tx) =>
+      tx.insert(orderGroupEvents).values({ ...event, actorId: null, actorDeviceId: deviceId }),
+    );
+    const rows = await inTx((tx) =>
+      tx
+        .select({
+          actorId: orderGroupEvents.actorId,
+          actorDeviceId: orderGroupEvents.actorDeviceId,
+        })
+        .from(orderGroupEvents)
+        .where(eq(orderGroupEvents.partyId, partyId)),
+    );
+    expect(rows).toEqual([{ actorId: null, actorDeviceId: deviceId }]);
+    const both = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(orderGroupEvents)
+          .values({ ...event, actorId: OPERATOR, actorDeviceId: deviceId }),
+      ),
+    );
+    expect(checkFailed(both, "order_group_events_actor_ck")).toBe(true);
+    const neither = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(orderGroupEvents).values({ ...event, actorId: null, actorDeviceId: null }),
+      ),
+    );
+    expect(checkFailed(neither, "order_group_events_actor_ck")).toBe(true);
+  });
+
+  it("refuses an event by a device that does not exist", async () => {
+    const partyId = await party();
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(orderGroupEvents).values({
+          partyId,
+          kind: "fired",
+          detail: {},
+          actorId: null,
+          actorDeviceId: MISSING,
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

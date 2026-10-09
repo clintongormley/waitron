@@ -96,13 +96,14 @@ describe("planVenue", () => {
             "hand-keyed-card-payment",
             "prepare-orders",
             "hand-over-orders",
+            "run-the-pass",
           ],
           inactivityTimeoutSeconds: 300,
         },
         {
           name: "Cocina",
           formFactor: "kds",
-          capabilities: ["act-as-kds", "prepare-orders"],
+          capabilities: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
           inactivityTimeoutSeconds: null,
         },
         {

@@ -14,7 +14,7 @@ import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { groupArrivingDishes, printHoldTickets } from "./order-groups.js";
+import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
 import {
   checkAndBumpParty,
   openParty,
@@ -88,7 +88,7 @@ export async function moveBill(
 
   // Read before the bill's party changes, which clears the party's main bill when it is this bill.
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
-  let firers: ReadonlyMap<string, string> = new Map();
+  let firers: ReadonlyMap<string, Firer> = new Map();
   if (source !== null) {
     await refuseMainBillLeaving(tx, source, billId);
     firers = await leaveParty(tx, billId);
@@ -355,17 +355,19 @@ export async function takeIntoParty(
 /**
  * The bill leaves its party: refused `group.held_leaves_party` while a dish of it is held for the
  * kitchen, and its sent dishes leave their groups, keeping their ticket and served state. Returns,
- * by line id, who fired each dish's group, for the dishes that were in one.
+ * by line id, the person or kitchen display that fired each dish's group, for the dishes that were
+ * in one.
  */
 export async function leaveParty(
   tx: Transaction,
   billId: string,
-): Promise<ReadonlyMap<string, string>> {
+): Promise<ReadonlyMap<string, Firer>> {
   const lines = await tx
     .select({
       id: workingOrderLines.id,
       groupId: workingOrderLines.groupId,
       firedBy: orderGroups.firedBy,
+      firedByDeviceId: orderGroups.firedByDeviceId,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -381,8 +383,11 @@ export async function leaveParty(
     tx,
     lines.filter((line) => line.groupId !== null).map((line) => line.id),
   );
-  const firers = new Map<string, string>();
-  for (const line of lines) if (line.firedBy !== null) firers.set(line.id, line.firedBy);
+  const firers = new Map<string, Firer>();
+  for (const line of lines) {
+    if (line.firedBy !== null) firers.set(line.id, { personId: line.firedBy });
+    else if (line.firedByDeviceId !== null) firers.set(line.id, { deviceId: line.firedByDeviceId });
+  }
   return firers;
 }
 

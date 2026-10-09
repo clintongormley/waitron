@@ -1,6 +1,7 @@
 // Side-effect only: keeps the `device.*` codes (errors.ts) reachable from the file that throws them.
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { requireBodyUuid } from "@waitron/server-kit";
 import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
@@ -20,15 +21,20 @@ import {
   sessions,
 } from "@waitron/identity";
 import { IN_PROGRESS_PAYMENT_STATES, payments } from "@waitron/payments";
-import { getDeviceProfile, isSharedDisplay, kindOfFormFactor } from "@waitron/layouts";
+import { getDeviceProfile, isSharedDisplay } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
+import type {
+  DeviceKitchenScreen,
+  KitchenScreenKind,
+  KitchenScreenScope,
+  ProfileKitchenScreens,
+} from "@waitron/module";
 import { settleDevice } from "./device-equipment.js";
-import { requireLiveStation } from "./kitchen.js";
+import { KITCHEN_SCREEN_KINDS } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import { readWatcher } from "./watchers.js";
 import type { TillConfig } from "./till-config.js";
 
-/** A device's kind is DERIVED from its profile's form factor via {@link kindOfFormFactor}. */
+/** A device's kind is DERIVED from its profile's form factor via `kindOfFormFactor`. */
 export type { DeviceKind };
 
 /** A device's name as a manager typed it: trimmed and never blank. Uniqueness is the index's. */
@@ -75,7 +81,7 @@ interface DevicePrinters {
 }
 
 /**
- * Write a device's name, profile and binding, plus any `also` columns, refusals mapped by
+ * Write a device's name and profile, plus any `also` columns, refusals mapped by
  * {@link mapDeviceNameTaken}. When the profile changes or a disabled device comes back, its
  * equipment settles ({@link settleDevice}), taking the profile's free portable defaults; anything
  * else, such as a rename, leaves its choices and holds alone. Returns the printer choices the row
@@ -87,8 +93,6 @@ export async function updateDeviceSettings(
   settings: {
     label: string;
     profileId: string;
-    stationId: string | null;
-    watcherId: string | null;
   },
   also: Partial<typeof devices.$inferInsert> = {},
 ): Promise<DevicePrinters> {
@@ -103,8 +107,6 @@ export async function updateDeviceSettings(
         ...also,
         label: settings.label,
         deviceProfileId: settings.profileId,
-        stationId: settings.stationId,
-        watcherId: settings.watcherId,
       })
       .where(eq(devices.id, device.id));
   } catch (error) {
@@ -280,8 +282,9 @@ export async function endSessionsNotAdmitted(
 
 /**
  * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
- * the device is approved for and the person may sign in on, whose list names the station or watcher
- * the device shows, with no payment of the device's in progress. Its equipment settles through
+ * the device is approved for and the person may sign in on, with no payment of the device's in
+ * progress. The device's kitchen screens narrow to what the new profile offers, recording what they
+ * lost. Its equipment settles through
  * {@link updateDeviceSettings}; the sessions of people the new profile does not admit end, every
  * one when it is a shared display. Choosing the active profile changes nothing.
  */
@@ -295,8 +298,7 @@ export async function switchActiveProfile(
       active: devices.active,
       label: devices.label,
       deviceProfileId: devices.deviceProfileId,
-      stationId: devices.stationId,
-      watcherId: devices.watcherId,
+      locationId: devices.locationId,
     })
     .from(devices)
     .where(eq(devices.id, input.deviceId));
@@ -314,71 +316,109 @@ export async function switchActiveProfile(
   if (!(await canUseDeviceProfile(tx, input.profileId, input.personId)))
     throw new AppError("device_profile.not_admitted", {});
   await assertNoPaymentInProgress(tx, device.id);
-  await VENUE_SERVICE.assertProfileBinding(tx, input.profileId, {
-    stationId: device.stationId,
-    watcherId: device.watcherId,
-  });
-  await updateDeviceSettings(tx, device, {
-    label: device.label,
-    profileId: input.profileId,
-    stationId: device.stationId,
-    watcherId: device.watcherId,
-  });
+  // Before the move is written: the narrowing reads the current profile as what the device had.
+  await VENUE_SERVICE.narrowDeviceKitchenScreens(
+    tx,
+    { locationId: brandLocationId(device.locationId) },
+    device.id,
+    input.profileId,
+  );
+  await updateDeviceSettings(tx, device, { label: device.label, profileId: input.profileId });
   await keepApprovedAfterSwitch(tx, device.id, device.deviceProfileId, input.profileId);
   await endSessionsNotAdmitted(tx, device.id, input.profileId);
   return { activeProfileId: input.profileId };
 }
 
 /**
- * Resolve which station or watcher a device with this profile binds: one the profile's list names.
- * The ADMIN supplies the profile and binding when accepting a join request, never the joining device
- * on an unauthenticated route.
+ * The profile a manager chose for a device. One that names no profile — unknown, or deleted
+ * meanwhile — is a client-recoverable refusal, not a server fault.
  */
-export async function resolveDeviceBinding(
+export async function requireDeviceProfile(
+  tx: Transaction,
+  profileId: string,
+): Promise<{ formFactor: FormFactor }> {
+  const profile = await getDeviceProfile(tx, profileId);
+  if (profile === undefined) throw new AppError("device_profile.not_found", {});
+  return profile;
+}
+
+const KITCHEN_SCREENS_FIELD = "kitchenScreens";
+
+function screenIds(list: unknown): string[] | null {
+  if (list === undefined || list === null) return null;
+  if (!Array.isArray(list))
+    throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
+  return list.map((id: unknown) => requireBodyUuid(id, KITCHEN_SCREENS_FIELD));
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+}
+
+/** A request's `kitchenScreens`: absent stays absent; anything else must be a list of screens. */
+export function parseKitchenScreens(value: unknown): DeviceKitchenScreen[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value))
+    throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
+  return value.map((entry: unknown) => {
+    const screen = asRecord(entry);
+    if (!KITCHEN_SCREEN_KINDS.includes(screen.kind as KitchenScreenKind))
+      throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
+    return {
+      kind: screen.kind as KitchenScreenKind,
+      stationIds: screenIds(screen.stationIds),
+      zoneIds: screenIds(screen.zoneIds),
+    };
+  });
+}
+
+/** A profile request's `kitchenScreens`: absent stays absent; anything else must map each offered
+ * kind to its lists. */
+export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreens | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
+  const screens: Partial<Record<KitchenScreenKind, KitchenScreenScope>> = {};
+  for (const [kind, scope] of Object.entries(value)) {
+    if (
+      !KITCHEN_SCREEN_KINDS.includes(kind as KitchenScreenKind) ||
+      typeof scope !== "object" ||
+      scope === null
+    )
+      throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
+    const lists = asRecord(scope);
+    screens[kind as KitchenScreenKind] = {
+      stationIds: screenIds(lists.stationIds),
+      zoneIds: screenIds(lists.zoneIds),
+    };
+  }
+  return screens;
+}
+
+/**
+ * Checks the kitchen screens a device on this profile is given, writing nothing; `deviceId` names a
+ * device whose stored, since switched-off stations and zones it may keep.
+ */
+export async function resolveDeviceKitchenScreens(
   tx: Transaction,
   cfg: TillConfig,
   input: {
     profileId: string;
-    stationId?: string | null;
-    watcherId?: string | null;
-    /**
-     * The station and watcher the device already holds: keeping one is accepted even after it was
-     * switched off, so an edit need not re-choose it. Never passed when enabling a device.
-     */
-    kept?: { stationId: string | null; watcherId: string | null };
+    kitchenScreens?: readonly DeviceKitchenScreen[];
+    deviceId?: string;
   },
 ): Promise<{
-  stationId: string | null;
-  watcherId: string | null;
+  kitchenScreens: readonly DeviceKitchenScreen[];
   formFactor: FormFactor;
 }> {
-  const profile = await getDeviceProfile(tx, input.profileId);
-  // `profileId` is the admin's choice in the accept dialog, so one that names no profile — unknown,
-  // or deleted meanwhile — is a client-recoverable refusal, not a server fault.
-  if (profile === undefined) throw new AppError("device_profile.not_found", {});
-
-  // A kitchen screen carries one station or watcher; other form factors carry neither.
-  let stationId: string | null = null;
-  let watcherId: string | null = null;
-  if (kindOfFormFactor(profile.formFactor) === "kds_station") {
-    if (input.stationId != null && input.watcherId != null)
-      throw new AppError("management.request_invalid", { field: "watcherId" });
-    if (input.stationId == null && input.watcherId == null)
-      throw new AppError("device.station_required", {});
-    if (input.stationId != null) {
-      if (input.stationId !== input.kept?.stationId)
-        await requireLiveStation(tx, cfg, input.stationId);
-      stationId = input.stationId;
-    } else if (input.watcherId != null) {
-      const watcher = await readWatcher(tx, cfg, input.watcherId);
-      const kept = input.watcherId === input.kept?.watcherId;
-      if (watcher === null || !(watcher.active || kept))
-        throw new AppError("watcher.not_found", { watcherId: input.watcherId });
-      watcherId = input.watcherId;
-    }
-    await VENUE_SERVICE.assertProfileBinding(tx, input.profileId, { stationId, watcherId });
-  } else if (input.watcherId != null) {
-    throw new AppError("management.request_invalid", { field: "watcherId" });
-  }
-  return { stationId, watcherId, formFactor: profile.formFactor };
+  const profile = await requireDeviceProfile(tx, input.profileId);
+  const kitchenScreens = input.kitchenScreens ?? [];
+  await VENUE_SERVICE.assertDeviceKitchenScreens(
+    tx,
+    cfg,
+    input.profileId,
+    kitchenScreens,
+    input.deviceId,
+  );
+  return { kitchenScreens, formFactor: profile.formFactor };
 }

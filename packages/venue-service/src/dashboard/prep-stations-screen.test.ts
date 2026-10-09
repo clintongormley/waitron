@@ -159,8 +159,7 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
           label: "Pass screen",
           kind: "kds_station",
           active: true,
-          stationId: null,
-          watcherId: "pass",
+          kitchenScreens: [],
         },
       ],
       watchers: [pass, runner],
@@ -181,7 +180,7 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
     "every service zone",
   );
   expect(q(el, '[data-test="edit-watcher-pass-pass"]')?.textContent?.trim()).toBe("Yes");
-  expect(q(el, '[data-test="watcher-screens-pass"]')?.textContent).toContain("Pass screen");
+  expect(q(el, '[data-test="watcher-screens-pass"]')).toBeNull();
   expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
   expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
   expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
@@ -192,7 +191,6 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
   expect(follows.querySelector("a")?.getAttribute("href")).toBe(
     "/manage/prep-stations/view/watchers",
   );
-  q(el, '[data-test="new-watcher"]');
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')?.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "bread" } }),
   );
@@ -201,7 +199,7 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
 
-it("creates, edits and confirms removal of a watcher", async () => {
+it("edits and confirms removal of a watcher", async () => {
   setLocale("en");
   const pass = {
     id: "pass",
@@ -218,30 +216,10 @@ it("creates, edits and confirms removal of a watcher", async () => {
   };
   const a = api({
     load: vi.fn().mockResolvedValue({ ...view, watchers: [pass] }),
-    createWatcher: vi.fn(),
     updateWatcher: vi.fn(),
     removeWatcher: vi.fn(),
   });
   const el = await mount(a);
-  q(el, '[data-test="new-watcher"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="watcher-modal"]')).not.toBeNull();
-  q(el, '[data-test="watcher-modal"] watcher-form')!.dispatchEvent(
-    new CustomEvent("watcher-save", {
-      detail: {
-        input: {
-          name: "Runner",
-          everyStation: true,
-          stationIds: [],
-          everyZone: true,
-          zoneIds: [],
-          runsPass: false,
-        },
-      },
-    }),
-  );
-  await settle(el);
-  expect(a.createWatcher).toHaveBeenCalled();
   q(el, '[data-test="rename-watcher-pass"]')!.click();
   await settle(el);
   const rename = q(el, '[data-test="watcher-rename-name"]') as WtInput;
@@ -1326,7 +1304,13 @@ it("shows linked printers and kitchen screens in Tickets", async () => {
       printers: [{ id: "p1", name: "Bar printer" }],
       stationPrinters: [{ stationId: "bar", printerId: "p1" }],
       devices: [
-        { id: "d1", label: "Bar display", stationId: "bar", kind: "kds_station", active: true },
+        {
+          id: "d1",
+          label: "Bar display",
+          kitchenScreens: [stationScreen([slot("bar", "Bar")])],
+          kind: "kds_station",
+          active: true,
+        },
       ],
     }),
   });
@@ -2535,7 +2519,7 @@ it("a health snapshot ahead of routing metadata leaves Today blank until the sta
   expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });
 
-it("opens the default Stations tab and places create actions beside the tabs", async () => {
+it("opens the default Stations tab and places New station, the only create action, beside the tabs", async () => {
   setLocale("en");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
@@ -2552,11 +2536,10 @@ it("opens the default Stations tab and places create actions beside the tabs", a
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
-  expect(q(el, '[data-test="new-watcher"]')!.closest('[slot="actions"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelectorAll('[data-test="new-watcher"]')).toHaveLength(1);
-  q(el, '[data-test="new-watcher"]')!.click();
-  await settle(el);
-  expect(el.shadowRoot!.querySelector("watcher-form")).not.toBeNull();
+  expect(
+    [...q(el, '[slot="actions"]')!.children].map((child) => child.getAttribute("data-test")),
+  ).toEqual(["new-station"]);
+  expect(q(el, '[data-test="new-watcher"]')).toBeNull();
 });
 
 it.each(["tickets", "watchers", "settings"])(
@@ -2712,7 +2695,6 @@ it.each([
   },
 );
 
-// Two add buttons share the tab action area here, so the strip keeps half the row (A424).
 it.each([
   { locale: "en", width: 310 },
   { locale: "en", width: 390 },
@@ -2738,7 +2720,7 @@ it.each([
     const selected = tabs
       .shadowRoot!.querySelector('[aria-selected="true"]')!
       .getBoundingClientRect();
-    expect(tabs.querySelectorAll('[slot="actions"] wt-button')).toHaveLength(2);
+    expect(tabs.querySelectorAll('[slot="actions"] wt-button')).toHaveLength(1);
     expect(strip.width).toBeGreaterThanOrEqual(row.width / 2 - 1);
     expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
     expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
@@ -3298,6 +3280,24 @@ it.each([
   },
 );
 
+const slot = (id: string, name: string, available = true) => ({
+  id,
+  name,
+  available,
+  switchedOff: false,
+});
+const stationScreen = (
+  stations: ReturnType<typeof slot>[],
+  kind: "station" | "pass" | "pass_monitor" = "station",
+) => ({
+  kind,
+  available: true,
+  everyStation: false,
+  everyZone: true,
+  profileEveryStation: true,
+  stations,
+  zones: null,
+});
 const ticketView: PrepStationsView = {
   ...view,
   stations: [...view.stations, upstairs],
@@ -3312,24 +3312,21 @@ const ticketView: PrepStationsView = {
     {
       id: "current",
       label: "Bar screen",
-      stationId: "bar",
-      watcherId: null,
+      kitchenScreens: [stationScreen([slot("bar", "Bar")])],
       kind: "kds_station",
       active: true,
     },
     {
       id: "elsewhere",
       label: "Other screen",
-      stationId: "upstairs",
-      watcherId: null,
+      kitchenScreens: [stationScreen([slot("upstairs", "Upstairs bar")])],
       kind: "kds_station",
       active: true,
     },
     {
       id: "off",
       label: "Disabled screen",
-      stationId: "bar",
-      watcherId: null,
+      kitchenScreens: [stationScreen([slot("bar", "Bar")])],
       kind: "kds_station",
       active: false,
     },
@@ -3386,6 +3383,73 @@ it("Tickets names each station's printed and current screen outputs with separat
   expect(bar.querySelector("wt-combobox")).toBeNull();
   expect(watchers.querySelector("wt-combobox")).toBeNull();
 });
+
+it.each([
+  {
+    locale: "en",
+    bar: ["Bar screen — station screen", "Pass — pass screen", "Till 2 — station screen"],
+    upstairs: ["Other screen — station screen", "Pass — pass screen", "Expo — pass monitor"],
+  },
+  {
+    locale: "es",
+    bar: [
+      "Bar screen — pantalla de estación",
+      "Pass — pantalla de pase",
+      "Till 2 — pantalla de estación",
+    ],
+    upstairs: [
+      "Other screen — pantalla de estación",
+      "Pass — pantalla de pase",
+      "Expo — monitor de pase",
+    ],
+  },
+])(
+  "Tickets names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
+  async ({ locale, bar, upstairs }) => {
+    const server = structuredClone(ticketView);
+    server.devices.push(
+      {
+        id: "pass",
+        label: "Pass",
+        kind: "kds_station",
+        active: true,
+        kitchenScreens: [
+          stationScreen([slot("bar", "Bar"), slot("upstairs", "Upstairs bar")], "pass"),
+        ],
+      },
+      {
+        id: "till-grill",
+        label: "Till 2",
+        kind: "till",
+        active: true,
+        kitchenScreens: [stationScreen([slot("bar", "Bar")])],
+      },
+      { id: "till-none", label: "Till 1", kind: "till", active: true, kitchenScreens: [] },
+      {
+        id: "expo",
+        label: "Expo",
+        kind: "kds_station",
+        active: true,
+        kitchenScreens: [
+          stationScreen(
+            [slot("bar", "Bar", false), slot("upstairs", "Upstairs bar")],
+            "pass_monitor",
+          ),
+        ],
+      },
+    );
+    setLocale(locale);
+    const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
+    const names = (id: string) =>
+      [
+        ...ticketQ(table, `[data-test="screens-${id}"]`)!.querySelectorAll(
+          "[data-test=screen-device]",
+        ),
+      ].map((device) => device.textContent!.trim());
+    expect(names("bar")).toEqual(bar);
+    expect(names("upstairs")).toEqual(upstairs);
+  },
+);
 
 it("Tickets opens its printer cell as a multi-select, explains unavailable choices and saves once", async () => {
   const { el, a, table } = await mountTickets();
@@ -4006,27 +4070,8 @@ async function openWatcherCell(el: PrepStationsScreen, field: string) {
 function chooseWatcherCell(combo: WtCombobox, values: string[]) {
   combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values, value: values[0] ?? "" } }));
 }
-it("Watchers table keeps current and retained screen relationships read-only", async () => {
-  const server = structuredClone(ticketView);
-  server.devices.push(
-    {
-      id: "pass-screen",
-      label: "Pass display",
-      stationId: null,
-      watcherId: "pass",
-      kind: "kds_station",
-      active: true,
-    },
-    {
-      id: "old-screen",
-      label: "Old display",
-      stationId: null,
-      watcherId: "pass",
-      kind: "kds_station",
-      active: false,
-    },
-  );
-  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
+it("Watchers table no longer lists screens: a device chooses its kitchen screens on its own page", async () => {
+  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(ticketView) });
   const table = q(el, '[data-test="watchers-table"]') as unknown as {
     columns: { label: string }[];
   };
@@ -4035,15 +4080,10 @@ it("Watchers table keeps current and retained screen relationships read-only", a
     "Follows",
     "For service zones",
     "Runs the pass",
-    "Screens",
     "Printers",
     "Actions",
   ]);
-  const screens = watcherTableQ(el, '[data-test="watcher-screens-pass"]')!;
-  expect(screens.textContent).toContain("Pass display");
-  expect(screens.textContent).toContain("Old display (Disabled)");
-  expect(screens.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
-  expect(screens.querySelector("wt-combobox, wt-input, wt-switch")).toBeNull();
+  expect(watcherTableQ(el, '[data-test="watcher-screens-pass"]')).toBeNull();
   expect(watcherTableQ(el, '[data-test="edit-watcher-printers-pass"]')).not.toBeNull();
 });
 it.each(["follows", "zones"])(
@@ -4366,8 +4406,7 @@ it.each([
       server.devices.push({
         id: "retained",
         label: "Old display",
-        stationId: null,
-        watcherId: "pass",
+        kitchenScreens: [],
         kind: "kds_station",
         active: false,
       });
@@ -4990,20 +5029,6 @@ it("failed watcher removal explains itself and retains confirmation for retry", 
   expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
 });
 
-it.each(["cancel", "dismiss"])("%s abandons new watcher creation without writing", async (how) => {
-  const create = vi.fn();
-  const { el } = await mountWatcherPrinters({ createWatcher: create });
-  q(el, '[data-test="new-watcher"]')!.click();
-  await settle(el);
-  const modal = q(el, '[data-test="watcher-modal"]')!;
-  expect(modal).not.toBeNull();
-  if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
-  else modal.querySelector("watcher-form")!.dispatchEvent(new CustomEvent("watcher-cancel"));
-  await expect.poll(() => modal.isConnected).toBe(false);
-  expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
-  expect(create).not.toHaveBeenCalled();
-});
-
 it("keeps an attempted watcher Rename invalid through whitespace until a name is supplied", async () => {
   const save = vi.fn();
   const { el } = await mountWatcherPrinters({ updateWatcher: save });
@@ -5038,61 +5063,6 @@ it("keeps an attempted watcher Rename invalid through whitespace until a name is
   });
   expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
 });
-
-it.each(["watcher.name_taken", "connection.failed"])(
-  "new watcher creation retains a retryable form after %s",
-  async (code) => {
-    const create = vi.fn().mockRejectedValueOnce({ code }).mockResolvedValue({ id: "new" });
-    const { el } = await mountWatcherPrinters({ createWatcher: create });
-    q(el, '[data-test="new-watcher"]')!.click();
-    await settle(el);
-    const form = q(el, '[data-test="watcher-modal"]')!.querySelector(
-      "watcher-form",
-    )! as HTMLElement & { updateComplete: Promise<boolean> };
-    await form.updateComplete;
-    form
-      .shadowRoot!.querySelector('[name="name"]')!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Runner" } }));
-    for (const name of ["everyStation", "everyZone"])
-      form
-        .shadowRoot!.querySelector(`[name="${name}"]`)!
-        .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
-    await form.updateComplete;
-    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher"]')!.click();
-    await settle(el);
-    await form.updateComplete;
-    expect(q(el, '[data-test="watcher-modal"]')).not.toBeNull();
-    const name = form.shadowRoot!.querySelector('[name="name"]') as WtInput;
-    expect(name.value).toBe("Runner");
-    expect(name.getAttribute("aria-invalid")).toBe(
-      code === "watcher.name_taken" ? "true" : "false",
-    );
-    if (code === "watcher.name_taken")
-      expect(form.shadowRoot!.querySelector('[data-field-error="name"]')!.textContent).toBe(
-        "A watcher already has this name.",
-      );
-    if (code === "connection.failed")
-      expect(form.shadowRoot!.querySelector('[data-test="watcher-error"]')!.textContent).toBe(
-        "The change could not be saved.",
-      );
-    expect(
-      form.shadowRoot!.querySelector('[data-test="save-watcher"]')!.hasAttribute("disabled"),
-    ).toBe(false);
-    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Runner two" } }));
-    await form.updateComplete;
-    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher"]')!.click();
-    await settle(el);
-    expect(create).toHaveBeenNthCalledWith(2, {
-      name: "Runner two",
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: false,
-    });
-    expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
-  },
-);
 
 it("Tickets names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
   setLocale("en");

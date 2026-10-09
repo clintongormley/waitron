@@ -244,9 +244,8 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
     }),
-    getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
     listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
@@ -1202,7 +1201,6 @@ describe("till-app: switching the device's profile with a table order open", () 
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
       profileId: "pr-counter",
       approvedProfiles: [
         { id: "pr-counter", name: "Counter till" },
@@ -2754,7 +2752,6 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
           deviceId: "phone-1",
           name: "Phone",
           formFactor: "phone-portrait",
-          stationId: null,
         }),
       });
       await openMesa(el);
@@ -2800,7 +2797,6 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
           deviceId: "phone-1",
           name: "Phone",
           formFactor: "phone-portrait",
-          stationId: null,
         }),
       });
       await openMesa(el);

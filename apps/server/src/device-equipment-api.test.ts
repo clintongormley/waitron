@@ -667,8 +667,6 @@ describe("management: a device's equipment", () => {
       .then(([row]) =>
         send(deviceApp, managerCookie, "PATCH", `/management-api/devices/${deviceId}`, {
           ...row,
-          stationId: null,
-          watcherId: null,
           ...changes,
         }),
       );

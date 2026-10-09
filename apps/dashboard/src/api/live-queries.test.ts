@@ -120,17 +120,48 @@ it.each([
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile. Not `devices`, which a device's heartbeat changes every minute.
   ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
-  // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts): the list rows of
-  // live profiles, filtered and ordered by the station and watcher rows they name.
+  // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's
+  // rows and lists, joined to the stations and zones they name.
   [
-    "listProfileKitchenLists",
+    "listProfileKitchenScreens",
     [],
     [
       "device_profiles",
-      "device_profile_stations",
-      "device_profile_watchers",
+      "device_profile_kitchen_screens",
+      "device_profile_kitchen_screen_stations",
+      "device_profile_kitchen_screen_zones",
       "kitchen_stations",
-      "watchers",
+      "floor_zones",
+    ],
+  ],
+  // `GET /management-api/devices` (apps/server/src/device-api.ts): each device with its profile,
+  // equipment and kitchen screens, which `readDevicesKitchenScreens`
+  // (packages/venue-service/src/kitchen-screens.ts) resolves against the profile's lists, the
+  // stations and zones, and what narrowings took. No watchers: a device no longer holds one.
+  [
+    "listDevices",
+    [],
+    [
+      "devices",
+      "device_profiles",
+      "kitchen_stations",
+      "device_made_here_stations",
+      "device_approved_profiles",
+      "printer_holders",
+      "card_reader_holders",
+      "device_card_readers",
+      "device_profile_printers",
+      "device_profile_card_readers",
+      "printers",
+      "card_readers",
+      "device_kitchen_screens",
+      "device_kitchen_screen_stations",
+      "device_kitchen_screen_zones",
+      "device_kitchen_screen_removals",
+      "device_profile_kitchen_screens",
+      "device_profile_kitchen_screen_stations",
+      "device_profile_kitchen_screen_zones",
+      "floor_zones",
     ],
   ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under

@@ -827,6 +827,55 @@
       "when": 1791420200716,
       "tag": "0117_bill_invoice_delivery_transition",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "6",
+      "when": 1791500099448,
+      "tag": "0118_pass_item_marks",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "6",
+      "when": 1791500100531,
+      "tag": "0119_drop_device_binding_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "6",
+      "when": 1791500431305,
+      "tag": "0120_order_group_firer_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "6",
+      "when": 1791500437963,
+      "tag": "0121_order_group_firer_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "6",
+      "when": 1791509546940,
+      "tag": "0122_devices_drop_form_factor_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "6",
+      "when": 1791509551499,
+      "tag": "0123_devices_lose_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "6",
+      "when": 1791509559356,
+      "tag": "0124_devices_recreate_form_factor_trigger",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  devices,
   floorZones,
   kitchenStations,
   orderGroupEvents,
@@ -28,6 +29,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { joinTables, splitTable } from "./table-actions.js";
 import { addTabRound, fireCourse, listExpoQueue, parkOrder, placeOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   OPERATOR,
@@ -286,7 +288,13 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
     // Only the later-fired dish records who fired it.
     const made = await inTx(v, (tx: Transaction) =>
-      groupArrivingDishes(tx, luis.partyId, ana.tabId, MOVER, new Map([[burger!.id, FIRER]])),
+      groupArrivingDishes(
+        tx,
+        luis.partyId,
+        ana.tabId,
+        MOVER,
+        new Map([[burger!.id, { personId: FIRER }]]),
+      ),
     );
 
     const [group] = await groupsOf(luis.partyId);
@@ -387,7 +395,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       ]);
     }
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, tarta!.id].sort(),
@@ -425,13 +433,13 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [tarta!.id, heldPrincipales!.id],
     ]);
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id].sort(),
     );
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id, loose!.id, tarta!.id].sort(),
@@ -504,7 +512,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [loose!.id, heldPostres!.id],
     ]);
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id, loose!.id].sort(),
@@ -622,6 +630,67 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(await groupsOf(result.partyId!)).toEqual([
       expect.objectContaining({ state: "fired", firedBy: FIRER, submittedBy: MOVER }),
     ]);
+  });
+
+  it("names the kitchen display that fired a dish's group in the party it left, not the mover, when its bill moves", async () => {
+    const ana = await seat(v, await v.table("Libre 5"));
+    const libre = await v.table("Libre 6");
+    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const [vino] = await lineRows(b2);
+    const display = await seedSessionDevice(v.db, v.cfg);
+    await inTx(v, async (tx) => {
+      await tx.update(devices).set({ label: "Pantalla cocina" }).where(eq(devices.id, display));
+      await tx
+        .update(orderGroups)
+        .set({ firedBy: null, firedByDeviceId: display })
+        .where(eq(orderGroups.id, vino!.groupId!));
+    });
+
+    const result = await move(b2, { tableId: libre }, { operatorId: MOVER });
+
+    const [made] = await inTx(v, (tx) =>
+      tx
+        .select({
+          firedBy: orderGroups.firedBy,
+          firedByDeviceId: orderGroups.firedByDeviceId,
+          submittedBy: orderGroups.submittedBy,
+        })
+        .from(orderGroups)
+        .where(eq(orderGroups.partyId, result.partyId!)),
+    );
+    expect(made).toEqual({ firedBy: null, firedByDeviceId: display, submittedBy: MOVER });
+    const current = await inTx(v, (tx) => readCurrentOrders(tx, result.partyId!));
+    expect(current.groups.map((g) => g.sentBy)).toEqual(["Pantalla cocina"]);
+  });
+
+  it("names the kitchen display that fired a dish's group when Split a table takes its bill", async () => {
+    const [m4, m5] = [await v.table("Separar 6"), await v.table("Separar 7")];
+    const ana = await seat(v, m4);
+    await nextMillisecond();
+    const joining = { ...(await commandFor(v, ana.partyId)), bills: "merge" as const };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
+    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const [vino] = await lineRows(b2);
+    const display = await seedSessionDevice(v.db, v.cfg);
+    await inTx(v, (tx) =>
+      tx
+        .update(orderGroups)
+        .set({ firedBy: null, firedByDeviceId: display })
+        .where(eq(orderGroups.id, vino!.groupId!)),
+    );
+
+    const splitting = { ...(await commandFor(v, ana.partyId)), operatorId: MOVER };
+    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+    const [made] = await inTx(v, (tx) =>
+      tx
+        .select({ firedBy: orderGroups.firedBy, firedByDeviceId: orderGroups.firedByDeviceId })
+        .from(orderGroups)
+        .where(eq(orderGroups.partyId, result.partyId)),
+    );
+    expect(made).toEqual({ firedBy: null, firedByDeviceId: display });
   });
 
   it("puts the chosen bill's sent dishes in ONE fired group at position 1 of the party Split a table starts, fired by whoever fired their group", async () => {

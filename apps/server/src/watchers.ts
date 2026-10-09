@@ -2,7 +2,6 @@ import "./errors.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
-  devices,
   floorZones,
   isUniqueViolation,
   printers,
@@ -10,11 +9,9 @@ import {
   watchers,
   watcherPrinters,
   watcherStations,
-  watcherItemMarks,
   watcherZones,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { deviceProfileWatchers } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import { requireLiveStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
@@ -162,17 +159,13 @@ export async function updateWatcher(
 }
 
 /** What keeps a watcher from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
-export const WATCHER_REFERENCES: readonly Reference[] = [
-  { table: devices, column: devices.watcherId },
-  { table: watcherItemMarks, column: watcherItemMarks.watcherId },
-];
+export const WATCHER_REFERENCES: readonly Reference[] = [];
 
 /** A watcher's own settings, deleted with it. */
 export const WATCHER_SETTINGS: readonly Reference[] = [
   { table: watcherStations, column: watcherStations.watcherId },
   { table: watcherZones, column: watcherZones.watcherId },
   { table: watcherPrinters, column: watcherPrinters.watcherId },
-  { table: deviceProfileWatchers, column: deviceProfileWatchers.watcherId },
 ];
 
 export function watchersInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {

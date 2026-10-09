@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
-import type { DashboardApi, DeviceProfile, Printer, Station, Watcher } from "../api/client.js";
+import type { DashboardApi, DeviceProfile, Printer, Station } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -59,18 +59,6 @@ const station: Station = {
   overdueAfterMinutes: 10,
   forgottenAfterMinutes: 15,
 };
-const watcher: Watcher = {
-  id: "w1",
-  name: "Pass",
-  active: true,
-  displayOrder: 0,
-  everyStation: true,
-  stationIds: [],
-  everyZone: true,
-  zoneIds: [],
-  runsPass: true,
-  printerIds: [],
-};
 class ProfileLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
@@ -115,9 +103,8 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
       ],
       listPrinters: async () => [printer, { ...printer, id: "r2", name: "Bar" }],
       listStations: async () => [station],
-      listWatchers: async () => [watcher],
-      listProfileKitchenLists: async () => [
-        { profileId: "p1", stationIds: ["s1"], watcherIds: [] },
+      listProfileKitchenScreens: async () => [
+        { profileId: "p1", screens: { station: { stationIds: ["s1"], zoneIds: null } } },
       ],
       listStaff: async () => [
         {
@@ -225,13 +212,72 @@ it("W69 kitchen profile lists are protected with clean reverts", async () => {
     {},
     { ...profile, formFactor: "kds", capabilities: [], startingScreen: null },
   );
-  change(screen, "profile-station-s1", false);
+  change(screen, "profile-station-screen-station-s1", false);
   expect(unload()).toBe(true);
-  change(screen, "profile-station-s1", true);
+  change(screen, "profile-station-screen-station-s1", true);
   expect(unload()).toBe(false);
-  change(screen, "profile-watcher-w1", true);
+  change(screen, "profile-pass-monitor", true);
   expect(unload()).toBe(true);
-  change(screen, "profile-watcher-w1", false);
+  change(screen, "profile-pass-monitor", false);
+  expect(unload()).toBe(false);
+});
+
+it("A366 a till's pass monitor is protected, and leaving with it asks", async () => {
+  const { app, screen } = await mount();
+  change(screen, "profile-pass-monitor", true);
+  expect(unload()).toBe(true);
+  q(screen, "profile-cancel")!.click();
+  await choose(app, "keep");
+  expect(q(screen, "editor-form")).not.toBeNull();
+  change(screen, "profile-pass-monitor", false);
+  expect(unload()).toBe(false);
+});
+
+it("A366 reconnect: a departed save's narrowed devices stay off the screen, and a kitchen screen changed after it still asks", async () => {
+  let finish!: () => void;
+  const kds = { ...profile, formFactor: "kds" as const, capabilities: [], startingScreen: null };
+  const { app, screen } = await mount(
+    {
+      updateDeviceProfile: async () => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return {
+          ...kds,
+          narrowedDevices: [
+            {
+              deviceId: "dv1",
+              deviceName: "Pantalla Pase",
+              lost: { screens: [], stations: [{ id: "s1", name: "Kitchen" }], zones: [] },
+            },
+          ],
+        };
+      },
+    },
+    kds,
+  );
+  change(screen, "profile-station-screen-station-s1", false);
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => typeof finish).toBe("function");
+  screen.remove();
+  app.shadowRoot!.append(screen);
+  await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
+  q(screen, "edit-p1")!.click();
+  await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
+  await screen.updateComplete;
+  change(screen, "profile-pass-monitor", true);
+  finish();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await screen.updateComplete;
+  expect(q(screen, "narrowed-devices")).toBeNull();
+  expect((q(screen, "profile-pass-monitor") as HTMLElement & { checked: boolean }).checked).toBe(
+    true,
+  );
+  expect(unload()).toBe(true);
+  q(screen, "profile-cancel")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => q(screen, "editor-form")).toBeNull();
+  expect(q(screen, "narrowed-devices")).toBeNull();
   expect(unload()).toBe(false);
 });
 
@@ -251,15 +297,15 @@ it("W69 kitchen choices compare membership after reselecting in a different orde
   const { screen } = await mount(
     {
       listStations: async () => [station, { ...station, id: "s2", name: "Bar" }],
-      listProfileKitchenLists: async () => [
-        { profileId: "p1", stationIds: ["s1", "s2"], watcherIds: [] },
+      listProfileKitchenScreens: async () => [
+        { profileId: "p1", screens: { station: { stationIds: ["s1", "s2"], zoneIds: null } } },
       ],
     },
     { ...profile, formFactor: "kds", capabilities: [], startingScreen: null },
   );
-  change(screen, "profile-station-s1", false);
+  change(screen, "profile-station-screen-station-s1", false);
   expect(unload()).toBe(true);
-  change(screen, "profile-station-s1", true);
+  change(screen, "profile-station-screen-station-s1", true);
   expect(unload()).toBe(false);
 });
 it("W69 an accepted profile save closes before a refused refresh", async () => {

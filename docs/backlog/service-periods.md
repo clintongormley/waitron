@@ -6,8 +6,8 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4–7, each planned then built without
-  stopping for the owner**
+  APPROVED 2026-10-07; remaining work is slices 4, 6 and 7, and slice 5 Part B, each planned
+  then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
   a name with one customer menu plus staff-only menus, a department's day is time ranges each given
@@ -19,8 +19,8 @@ their full text.
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
-  in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired
-  after slice 4. Revised 2026-10-08 to the owner's answers (any device may run a station or pass
+  in two pull requests — kitchen screens and monitors after slice 1 (Part A), watcher printers
+  retired after slice 4 (Part B, still to build). Revised 2026-10-08 to the owner's answers (any device may run a station or pass
   screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
   revision added listed at its end.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),

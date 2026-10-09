@@ -43,7 +43,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createWatcher, setPrinterWatcher } from "./watchers.js";
@@ -77,6 +77,7 @@ import {
   bumpGroupReady,
   fireGroup,
   listOrderGroups,
+  readCurrentOrders,
   markGroupAway,
   moveLinesToGroup,
   reorderHeldGroups,
@@ -2317,6 +2318,67 @@ describe("sending lines on their own", () => {
   });
 });
 
+describe("a device as the firer", () => {
+  async function firingDevice(v: Venue): Promise<{ id: string; label: string }> {
+    const id = await seedSessionDevice(db, v.cfg);
+    const [row] = await db.select({ label: devices.label }).from(devices).where(eq(devices.id, id));
+    return { id, label: row!.label };
+  }
+
+  it("records the device, not a person, when a course fires its held groups, and shows it as the sender", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const device = await firingDevice(v);
+    const [steak] = await db
+      .select({ courseId: workingOrderLines.courseId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.productId, v.productId.steak))
+      .limit(1);
+
+    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak!.courseId!, { deviceId: device.id }));
+
+    const [group] = await db.select().from(orderGroups).where(eq(orderGroups.id, s.mains));
+    expect(group).toMatchObject({ state: "fired", firedBy: null, firedByDeviceId: device.id });
+    const [event] = await db
+      .select()
+      .from(orderGroupEvents)
+      .where(and(eq(orderGroupEvents.groupId, s.mains), eq(orderGroupEvents.kind, "fired")));
+    expect(event).toMatchObject({ actorId: null, actorDeviceId: device.id });
+    const read = await inTx((tx) => readCurrentOrders(tx, s.partyId));
+    expect(read.groups.find((g) => g.id === s.mains)?.sentBy).toBe(device.label);
+    expect(read.groups.find((g) => g.id === s.drinks)?.sentBy).toBeNull();
+  });
+
+  it("records the device when a group fires, keeping the device's id as the command's operator", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const device = await firingDevice(v);
+    const command = await args(s.partyId, { operatorId: device.id });
+
+    await inTx((tx) => fireGroup(tx, v.cfg, s.partyId, s.warm, command, { deviceId: device.id }));
+
+    const [group] = await db.select().from(orderGroups).where(eq(orderGroups.id, s.warm));
+    expect(group).toMatchObject({ state: "fired", firedBy: null, firedByDeviceId: device.id });
+    expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
+      groupId: s.warm,
+      kind: "fired",
+      actorId: null,
+    });
+    const replay = await inTx((tx) =>
+      fireGroup(tx, v.cfg, s.partyId, s.warm, command, { deviceId: device.id }),
+    );
+    expect(replay).toEqual({ revision: await revisionOf(s.partyId) });
+  });
+
+  it("records the person a group's command names when no firer is given", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await fire(v, s.partyId, s.warm, { operatorId: MIA });
+    const [group] = await db.select().from(orderGroups).where(eq(orderGroups.id, s.warm));
+    expect(group).toMatchObject({ firedBy: MIA, firedByDeviceId: null });
+  });
+});
+
 describe("the course Fire of the station and the pass, on a party", () => {
   async function courseIdOf(v: Venue, dish: Dish): Promise<string> {
     const [row] = await db
@@ -2334,7 +2396,9 @@ describe("the course Fire of the station and the pass, on a party", () => {
     const revision = await revisionOf(s.partyId);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), MIA));
+    await inTx(async (tx) =>
+      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: MIA }),
+    );
 
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
     const states = Object.fromEntries(
@@ -2372,7 +2436,9 @@ describe("the course Fire of the station and the pass, on a party", () => {
     const [steakGroup, fishGroup, warmGroup] = made.groups.map((group) => group.id);
     await reorder(s.partyId, [fishGroup!, warmGroup!, steakGroup!]);
 
-    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
+    await inTx(async (tx) =>
+      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
+    );
 
     const fired = (await eventsOf(s.partyId)).filter((event) => event.kind === "fired");
     expect(fired.map((event) => event.groupId)).toEqual([fishGroup, steakGroup]);
@@ -2387,7 +2453,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const mains = await courseIdOf(v, "steak");
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, ALEX));
+    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, { personId: ALEX }));
 
     const later = await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak")] }]);
     const laterGroup = later.groups[0]!.id;
@@ -2395,7 +2461,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(steak!.sentAt).toBeNull();
     expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
 
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, ALEX));
+    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, mains, { personId: ALEX }));
 
     expect((await linesIn(s.partyId, laterGroup))[0]!.sentAt).not.toBeNull();
     expect(await firedTicketLineIds(s.partyId)).toContain(steak!.id);
@@ -2415,7 +2481,9 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
+    await inTx(async (tx) =>
+      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
+    );
 
     expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id, fish!.id].sort());
     expect((await groupsOf(s.partyId)).groups.map((group) => group.state)).toEqual([
@@ -2436,7 +2504,9 @@ describe("the course Fire of the station and the pass, on a party", () => {
     expect(await firedTicketLineIds(s.partyId)).toEqual([]);
     const jobsBefore = (await printed(v)).length;
 
-    await inTx(async (tx) => fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), ALEX));
+    await inTx(async (tx) =>
+      fireCourse(tx, v.cfg, s.tabId, await courseIdOf(v, "steak"), { personId: ALEX }),
+    );
 
     expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id]);
     expect((await printed(v)).slice(jobsBefore).join("\n")).toContain(DISHES.steak.kitchen);
@@ -2451,7 +2521,7 @@ describe("the course Fire of the station and the pass, on a party", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, courseId, ALEX)),
+      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, courseId, { personId: ALEX })),
       { code: "product.unavailable", params: { productId: v.productId.steak } },
     );
   });
@@ -2462,14 +2532,14 @@ describe("the course Fire of the station and the pass, on a party", () => {
     const drinks = await courseIdOf(v, "beer");
     const before = await snapshot(v, s.partyId);
 
-    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, drinks, ALEX));
+    await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, drinks, { personId: ALEX }));
     expect(await snapshot(v, s.partyId)).toEqual(before);
 
     const missing = randomUUID();
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, missing, ALEX)),
+      () => inTx((tx) => fireCourse(tx, v.cfg, s.tabId, missing, { personId: ALEX })),
       { code: "course.not_found", params: { courseId: missing } },
     );
   });
@@ -3250,8 +3320,7 @@ describe("a paper-only station (Review Focus 6, server half)", () => {
   it("leaves every fired item queued and the group not ready, when no kitchen screen is enrolled", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const screens = await db.select().from(devices).where(eq(devices.stationId, v.stationId));
-    expect(screens).toEqual([]);
+    expect(db.all(sql`select device_id from device_kitchen_screens`)).toEqual([]);
 
     await fire(v, s.partyId, s.warm);
 
@@ -3910,7 +3979,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       const s = await specExample(v);
       const steak = await lineOf(s, s.mains, "steak", v);
 
-      await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak.courseId!, MIA));
+      await inTx((tx) => fireCourse(tx, v.cfg, s.tabId, steak.courseId!, { personId: MIA }));
 
       expect(await printedSince(v, 5)).toEqual([
         [

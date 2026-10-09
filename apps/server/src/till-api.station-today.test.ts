@@ -391,9 +391,9 @@ describe("the kitchen display's station day", () => {
     expect(await rows()).toEqual([
       expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
     ]);
-    const answer = await deviceCall("GET", "/api/device/station");
+    const answer = await deviceCall("GET", "/api/device/station-screen");
     expect(answer.status).toBe(200);
-    expect(answer.json.station).toMatchObject({
+    expect((answer.json.stations as unknown[])[0]).toMatchObject({
       id: grill,
       name: "Grill",
       today: {
@@ -416,8 +416,8 @@ describe("the kitchen display's station day", () => {
       ).status,
     ).toBe(204);
     expect(await rows()).toEqual([]);
-    const answer = await deviceCall("GET", "/api/device/station");
-    expect(answer.json.station).toMatchObject({
+    const answer = await deviceCall("GET", "/api/device/station-screen");
+    expect((answer.json.stations as unknown[])[0]).toMatchObject({
       name: "Grill",
       today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" },
     });
@@ -427,9 +427,9 @@ describe("the kitchen display's station day", () => {
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, grill));
-    const answer = await deviceCall("GET", "/api/device/station");
+    const answer = await deviceCall("GET", "/api/device/station-screen");
     expect(answer.status).toBe(200);
-    expect(answer.json.station).toMatchObject({
+    expect((answer.json.stations as unknown[])[0]).toMatchObject({
       id: grill,
       name: "Grill",
       today: {

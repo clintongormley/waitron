@@ -5,7 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { deviceProfiles, withTransaction } from "@waitron/db";
 import { readProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -141,6 +141,36 @@ describe("seedDemoRestaurant", () => {
     expect(separate).toEqual([{ count: 0 }]);
   });
 
+  it("gives the kitchen display profile the pass levers, and seeds no watcher", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const profiles = await suite.db
+      .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.formFactor, "kds"));
+    expect(profiles).toEqual([
+      {
+        formFactor: "kds",
+        capabilities: [
+          "act-as-kds",
+          "prepare-orders",
+          "take-orders",
+          "hand-over-orders",
+          "run-the-pass",
+        ],
+      },
+    ]);
+    const { rows } = await suite.db.execute<{ n: number }>(sql`
+      select cast(count(*) as integer) as n from watchers`);
+    expect(rows).toEqual([{ n: 0 }]);
+  });
+
   it("connects the demo printer to every device profile and the preparation stations", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
@@ -230,39 +260,6 @@ describe("seedDemoRestaurant", () => {
     });
 
     await withTransaction(suite.db, async (tx) => {
-      const { rows: pass } = await tx.execute<{
-        name: string;
-        every_zone: number;
-        runs_pass: number;
-        active: number;
-        display_order: number;
-        station_name: string;
-      }>(sql`
-        select w.name, w.every_zone, w.runs_pass, w.active, w.display_order,
-               ks.name as station_name
-        from watchers w
-        join watcher_stations ws on ws.watcher_id = w.id
-        join kitchen_stations ks on ks.id = ws.station_id
-        where w.location_id = ${venue.locationId}
-        order by ks.name`);
-      expect(pass).toEqual([
-        {
-          name: "Pass",
-          every_zone: 1,
-          runs_pass: 1,
-          active: 1,
-          display_order: 1,
-          station_name: "Deli counter",
-        },
-        {
-          name: "Pass",
-          every_zone: 1,
-          runs_pass: 1,
-          active: 1,
-          display_order: 1,
-          station_name: "Kitchen",
-        },
-      ]);
       const cfg = { locationId: brandLocationId(venue.locationId) };
       const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from kitchen_stations where location_id = ${venue.locationId}`);

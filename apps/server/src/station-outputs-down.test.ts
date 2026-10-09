@@ -28,8 +28,10 @@ import { parkOrder, placeOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
 import { stationOutputAlertSource } from "./alert-sources.js";
-import { createWatcher } from "./watchers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import { VENUE_SERVICE } from "./modules.js";
+import type { DeviceKitchenScreen } from "@waitron/module";
+import { locationId } from "@waitron/shared";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -57,6 +59,50 @@ async function setup() {
     return p!.id;
   };
   return { venue, grill, bar: bar.id, printer };
+}
+
+/** A device row, given a station screen on `stationId` offered on its profile. */
+async function stationScreenDevice(values: typeof devices.$inferInsert & { stationId: string }) {
+  const { stationId, ...row } = values;
+  return kitchenScreenDevice(row, { kind: "station", stationIds: [stationId], zoneIds: null });
+}
+
+/** A device row, given `screen` offered on its profile. */
+async function kitchenScreenDevice(row: typeof devices.$inferInsert, screen: DeviceKitchenScreen) {
+  const [device] = await suite.db.insert(devices).values(row).returning({ id: devices.id });
+  const cfg = { locationId: locationId(row.locationId) };
+  await withTransaction(suite.db, async (tx) => {
+    await VENUE_SERVICE.addProfileKitchenScreen(tx, cfg, row.deviceProfileId, screen);
+    await VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+      deviceId: device!.id,
+      profileId: row.deviceProfileId,
+      screens: [screen],
+    });
+  });
+  return device!.id;
+}
+
+async function profile(formFactor: "kds" | "till"): Promise<string> {
+  const [row] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: randomUUID(), formFactor, capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
+}
+
+/** The dark-screen alerts' keys, every station open and the grill the default. */
+async function darkScreenAlertKeys(f: Awaited<ReturnType<typeof setup>>): Promise<string[]> {
+  const source = stationOutputAlertSource({
+    locationId: f.venue.cfg.locationId,
+    stationStates: async () =>
+      new Map([
+        [f.grill, { open: true, isDefault: true, active: true, name: "Cocina" }],
+        [f.bar, { open: true, isDefault: false, active: true, name: "Bar" }],
+      ]),
+  });
+  return (await withTransaction(suite.db, (tx) => source.read({ tx, now: at })))
+    .map((alert) => alert.key)
+    .filter((key) => key.startsWith("station.screens_dark:"));
 }
 
 async function job(
@@ -124,7 +170,7 @@ describe("station output status", () => {
   it("uses the printer pull and recent waiting-dish indexes in its SQL plans", async () => {
     const f = await setup();
     const plans = await withTransaction(suite.db, async (tx) => {
-      const printer = stationPrintersDownQuery(tx, f.venue.cfg.locationId, at, f.grill);
+      const printer = stationPrintersDownQuery(tx, f.venue.cfg.locationId, at, [f.grill]);
       const waiting = waitingDishesQuery(tx, f.venue.cfg.locationId, at, [f.grill]);
       expect(printer.toSQL().sql).toContain("print_jobs");
       expect(waiting.toSQL().sql).toContain("ticket_items");
@@ -178,7 +224,7 @@ describe("station output status", () => {
     await job(f.venue.cfg.locationId, two);
     expect(
       await withTransaction(suite.db, (tx) =>
-        stationPrintersDown(tx, f.venue.cfg.locationId, at, f.grill),
+        stationPrintersDown(tx, f.venue.cfg.locationId, at, [f.grill]),
       ),
     ).toMatchObject([{ printerId: one }]);
     await suite.db
@@ -187,7 +233,7 @@ describe("station output status", () => {
       .where(eq(printJobs.printerId, one));
     expect(
       await withTransaction(suite.db, (tx) =>
-        stationPrintersDown(tx, f.venue.cfg.locationId, at, f.grill),
+        stationPrintersDown(tx, f.venue.cfg.locationId, at, [f.grill]),
       ),
     ).toEqual([]);
   });
@@ -223,7 +269,7 @@ describe("station output status", () => {
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -270,7 +316,7 @@ describe("station output status", () => {
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -280,7 +326,7 @@ describe("station output status", () => {
     expect(
       await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
     ).toEqual([{ stationId: f.grill, stationName: "Cocina", lastSeenAt: null }]);
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -293,35 +339,27 @@ describe("station output status", () => {
     ).toEqual([]);
   });
 
-  it("does not count a watcher screen as Grill's own screen", async () => {
+  it("does not count a pass screen on Grill as Grill's own screen", async () => {
     const f = await setup();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const [profile] = await suite.db
       .insert(deviceProfiles)
       .values({ name: "KDS", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    const pass = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, f.venue.cfg, {
-        name: "Pass",
-        everyStation: false,
-        stationIds: [f.grill],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
+    const pass = await kitchenScreenDevice(
+      {
+        locationId: f.venue.cfg.locationId,
+        deviceProfileId: profile!.id,
+        label: "Dark pass",
+        tokenHash: "hash",
+        lastSeenAt: "2026-10-02T17:55:00.000Z",
+      },
+      { kind: "pass", stationIds: [f.grill], zoneIds: null },
     );
-    await suite.db.insert(devices).values({
-      locationId: f.venue.cfg.locationId,
-      watcherId: pass.id,
-      deviceProfileId: profile!.id,
-      label: "Dark pass",
-      tokenHash: "hash",
-      lastSeenAt: "2026-10-02T17:55:00.000Z",
-    });
     expect(
       await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
     ).toEqual([]);
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -332,7 +370,7 @@ describe("station output status", () => {
     await suite.db
       .update(devices)
       .set({ lastSeenAt: "2026-10-02T18:05:00.000Z" })
-      .where(eq(devices.watcherId, pass.id));
+      .where(eq(devices.id, pass));
     expect(
       await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
     ).toEqual([
@@ -347,7 +385,7 @@ describe("station output status", () => {
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -375,7 +413,7 @@ describe("station output status", () => {
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.bar,
       deviceProfileId: profile!.id,
@@ -412,7 +450,7 @@ describe("station output status", () => {
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    await suite.db.insert(devices).values({
+    await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -434,5 +472,74 @@ describe("station output status", () => {
         screen: "prep-stations",
       },
     ]);
+  });
+  it("alerts a dark station screen for each of its stations", async () => {
+    const f = await setup();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
+    await kitchenScreenDevice(
+      {
+        locationId: f.venue.cfg.locationId,
+        deviceProfileId: await profile("kds"),
+        label: "Dark line",
+        tokenHash: "hash",
+        lastSeenAt: "2026-10-02T17:55:00.000Z",
+      },
+      { kind: "station", stationIds: [f.grill, f.bar], zoneIds: null },
+    );
+    expect((await darkScreenAlertKeys(f)).sort()).toEqual(
+      [`station.screens_dark:${f.grill}`, `station.screens_dark:${f.bar}`].sort(),
+    );
+  });
+
+  describe("no screen is normal", () => {
+    it("raises nothing in a venue with no kitchen display", async () => {
+      const f = await setup();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
+      expect(
+        await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
+      ).toEqual([]);
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+
+    it("raises nothing when the only kitchen displays run pass screens and monitors, all silent", async () => {
+      const f = await setup();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      for (const kind of ["pass", "pass_monitor"] as const) {
+        await kitchenScreenDevice(
+          {
+            locationId: f.venue.cfg.locationId,
+            deviceProfileId: await profile("kds"),
+            label: kind,
+            tokenHash: "hash",
+          },
+          { kind, stationIds: null, zoneIds: null },
+        );
+      }
+      expect(
+        await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
+      ).toEqual([]);
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
+
+    it("raises nothing for a till whose station choice covers the station and which has been silent an hour", async () => {
+      const f = await setup();
+      await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      await kitchenScreenDevice(
+        {
+          locationId: f.venue.cfg.locationId,
+          deviceProfileId: await profile("till"),
+          label: "Till",
+          tokenHash: "hash",
+          lastSeenAt: "2026-10-02T17:05:00.000Z",
+        },
+        { kind: "station", stationIds: [f.grill], zoneIds: null },
+      );
+      expect(
+        await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
+      ).toEqual([]);
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
+    });
   });
 });

@@ -10,3 +10,4 @@ export * from "./department-transfers.js";
 export * from "./period-extensions.js";
 export * from "./zone-closed-times.js";
 export * from "./zone-extensions.js";
+export * from "./kitchen-screens.js";

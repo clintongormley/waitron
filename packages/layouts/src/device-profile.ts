@@ -15,8 +15,13 @@ export function isSharedDisplay(formFactor: FormFactor): boolean {
   return formFactor === "kds";
 }
 
-/** The only action a shared display can be given: every other one needs a named person signed in. */
-const SHARED_DISPLAY_ACTIONS: readonly ProfileAction[] = ["prepare-orders"];
+/** The actions a shared display can be given: every other one needs a named person signed in.
+ * Taking and handing over are for a kitchen display's pass screen. */
+const SHARED_DISPLAY_ACTIONS: readonly ProfileAction[] = [
+  "prepare-orders",
+  "take-orders",
+  "hand-over-orders",
+];
 
 function sharedDisplayMay(flag: CapabilityFlag): boolean {
   const action = (PROFILE_ACTIONS as readonly CapabilityFlag[]).includes(flag);
@@ -100,6 +105,7 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
     "hand-keyed-card-payment",
     "prepare-orders",
     "hand-over-orders",
+    "run-the-pass",
   ],
   "phone-portrait": [
     "take-orders",
@@ -108,7 +114,7 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
     "hand-over-orders",
   ],
   "tablet-landscape": [],
-  kds: ["act-as-kds", "prepare-orders"],
+  kds: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
 };
 
 /** No `canvasId`: a seeded profile binds no canvas, so its canvas is resolved by form factor

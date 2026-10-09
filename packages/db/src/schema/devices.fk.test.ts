@@ -16,8 +16,8 @@ const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
 const PROFILE_A = "11111111-0000-4000-8000-0000000000a4";
 const TOKEN_HASH = "scrypt$00$00";
 
-// Every seed device points at a `till` profile and binds no station, as the binding rule requires,
-// so the only constraint each case leaves violated is the FK under test.
+// Every seed device points at a real `till` profile, so the only constraint each case leaves
+// violated is the FK under test.
 describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
@@ -67,7 +67,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       .values({
         locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
-        stationId: null,
         label: "Bound till",
         tokenHash: TOKEN_HASH,
         receiptPrinterId: PRINTER_A,
@@ -80,7 +79,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       .values({
         locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
-        stationId: null,
         label: "Unbound printer",
         tokenHash: TOKEN_HASH,
       })
@@ -125,7 +123,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       .values({
         locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
-        stationId: null,
         label: "Profile-bound",
         tokenHash: TOKEN_HASH,
       })
@@ -141,7 +138,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     await admin.insert(devices).values({
       locationId: LOCATION_A,
       deviceProfileId: profileC,
-      stationId: null,
       label: "Restrict device",
       tokenHash: TOKEN_HASH,
     });

@@ -41,7 +41,14 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
-import { listOnProfile } from "./testing/enrol.js";
+import { offerOnProfile } from "./testing/enrol.js";
+import type { DeviceKitchenScreen } from "@waitron/module";
+
+const stationScreen = (stationId: string): DeviceKitchenScreen => ({
+  kind: "station",
+  stationIds: [stationId],
+  zoneIds: null,
+});
 
 /** Hooks a case sets to land a race at a fixed point; each is a no-op unless a case sets it. */
 const between = vi.hoisted(() => ({
@@ -265,7 +272,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       deviceId: joinId,
       formFactor: "till",
       name: "Bar till",
-      stationId: null,
+      kitchenScreens: [],
     });
   });
 
@@ -432,7 +439,7 @@ describe("a disabled device comes back as the same device", () => {
     venue: Venue,
     holdId: string,
     joined: { joinId: string; verificationNumber: string },
-    body: { name: string; profileId: string; stationId?: string },
+    body: { name: string; profileId: string; kitchenScreens?: DeviceKitchenScreen[] },
   ): Promise<Response> {
     const checked = await send(
       app,
@@ -610,8 +617,7 @@ describe("a disabled device comes back as the same device", () => {
       body: {
         name: "Bar till",
         profileId,
-        stationId,
-        watcherId: null,
+        ...(stationId === null ? {} : { kitchenScreens: [stationScreen(stationId)] }),
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
         madeHereStationIds: [],
@@ -656,8 +662,7 @@ describe("a disabled device comes back as the same device", () => {
         returning: {
           name: "Bar till",
           profileId,
-          stationId: null,
-          watcherId: null,
+          kitchenScreens: [],
           profileRetired: false,
         },
       },
@@ -842,7 +847,7 @@ describe("a disabled device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const kitchenId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, kitchenId, { stationId: venue.defaultStationId }),
+      offerOnProfile(tx, venue.cfg, kitchenId, stationScreen(venue.defaultStationId)),
     );
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
@@ -870,14 +875,14 @@ describe("a disabled device comes back as the same device", () => {
     const app = mountWithSignIn(venue);
     const kitchenId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, kitchenId, { stationId: venue.defaultStationId }),
+      offerOnProfile(tx, venue.cfg, kitchenId, stationScreen(venue.defaultStationId)),
     );
     const holdId = await openWindow(app, venue);
     const joined = await knock(app, "Pass screen");
     const accepted = await pair(app, venue, holdId, joined, {
       name: "Pass screen",
       profileId: kitchenId,
-      stationId: venue.defaultStationId,
+      kitchenScreens: [stationScreen(venue.defaultStationId)],
     });
     expect(accepted.status).toBe(200);
     const [person] = await suite.db
@@ -968,8 +973,6 @@ describe("a disabled device comes back as the same device", () => {
       body: {
         name: "Bar till",
         profileId,
-        stationId: null,
-        watcherId: null,
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
         approvedProfileIds: [managersOnly],
@@ -1074,8 +1077,6 @@ describe("a disabled device comes back as the same device", () => {
       active: false,
       label: "Bar till",
       deviceProfileId: profileId,
-      stationId: null,
-      watcherId: null,
     });
     const status = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });
     expect(await status.json()).toEqual({ status: "not_approved" });

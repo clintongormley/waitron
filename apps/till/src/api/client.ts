@@ -1396,12 +1396,30 @@ export interface DeviceIdentity {
   deviceId: string;
   formFactor: string;
   name: string;
-  stationId: string | null;
-  watcherId?: string | null;
+  /** A kitchen display runs the first available one. */
+  kitchenScreens: ResolvedKitchenScreen[];
   /** The device's active profile. A server too old to send it offers no switch. */
   profileId?: string;
   /** The profiles a signed-in person may switch the device to, the active one first. */
   approvedProfiles?: ProfileChoice[];
+}
+
+export type KitchenScreenKind = "station" | "pass" | "pass_monitor";
+
+/** One station or zone of a device's kitchen screen: shown, or no longer available. */
+export interface ScreenSlot {
+  id: string;
+  name: string;
+  available: boolean;
+}
+
+export interface ResolvedKitchenScreen {
+  kind: KitchenScreenKind;
+  /** False when a profile narrowing took this kind from the device. */
+  available: boolean;
+  stations: ScreenSlot[];
+  /** null: no zone filter. */
+  zones: ScreenSlot[] | null;
 }
 
 export interface ProfileChoice {
@@ -1466,25 +1484,33 @@ export interface EquipmentChange {
   takeOver?: boolean;
 }
 
-/**
- * `GET /api/device/station` success — the enrolled display's OWN bound station and its queue. The
- * device cookie names the station, so there is no id to pass.
- */
-export interface DeviceStation {
-  station: {
-    id: string;
-    name: string;
-    today: {
-      open: boolean;
-      isDefault: boolean;
-      byHand: Station["byHand"];
-      sendsTo: { id: string; name: string } | null;
-      why: Station["why"];
-    };
-    queue: StationQueueGroup[];
-    notices: KitchenNotice[];
-    printersDown: StationPrinterDown[];
+/** A station the display works: available, or switched off on its own page and still holding the
+ * dishes waiting there (owner 2026-10-09). */
+export interface DeviceWorkedStation {
+  id: string;
+  name: string;
+  available: boolean;
+  switchedOff?: boolean;
+  today: {
+    open: boolean;
+    isDefault: boolean;
+    byHand: Station["byHand"];
+    sendsTo: { id: string; name: string } | null;
+    why: Station["why"];
   };
+  queue: StationQueueGroup[];
+  notices: KitchenNotice[];
+  printersDown: StationPrinterDown[];
+}
+
+/** `GET /api/device/station-screen` success — the display's stations in display order. A station a
+ * narrowing took comes back with no queue; one switched off on its own page keeps its queue. */
+export interface DeviceStationScreen {
+  stations: (
+    | (DeviceWorkedStation & { available: true })
+    | (DeviceWorkedStation & { available: false; switchedOff: true })
+    | { id: string; name: string; available: false; switchedOff: false }
+  )[];
 }
 
 /**
@@ -1495,7 +1521,6 @@ export interface DevDevice {
   id: string;
   kind: string;
   label: string;
-  stationId: string | null;
   active: boolean;
 }
 export interface DevDeviceList {
@@ -1598,11 +1623,6 @@ export interface ExpoOrder {
   worstBand: TimingBand;
 }
 
-export interface WatcherSummary {
-  id: string;
-  name: string;
-  runsPass: boolean;
-}
 export interface WatcherCourse extends ExpoCourse {
   allReady: boolean;
 }
@@ -1613,9 +1633,20 @@ export interface WatcherOrder extends Omit<ExpoOrder, "courses" | "groups"> {
   courses: WatcherCourse[];
   groups: WatcherGroup[];
 }
-export interface WatcherBoard {
-  watcher: WatcherSummary & { active: boolean };
+/** `GET /api/device/pass-screen`: dishes stay until this device marks them Done. */
+export interface DevicePassScreen {
   orders: WatcherOrder[];
+  stations: ScreenSlot[];
+  /** null: no zone filter. */
+  zones: ScreenSlot[] | null;
+}
+/** `GET /api/device/pass-monitor`: what All stations shows, narrowed to the monitor's stations and
+ *  zones; no Done marks. */
+export interface DevicePassMonitor {
+  orders: ExpoOrder[];
+  stations: ScreenSlot[];
+  /** null: no zone filter. */
+  zones: ScreenSlot[] | null;
 }
 
 /**
@@ -2651,27 +2682,100 @@ export class TillApi {
   }
 
   /**
-   * The enrolled display's OWN bound station and queue → `GET /api/device/station`. A missing, rejected
-   * or revoked cookie rejects `device.unauthorized` (401).
+   * The device's station screen → `GET /api/device/station-screen`. A missing, rejected or revoked
+   * cookie, or a device with no station screen or one a narrowing took, rejects
+   * `device.unauthorized` (401).
    */
-  getDeviceStation(options: ReadOptions = {}): Promise<DeviceStation> {
-    return this.#request<DeviceStation>("/api/device/station", "GET", undefined, options.signal);
+  getDeviceStationScreen(options: ReadOptions = {}): Promise<DeviceStationScreen> {
+    return this.#request<DeviceStationScreen>(
+      "/api/device/station-screen",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
-  getDeviceWatcher(options: ReadOptions = {}): Promise<WatcherBoard> {
-    return this.#request<WatcherBoard>("/api/device/watcher", "GET", undefined, options.signal);
+  /** The device's pass screen → `GET /api/device/pass-screen`; at a till it needs a signed-in person.
+   *  Rejects `device.unauthorized` as {@link getDeviceStationScreen} does. */
+  getDevicePassScreen(options: ReadOptions = {}): Promise<DevicePassScreen> {
+    return this.#request<DevicePassScreen>(
+      "/api/device/pass-screen",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
-  async markDeviceWatcherDone(ticketItemIds: string[], done: boolean): Promise<void> {
-    await this.#request<void>("/api/device/watcher/done", "POST", { ticketItemIds, done });
+  /** A kitchen display's pass monitor → `GET /api/device/pass-monitor`. Rejects
+   *  `device.unauthorized` as {@link getDeviceStationScreen} does. */
+  getDevicePassMonitor(options: ReadOptions = {}): Promise<DevicePassMonitor> {
+    return this.#request<DevicePassMonitor>(
+      "/api/device/pass-monitor",
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  /** Marks dishes Done on the device's pass screen, or takes the mark back with `done: false`. */
+  async markDevicePassDone(ticketItemIds: string[], done: boolean): Promise<void> {
+    await this.#request<void>("/api/device/pass-screen/done", "POST", { ticketItemIds, done });
+  }
+
+  /**
+   * A kitchen display's course levers → `POST /api/device/orders/:id/courses/:courseId/fire`,
+   * `/ready` and `/away`. Kitchen displays only; each checks the device's profile action
+   * (`device.forbidden_action`) and the order's zone against its pass screen
+   * (`kitchen_screen.zone_not_allowed`).
+   */
+  async fireDeviceCourse(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
+  }
+
+  async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(
+      `/api/device/orders/${orderId}/courses/${courseId}/ready`,
+      "POST",
+      {},
+    );
+  }
+
+  async markDeviceCourseAway(orderId: string, courseId: string): Promise<void> {
+    await this.#request<void>(`/api/device/orders/${orderId}/courses/${courseId}/away`, "POST", {});
+  }
+
+  /** A kitchen display's group levers → `POST /api/device/parties/:id/groups/:gid/fire`, `/ready`
+   * and `/away`, refused as {@link fireDeviceCourse} is, plus the command refusals. */
+  fireDeviceGroup(
+    partyId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
+  }
+
+  bumpDeviceGroupReady(
+    partyId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/ready`, "POST", command);
+  }
+
+  markDeviceGroupAway(
+    partyId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/device/parties/${partyId}/groups/${groupId}/away`, "POST", command);
   }
 
   /**
    * This enrolled device's OWN identity → `GET /api/device/me`. A missing, rejected or revoked cookie
    * rejects `device.unauthorized` (401) — the signal that this browser is not an enrolled device.
    */
-  getDeviceIdentity(): Promise<DeviceIdentity> {
-    return this.#request<DeviceIdentity>("/api/device/me", "GET");
+  getDeviceIdentity(options: ReadOptions = {}): Promise<DeviceIdentity> {
+    return this.#request<DeviceIdentity>("/api/device/me", "GET", undefined, options.signal);
   }
 
   /**
@@ -2707,9 +2811,9 @@ export class TillApi {
   }
 
   /**
-   * Advance ONE of the bound station's ticket items → `POST /api/device/ticket-items/:id/advance`, the
-   * device-scoped {@link advanceTicketItem}: the cookie's own station is the only one it may touch. An
-   * item at ANOTHER station rejects `device.forbidden_station` (403); an illegal transition or unknown
+   * Advance ONE ticket item at a station the device's station screen works →
+   * `POST /api/device/ticket-items/:id/advance`, the device-scoped {@link advanceTicketItem}. An
+   * item at any other station rejects `device.forbidden_station` (403); an illegal transition or unknown
    * item `ticket.invalid_transition`.
    */
   async deviceAdvance(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
@@ -2786,23 +2890,6 @@ export class TillApi {
    */
   getExpoQueue(options: ReadOptions = {}): Promise<ExpoOrder[]> {
     return this.#request<ExpoOrder[]>("/api/expo/queue", "GET", undefined, options.signal);
-  }
-
-  listWatchers(): Promise<WatcherSummary[]> {
-    return this.#request<WatcherSummary[]>("/api/watchers", "GET");
-  }
-
-  getWatcherQueue(id: string, options: ReadOptions = {}): Promise<WatcherBoard> {
-    return this.#request<WatcherBoard>(
-      `/api/watchers/${id}/queue`,
-      "GET",
-      undefined,
-      options.signal,
-    );
-  }
-
-  async markWatcherDone(id: string, ticketItemIds: string[], done: boolean): Promise<void> {
-    await this.#request<void>(`/api/watchers/${id}/done`, "POST", { ticketItemIds, done });
   }
 
   /**

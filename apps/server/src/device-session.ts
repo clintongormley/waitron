@@ -94,8 +94,6 @@ export interface DeviceBinding {
   formFactor: FormFactor;
   label: string;
   locationId: string;
-  stationId: string | null;
-  watcherId: string | null;
   deviceProfileId: string;
   capabilities: CapabilityFlag[];
 }
@@ -106,8 +104,6 @@ export const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
   label: devices.label,
   locationId: devices.locationId,
-  stationId: devices.stationId,
-  watcherId: devices.watcherId,
   deviceProfileId: devices.deviceProfileId,
   capabilities: deviceProfiles.capabilities,
 };
@@ -155,8 +151,6 @@ export function toDeviceBinding(
     formFactor: row.formFactor,
     label: row.label,
     locationId: row.locationId,
-    stationId: row.stationId,
-    watcherId: row.watcherId,
     deviceProfileId: row.deviceProfileId,
     capabilities: row.capabilities as CapabilityFlag[],
   };
@@ -351,8 +345,9 @@ export async function assertDeviceStillProven(
 
 /**
  * Refuses `device.forbidden_action` when the device's active profile does not permit `action`
- * (`profileAllows`: a shared display may only prepare). `label` is the refusal's `action` param,
- * which the routes that predate the action names keep. `null` (no device) passes.
+ * (`profileAllows`: a shared display may only take, prepare and hand over). `label` is the
+ * refusal's `action` param, which the routes that predate the action names keep. `null` (no
+ * device) passes.
  */
 export function assertProfileAction(
   device: DeviceBinding | null,

@@ -10,7 +10,6 @@ import {
   floorZones,
   id,
   json,
-  kitchenStations,
   label,
   locations,
   newId,
@@ -18,7 +17,6 @@ import {
   sales,
   table,
   tsString,
-  watchers,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -212,50 +210,6 @@ export const deviceProfileZones = table(
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
       name: "device_profile_zones_zone_fk",
-    }),
-  ],
-);
-
-/** The kitchen stations a device using this profile may be set to show. */
-export const deviceProfileStations = table(
-  "device_profile_stations",
-  {
-    deviceProfileId: id("device_profile_id").notNull(),
-    stationId: id("station_id").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.deviceProfileId, t.stationId], name: "device_profile_stations_pk" }),
-    foreignKey({
-      columns: [t.deviceProfileId],
-      foreignColumns: [deviceProfiles.id],
-      name: "device_profile_stations_profile_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.stationId],
-      foreignColumns: [kitchenStations.id],
-      name: "device_profile_stations_station_fk",
-    }),
-  ],
-);
-
-/** The watchers a device using this profile may be set to show. */
-export const deviceProfileWatchers = table(
-  "device_profile_watchers",
-  {
-    deviceProfileId: id("device_profile_id").notNull(),
-    watcherId: id("watcher_id").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.deviceProfileId, t.watcherId], name: "device_profile_watchers_pk" }),
-    foreignKey({
-      columns: [t.deviceProfileId],
-      foreignColumns: [deviceProfiles.id],
-      name: "device_profile_watchers_profile_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.watcherId],
-      foreignColumns: [watchers.id],
-      name: "device_profile_watchers_watcher_fk",
     }),
   ],
 );

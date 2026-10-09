@@ -139,10 +139,17 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
  * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
+ * | POST /api/device/orders/:id/courses/:courseId/fire|ready|away | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/courses/:courseId/<verb> |
+ * | POST /api/device/parties/:id/groups/:gid/fire|ready|away | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
  *
  * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
  * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
  * on past the rows they hide until a page of twenty shows.
+ *
+ * A kitchen display's pass levers (`/api/device/...`) read the order's or the party's zone as its
+ * pass board does and check it against the zones of the device's pass screen, not a zone of the
+ * profile: a zone outside them, or no zone on a pass with a zone list, is refused
+ * `kitchen_screen.zone_not_allowed`.
  *
  * Where the check runs: first inside the route's own transaction, except where the route's work
  * runs in a helper that opens its own transaction — `/api/sales`, `/api/pay`, POST
@@ -153,10 +160,12 @@ import { offerProducts } from "./testing/zone-offers.js";
  *
  * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
  * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
- * reads; the kitchen's station,
- * notice, ticket-item, expo, watcher and `/api/orders/:id/stations/:sid/advance` routes, whose scope
- * is the device's station or watcher ("a kitchen display" below); and the drawer, the authorizer and reason lists,
- * `/api/statuses` and `GET/PUT /api/device/equipment`, which name no zone.
+ * reads; the kitchen's `/api/device/station-screen`, notice and ticket-item routes, scoped by the
+ * device's station screen ("a kitchen display" below); `/api/device/pass-screen`, its `/done` and
+ * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
+ * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
+ * and the drawer, the authorizer and reason lists, `/api/statuses` and
+ * `GET/PUT /api/device/equipment`, which name no zone.
  */
 
 const suite = useVenueDb({
@@ -374,8 +383,6 @@ beforeAll(async () => {
       departmentId: await departmentOf(tx, v.tables.zoneId),
       allowedZoneIds: null,
       startingZoneId: f.bar,
-      stationIds: [],
-      watcherIds: [],
     }),
   );
   restaurant = await signIn(restaurantProfile);
@@ -386,8 +393,6 @@ beforeAll(async () => {
       departmentId: await departmentOf(tx, f.deliCounter),
       allowedZoneIds: null,
       startingZoneId: f.deliCounter,
-      stationIds: [],
-      watcherIds: [],
     }),
   );
   deli = await signIn(deliProfile);
@@ -1029,9 +1034,9 @@ describe("a kitchen display", () => {
       );
     }
 
-    const queue = await send(display, "GET", "/api/device/station");
+    const queue = await send(display, "GET", "/api/device/station-screen");
     expect(queue.status).toBe(200);
-    const orders = (queue.body.station as { queue: StationQueueGroup[] }).queue.map(
+    const orders = (queue.body.stations as { queue: StationQueueGroup[] }[])[0]!.queue.map(
       (group) => group.orderId,
     );
     expect(orders).toEqual(expect.arrayContaining([deliRound.tabId, restRound.tabId]));
@@ -1052,6 +1057,56 @@ describe("a kitchen display", () => {
       });
     }
   });
+});
+
+describe("a kitchen display's pass levers", () => {
+  async function restaurantPass(): Promise<string> {
+    const [row] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: `Pass ${randomUUID()}`,
+        formFactor: "kds",
+        capabilities: ["take-orders", "prepare-orders", "hand-over-orders"],
+      })
+      .returning({ id: deviceProfiles.id });
+    const device = await enrolDeviceForTest(suite.db, v.cfg, {
+      name: `Pass ${randomUUID()}`,
+      profileId: row!.id,
+      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.restTables, f.bar] },
+    });
+    return `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+  }
+
+  for (const verb of ["fire", "ready", "away"] as const) {
+    it(`refuses the display's POST /api/device/orders/:id/courses/:courseId/${verb}`, async () => {
+      const answer = await send(
+        await restaurantPass(),
+        "POST",
+        `/api/device/orders/${f.deliOrder}/courses/${randomUUID()}/${verb}`,
+      );
+      expect(answer).toEqual({
+        status: 403,
+        body: {
+          error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: f.deliCounter } },
+        },
+      });
+    });
+
+    it(`refuses the display's POST /api/device/parties/:id/groups/:gid/${verb}`, async () => {
+      const answer = await send(
+        await restaurantPass(),
+        "POST",
+        `/api/device/parties/${f.deliParty}/groups/${randomUUID()}/${verb}`,
+        { submissionId: randomUUID(), expectedPartyRevision: 0 },
+      );
+      expect(answer).toEqual({
+        status: 403,
+        body: {
+          error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: f.deliTables } },
+        },
+      });
+    });
+  }
 });
 
 describe("a Restaurant profile on another department's zone", () => {
@@ -1248,8 +1303,6 @@ describe("a Restaurant profile in its own zones", () => {
         departmentId: restaurantId,
         allowedZoneIds: [zone.id],
         startingZoneId: zone.id,
-        stationIds: [],
-        watcherIds: [],
       });
       return zone.id;
     });

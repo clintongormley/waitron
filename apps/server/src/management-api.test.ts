@@ -4,8 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
-  devices,
   floorZones,
   kitchenCourses,
   kitchenStations,
@@ -368,23 +366,6 @@ describe("/management-api/watchers", () => {
   }
 
   /** A switched-off kitchen screen still naming the watcher, so the watcher is in use. */
-  async function bindDevice(watcherId: string): Promise<void> {
-    await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: unique("Watcher screen"), formFactor: "kds" })
-        .returning({ id: deviceProfiles.id });
-      await tx.insert(devices).values({
-        locationId: venue.locationId,
-        watcherId,
-        deviceProfileId: profile!.id,
-        label: unique("Pass screen"),
-        tokenHash: randomUUID(),
-        active: false,
-      });
-    });
-  }
-
   async function listWatchers(
     query = "",
   ): Promise<{ id: string; active: boolean; inUse: boolean }[]> {
@@ -393,35 +374,39 @@ describe("/management-api/watchers", () => {
     return (await res.json()) as { id: string; active: boolean; inUse: boolean }[];
   }
 
-  it("deletes an unused watcher, and disables one a device names, which only the disabled list shows", async () => {
+  it("deletes a watcher, and disables one when asked, which only the disabled list shows; no device keeps one in use", async () => {
     const unused = await createWatcher(unique("Unused"));
-    const used = await createWatcher(unique("Used"));
-    await bindDevice(used);
+    const kept = await createWatcher(unique("Kept"));
     expect((await listWatchers()).every((w) => !("inUse" in w))).toBe(true);
     expect(await listWatchers("?includeDisabled=true")).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: unused, active: true, inUse: false }),
-        expect.objectContaining({ id: used, active: true, inUse: true }),
+        expect.objectContaining({ id: kept, active: true, inUse: false }),
       ]),
     );
-    for (const id of [unused, used]) {
-      expect((await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-    }
+    expect((await req(`/watchers/${unused}`, { method: "DELETE" }, managerCookie)).status).toBe(
+      204,
+    );
+    expect(
+      (await req(`/watchers/${kept}?disable=true`, { method: "DELETE" }, managerCookie)).status,
+    ).toBe(204);
     const active = (await listWatchers()).map((w) => w.id);
     expect(active).not.toContain(unused);
-    expect(active).not.toContain(used);
+    expect(active).not.toContain(kept);
     const all = await listWatchers("?includeDisabled=true");
     expect(all.find((w) => w.id === unused)).toBeUndefined();
-    expect(all.find((w) => w.id === used)).toMatchObject({ active: false, inUse: true });
+    expect(all.find((w) => w.id === kept)).toMatchObject({ active: false, inUse: false });
     expect(all.every((w) => typeof w.inUse === "boolean")).toBe(true);
-    expect((await req(`/watchers/${used}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    expect((await req(`/watchers/${kept}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    expect(
+      (await listWatchers("?includeDisabled=true")).find((w) => w.id === kept),
+    ).toBeUndefined();
   });
 
   it("enables a disabled watcher as itself; refuses a taken name, an unknown id and a staff session", async () => {
     const name = unique("Again");
     const id = await createWatcher(name);
-    await bindDevice(id);
-    await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
+    await req(`/watchers/${id}?disable=true`, { method: "DELETE" }, managerCookie);
     const taker = await createWatcher(name);
     const taken = await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie);
     expect(taken.status).toBe(409);
@@ -441,7 +426,7 @@ describe("/management-api/watchers", () => {
     expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
       name,
       active: true,
-      inUse: true,
+      inUse: false,
       runsPass: true,
       displayOrder: 3,
     });

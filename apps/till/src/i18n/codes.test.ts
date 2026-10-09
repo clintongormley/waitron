@@ -430,18 +430,6 @@ it("says in both languages that a printer cannot be chosen for this device, nami
   expect(codeMessage("device.binding_invalid", "es")).toMatch(/impresora/i);
 });
 
-it("words a profile switch refused for the station or watcher the device shows, in both languages", () => {
-  for (const [code, en, es] of [
-    ["station.not_allowed", /station/i, /estación/i],
-    ["watcher.not_allowed", /watcher/i, /seguimiento/i],
-  ] as const) {
-    expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
-    expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
-    expect(codeMessage(code, "en")).toMatch(en);
-    expect(codeMessage(code, "es")).toMatch(es);
-  }
-});
-
 it("explains that unsupported published menus require a venue reset in both languages", () => {
   expect(codeMessage("menu.reset_required", "en")).toBe(
     "This venue has a menu in an unsupported format. Reset the venue before using menus.",
@@ -496,5 +484,20 @@ it("explains the closed-zone refusal while preserving payment and move choices i
   );
   expect(codeMessage("service_zone.closed", "es")).toBe(
     "Esa zona está cerrada ahora, así que no se puede pedir nada nuevo. Las cuentas se pueden cobrar o mover.",
+  );
+});
+
+it("tells a kitchen display why its pass lever was refused, in both languages", () => {
+  expect(codeMessage("kitchen_screen.zone_not_allowed", "en")).toBe(
+    "This order is in a zone this pass screen doesn't show.",
+  );
+  expect(codeMessage("kitchen_screen.zone_not_allowed", "es")).toBe(
+    "Este pedido es de una zona que esta pantalla de pase no muestra.",
+  );
+  expect(codeMessage("kitchen_screen.not_allowed", "en")).toBe(
+    "This device no longer shows that screen. Ask a manager to choose its screens again.",
+  );
+  expect(codeMessage("kitchen_screen.not_allowed", "es")).toBe(
+    "Este dispositivo ya no muestra esa pantalla. Pide a un responsable que vuelva a elegir sus pantallas.",
   );
 });

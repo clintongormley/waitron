@@ -14,7 +14,9 @@ import {
 import { endDeviceSessions, hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { FormFactor } from "@waitron/layouts";
-import { insertDevice, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
+import type { DeviceKitchenScreen, ResolvedKitchenScreen } from "@waitron/module";
+import { insertDevice, resolveDeviceKitchenScreens, updateDeviceSettings } from "./device.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { settleDevice } from "./device-equipment.js";
 import type { PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
@@ -238,14 +240,13 @@ export async function provenDisabledDevice(
 }
 
 /**
- * What the Pair step offers for a returning device: the disabled row's own name and binding, and
- * whether its profile was retired.
+ * What the Pair step offers for a returning device: the disabled row's own name, profile and
+ * kitchen screens, and whether its profile was retired.
  */
 export interface ReturningDetails {
   name: string;
   profileId: string;
-  stationId: string | null;
-  watcherId: string | null;
+  kitchenScreens: ResolvedKitchenScreen[];
   /** The profile was deleted while only disabled devices held it, so Pair cannot reuse it. */
   profileRetired: boolean;
 }
@@ -256,6 +257,7 @@ export interface ReturningDetails {
  */
 export async function returningDevicesOf(
   tx: Transaction,
+  cfg: TillConfig,
   ids: readonly string[],
 ): Promise<Map<string, ReturningDetails>> {
   if (ids.length === 0) return new Map();
@@ -264,17 +266,20 @@ export async function returningDevicesOf(
       id: devices.id,
       name: devices.label,
       profileId: devices.deviceProfileId,
-      stationId: devices.stationId,
-      watcherId: devices.watcherId,
       retiredAt: deviceProfiles.retiredAt,
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(and(inArray(devices.id, [...ids]), eq(devices.active, false)));
+  const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
+    tx,
+    cfg,
+    rows.map((row) => row.id),
+  );
   return new Map(
     rows.map(({ id, retiredAt, ...details }) => [
       id,
-      { ...details, profileRetired: retiredAt !== null },
+      { ...details, kitchenScreens: screens.get(id)!, profileRetired: retiredAt !== null },
     ]),
   );
 }
@@ -491,8 +496,7 @@ export async function acceptDeviceJoinRequest(
   input: {
     label: string;
     profileId: string;
-    stationId?: string | null;
-    watcherId?: string | null;
+    kitchenScreens?: readonly DeviceKitchenScreen[];
   },
 ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
   await sweepLapsed(tx, cfg);
@@ -507,11 +511,16 @@ export async function acceptDeviceJoinRequest(
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
 
-  const binding = await resolveDeviceBinding(tx, cfg, {
+  const { kitchenScreens, formFactor } = await resolveDeviceKitchenScreens(tx, cfg, {
     profileId: input.profileId,
-    stationId: input.stationId,
-    watcherId: input.watcherId,
+    kitchenScreens: input.kitchenScreens,
   });
+  const writeKitchenScreens = () =>
+    VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+      deviceId: row.id,
+      profileId: input.profileId,
+      screens: kitchenScreens,
+    });
 
   const [disabled] = await tx
     .select({ id: devices.id })
@@ -522,32 +531,27 @@ export async function acceptDeviceJoinRequest(
     await updateDeviceSettings(
       tx,
       disabled,
-      {
-        label: input.label,
-        profileId: input.profileId,
-        stationId: binding.stationId,
-        watcherId: binding.watcherId,
-      },
+      { label: input.label, profileId: input.profileId },
       { active: true, tokenHash: row.tokenHash },
     );
+    await writeKitchenScreens();
     // The Disable route ends them itself; this catches a device turned off outside it.
     await endDeviceSessions(tx, row.id);
-    return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
+    return { deviceId: row.id, name: input.label, formFactor };
   }
 
   await insertDevice(tx, {
     id: row.id,
     locationId: row.locationId,
-    stationId: binding.stationId,
-    watcherId: binding.watcherId,
     deviceProfileId: input.profileId,
     label: input.label,
     tokenHash: row.tokenHash,
     active: true,
   });
   await settleDevice(tx, row.id, { acquire: true });
+  await writeKitchenScreens();
 
-  return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
+  return { deviceId: row.id, name: input.label, formFactor };
 }
 
 /** What {@link acceptPrintAgentJoinRequest} hands back. A wrong choice is a RESULT, never a throw:

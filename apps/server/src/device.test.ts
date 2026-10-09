@@ -1,13 +1,10 @@
 /**
- * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding`.
- *
- * What the join-and-accept cases pin is the binding rule: a kitchen screen has one station or
- * watcher, while a till or handheld binds neither.
+ * Device join-and-accept, plus direct cases over `resolveDeviceKitchenScreens` and `insertDevice`.
  */
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, locations, watchers, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -20,10 +17,11 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { insertDevice, resolveDeviceBinding } from "./device.js";
+import { insertDevice, resolveDeviceKitchenScreens } from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
-import { createWatcher, removeWatcher } from "./watchers.js";
+import { VENUE_SERVICE } from "./modules.js";
+import type { DeviceKitchenScreen } from "@waitron/module";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -36,70 +34,6 @@ interface SeededVenue {
   cfg: TillConfig;
   stationId: string;
 }
-
-async function watcher(cfg: TillConfig): Promise<string> {
-  const made = await withTransaction(suite.db, (tx) =>
-    createWatcher(tx, cfg, {
-      name: "Pass",
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: false,
-    }),
-  );
-  return made.id;
-}
-
-describe("watcher screen binding", () => {
-  it("binds a kitchen screen to exactly one live watcher", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await seedProfile("kds", "Watcher screen");
-    const watcherId = await watcher(cfg);
-    const dev = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Pass screen",
-      profileId,
-      watcherId,
-    });
-    const { rows } = await suite.db.execute<{
-      station_id: string | null;
-      watcher_id: string | null;
-    }>(sql`select station_id, watcher_id from devices where id = ${dev.deviceId}`);
-    expect(rows).toEqual([{ station_id: null, watcher_id: watcherId }]);
-  });
-
-  it("refuses missing, duplicate, and switched-off kitchen screen targets", async () => {
-    const { cfg, stationId } = await setupVenue();
-    const profileId = await seedProfile("kds", "Watcher screen");
-    const watcherId = await watcher(cfg);
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "None", profileId }),
-    ).rejects.toMatchObject({ code: "device.station_required" });
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Both", profileId, stationId, watcherId }),
-    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "watcherId" } });
-    // A device naming the watcher keeps it, switched off, rather than deleted.
-    await enrolDeviceForTest(suite.db, cfg, { name: "Pass", profileId, watcherId });
-    await withTransaction(suite.db, (tx) => removeWatcher(tx, cfg, watcherId));
-    const [kept] = await suite.db
-      .select({ active: watchers.active })
-      .from(watchers)
-      .where(eq(watchers.id, watcherId));
-    expect(kept).toEqual({ active: false });
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Removed", profileId, watcherId }),
-    ).rejects.toMatchObject({ code: "watcher.not_found" });
-  });
-
-  it("refuses a watcher target for a till profile", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Till screen");
-    const watcherId = await watcher(cfg);
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Till", profileId, watcherId }),
-    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "watcherId" } });
-  });
-});
 
 /** A fresh tenant + venue + one station. Every test calls it, and `useVenueDb` empties the data
  * tables between tests, so the counts each case reads are its own. */
@@ -179,21 +113,11 @@ function deviceValues(locationId: string, deviceProfileId: string, label: string
   return { id: randomUUID(), locationId, deviceProfileId, label, tokenHash: "x", active: true };
 }
 
-/** The enrolled device's binding columns and label, read straight off the table rather than out of
- * the verb's return value. */
-async function deviceRow(deviceId: string): Promise<{
-  station_id: string | null;
-  watcher_id: string | null;
-  device_profile_id: string;
-  label: string;
-}> {
-  const { rows } = await suite.db.execute<{
-    station_id: string | null;
-    watcher_id: string | null;
-    device_profile_id: string;
-    label: string;
-  }>(sql`
-    select station_id, watcher_id, device_profile_id, label from devices where id = ${deviceId}`);
+/** The enrolled device's profile and label, read straight off the table rather than out of the
+ * verb's return value. */
+async function deviceRow(deviceId: string): Promise<{ device_profile_id: string; label: string }> {
+  const { rows } = await suite.db.execute<{ device_profile_id: string; label: string }>(sql`
+    select device_profile_id, label from devices where id = ${deviceId}`);
   return rows[0]!;
 }
 
@@ -207,8 +131,6 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
     expect(changedCounts(before, await rowCounts())).toEqual({ devices: 1 });
     expect(await deviceRow(dev.deviceId)).toEqual({
-      station_id: null,
-      watcher_id: null,
       device_profile_id: profileId,
       label: "Caja Nueva",
     });
@@ -223,14 +145,12 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
     expect(changedCounts(before, await rowCounts())).toEqual({ devices: 1 });
     expect(await deviceRow(dev.deviceId)).toEqual({
-      station_id: null,
-      watcher_id: null,
       device_profile_id: profileId,
       label: "Camarero 1",
     });
   });
 
-  it("a kds profile binds the named station", async () => {
+  it("a kds profile shows the named station on its station screen", async () => {
     const { cfg, stationId } = await setupVenue();
     const profileId = await seedProfile("kds", "Perfil KDS");
 
@@ -240,42 +160,254 @@ describe("device join-and-accept binds the device by its profile's form factor",
       stationId,
     });
 
-    const row = await deviceRow(dev.deviceId);
-    expect(row.station_id).toBe(stationId);
-    expect(row.watcher_id).toBeNull();
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, dev.deviceId),
+      ),
+    ).toMatchObject([{ kind: "station", stations: [{ id: stationId, available: true }] }]);
   });
 
-  it("accepting a kds device refuses a station or watcher its profile does not list, and the request survives", async () => {
+  it("accepting a kds device refuses a station its profile does not list, and the request survives", async () => {
     const { cfg, stationId } = await setupVenue();
     const profileId = await seedProfile("kds", "Perfil KDS");
-    const watcherId = await watcher(cfg);
+    const grill = await withTransaction(suite.db, (tx) =>
+      createStation(tx, cfg, { name: "Grill" }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
+        station: { stationIds: [grill.id], zoneIds: null },
+      }),
+    );
     const window = createPairingMode();
     window.open();
     const made = await withTransaction(suite.db, (tx) =>
       createJoinRequest(tx, cfg, { kind: "device", label: "Pantalla" }),
     );
-    const accept = (choice: { stationId?: string; watcherId?: string }) =>
+    const accept = (kitchenScreens: readonly DeviceKitchenScreen[]) =>
       withTransaction(suite.db, (tx) =>
-        acceptDeviceJoinRequest(tx, cfg, made.joinId, { label: "Pantalla", profileId, ...choice }),
+        acceptDeviceJoinRequest(tx, cfg, made.joinId, {
+          label: "Pantalla",
+          profileId,
+          kitchenScreens,
+        }),
       );
 
-    await expect(accept({ stationId })).rejects.toMatchObject({
+    await expect(
+      accept([{ kind: "station", stationIds: [stationId], zoneIds: null }]),
+    ).rejects.toMatchObject({
       code: "station.not_allowed",
       params: { stationId },
-    });
-    await expect(accept({ watcherId })).rejects.toMatchObject({
-      code: "watcher.not_allowed",
-      params: { watcherId },
     });
     expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token, window)).toBe("pending");
   });
 
-  it("a kds profile with NO station is device.station_required", async () => {
+  it("a kitchen display accepted with no kitchen screen is kitchen_screen.required", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("kds", "Perfil KDS");
     await expect(
       enrolDeviceForTest(suite.db, cfg, { name: "Pantalla", profileId }),
-    ).rejects.toMatchObject({ code: "device.station_required" });
+    ).rejects.toMatchObject({ code: "kitchen_screen.required" });
+  });
+});
+
+describe("accepting a device writes its kitchen screens", () => {
+  async function offering(cfg: TillConfig, formFactor: FormFactor, name: string) {
+    const profileId = await seedProfile(formFactor, name);
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
+        station: { stationIds: null, zoneIds: null },
+        pass: { stationIds: null, zoneIds: null },
+      }),
+    );
+    return profileId;
+  }
+
+  async function accept(
+    cfg: TillConfig,
+    profileId: string,
+    kitchenScreens: readonly DeviceKitchenScreen[],
+  ) {
+    const made = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "device", label: "Pantalla" }),
+    );
+    return withTransaction(suite.db, (tx) =>
+      acceptDeviceJoinRequest(tx, cfg, made.joinId, {
+        label: "Pantalla",
+        profileId,
+        kitchenScreens,
+      }),
+    );
+  }
+
+  const shown = (cfg: TillConfig, deviceId: string) =>
+    withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, deviceId));
+
+  it("a kitchen display's station screen on two stations is stored", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const grill = await withTransaction(suite.db, (tx) =>
+      createStation(tx, cfg, { name: "Plancha" }),
+    );
+    const profileId = await offering(cfg, "kds", "Perfil KDS");
+    const { deviceId } = await accept(cfg, profileId, [
+      { kind: "station", stationIds: [stationId, grill.id], zoneIds: null },
+    ]);
+    expect(await shown(cfg, deviceId)).toEqual([
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
+        stations: [
+          { id: stationId, name: "Cocina", available: true, switchedOff: false },
+          { id: grill.id, name: "Plancha", available: true, switchedOff: false },
+        ],
+        zones: null,
+      },
+    ]);
+  });
+
+  it("a kitchen display's station screen on one station is stored", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await offering(cfg, "kds", "Perfil KDS");
+    const { deviceId } = await accept(cfg, profileId, [
+      { kind: "station", stationIds: [stationId], zoneIds: null },
+    ]);
+    expect(await shown(cfg, deviceId)).toMatchObject([
+      { kind: "station", stations: [{ id: stationId, available: true }] },
+    ]);
+  });
+
+  it("a kitchen display accepted with no kitchen screen is kitchen_screen.required", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await offering(cfg, "kds", "Perfil KDS");
+    await expect(accept(cfg, profileId, [])).rejects.toMatchObject({
+      code: "kitchen_screen.required",
+    });
+  });
+
+  it("a till accepted with a station screen and a pass screen stores both", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await offering(cfg, "till", "Perfil Caja");
+    const { deviceId } = await accept(cfg, profileId, [
+      { kind: "station", stationIds: [stationId], zoneIds: null },
+      { kind: "pass", stationIds: null, zoneIds: null },
+    ]);
+    expect((await shown(cfg, deviceId)).map((screen) => screen.kind)).toEqual(["station", "pass"]);
+  });
+
+  it("the enrol helper adds each station it is given to the profile's station screen, and the device shows it", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const grill = await withTransaction(suite.db, (tx) =>
+      createStation(tx, cfg, { name: "Plancha" }),
+    );
+    const profileId = await seedProfile("kds", "Perfil KDS");
+    const first = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Cocina 1",
+      profileId,
+      stationId,
+    });
+    const second = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Plancha 1",
+      profileId,
+      stationId: grill.id,
+    });
+    const offered = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readProfileKitchenScreens(tx, cfg),
+    );
+    expect(offered.find((row) => row.profileId === profileId)?.screens).toEqual({
+      station: { stationIds: [stationId, grill.id], zoneIds: null },
+    });
+    expect(await shown(cfg, first.deviceId)).toEqual([
+      {
+        kind: "station",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
+        zones: null,
+      },
+    ]);
+    expect((await shown(cfg, second.deviceId))[0]?.stations).toEqual([
+      { id: grill.id, name: "Plancha", available: true, switchedOff: false },
+    ]);
+  });
+
+  it("the enrol helper gives a kitchen screen it is handed, offered on the profile first", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    const { deviceId } = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Caja",
+      profileId,
+      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
+    });
+    expect(await shown(cfg, deviceId)).toEqual([
+      {
+        kind: "pass",
+        available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: true,
+        stations: [{ id: expect.any(String), name: "Cocina", available: true, switchedOff: false }],
+        zones: null,
+      },
+    ]);
+  });
+
+  async function offeringMonitor(cfg: TillConfig) {
+    const profileId = await seedProfile("till", "Perfil Caja");
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
+        pass: { stationIds: null, zoneIds: null },
+        pass_monitor: { stationIds: null, zoneIds: null },
+      }),
+    );
+    return profileId;
+  }
+
+  it("a till whose profile offers a pass monitor is accepted with one, and stores it", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await offeringMonitor(cfg);
+    const { deviceId } = await accept(cfg, profileId, [
+      { kind: "pass_monitor", stationIds: [stationId], zoneIds: null },
+    ]);
+    expect(await shown(cfg, deviceId)).toEqual([
+      {
+        kind: "pass_monitor",
+        available: true,
+        everyStation: false,
+        everyZone: true,
+        profileEveryStation: true,
+        stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
+        zones: null,
+      },
+    ]);
+  });
+
+  it("a till whose profile has no pass monitor row, accepted with a pass monitor, is kitchen_screen.not_allowed", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await offering(cfg, "till", "Perfil Caja");
+    await expect(
+      accept(cfg, profileId, [{ kind: "pass_monitor", stationIds: null, zoneIds: null }]),
+    ).rejects.toMatchObject({
+      code: "kitchen_screen.not_allowed",
+      params: { screen: "pass_monitor" },
+    });
+  });
+
+  it("a till accepted with both a pass screen and a pass monitor is kitchen_screen.invalid one_only", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await offeringMonitor(cfg);
+    await expect(
+      accept(cfg, profileId, [
+        { kind: "pass", stationIds: null, zoneIds: null },
+        { kind: "pass_monitor", stationIds: null, zoneIds: null },
+      ]),
+    ).rejects.toMatchObject({
+      code: "kitchen_screen.invalid",
+      params: { field: "screens", reason: "one_only" },
+    });
   });
 });
 
@@ -334,11 +466,13 @@ describe("device names among a location's active devices", () => {
   });
 });
 
-describe("resolveDeviceBinding and insertDevice, called directly", () => {
+describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => {
   it("refuses a profile id that names no profile as device_profile.not_found", async () => {
     const { cfg } = await setupVenue();
     await expect(
-      withTransaction(suite.db, (tx) => resolveDeviceBinding(tx, cfg, { profileId: randomUUID() })),
+      withTransaction(suite.db, (tx) =>
+        resolveDeviceKitchenScreens(tx, cfg, { profileId: randomUUID() }),
+      ),
     ).rejects.toMatchObject({ code: "device_profile.not_found" });
   });
 

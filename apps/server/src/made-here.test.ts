@@ -148,13 +148,9 @@ describe("device made-here stations", () => {
         .select()
         .from(printJobs)
         .where(eq(printJobs.printerId, barPrinter));
-      await fireCourse(
-        tx,
-        { ...venue.cfg, origin: deviceOrigin(deviceId) },
-        orderId,
-        second.id,
-        randomUUID(),
-      );
+      await fireCourse(tx, { ...venue.cfg, origin: deviceOrigin(deviceId) }, orderId, second.id, {
+        personId: randomUUID(),
+      });
       await reprintOrderTickets(tx, venue.cfg, orderId);
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
@@ -445,13 +441,9 @@ describe("device made-here stations", () => {
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
       ).toHaveLength(0);
-      await fireCourse(
-        tx,
-        { ...venue.cfg, origin: deviceOrigin(deviceId) },
-        orderId,
-        second.id,
-        randomUUID(),
-      );
+      await fireCourse(tx, { ...venue.cfg, origin: deviceOrigin(deviceId) }, orderId, second.id, {
+        personId: randomUUID(),
+      });
       const [released] = await tx
         .select()
         .from(ticketItems)
