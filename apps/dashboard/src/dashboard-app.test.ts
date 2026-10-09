@@ -6933,3 +6933,91 @@ it("lets the canvas parent link use the editor's own Cancel handler inside the s
     .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
     .not.toBeNull();
 });
+
+describe("department list links inside dashboard capture", () => {
+  async function listInDashboard() {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    const list = document.createElement("departments-list");
+    list.model = {
+      departments: [
+        {
+          id: "d1",
+          name: "Dining room",
+          tradingName: "Dining",
+          defaultServiceMode: "table_tab",
+          active: true,
+        },
+      ],
+      zones: [],
+      floorZones: [],
+      readiness: [],
+      salePolicies: { departments: [], zones: [] },
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      printHeldWork: false,
+      releaseReminderMinutes: 10,
+      clearingWorkflow: false,
+    };
+    el.shadowRoot!.append(list);
+    await list.updateComplete;
+    const table = list.shadowRoot?.querySelector("wt-data-table");
+    expect(table, "the module registers and renders the department list").toBeTruthy();
+    await table!.updateComplete;
+    const link = table!.shadowRoot!.querySelector<HTMLAnchorElement>(
+      '[data-test="open-department-name-d1"]',
+    )!;
+    return { el, list, link };
+  }
+  it("delivers a plain department link once to its page owner without dashboard capture navigating first", async () => {
+    const { el, list, link } = await listInDashboard();
+    const before = location.href;
+    const opened = vi.fn();
+    list.addEventListener("open-department", opened);
+    const event = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ departmentId: "d1" });
+    await flush(el);
+    expect(location.href).toBe(before);
+  });
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])(
+    "leaves a modified department link to the browser even inside dashboard capture: %j",
+    async (options) => {
+      const { el, list, link } = await listInDashboard();
+      const before = location.href;
+      const opened = vi.fn();
+      list.addEventListener("open-department", opened);
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        ...options,
+      });
+      let preventedBeforeHarness: boolean | undefined;
+      link.addEventListener(
+        "click",
+        (click) => {
+          preventedBeforeHarness = click.defaultPrevented;
+          click.preventDefault();
+        },
+        { once: true },
+      );
+      link.dispatchEvent(event);
+      expect(preventedBeforeHarness).toBe(false);
+      expect(opened).not.toHaveBeenCalled();
+      await flush(el);
+      expect(location.href).toBe(before);
+    },
+  );
+});

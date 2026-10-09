@@ -1325,3 +1325,30 @@ section was read directly and the original base retained.
 Task A9 was executed inline. Its whole-branch Claude reviews remain in the final
 finish-branch gate; no independent task-review approval is claimed here. The
 previous tasks' deferred fixture-duplication and framework-warning findings remain.
+
+### Implementation checkpoint — Task A10 navigation foundation (2026-10-09)
+
+Task A10 is in progress. The dashboard path map now retains `department`, `view`
+and `zone`. The department list registers through the venue-service screen entry
+point. Its name link leaves modified clicks to the browser and marks its own plain
+click handler so the dashboard's capture listener does not navigate before the
+list emits `open-department`.
+
+Observed checks: five URL cases failed before the map entry, five standalone
+modified-click cases failed before the handler guard, and six mounted dashboard
+capture cases failed before the fixes. Removing the test's direct component import
+also exposed missing module registration; six explicit rendering assertions failed
+before adding the screen's import. The final dashboard navigation and app files
+passed 374 tests; four focused module files passed 55 tests. Scoped types, lint and
+format checks passed. Installed disposable candidates failed when the map entry,
+click ownership marker, modifier guard or component registration was deleted;
+restored selections passed. Test harness failures and a control script's outdated
+pre-format search are retained in the external receipts.
+
+These checks cover the URL controller and a real department list hosted inside a
+mounted dashboard. They do not yet cover the screen selecting a department page.
+No existing assertion changed or legacy test was retired. Continue A10 with the
+shell switch, dialog navigation, history leave protection, permission checks,
+refresh failures and focus return. Audit the retained assertions before retiring
+the policy-tree, list-table, inline-editor and transfer-modal suites. A10's full
+look pass and A11–A15 remain, along with the whole-branch review and CI gates.

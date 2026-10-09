@@ -93,6 +93,37 @@ async function setup(view = model, shadow = false) {
   await new Promise((resolve) => setTimeout(resolve, 0));
   return el;
 }
+
+it.each([
+  { ctrlKey: true },
+  { metaKey: true },
+  { shiftKey: true },
+  { altKey: true },
+  { button: 1 },
+])("leaves a modified department name link to the browser: %j", async (options) => {
+  const el = await setup();
+  const link = find(el, '[data-test="open-department-name-d1"]')!;
+  const opened = vi.fn();
+  el.addEventListener("open-department", opened);
+  const event = new MouseEvent("click", {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    ...options,
+  });
+  let preventedBeforeHarness: boolean | undefined;
+  link.addEventListener(
+    "click",
+    (click) => {
+      preventedBeforeHarness = click.defaultPrevented;
+      click.preventDefault();
+    },
+    { once: true },
+  );
+  link.dispatchEvent(event);
+  expect(preventedBeforeHarness).toBe(false);
+  expect(opened).not.toHaveBeenCalled();
+});
 function table(el: List) {
   const list = el.shadowRoot?.querySelector<WtDataTable>("wt-data-table");
   expect(list, "the department table renders").toBeTruthy();

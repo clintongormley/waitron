@@ -31,6 +31,7 @@ import type {
 } from "./client.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
+import "./departments-list.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 

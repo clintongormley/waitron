@@ -125,8 +125,17 @@ export class DepartmentsList extends LitElement {
           html`<a
               part="link"
               data-test=${`open-department-name-${row.id}`}
+              data-own-click
               href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}`}
               @click=${(event: MouseEvent) => {
+                if (
+                  event.button ||
+                  event.ctrlKey ||
+                  event.metaKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
                 event.preventDefault();
                 this.#emit("open-department", { departmentId: row.id });
               }}
