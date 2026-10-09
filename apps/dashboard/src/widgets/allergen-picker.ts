@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
+import { foldForSearch, searchFor } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -164,10 +165,9 @@ export class AllergenPicker extends LitElement {
   override render() {
     const generation = this.pickerGeneration;
     const selected = ALLERGEN_DISPLAY_ORDER.filter((code) => this.entries[code]);
-    const choices = ALLERGEN_DISPLAY_ORDER.filter(
-      (code) =>
-        !this.entries[code] &&
-        allergenName(code).toLocaleLowerCase().includes(this.search.trim().toLocaleLowerCase()),
+    const unchosen = ALLERGEN_DISPLAY_ORDER.filter((code) => !this.entries[code]);
+    const choices = searchFor(this.search)(
+      unchosen.map((code) => [code, foldForSearch(allergenName(code))] as const),
     );
     return html`
       <wt-switch

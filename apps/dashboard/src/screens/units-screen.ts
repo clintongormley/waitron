@@ -399,6 +399,7 @@ export class UnitsScreen extends LitElement {
         label: t("units.name"),
         cell: (product) => product.name,
         sortValue: (product) => product.name,
+        searchValue: (product) => product.name,
       },
       {
         key: "status",
@@ -508,13 +509,6 @@ export class UnitsScreen extends LitElement {
   }
 
   override render() {
-    const productNeedle = this.inUseSearch.trim().toLocaleLowerCase();
-    const inUseRows =
-      productNeedle === ""
-        ? this.inUseProducts
-        : this.inUseProducts.filter((product) =>
-            product.name.toLocaleLowerCase().includes(productNeedle),
-          );
     const unitNameCollator = new Intl.Collator(currentLocale(), { sensitivity: "base" });
     const otherUnits = this.units
       .filter((unit) => unit.id !== this.inUseUnitId)
@@ -686,7 +680,8 @@ export class UnitsScreen extends LitElement {
                   noMatchesMessage=${tableNoMatches()}
                   emptyMessage=${tableNoMatches()}
                   aria-label=${t("units.in_use_title")}
-                  .rows=${inUseRows}
+                  .rows=${this.inUseProducts}
+                  .searchTerm=${this.inUseSearch}
                   .columns=${this.#productColumns()}
                   .rowKey=${(product: ProductUsingUnit) => product.id}
                   .selectable=${this.selectingProducts && !this.busy}

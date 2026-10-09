@@ -195,11 +195,29 @@ it("filtering by Drinks also lists what sits under Beer, and not Mains", async (
 
 it("searches by name, ignoring case, within the chosen category", async () => {
   const el = await mount();
-  await search(el, "  LA ");
+  await search(el, "  LAGER ");
   expect(listed(el)).toEqual(["p-lager"]);
   await filterBy(el, "c-mains");
   expect(listed(el)).toEqual([]);
   expect(q(el, '[data-test="no-matches"]').textContent!.trim()).toBe(t("add_products.no_matches"));
+});
+
+it("finds every word in any order, ignoring accents, and lists the closest matches first", async () => {
+  const el = await mount({
+    products: [
+      { id: "p-ginger", name: "Fresh Ginger", categoryId: null },
+      { id: "p-gt", name: "Gin & Tónic", categoryId: null },
+      { id: "p-pink", name: "Pink Gin", categoryId: null },
+    ],
+  });
+  await search(el, "tonic gin");
+  expect(listed(el)).toEqual(["p-gt"]);
+  await search(el, "&");
+  expect(listed(el)).toEqual([]);
+  await search(el, "gin");
+  expect(listed(el)).toEqual(["p-gt", "p-pink", "p-ginger"]);
+  await search(el, "gin ");
+  expect(listed(el)).toEqual(["p-gt", "p-pink"]);
 });
 
 it("selecting three and confirming emits one event carrying the three ids", async () => {

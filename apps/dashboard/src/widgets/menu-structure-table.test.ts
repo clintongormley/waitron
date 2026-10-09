@@ -2984,6 +2984,44 @@ describe("search and the Available filter", () => {
     expect(shown(el)).toEqual(["included-wine"]);
   });
 
+  it("lists the closest matches first among the rows under each parent, and finishes a word on a trailing space", async () => {
+    const gins = [
+      product("p-ginger", "Ginger Ale"),
+      product("p-pink", "Pink Gin"),
+      product("p-gt", "Gin & Tónic"),
+    ];
+    const el = await mount({
+      products: gins,
+      nodes: [
+        productNode("m-ginger", "p-ginger"),
+        {
+          memberId: "m-bar",
+          ref: { kind: "section", sectionId: "s-bar" },
+          internalName: "Gin",
+          names: {},
+          image: null,
+          color: null,
+          ownerMenuId: "menu-lunch",
+          children: [productNode("m-bar-ginger", "p-ginger"), productNode("m-bar-pink", "p-pink")],
+        },
+        productNode("m-gt", "p-gt"),
+      ],
+    });
+    await search(el, "gin");
+    expect(shown(el)).toEqual([
+      "m-bar",
+      "m-bar/m-bar-pink",
+      "m-bar/m-bar-ginger",
+      "m-gt",
+      "m-ginger",
+    ]);
+    await search(el, "tonic gin");
+    expect(shown(el)).toEqual(["m-gt"]);
+    // A section that matches keeps all its rows; the top-level Ginger Ale is what goes.
+    await search(el, "gin ");
+    expect(shown(el)).toEqual(["m-bar", "m-bar/m-bar-pink", "m-bar/m-bar-ginger", "m-gt"]);
+  });
+
   it("says nothing matches when the search finds no row", async () => {
     const el = await mount();
     await search(el, "zzz");
@@ -3184,6 +3222,28 @@ describe("Select mode while a search or filter hides rows", () => {
     el.search = "";
     await settle(el);
     expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  });
+
+  it("gives a box to a section only when its own name matches by the table's rule", async () => {
+    const stuff: MenuStructureNode = {
+      memberId: "m-stuff",
+      ref: { kind: "section", sectionId: "s-stuff" },
+      internalName: "Drinkstuff",
+      names: {},
+      image: null,
+      color: null,
+      ownerMenuId: "menu-lunch",
+      children: [drinksNode("m-stuff-drinks")],
+    };
+    const el = await mount({ selecting: true, nodes: [drinksNode("m-drinks"), stuff] });
+    el.search = "drinks ";
+    await settle(el);
+    expect(shown(el)).toContain("m-stuff");
+    expect(boxKeys(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
+    el.search = "&";
+    await settle(el);
+    expect(boxKeys(el)).toEqual([]);
+    expect([...el.shownSelectableKeys()]).toEqual([]);
   });
 
   it("gives no section or included menu a box while the Available filter is on", async () => {

@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
+import { foldForSearch, searchFor } from "@waitron/shared";
 import type { CategorySummary } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -193,11 +194,12 @@ export class SectionAddProducts extends LitElement {
 
   #visible(): AddableProduct[] {
     const within = this.#within;
-    const needle = this.search.trim().toLocaleLowerCase();
-    return this.#offered.filter(
+    const offered = this.#offered.filter(
       (product) =>
-        (within === null || (product.categoryId !== null && within.has(product.categoryId))) &&
-        product.name.toLocaleLowerCase().includes(needle),
+        within === null || (product.categoryId !== null && within.has(product.categoryId)),
+    );
+    return searchFor(this.search)(
+      offered.map((product) => [product, foldForSearch(product.name)] as const),
     );
   }
 

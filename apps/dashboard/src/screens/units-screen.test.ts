@@ -589,7 +589,53 @@ describe("units-screen", () => {
       );
     await el.updateComplete;
     const productTable = dialog.querySelector("wt-data-table")!;
-    expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
+    await productTable.updateComplete;
+    expect(
+      [...productTable.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+        row.getAttribute("data-row-key"),
+      ),
+    ).toEqual(["p2"]);
+  });
+
+  it("finds every word in any order, ignoring accents, with the closest matches first whatever the sort", async () => {
+    const el = await mount(
+      inUseApi([
+        { id: "p-ginger", name: "Fresh Ginger", active: true },
+        { id: "p-gt", name: "Gin & Tónic", active: true },
+        { id: "p-pink", name: "Pink Gin", active: false },
+      ]),
+    );
+    const dialog = await openInUseModal(el);
+    const productTable = dialog.querySelector("wt-data-table")!;
+    const searchFor = async (value: string) => {
+      dialog
+        .querySelector("[data-test=in-use-search]")!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+      await el.updateComplete;
+      await productTable.updateComplete;
+    };
+    const drawn = () =>
+      [...productTable.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+        row.getAttribute("data-row-key")!,
+      );
+    await searchFor("tonic gin");
+    expect(drawn()).toEqual(["p-gt"]);
+    await searchFor("&");
+    expect(drawn()).toEqual([]);
+    await searchFor("gin");
+    expect(drawn()).toEqual(["p-gt", "p-pink", "p-ginger"]);
+    for (const heading of ["name", "name", "status"]) {
+      productTable.shadowRoot!.querySelector<HTMLElement>(`[data-sort="${heading}"]`)!.click();
+      await productTable.updateComplete;
+      expect(drawn(), heading).toEqual(["p-gt", "p-pink", "p-ginger"]);
+    }
+    await searchFor("gin ");
+    expect(drawn()).toEqual(["p-gt", "p-pink"]);
+    // With no search the Status sort the clicks chose does reorder the rows.
+    await searchFor("");
+    expect(drawn()).toEqual(["p-pink", "p-ginger", "p-gt"]);
   });
 
   it("says the dashboard's one no-matches sentence when the modal's search hides every product", async () => {
@@ -605,7 +651,7 @@ describe("units-screen", () => {
     await el.updateComplete;
     const productTable = dialog.querySelector("wt-data-table")!;
     await productTable.updateComplete;
-    expect(productTable.rows).toEqual([]);
+    expect(productTable.shadowRoot!.querySelectorAll("tr[data-row-key]")).toHaveLength(0);
     expect(productTable.shadowRoot!.querySelector(".empty .message")!.textContent).toBe(
       tableNoMatches(),
     );

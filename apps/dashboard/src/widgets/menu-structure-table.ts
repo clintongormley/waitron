@@ -2,7 +2,7 @@ import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { textSearch } from "@waitron/shared";
+import { foldForSearch, textSearch } from "@waitron/shared";
 import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -650,8 +650,8 @@ export class MenuStructureTable extends LitElement {
     if (row.readOnly) return false;
     if (row.node.ref.kind !== "section") return true;
     if (this.filtering) return false;
-    const term = this.search.trim().toLocaleLowerCase();
-    return term === "" || row.name.toLocaleLowerCase().includes(term);
+    const search = textSearch(this.search);
+    return search === undefined || search.rank(foldForSearch(row.name)) !== undefined;
   }
 
   readonly #filterChange = (event: CustomEvent<{ filters: Record<string, string | string[]> }>) => {
