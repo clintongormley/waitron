@@ -11,12 +11,14 @@ import {
   type DraftScope,
 } from "@waitron/ui";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
-import type { ServiceRange } from "../service-day.js";
+import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./service-grid.js";
 import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
+import type { NamedDaysModel } from "../holiday-types.js";
+import type { NamedCalendarAction } from "./hours-calendar.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import "./service-grid.js";
@@ -26,7 +28,9 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 
 type Department = OpeningHoursModel["departments"][number];
-type Draft = Record<string, MenuWeekDay[]>;
+type Zone = Department["zones"][number];
+type ClosedDay = { weekday: number; ranges: ClosedRange[] };
+type Draft = { menus: Record<string, MenuWeekDay[]>; zones: Record<string, ClosedDay[]> };
 type Opening = { department: Department; index?: number; input: ServiceRange };
 const minuteOfServiceDay = (time: string, cutover: string) =>
   (Number(time.slice(0, 2)) * 60 +
@@ -72,9 +76,29 @@ const same = (a: readonly MenuWeekDay[], b: readonly MenuWeekDay[]) =>
       )
     );
   });
+const sameClosed = (a: readonly ClosedDay[], b: readonly ClosedDay[]) =>
+  a.length === b.length &&
+  a.every((day) => {
+    const other = b.find((value) => value.weekday === day.weekday);
+    return (
+      !!other &&
+      day.ranges.length === other.ranges.length &&
+      day.ranges.every((range) =>
+        other.ranges.some(
+          (value) => value.startsAt === range.startsAt && value.endsAt === range.endsAt,
+        ),
+      )
+    );
+  });
 const equal = (a: Draft, b: Draft) =>
-  Object.keys(a).length === Object.keys(b).length &&
-  Object.keys(a).every((id) => b[id] !== undefined && same(a[id]!, b[id]!));
+  Object.keys(a.menus).length === Object.keys(b.menus).length &&
+  Object.keys(a.menus).every(
+    (id) => b.menus[id] !== undefined && same(a.menus[id]!, b.menus[id]!),
+  ) &&
+  Object.keys(a.zones).length === Object.keys(b.zones).length &&
+  Object.keys(a.zones).every(
+    (id) => b.zones[id] !== undefined && sameClosed(a.zones[id]!, b.zones[id]!),
+  );
 
 @customElement("opening-hours-day")
 export class OpeningHoursDay extends LitElement {
@@ -110,7 +134,7 @@ export class OpeningHoursDay extends LitElement {
   @property({ attribute: false }) model!: OpeningHoursModel;
   @property({ type: Boolean }) readOnly = false;
   @state() private date = "";
-  @state() private draft: Draft = {};
+  @state() private draft: Draft = { menus: {}, zones: {} };
   @state() private opening?: Opening;
   @state() private periodOpening?: { range: Opening };
   @state() private created: Record<string, Department["periods"][number][]> = {};
@@ -120,8 +144,14 @@ export class OpeningHoursDay extends LitElement {
   @state() private errorDepartment = "";
   @state() private skippedTime = false;
   @state() private offsetClash = false;
+  @state() private zoneOpening?: { zone: Zone; index: number; input: ClosedRange };
+  @state() private errorZone = "";
+  @state() private calendar?: NamedDaysModel;
+  @state() private calendarError = false;
+  private calendarDate = "";
+  private detachCalendar?: () => void;
   private scope?: DraftScope<Draft>;
-  private baseline: Draft = {};
+  private baseline: Draft = { menus: {}, zones: {} };
   private source?: OpeningHoursModel;
   private contextDepartments: readonly Department[] = [];
   private contextSpecial?: OpeningHoursModel["namedDays"][number];
@@ -131,6 +161,8 @@ export class OpeningHoursDay extends LitElement {
     this.requestUpdate();
   }
   override disconnectedCallback() {
+    this.detachCalendar?.();
+    this.calendarDate = "";
     this.scope?.dispose();
     this.scope = undefined;
     this.generation = {};
@@ -142,7 +174,9 @@ export class OpeningHoursDay extends LitElement {
       this.draft = this.seed();
       this.baseline = clone(this.draft);
       this.source = this.model;
-    } else if (this.source !== this.model) {
+    }
+    this.registerScope();
+    if (this.source !== this.model) {
       if (
         (this.scope ? saveActionState(this.scope).unchanged : equal(this.draft, this.baseline)) &&
         !this.saving
@@ -153,6 +187,9 @@ export class OpeningHoursDay extends LitElement {
       }
       this.source = this.model;
     }
+    this.watchCalendar();
+  }
+  private registerScope() {
     if (this.isConnected && !this.scope) {
       this.scope = draftScopeFor(this, {
         id: this,
@@ -173,12 +210,15 @@ export class OpeningHoursDay extends LitElement {
     return this.contextSpecial;
   }
   private seed(): Draft {
-    this.contextDepartments = this.model.departments.filter((department) => department.active);
+    this.contextDepartments = structuredClone(
+      this.model.departments.filter((department) => department.active),
+    );
     this.contextSpecial = this.model.namedDays.find((special) => occursOn(special, this.date));
-    if (!this.date) return {};
+    if (this.contextSpecial) this.contextSpecial = { ...this.contextSpecial };
+    if (!this.date) return { menus: {}, zones: {} };
     const special = this.special(),
       weekday = weekdayOf(this.date);
-    return Object.fromEntries(
+    const menus = Object.fromEntries(
       this.departments().map((department) => {
         const days: MenuWeekDay[] = Array.from({ length: 7 }, (_, day) => ({
           weekday: day,
@@ -192,12 +232,57 @@ export class OpeningHoursDay extends LitElement {
         return [department.id, days];
       }),
     );
+    const zones = Object.fromEntries(
+      this.departments().flatMap((department) =>
+        (department.zones ?? []).map((zone) => [
+          zone.id,
+          Array.from({ length: 7 }, (_, day) => ({
+            weekday: day,
+            ranges: (special?.ownHours && day === weekday
+              ? (zone.dates.find((row) => row.specialDateId === special.id)?.ranges ?? [])
+              : (zone.week.find((row) => row.weekday === day)?.ranges ?? [])
+            ).map((range) => ({ ...range })),
+          })),
+        ]),
+      ),
+    );
+    return { menus, zones };
+  }
+  private watchCalendar() {
+    if (!this.isConnected || !this.date || this.calendarDate === this.date) return;
+    this.detachCalendar?.();
+    const date = this.date;
+    this.calendarDate = date;
+    this.calendar = undefined;
+    this.calendarError = false;
+    this.detachCalendar = this.api.namedDays.watchNamedDays(
+      date,
+      date,
+      (model) => {
+        if (this.isConnected && this.calendarDate === date) {
+          this.calendar = model;
+          this.calendarError = false;
+        }
+      },
+      () => {
+        if (this.isConnected && this.calendarDate === date) this.calendarError = true;
+      },
+      () => {
+        if (this.isConnected && this.calendarDate === date) this.calendarError = false;
+      },
+    );
   }
   private editable() {
-    return this.isConnected && !this.readOnly && !this.saving && !this.creating;
+    return (
+      this.isConnected &&
+      !this.readOnly &&
+      !this.saving &&
+      !this.creating &&
+      !this.special()?.closeWholeVenue
+    );
   }
   private slots(id: string) {
-    return this.draft[id]?.[weekdayOf(this.date)]?.slots ?? [];
+    return this.draft.menus[id]?.[weekdayOf(this.date)]?.slots ?? [];
   }
   private periods(department: Department) {
     return [
@@ -210,18 +295,30 @@ export class OpeningHoursDay extends LitElement {
   private stage(id: string, slots: readonly ServiceRange[]) {
     this.draft = {
       ...this.draft,
-      [id]: this.draft[id]!.map((day) =>
-        day.weekday === weekdayOf(this.date)
-          ? { weekday: day.weekday, slots: slots.map((slot) => ({ ...slot })) }
-          : day,
-      ),
+      menus: {
+        ...this.draft.menus,
+        [id]: this.draft.menus[id]!.map((day) =>
+          day.weekday === weekdayOf(this.date)
+            ? { weekday: day.weekday, slots: slots.map((slot) => ({ ...slot })) }
+            : day,
+        ),
+      },
     };
     this.error = "";
     this.errorDepartment = "";
+    this.errorZone = "";
     this.scope?.changed();
   }
   private async stepDate(delta: number) {
-    if (!this.isConnected || this.saving || this.opening || !this.date) return;
+    if (
+      !this.isConnected ||
+      this.saving ||
+      this.opening ||
+      this.zoneOpening ||
+      !this.date ||
+      addDays(this.date, delta) < businessDateToday(this.model)
+    )
+      return;
     const generation = this.generation,
       date = this.date;
     const proceed = () => {
@@ -232,6 +329,7 @@ export class OpeningHoursDay extends LitElement {
       this.scope?.commit(this.baseline);
       this.error = "";
       this.errorDepartment = "";
+      this.errorZone = "";
     };
     const coordinator = leaveCoordinatorFor(this);
     if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });
@@ -239,9 +337,9 @@ export class OpeningHoursDay extends LitElement {
   }
   private openRange(event: CustomEvent<GridRangeSelection | GridBlockOpen>) {
     event.stopPropagation();
-    if (!this.editable() || this.opening) return;
+    if (!this.editable() || this.opening || this.zoneOpening) return;
     const department = this.departments().find((row) => row.id === event.detail.columnKey);
-    if (!department || !this.draft[department.id]) return;
+    if (!department || !this.draft.menus[department.id]) return;
     if ("index" in event.detail) {
       const slot = this.slots(department.id)[event.detail.index];
       if (slot) this.opening = { department, index: event.detail.index, input: { ...slot } };
@@ -253,13 +351,104 @@ export class OpeningHoursDay extends LitElement {
   }
   private resize(event: CustomEvent<GridBlockChange>) {
     event.stopPropagation();
-    if (!this.editable() || this.opening) return;
+    if (!this.editable() || this.opening || this.zoneOpening) return;
     const { columnKey, index, startsAt, endsAt } = event.detail;
     if (!this.departments().some((row) => row.id === columnKey) || !this.slots(columnKey)[index])
       return;
     this.stage(
       columnKey,
       this.slots(columnKey).map((slot, i) => (i === index ? { ...slot, startsAt, endsAt } : slot)),
+    );
+  }
+  private closedRanges(id: string) {
+    return this.draft.zones[id]?.[weekdayOf(this.date)]?.ranges ?? [];
+  }
+  private zone(id: string) {
+    return this.departments()
+      .flatMap((department) => department.zones ?? [])
+      .find((zone) => `zone:${zone.id}` === id);
+  }
+  private stageZone(id: string, ranges: readonly ClosedRange[]) {
+    this.draft = {
+      ...this.draft,
+      zones: {
+        ...this.draft.zones,
+        [id]: this.draft.zones[id]!.map((day) =>
+          day.weekday === weekdayOf(this.date)
+            ? {
+                weekday: day.weekday,
+                ranges: ranges
+                  .map(({ startsAt, endsAt }) => ({ startsAt, endsAt }))
+                  .sort(
+                    (a, b) =>
+                      minuteOfServiceDay(a.startsAt, this.model.dayCutover) -
+                      minuteOfServiceDay(b.startsAt, this.model.dayCutover),
+                  ),
+              }
+            : day,
+        ),
+      },
+    };
+    this.error = "";
+    this.errorZone = "";
+    this.errorDepartment = "";
+    this.scope?.changed();
+  }
+  private selectRange(event: CustomEvent<GridRangeSelection>) {
+    const zone = this.zone(event.detail.columnKey);
+    if (!zone) {
+      this.openRange(event);
+      return;
+    }
+    event.stopPropagation();
+    if (!this.editable() || this.opening || this.zoneOpening) return;
+    this.stageZone(zone.id, [
+      ...this.closedRanges(zone.id),
+      { startsAt: event.detail.startsAt, endsAt: event.detail.endsAt },
+    ]);
+  }
+  private openBlock(event: CustomEvent<GridBlockOpen>) {
+    const zone = this.zone(event.detail.columnKey);
+    if (!zone) {
+      this.openRange(event);
+      return;
+    }
+    event.stopPropagation();
+    if (!this.editable() || this.opening || this.zoneOpening) return;
+    const input = this.closedRanges(zone.id)[event.detail.index];
+    if (input) this.zoneOpening = { zone, index: event.detail.index, input: { ...input } };
+  }
+  private changeBlock(event: CustomEvent<GridBlockChange>) {
+    const zone = this.zone(event.detail.columnKey);
+    if (!zone) {
+      this.resize(event);
+      return;
+    }
+    event.stopPropagation();
+    if (
+      !this.editable() ||
+      this.opening ||
+      this.zoneOpening ||
+      !this.closedRanges(zone.id)[event.detail.index]
+    )
+      return;
+    this.stageZone(
+      zone.id,
+      this.closedRanges(zone.id).map((range, index) =>
+        index === event.detail.index
+          ? { startsAt: event.detail.startsAt, endsAt: event.detail.endsAt }
+          : range,
+      ),
+    );
+  }
+  private currentZone(
+    opening: NonNullable<OpeningHoursDay["zoneOpening"]>,
+    target: EventTarget | null,
+  ) {
+    return (
+      this.editable() &&
+      this.zoneOpening === opening &&
+      target === this.shadowRoot?.querySelector("range-dialog")
     );
   }
   private currentRange(opening: Opening, target: EventTarget | null) {
@@ -294,7 +483,13 @@ export class OpeningHoursDay extends LitElement {
     this.opening = undefined;
   }
   private async save() {
-    if (!this.editable() || this.opening || saveActionState(this.scope).unchanged) return;
+    if (
+      !this.editable() ||
+      this.opening ||
+      this.zoneOpening ||
+      saveActionState(this.scope).unchanged
+    )
+      return;
     const submitted = clone(this.draft),
       generation = this.generation,
       special = this.special(),
@@ -302,12 +497,13 @@ export class OpeningHoursDay extends LitElement {
     this.saving = true;
     this.error = "";
     this.errorDepartment = "";
+    this.errorZone = "";
     this.skippedTime = false;
     this.offsetClash = false;
     try {
       for (const department of this.departments()) {
-        const days = submitted[department.id];
-        if (!days || same(days, this.baseline[department.id] ?? [])) continue;
+        const days = submitted.menus[department.id];
+        if (!days || same(days, this.baseline.menus[department.id] ?? [])) continue;
         try {
           if (special?.ownHours)
             await this.api.saveDateMenus(special.id, department.id, days[weekday]!.slots);
@@ -333,9 +529,46 @@ export class OpeningHoursDay extends LitElement {
         }
         if (generation !== this.generation || !this.isConnected) return;
         // Each route commits one department; a later refusal must not resend successful writes.
-        this.baseline = { ...this.baseline, [department.id]: days };
+        this.baseline = {
+          ...this.baseline,
+          menus: { ...this.baseline.menus, [department.id]: days },
+        };
         this.scope?.commit(this.baseline);
       }
+      for (const department of this.departments())
+        for (const zone of department.zones ?? []) {
+          const days = submitted.zones[zone.id];
+          if (!days || sameClosed(days, this.baseline.zones[zone.id] ?? [])) continue;
+          try {
+            if (special?.ownHours)
+              await this.api.saveZoneDate(special.id, zone.id, days[weekday]!.ranges);
+            else await this.api.saveZoneWeek(zone.id, days);
+          } catch (error) {
+            if (generation !== this.generation || !this.isConnected) return;
+            const invalid = codeOf(error) === "zone_closed_time.invalid";
+            this.error = t(
+              codeOf(error) === "special_date.keeps_week"
+                ? "opening.keeps_week"
+                : invalid
+                  ? "opening.closed_invalid"
+                  : "menu.save_error",
+            );
+            const field = (error as { params?: { field?: unknown } })?.params?.field;
+            if (
+              invalid &&
+              typeof field === "string" &&
+              (special?.ownHours
+                ? /^(?:ranges(?:\.|$)|specialDateId$)/.test(field)
+                : new RegExp(`^days\\.${weekday}(?:\\.|$)`).test(field))
+            )
+              this.errorZone = zone.id;
+            return;
+          }
+          if (generation !== this.generation || !this.isConnected) return;
+          // Each route commits one zone; a later refusal must not resend successful writes.
+          this.baseline = { ...this.baseline, zones: { ...this.baseline.zones, [zone.id]: days } };
+          this.scope?.commit(this.baseline);
+        }
       this.api.rereadWatches();
     } finally {
       this.saving = false;
@@ -404,13 +637,16 @@ export class OpeningHoursDay extends LitElement {
     const opening = this.opening,
       child = this.periodOpening,
       special = this.special(),
-      state = saveActionState(this.scope);
+      state = saveActionState(this.scope),
+      closed = special?.closeWholeVenue,
+      zoneOpening = this.zoneOpening,
+      blocked = this.readOnly || this.saving || !!opening || !!zoneOpening;
     return html`<div class="date-nav">
         <wt-button
           variant="secondary"
           data-test="previous-day"
           aria-label=${t("opening.previous_day")}
-          ?disabled=${this.saving || !!opening}
+          ?disabled=${this.saving || !!opening || !!zoneOpening || this.date <= businessDateToday(this.model)}
           @click=${() => this.stepDate(-1)}
           >‹</wt-button
         >
@@ -421,26 +657,108 @@ export class OpeningHoursDay extends LitElement {
           variant="secondary"
           data-test="next-day"
           aria-label=${t("opening.next_day")}
-          ?disabled=${this.saving || !!opening}
+          ?disabled=${this.saving || !!opening || !!zoneOpening}
           @click=${() => this.stepDate(1)}
           >›</wt-button
         >
       </div>
-      ${special?.ownHours ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]) })}</p>`}
+      ${
+        closed
+          ? html`<p>${t("hours.closed")}</p>`
+          : !special?.ownHours && !this.readOnly
+            ? html`<wt-button
+                data-test="own-date"
+                variant="secondary"
+                ?disabled=${blocked || !this.calendar || this.calendarError}
+                @click=${(event: Event) => {
+                  if (
+                    !this.editable() ||
+                    this.opening ||
+                    this.zoneOpening ||
+                    !this.calendar ||
+                    this.calendarError
+                  )
+                    return;
+                  const button = event.currentTarget as HTMLElement;
+                  this.dispatchEvent(
+                    new CustomEvent<NamedCalendarAction>("named-calendar-action", {
+                      detail: {
+                        kind: "own",
+                        date: this.date,
+                        day: special,
+                        holidays:
+                          this.calendar.days?.find((day) => day.date === this.date)?.holidays ?? [],
+                        returnTo: () => (button.isConnected ? button : null),
+                      },
+                      bubbles: true,
+                      composed: true,
+                    }),
+                  );
+                }}
+                >${t("named.give_own")}</wt-button
+              >`
+            : nothing
+      }
+      ${this.calendarError ? html`<p class="refusal">${t("opening.load_error")}</p>` : nothing}
+      ${closed || special?.ownHours ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]) })}</p>`}
       ${
         this.departments().length
           ? html`<service-grid
               .dayCutover=${this.model.dayCutover}
-              .columns=${this.departments().map((department) => ({ key: department.id, label: department.name, slots: this.slots(department.id), periods: this.periods(department), editable: !this.readOnly && !this.saving && !opening }))}
-              @grid-range-select=${this.openRange}
-              @grid-block-open=${this.openRange}
-              @grid-block-change=${this.resize}
+              .columns=${this.departments().flatMap((department) => [{ key: department.id, label: department.name, slots: closed ? [] : this.slots(department.id), periods: this.periods(department), editable: !closed && !blocked }, ...(department.zones ?? []).map((zone) => ({ key: `zone:${zone.id}`, label: zone.name, slots: closed ? [] : this.slots(department.id), periods: this.periods(department), layer: "closed" as const, narrow: true, closed: closed ? [] : this.closedRanges(zone.id), editable: !closed && !blocked }))])}
+              @grid-range-select=${this.selectRange}
+              @grid-block-open=${this.openBlock}
+              @grid-block-change=${this.changeBlock}
             >
+              ${this.errorZone ? html`<p slot=${`header-zone:${this.errorZone}`} class="refusal" data-zone-error=${this.errorZone}>${this.error}</p>` : nothing}
               ${this.errorDepartment ? html`<p slot=${`header-${this.errorDepartment}`} class="refusal" data-department-error=${this.errorDepartment}>${t(this.skippedTime ? "menu.time_skipped" : this.offsetClash ? "menu.offset_timetable" : "opening.check_day")}</p>` : nothing}
             </service-grid>`
           : html`<p>${t("menu.no_departments")}</p>`
       }
-      ${this.readOnly || !this.departments().length ? nothing : html`<wt-form-actions .error=${this.errorDepartment ? t("menu.fix_fields") : this.error}><wt-button data-test="save-day" variant=${state.variant} ?disabled=${state.unchanged || this.saving || !!opening} @click=${() => this.save()}>${t("menu.save")}</wt-button></wt-form-actions>`}
+      ${closed || this.readOnly || !this.departments().length ? nothing : html`<wt-form-actions .error=${this.errorDepartment || this.errorZone ? t("menu.fix_fields") : this.error}><wt-button data-test="save-day" variant=${state.variant} ?disabled=${state.unchanged || this.saving || !!opening || !!zoneOpening} @click=${() => this.save()}>${t("menu.save")}</wt-button></wt-form-actions>`}
+      ${
+        zoneOpening
+          ? keyed(
+              zoneOpening,
+              html`<range-dialog
+                .open=${true}
+                .closedTimes=${true}
+                .range=${zoneOpening.input}
+                .businessDate=${special?.ownHours ? this.date : undefined}
+                .dayCutover=${this.model.dayCutover}
+                .occupied=${this.closedRanges(zoneOpening.zone.id).filter((_, index) => index !== zoneOpening.index)}
+                .deletable=${true}
+                @range-save=${(event: CustomEvent<{ input: ClosedRange }>) => {
+                  event.stopPropagation();
+                  if (!this.currentZone(zoneOpening, event.currentTarget)) return;
+                  this.stageZone(
+                    zoneOpening.zone.id,
+                    this.closedRanges(zoneOpening.zone.id).map((range, index) =>
+                      index === zoneOpening.index ? event.detail.input : range,
+                    ),
+                  );
+                  this.zoneOpening = undefined;
+                }}
+                @range-delete=${(event: Event) => {
+                  event.stopPropagation();
+                  if (!this.currentZone(zoneOpening, event.currentTarget)) return;
+                  this.stageZone(
+                    zoneOpening.zone.id,
+                    this.closedRanges(zoneOpening.zone.id).filter(
+                      (_, index) => index !== zoneOpening.index,
+                    ),
+                  );
+                  this.zoneOpening = undefined;
+                }}
+                @range-close=${(event: Event) => {
+                  event.stopPropagation();
+                  if (this.currentZone(zoneOpening, event.currentTarget))
+                    this.zoneOpening = undefined;
+                }}
+              ></range-dialog>`,
+            )
+          : nothing
+      }
       ${
         opening
           ? keyed(

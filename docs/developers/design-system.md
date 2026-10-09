@@ -1587,13 +1587,19 @@ named day opens its own editor, with own hours staged and its original repeating
 Changing weeks or returning to the normal week asks before discarding staged drafts. A dated
 range explains endpoints the venue clock repeats on their calendar morning; its ending
 changeover belongs to the next morning. A skipped-time refusal
-names the clock gap at the date header and keeps Save available for retry. The Day tab starts on the venue's business date and shows one editable column per active
-department in a shared grid. Previous/next date actions ask before discarding a staged draft.
-An ordinary date shows “Changes every {weekday}” and saves that weekday in the normal week;
-a special date saves only that date's ranges. One Save writes changed departments in order.
-If a later department is refused, earlier successful writes stay saved and the remaining draft
-stays available to retry. A dirty draft keeps its original departments and date target through
-background reads and reconnect.
+names the clock gap at the date header and keeps Save available for retry. The Day tab starts on your venue's business date; Previous cannot go earlier. Each active
+department is followed by a narrow column for each of its active zones. Dragging in a zone stages
+closed times over the department's periods; opening a closed block edits its times or deletes it.
+Previous/next date actions ask before discarding a staged draft. A date without own hours shows
+“Changes every {weekday}” and saves that weekday in the normal week. Its heading offers Give this
+date its own hours after its calendar facts load, opening an existing named day's editor or
+prefilling a public holiday's name and kind. A named day with own hours saves that date's
+department ranges and zone closed times. A whole-venue closure says Closed and offers no editing
+action. One Save writes changed departments, then changed zones. If a later write is refused,
+earlier successful writes stay saved and the remaining draft stays available to retry. A refusal
+naming a shown field sits beside its department or zone, with the generic message above Save.
+A dirty draft keeps its original department, zone and named-day facts through background reads
+and reconnect.
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn

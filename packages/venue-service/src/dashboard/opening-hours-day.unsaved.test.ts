@@ -28,6 +28,14 @@ class DayLeaveApp extends LitElement {
           id: "d1",
           name: "Restaurant",
           active: true,
+          zones: [
+            {
+              id: "z1",
+              name: "Terrace",
+              week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
+              dates: [],
+            },
+          ],
           periods: [
             {
               id: "p1",
@@ -213,4 +221,46 @@ describe.each(["en", "es"])("Day draft (%s)", (locale) => {
     day.shadowRoot!.querySelector<HTMLElement>("[data-test=save-day]")!.click();
     await expect.poll(() => unload()).toBe(false);
   });
+});
+
+describe.each(["en", "es"])("Day zone draft (%s)", (locale) => {
+  it.each(["before", "after"])(
+    "keeps a zone-only edit made %s reconnect protected through a new model",
+    async (when) => {
+      setLocale(locale);
+      const { day } = await mount();
+      const stage = () =>
+        emit(day.shadowRoot!.querySelector("service-grid")!, "grid-range-select", {
+          columnKey: "zone:z1",
+          startsAt: "13:00",
+          endsAt: "14:00",
+        });
+      if (when === "before") {
+        stage();
+        await day.updateComplete;
+      }
+      const parent = day.parentNode!;
+      day.remove();
+      await day.updateComplete;
+      day.model = structuredClone(day.model);
+      parent.appendChild(day);
+      await day.updateComplete;
+      if (when === "after") {
+        stage();
+        await day.updateComplete;
+      }
+      app.api.rereadWatches();
+      await expect.poll(() => unload()).toBe(true);
+      expect(day.shadowRoot!.querySelector("service-grid")!.columns[1]!.closed).toEqual([
+        { startsAt: "13:00", endsAt: "14:00" },
+        { startsAt: "23:00", endsAt: "06:00" },
+      ]);
+      day.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
+      await choose("keep");
+      expect(unload()).toBe(true);
+      day.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
+      await choose("discard");
+      expect(unload()).toBe(false);
+    },
+  );
 });

@@ -413,11 +413,13 @@ export class OpeningHoursScreen extends LitElement {
         this.shadowRoot?.querySelector("hours-calendar"),
         this.shadowRoot?.querySelector("opening-hours-week"),
         this.shadowRoot?.querySelector("opening-hours-zone-week"),
+        this.shadowRoot?.querySelector("opening-hours-day"),
       ].some((component) => component === event.currentTarget)
     )
       return;
     if (
       event.currentTarget !== this.shadowRoot?.querySelector("hours-calendar") &&
+      event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-day") &&
       (!this.namedWeek || this.namedReadError)
     )
       return;
@@ -780,7 +782,7 @@ export class OpeningHoursScreen extends LitElement {
                   }
                 </div>
                 <div slot="day">
-                  ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .readOnly=${this.readOnly}></opening-hours-day>` : nothing}
+                  ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .readOnly=${this.readOnly} @named-calendar-action=${this.openNamedDay}></opening-hours-day>` : nothing}
                 </div>
               </wt-tabs>`
       }

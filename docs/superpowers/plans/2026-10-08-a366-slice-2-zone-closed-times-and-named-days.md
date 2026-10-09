@@ -1096,10 +1096,30 @@ zone rows; otherwise they save the weekday (with slice 1's note "Changes every {
 heading offers "Give this date its own hours". A whole-venue closure shows "Closed" and nothing is
 editable. ‹ stops at today's business day. A331 rule for the staged day.
 
-- [ ] Steps: failing tests (the Terrace column follows the Restaurant column — fails today because
+- [x] Steps: failing tests (the Terrace column follows the Restaurant column — fails today because
   the Day view draws departments only; edits on an own-hours day save the date; ‹ stops at today);
   watch them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and
   390; commit `feat(venue-service): zones on the Day tab (A366)`.
+
+
+2026-10-09 Task 23 checkpoint: implemented in the existing `dashboard/opening-hours-day.ts`
+extraction, with screen integration for the named-day editor. The Day grid now places each zone’s
+narrow closed-time layer after its department; its combined staged draft saves changed department
+rows and zone rows to the weekday or named-day occurrence. Previous stops at the venue’s business
+Today, and a whole-venue closure offers no editing action. Calendar facts gate the heading’s own-hours
+action, preserving existing repeating-day identity and public-holiday prefills. Dirty drafts retain
+cloned department, zone and named-day facts through background reads and reconnect. Each successful
+write commits its own baseline before the next request; refusals remain retryable.
+
+Implementation validation: the node project passed 1475 tests; the unchanged fiscal pair passed 20.
+The screen/Day/Calendar regression wave passed 207 tests before the final Day-only error cleanup;
+focused Day tests and lifecycle controls verify that cleanup and the added zone cases. Existing Day,
+unsaved and accessibility assertions were retained. Eight installed-checkout deletion controls
+failed at the intended assertions and passed after restoration; the source hashes and discarded
+initial probes are retained in the campaign’s Task 23 receipts. LOOK captured normal/own/closed
+states once across EN/ES, light/dark and actual CSS widths 1280/390; the visible hour range is roughly
+09:00–13:00, not the full business day. Implementation done, pending controller review. Remaining
+slice work starts at Task 24; this checkpoint does not complete slice 2.
 
 ---
 
