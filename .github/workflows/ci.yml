@@ -650,8 +650,7 @@ jobs:
   # plus the merge) rather than one.
   #
   # `ci` needs BOTH this matrix job AND test-heavy-merge: if a shard fails, the merge job's `needs` is
-  # unsatisfied so it SKIPS; `ci` fails the run because it names test-heavy directly, and also
-  # because it refuses a merge job skipped while its package was selected. `fail-fast: false` lets every shard report rather than one
+  # unsatisfied so it SKIPS; `ci` fails the run because it names test-heavy directly. `fail-fast: false` lets every shard report rather than one
   # failure cancelling its siblings. scripts/ci-workflow.test.mjs pins the matrix size against the
   # `--shard=i/N` denominator and the merge job against its shards, so the two cannot drift.
   test-heavy:

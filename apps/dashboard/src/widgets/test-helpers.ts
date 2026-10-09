@@ -115,8 +115,8 @@ export async function closeReportsDelivered(): Promise<void> {
 
 /**
  * Resolves when `dialog` sends `wt-close`. `wt-dialog` sends it only once Chromium reports the
- * native close, which Chromium queues for the next rendered frame, so a test checking what a close
- * does waits for this rather than for `vi.waitFor`'s one second.
+ * native close, which Chromium queues for the next rendered frame, so a test checking what a screen
+ * does on `wt-close` waits for this rather than for `vi.waitFor`'s one second.
  */
 export function dialogClosed(dialog: Element): Promise<unknown> {
   return new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
