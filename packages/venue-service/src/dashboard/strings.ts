@@ -635,6 +635,12 @@ const en = {
   "holidays.area_chosen": "Holiday area: {name}",
   "holidays.area_none": "Holiday area: not chosen",
   "holidays.area_refused": "Choose one of the areas offered.",
+  "holidays.area_needs_city": "The holiday area needs the venue's city. Add it in Venue details.",
+  "holidays.area_needs_province":
+    "The holiday area needs a recognised province. Correct it in Venue details.",
+  "holidays.area_needs_address":
+    "The holiday area needs the venue's city and a recognised province. Set them in Venue details.",
+  "holidays.area_unsupported": "Holiday areas are unavailable for this country.",
   "nav.menu_timetable": "Menu timetable",
   "venue.set_up_periods": "Set up Opening hours",
   "menu.department": "Department",
@@ -1370,6 +1376,13 @@ const es: Record<keyof typeof en, string> = {
   "holidays.area_chosen": "Zona de festivos: {name}",
   "holidays.area_none": "Zona de festivos: sin elegir",
   "holidays.area_refused": "Elige una de las zonas ofrecidas.",
+  "holidays.area_needs_city":
+    "La zona de festivos necesita la ciudad del local. Añádela en Datos del local.",
+  "holidays.area_needs_province":
+    "La zona de festivos necesita una provincia reconocida. Corrígela en Datos del local.",
+  "holidays.area_needs_address":
+    "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+  "holidays.area_unsupported": "No hay zonas de festivos para este país.",
   "nav.menu_timetable": "Horario de cartas",
   "venue.set_up_periods": "Configura los horarios de apertura",
   "menu.department": "Departamento",

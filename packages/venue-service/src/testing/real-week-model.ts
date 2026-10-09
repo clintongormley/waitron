@@ -80,6 +80,12 @@ export const namedWeekModel = (): NamedDaysModel => ({
   days: [],
   holidayCoverage: [],
   holidaySources: [],
-  area: { addressKey: "fixture-address", options: [], required: false, chosen: null },
+  area: {
+    addressKey: "fixture-address",
+    readiness: "ready",
+    options: [],
+    required: false,
+    chosen: null,
+  },
   localHolidaysPerYear: 2,
 });

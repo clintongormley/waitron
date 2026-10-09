@@ -829,7 +829,7 @@ export class HoursCalendar extends LitElement {
       ${
         model === undefined
           ? nothing
-          : html` ${model.area.options.length ? this.#namedArea(model) : nothing}
+          : html` ${model.area.options.length || model.area.readiness !== "ready" ? this.#namedArea(model) : nothing}
               <ul class="note coverage" data-test="month-coverage">
                 ${years.map((year) => {
                   const coverage = model.holidayCoverage.find((item) => item.year === year);
@@ -917,38 +917,61 @@ export class HoursCalendar extends LitElement {
       ${entry?.holidays.map((holiday) => html`<p>${holiday.name}</p>`)}
       ${this.readOnly ? nothing : html`<div class="actions">${day ? html`${action("edit", "hours.edit")}${action("copy", "named.copy")}${action("delete", "hours.delete")}` : action("add", "named.add")}${action("own", "named.give_own")}</div>`}`;
   }
+  #areaAddress(readiness: NamedDaysModel["area"]["readiness"]): string {
+    switch (readiness) {
+      case "missing_city":
+        return t("holidays.area_needs_city");
+      case "unresolved_province":
+        return t("holidays.area_needs_province");
+      case "unresolved_address":
+        return t("holidays.area_needs_address");
+      case "unsupported_country":
+        return t("holidays.area_unsupported");
+      case "ready":
+        return "";
+    }
+  }
   #namedArea(model: NamedDaysModel) {
+    const explanation =
+      model.area.readiness === "ready"
+        ? nothing
+        : html`<p class="note" data-test="area-address">
+            ${this.#areaAddress(model.area.readiness)}
+          </p>`;
+    if (!model.area.options.length) return explanation;
     if (this.readOnly)
-      return html`<p class="note" data-test="area-chosen">
-        ${model.area.options.find((item) => item.key === model.area.chosen)?.name ?? t("holidays.area_none")}
-      </p>`;
-    return html`<wt-combobox
-      name="holidayArea"
-      label=${t("holidays.area")}
-      hint=${t("holidays.area_hint")}
-      search="never"
-      ?required=${model.area.required}
-      .value=${model.area.chosen ?? ""}
-      .options=${model.area.options.map(({ key, name }) => ({ value: key, label: name }))}
-      ?disabled=${this.areaBusy}
-      error=${this.areaError}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        const chooser = event.currentTarget as HTMLElementTagNameMap["wt-combobox"];
-        chooser.value = this.namedModel?.area.chosen ?? "";
-        const value = event.detail.value;
-        if (
-          !this.isConnected ||
-          this.readOnly ||
-          this.areaBusy ||
-          chooser !== this.shadowRoot?.querySelector("[name=holidayArea]") ||
-          value === model.area.chosen ||
-          !model.area.options.some((item) => item.key === value)
-        )
-          return;
-        void this.#saveNamedArea(value);
-      }}
-    ></wt-combobox>`;
+      return html`${explanation}
+        <p class="note" data-test="area-chosen">
+          ${model.area.options.find((item) => item.key === model.area.chosen)?.name ?? t("holidays.area_none")}
+        </p>`;
+    return html`${explanation}<wt-combobox
+        name="holidayArea"
+        label=${t("holidays.area")}
+        hint=${t("holidays.area_hint")}
+        search="never"
+        ?required=${model.area.required}
+        .value=${model.area.chosen ?? ""}
+        .options=${model.area.options.map(({ key, name }) => ({ value: key, label: name }))}
+        ?disabled=${this.areaBusy || model.area.readiness !== "ready"}
+        error=${this.areaError}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          const chooser = event.currentTarget as HTMLElementTagNameMap["wt-combobox"];
+          chooser.value = this.namedModel?.area.chosen ?? "";
+          const value = event.detail.value;
+          if (
+            !this.isConnected ||
+            this.readOnly ||
+            this.areaBusy ||
+            this.namedModel?.area.readiness !== "ready" ||
+            chooser !== this.shadowRoot?.querySelector("[name=holidayArea]") ||
+            value === model.area.chosen ||
+            !model.area.options.some((item) => item.key === value)
+          )
+            return;
+          void this.#saveNamedArea(value);
+        }}
+      ></wt-combobox>`;
   }
   async #saveNamedArea(value: string) {
     const connection = this.#connection;
@@ -959,8 +982,16 @@ export class HoursCalendar extends LitElement {
     this.areaError = "";
     try {
       await this.namedApi!.saveHolidayArea(value);
-    } catch {
-      if (current()) this.areaError = t("hours.save_error");
+    } catch (error) {
+      if (current()) {
+        const refusal = error as { code?: string; params?: { field?: string } } | null;
+        this.areaError =
+          refusal?.code === "holiday.invalid" && refusal.params?.field === "geography"
+            ? t("holidays.area_needs_address")
+            : refusal?.code === "holiday.invalid" && refusal.params?.field === "areaKey"
+              ? t("holidays.area_refused")
+              : t("hours.save_error");
+      }
       return;
     } finally {
       if (current()) this.areaBusy = false;

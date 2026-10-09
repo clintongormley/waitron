@@ -235,6 +235,16 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
         : [];
     return {
       venue: { country: address.country, provinceCode: address.provinceCode, city: address.city },
+      readiness:
+        address.calendar === undefined
+          ? "unsupported_country"
+          : address.provinceCode === null && address.city === null
+            ? "unresolved_address"
+            : address.provinceCode === null
+              ? "unresolved_province"
+              : address.city === null
+                ? "missing_city"
+                : "ready",
       localHolidaysPerYear: address.calendar?.localEntryLimit ?? 0,
       areaOptions,
       areaRequired: areaOptions.length > 0 && (current?.areaKey ?? null) === null,

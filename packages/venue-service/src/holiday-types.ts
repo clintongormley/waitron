@@ -38,6 +38,8 @@ export interface HolidayGeography {
 }
 
 export interface HolidayAreaModel {
+  readiness:
+    "ready" | "missing_city" | "unresolved_province" | "unresolved_address" | "unsupported_country";
   venue: { country: string; provinceCode: string | null; city: string | null };
   localHolidaysPerYear: number;
   areaOptions: readonly { key: string; name: string }[];
@@ -72,6 +74,7 @@ export interface NamedDaysModel {
   holidayCoverage: readonly HolidayCoverage[];
   holidaySources: readonly HolidaySource[];
   area: {
+    readiness: HolidayAreaModel["readiness"];
     addressKey: string;
     options: readonly { key: string; name: string }[];
     required: boolean;

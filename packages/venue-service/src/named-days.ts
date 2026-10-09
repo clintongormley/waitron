@@ -146,6 +146,7 @@ export async function readNamedDaysModel(
     holidayCoverage: read.coverage,
     holidaySources: read.sources,
     area: {
+      readiness: area.readiness,
       addressKey: JSON.stringify([
         area.venue.country,
         area.venue.provinceCode,
