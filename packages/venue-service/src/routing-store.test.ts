@@ -44,7 +44,6 @@ import {
 } from "./routing.js";
 import {
   describeMakers,
-  explainRoute,
   loadRoutingRules,
   previewRoutingChange,
   resolveMakers,
@@ -61,7 +60,6 @@ import { routingCells } from "./schema/routing.js";
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { closeStationForToday, setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/station-week.js";
-import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
 import { specialDates } from "./schema/hours.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
@@ -175,6 +173,25 @@ const cellKey = (cell: RoutingCell) =>
   `${cell.row.kind}:${cell.row.kind === "category" ? cell.row.categoryId : cell.row.kind === "product" ? cell.row.productId : ""}:${cell.zoneId ?? ""}`;
 const sortCells = (cells: readonly RoutingCell[]) =>
   [...cells].sort((a, b) => cellKey(a).localeCompare(cellKey(b)));
+const factsOf = (
+  productId: string,
+  routedProductId: string,
+  categoryId: string | null,
+): ProductFacts => ({ productId, routedProductId, categoryId });
+/** The stored rules' whole choice: the deciding cell and any fallback steps beside the route. */
+const storedChoice = async (
+  tx: Transaction,
+  cfg: Parameters<typeof loadRoutingRules>[1],
+  facts: ProductFacts,
+  zoneId: string | null,
+  today: { businessDay: string | null; moment: RoutingMoment } | null = null,
+): Promise<MakerChoice> =>
+  chooseMaker(
+    await loadRoutingRules(tx, cfg, today?.businessDay ?? null),
+    facts,
+    zoneId,
+    today?.moment ?? null,
+  );
 
 describe("route explanation", () => {
   it("loads a frozen cell list, so routing a whole catalogue indexes it once", async () =>
@@ -220,10 +237,7 @@ describe("route explanation", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await expect(
-        explainRoute(tx, f.cfg, randomUUID(), null, {
-          kind: "now",
-          at: new Date("2026-10-02T22:00:00Z"),
-        }),
+        resolveMakers(tx, f.cfg, null, [randomUUID()], new Date("2026-10-02T22:00:00Z")),
       ).rejects.toMatchObject({
         code: "route.subject_not_found",
         params: { subject: "product" },
@@ -431,16 +445,18 @@ describe("route explanation", () => {
       const f = await fixture(tx);
       const address: CellAddress = { row: productRow(f.mojito), zoneId: f.terrace };
       await setRoutingCell(tx, f.cfg, address, station(f.terraceBar));
-      const explained = await explainRoute(tx, f.cfg, f.variant, f.terrace, {
-        kind: "now",
-        at: new Date("2026-10-02T22:00:00Z"),
+      const at = new Date("2026-10-02T22:00:00Z");
+      expect((await resolveMakers(tx, f.cfg, f.terrace, [f.variant], at)).get(f.variant)).toEqual({
+        kind: "made",
+        route: station(f.terraceBar),
       });
-      expect(explained.decidedBy).toEqual({ kind: "cell", address });
-      expect(explained).toMatchObject({
-        route: { kind: "station", stationId: f.terraceBar },
+      expect(
+        await storedChoice(tx, f.cfg, factsOf(f.variant, f.mojito, f.cocktails), f.terrace),
+      ).toEqual({
+        route: station(f.terraceBar),
+        decidedBy: { kind: "cell", address },
         fallbacks: [],
         noReplacement: false,
-        stations: expect.arrayContaining([{ id: f.terraceBar, name: "Terrace Bar", active: true }]),
       });
     }));
 
@@ -454,40 +470,43 @@ describe("route explanation", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      const explained = await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
-        kind: "now",
-        at: new Date("2026-10-02T22:00:00Z"),
+      const resolver = await routingAt(tx, f.cfg, new Date("2026-10-02T22:00:00Z"));
+      expect((await resolver.makers(f.terrace, [f.mojito])).get(f.mojito)).toEqual({
+        kind: "no_replacement",
+        stationId: f.terraceBar,
       });
-      expect(explained.decidedBy).toEqual({ kind: "cell", address });
-      expect(explained).toMatchObject({
+      expect((await resolver.stations()).get(f.terraceBar)).toMatchObject({
+        name: "Terrace Bar",
+        active: false,
+      });
+      expect(
+        await storedChoice(tx, f.cfg, factsOf(f.mojito, f.mojito, f.cocktails), f.terrace),
+      ).toEqual({
         route: null,
+        decidedBy: { kind: "cell", address },
         fallbacks: [{ stationId: f.terraceBar, why: "switched_off" }],
         noReplacement: true,
-        stations: expect.arrayContaining([
-          { id: f.terraceBar, name: "Terrace Bar", active: false },
-        ]),
       });
     }));
 
   it("names the default and reports no route when no active default remains", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      expect(
-        await explainRoute(tx, f.cfg, f.bread, null, {
-          kind: "now",
-          at: new Date("2026-10-02T22:00:00Z"),
-        }),
-      ).toMatchObject({
+      const at = new Date("2026-10-02T22:00:00Z");
+      const bread = factsOf(f.bread, f.bread, null);
+      expect((await resolveMakers(tx, f.cfg, null, [f.bread], at)).get(f.bread)).toEqual({
+        kind: "made",
+        route: station(f.bar),
+      });
+      expect(await storedChoice(tx, f.cfg, bread, null)).toMatchObject({
         route: { kind: "station", stationId: f.bar },
         decidedBy: { kind: "default" },
       });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      expect(
-        await explainRoute(tx, f.cfg, f.bread, null, {
-          kind: "now",
-          at: new Date("2026-10-02T22:00:00Z"),
-        }),
-      ).toMatchObject({
+      expect((await resolveMakers(tx, f.cfg, null, [f.bread], at)).get(f.bread)).toEqual({
+        kind: "no_station",
+      });
+      expect(await storedChoice(tx, f.cfg, bread, null)).toMatchObject({
         route: null,
         decidedBy: null,
       });
@@ -2166,7 +2185,21 @@ describe("routing previews", () => {
     }));
 });
 
-describe("timed routing explanation", () => {
+describe("timed routing", () => {
+  /** Friday 2 October 2026 at 22:00 in a venue on UTC, before its 06:00 cutover moves the day. */
+  const fridayLate = {
+    at: new Date("2026-10-02T22:00:00Z"),
+    businessDay: "2026-10-02",
+    moment: { weekday: 5, timeOfDay: "22:00" },
+  };
+  const routedAt = async (tx: Transaction, f: Awaited<ReturnType<typeof fixture>>, at: Date) => {
+    const resolver = await routingAt(tx, f.cfg, at);
+    return {
+      mojito: (await resolver.makers(null, [f.mojito])).get(f.mojito),
+      terraceBar: (await resolver.stations()).get(f.terraceBar),
+    };
+  };
+
   it("uses Friday hours and names the fallback, while now honors today's open", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -2176,36 +2209,38 @@ describe("timed routing explanation", () => {
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
       await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
-      const at = new Date("2026-10-02T22:00:00Z");
-      const scheduled = await explainRoute(tx, f.cfg, f.mojito, null, {
-        kind: "at",
-        moment: { weekday: 5, timeOfDay: "22:00" },
-      });
-      expect(scheduled).toMatchObject({
+      const { at } = fridayLate;
+      const mojito = factsOf(f.mojito, f.mojito, f.cocktails);
+      expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toEqual({
         route: { kind: "station", stationId: f.bar },
+        decidedBy: { kind: "cell", address: { row: categoryRow(f.cocktails), zoneId: null } },
         fallbacks: [{ stationId: f.terraceBar, why: "out_of_hours" }],
         noReplacement: false,
-        clockReadable: true,
+      });
+      expect(await routedAt(tx, f, at)).toMatchObject({
+        mojito: { kind: "made", route: station(f.bar) },
+        terraceBar: { open: false, why: "out_of_hours" },
       });
       await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
-      expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
-        route: { kind: "station", stationId: f.terraceBar },
-        fallbacks: [],
-        clockReadable: true,
+      expect(await routedAt(tx, f, at)).toMatchObject({
+        mojito: { kind: "made", route: station(f.terraceBar) },
+        terraceBar: { open: true, why: "opened_by_hand" },
       });
-      expect(
-        await explainRoute(tx, f.cfg, f.mojito, null, {
-          kind: "at",
-          moment: { weekday: 5, timeOfDay: "22:00" },
-        }),
-      ).toEqual(scheduled);
+      expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toMatchObject({
+        route: station(f.terraceBar),
+        fallbacks: [],
+      });
       await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
-      expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
-        route: { kind: "station", stationId: f.bar },
+      expect(await routedAt(tx, f, at)).toMatchObject({
+        mojito: { kind: "made", route: station(f.bar) },
+        terraceBar: { open: false, why: "closed_by_hand" },
+      });
+      expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toMatchObject({
+        route: station(f.bar),
         fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
       });
     }));
-  it("reports an unreadable venue clock and does not apply hours", async () =>
+  it("does not apply hours while the venue clock cannot be read", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -2216,32 +2251,31 @@ describe("timed routing explanation", () => {
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
+      expect(await routedAt(tx, f, fridayLate.at)).toMatchObject({
+        mojito: { kind: "made", route: station(f.terraceBar) },
+        terraceBar: { open: true, why: "open" },
+      });
+    }));
+  it("routes now around today's manual closure", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const { at } = fridayLate;
+      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+      expect(await routedAt(tx, f, at)).toMatchObject({
+        mojito: { kind: "made", route: station(f.bar) },
+        terraceBar: { open: false, why: "closed_by_hand" },
+      });
       expect(
-        await explainRoute(tx, f.cfg, f.mojito, null, {
-          kind: "now",
-          at: new Date("2026-10-02T22:00:00Z"),
-        }),
+        await storedChoice(tx, f.cfg, factsOf(f.mojito, f.mojito, f.cocktails), null, fridayLate),
       ).toMatchObject({
-        route: { kind: "station", stationId: f.terraceBar },
-        clockReadable: false,
-        fallbacks: [],
+        route: { kind: "station", stationId: f.bar },
+        fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
       });
     }));
 });
-
-it("explains now with today's manual closure", async () =>
-  scoped(async (tx) => {
-    const f = await fixture(tx);
-    const at = new Date("2026-10-02T22:00:00Z");
-    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
-    await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-    await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
-    await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
-    expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
-      route: { kind: "station", stationId: f.bar },
-      fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
-    });
-  }));
 
 const fixedInstant = new Date("2026-10-02T18:30:00Z");
 async function extrasFixture(tx: Transaction) {
@@ -2280,6 +2314,7 @@ async function extrasFixture(tx: Transaction) {
     ...f,
     extras,
     sides,
+    toppings,
     chips,
     cheese,
     chipsVariant: variant!.id,
@@ -2289,62 +2324,81 @@ async function extrasFixture(tx: Transaction) {
 }
 
 describe("extra maker resolution", () => {
-  it("explains each chosen extra against the dish's final station and names its cell", async () =>
+  it("places each chosen extra against the dish's final station and names its cell", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
-      const result = await explainRoute(
-        tx,
-        f.cfg,
-        f.mojito,
-        null,
-        { kind: "now", at: fixedInstant },
-        [f.chips, f.cheese],
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], fixedInstant)).get(f.mojito),
+      ).toEqual({ kind: "made", route: station(f.grill) });
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [
+            { key: "chips", productId: f.chips, dishStationId: f.grill },
+            { key: "cheese", productId: f.cheese, dishStationId: f.grill },
+          ],
+          fixedInstant,
+        ),
+      ).toEqual(
+        new Map([
+          ["chips", { kind: "made", stationId: f.fryer }],
+          ["cheese", { kind: "follows_dish", why: "no_rule" }],
+        ]),
       );
-      expect(result.extras).toEqual([
+      const rules = await loadRoutingRules(tx, f.cfg, null);
+      const dish = chooseMaker(rules, factsOf(f.mojito, f.mojito, f.cocktails), null, null);
+      expect(
+        [factsOf(f.chips, f.chips, f.sides), factsOf(f.cheese, f.cheese, f.toppings)].map((extra) =>
+          chooseExtraMakerBeside(rules, dish, extra, null, null),
+        ),
+      ).toEqual([
         {
-          productId: f.chips,
           outcome: { kind: "made", stationId: f.fryer },
           decidedBy: { kind: "cell", address: { row: categoryRow(f.sides), zoneId: null } },
           fallbacks: [],
         },
         {
-          productId: f.cheese,
           outcome: { kind: "follows_dish", why: "no_rule" },
           decidedBy: { kind: "default" },
           fallbacks: [],
         },
       ]);
-      expect(result.extrasWaitOnDish).toBe(false);
-      expect(result.stations).toContainEqual({ id: f.fryer, name: "Fryer", active: true });
     }));
-  it("waits for the dish's station before explaining extras when its cell's station is closed", async () =>
+  it("gives no extra a maker while its dish's cell's station is closed with no replacement", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
       await setStationToday(tx, f.cfg, f.grill, "closed", fixedInstant);
       expect(
-        await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [f.chips]),
-      ).toMatchObject({ route: null, extras: [], extrasWaitOnDish: true });
-      const id = randomUUID();
-      await expect(
-        explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [id]),
-      ).rejects.toMatchObject({
-        code: "route.subject_not_found",
-        params: { subject: "product", id },
-      });
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], fixedInstant)).get(f.mojito),
+      ).toEqual({ kind: "no_replacement", stationId: f.grill });
+      const today = { businessDay: "2026-10-02", moment: { weekday: 5, timeOfDay: "18:30" } };
+      const rules = await loadRoutingRules(tx, f.cfg, today.businessDay);
+      const dish = chooseMaker(rules, factsOf(f.mojito, f.mojito, f.cocktails), null, today.moment);
+      expect(dish.route).toBeNull();
+      expect(
+        chooseExtraMakerBeside(rules, dish, factsOf(f.chips, f.chips, f.sides), null, today.moment),
+      ).toBeNull();
     }));
-  it("treats a dish with no preparation as having no station when explaining an extra", async () =>
+  it("treats a dish with no preparation as having no station when placing an extra", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       await setCategoryCell(tx, f.cfg, f.cocktails, noPrep);
       expect(
-        await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [f.chips]),
-      ).toMatchObject({
-        route: noPrep,
-        extrasWaitOnDish: false,
-        extras: [{ productId: f.chips, outcome: { kind: "made", stationId: f.fryer } }],
-      });
+        (await resolveMakers(tx, f.cfg, null, [f.mojito], fixedInstant)).get(f.mojito),
+      ).toEqual({ kind: "made", route: noPrep });
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [{ key: "chips", productId: f.chips, dishStationId: null }],
+          fixedInstant,
+        ),
+      ).toEqual(new Map([["chips", { kind: "made", stationId: f.fryer }]]));
     }));
   it("splits extras with a cell of their own while extras without one follow their dish", async () =>
     scoped(async (tx) => {
@@ -2450,9 +2504,12 @@ describe("routing from cells", () => {
           [f.variant, { kind: "made", route: station(f.bar) }],
         ]),
       );
-      expect(
-        await explainRoute(tx, f.cfg, f.mojito, f.terrace, { kind: "now", at: fixedInstant }),
-      ).toMatchObject({ route: station(f.bar), decidedBy: { kind: "default" }, fallbacks: [] });
+      const mojito = factsOf(f.mojito, f.mojito, f.cocktails);
+      expect(await storedChoice(tx, f.cfg, mojito, f.terrace)).toMatchObject({
+        route: station(f.bar),
+        decidedBy: { kind: "default" },
+        fallbacks: [],
+      });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
       expect(
         await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, [f.mojito, f.bread]),
@@ -2462,11 +2519,11 @@ describe("routing from cells", () => {
           [f.bread, { kind: "no_station" }],
         ]),
       );
-      const explained = await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
-        kind: "now",
-        at: fixedInstant,
+      expect(await storedChoice(tx, f.cfg, mojito, f.terrace)).toMatchObject({
+        route: null,
+        decidedBy: null,
+        noReplacement: false,
       });
-      expect(explained).toMatchObject({ route: null, decidedBy: null, noReplacement: false });
     }));
 
   it("a product's Every zone cell beats its parent category's Terrace cell, and clearing it shows the Terrace cell with its origin", async () =>
@@ -2476,18 +2533,28 @@ describe("routing from cells", () => {
       await setRoutingCell(tx, f.cfg, terraceCell, station(f.terraceBar));
       const productCell: CellAddress = { row: productRow(f.mojito), zoneId: null };
       await setRoutingCell(tx, f.cfg, productCell, station(f.bar));
-      const when = { kind: "now", at: fixedInstant } as const;
-      for (const id of [f.mojito, f.variant])
-        expect(await explainRoute(tx, f.cfg, id, f.terrace, when)).toMatchObject({
+      const both = [
+        factsOf(f.mojito, f.mojito, f.cocktails),
+        factsOf(f.variant, f.mojito, f.cocktails),
+      ];
+      const ids = [f.mojito, f.variant];
+      for (const facts of both)
+        expect(await storedChoice(tx, f.cfg, facts, f.terrace)).toMatchObject({
           route: station(f.bar),
           decidedBy: { kind: "cell", address: productCell },
         });
+      expect(await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, ids)).toEqual(
+        new Map(ids.map((id) => [id, { kind: "made", route: station(f.bar) }])),
+      );
       await clearRoutingCell(tx, f.cfg, productCell);
-      for (const id of [f.mojito, f.variant]) {
-        const explained = await explainRoute(tx, f.cfg, id, f.terrace, when);
-        expect(explained.route).toEqual(station(f.terraceBar));
-        expect(explained.decidedBy).toEqual({ kind: "cell", address: terraceCell });
+      for (const facts of both) {
+        const chosen = await storedChoice(tx, f.cfg, facts, f.terrace);
+        expect(chosen.route).toEqual(station(f.terraceBar));
+        expect(chosen.decidedBy).toEqual({ kind: "cell", address: terraceCell });
       }
+      expect(await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, ids)).toEqual(
+        new Map(ids.map((id) => [id, { kind: "made", route: station(f.terraceBar) }])),
+      );
       expect(
         await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, [f.mojito]),
       ).toEqual(new Map([[f.mojito, { kind: "made", route: station(f.terraceBar) }]]));
@@ -2497,7 +2564,12 @@ describe("routing from cells", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const half = await breadVariant(tx, f);
-      const when = { kind: "now", at: fixedInstant } as const;
+      const factsById = new Map([
+        [f.bread, factsOf(f.bread, f.bread, null)],
+        [half, factsOf(half, f.bread, null)],
+        [f.mojito, factsOf(f.mojito, f.mojito, f.cocktails)],
+        [f.variant, factsOf(f.variant, f.mojito, f.cocktails)],
+      ]);
       const allTerrace: CellAddress = { row: { kind: "all" }, zoneId: f.terrace };
       await setRoutingCell(tx, f.cfg, allTerrace, station(f.terraceBar));
       // Half stores Food; a Food cell must not decide for it.
@@ -2513,7 +2585,7 @@ describe("routing from cells", () => {
         decidedBy: unknown,
       ): Promise<void> => {
         for (const id of ids)
-          expect(await explainRoute(tx, f.cfg, id, f.terrace, when), id).toMatchObject({
+          expect(await storedChoice(tx, f.cfg, factsById.get(id)!, f.terrace), id).toMatchObject({
             route,
             decidedBy,
           });
@@ -2542,43 +2614,60 @@ describe("routing from cells", () => {
       await routed([f.bread, half], station(f.terraceBar), cell(allTerrace));
     }));
 
-  it("explains a variant and an extra by the parent-owned cell and its category path", async () =>
+  it("routes a variant and an extra by the parent-owned cell and its category path", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       const variantCell: CellAddress = { row: productRow(f.chips), zoneId: f.terrace };
       await setRoutingCell(tx, f.cfg, variantCell, station(f.grill));
       const extrasCell: CellAddress = { row: categoryRow(f.extras), zoneId: null };
       await setRoutingCell(tx, f.cfg, extrasCell, station(f.terraceBar));
-      const explained = await explainRoute(
-        tx,
-        f.cfg,
-        f.chipsVariant,
-        f.terrace,
-        { kind: "now", at: fixedInstant },
-        [f.chipsVariant, f.cheese],
-      );
-      expect(explained.route).toEqual(station(f.grill));
-      expect(explained.decidedBy).toEqual({ kind: "cell", address: variantCell });
-      expect(explained.extras).toEqual([
+      const variant = factsOf(f.chipsVariant, f.chips, f.sides);
+      const rules = await loadRoutingRules(tx, f.cfg, null);
+      const dish = chooseMaker(rules, variant, f.terrace, null);
+      expect(dish.route).toEqual(station(f.grill));
+      expect(dish.decidedBy).toEqual({ kind: "cell", address: variantCell });
+      expect(
+        (await resolveMakers(tx, f.cfg, f.terrace, [f.chipsVariant], fixedInstant)).get(
+          f.chipsVariant,
+        ),
+      ).toEqual({ kind: "made", route: station(f.grill) });
+      expect(
+        [variant, factsOf(f.cheese, f.cheese, f.toppings)].map((extra) =>
+          chooseExtraMakerBeside(rules, dish, extra, f.terrace, null),
+        ),
+      ).toEqual([
         {
-          productId: f.chipsVariant,
           outcome: { kind: "follows_dish", why: "same_station" },
           decidedBy: { kind: "cell", address: variantCell },
           fallbacks: [],
         },
         {
-          productId: f.cheese,
           outcome: { kind: "made", stationId: f.terraceBar },
           decidedBy: { kind: "cell", address: extrasCell },
           fallbacks: [],
         },
       ]);
-      const elsewhere = await explainRoute(tx, f.cfg, f.chipsVariant, null, {
-        kind: "now",
-        at: fixedInstant,
-      });
-      expect(elsewhere.route).toEqual(station(f.fryer));
-      expect(elsewhere.decidedBy).toEqual({
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          f.terrace,
+          [
+            { key: "variant", productId: f.chipsVariant, dishStationId: f.grill },
+            { key: "cheese", productId: f.cheese, dishStationId: f.grill },
+          ],
+          fixedInstant,
+        ),
+      ).toEqual(
+        new Map([
+          ["variant", { kind: "follows_dish", why: "same_station" }],
+          ["cheese", { kind: "made", stationId: f.terraceBar }],
+        ]),
+      );
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.chipsVariant], fixedInstant)).get(f.chipsVariant),
+      ).toEqual({ kind: "made", route: station(f.fryer) });
+      expect((await storedChoice(tx, f.cfg, variant, null)).decidedBy).toEqual({
         kind: "cell",
         address: { row: categoryRow(f.sides), zoneId: null },
       });
@@ -2591,13 +2680,17 @@ describe("routing from cells", () => {
       await setRoutingCell(tx, f.cfg, address, station(f.terraceBar));
       await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await setStationToday(tx, f.cfg, f.terraceBar, "closed", fixedInstant);
-      const explained = await explainRoute(tx, f.cfg, f.chips, null, {
-        kind: "now",
-        at: fixedInstant,
+      expect((await resolveMakers(tx, f.cfg, null, [f.chips], fixedInstant)).get(f.chips)).toEqual({
+        kind: "made",
+        route: station(f.bar),
       });
-      expect(explained.route).toEqual(station(f.bar));
-      expect(explained.decidedBy).toEqual({ kind: "cell", address });
-      expect(explained.fallbacks).toEqual([{ stationId: f.terraceBar, why: "closed_by_hand" }]);
+      const chosen = await storedChoice(tx, f.cfg, factsOf(f.chips, f.chips, f.sides), null, {
+        businessDay: "2026-10-02",
+        moment: { weekday: 5, timeOfDay: "18:30" },
+      });
+      expect(chosen.route).toEqual(station(f.bar));
+      expect(chosen.decidedBy).toEqual({ kind: "cell", address });
+      expect(chosen.fallbacks).toEqual([{ stationId: f.terraceBar, why: "closed_by_hand" }]);
       expect(
         await resolveExtraMakers(
           tx,
@@ -2741,7 +2834,7 @@ describe("hours from special dates", () => {
       SAVED_AT,
     );
 
-  it("previews a date and local time with its special hours, and a weekday with the standard week alone", async () =>
+  it("routes by a date's special hours, and by the standard week on the same weekday a week later", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -2754,47 +2847,21 @@ describe("hours from special dates", () => {
         { weekday: 5, opensAt: "18:00", closesAt: "23:00" },
       ]);
       await closedOn(tx, f.cfg, "2026-10-09", f.terraceBar);
-      const preview = (moment: RoutingMoment) =>
-        explainRoute(tx, f.cfg, f.mojito, null, { kind: "at", moment });
-      expect(await preview({ weekday: 5, timeOfDay: "20:00" })).toMatchObject({
-        route: { kind: "station", stationId: f.terraceBar },
-        fallbacks: [],
+      // 18:00 UTC is 20:00 in Madrid on both Fridays.
+      const routed = async (instant: string) => {
+        const resolver = await routingAt(tx, f.cfg, new Date(instant));
+        return {
+          mojito: (await resolver.makers(null, [f.mojito])).get(f.mojito),
+          terraceBar: (await resolver.stations()).get(f.terraceBar),
+        };
+      };
+      expect(await routed("2026-10-09T18:00:00Z")).toMatchObject({
+        mojito: { kind: "made", route: station(f.bar) },
+        terraceBar: { open: false, why: "out_of_hours" },
       });
-      expect(
-        await preview({ civilDate: "2026-10-09", weekday: 5, timeOfDay: "20:00" }),
-      ).toMatchObject({
-        route: { kind: "station", stationId: f.bar },
-        fallbacks: [{ stationId: f.terraceBar, why: "out_of_hours" }],
-      });
-      expect(
-        await preview({ civilDate: "2026-10-16", weekday: 5, timeOfDay: "20:00" }),
-      ).toMatchObject({ route: { kind: "station", stationId: f.terraceBar }, fallbacks: [] });
-    }));
-
-  it("refuses to preview a local time the clock skips on that date", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
-      const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
-      const preview = (timeOfDay: string) =>
-        explainRoute(tx, f.cfg, f.mojito, null, {
-          kind: "at",
-          moment: { civilDate: forward.date, weekday: 0, timeOfDay },
-        });
-      await expect(preview(minutesAfter(forward.before, 1))).rejects.toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "time" },
-      });
-      await expect(preview(forward.after)).resolves.toMatchObject({ clockReadable: true });
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
-      await expect(preview(minutesAfter(forward.before, 1))).resolves.toMatchObject({
-        route: { kind: "station", stationId: f.bar },
+      expect(await routed("2026-10-16T18:00:00Z")).toMatchObject({
+        mojito: { kind: "made", route: station(f.terraceBar) },
+        terraceBar: { open: true, why: "open" },
       });
     }));
 
