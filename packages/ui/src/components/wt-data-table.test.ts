@@ -1751,6 +1751,138 @@ test("a search in a tree keeps a match's ancestors and drops everything else", a
   expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
 });
 
+type MenuNode = { id: string; parent: string | null; name: string };
+const nodes: MenuNode[] = [
+  { id: "drinks", parent: null, name: "Drinks" },
+  { id: "virgin", parent: "drinks", name: "Virgin Mary" },
+  { id: "gin", parent: "drinks", name: "Gin" },
+  { id: "food", parent: null, name: "Food" },
+  { id: "ginger-cake", parent: "food", name: "Ginger Cake" },
+  { id: "spirits", parent: null, name: "Spirits" },
+  { id: "gin-and-tonic", parent: "spirits", name: "Gin & Tonic" },
+];
+async function menuTree(props: Partial<WtDataTable<MenuNode>> = {}) {
+  const el = (await mount(
+    '<wt-data-table aria-label="Menu"></wt-data-table>',
+  )) as WtDataTable<MenuNode>;
+  Object.assign(el, {
+    rows: nodes,
+    rowKey: (r: MenuNode) => r.id,
+    rowParent: (r: MenuNode) => r.parent,
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (r: MenuNode) => r.name,
+        searchValue: (r: MenuNode) => r.name,
+        sortValue: (r: MenuNode) => r.name,
+      },
+    ],
+    sortKey: "name",
+    sortDirection: "ascending",
+    searchTerm: "gin",
+    ...props,
+  });
+  await el.updateComplete;
+  return el;
+}
+const menuKeys = (el: WtDataTable<MenuNode>) =>
+  [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-row-key"));
+
+test("in a tree, the closest matches come first under each parent", async () => {
+  const el = await menuTree();
+  // Drinks holds a whole-word Gin; Spirits a whole-word Gin at position 0 of a longer name; Food
+  // only a word that starts with gin. Under Drinks, Gin comes before Virgin Mary.
+  expect(menuKeys(el)).toEqual([
+    "drinks",
+    "gin",
+    "virgin",
+    "spirits",
+    "gin-and-tonic",
+    "food",
+    "ginger-cake",
+  ]);
+  el.sortDirection = "descending";
+  await el.updateComplete;
+  expect(menuKeys(el)).toEqual([
+    "drinks",
+    "gin",
+    "virgin",
+    "spirits",
+    "gin-and-tonic",
+    "food",
+    "ginger-cake",
+  ]);
+});
+
+test("in a tree, a parent that keeps its children's order keeps it during a search", async () => {
+  const el = await menuTree({ rowKeepsChildOrder: (r: MenuNode) => r.id === "drinks" });
+  expect(menuKeys(el)).toEqual([
+    "drinks",
+    "virgin",
+    "gin",
+    "spirits",
+    "gin-and-tonic",
+    "food",
+    "ginger-cake",
+  ]);
+});
+
+test("in a tree, a row kept only under a match comes after its ranked siblings, in column order", async () => {
+  const bar: MenuNode[] = [
+    { id: "bar", parent: null, name: "Gin bar" },
+    { id: "absinthe", parent: "bar", name: "Absinthe" },
+    { id: "sloe", parent: "bar", name: "Sloe gin" },
+    { id: "bitters", parent: "bar", name: "Bitters" },
+    { id: "gin", parent: "bar", name: "Gin" },
+  ];
+  const el = await menuTree({ rows: bar, searchOpensPath: true });
+  expect(menuKeys(el)).toEqual(["bar", "gin", "sloe", "absinthe", "bitters"]);
+  el.sortDirection = "descending";
+  await el.updateComplete;
+  expect(menuKeys(el)).toEqual(["bar", "gin", "sloe", "bitters", "absinthe"]);
+});
+
+test("in a tree, a parent that matches sorts by its own closeness, not its children's", async () => {
+  const el = await menuTree({
+    rows: [
+      { id: "virgin", parent: null, name: "Virgin" },
+      { id: "gin", parent: "virgin", name: "Gin" },
+      { id: "ginger", parent: null, name: "Ginger" },
+    ],
+  });
+  expect(menuKeys(el)).toEqual(["ginger", "virgin", "gin"]);
+});
+
+test("in a tree, a parent that does not match takes its closest child's place, whichever comes first", async () => {
+  const el = await menuTree({
+    rows: [
+      { id: "mixers", parent: null, name: "Mixers" },
+      { id: "gin", parent: "mixers", name: "Gin" },
+      { id: "virgin", parent: "mixers", name: "Virgin" },
+      { id: "juices", parent: null, name: "Juices" },
+      { id: "ginger", parent: "juices", name: "Ginger beer" },
+    ],
+  });
+  expect(menuKeys(el)).toEqual(["mixers", "gin", "virgin", "juices", "ginger"]);
+});
+
+test("a tree search stops at a parent that is missing or that points back down", async () => {
+  const el = await menuTree({
+    rows: [
+      { id: "eggs", parent: "gone", name: "Gin eggs" },
+      { id: "x", parent: "y", name: "Gin" },
+      { id: "y", parent: "x", name: "Why" },
+    ],
+  });
+  expect(menuKeys(el)).toEqual(["eggs"]);
+});
+
+test("a search of only punctuation empties a tree", async () => {
+  const el = await menuTree({ searchTerm: "&", searchOpensPath: true });
+  expect(menuKeys(el)).toEqual([]);
+});
+
 // Each of these two rows names the other as its parent, so walking up the chain from either one
 // never reaches a top-level row.
 const loopingRows: TreeRow[] = [
@@ -2002,6 +2134,21 @@ test("a heading clicked during a search applies once the search is cleared", asy
   el.searchTerm = "";
   await el.updateComplete;
   expect(keys(el)).toEqual(["virgin", "tonic-gin", "ginger", "gt", "gin"]);
+});
+
+test("during a search, rows whose closeness ties follow the column sort, and a heading click flips them", async () => {
+  const el = await drinksTable({
+    rows: [
+      ...drinks,
+      { id: "sour", name: "Gin Sour", category: "Cocktails" },
+      { id: "fizz", name: "Gin Fizz", category: "Cocktails" },
+    ],
+    searchTerm: "gin",
+  });
+  expect(keys(el)).toEqual(["gin", "fizz", "sour", "gt", "tonic-gin", "ginger", "virgin"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button.sort[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["gin", "sour", "fizz", "gt", "tonic-gin", "ginger", "virgin"]);
 });
 
 test("searchable renders a search box that narrows rows", async () => {

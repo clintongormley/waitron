@@ -35,6 +35,7 @@ export interface DataTableColumn<Row> {
   group?: string;
   cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
+  /** Read again only when `rows` or `columns` change. */
   searchValue?: (row: Row) => string;
   filter?: {
     label: string;
@@ -1626,11 +1627,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }))
       .sort((left, right) => {
         if (left.group !== right.group) return left.group - right.group;
-        const ranked =
-          left.rank === undefined || right.rank === undefined
-            ? 0
-            : compareSearchRanks(left.rank, right.rank);
-        if (ranked !== 0) return ranked;
+        if (left.rank !== right.rank) {
+          if (left.rank === undefined) return 1;
+          if (right.rank === undefined) return -1;
+          const ranked = compareSearchRanks(left.rank, right.rank);
+          if (ranked !== 0) return ranked;
+        }
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
         if (right.value == null) return -1;
@@ -1788,6 +1790,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
     }
     const byKey = this.#rowsByKey();
+    const ranks = this.#treeRanks(rows, indexOf);
     const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
     const walk = (parentKey: string, depth: number) => {
       const children = childrenByParent.get(parentKey) ?? [];
@@ -1795,7 +1798,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const siblings =
         parent !== undefined && this.rowKeepsChildOrder(parent)
           ? children
-          : this.#sortByColumn(children, column, indexOf, undefined);
+          : this.#sortByColumn(children, column, indexOf, ranks);
       for (const row of siblings) {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
@@ -1809,6 +1812,36 @@ export class WtDataTable<Row = unknown> extends LitElement {
     };
     walk("", 0);
     return out;
+  }
+
+  /** A row that does not match takes the best rank among its matching descendants; one with
+   * neither has no rank, and sorts after its ranked siblings. */
+  #treeRanks(
+    rows: readonly Row[],
+    indexOf: ReadonlyMap<Row, number>,
+  ): ReadonlyMap<Row, SearchRank> | undefined {
+    const own = this.#ranks;
+    if (own === undefined) return undefined;
+    const parentOf = this.rowParent!;
+    const byKey = new Map<string, Row>();
+    for (const row of rows) byKey.set(this.rowKey(row, indexOf.get(row)!), row);
+    const best = new Map(own);
+    for (const row of rows) {
+      const rank = own.get(row);
+      if (rank === undefined) continue;
+      const visited = new Set<string>();
+      let parentKey = parentOf(row);
+      while (parentKey !== null && !visited.has(parentKey)) {
+        visited.add(parentKey);
+        const parent = byKey.get(parentKey);
+        if (parent === undefined) break;
+        const held = best.get(parent);
+        if (held === undefined || (!own.has(parent) && compareSearchRanks(rank, held) < 0))
+          best.set(parent, rank);
+        parentKey = parentOf(parent);
+      }
+    }
+    return best;
   }
 
   #rowsByKey(): Map<string, Row> {
