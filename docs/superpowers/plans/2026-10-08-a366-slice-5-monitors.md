@@ -2251,7 +2251,7 @@ when the change is undone; leaving with a changed list asks; #1422's reconnect c
 **Behaviour:** Pair and Edit. For a kitchen display: "Screen" (a `wt-combobox` of the kinds the
 profile offers), then "Every station" or station switches within the profile's list, and for a
 pass screen or pass monitor "Every zone" or zone switches. For a till or handheld: "Kitchen screen
-shows" and "Pass screen shows", each optional ("Every station the profile allows" when not set),
+shows" and "Pass screen shows", each optional ("Every station" when not set),
 offered when the profile shows that screen. **Owner 2026-10-09 (decision 17):** the Pass choice is
 a pass screen or a pass monitor, one or the other, the monitor offered only when the profile
 offers one; choosing it shows its station and zone lists within the profile's monitor row.
