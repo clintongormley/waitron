@@ -62,3 +62,137 @@ describe("NamedDaysApi", () => {
     expect(request).toHaveBeenCalledTimes(4);
   });
 });
+
+it("preserves non-default station hours when editing metadata and passes real request validation", async () => {
+  const { parseSpecialDateInput } = await import("../hours-rules.js");
+  const cells = [
+    {
+      subject: { kind: "station", id: "bar" },
+      cell: {
+        mode: "periods",
+        periods: [
+          { id: "00000000-0000-4000-8000-000000000001", opensAt: "12:00", closesAt: "16:00" },
+        ],
+      },
+    },
+    { subject: { kind: "station", id: "default" }, cell: { mode: "closed", periods: [] } },
+  ];
+  const requests: unknown[][] = [];
+  const api = new clients.NamedDaysApi((async (path, method, body, options) => {
+    requests.push([path, method, body, options]);
+    if (method === "GET")
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        departments: [],
+        subjects: [
+          { kind: "station", id: "bar", name: "Bar", active: true, isDefault: false },
+          { kind: "station", id: "default", name: "Default", active: true, isDefault: true },
+        ],
+        week: [],
+        days: [],
+        specialDates: [],
+        specialCells: [{ specialDateId: "source", cells }],
+        holidayCoverage: [],
+        holidaySources: [],
+      };
+    parseSpecialDateInput(body);
+    return {};
+  }) as DashboardRequest);
+  const input = {
+    date: "2026-10-02",
+    name: "Edited",
+    kind: "holiday" as const,
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: false,
+  };
+  await (
+    api.saveDay as unknown as (id: string, value: typeof input, source: unknown) => Promise<unknown>
+  )("source", input, {
+    id: "source",
+    date: "2026-10-01",
+    name: "Original",
+    kind: "holiday",
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: false,
+    hasStationHours: true,
+  });
+  expect(requests).toEqual([
+    [
+      "/management-api/venue-service/hours?from=2026-10-01&to=2026-10-01",
+      "GET",
+      undefined,
+      { passive: true },
+    ],
+    [
+      "/management-api/venue-service/special-dates/source",
+      "PUT",
+      { ...input, cells: [cells[0]] },
+      undefined,
+    ],
+  ]);
+});
+it("a failed station-source read prevents a metadata write", async () => {
+  const methods: unknown[] = [];
+  const api = new clients.NamedDaysApi((async (_path, method) => {
+    methods.push(method);
+    throw new Error("source offline");
+  }) as DashboardRequest);
+  await expect(
+    (api.saveDay as unknown as (id: string, input: unknown, source: unknown) => Promise<unknown>)(
+      "source",
+      {
+        date: "2026-10-02",
+        name: "Edited",
+        kind: "holiday",
+        repeats: false,
+        ownHours: false,
+        closeWholeVenue: false,
+      },
+      { id: "source", date: "2026-10-01", hasStationHours: true },
+    ),
+  ).rejects.toThrow("source offline");
+  expect(methods).toEqual(["GET"]);
+});
+it("a station read that settles after its editor leaves cannot begin the write", async () => {
+  const methods: unknown[] = [];
+  let finish!: (value: unknown) => void;
+  let current = true;
+  const api = new clients.NamedDaysApi((async (_path, method) => {
+    methods.push(method);
+    if (method === "GET")
+      return new Promise<unknown>((resolve) => {
+        finish = resolve;
+      });
+    return {};
+  }) as DashboardRequest);
+  const saving = (
+    api.saveDay as unknown as (
+      id: string,
+      input: unknown,
+      source: unknown,
+      current: () => boolean,
+    ) => Promise<unknown>
+  )(
+    "source",
+    {
+      date: "2026-10-02",
+      name: "Edited",
+      kind: "holiday",
+      repeats: false,
+      ownHours: false,
+      closeWholeVenue: false,
+    },
+    { id: "source", date: "2026-10-01", hasStationHours: true },
+    () => current,
+  );
+  await expect.poll(() => methods).toEqual(["GET"]);
+  current = false;
+  finish({ subjects: [], specialCells: [] });
+  await saving;
+  expect(methods).toEqual(["GET"]);
+});

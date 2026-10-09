@@ -21,6 +21,11 @@ import "./opening-hours-zone-week.js";
 import "./opening-hours-day.js";
 import "./opening-hours-all.js";
 import "./hours-calendar.js";
+import "./named-day-editor.js";
+import "./named-day-copy.js";
+import type { NamedCalendarAction } from "./hours-calendar.js";
+import type { NamedDayEditor, NamedDayInput } from "./named-day-editor.js";
+import type { NamedDayCopy } from "./named-day-copy.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { MenuPeriodInput, MenuPeriodUse, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -80,6 +85,8 @@ export class OpeningHoursScreen extends LitElement {
   @state() private deleting?: Deletion;
   @state() private deleteError = "";
   @state() private busy = false;
+  @state() private namedAction?: NamedCalendarAction;
+  @state() private namedDeleteError = "";
   private detach?: () => void;
   private generation = {};
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
@@ -116,6 +123,7 @@ export class OpeningHoursScreen extends LitElement {
   override disconnectedCallback() {
     this.detach?.();
     this.generation = {};
+    this.busy = false;
     super.disconnectedCallback();
   }
   private department() {
@@ -326,6 +334,177 @@ export class OpeningHoursScreen extends LitElement {
     if (this.deleting === deletion) this.deleting = undefined;
     this.api.rereadWatches();
   }
+  private openNamedDay(event: CustomEvent<NamedCalendarAction>) {
+    event.stopPropagation();
+    if (
+      !this.isConnected ||
+      this.readOnly ||
+      this.busy ||
+      this.editor ||
+      this.deleting ||
+      this.namedAction ||
+      event.currentTarget !== this.shadowRoot?.querySelector("hours-calendar")
+    )
+      return;
+    this.namedDeleteError = "";
+    this.namedAction = event.detail;
+  }
+  private closeNamedDay(action: NamedCalendarAction) {
+    if (!this.isConnected || this.namedAction !== action || this.busy) return;
+    this.namedAction = undefined;
+    void this.updateComplete.then(() => action.returnTo()?.focus());
+  }
+  private async saveNamedDay(
+    event: CustomEvent<
+      { id: string | null; input: NamedDayInput } | { id: string; dates: string[] }
+    >,
+  ) {
+    event.stopPropagation();
+    const action = this.namedAction;
+    const component = event.currentTarget as NamedDayEditor | NamedDayCopy;
+    if (
+      !action ||
+      !this.isConnected ||
+      this.readOnly ||
+      this.busy ||
+      component !== this.shadowRoot?.querySelector("named-day-editor, named-day-copy")
+    )
+      return;
+    const generation = this.generation;
+    const detail = event.detail;
+    this.busy = true;
+    component.refusal = undefined;
+    try {
+      if ("dates" in detail) await this.api.namedDays.copyDay(detail.id, detail.dates);
+      else
+        await this.api.namedDays.saveDay(
+          detail.id,
+          detail.input,
+          action.day,
+          () => this.isConnected && generation === this.generation && this.namedAction === action,
+        );
+    } catch (error) {
+      if (this.isConnected && generation === this.generation && this.namedAction === action)
+        component.refusal = {
+          code: codeOf(error),
+          params:
+            typeof error === "object" && error !== null
+              ? (error as { params?: Record<string, unknown> }).params
+              : undefined,
+        };
+      return;
+    } finally {
+      if (generation === this.generation) this.busy = false;
+    }
+    if (!this.isConnected || generation !== this.generation || this.namedAction !== action) return;
+    const clean =
+      "dates" in detail
+        ? (component as NamedDayCopy).commitSubmitted(detail.dates)
+        : (component as NamedDayEditor).commitSubmitted(detail.input);
+    if (clean) this.closeNamedDay(action);
+    this.api.namedDays.rereadWatches();
+    this.api.rereadWatches();
+  }
+  private async deleteNamedDay(action: NamedCalendarAction) {
+    if (
+      !this.isConnected ||
+      this.readOnly ||
+      this.busy ||
+      this.namedAction !== action ||
+      !action.day
+    )
+      return;
+    const generation = this.generation;
+    this.busy = true;
+    this.namedDeleteError = "";
+    try {
+      await this.api.namedDays.deleteDay(action.day.id);
+    } catch {
+      if (this.isConnected && generation === this.generation && this.namedAction === action)
+        this.namedDeleteError = t("hours.save_error");
+      return;
+    } finally {
+      if (generation === this.generation) this.busy = false;
+    }
+    if (!this.isConnected || generation !== this.generation || this.namedAction !== action) return;
+    this.closeNamedDay(action);
+    this.api.namedDays.rereadWatches();
+    this.api.rereadWatches();
+  }
+  private namedDialog() {
+    const action = this.namedAction;
+    if (!action) return nothing;
+    const current = () => this.isConnected && this.namedAction === action && !this.busy;
+    if (action.kind === "delete")
+      return keyed(
+        action,
+        html`<wt-dialog
+          open
+          data-test="delete-named-day"
+          heading=${t("hours.delete")}
+          .dismissible=${!this.busy}
+          @wt-close=${(event: Event) => {
+            event.stopPropagation();
+            if (current()) this.closeNamedDay(action);
+          }}
+        >
+          <p>
+            ${format(action.day!.repeats ? "named.delete_repeat" : "named.delete", { name: action.day!.name })}
+          </p>
+          ${this.namedDeleteError ? html`<p role="alert">${this.namedDeleteError}</p>` : nothing}
+          <wt-form-actions slot="footer"
+            ><wt-button
+              slot="cancel"
+              variant="secondary"
+              ?disabled=${this.busy}
+              @click=${() => {
+                if (current()) this.closeNamedDay(action);
+              }}
+              >${t("hours.cancel")}</wt-button
+            ><wt-button
+              data-test="confirm-named-delete"
+              variant="danger"
+              ?disabled=${this.busy}
+              ?loading=${this.busy}
+              @click=${() => this.deleteNamedDay(action)}
+              >${t("hours.delete")}</wt-button
+            ></wt-form-actions
+          >
+        </wt-dialog>`,
+      );
+    if (action.kind === "copy")
+      return keyed(
+        action,
+        html`<named-day-copy
+          .open=${true}
+          .day=${action.day!}
+          .api=${this.api.namedDays}
+          .busy=${this.busy}
+          @named-day-copy-save=${this.saveNamedDay}
+          @named-day-copy-close=${(event: Event) => {
+            event.stopPropagation();
+            if (current()) this.closeNamedDay(action);
+          }}
+        ></named-day-copy>`,
+      );
+    return keyed(
+      action,
+      html`<named-day-editor
+        .open=${true}
+        .day=${action.day}
+        .date=${action.date}
+        .holidays=${action.holidays}
+        .ownHours=${action.kind === "own"}
+        .savableAtOpen=${action.kind === "own"}
+        .busy=${this.busy}
+        @named-day-save=${this.saveNamedDay}
+        @named-day-close=${(event: Event) => {
+          event.stopPropagation();
+          if (current()) this.closeNamedDay(action);
+        }}
+      ></named-day-editor>`,
+    );
+  }
   private periods(department: Department) {
     const columns: DataTableColumn<Period>[] = [
       {
@@ -503,6 +682,7 @@ export class OpeningHoursScreen extends LitElement {
                     this.view === "calendar"
                       ? html`<hours-calendar
                           .namedApi=${this.api.namedDays}
+                          @named-calendar-action=${this.openNamedDay}
                           .month=${this.month}
                           .readOnly=${this.readOnly}
                           @calendar-month-change=${(event: CustomEvent<{ month: string }>) => {
@@ -524,6 +704,7 @@ export class OpeningHoursScreen extends LitElement {
                 </div>
               </wt-tabs>`
       }
+      ${this.namedDialog()}
       ${
         this.editor
           ? keyed(

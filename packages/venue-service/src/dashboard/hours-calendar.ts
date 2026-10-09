@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type { HolidayCoverage, NamedDaysModel } from "../holiday-types.js";
+import type { HolidayCoverage, NamedDay, NamedDaysModel } from "../holiday-types.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type {
   CalendarDay,
@@ -43,6 +43,14 @@ export interface CalendarAction {
   cells?: DateHoursCell[];
   /** The date's public holidays, which name a date made special from the panel. */
   holidays?: HolidayFact[];
+  returnTo: () => HTMLElement | null;
+}
+
+export interface NamedCalendarAction {
+  kind: "add" | "edit" | "own" | "copy" | "delete";
+  date: LocalDate;
+  day?: NamedDay;
+  holidays: readonly HolidayFact[];
   returnTo: () => HTMLElement | null;
 }
 
@@ -786,6 +794,10 @@ export class HoursCalendar extends LitElement {
         >${glyph}</wt-button
       >`;
     const dates = monthGrid(this.shownMonth);
+    const stop =
+      [this.focusDate, this.selected, model?.civilDate].find(
+        (date) => date != null && dates.includes(date),
+      ) ?? `${this.shownMonth}-01`;
     const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
     return html`<div class="month">
       <div class="nav">
@@ -822,7 +834,7 @@ export class HoursCalendar extends LitElement {
                 })}
               </ul>
               ${model.localHolidaysPerYear > 0 ? html`<p class="note" data-test="local-holiday-hint">${format("calendar.local_hint", { count: String(model.localHolidaysPerYear) })}</p>` : nothing}
-              <table class="grid" aria-labelledby="month-heading">
+              <table class="grid" aria-labelledby="month-heading" @keydown=${this.#keydown}>
                 <thead>
                   <tr>
                     ${dates.slice(0, 7).map((date) => html`<th scope="col" abbr=${formatUtc(date, { weekday: "long" })}>${formatUtc(date, { weekday: "short" })}</th>`)}
@@ -840,22 +852,64 @@ export class HoursCalendar extends LitElement {
                             data-tone=${day?.tone ?? "standard"}
                             ?data-outside=${!date.startsWith(this.shownMonth)}
                           >
-                            <div
+                            <button
+                              type="button"
                               class="day named-day"
+                              tabindex=${date === stop ? 0 : -1}
+                              aria-label=${[formatLongDate(date), day?.namedDay?.name, holidayDateName([...(day?.holidays ?? [])], date, ""), day?.closed ? t("hours.closed") : "", day?.ownHours ? t("calendar.own_hours") : ""].filter(Boolean).join(", ")}
+                              aria-pressed=${date === this.selected ? "true" : "false"}
                               aria-current=${date === model.civilDate ? "date" : nothing}
+                              @click=${() => this.#open(date)}
+                              @focus=${() => {
+                                this.focusDate = date;
+                              }}
                             >
                               <span class="number"
                                 >${formatUtc(date, date.startsWith(this.shownMonth) ? { day: "numeric" } : { day: "numeric", month: "short" })}</span
                               >${day?.namedDay ? html`<span>${day.namedDay.name}</span>` : nothing}${day?.holidays.length ? html`<span>${holidayDateName([...day.holidays], date, "")}</span>` : nothing}${day?.closed ? html`<span>${t("hours.closed")}</span>` : nothing}${day?.ownHours ? html`<span class="own-hours"><wt-icon name="clock" size="sm"></wt-icon><span class="visually-hidden">${t("calendar.own_hours")}</span></span>` : nothing}
-                            </div>
+                            </button>
                           </td>`;
                         })}
                       </tr>`,
                   )}
                 </tbody>
-              </table>`
+              </table>
+              ${this.selected ? html`<section class="panel" data-test="date-panel">${this.#namedPanel(model)}</section>` : nothing}`
       }
     </div>`;
+  }
+  #namedPanel(model: NamedDaysModel) {
+    const date = this.selected;
+    if (!date) return html`<p>${t("hours.calendar.pick")}</p>`;
+    const entry = model.days.find((day) => day.date === date);
+    const day = entry?.namedDay ?? undefined;
+    const action = (kind: NamedCalendarAction["kind"], label: Key) =>
+      html`<wt-button
+        variant="secondary"
+        data-test=${`named-${kind}`}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          if (this.readOnly || !this.isConnected || !this.namedModel) return;
+          const trigger = event.currentTarget as HTMLElement;
+          this.dispatchEvent(
+            new CustomEvent<NamedCalendarAction>("named-calendar-action", {
+              detail: {
+                kind,
+                date,
+                day: day ? structuredClone(day) : undefined,
+                holidays: structuredClone(entry?.holidays ?? []),
+                returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }}
+        >${t(label)}</wt-button
+      >`;
+    return html`<h2 tabindex="-1">${formatDate(date)}${day ? ` · ${day.name}` : ""}</h2>
+      ${entry?.holidays.map((holiday) => html`<p>${holiday.name}</p>`)}
+      ${this.readOnly ? nothing : html`<div class="actions">${day ? html`${action("edit", "hours.edit")}${action("copy", "named.copy")}${action("delete", "hours.delete")}` : action("add", "named.add")}${action("own", "named.give_own")}</div>`}`;
   }
   #namedArea(model: NamedDaysModel) {
     if (this.readOnly)

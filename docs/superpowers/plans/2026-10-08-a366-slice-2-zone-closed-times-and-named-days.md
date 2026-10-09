@@ -1025,9 +1025,9 @@ in words; the holiday area picker shows when the region has areas and saves thro
 
 **Files:**
 - Modify: `dashboard/hours-calendar.ts` (the date menu), `dashboard/opening-hours-screen.ts`,
-  `strings.ts`
+  `strings.ts`, `dashboard/named-days-client.ts`, `dashboard/named-day-editor.ts`
 - Create: `dashboard/named-day-copy.ts` (the copy form moved from `hours-screen.ts:1239-1297`),
-  `.test.ts`, `.unsaved.test.ts`
+  `.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`
 - Test: `hours-calendar.test.ts`, `opening-hours-screen.test.ts`, `opening-hours-screen.unsaved.test.ts`
 
 **Behaviour:** a date's menu offers "Add a named day" on a plain date, "Give this date its own
@@ -1035,9 +1035,11 @@ hours" (decision 21), and on a named day Edit, "Copy to other dates" and Delete 
 naming the day; a repeating day says every year goes). The moved copy form follows the A331 save
 rule in full: `draftScopeFor`, `saveActionState`, the early return, its `*.unsaved.test.ts` and
 the reconnect case. It opens with one empty date, which is not savable, so it does not pass
-`{ savableAtOpen: true }`.
+`{ savableAtOpen: true }`. The explicit own-hours action clears whole-venue closure in the
+staged draft. Metadata edits preserve station cells through the existing passive Hours read;
+copy uses that read for the retained station repeated-clock warnings.
 
-- [ ] Steps: failing tests (Edit on a repeating day opens it, not a new day — fails today because
+- [x] Steps: failing tests (Edit on a repeating day opens it, not a new day — fails today because
   the calendar emits no such action; "Give this date its own hours" on a stored day opens it with
   own hours on and on a public holiday pre-fills kind holiday and its name; add, copy and delete
   call the client and the month refreshes; the copy form's quiet Save, discard and reconnect);

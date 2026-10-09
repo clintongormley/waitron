@@ -1145,6 +1145,40 @@ describe("Opening hours named month", () => {
     await el.updateComplete;
     return el;
   }
+  it("named date actions carry the stored repeating record and plain dates offer Add", async () => {
+    const el = await namedMount();
+    const events: unknown[] = [];
+    el.addEventListener("named-calendar-action", (event) =>
+      events.push((event as CustomEvent).detail),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=named-edit]")!.click();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: "edit",
+      date: "2026-10-13",
+      day: { id: "own", repeats: true },
+    });
+    const event = events[0] as { returnTo: () => HTMLElement };
+    expect(event.returnTo()).toBe(el.shadowRoot!.querySelector("[data-test=named-edit]"));
+    el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-16'] button")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=named-add]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=named-edit]")).toBeNull();
+    el.readOnly = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test^=named-]")).toBeNull();
+  });
+  it("named month keeps exactly one keyboard tab stop after changing months", async () => {
+    const el = await namedMount();
+    el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.focus();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=next-month]")!.click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("td button[tabindex='0']")).toHaveLength(1);
+  });
   it("paints kind tones across each date, says Closed independently and marks own hours", async () => {
     const el = await namedMount();
     for (const [date, fill] of [

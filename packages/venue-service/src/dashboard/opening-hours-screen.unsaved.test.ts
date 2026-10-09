@@ -15,6 +15,51 @@ class OpeningLeaveApp extends LitElement {
       this.writes.push([path, method, body]);
       return;
     }
+    if (path.includes("/named-days?"))
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        days: [
+          {
+            date: "2026-10-13",
+            namedDay: {
+              id: "own",
+              date: "2025-10-13",
+              name: "Anniversary",
+              kind: "holiday",
+              repeats: true,
+              ownHours: false,
+              closeWholeVenue: false,
+              hasStationHours: false,
+            },
+            holidays: [],
+            tone: "own_holiday",
+            ownHours: false,
+            closed: false,
+          },
+        ],
+        holidayCoverage: [],
+        holidaySources: [],
+        area: { options: [], required: false, chosen: null },
+        localHolidaysPerYear: 2,
+      };
+    if (path.includes("/hours?"))
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        departments: [],
+        subjects: [],
+        week: [],
+        days: [],
+        specialDates: [],
+        specialCells: [],
+        holidayCoverage: [],
+        holidaySources: [],
+      };
     return {
       timeZone: "Europe/Madrid",
       clockReadable: true,
@@ -191,4 +236,64 @@ it("Cancel and native Escape close a period deletion without creating a draft or
     ).toBe(false);
   }
   expect(app.writes).toEqual([]);
+});
+
+describe.each(["en", "es"])("Calendar discard (%s)", (locale) => {
+  it.each(["edit", "copy"])("protects changed %s through close and reconnect", async (kind) => {
+    setLocale(locale);
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
+    app = document.createElement("opening-leave-test-app") as OpeningLeaveApp;
+    applyTokens(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const screen = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    await expect.poll(() => screen.shadowRoot!.querySelector("hours-calendar")).not.toBeNull();
+    const cal = screen.shadowRoot!.querySelector("hours-calendar")!;
+    await expect
+      .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13'] button"))
+      .not.toBeNull();
+    cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
+    await cal.updateComplete;
+    cal.shadowRoot!.querySelector<HTMLElement>(`[data-test=named-${kind}]`)!.click();
+    await screen.updateComplete;
+    const form = screen.shadowRoot!.querySelector<LitElement>(
+      kind === "edit" ? "named-day-editor" : "named-day-copy",
+    )!;
+    await form.updateComplete;
+    const input = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      kind === "edit" ? "[name=name]" : "[name='dates.0']",
+    )!;
+    expect(unload()).toBe(false);
+    input.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: kind === "edit" ? "New anniversary" : "2026-10-25" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await form.updateComplete;
+    expect(unload()).toBe(true);
+    const parent = screen.parentNode!;
+    screen.remove();
+    expect(unload()).toBe(false);
+    parent.appendChild(screen);
+    await screen.updateComplete;
+    await form.updateComplete;
+    expect(unload()).toBe(true);
+    const modal = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
+    const keeping = modal.requestClose("cancel");
+    await choose("keep");
+    expect(await keeping).toBe(false);
+    expect(input.value).toBe(kind === "edit" ? "New anniversary" : "2026-10-25");
+    const discarding = modal.requestClose("escape");
+    await choose("discard");
+    expect(await discarding).toBe(true);
+    await expect
+      .poll(() =>
+        screen.shadowRoot!.querySelector(kind === "edit" ? "named-day-editor" : "named-day-copy"),
+      )
+      .toBeNull();
+    expect(unload()).toBe(false);
+    expect(app.writes).toEqual([]);
+  });
 });

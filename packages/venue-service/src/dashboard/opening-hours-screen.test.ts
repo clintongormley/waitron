@@ -9,6 +9,7 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodEditor } from "./period-editor.js";
 
 import "./opening-hours-screen.js";
+import { parseSpecialDateInput } from "../hours-rules.js";
 
 type Screen = LitElement & { api: OpeningHoursApi; readOnly: boolean };
 const hosts: HTMLElement[] = [];
@@ -1215,5 +1216,285 @@ describe("Calendar venue month fallback", () => {
     history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => heading(el)).toContain("October 2026");
+  });
+});
+
+describe("Calendar named-day actions", () => {
+  const source = {
+    id: "annual/day",
+    date: "2025-10-13",
+    name: "Anniversary",
+    kind: "holiday" as const,
+    repeats: true,
+    ownHours: false,
+    closeWholeVenue: false,
+    hasStationHours: false,
+  };
+  async function calendarMount(closed = false) {
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
+    const writes: unknown[][] = [];
+    let reads = 0;
+    const day = { ...source, closeWholeVenue: closed };
+    const el = await mount((async (path, method, body) => {
+      if (method !== "GET") {
+        if (method === "PUT" || (method === "POST" && !path.endsWith("/duplicate")))
+          parseSpecialDateInput(body);
+        writes.push([path, method, body]);
+        return { id: "new" };
+      }
+      if (path.includes("/hours?"))
+        return {
+          timeZone: "Europe/Madrid",
+          clockReadable: true,
+          dayCutover: "06:00",
+          civilDate: "2026-10-07",
+          departments: [],
+          subjects: [],
+          week: [],
+          days: [],
+          specialDates: [],
+          specialCells: [],
+          holidayCoverage: [],
+          holidaySources: [],
+        };
+      if (path.includes("/named-days?")) {
+        reads++;
+        return {
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+          civilDate: "2026-10-07",
+          clockReadable: true,
+          days: [
+            {
+              date: "2026-10-13",
+              namedDay: day,
+              holidays: [],
+              tone: "own_holiday",
+              ownHours: false,
+              closed,
+            },
+            {
+              date: "2026-10-12",
+              namedDay: null,
+              holidays: [
+                {
+                  id: "public",
+                  date: "2026-10-12",
+                  name: "Public feast",
+                  scope: "national",
+                  sourceId: "official",
+                },
+              ],
+              tone: "public_holiday",
+              ownHours: false,
+              closed: false,
+            },
+          ],
+          holidayCoverage: [],
+          holidaySources: [],
+          area: { options: [], required: false, chosen: null },
+          localHolidaysPerYear: 2,
+        };
+      }
+      return model();
+    }) as DashboardRequest);
+    const cal = el.shadowRoot!.querySelector("hours-calendar")!;
+    await expect
+      .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13']"))
+      .not.toBeNull();
+    return { el, cal, day, writes, reads: () => reads };
+  }
+  async function action(cal: HTMLElementTagNameMap["hours-calendar"], date: string, kind: string) {
+    const trigger = cal.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`);
+    expect(trigger, "named calendar offers a date menu").not.toBeNull();
+    trigger!.click();
+    await cal.updateComplete;
+    const button = cal.shadowRoot!.querySelector<HTMLElement>(`[data-test=named-${kind}]`);
+    expect(button, `${kind} offered for ${date}`).not.toBeNull();
+    button!.click();
+  }
+  async function editor(el: Screen) {
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("named-day-editor");
+    expect(form).not.toBeNull();
+    await form!.updateComplete;
+    return form!;
+  }
+  function field(form: HTMLElementTagNameMap["named-day-editor"], name: string) {
+    return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!;
+  }
+  async function change(
+    form: HTMLElementTagNameMap["named-day-editor"],
+    name: string,
+    value: string,
+  ) {
+    field(form, name).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await form.updateComplete;
+  }
+  it("Edit on a repeating occurrence opens the stored record and saves to its id", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-13", "edit");
+    const form = await editor(el);
+    expect(field(form, "date").value).toBe("2025-10-13");
+    expect(form.day?.id).toBe("annual/day");
+    await change(form, "name", "New anniversary");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates/annual%2Fday",
+          "PUT",
+          {
+            date: "2025-10-13",
+            name: "New anniversary",
+            kind: "holiday",
+            repeats: true,
+            ownHours: false,
+            closeWholeVenue: false,
+            cells: [],
+          },
+        ],
+      ]);
+    await expect.poll(() => el.shadowRoot!.querySelector("named-day-editor")).toBeNull();
+    await expect.poll(reads).toBe(2);
+  });
+  it.each([false, true])(
+    "own hours stages the same repeating day, clearing closure %s",
+    async (closed) => {
+      const { el, cal, day, writes } = await calendarMount(closed);
+      await action(cal, "2026-10-13", "own");
+      const form = await editor(el);
+      expect(form.day?.id).toBe("annual/day");
+      expect(
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=ownHours]")
+          ?.value,
+      ).toBe("own");
+      expect(
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "[name=closeWholeVenue]",
+        )!.checked,
+      ).toBe(false);
+      expect(form.shadowRoot!.textContent).toContain("This changes the day every year");
+      expect(day.closeWholeVenue).toBe(closed);
+      expect(writes).toEqual([]);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+      await expect
+        .poll(() => writes)
+        .toEqual([
+          [
+            "/management-api/venue-service/special-dates/annual%2Fday",
+            "PUT",
+            {
+              date: "2025-10-13",
+              name: "Anniversary",
+              kind: "holiday",
+              repeats: true,
+              ownHours: true,
+              closeWholeVenue: false,
+              cells: [],
+            },
+          ],
+        ]);
+    },
+  );
+  it("public holiday own hours prefills its name and holiday kind and creates a day", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-12", "own");
+    const form = await editor(el);
+    expect(field(form, "name").value).toBe("Public feast");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=kind]")!.value,
+    ).toBe("holiday");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates",
+          "POST",
+          {
+            date: "2026-10-12",
+            name: "Public feast",
+            kind: "holiday",
+            repeats: false,
+            ownHours: true,
+            closeWholeVenue: false,
+            cells: [],
+          },
+        ],
+      ]);
+    await expect.poll(reads).toBe(2);
+  });
+  it("Add on a plain date creates a named working day and refreshes the month", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-16", "add");
+    const form = await editor(el);
+    expect(field(form, "date").value).toBe("2026-10-16");
+    await change(form, "name", "World cup final");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates",
+          "POST",
+          {
+            date: "2026-10-16",
+            name: "World cup final",
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
+            closeWholeVenue: false,
+            cells: [],
+          },
+        ],
+      ]);
+    await expect.poll(reads).toBe(2);
+  });
+  it("Copy submits target dates for the stored repeating id and refreshes the month", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-13", "copy");
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector<LitElement>("named-day-copy");
+    expect(form).not.toBeNull();
+    await form!.updateComplete;
+    form!.shadowRoot!.querySelector("[name='dates.0']")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-10-20" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await form!.updateComplete;
+    form!.shadowRoot!.querySelector<HTMLElement>("[data-test=save-copy]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates/annual%2Fday/duplicate",
+          "POST",
+          { dates: ["2026-10-20"] },
+        ],
+      ]);
+    await expect.poll(() => el.shadowRoot!.querySelector("named-day-copy")).toBeNull();
+    await expect.poll(reads).toBe(2);
+  });
+  it("Delete names the repeating day, warns that every year goes and refreshes", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-13", "delete");
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("[data-test=delete-named-day]");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain("Anniversary");
+    expect(dialog!.textContent).toContain("every year");
+    expect(writes).toEqual([]);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-named-delete]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([["/management-api/venue-service/special-dates/annual%2Fday", "DELETE", undefined]]);
+    await expect.poll(reads).toBe(2);
   });
 });

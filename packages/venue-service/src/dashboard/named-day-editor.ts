@@ -113,7 +113,7 @@ export class NamedDayEditor extends LitElement {
             kind: this.day.kind,
             repeats: this.day.repeats,
             ownHours: this.ownHours || this.day.ownHours,
-            closeWholeVenue: this.day.closeWholeVenue,
+            closeWholeVenue: this.ownHours ? false : this.day.closeWholeVenue,
           }
         : {
             ...empty(),
