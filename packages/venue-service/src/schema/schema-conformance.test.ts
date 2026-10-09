@@ -14,6 +14,6 @@ describeSchemaConformance({
   declarations,
   // `kitchen_notices.kind` carries the `enumText`/`enumCheck` pair, through `enumType`. The
   // value-set columns in `service.ts` are plain `label()`s beside a hand-written check, and that
-  // file says why above `departments.default_service_mode`.
+  // file keeps their checked vocabulary's SQL spelling.
   declaresClosedVocabularies: true,
 });

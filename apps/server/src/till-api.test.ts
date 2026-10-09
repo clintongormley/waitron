@@ -220,7 +220,6 @@ const suite = useVenueDb({
             locationId: loc!.id,
             name: "Restaurant",
             tradingName: "Restaurant",
-            defaultServiceMode: "prepay",
           })
           .returning({ id: departments.id });
         const [zone] = await tx
@@ -1744,9 +1743,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       mountTillApi(app, deps(suite.db), collect([]));
       const token = await openSession(suite.db);
       const headers = { cookie: `${SESSION_COOKIE}=${token}` };
-      await suite.db.execute(sql`
-        update zone_service_policies set service_mode = 'ticket_then_pay'
-        where zone_id = ${counterZoneId}`);
       await suite.db.execute(
         sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${counterZoneId}`,
       );
@@ -1765,9 +1761,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           });
         }
       } finally {
-        await suite.db.execute(sql`
-          update zone_service_policies set service_mode = 'prepay'
-          where zone_id = ${counterZoneId}`);
         await suite.db.execute(
           sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${counterZoneId}`,
         );
@@ -1788,8 +1781,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       .values({ locationId: cfg.locationId, name: "Collect at counter" })
       .returning({ id: floorZones.id });
     await suite.db.execute(sql`
-      insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
-      select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
+      insert into zone_service_policies (location_id, zone_id, department_id)
+      select ${cfg.locationId}, ${second!.id}, department_id
       from zone_service_policies where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
       insert into zone_sale_policies (zone_id, order_start, paid_when) values (${second!.id}, 'counter', 'ticket_then_pay')`);
@@ -1877,8 +1870,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       .returning({ id: floorZones.id });
     await suite.db.execute(sql`
       insert into zone_service_policies
-        (location_id, zone_id, department_id, service_mode)
-      select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
+        (location_id, zone_id, department_id)
+      select ${cfg.locationId}, ${second!.id}, department_id
       from zone_service_policies
       where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
@@ -3511,7 +3504,6 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
         locationId: cfg.locationId,
         name: "Dining room",
         tradingName: "Restaurant",
-        defaultServiceMode: "table_tab",
       })
       .returning({ id: departments.id });
     await suite.db.execute(sql`
@@ -4338,7 +4330,6 @@ describe("canonical modifier HTTP serialization", () => {
         locationId: cfg.locationId,
         name: "Modifier tables",
         tradingName: "Restaurant",
-        defaultServiceMode: "table_tab",
       })
       .returning({ id: departments.id });
     await suite.db.execute(
@@ -4439,9 +4430,6 @@ describe("sale-policy order flow routes", () => {
         });
         await tx.execute(
           sql`update department_sale_policies set order_start = ${zoneOverride ? "table" : "counter"} where department_id = (select department_id from zone_service_policies where zone_id = ${zone.id})`,
-        );
-        await tx.execute(
-          sql`update zone_service_policies set service_mode = 'table_tab' where zone_id = ${zone.id}`,
         );
         await tx.execute(
           sql`update zone_sale_policies set order_start = ${zoneOverride ? "counter" : null} where zone_id = ${zone.id}`,

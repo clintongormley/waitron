@@ -36,7 +36,7 @@ const EXPECTED: Record<
   departments: {
     table: departments,
     foreignKeys: ["departments_location_fk"],
-    checks: ["departments_service_mode_ck"],
+    checks: [],
     indexes: ["departments_one_default_per_location_key"],
     uniqueConstraints: ["departments_location_name_key"],
     primaryKeys: [],
@@ -61,7 +61,7 @@ const EXPECTED: Record<
       "zone_service_policies_zone_fk",
       "zone_service_policies_department_fk",
     ],
-    checks: ["zone_service_policies_mode_ck"],
+    checks: [],
     indexes: ["zone_service_policies_one_counter_default_key"],
     uniqueConstraints: [],
     primaryKeys: ["zone_service_policies_pk"],

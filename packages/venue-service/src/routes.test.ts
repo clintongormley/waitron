@@ -34,7 +34,12 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
+import {
+  departmentSalePolicies,
+  departments,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "./schema/service.js";
 import { configureZone, createDepartment, listServiceZones } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
@@ -272,26 +277,30 @@ describe("whole service settings saves", () => {
     const read = await settingsSnapshot(fx);
     expect(read.transfers).toEqual(transfers);
     expect(
-      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!
-        .defaultServiceMode,
-    ).toBe("table_tab");
+      (
+        await db
+          .select()
+          .from(departmentSalePolicies)
+          .where(eq(departmentSalePolicies.departmentId, fx.departmentId))
+      )[0]!.orderStart,
+    ).toBe("table");
     expect(
       read.model.salePolicies.departments.find(
         (row: { departmentId: string }) => row.departmentId === fx.departmentId,
       ).receiptPrintMode,
     ).toBe("auto");
-    await db
-      .update(departments)
-      .set({ defaultServiceMode: "ticket_then_pay" })
-      .where(eq(departments.id, fx.departmentId));
     expect(
       (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
     ).toBe(204);
 
     expect(
-      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!
-        .defaultServiceMode,
-    ).toBe("ticket_then_pay");
+      (
+        await db
+          .select()
+          .from(departmentSalePolicies)
+          .where(eq(departmentSalePolicies.departmentId, fx.departmentId))
+      )[0]!.orderStart,
+    ).toBe("counter");
   });
 
   it.each([true, false])(
@@ -424,7 +433,7 @@ describe("whole service settings saves", () => {
         })
       ).status,
     ).toBe(204);
-    for (const [input, style, effective] of [
+    for (const [input, , effective] of [
       [zoneSettings, "prepay", zoneSettings],
       [
         {
@@ -459,22 +468,18 @@ describe("whole service settings saves", () => {
       ]);
       const [stored] = await db
         .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
-      expect(stored!.serviceMode).toBe(style);
+        .from(zoneSalePolicies)
+        .where(eq(zoneSalePolicies.zoneId, fx.zoneId));
+      expect(stored!.orderStart).toBe(input.orderStart);
     }
-    await db
-      .update(zoneServicePolicies)
-      .set({ serviceMode: "ticket_then_pay" })
-      .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
     expect((await send(fx.app, "PUT", fx.zonePath, fx.managerCookie, zoneSettings)).status).toBe(
       204,
     );
     const [retained] = await db
       .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
-    expect(retained!.serviceMode).toBe("ticket_then_pay");
+      .from(zoneSalePolicies)
+      .where(eq(zoneSalePolicies.zoneId, fx.zoneId));
+    expect(retained!.orderStart).toBe("counter");
   });
 
   it.each([
@@ -664,10 +669,6 @@ describe("venue service management routes", () => {
         orderStart: "table",
       }),
     );
-    await db
-      .update(departments)
-      .set({ defaultServiceMode: "prepay" })
-      .where(eq(departments.id, department.id));
     const before = await db.all(
       sql`select * from department_sale_policies where department_id = ${department.id}`,
     );
@@ -700,10 +701,6 @@ describe("venue service management routes", () => {
         await tx.run(
           sql`update zone_sale_policies set paid_when = 'ticket_then_pay', collection_number = 'numbered', receipt_print_mode = 'on_request' where zone_id = ${fx.zoneId}`,
         );
-        await tx
-          .update(zoneServicePolicies)
-          .set({ serviceMode: orderStart === "table" ? "prepay" : "table_tab" })
-          .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
         return [source, target];
       });
       const before = await db.all(
@@ -835,7 +832,10 @@ describe("venue service management routes", () => {
       ]);
       expect(
         await db.select().from(zoneServicePolicies).where(eq(zoneServicePolicies.zoneId, id)),
-      ).toMatchObject([{ departmentId: department.id, serviceMode: null }]);
+      ).toMatchObject([{ departmentId: department.id }]);
+      expect(db.all(sql`select order_start from zone_sale_policies where zone_id = ${id}`)).toEqual(
+        [{ order_start: null }],
+      );
     },
   );
 
@@ -1293,23 +1293,23 @@ describe("venue service management routes", () => {
     }
     expect(
       db.all(
-        sql`select d.default_service_mode, p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${department.id}`,
+        sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${department.id}`,
       ),
-    ).toEqual([{ default_service_mode: "table_tab", order_start: "table" }]);
+    ).toEqual([{ order_start: "table" }]);
     expect(
       db.all(
-        sql`select s.service_mode, p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
+        sql`select p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
       ),
-    ).toEqual([{ service_mode: "prepay", order_start: "counter" }]);
+    ).toEqual([{ order_start: "counter" }]);
     const zonePath = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/orderStart`;
     expect((await send(fx.app, "PATCH", zonePath, fx.managerCookie, { value: null })).status).toBe(
       204,
     );
     expect(
       db.all(
-        sql`select s.service_mode, p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
+        sql`select p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
       ),
-    ).toEqual([{ service_mode: null, order_start: null }]);
+    ).toEqual([{ order_start: null }]);
   });
 
   it.each(["department", "zone"] as const)(

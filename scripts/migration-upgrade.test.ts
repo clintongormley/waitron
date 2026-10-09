@@ -244,6 +244,9 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "venue-service/0038_clammy_klaw": {
     lost: ["special_date_hours", "special_date_hours_periods", "zone_closed_times"],
   },
+  "venue-service/0040_retire_service_style": {
+    refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
+  },
   "venue-service/0033_aromatic_slapstick": {
     refused: ["DROP TABLE `department_menus`", "FOREIGN KEY constraint failed"],
   },

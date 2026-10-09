@@ -392,7 +392,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         locationId,
         name: "Bar",
         tradingName: "Bar",
-        defaultServiceMode: "prepay",
       })
       .returning({ id: departments.id });
     const menu = await db.transaction((tx) => createCatalogue(tx, { name: "Drinks" }));
@@ -1082,8 +1081,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await refusal(
       // `id` and `created_at` are named, or the insert is refused as NOT NULL before the foreign
       // key is reached.
-      sql`insert into departments (id, location_id, name, trading_name, default_service_mode, created_at)
-        values (${randomUUID()}, ${missing}, 'X', 'X', 'prepay', ${new Date().toISOString()})`,
+      sql`insert into departments (id, location_id, name, trading_name, created_at)
+        values (${randomUUID()}, ${missing}, 'X', 'X', ${new Date().toISOString()})`,
       "departments_location_fk",
     );
     await refusal(

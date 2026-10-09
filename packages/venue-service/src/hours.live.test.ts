@@ -78,7 +78,6 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
         locationId: location!.id,
         name: "Deli",
         tradingName: "Deli",
-        defaultServiceMode: "table_tab",
         isDefault: true,
       })
       .returning();

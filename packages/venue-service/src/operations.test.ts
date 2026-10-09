@@ -222,17 +222,14 @@ describe("order flow from sale policies", () => {
       override: "table_tab",
     },
   ] as const)(
-    "uses $start / $zoneStart / $paid / $zonePaid rather than old $old",
-    async ({ old, start, zoneStart, paid, zonePaid, want }) => {
+    "uses $start / $zoneStart / $paid / $zonePaid",
+    async ({ start, zoneStart, paid, zonePaid, want }) => {
       const cfg = { locationId: brandLocationId(await seedLocation(`Flow ${randomUUID()}`)) };
       await scoped(async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: "Dining",
           orderStart: start,
         });
-        await tx.execute(
-          sql`update departments set default_service_mode = ${old} where id = ${department.id}`,
-        );
         const zone = await createServiceZone(tx, cfg, {
           name: "Flow",
           departmentId: department.id,
@@ -1256,32 +1253,27 @@ describe("departments", () => {
     );
     expect(
       db.all(
-        sql`select s.service_mode, p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${zone.id}`,
+        sql`select p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${zone.id}`,
       ),
-    ).toEqual([{ service_mode: "prepay", order_start: "counter" }]);
+    ).toEqual([{ order_start: "counter" }]);
   });
 
-  it("mirrors order-start inputs into retained style columns and resolves zone overrides", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Order start mirrors")) };
+  it("stores order-start inputs and resolves zone overrides", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Order start storage")) };
     const row = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" }),
     );
     const readDepartment = () =>
-      db.all(sql`select d.default_service_mode, p.order_start from departments d
+      db.all(sql`select p.order_start from departments d
       join department_sale_policies p on p.department_id=d.id where d.id=${row.id}`);
-    expect(readDepartment()).toEqual([{ default_service_mode: "table_tab", order_start: "table" }]);
+    expect(readDepartment()).toEqual([{ order_start: "table" }]);
     const zone = await scoped((tx) =>
       createServiceZone(tx, cfg, { name: "Terrace", departmentId: row.id }),
     );
     const readZone = () =>
-      db.all(sql`select s.service_mode, p.order_start from zone_service_policies s
+      db.all(sql`select p.order_start from zone_service_policies s
       join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${zone.id}`);
-    await scoped(async (tx) =>
-      tx.execute(
-        sql`update zone_service_policies set service_mode = 'ticket_then_pay' where zone_id = ${zone.id}`,
-      ),
-    );
-    for (const [input, style, start] of [
+    for (const [input, , start] of [
       [{ orderStart: "counter" }, "ticket_then_pay", "counter"],
       [{ orderStart: "counter" }, "ticket_then_pay", "counter"],
       [{ orderStart: "table" }, "table_tab", "table"],
@@ -1293,7 +1285,7 @@ describe("departments", () => {
       await scoped((tx) =>
         configureZone(tx, cfg, { zoneId: zone.id, departmentId: row.id, ...input }),
       );
-      expect(readZone()).toEqual([{ service_mode: style, order_start: start }]);
+      expect(readZone()).toEqual([{ order_start: start }]);
       expect(await scoped((tx) => resolveSalePolicy(tx, cfg, zone.id))).toMatchObject({
         orderStart: start ?? "table",
       });
@@ -1309,16 +1301,11 @@ describe("departments", () => {
         }),
       );
     }
-    for (const [style, start] of [
+    for (const [, start] of [
       ["prepay", "counter"],
       ["ticket_then_pay", "counter"],
       ["table_tab", "table"],
     ] as const) {
-      await scoped(async (tx) =>
-        tx.execute(
-          sql`update departments set default_service_mode = ${style} where id = ${row.id}`,
-        ),
-      );
       await scoped((tx) =>
         updateDepartment(tx, cfg, row.id, {
           name: row.name,
@@ -1326,13 +1313,8 @@ describe("departments", () => {
           orderStart: start,
         }),
       );
-      expect(readDepartment()).toEqual([{ default_service_mode: style, order_start: start }]);
+      expect(readDepartment()).toEqual([{ order_start: start }]);
     }
-    await scoped(async (tx) =>
-      tx.execute(
-        sql`update departments set default_service_mode = 'ticket_then_pay' where id = ${row.id}`,
-      ),
-    );
     await scoped((tx) =>
       updateDepartment(tx, cfg, row.id, {
         name: row.name,
@@ -1341,11 +1323,9 @@ describe("departments", () => {
       }),
     );
     await scoped((tx) => setDepartmentSalePolicyField(tx, cfg, row.id, "orderStart", "counter"));
-    expect(readDepartment()).toEqual([
-      { default_service_mode: "ticket_then_pay", order_start: "counter" },
-    ]);
+    expect(readDepartment()).toEqual([{ order_start: "counter" }]);
     await scoped((tx) => setDepartmentSalePolicyField(tx, cfg, row.id, "orderStart", "table"));
-    expect(readDepartment()).toEqual([{ default_service_mode: "table_tab", order_start: "table" }]);
+    expect(readDepartment()).toEqual([{ order_start: "table" }]);
     await scoped((tx) =>
       updateDepartment(tx, cfg, row.id, {
         name: row.name,
@@ -1353,16 +1333,16 @@ describe("departments", () => {
         orderStart: "counter",
       }),
     );
-    expect(readDepartment()).toEqual([{ default_service_mode: "prepay", order_start: "counter" }]);
-    for (const [value, style] of [
+    expect(readDepartment()).toEqual([{ order_start: "counter" }]);
+    for (const [value] of [
       ["counter", "prepay"],
       ["table", "table_tab"],
       [null, null],
     ] as const) {
       await scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zone.id, "orderStart", value));
-      expect(readZone()).toEqual([{ service_mode: style, order_start: value }]);
+      expect(readZone()).toEqual([{ order_start: value }]);
     }
-    for (const [style, start, storedStyle] of [
+    for (const [style, start] of [
       ["table_tab", "table", "table_tab"],
       ["prepay", "counter", "prepay"],
       ["ticket_then_pay", "counter", "prepay"],
@@ -1372,15 +1352,10 @@ describe("departments", () => {
       );
       expect(
         db.all(
-          sql`select d.default_service_mode, p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${created.id}`,
+          sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${created.id}`,
         ),
-      ).toEqual([{ default_service_mode: storedStyle, order_start: start }]);
+      ).toEqual([{ order_start: start }]);
     }
-    await scoped(async (tx) =>
-      tx.execute(
-        sql`update zone_service_policies set service_mode = 'ticket_then_pay' where zone_id = ${zone.id}`,
-      ),
-    );
     await scoped((tx) =>
       configureZone(tx, cfg, {
         zoneId: zone.id,
@@ -1389,13 +1364,13 @@ describe("departments", () => {
       }),
     );
     await scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zone.id, "orderStart", "counter"));
-    expect(readZone()).toEqual([{ service_mode: "ticket_then_pay", order_start: "counter" }]);
+    expect(readZone()).toEqual([{ order_start: "counter" }]);
     const defaulted = await scoped((tx) => createDepartment(tx, cfg, { name: "Default counter" }));
     expect(
       db.all(
-        sql`select d.default_service_mode, p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${defaulted.id}`,
+        sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${defaulted.id}`,
       ),
-    ).toEqual([{ default_service_mode: "prepay", order_start: "counter" }]);
+    ).toEqual([{ order_start: "counter" }]);
   });
 
   it("resolves a recorded zone's receipt policy after the zone is deactivated", async () => {
@@ -3199,12 +3174,12 @@ describe("orderInZones", () => {
 
 for (const { statement, constraint } of [
   {
-    statement: sql`update departments set default_service_mode = 'invoice_first'`,
-    constraint: "departments_service_mode_ck",
+    statement: sql`update department_sale_policies set order_start = 'invoice_first'`,
+    constraint: "department_sale_policies_order_start_ck",
   },
   {
-    statement: sql`update zone_service_policies set service_mode = 'invoice_first'`,
-    constraint: "zone_service_policies_mode_ck",
+    statement: sql`update zone_sale_policies set order_start = 'invoice_first'`,
+    constraint: "zone_sale_policies_order_start_ck",
   },
   {
     statement: sql`update order_service_contexts set service_mode = 'invoice_first'`,

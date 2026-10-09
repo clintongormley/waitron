@@ -3960,7 +3960,6 @@ describe("opening hours in a configuration transfer", () => {
         locationId: source.locationId,
         name: "Deli",
         tradingName: "Deli",
-        defaultServiceMode: "prepay",
       });
       await tx.insert(kitchenStations).values([
         { locationId: source.locationId, name: "Bar" },

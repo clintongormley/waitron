@@ -117,7 +117,6 @@ async function fixture(): Promise<Fixture> {
       locationId: location,
       name,
       tradingName: name,
-      defaultServiceMode: "table_tab",
       isDefault,
     });
     const [restaurant, deli] = await tx
@@ -1234,7 +1233,6 @@ async function addSubjects(f: Fixture) {
         locationId: f.cfg.locationId,
         name: `Terrace ${randomUUID()}`,
         tradingName: "Terrace",
-        defaultServiceMode: "table_tab",
       })
       .returning();
     const [terraceStation, grill] = await tx

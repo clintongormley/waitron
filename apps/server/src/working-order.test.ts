@@ -230,8 +230,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       const createdAt = nowIso();
       await tx.execute(sql`
       insert into departments
-        (id, location_id, name, trading_name, default_service_mode, created_at)
-      values (${departmentId}, ${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}, ${createdAt})`);
+        (id, location_id, name, trading_name, created_at)
+      values (${departmentId}, ${locationId}, 'Restaurant', 'Restaurant', ${createdAt})`);
       await tx.execute(sql`
       insert into floor_zones (id, location_id, name, created_at)
       values (${zoneId}, ${locationId}, 'Counter', ${createdAt})`);
@@ -1048,12 +1048,9 @@ describe("seating from order start", () => {
   });
 
   it.each([false, true])(
-    "refuses seating in counter service (zone override: %s) despite old table style",
+    "refuses seating in counter service (zone override: %s)",
     async (zoneOverride) => {
       const { cfg, zoneId } = await setupVenue();
-      await db.execute(
-        sql`update departments set default_service_mode = 'table_tab' where location_id = ${cfg.locationId}`,
-      );
       await db.execute(
         sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
       );
@@ -1086,9 +1083,6 @@ describe("openTab service context", () => {
   it("derives the service zone from the table and prices its menu offer", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`
-        update departments set default_service_mode = 'table_tab'
-        where location_id = ${cfg.locationId}`);
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments where location_id = ${cfg.locationId})`);
       const table = await tx.execute<{ id: string }>(sql`
@@ -1121,9 +1115,6 @@ describe("openTab service context", () => {
         )
       ).rows;
       await insertRoute(tx, cfg, { zoneId, productId: offer!.product_id, stationId: station.id });
-      await tx.execute(sql`
-        update departments set default_service_mode = 'table_tab'
-        where location_id = ${cfg.locationId}`);
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments where location_id = ${cfg.locationId})`);
       const table = await tx.execute<{ id: string }>(sql`
@@ -1147,9 +1138,7 @@ describe("openTab service context", () => {
     const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const department = await tx.execute<{ id: string }>(sql`
-        update departments set default_service_mode = 'table_tab'
-        where location_id = ${cfg.locationId}
-        returning id`);
+        select id from departments where location_id = ${cfg.locationId}`);
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments where location_id = ${cfg.locationId})`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
@@ -1211,9 +1200,6 @@ describe("openTab service context", () => {
   it("stores an explicitly no-preparation offer without creating a kitchen ticket", async () => {
     const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`
-        update departments set default_service_mode = 'table_tab'
-        where location_id = ${cfg.locationId}`);
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments where location_id = ${cfg.locationId})`);
       await setRoutingCell(
@@ -3340,9 +3326,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // per line or per product on the shared transaction.
     const { cfg, zoneId, catalogueId, premiumCafeOfferId, cafeId, aguaId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`
-        update departments set default_service_mode = 'table_tab'
-        where location_id = ${cfg.locationId}`);
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments where location_id = ${cfg.locationId})`);
       const bar = await createStation(tx, cfg, { name: "Bar", isDefault: true });

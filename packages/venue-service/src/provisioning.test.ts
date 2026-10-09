@@ -177,23 +177,22 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       insert into menu_periods (id, department_id, name, menu_id)
       select ${randomUUID()}, department_id, 'Authored', ${menus[1]!.id}
       from zone_service_policies`);
-    await db.execute(sql`
-      update zone_service_policies
-      set service_mode = 'ticket_then_pay'`);
-    await db.execute(sql`update zone_sale_policies set order_start = 'counter'`);
+    await db.execute(
+      sql`update zone_sale_policies set order_start = 'counter', paid_when = 'ticket_then_pay'`,
+    );
     await runSeed();
 
     const departments = await db.execute<{ count: number }>(sql`
       select count(*) as count from departments`);
     const zones = await db.execute<{ count: number }>(sql`
       select count(*) as count from floor_zones`);
-    const policies = await db.execute<{ service_mode: string | null }>(sql`
-      select service_mode from zone_service_policies`);
+    const policies = await db.execute<{ order_start: string | null; paid_when: string | null }>(sql`
+      select order_start, paid_when from zone_sale_policies`);
     const periods = await db.execute<{ menu_id: string }>(sql`
       select menu_id from menu_periods`);
     expect(departments.rows[0]!.count).toBe(1);
     expect(zones.rows[0]!.count).toBe(1);
-    expect(policies.rows).toEqual([{ service_mode: "ticket_then_pay" }]);
+    expect(policies.rows).toEqual([{ order_start: "counter", paid_when: "ticket_then_pay" }]);
     expect(periods.rows).toEqual([{ menu_id: menus[1]!.id }]);
   });
 

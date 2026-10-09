@@ -336,7 +336,7 @@ async function placeTable(shop: Shop): Promise<void> {
       limit 1`);
     const departmentId = department.rows[0]!.department_id;
     await tx.execute(sql`update zone_service_policies
-      set department_id = ${departmentId}, service_mode = 'table_tab'
+      set department_id = ${departmentId}
       where zone_id = ${zone.id}`);
     await tx.execute(
       sql`update zone_sale_policies set order_start = 'table' where zone_id = ${zone.id}`,

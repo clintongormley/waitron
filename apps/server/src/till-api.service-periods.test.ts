@@ -33,7 +33,6 @@ import {
 } from "@waitron/shared";
 import {
   createDepartment,
-  departments,
   departmentSalePolicies,
   createServiceZone,
   deleteMenuPeriod,
@@ -620,10 +619,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     const v = await mealVenue();
     await offsetLunch(v, 15);
     await suite.db
-      .update(departments)
-      .set({ defaultServiceMode: "table_tab" })
-      .where(eq(departments.id, v.restaurant));
-    await suite.db
       .update(departmentSalePolicies)
       .set({ orderStart: "table" })
       .where(eq(departmentSalePolicies.departmentId, v.restaurant));
@@ -1024,10 +1019,6 @@ describe("service periods gate only added dishes and added stored quantities", (
       let path: string;
       if (kind === "fired") {
         await suite.db
-          .update(departments)
-          .set({ defaultServiceMode: "table_tab" })
-          .where(eq(departments.id, v.restaurant));
-        await suite.db
           .update(departmentSalePolicies)
           .set({ orderStart: "table" })
           .where(eq(departmentSalePolicies.departmentId, v.restaurant));
@@ -1099,10 +1090,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     async (meal) => {
       at(mondayAt("13:50"));
       const v = await mealVenue();
-      await suite.db
-        .update(departments)
-        .set({ defaultServiceMode: "table_tab" })
-        .where(eq(departments.id, v.restaurant));
       await suite.db
         .update(departmentSalePolicies)
         .set({ orderStart: "table" })
