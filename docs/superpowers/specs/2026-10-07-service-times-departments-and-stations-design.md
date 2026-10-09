@@ -298,7 +298,7 @@ show:
   handing over).
 - **Pass monitor** (view-only, no buttons): which stations and which zones. Any profile may offer
   it (owner, 2026-10-09); it shows what the till's "All stations" pass board shows, limited to
-  those stations and zones. On a till or handheld it is the Pass screen.
+  those stations and zones. On a till or handheld it is the Pass screen (plan default).
 
 **Any device can run a station or pass screen.** A kitchen display runs exactly one kitchen screen,
 with nobody signed in: the device is the one acting. A till's or handheld's choice narrows its

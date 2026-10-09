@@ -202,6 +202,8 @@ migration); `packages/venue-service/src/dashboard/prep-stations-screen.ts` (the 
 
 ### 2. Does this slice need slice 2, 3 or 4?
 
+Landed: #1470 (slice 2) and #1469 (slice 3), 2026-10-09; Part A rebased onto both.
+
 | Slice | What it builds (spec) | Needed by this slice? | What was checked |
 | --- | --- | --- | --- |
 | 2 | Zone closed times, refusing new orders in a closed zone, named days, real weeks, the Calendar (§6 "Closed times", §7, §9.2, §13 item 2) | **Believed independent.** No branch exists (`git branch -a` lists no slice 2 branch, 2026-10-08). | A pass screen or monitor filters by zone id the way a watcher does today (`watcherSees`, `apps/server/src/watchers.ts:45-53`, through `orderWatchZones`, `apps/server/src/watch-zones.ts:15`); nothing in §6–§7 changes a zone's id or which zone an order's food is in. Nothing this slice reads or writes is a zone's closed time or a named day. |
@@ -215,6 +217,8 @@ today's code and must be re-grounded then. Building Part A ahead of slices 2–4
 departure from the spec's order (decision 1).
 
 ### 3. Files shared with slices 2 to 4 (same files, different areas)
+
+Landed: #1470 (slice 2) and #1469 (slice 3), 2026-10-09; Part A rebased onto both.
 
 - **Slice 2** (no branch): `packages/venue-service/src/classification.ts`,
   `configuration-transfer.ts`, `errors.ts`, `index.ts`, `migrations.test.ts`,
@@ -262,8 +266,8 @@ decisions this revision made" at the end.
 
 Given in the campaign watcher's session, about 09:20–09:40, to the build's question of 02:25 and to
 the new decisions 17–26 (source: the campaign questions file, "2026-10-09 ~09:20 — OWNER ANSWERS
-… to A366-5A", and the 02:25 question above it). Decisions 18, 19, 20, 22, 25 and 13's additions
-keep their defaults.
+… to A366-5A", and the 02:25 question above it). Decisions 19, 20, 22, 25 and 13's additions keep their
+defaults.
 
 | Answer | What changes | Tasks with an "AS BUILT → CHANGE" note | Tasks not yet built whose text changed |
 | --- | --- | --- | --- |
@@ -512,7 +516,10 @@ keep their defaults.
     existing per-profile "Auto-logout after (minutes)" setting once sign-in exists; the work is the
     sign-in. Backlog: A436, "A kitchen display with someone signed in, logged out only after a long
     idle time" (The till, devices and table service). This slice is ready for it: the Done route
-    reads the signed-in person (decision 5).
+    reads the signed-in person (decision 5). For A436's entry: new venues' default kitchen display
+    profile now holds `take-orders` and `hand-over-orders` (decision 23), which become reachable
+    through session routes (for example `apps/server/src/department-transfer-api.ts`) once a
+    kitchen display can sign in.
 19. **NEW — a kitchen display's Fire records the device.** Fire is the one lever that records who
     did it: `order_groups.fired_by` (`packages/db/src/schema/order-groups.ts:26`, written at
     `apps/server/src/order-groups.ts:469`) and an `order_group_events` row whose `actor_id` is not
@@ -628,8 +635,8 @@ keep their defaults.
     every new venue) gains `take-orders` and `hand-over-orders`, so its pass's Fire and Away pass
     the server's checks out of the box; the demo's has them too (decision 13). This plan's default
     was "unchanged". No existing venue's profile is rewritten: the slice already needs a venue
-    reset, and no data migration is written before go-live (CLAUDE.md §3). **Open point for the
-    owner, raised by this revision:** a pass screen draws Fire, Ready and Away only when its
+    reset, and no data migration is written before go-live (CLAUDE.md §3). **Open question for
+    the owner, with a worked example under "New decisions this revision made":** a pass screen draws Fire, Ready and Away only when its
     profile has "Run the pass" (decision 3), and the answer did not name that flag, so the default
     kitchen display profile still draws none of them until a manager switches it on; until the
     owner says otherwise the default does not get `run-the-pass`. Several tests and strings say a
@@ -642,11 +649,14 @@ keep their defaults.
     `{ zoneId }`, thrown by venue-service (`assertPassScreenZone`, Task A3b). **A counter order
     has a zone.** `orderWatchZones` takes the seated table's zone, then a delivery table's, then
     the zone the order recorded when it opened (`watch-zones.ts:50-61`, the last through
-    `findOrderZones`, which reads `order_service_contexts`,
-    `packages/venue-service/src/operations.ts:1091-1110`). Measured 2026-10-09 by backlog item
+    `findOrderZones`, which reads `order_service_contexts`: it is `findOrderServiceZones`,
+    `packages/venue-service/src/operations.ts:1091-1110`, exposed as `findOrderZones` at
+    `packages/venue-service/src/service.ts:93`). Measured 2026-10-09 by backlog item
     A437 on `main`: deleting that recorded-zone fallback failed 3 of 19 kitchen tests; restored,
-    19 of 19 passed. The till's zone limits read the same recorded zone for an order
-    (`subjectZone`, `apps/server/src/zone-access.ts:16-24`). So a pass limited to named zones
+    19 of 19 passed. The till's zone limits read differently: `subjectZone`
+    (`apps/server/src/zone-access.ts:22-25`) reads only the recorded zone for an order, while
+    `orderWatchZones` takes the seated table's first, so the two differ after a party moves (A437's
+    open question to the owner). So a pass limited to named zones
     shows and fires counter orders rung up in those zones, and refuses those from others with
     `kitchen_screen.zone_not_allowed` `{ zoneId }` naming the counter's zone. Only an order that
     never recorded a zone and has no table is zone-less: on a pass with an explicit zone list it
@@ -706,7 +716,7 @@ keep their defaults.
 - Work in this branch's worktree; never commit to `main`.
 - A shipped migration file is never edited. New migrations only; numbers come from
   `pnpm --filter <package> db:generate` (or `db:generate:custom`) at build time, never typed. Slice
-  3's branch adds venue-service `0034` and `0035`; whichever lands second regenerates.
+  Part A's venue-service migrations, after the rebase onto slices 2 and 3, are `0039` and `0040`.
 - No data-migration code before go-live (CLAUDE.md §3): a migration changes the schema; old rows
   are left to the reset. Part A adds, rebuilds and drops; Part B drops.
 - drizzle-kit 0.31.11: a generation that rebuilds a table must not also add a column to it. This
@@ -897,6 +907,14 @@ its test in the task named.
 
 ## Part A — kitchen screens and monitors (first pull request)
 
+**Rebase onto slices 2 and 3 (built, 2026-10-09).** The branch was rebased onto `main` `974f7170e`
+as one commit, `5f925a618`. Its venue-service migrations are now `0039_curved_magdalene.sql` and
+`0040_illegal_wolfsbane.sql`. Slice 3's kitchen display station-day routes
+(`GET` and `PUT /api/device/stations/:stationId/today`, `apps/server/src/station-today-api.ts`)
+checked the device's own station, a column Part A drops; on the branch they accept a station the
+device's station screen shows as available (`assertScreenShowsStation`, `:27-41`) and refuse any
+other with `device.forbidden_station`.
+
 ### Task A1: The `run-the-pass` setting; a kitchen display may take and hand over
 
 **Files:**
@@ -1016,8 +1034,8 @@ screen or a pass monitor, not both (decision 17, owner 2026-10-09) — are code 
 refused a kind at the profile any more: decision 17.) `device_kitchen_screens.device_id` and the removals' `device_id` are `no action`
 rather than `cascade` so that a later rebuild of `devices` refuses (see Global constraints) instead
 of silently emptying every device's choice. The removals are keyed to the device, not to its
-kitchen screen row, because a pick may replace that row and the removal must be keyed apart from
-it (decision 21: since 2026-10-09 a narrowing keeps the row).
+kitchen screen row: the key was chosen when a narrowing deleted rows, and is kept to avoid another
+migration.
 
 - [ ] **Step 1: Failing test** in `migrations.test.ts`: the seven tables exist; deleting a profile
   deletes its kitchen screen rows; a station row with `every_zone = 1`, a zone row on a station
@@ -1191,7 +1209,8 @@ Rules the tests pin:
 - **The 02:25 question, answer "b".** AS BUILT: `ScreenSlot` has no way to tell a switched-off
   station from a recorded removal. → CHANGE, test first: a device whose explicit Deli is switched
   off on its own page reads Deli `available: false, switchedOff: true`; a device whose Deli a
-  narrowing took reads `switchedOff: false`; a zone likewise. Watch them fail, then add the field.
+  narrowing took reads `switchedOff: false`; a station both switched off and narrowed away reads
+  `switchedOff: false`; a zone likewise. Watch them fail, then add the field.
   Task A7 uses it.
 
 ---
@@ -1262,6 +1281,22 @@ of a device on the profile whose station, zone or kind the profile now allows fo
 `kitchen-screens.test.ts` cases that read a device's stored rows straight from the tables after a
 narrowing change to read through `readDeviceKitchenScreens`; list them in the pull request's
 notes. Task A5b's switch uses the same restore.
+
+`assertPassScreenZone` still refuses `kitchen_screen.not_allowed` `{ screen: "pass" }` when the
+pass screen shows no available station, or its explicit zone list has no available zone: with the
+row kept, and `zoneIds: null` meaning every zone, an emptied pass would otherwise accept every
+zone. In "refuses a kitchen display whose pass screen a narrowing emptied, for any zone or none"
+(`kitchen-screens.test.ts`), change only the `storedKindsOf` line; keep both refusals.
+
+Also written before the change: a kitchen display on [Grill, Deli] whose Deli a narrowing took:
+`readStationScreens({ withSwitchedOff: true })` lists only Grill. It passes on the branch today,
+because the narrowing deletes Deli from the explicit list, and fails if `readStationScreens` is not
+made to leave out recorded removals. The comments this change makes false, to cut: in
+`kitchen-screens.ts` at `5f925a618`, `narrowDevices`' doc comment (`:661-665`, "an explicit list
+loses what `after` leaves out, a kind … or a list left empty goes"), `assertPassScreenZone`'s
+(`:836-839`) and `readStationScreens`' (`:859-861`, "A narrowing deletes what it takes from an
+explicit list"); in `schema/kitchen-screens.ts`, the removals table's (`:193-196`, "the narrowing
+may delete that row").
 
 ---
 
@@ -1462,7 +1497,11 @@ switch cases): a till that chose Grill and Deli switches to a profile without De
 `available: false`) and back to the first profile, and then reads Deli `available: true` with no
 removal row; a till someone re-picked on in between does not get Deli back. Watch it fail
 (`pnpm --filter @waitron/server exec vitest run src/device-api.test.ts`); Task A3c's restore,
-called from `narrowDeviceKitchenScreens` as well, makes it pass.
+called from `narrowDeviceKitchenScreens` as well, makes it pass. The dashboard's device update that
+changes the profile also calls `narrowDeviceKitchenScreens` (`apps/server/src/device-api.ts:687` at
+`5f925a618`), so add the same restore case there: a PATCH moving a till that chose Grill and Deli to a profile without Deli
+and a second PATCH moving it back, neither naming `kitchenScreens`, leaves Deli `available: true`
+with no removal row.
 
 ---
 
@@ -1599,17 +1638,31 @@ mock the client, so they stay green.
 printers down only for available stations and sends every unavailable one as `{ id, name,
 available: false }`; Advance and Acknowledge accept only available stations (`availableStations`).
 The dark-screen alert already counts a switched-off station a kitchen display stores (the A7 fix,
-`readStationScreens(…, { withSwitchedOff })`), and stays as it is. → CHANGE, test first in
+`readStationScreens(…, { withSwitchedOff })`), and must leave out recorded removals once Task A3c
+keeps the device's choice. → CHANGE, test first in
 `device-api.test.ts`: a kitchen display on Grill and Deli with a dish waiting at Deli; Deli is
 switched off on its own page; the read sends Deli `available: false, switchedOff: true` with that
 dish in its queue; starting, readying and finishing the dish are accepted; acknowledging a notice
 at Deli is accepted; once the dish is done Deli's queue is empty and its entry stays. Controls in
 the other direction: Deli taken by a narrowing instead is sent `switchedOff: false` with no queue,
-and advancing its dish answers `device.forbidden_station`; an every-station screen under an
+and advancing its dish answers `device.forbidden_station`, and acknowledging a notice at it is
+refused as Advance is (Acknowledge follows Advance's rule for a switched-off station's dishes and
+notices); an every-station screen under an
 every-station profile lists a switched-off station only while its queue holds dishes. Before
 running, say what the failing case prints: Deli with no `queue`, and `device.forbidden_station` on
 the advance. Watch them fail (`pnpm --filter @waitron/server exec vitest run src/device-api.test.ts`),
 then read queues for switched-off shown stations too and let Advance and Acknowledge accept them.
+
+**Slice 3's today state, with answer "b".** A switched-off station the read lists is sent with
+slice 3's `today` state, like any other station. Slice 3's `apps/server/src/till-api.station-today.test.ts`
+case "shows an assigned station switched off since enrollment" expects that; run 2026-10-09 at
+`5f925a618` (`pnpm --filter @waitron/server exec vitest run src/till-api.station-today.test.ts -t
+"switched off since enrollment"`), it fails, Grill arriving with no `today`. After this change it
+passes with no edit beyond the route and response shape the rebase already moved. A 5A case in
+`device-api.test.ts` that pins a switched-off station's station-screen entry as no longer available
+with no `today` changes with this answer and goes under "Changed test checks"; at `5f925a618` a
+read of the cases calling `switchStationOff` found none reading `/api/device/station-screen`, so
+the implementer greps again before calling the list empty.
 
 ---
 
@@ -1670,7 +1723,7 @@ session is required and its person recorded. The watcher routes still answer unt
   sale out, and `device-api.pass.test.ts` that a pass limited to the counter's zone leaves a table
   order out, but no case checks that a pass limited to the counter's zone shows a counter sale. → CHANGE: add that case to `device-api.pass.test.ts` (a kitchen display
   whose pass screen names only the counter's zone reads the counter sale's dish, and its Done is
-  accepted) and to the pass monitor read. It passes on arrival, so prove it can fail: delete the
+  accepted) and to the pass monitor read's cases in `pass-board.test.ts`. It passes on arrival, so prove it can fail: delete the
   recorded-zone fallback in `orderWatchZones` (`apps/server/src/watch-zones.ts`, the
   `findOrderZones` step), watch the new case fail with the dish missing, and restore it.
 - **Decision 17.** AS BUILT: `GET /api/device/pass-monitor` already serves any device with a pass
@@ -1815,7 +1868,9 @@ packages/venue-service/src | grep -i "zone"`) and correct any left.
 (`apps/server/scripts/demo-seed/seed.ts`) adds `run-the-pass`, `take-orders` and
 `hand-over-orders` to every kitchen display profile, and `demo-seed/seed.test.ts` and
 `dev-setup.test.ts` pin the Kitchen profile's five capabilities in order. → CHANGE, after Task A1's
-change to the default: the seed adds only `run-the-pass`; rerun
+change to the default, as optional cleanup (`validateCapabilities` drops a duplicate,
+`packages/layouts/src/device-profile.ts:56`, so the seed's profile is the same either way): the seed
+adds only `run-the-pass`; rerun
 `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.test.ts scripts/dev-setup.test.ts`;
 the profile must still hold the same five, and a pin that fails only on their order changes to the
 order the store now gives, listed in the pull request's notes.
@@ -1997,7 +2052,8 @@ switch.
 **AS BUILT → CHANGE (owner 2026-10-09, the 02:25 question, answer "b").** AS BUILT: the merged
 view's one queue holds available stations' dishes only. → CHANGE, test first: a switched-off
 station's waiting dishes join the merged queue, labelled with its name, oldest first among the
-rest, while its line stays above the queue with the others; bumping one advances it. Watch it fail
+rest, while its line stays above the queue with the others, and its notices sit there with the
+line, as in the stacked view; bumping one advances it. Watch it fail
 (`pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen.test.ts`), then
 implement; look at it in Merged at 1280 and 390.
 
@@ -2067,7 +2123,10 @@ in `till-expo-screen.test.ts`: a till whose identity carries a `pass_monitor` ch
 board, as a narrowed-away pass screen does; a till with a `pass` choice is unchanged. Watch it fail
 (`pnpm --filter @waitron/till exec vitest run src/screens/till-expo-screen.test.ts`), then let
 `#loadChoice` select the monitor mode for a `pass_monitor` choice. Look at it at 1280 and 390, both
-themes. Task A14b's monitor needs no other change.
+themes. The till's Pass screen must draw no levers when its choice is the monitor: on the branch
+`#drawsLevers()` and `#onDevice()` (`till-expo-screen.ts:785-791` at `5f925a618`) read the
+`monitor` property, not the chosen board, and the no-button case above catches a till that draws
+them.
 
 ---
 
@@ -2338,7 +2397,7 @@ and `products.md` (the lines listed in section 1); `docs/backlog.md` (slice 5 bu
 ## New decisions this revision made
 
 Each is a default the owner may override; the decision it sits in has the detail. The owner
-answered all of them on 2026-10-09: 18, 19, 20, 22, 25 and 13's additions stand; 17, 21, 23 and 24
+answered all but 18 on 2026-10-09: 19, 20, 22, 25 and 13's additions stand; 17, 21, 23 and 24
 changed and 26 was dropped, as marked below. The 2026-10-09 revision added the few defaults marked
 "2026-10-09 revision", which the owner may still override.
 
@@ -2378,8 +2437,22 @@ changed and 26 was dropped, as marked below. The 2026-10-09 revision added the f
   `apps/server/src/boot.ts:1017-1046`).
 - **23 (owner 2026-10-09: overridden).** A kitchen display profile may also hold `take-orders`
   and `hand-over-orders`, which only its pass levers check, and new venues' kitchen display
-  profile holds both. Open for the owner: whether it also gets "Run the pass", without which its
-  pass draws no Fire, Ready or Away.
+  profile holds both.
+- **OPEN QUESTION — does "Run the pass" come switched on (decision 23)?** Worked example: a new
+  venue's kitchen display profile offers no screen at all, so a manager adds a pass screen to the
+  Kitchen profile before any pass works. With "Run the pass" on by default for a new pass screen,
+  Fire, Ready and Away appear at once; otherwise the manager must also tick it. Default as built:
+  not ticked.
+- **OPEN QUESTION — a switched-off station on a pass screen or monitor.** Answer "b" was about the
+  station screen; a pass screen or pass monitor still drops a switched-off station's dishes.
+  Default: as written (they drop).
+- **2026-10-09 revision, around answer "b" and decision 21** (the owner may override each):
+  - "b" applies only on a kitchen display's station screen; a till's Station screen and the pass
+    keep the old rule.
+  - A device re-picked as "Every station" gets Deli back when Deli is re-added to the profile,
+    because "every" follows the profile.
+  - A till that chooses a pass monitor loses Fire, Ready and Away on its Pass screen.
+  - A switch back to a profile restores what the first switch took, as a re-add does.
 - **24 (owner 2026-10-09: clarified).** A kitchen display's lever checks the order's zone against
   its pass zones, not its stations, refusing `kitchen_screen.zone_not_allowed`; a counter order's
   zone is the one it was rung up in, as `main` already reads it, and only an order that never
