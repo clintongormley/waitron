@@ -670,6 +670,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   sorting without changing its results.
   [Detail](backlog/catalogue.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
 
+- **Product search and image search follow different rules, and a search of only punctuation
+  lists every product** — OPEN (left by #1478). Product search finds the word being typed anywhere
+  inside a word; image search finds it only at the start of one. "&" or "-" alone lists every
+  product in menu order, where before #1478 it listed only names containing that character.
+  **Next action:** the owner decides whether both searches should share one rule, and whether a
+  punctuation-only search should list everything.
+  [Detail](backlog/catalogue.md#product-search-and-image-search-follow-different-rules-and-a-search-of-only-punctuation-lists-every-product)
+
 - **A negative catalogue price can still be stored by a direct call** — OPEN (left by #487).
   `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`) still accept and
   store a negative when called directly — a seed, a script or a future caller — and
