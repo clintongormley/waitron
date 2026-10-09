@@ -475,3 +475,49 @@ it.each(acceptedNames)(
     expect(unload()).toBe(false);
   },
 );
+
+it.each(cases)("$kind paints native Save states after a pending name save", async (dialog) => {
+  const el = await mount(dialog);
+  let finish!: (value: unknown) => void;
+  const writes: unknown[] = [];
+  el.api = testApi(async (...args: unknown[]) => {
+    writes.push(args);
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  const save =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  const state = async () => {
+    await save.updateComplete;
+    return {
+      variant: save.variant,
+      disabled: save.disabled,
+      innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+    };
+  };
+  await field(el).updateComplete;
+  const input = field(el).shadowRoot!.querySelector("input")!;
+  await userEvent.fill(page.elementLocator(input), "Submitted name");
+  save.click();
+  try {
+    await expect.poll(() => writes.length).toBe(1);
+    await el.updateComplete;
+    expect((await state()).innerDisabled).toBe(true);
+    save.dispatchEvent(new MouseEvent("click"));
+    await userEvent.fill(page.elementLocator(input), "Newer name");
+    finish({ id: "new" });
+    await expect.poll(() => save.disabled).toBe(false);
+    expect(await state()).toEqual({ variant: "primary", disabled: false, innerDisabled: false });
+    expect(input.value).toBe("Newer name");
+    expect(el.dialog).toEqual(dialog);
+    expect(unload()).toBe(true);
+    await userEvent.fill(page.elementLocator(input), " Submitted name ");
+    await el.updateComplete;
+    expect(await state()).toEqual({ variant: "secondary", disabled: true, innerDisabled: true });
+    expect(unload()).toBe(false);
+    expect(writes).toHaveLength(1);
+  } finally {
+    finish?.({ id: "new" });
+  }
+});

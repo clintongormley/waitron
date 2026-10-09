@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController, UrlStateController, navigationGuardFor } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -268,3 +269,40 @@ it.each([
     expect(clean.defaultPrevented).toBe(false);
   },
 );
+
+it("dirty native Escape keeps the rename, then Discard returns focus to its row menu", async () => {
+  const { shell } = await mount("/manage/venue-operations");
+  const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(async () => ({
+    id: "unexpected-write",
+  }));
+  shell.api = new VenueServiceApi(request as DashboardRequest);
+  await shell.updateComplete;
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-department-d1]")!.click();
+  const dialogs = shell.shadowRoot!.querySelector("department-dialogs")!;
+  await expect.poll(() => dialogs.dialog?.kind).toBe("rename-department");
+  const field =
+    dialogs.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  await userEvent.fill(page.elementLocator(input), "Retained rename");
+  await userEvent.keyboard("{Escape}");
+  await choose("keep");
+  expect(input.value).toBe("Retained rename");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.click(page.elementLocator(input));
+  await userEvent.keyboard("{Escape}");
+  await choose("discard");
+  await expect.poll(() => dialogs.dialog).toBeUndefined();
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  const menu = table
+    .shadowRoot!.querySelector("[data-test=rename-department-d1]")!
+    .closest("wt-row-actions")!;
+  await expect
+    .poll(() => menu.shadowRoot!.activeElement)
+    .toBe(menu.shadowRoot!.querySelector("button"));
+  expect(request.mock.calls.filter(([, method]) => method && method !== "GET")).toEqual([]);
+});

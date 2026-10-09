@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -352,5 +353,143 @@ it.each([
     expect(fields().errors[refused]).toBeUndefined();
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
     expect(button("save-zone").disabled).toBe(false);
+  },
+);
+
+it.each([
+  ["orderStart", "table", "counter"],
+  ["paidWhen", "prepay", "ticket_then_pay"],
+  ["collectionNumber", "none", "numbered"],
+  ["receiptPrintMode", "auto", "on_request"],
+] as const)(
+  "native %s edits during Save remain dirty against the submitted zone snapshot",
+  async (kind, submitted, newer) => {
+    await mount("z3");
+    el.model = {
+      ...el.model!,
+      salePolicies: {
+        ...el.model!.salePolicies,
+        zones: el.model!.salePolicies.zones.map((zone) =>
+          zone.zoneId === "z3"
+            ? {
+                ...zone,
+                orderStart: null,
+                paidWhen: null,
+                collectionNumber: null,
+                receiptPrintMode: null,
+              }
+            : zone,
+        ),
+      },
+    };
+    await el.updateComplete;
+    let finish!: () => void;
+    const writes: unknown[] = [];
+    el.api = new VenueServiceApi((async (path, method, body) => {
+      writes.push({ path, method, body });
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    }) as DashboardRequest);
+    const state = async () => {
+      const save = button("save-zone");
+      await save.updateComplete;
+      return {
+        variant: save.variant,
+        disabled: save.disabled,
+        innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+      };
+    };
+    await fields().updateComplete;
+    const control = fields().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      `[name=${kind}]`,
+    )!;
+    const pick = async (value: string) => {
+      await control.updateComplete;
+      await userEvent.click(
+        page.elementLocator(control.shadowRoot!.querySelector<HTMLElement>(".trigger")!),
+      );
+      await control.updateComplete;
+      const label = control.options.find((option) => option.value === value)!.label;
+      const option = [...control.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (node) => node.textContent!.trim() === label,
+      )!;
+      await userEvent.click(page.elementLocator(option));
+      await el.updateComplete;
+    };
+    const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+    const ready = { variant: "primary", disabled: false, innerDisabled: false };
+    expect(await state()).toEqual(quiet);
+    button("save-zone").dispatchEvent(new MouseEvent("click"));
+    await el.updateComplete;
+    expect(writes).toEqual([]);
+    expect(fields().errors).toEqual({});
+    await pick(submitted);
+    await el.updateComplete;
+    expect(await state()).toEqual(ready);
+    await pick("");
+    await el.updateComplete;
+    expect(await state()).toEqual(quiet);
+    await pick(submitted);
+    button("save-zone").click();
+    try {
+      await expect.poll(() => writes.length).toBe(1);
+      await el.updateComplete;
+      await fields().updateComplete;
+      await control.updateComplete;
+      expect(control.disabled).toBe(false);
+      expect(control.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+      expect((await state()).innerDisabled).toBe(true);
+      await button("cancel-zone").updateComplete;
+      expect(button("cancel-zone").shadowRoot!.querySelector("button")!.disabled).toBe(true);
+      button("save-zone").dispatchEvent(new MouseEvent("click"));
+      await pick(newer);
+      finish();
+      await expect.poll(() => button("save-zone").disabled).toBe(false);
+      expect(control.value).toBe(newer);
+      expect(await state()).toEqual(ready);
+      await pick(submitted);
+      await el.updateComplete;
+      expect(await state()).toEqual(quiet);
+      expect(writes).toEqual([
+        {
+          path: "/management-api/venue-service/zones/z3/service-settings",
+          method: "PUT",
+          body: {
+            orderStart: null,
+            paidWhen: null,
+            collectionNumber: null,
+            receiptPrintMode: null,
+            [kind]: submitted,
+          },
+        },
+      ]);
+      el.api = new VenueServiceApi((async (path, method, body) => {
+        writes.push({ path, method, body });
+        throw { code: "connection.failed" };
+      }) as DashboardRequest);
+      await pick(newer);
+      button("save-zone").click();
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+        .toBe("The change could not be saved.");
+      expect(await state()).toEqual(ready);
+      expect(fields().errors).toEqual({});
+      expect(control.value).toBe(newer);
+      expect(writes).toHaveLength(2);
+      expect(writes[1]).toEqual({
+        path: "/management-api/venue-service/zones/z3/service-settings",
+        method: "PUT",
+        body: {
+          orderStart: null,
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+          [kind]: newer,
+        },
+      });
+    } finally {
+      finish?.();
+    }
   },
 );

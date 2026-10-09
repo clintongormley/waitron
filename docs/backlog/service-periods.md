@@ -43,7 +43,7 @@ their full text.
   remains one Lane E PR from landed slices 1/3A. Its storage, policy writers, order flow, shared service settings fields, standalone department list
   and department/zone dialogs are built, as is the standalone department page with Settings.
   The standalone Zones tab and staged routing/actions shell are built. Move and Disable ask before discarding the selected zone's service settings draft.
-  Removed-row Rename dialogs retain their dirty names, and closing returns focus to the current row or Add/parent link. Reused zone menus carry their zone identity. The staged live-query handoff is built; Task A10 still carries the public wrapper switch, mounted-dashboard checks and the full kept-assertion audit before retiring the legacy tests. Parts B/C remain Lane D work after
+  Removed-row Rename dialogs retain their dirty names, and closing returns focus to the current row or Add/parent link. Reused zone menus carry their zone identity. The staged live-query handoff is built. Pending department and zone edits now remain drafts against the submitted snapshot; native tests cover their Save states and Escape/Discard focus. Task A10 still carries the semantic retirement inventory, public wrapper switch and mounted-dashboard checks before retiring the legacy tests. Parts B/C remain Lane D work after
   slice 2/A429. Lane E's slice 7 follows 6A, with no current branch. The explicit overlap waiver
   permits independent slice 2/5 checkouts; whoever lands second reconciles source and regenerates
   migration clashes. No conversion of obsolete receipt data, only pre-live reset. The 6A branch has not landed.

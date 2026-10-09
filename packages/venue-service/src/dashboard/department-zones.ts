@@ -265,7 +265,7 @@ export class DepartmentZones extends LitElement {
       collectionNumber: "none" as const,
       receiptPrintMode: "auto" as const,
     };
-    const disabled = this.busy || this.readonly,
+    const disabled = this.readonly,
       state = saveActionState(this.scope);
     return html`<div class="zones" aria-label=${t("venue.list_zones")}>
         ${this.zones.map((z) => html`<wt-button variant="secondary" data-zone=${z.id} data-test=${`zone-${z.id}`} aria-pressed=${String(z.id === row?.id)} ?disabled=${this.busy} @click=${() => void this.select(z.id)}>${z.name}${z.active === false ? html` <span class="muted">(${t("venue.zone_disabled")})</span>` : nothing}</wt-button>`)}
@@ -336,7 +336,7 @@ export class DepartmentZones extends LitElement {
                 <wt-button
                   variant=${state.variant}
                   data-test="save-zone"
-                  ?disabled=${disabled || state.unchanged}
+                  ?disabled=${this.busy || disabled || state.unchanged}
                   .loading=${this.busy}
                   @click=${() => void this.save()}
                   >${t("venue.save")}</wt-button

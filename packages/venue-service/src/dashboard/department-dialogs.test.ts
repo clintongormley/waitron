@@ -1076,3 +1076,27 @@ it.each(
   expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
   expect(request).toHaveBeenCalledTimes(1);
 });
+
+it.each(dialogs.slice(6))(
+  "$kind enables its native danger action after its impact is loaded",
+  async (dialog) => {
+    const { el, request } = await mount(dialog);
+    await expect.poll(() => save(el).disabled).toBe(false);
+    await save(el).updateComplete;
+    expect({
+      variant: save(el).variant,
+      disabled: save(el).disabled,
+      innerDisabled: save(el).shadowRoot!.querySelector("button")!.disabled,
+    }).toEqual({ variant: "danger", disabled: false, innerDisabled: false });
+    await userEvent.click(page.elementLocator(save(el).shadowRoot!.querySelector("button")!));
+    await expect.poll(() => el.dialog).toBeUndefined();
+    expect(request.mock.calls.filter(([, method]) => method === "DELETE")).toEqual([
+      [
+        dialog.kind === "disable-department"
+          ? "/management-api/venue-service/departments/d1"
+          : "/management-api/zones/z1",
+        "DELETE",
+      ],
+    ]);
+  },
+);

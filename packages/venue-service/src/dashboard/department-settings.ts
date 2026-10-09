@@ -299,7 +299,7 @@ export class DepartmentSettings extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
   private changed(field: Field, value: unknown) {
-    if (this.busy || !this.department?.active) return;
+    if (!this.department?.active) return;
     if (field === "receivingProfileId")
       this.draft = {
         ...this.draft!,
@@ -474,7 +474,7 @@ export class DepartmentSettings extends LitElement {
       draft = this.draft;
     if (!row || !draft) return nothing;
     const errors = { ...(this.attempted ? this.errors : {}), ...this.refused },
-      disabled = this.busy || !row.active,
+      disabled = !row.active,
       state = saveActionState(this.scope);
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
     for (const field of ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"] as const)

@@ -1732,3 +1732,40 @@ Settings input with its retained busy-input assertion before the retirement inve
 public wrapper switch. Then remove the staged create spy, rerun mounted integration/public
 LOOK, and finish A13–A15 and the branch gates. Receipts stay in the lane's
 `receipts/a366-6a/a10-policy-history/`, outside the repository.
+
+
+### Implementation checkpoint: A10 pending inputs and native action/focus checks (2026-10-09)
+
+The owner answered A to Lane E's 19:29 question: the new Settings fields remain usable
+while Save waits. Exactly two expectations in `department-settings.test.ts` changed,
+in their own `Changed test checks (A366 slice 6):` commit: the pending name field is
+enabled, and its later name remains visible. Disconnect/reconnect and late-result
+assertions remain unchanged.
+
+The native trading-name case failed at `native.disabled` before the two-line fix.
+The pending zone audit also reproduced a lost retained behavior: the legacy Configure
+zone pending-edit case passed, while the four new service-field cases failed because
+the fields were disabled. Field read-only state now follows the zone/department,
+while Save, Cancel, zone switching and row actions remain locked during the write.
+Both forms commit the submitted snapshot, so later input remains a new unsaved change.
+
+Added checks cover the native receiving-profile pending edit, each zone field's clean,
+changed, reverted, pending and refused action states, name-dialog pending action states,
+loaded Disable actions and dirty Escape/Keep/Discard focus back to the row menu.
+The twelve affected browser files passed 372 cases. After correcting the new focus
+test's request capture, its complete file passed 8 cases. Fiscal golden and
+inmutabilidad tests remain unedited and passed 20 cases. The retained old suites and
+public wrapper remain unchanged; this checkpoint does not retire assertions.
+
+Deletion controls in an independently installed candidate failed for disabled zone
+fields, committing the latest zone draft, duplicate zone submission, wrong zone action
+colour, committing the latest Settings draft and dropping Escape focus return. Restored
+source passed the selected native cases. The pending component LOOK covers department
+Settings and Zones in EN/ES, both themes, measured 390/1280 px; the screenshots and
+computed colours are retained outside the repository under Lane E's
+`receipts/a366-6a/a10-settings-input-resume/`.
+
+Next: complete the semantic retirement inventory, switch the public wrapper, remove
+the staged create spy and verify mounted public navigation and LOOK. A13–A15, two
+completed Claude reviews, normal push hook, current-head CI and authorised landing
+remain. Do not repeat the pending-input diagnosis or ask for the settled exception.

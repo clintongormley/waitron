@@ -557,3 +557,162 @@ it.each(["tradingName", "receivingProfileId"] as const)(
     ]);
   },
 );
+
+it("keeps native edits made during Save dirty against the submitted Settings snapshot", async () => {
+  let finish!: () => void;
+  const writes: unknown[][] = [];
+  const el = await mount((async (path, method, body) => {
+    if (method === "GET")
+      return path.endsWith("/profiles")
+        ? []
+        : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };
+    writes.push([path, method, body]);
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+  }) as DashboardRequest);
+  const control =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=tradingName]")!;
+  await control.updateComplete;
+  const native = control.shadowRoot!.querySelector("input")!;
+  try {
+    await userEvent.fill(page.elementLocator(native), "Submitted name");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    await expect.poll(() => writes.length).toBe(1);
+    await el.updateComplete;
+    await control.updateComplete;
+    expect(native.disabled).toBe(false);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+    const cancel = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=cancel-editor]",
+    )!;
+    await save.updateComplete;
+    await cancel.updateComplete;
+    expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    expect(cancel.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    save.click();
+    await el.updateComplete;
+    expect(writes).toHaveLength(1);
+    await userEvent.fill(page.elementLocator(native), "Newer name");
+    finish();
+    await expect
+      .poll(
+        () =>
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            "[data-test=cancel-editor]",
+          )!.disabled,
+      )
+      .toBe(false);
+    expect(native.value).toBe("Newer name");
+    expect(unload()).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+    await choice("keep");
+    expect(native.value).toBe("Newer name");
+    await userEvent.fill(page.elementLocator(native), " Submitted name ");
+    expect(unload()).toBe(false);
+    expect(writes[0]).toEqual([
+      "/management-api/venue-service/departments/d1/settings",
+      "PUT",
+      {
+        name: "Restaurant",
+        tradingName: "Submitted name",
+        orderStart: "table",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+        printTradingName: false,
+        transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
+      },
+    ]);
+    expect(writes).toHaveLength(1);
+  } finally {
+    finish?.();
+  }
+});
+
+it("a native receiving-profile edit during Save retains the submitted baseline and action states", async () => {
+  let finish!: () => void;
+  const writes: unknown[][] = [];
+  const el = await mount((async (path, method, body) => {
+    if (method === "GET")
+      return path.endsWith("/profiles")
+        ? [
+            { id: "p1", name: "Restaurant desk" },
+            { id: "p2", name: "Deli desk" },
+          ]
+        : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };
+    writes.push([path, method, body]);
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+  }) as DashboardRequest);
+  await expect.poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]")).not.toBeNull();
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=receivingProfileId]",
+  )!;
+  const pick = async (value: string) => {
+    await control.updateComplete;
+    await userEvent.click(
+      page.elementLocator(control.shadowRoot!.querySelector<HTMLElement>(".trigger")!),
+    );
+    await control.updateComplete;
+    const label = control.options.find((option) => option.value === value)!.label;
+    const option = [...control.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (node) => node.textContent!.trim() === label,
+    )!;
+    await userEvent.click(page.elementLocator(option));
+    await el.updateComplete;
+  };
+  const save =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  const state = async () => {
+    await save.updateComplete;
+    return {
+      variant: save.variant,
+      disabled: save.disabled,
+      innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+    };
+  };
+  const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+  const ready = { variant: "primary", disabled: false, innerDisabled: false };
+  expect(await state()).toEqual(quiet);
+  await pick("p1");
+  expect(await state()).toEqual(ready);
+  save.click();
+  try {
+    await expect.poll(() => writes.length).toBe(1);
+    await el.updateComplete;
+    await control.updateComplete;
+    expect(control.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    expect((await state()).innerDisabled).toBe(true);
+    save.dispatchEvent(new MouseEvent("click"));
+    await pick("p2");
+    finish();
+    await expect.poll(() => save.disabled).toBe(false);
+    expect(control.value).toBe("p2");
+    expect(unload()).toBe(true);
+    expect(await state()).toEqual(ready);
+    await pick("p1");
+    expect(unload()).toBe(false);
+    expect(await state()).toEqual(quiet);
+    expect(writes).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/settings",
+        "PUT",
+        {
+          name: "Restaurant",
+          tradingName: "Casa",
+          orderStart: "table",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          receiptPrintMode: "auto",
+          printTradingName: false,
+          transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
+        },
+      ],
+    ]);
+  } finally {
+    finish?.();
+  }
+});
