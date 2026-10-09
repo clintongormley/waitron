@@ -14,10 +14,11 @@ import { readMenuStructure } from "./menu-structure.js";
 import { insertVersion, previewMenu, publishMenu } from "./menu-publication.js";
 import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
 import { eq } from "drizzle-orm";
-import { listProductVariants } from "./variants.js";
+import { listProductVariants, setProductVariants } from "./variants.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { deleteCatalogueItems } from "./catalogue-items.js";
-import { extraListItems } from "./schema/extras.js";
+import { extraListItems, extraLists } from "./schema/extras.js";
+import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { menuItems } from "./schema/menu.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { offerOf } from "../test/menus-fixture.js";
@@ -422,5 +423,214 @@ describe("archive path boundaries", () => {
       await archiveProducts(tx, ["missing"]);
     });
     expect(await snapshot()).toEqual(before);
+  });
+});
+
+describe("variants and extras", () => {
+  it("refuses switching an archived variant back on at its body position", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.large, { active: false }));
+    const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+    const before = await snapshot();
+    await expect(
+      app((tx) =>
+        setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            { ...large!, id: undefined, name: "Small", active: true },
+            { ...large!, active: true },
+          ],
+          "en",
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: f.large, field: "variants.1.active" },
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("leaves every archived variant column unchanged while retaining body positions", async () => {
+    const f = await menusFixture(fx.db);
+    const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+    await app((tx) =>
+      setProductVariants(
+        tx,
+        f.lemonade,
+        [large!, { ...large!, id: undefined, name: "Small" }],
+        "en",
+      ),
+    );
+    await app((tx) => updateProduct(tx, f.large, { active: false }));
+    const before = await row(f.large);
+    const [, small] = await app((tx) => listProductVariants(tx, f.lemonade));
+    await app((tx) =>
+      setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          { ...small!, name: "Medium" },
+          {
+            ...large!,
+            active: false,
+            name: "Changed",
+            customerName: { es: "Sin inglés" },
+            kitchenName: "CHANGED",
+            image: "changed.jpg",
+            unitPrice: "99.00",
+            available: false,
+          },
+          { ...large!, id: undefined, name: "Tiny" },
+        ],
+        "en",
+      ),
+    );
+    expect(await row(f.large)).toEqual(before);
+    const rows = await app((tx) =>
+      tx.select().from(products).where(eq(products.parentId, f.lemonade)),
+    );
+    expect(rows.find((v) => v.id === small!.id)).toMatchObject({ name: "Medium", variantOrder: 0 });
+    expect(rows.find((v) => v.name === "Tiny")).toMatchObject({ active: true, variantOrder: 2 });
+  });
+
+  it("writes nothing to an omitted already archived variant", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.large, { active: false }));
+    const before = await row(f.large);
+    await app((tx) =>
+      setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        "en",
+      ),
+    );
+    expect(await row(f.large)).toEqual(before);
+  });
+
+  it("refuses a variants write to an archived parent", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
+    const before = await snapshot();
+    await expect(app((tx) => setProductVariants(tx, f.lemonade, [], "en"))).rejects.toMatchObject(
+      archived(f.lemonade),
+    );
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each(["live", "scheduled"] as const)(
+    "refuses explicit and omitted variant archives on a %s menu atomically",
+    async (publication) => {
+      const f = await menusFixture(fx.db);
+      if (publication === "live") await publish(f.lunch);
+      else await queue(f.lunch, new Date(Date.now() + 86_400_000));
+      const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+      const before = await snapshot();
+      for (const inputs of [[{ ...large!, active: false, name: "Changed" }], []]) {
+        await expect(
+          app((tx) => setProductVariants(tx, f.lemonade, inputs, "en")),
+        ).rejects.toMatchObject({
+          code: "product.on_live_menu",
+          params: {
+            products: [{ id: f.large, name: "Large" }],
+            menus: [{ id: f.lunch, name: "Lunch Menu" }],
+          },
+        });
+        expect(await snapshot()).toEqual(before);
+      }
+    },
+  );
+
+  it.each(["explicit", "omitted"] as const)(
+    "takes an %s archived variant out of extras and draft prices",
+    async (mode) => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) => {
+        await createExtraList(tx, { name: "Sizes", items: [{ productId: f.large }] }, "en");
+        await tx.insert(menuItemVariantOverrides).values({
+          menuItemId: await offerOf(tx, f.lunch, f.lemonade),
+          productId: f.lemonade,
+          variantId: f.large,
+          price: 450,
+        });
+      });
+      const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+      await app((tx) =>
+        setProductVariants(
+          tx,
+          f.lemonade,
+          mode === "explicit" ? [{ ...large!, active: false }] : [],
+          "en",
+        ),
+      );
+      expect((await row(f.large))!.active).toBe(false);
+      expect(
+        await app((tx) =>
+          tx.select().from(extraListItems).where(eq(extraListItems.productId, f.large)),
+        ),
+      ).toEqual([]);
+      expect(await app((tx) => tx.select().from(menuItemVariantOverrides))).toEqual([]);
+    },
+  );
+
+  it.each(["create", "update"] as const)(
+    "refuses an archived extras item in a %s body at its position atomically",
+    async (mode) => {
+      const f = await menusFixture(fx.db);
+      await app((tx) => updateProduct(tx, f.extraLemon, { active: false }));
+      const before = await app(async (tx) => ({
+        lists: await tx.select().from(extraLists),
+        items: await tx.select().from(extraListItems),
+      }));
+      const input = {
+        name: "Changed extras",
+        items: [{ productId: f.burger }, { productId: f.extraLemon }],
+      };
+      await expect(
+        app((tx) =>
+          mode === "create"
+            ? createExtraList(tx, input, "en")
+            : updateExtraList(tx, f.extrasList, input, "en"),
+        ),
+      ).rejects.toMatchObject({
+        code: "product.archived",
+        params: { productId: f.extraLemon, field: "items.1.productId" },
+      });
+      expect(
+        await app(async (tx) => ({
+          lists: await tx.select().from(extraLists),
+          items: await tx.select().from(extraListItems),
+        })),
+      ).toEqual(before);
+    },
+  );
+
+  it("still creates and updates lists containing active variants and products", async () => {
+    const f = await menusFixture(fx.db);
+    const list = await app((tx) =>
+      createExtraList(tx, { name: "Sizes", items: [{ productId: f.large }] }, "en"),
+    );
+    await app((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Extras changed", items: [{ productId: f.extraLemon }] },
+        "en",
+      ),
+    );
+    expect(await app((tx) => getExtraList(tx, list.id))).toMatchObject({
+      name: "Extras changed",
+      items: [{ productId: f.extraLemon }],
+    });
   });
 });
