@@ -1537,6 +1537,28 @@ describe("device-profiles-screen kitchen screens", () => {
     });
   });
 
+  it("keeps a till's kind whose list is all switched off, emptied, so the server refuses the copy rather than letting it offer every station", async () => {
+    const { api, el } = await edit(till, {
+      station: { stationIds: ["s-off"], zoneIds: null },
+      pass: { stationIds: null, zoneIds: ["z4"] },
+      pass_monitor: { stationIds: ["s-off"], zoneIds: null },
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await flush(el);
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toMatchObject({
+      kitchenScreens: {
+        station: { stationIds: [], zoneIds: null },
+        pass: { stationIds: null, zoneIds: [] },
+      },
+    });
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]!.kitchenScreens).not.toHaveProperty(
+      "pass_monitor",
+    );
+  });
+
   it("copies a till's pass monitor when it is duplicated", async () => {
     const { api, el } = await edit(till, {
       pass_monitor: { stationIds: ["s2"], zoneIds: ["z1", "z4"] },

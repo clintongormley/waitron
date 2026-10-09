@@ -1373,6 +1373,39 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       }
     });
 
+    it("refuses a new till profile whose station or pass screen list is empty, and makes no profile", async () => {
+      const app = mountApp();
+      for (const [kitchenScreens, field] of [
+        [{ station: { stationIds: [], zoneIds: null } }, "stationScreenStations"],
+        [{ pass: { stationIds: null, zoneIds: [] } }, "passScreenZones"],
+      ] as const) {
+        const name = uniqueName("Emptied copy");
+        const res = await app.request("/management-api/device-profiles", {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie: managerCookie },
+          body: JSON.stringify({
+            name,
+            formFactor: "till",
+            ...ordering,
+            canvasId: null,
+            capabilities: ["show-station", "show-expo"],
+            kitchenScreens,
+          }),
+        });
+        expect({ status: res.status, body: await res.json() }).toEqual({
+          status: 400,
+          body: {
+            error: { code: "device_profile.access_invalid", params: { field, reason: "empty" } },
+          },
+        });
+        const listed = await app.request("/management-api/device-profiles", {
+          headers: { cookie: managerCookie },
+        });
+        const { deviceProfiles } = (await listed.json()) as { deviceProfiles: ProfileRow[] };
+        expect(deviceProfiles.map((row) => row.name)).not.toContain(name);
+      }
+    });
+
     it("refuses the kitchen screens to a staff session", async () => {
       const app = mountApp();
       const staffCookie = await login(app, STAFF_EMAIL);

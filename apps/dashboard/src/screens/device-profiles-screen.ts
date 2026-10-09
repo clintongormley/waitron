@@ -204,10 +204,15 @@ function comparableScreens(
   return out;
 }
 
-/** A copy of the screens with only switched-on stations and zones; a kind whose explicit list
- * would be left empty is not copied. */
+/**
+ * A copy of the screens with only switched-on stations and zones. A kind whose explicit list would
+ * be left empty is not copied where no row offers less (a kitchen display's kinds, a pass monitor);
+ * on a till or handheld a station or pass screen with no row bounds nothing, so that kind is kept
+ * with its emptied list, which the server refuses rather than the copy offering every station.
+ */
 function switchedOnScreens(
   screens: ProfileKitchenScreens,
+  sharedDisplay: boolean,
   stationOn: (id: string) => boolean,
   zoneOn: (id: string) => boolean,
 ): ProfileKitchenScreens {
@@ -217,7 +222,8 @@ function switchedOnScreens(
     if (scope === undefined) continue;
     const stationIds = scope.stationIds === null ? null : scope.stationIds.filter(stationOn);
     const zoneIds = scope.zoneIds === null ? null : scope.zoneIds.filter(zoneOn);
-    if (stationIds?.length === 0 || zoneIds?.length === 0) continue;
+    const noRowBoundsNothing = !sharedDisplay && kind !== "pass_monitor";
+    if ((stationIds?.length === 0 || zoneIds?.length === 0) && !noRowBoundsNothing) continue;
     out[kind] = { stationIds, zoneIds };
   }
   return out;
@@ -1513,7 +1519,8 @@ export class DeviceProfilesScreen extends LitElement {
   /**
    * A copy keeps where the profile serves and who signs in on it, less the zones switched off since.
    * With its department off, or none of its zones left, the copy carries no department, and the
-   * server refuses it. The copy's kitchen screens hold only the stations and zones still switched on.
+   * server refuses it. The copy's kitchen screens hold only the stations and zones still switched on,
+   * and the server refuses it too when that would let it offer more than the profile does.
    */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
@@ -1524,6 +1531,7 @@ export class DeviceProfilesScreen extends LitElement {
       const stored = this.kitchenScreens.find((entry) => entry.profileId === profile.id)?.screens;
       const screens = switchedOnScreens(
         stored ?? {},
+        isSharedDisplay(profile.formFactor),
         (id) => this.stations.some((station) => station.id === id && station.active),
         (id) => choices.zones.some((zone) => zone.id === id && zone.active),
       );
