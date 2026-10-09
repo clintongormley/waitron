@@ -8,7 +8,13 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { TillStationChoiceDialog } from "./widgets/station-choice-dialog.js";
 import type { CanvasDef } from "./layout.js";
-import type { CounterWaitingOrder, Station, TillApi, ZoneOfferCatalogue } from "./api/client.js";
+import type {
+  CounterWaitingOrder,
+  Station,
+  StationQueue,
+  TillApi,
+  ZoneOfferCatalogue,
+} from "./api/client.js";
 
 // Move to station on a paid counter order waiting to be handed over: one request naming, at most 100
 // at a time, the order's movable dishes not already at the chosen station, through the table's move
@@ -202,6 +208,32 @@ async function openMove(overrides: Record<string, unknown> = {}): Promise<TillAp
 async function choose(el: TillApp, stationId = "grill", rounds = 6): Promise<void> {
   emit(dialog(el)!, "station-chosen", { stationId });
   await flush(el, rounds);
+}
+
+/** Picks a station in the open dialog's own field, as a person would. */
+async function pick(el: TillApp, index: number): Promise<void> {
+  const field = dialog(el)!.shadowRoot!.querySelector<
+    HTMLElement & { updateComplete: Promise<unknown> }
+  >('wt-combobox[name="station"]')!;
+  field.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+  await field.updateComplete;
+  field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[index]!.click();
+  await flush(el);
+}
+const dialogMove = (el: TillApp) =>
+  dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!;
+
+function held<T>() {
+  let answer!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => (answer = resolve));
+  return { promise, answer };
+}
+
+async function changeOperator(el: TillApp): Promise<void> {
+  emit(counter(el), "logout");
+  await flush(el);
+  emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+  await flush(el);
 }
 
 beforeEach(() => setLocale("en"));
@@ -457,5 +489,69 @@ describe("till-app: moving a paid counter order to another station", () => {
     await flush(el);
 
     expect(dialog(el)).toBeNull();
+  });
+
+  it("a second press of Move to station while the stations are read reads them once and opens one dialog", async () => {
+    const el = await signedIn();
+    const reads = vi.mocked(api.listStations).mock.calls.length;
+    const stationsRead = held<Station[]>();
+    vi.mocked(api.listStations).mockImplementation(() => stationsRead.promise);
+
+    moveButton(el)!.click();
+    await flush(el);
+    moveButton(el)!.click();
+    await flush(el);
+    stationsRead.answer(stations);
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(reads + 1);
+    expect(el.shadowRoot!.querySelectorAll("till-station-choice-dialog")).toHaveLength(1);
+    expect(dialog(el)!.currentStationId).toBe("kitchen");
+  });
+
+  it("a second press of the dialog's Move handled before the till redraws sends no second move", async () => {
+    const el = await openMove();
+    await pick(el, 1);
+
+    dialogMove(el).click();
+    dialogMove(el).click();
+    await flush(el, 6);
+
+    expect(api.moveDishStation).toHaveBeenCalledOnce();
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("does not read the waiting list when the operator changes while the kitchen queue is read after a move", async () => {
+    const queueRead = held<StationQueue>();
+    const el = await openMove();
+    vi.mocked(api.getStationQueue).mockImplementationOnce(() => queueRead.promise);
+    await choose(el);
+    expect(api.moveDishStation).toHaveBeenCalledOnce();
+
+    await changeOperator(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    queueRead.answer({ printersDown: [], items: [], notices: [] });
+    await flush(el, 6);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not read the waiting list when the operator changes while the kitchen queue is read after a refusal", async () => {
+    const queueRead = held<StationQueue>();
+    const el = await openMove({
+      moveDishStation: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    vi.mocked(api.getStationQueue).mockImplementationOnce(() => queueRead.promise);
+    await choose(el);
+    expect(api.moveDishStation).toHaveBeenCalledOnce();
+
+    await changeOperator(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    queueRead.answer({ printersDown: [], items: [], notices: [] });
+    await flush(el, 6);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+    expect(dialog(el)).toBeNull();
+    expect(alert(el)).toBeNull();
   });
 });
