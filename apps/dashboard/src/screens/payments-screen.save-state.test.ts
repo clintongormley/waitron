@@ -277,7 +277,11 @@ describe("the Rename reader dialog's Save", () => {
   it("Escape after an edit closes the dialog with no leave coordinator", async () => {
     const { el } = await openRename();
     await type(el, "edit-reader-name", "Garden");
+    const closed = new Promise((resolve) =>
+      q(el, "[data-test=reader-editor]")!.addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
   });
 
@@ -407,7 +411,13 @@ describe("the bill attestation's Record", () => {
   it("Escape after an edit closes the dialog with no leave coordinator", async () => {
     const { el } = await openAttest();
     await type(el, "bill-attest-note", "Provider confirmed");
+    const closed = new Promise((resolve) =>
+      q(el, "[data-test=bill-attest-dialog]")!.addEventListener("wt-close", resolve, {
+        once: true,
+      }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(q(el, "[data-test=bill-attest-dialog]")).toBeNull());
   });
 

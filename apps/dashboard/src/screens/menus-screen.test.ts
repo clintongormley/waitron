@@ -9194,7 +9194,11 @@ describe("the include-a-menu field", () => {
     expect(list.matches(":popover-open")).toBe(false);
     await el.updateComplete;
     expect(modal(el, "include").open).toBe(true);
+    const closed = new Promise((resolve) =>
+      modal(el, "include").addEventListener("wt-close", resolve, { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
   });
 });
