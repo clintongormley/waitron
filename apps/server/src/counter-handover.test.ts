@@ -737,6 +737,7 @@ describe("GET /api/orders/counter-waiting", () => {
     total: string;
     canHandOver: boolean;
     serviceMode: string | null;
+    movableDishes: { lineId: string; stationId: string }[];
   }
 
   async function waiting(): Promise<WaitingRow[]> {
@@ -797,6 +798,7 @@ describe("GET /api/orders/counter-waiting", () => {
       total: "18.00",
       canHandOver: true,
       serviceMode: "ticket_then_pay",
+      movableDishes: [],
     });
     expect(row(handedOver)).toMatchObject({
       status: "placed",
@@ -818,6 +820,66 @@ describe("GET /api/orders/counter-waiting", () => {
       canHandOver: true,
       serviceMode: null,
     });
+  });
+
+  it("lists a paid order's dishes that can still move, each with its station, leaving out a started dish, a made-here record and an extras row", async () => {
+    const id = await parked("ticket_then_pay", "Tarta", "Tarta", "Tarta", "Tarta", "Tarta");
+    const lineIds = venue.db
+      .all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${id} order by line_no`,
+      )
+      .map((row) => row.id);
+    const [queued, otherQueued, started, madeHere, extra] = lineIds as [
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
+    venue.db.run(
+      sql`update working_order_lines set parent_line_id = ${queued} where id = ${extra}`,
+    );
+    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+    await collectCash(id, "100.00");
+    expect((await orderRow(id)).status).toBe("settled");
+    const stationOf = new Map(
+      venue.db
+        .all<{ lineId: string; stationId: string }>(
+          sql`select working_order_line_id as lineId, station_id as stationId
+              from ticket_items where working_order_id = ${id}`,
+        )
+        .map((row) => [row.lineId, row.stationId]),
+    );
+    // Sending gave this extras row no kitchen record of its own; it is given one here, as an extras
+    // row split off to another station has (station-move.test.ts, "split-off chips").
+    expect(stationOf.has(extra)).toBe(false);
+    venue.db.run(
+      sql`insert into ticket_items
+            (id, node_id, working_order_id, working_order_line_id, station_id, state, queued_at,
+             fired_at, quantity, made_here)
+          select ${randomUUID()}, node_id, working_order_id, ${extra}, station_id, 'queued',
+                 queued_at, fired_at, quantity, 0
+          from ticket_items where working_order_line_id = ${queued}`,
+    );
+    expect(ticketItemCount(id)).toBe(5);
+    venue.db.run(
+      sql`update ticket_items set state = 'preparing' where working_order_line_id = ${started}`,
+    );
+    venue.db.run(
+      sql`update ticket_items set made_here = 1 where working_order_line_id = ${madeHere}`,
+    );
+
+    expect((await waitingRow(id))?.movableDishes).toEqual([
+      { lineId: queued, stationId: stationOf.get(queued) },
+      { lineId: otherQueued, stationId: stationOf.get(otherQueued) },
+    ]);
+  });
+
+  it("lists no movable dishes on an order sent but not paid", async () => {
+    const id = await placed("ticket_then_pay", "Tarta");
+    expect(ticketItemCount(id)).toBe(1);
+
+    expect((await waitingRow(id))?.movableDishes).toEqual([]);
   });
 
   it("totals a placed order by the sale already issued for it (here a seeded unpaid invoice), net of its credit notes, which is what collecting it charges", async () => {
