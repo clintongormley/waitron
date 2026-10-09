@@ -98,7 +98,8 @@ taken locally instead. `docs/backlog.md` carries the work item.
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
 guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
 also selects the members listed against it (those that read it, or whose CI test job runs it) and
-their dependents. A documentation-only push stops after formatting. Deletion-only pushes run no
+their dependents, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI
+test command loads), which runs everything. A documentation-only push stops after formatting. Deletion-only pushes run no
 checks. Unknown ranges keep the full local gate, including workspace typechecking.
 
 The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
@@ -674,25 +675,30 @@ documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, 
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
 the changed packages and their dependents. A root file a member depends on is the exception — a
 root file `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` lists, because a member file reads
-it, the ci.yml job that tests the member runs it first, or that job's test command loads it as a
-Vitest reporter: that map selects those members, so its change is `code=true`. `scripts/root-scope-consumers.test.mjs` fails when a member file starts reading an
-unlisted one, when a ci.yml job starts running an unlisted one before a member's tests or loading
-one as a reporter in a test command, or when a listed entry is none of these. That guard is weaker than its name: it reads
+it or the ci.yml job that tests the member runs it first: that map selects those members, so its
+change is `code=true`. A root file a ci.yml test command loads as a Vitest reporter
+(`scripts/vitest-file-progress.mjs`) is in `GLOBAL_ROOT_FILES` instead, and its change runs
+everything (`scope=global`): every tested member loads it, and a hand-kept list of them had to
+gain every new package (A452). `scripts/root-scope-consumers.test.mjs` fails when a member file
+starts reading an unlisted file, when a ci.yml job starts running an unlisted one before a member's
+tests, or when a listed entry is neither; and when a reporter in a ci.yml test command is missing
+from `GLOBAL_ROOT_FILES`, a file there is no such reporter, or one is also in
+`ROOT_SCOPE_CONSUMERS`. That guard is weaker than its name: it reads
 text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
 is invisible to it, and a comment spelling the path counts as a reference; in ci.yml, and no other
 workflow, only a line starting `node scripts/…` counts, in a job that tests a member through one
 quoted `pnpm --filter "<name>" test:shard` or `test:coverage` — so a script fed from a pipe does
 not count, and a step an `if:` switches off does; a reporter counts only in a `--reporter=` flag
-on a `pnpm … test:shard` or `test:coverage` line, and for the light shards' `pnpm "$@"` command
-the members are derived (every member with `test:coverage` that the job's literal `!` filters do
-not remove), not read from what the shell builds; and only root `scripts/` is scanned.
+on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
+root `scripts/` is scanned.
 
 `lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) are ungated
 and run on every push, so a regression in a skipped path is caught there only as far as the root suites
 exercise it.
 
 A merge to `main` runs the unfiltered suite whenever its `code` output is true — anything but a
-change made only of inert paths, documentation, or machinery `ROOT_SCOPE_CONSUMERS` does not list;
+change made only of inert paths, documentation, or machinery neither `ROOT_SCOPE_CONSUMERS` nor
+`GLOBAL_ROOT_FILES` lists;
 that run verifies the narrowing. Read the `changes` job's `code`, `scope` and `packages` outputs
 before treating a green PR as evidence about the workspace. Designed and built in #27.
 
@@ -1291,11 +1297,10 @@ wired in fails the hook, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
-the three named below; wired, the root project is green. Since A441 (2026-10-09) a fourth and a fifth,
-`scripts/root-scope-consumers.test.mjs` and the vitest-file-progress command-line case in
-`scripts/changed-packages.test.mjs`, fail for a new member with a `test:coverage` script until
-the member is added to the `scripts/vitest-file-progress.mjs` entry of `ROOT_SCOPE_CONSUMERS` in
-`scripts/changed-scope.mjs` (read from the guard, not measured). The three:
+the three named below; wired, the root project is green. From A441 until A452 (both 2026-10-09) a
+new member with tests also had to be added to a hand-kept list of the members that load
+`scripts/vitest-file-progress.mjs`; since A452 a change to that file runs everything instead, and
+there is no such list. The three:
 
 - `scripts/changed-scope.test.mjs` — a member declaring no `test:coverage` script and not named in
   `PACKAGES_WITHOUT_TESTS` is a mistake, and this fails on it.
@@ -1308,8 +1313,7 @@ the member is added to the `scripts/vitest-file-progress.mjs` entry of `ROOT_SCO
 
 What to wire, for an ordinary package with tests: a `vitest.config.ts` whose thresholds are
 `98/98/98/95` (pinned by `scripts/coverage-thresholds.test.ts`), the shard lists
-in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`, and the
-`scripts/vitest-file-progress.mjs` entry of `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`. A package that declares no
+in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that declares no
 `test:coverage` script at all — today only the two `bench/` members — additionally goes in
 `PACKAGES_WITHOUT_TESTS`.
 
