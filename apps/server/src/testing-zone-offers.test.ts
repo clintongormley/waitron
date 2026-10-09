@@ -309,9 +309,21 @@ describe("offerProducts", () => {
         tables: await resolveZoneContext(tx, venue.cfg, tables.zoneId),
       };
     });
-    expect(context.counter.serviceMode).toBe("ticket_then_pay");
+    expect(context.counter.serviceMode).toBe("prepay");
     expect(context.tables.serviceMode).toBe("table_tab");
     expect(context.tables.zoneId).not.toBe(context.counter.zoneId);
+  });
+
+  it("an explicit counter paid-at-collection policy answers ticket_then_pay", async () => {
+    const venue = await seedVenue(suite.db);
+    const context = await withTransaction(suite.db, async (tx) => {
+      const counter = await offerProducts(tx, venue.cfg, {
+        serviceMode: "ticket_then_pay",
+        paidWhen: "ticket_then_pay",
+      });
+      return resolveZoneContext(tx, venue.cfg, counter.zoneId);
+    });
+    expect(context.serviceMode).toBe("ticket_then_pay");
   });
 
   it("fires each line to the station the product, its category or the venue default would pick", async () => {

@@ -569,7 +569,7 @@ describe("venue service routing", () => {
       );
 
       await expect(resolveZoneContext(tx, { locationId }, zone)).resolves.toMatchObject({
-        serviceMode: "ticket_then_pay",
+        serviceMode: "prepay",
       });
       await expect(
         getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
@@ -586,8 +586,18 @@ describe("venue service routing", () => {
       await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
         zoneId: zone,
         departmentId: department.id,
+        serviceMode: "prepay",
+      });
+      await setZoneSalePolicyOverride(tx, { locationId }, zone, "paidWhen", "ticket_then_pay");
+      await expect(resolveZoneContext(tx, { locationId }, zone)).resolves.toMatchObject({
         serviceMode: "ticket_then_pay",
       });
+      await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
+        zoneId: zone,
+        departmentId: department.id,
+        serviceMode: "ticket_then_pay",
+      });
+      await setZoneSalePolicyOverride(tx, { locationId }, zone, "paidWhen", null);
       expect(visible.offers).toHaveLength(1);
       expect(visible.offers[0]).toMatchObject({
         id: offer.id,
