@@ -36,6 +36,9 @@ export class DepartmentZones extends LitElement {
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-5);
       }
+      .zones wt-button::part(button) {
+        overflow-wrap: anywhere;
+      }
       .heading {
         display: flex;
         align-items: center;
