@@ -8,20 +8,17 @@ import {
   registerIcons,
   visuallyHiddenStyles,
 } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
 import {
   HOME_GRID_COLUMNS,
   arrangeHome,
-  foldForSearch,
   indexDocument,
   openedSection,
-  searchFor,
   sectionTrail,
   shownMembers,
   tileFill,
   tilePaths,
   type HomeIndex,
-  type NameSearch,
   type SectionStep,
 } from "@waitron/catalogue/src/device-home.js";
 import type {

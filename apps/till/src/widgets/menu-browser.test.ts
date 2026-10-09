@@ -946,6 +946,16 @@ describe("till-menu-browser", () => {
         "No products match",
       );
     });
+
+    it("finds nothing when only punctuation is typed", async () => {
+      const { el } = await mount();
+      await search(el, "&");
+      expect(regions(el)).toEqual(["search", "results"]);
+      expect(entries(el, "results")).toEqual([]);
+      expect(root(el).querySelector('[data-region="results"]')!.textContent).toContain(
+        "No products match",
+      );
+    });
   });
 
   describe("search across the served menus", () => {
