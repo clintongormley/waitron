@@ -200,3 +200,107 @@ it("a failed warning read and its recovery preserve target edits and a copy refu
   expect(el.refusal?.code).toBe("special_date.date_taken");
   expect(save().disabled).toBe(false);
 });
+
+it("busy copy controls retain the submitted targets and ignore host-level edits, adds, removals and close", async () => {
+  await mount();
+  await change("2026-10-20");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-target]")!.click();
+  await el.updateComplete;
+  await change("2026-10-21", 1);
+  const events: unknown[] = [];
+  el.addEventListener("named-day-copy-save", (event) => events.push((event as CustomEvent).detail));
+  save().click();
+  el.busy = true;
+  await el.updateComplete;
+  await change("2026-11-20");
+  for (const selector of [
+    "[data-test=add-target]",
+    "[data-test=remove-target-1]",
+    "[slot=cancel]",
+    "[data-test=save-copy]",
+  ])
+    el.shadowRoot!.querySelector<HTMLElement>(selector)!.dispatchEvent(new MouseEvent("click"));
+  el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
+  await el.updateComplete;
+  expect(el.open).toBe(true);
+  expect(
+    Array.from(
+      el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>("wt-input"),
+      (input) => input.value,
+    ),
+  ).toEqual(["2026-10-20", "2026-10-21"]);
+  expect(events).toEqual([{ id: "annual", dates: ["2026-10-20", "2026-10-21"] }]);
+});
+
+it("a replaced copy's retained controls and completion cannot change the new target draft", async () => {
+  await mount();
+  await change("2026-10-20");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-target]")!.click();
+  await el.updateComplete;
+  await change("2026-10-21", 1);
+  save().click();
+  const old = el.shadowRoot!.querySelector("wt-modal")!;
+  el.day = { id: "replacement", name: "Replacement" };
+  await el.updateComplete;
+  await change("2026-11-20");
+  old
+    .querySelector("wt-input")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-12-20" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  for (const selector of [
+    "[data-test=add-target]",
+    "[data-test=remove-target-1]",
+    "[slot=cancel]",
+    "[data-test=save-copy]",
+  ])
+    old.querySelector<HTMLElement>(selector)!.dispatchEvent(new MouseEvent("click"));
+  old.dispatchEvent(new CustomEvent("wt-close"));
+  await el.updateComplete;
+  expect(el.open).toBe(true);
+  expect(el.commitSubmitted(["2026-10-20", "2026-10-21"])).toBe(false);
+  expect(
+    Array.from(
+      el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>("wt-input"),
+      (input) => input.value,
+    ),
+  ).toEqual(["2026-11-20"]);
+  expect(save().disabled).toBe(false);
+});
+
+it("Enter submits the changed target once and Cancel closes a clean copy", async () => {
+  await mount();
+  await change("2026-10-20");
+  const events: unknown[] = [];
+  el.addEventListener("named-day-copy-save", (event) => events.push((event as CustomEvent).detail));
+  const field = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+  field.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true, cancelable: true }),
+  );
+  expect(events).toEqual([{ id: "annual", dates: ["2026-10-20"] }]);
+  expect(el.commitSubmitted(["2026-10-20"])).toBe(true);
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  await expect.poll(() => el.open).toBe(false);
+});
+
+it("a field-specific copy refusal marks only its target and correction clears it without losing the other target", async () => {
+  await mount();
+  await change("2026-10-20");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-target]")!.click();
+  await el.updateComplete;
+  await change("2026-10-21", 1);
+  el.refusal = { code: "hours.invalid", params: { field: "dates.1" } };
+  await el.updateComplete;
+  const fields = el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>("wt-input");
+  expect(fields[0]!.error).toBe("");
+  expect(fields[1]!.error).not.toBe("");
+  expect(save().disabled).toBe(false);
+  await change("2026-10-22", 1);
+  expect(el.refusal).toBeUndefined();
+  expect(Array.from(fields, (input) => input.value)).toEqual(["2026-10-20", "2026-10-22"]);
+});
