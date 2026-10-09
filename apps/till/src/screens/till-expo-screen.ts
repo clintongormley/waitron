@@ -657,6 +657,7 @@ export class TillExpoScreen extends LitElement {
       }, 10_000);
       await this.#reload();
     } catch (error) {
+      if (this.#switched(error, false)) return;
       if (this.#isCurrent("pass"))
         this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
     }
@@ -669,6 +670,7 @@ export class TillExpoScreen extends LitElement {
       await this.api.markDevicePassDone(notice.ids, false);
       if (this.#isCurrent("pass")) await this.#reload();
     } catch (error) {
+      if (this.#switched(error, false)) return;
       if (this.#isCurrent("pass"))
         this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
     }
@@ -682,6 +684,7 @@ export class TillExpoScreen extends LitElement {
     try {
       await call();
     } catch (error) {
+      if (this.#switched(error, true)) return;
       if (boardId !== null && this.#isCurrent(boardId)) this.#leverRefused(order, error);
     }
     if (boardId !== null && this.#isCurrent(boardId)) await this.#reload();
@@ -701,6 +704,7 @@ export class TillExpoScreen extends LitElement {
     try {
       await call({ submissionId: crypto.randomUUID(), expectedPartyRevision: party.revision });
     } catch (error) {
+      if (this.#switched(error, true)) return;
       if (boardId !== null && this.#isCurrent(boardId)) {
         if ((error as { code?: string }).code === "party.out_of_date")
           this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
@@ -708,6 +712,28 @@ export class TillExpoScreen extends LitElement {
       }
     }
     if (boardId !== null && this.#isCurrent(boardId)) await this.#reload();
+  }
+
+  /**
+   * On a kitchen display, a press refused because the device no longer has this screen asks the app
+   * to re-read the device's choice now. A lever names a lost pass screen `kitchen_screen.not_allowed`.
+   */
+  #switched(error: unknown, lever: boolean): boolean {
+    const code = (error as { code?: string } | null)?.code;
+    if (
+      !this.#onDevice() ||
+      !this.isConnected ||
+      (code !== "device.unauthorized" && !(lever && code === "kitchen_screen.not_allowed"))
+    )
+      return false;
+    this.dispatchEvent(
+      new CustomEvent("kitchen-screen-changed", {
+        detail: { from: this.monitor ? "pass_monitor" : "pass" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    return true;
   }
 
   #leverRefused(order: ExpoOrder, error: unknown): void {

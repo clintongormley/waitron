@@ -255,6 +255,7 @@ import type {
   EquipmentHolder,
   ProfileChoice,
   ReadOptions,
+  KitchenScreenKind,
   ResolvedKitchenScreen,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
@@ -1431,6 +1432,7 @@ export class TillApp extends LitElement {
     this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
     clearTimeout(this.#contentLanguageTimer);
+    clearTimeout(this.#switchedTimer);
     this.#detach();
     this.removeEventListener("pointerdown", this.#onInteraction);
     this.removeEventListener("keydown", this.#onInteraction);
@@ -1687,6 +1689,9 @@ export class TillApp extends LitElement {
   @state() private initialDevicePass?: DevicePassScreen;
   @state() private initialDevicePassMonitor?: DevicePassMonitor;
   @state() private kitchenScreenNotice?: KitchenScreenNotice;
+  /** The screen a kitchen display switched to after a refused press, shown for a while. */
+  @state() private kitchenScreenSwitched?: KitchenScreenKind;
+  #switchedTimer?: ReturnType<typeof setTimeout>;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,
@@ -2289,7 +2294,8 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #boot(): Promise<void> {
+  /** `from`: the kind of screen a kitchen display showed when a press on it was refused. */
+  async #boot(from?: KitchenScreenKind): Promise<void> {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
@@ -2363,6 +2369,8 @@ export class TillApp extends LitElement {
     this.initialDevicePass = undefined;
     this.initialDevicePassMonitor = undefined;
     this.kitchenScreenNotice = undefined;
+    this.kitchenScreenSwitched = undefined;
+    clearTimeout(this.#switchedTimer);
     this.#deviceKind = "till";
     this.deviceName = undefined;
     const previousDeviceId = this.deviceId;
@@ -2408,6 +2416,7 @@ export class TillApp extends LitElement {
         }
         if (overtaken()) return;
         show();
+        this.#sayIfSwitched(from);
         this.deviceMode = true;
         if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
         this.#setScreen("station");
@@ -2430,6 +2439,19 @@ export class TillApp extends LitElement {
       }
     }
     this.#configureSessionActivity();
+  }
+
+  #sayIfSwitched(from: KitchenScreenKind | undefined): void {
+    const now = this.initialDeviceStation
+      ? "station"
+      : this.initialDevicePass
+        ? "pass"
+        : this.initialDevicePassMonitor
+          ? "pass_monitor"
+          : undefined;
+    if (from === undefined || now === undefined || now === from) return;
+    this.kitchenScreenSwitched = now;
+    this.#switchedTimer = setTimeout(() => (this.kitchenScreenSwitched = undefined), 10_000);
   }
 
   async #readKitchenScreen(screens: readonly ResolvedKitchenScreen[]): Promise<() => void> {
@@ -8769,6 +8791,7 @@ export class TillApp extends LitElement {
       .initialDevicePass=${this.initialDevicePass}
       .initialDevicePassMonitor=${this.initialDevicePassMonitor}
       .kitchenScreenNotice=${this.kitchenScreenNotice}
+      .kitchenScreenSwitched=${this.kitchenScreenSwitched}
       .menus=${tableTab ? this.tableMenus : this.menus}
       .zoneId=${tableTab ? (this.#tableZoneId ?? "") : this.counterServiceZoneId}
       .service=${tableTab ? this.tableService : this.counterService}
@@ -8978,7 +9001,8 @@ export class TillApp extends LitElement {
         @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}
         @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}
-        @kitchen-screen-changed=${() => void this.#boot()}
+        @kitchen-screen-changed=${(event: CustomEvent<{ from?: KitchenScreenKind } | null>) =>
+          void this.#boot(event.detail?.from)}
         @switch-device=${() => void this.#onSwitchDevice()}
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
         @show-expo=${() => this.#requestLeave(() => this.#onShowExpo())}

@@ -466,6 +466,95 @@ describe("till-expo-screen", () => {
         expect(reboot).not.toHaveBeenCalled();
       }));
 
+    async function switching(run: (switched: ReturnType<typeof vi.fn>) => Promise<void>) {
+      const switched = vi.fn();
+      document.addEventListener("kitchen-screen-changed", switched);
+      try {
+        await run(switched);
+      } finally {
+        document.removeEventListener("kitchen-screen-changed", switched);
+      }
+    }
+    const fromOf = (switched: ReturnType<typeof vi.fn>) =>
+      (switched.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from;
+
+    it("a Done refused device.unauthorized asks at once to switch, naming the pass screen", () =>
+      switching(async (switched) => {
+        const api = stubApi([], {
+          getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
+          markDevicePassDone: vi.fn().mockRejectedValue(refused()),
+        });
+        const el = await mount({ api, deviceMode: true, initialDevicePass: deviceBoard() });
+        el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+        await flush(el);
+        expect(switched).toHaveBeenCalledTimes(1);
+        expect(fromOf(switched)).toBe("pass");
+        expect(api.getDevicePassScreen).not.toHaveBeenCalled();
+      }));
+
+    it("an Undo refused device.unauthorized asks at once to switch", () =>
+      switching(async (switched) => {
+        const api = stubApi([], {
+          getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
+        });
+        const el = await mount({ api, deviceMode: true, initialDevicePass: deviceBoard() });
+        el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+        await flush(el);
+        vi.mocked(api.markDevicePassDone).mockRejectedValue(refused());
+        vi.mocked(api.getDevicePassScreen).mockClear();
+        el.shadowRoot!.querySelector<HTMLElement>("[data-undo]")!.click();
+        await flush(el);
+        expect(switched).toHaveBeenCalledTimes(1);
+        expect(fromOf(switched)).toBe("pass");
+        expect(api.getDevicePassScreen).not.toHaveBeenCalled();
+      }));
+
+    it.each([
+      [
+        "kitchen_screen.not_allowed",
+        { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
+      ],
+      ["device.unauthorized", refused()],
+    ])("a course lever refused %s asks at once to switch", (_code, error) =>
+      switching(async (switched) => {
+        const api = stubApi([], {
+          getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
+          fireDeviceCourse: vi.fn().mockRejectedValue(error),
+        });
+        const el = await mount({
+          api,
+          deviceMode: true,
+          fireControl: "expo",
+          runsPass: true,
+          initialDevicePass: deviceBoard(),
+        });
+        el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+        await flush(el);
+        expect(switched).toHaveBeenCalledTimes(1);
+        expect(fromOf(switched)).toBe("pass");
+        expect(api.getDevicePassScreen).not.toHaveBeenCalled();
+      }),
+    );
+
+    it("a lever refused kitchen_screen.zone_not_allowed does not switch, and says why", () =>
+      switching(async (switched) => {
+        const api = stubApi([], {
+          getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
+          fireDeviceCourse: vi.fn().mockRejectedValue({ code: "kitchen_screen.zone_not_allowed" }),
+        });
+        const el = await mount({
+          api,
+          deviceMode: true,
+          fireControl: "expo",
+          runsPass: true,
+          initialDevicePass: deviceBoard(),
+        });
+        el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+        await flush(el);
+        expect(switched).not.toHaveBeenCalled();
+        expect(el.shadowRoot!.querySelector("[data-lever-error]")).not.toBeNull();
+      }));
+
     it("at a till, a refused pass read re-boots nothing", () =>
       listening(async (reboot) => {
         vi.useFakeTimers({
@@ -2325,6 +2414,28 @@ describe("till-expo-screen — a seated party's groups", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
       `#9 Mesa 4: ${codeMessage("kitchen_screen.zone_not_allowed")}`,
     );
+  });
+
+  it("a kitchen display's group lever refused kitchen_screen.not_allowed asks at once to switch", async () => {
+    const switched = vi.fn();
+    document.addEventListener("kitchen-screen-changed", switched);
+    try {
+      const { api, board } = devicePartyApi({
+        bumpDeviceGroupReady: vi
+          .fn()
+          .mockRejectedValue({ code: "kitchen_screen.not_allowed", params: { screen: "pass" } }),
+      });
+      const el = await mount({ api, deviceMode: true, runsPass: true, initialDevicePass: board });
+      el.shadowRoot!.querySelector<HTMLElement>('[data-group-ready="g-2"]')!.click();
+      await flush(el);
+      expect(switched).toHaveBeenCalledTimes(1);
+      expect((switched.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from).toBe(
+        "pass",
+      );
+      expect(api.getDevicePassScreen).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("kitchen-screen-changed", switched);
+    }
   });
 
   it("offers a kitchen display no group lever without Run the pass", async () => {

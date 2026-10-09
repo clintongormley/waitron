@@ -38,6 +38,11 @@ export function kitchenScreenNoticeText(notice: KitchenScreenNotice): string {
   }
 }
 
+/** "Now showing: Station screen", after a refused press re-read the device's choice. */
+export function kitchenScreenSwitchedText(kind: KitchenScreenKind): string {
+  return t("kitchen_screen.switched").replace("{screen}", t(SCREEN_NAME[kind]));
+}
+
 /** "This station is no longer available: Deli", for a station or zone a narrowing took. */
 export function lostSlotLine(slot: "station" | "zone", name: string): string {
   return t(slot === "station" ? "station.unavailable" : "zone.unavailable").replace(
