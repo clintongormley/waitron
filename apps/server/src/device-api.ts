@@ -2,7 +2,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   deviceProfiles,
@@ -885,7 +885,10 @@ async function worksStation(
   const slot = screen.stations.find((candidate) => candidate.id === stationId);
   if (slot !== undefined) return slot.available || slot.switchedOff;
   if (!(screen.everyStation && screen.profileEveryStation)) return false;
-  const station = (await stationsHere(tx, cfg)).find((candidate) => candidate.id === stationId);
+  const [station] = await tx
+    .select({ active: kitchenStations.active })
+    .from(kitchenStations)
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.locationId, cfg.locationId)));
   if (station === undefined || station.active) return false;
   return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;
 }

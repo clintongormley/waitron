@@ -8,6 +8,7 @@ import {
   devices,
   deviceProfiles,
   kitchenStations,
+  locations,
   printJobs,
   printers,
   stationPrinters,
@@ -1274,6 +1275,26 @@ describe("Device API — the device-guarded routes", () => {
       const after = await advance(app, jar, items[1]!, "ready");
       expect(after.status).toBe(403);
       expect(await after.json()).toMatchObject({ error: { code: "device.forbidden_station" } });
+    });
+
+    it("refuses, on an every-station screen, a switched-off station's dish at another location", async () => {
+      const { venue, app, fria, items } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, null);
+      const [elsewhere] = await suite.db
+        .insert(locations)
+        .values({ name: "Otro local", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+        .returning({ id: locations.id });
+      await switchStationOff(fria);
+      await suite.db
+        .update(kitchenStations)
+        .set({ locationId: elsewhere!.id })
+        .where(eq(kitchenStations.id, fria));
+
+      const refused = await advance(app, jar, items[1]!, "preparing");
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "device.forbidden_station", params: { stationId: fria } },
+      });
     });
 
     it("reads the device's kitchen screens once per request, on an every-station screen too", async () => {
