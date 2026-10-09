@@ -62,7 +62,7 @@ import type {
   RoutingRefusal,
 } from "./routing-grid.js";
 import { t } from "./strings.js";
-import "./station-health-table.js";
+import "./station-table.js";
 import "./station-editor.js";
 import {
   refusalOf,
@@ -1059,7 +1059,7 @@ export class PrepStationsScreen extends LitElement {
   }
   #stationTable() {
     return this.renderRoot
-      .querySelector("prep-station-health-table")
+      .querySelector("prep-station-table")
       ?.shadowRoot?.querySelector("wt-data-table");
   }
   #moveStation(id: string, to: number) {
@@ -1080,7 +1080,7 @@ export class PrepStationsScreen extends LitElement {
     await this.#act(() => this.api.reorderStations(ids));
     this.stationOrder = undefined;
     await this.updateComplete;
-    const stations = this.renderRoot.querySelector("prep-station-health-table");
+    const stations = this.renderRoot.querySelector("prep-station-table");
     if (stations) await stations.updateComplete;
     const table = this.#stationTable();
     if (table) await table.updateComplete;
@@ -3090,7 +3090,7 @@ export class PrepStationsScreen extends LitElement {
                 >
                   ${this.stationAnnouncement}
                 </div>
-                <prep-station-health-table
+                <prep-station-table
                   .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
                   .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .today=${Object.fromEntries(
@@ -3099,7 +3099,7 @@ export class PrepStationsScreen extends LitElement {
                       return [station.id, status === nothing ? "" : status];
                     }),
                   )}
-                ></prep-station-health-table>
+                ></prep-station-table>
               </div>
               ${
                 this.readOnly

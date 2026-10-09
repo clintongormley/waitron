@@ -4,7 +4,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { PrepStation } from "./routing-client.js";
-import "./station-health-table.js";
+import "./station-table.js";
 afterEach(() => {
   cleanup();
   setLocale("en");
@@ -19,7 +19,7 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
   it.each(["manager", "supervisor", "empty"] as const)("checks %s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
-    const el = document.createElement("prep-station-health-table");
+    const el = document.createElement("prep-station-table");
     el.stations = state === "empty" ? [] : stations;
     el.today = { bar: "Always open", old: "Disabled" };
     el.actions =

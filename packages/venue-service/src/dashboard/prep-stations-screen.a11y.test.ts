@@ -456,7 +456,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     if (action) {
       const selector = `[data-test="${action}-bar"]`;
       const summary = el
-        .shadowRoot!.querySelector("prep-station-health-table")!
+        .shadowRoot!.querySelector("prep-station-table")!
         .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
       (el.shadowRoot!.querySelector<HTMLElement>(selector) ??
         summary.querySelector<HTMLElement>(selector))!.click();

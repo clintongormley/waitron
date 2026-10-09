@@ -238,7 +238,7 @@ const q = (el: PrepStationsScreen, s: string) =>
   el
     .shadowRoot!.querySelector('[data-test="watchers-table"]')
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
-  healthSummary(el)?.querySelector<HTMLElement>(s) ??
+  stationTable(el)?.querySelector<HTMLElement>(s) ??
   null;
 async function routingGrid(el: PrepStationsScreen) {
   const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
@@ -324,7 +324,7 @@ it.each([
     .replace("default-", "make-default-")
     .replace("switch-off-", "disable-")
     .replace("switch-on-", "enable-");
-  expect(healthSummary(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
+  expect(stationTable(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
 });
 
 function settingsQ(el: PrepStationsScreen, selector: string) {
@@ -575,9 +575,9 @@ it.each([
 ] as const)("shows station status %j", async (status, expected) => {
   setLocale("en");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(withUpstairs(status)) }));
-  expect(healthRow(el, "upstairs").textContent).toContain(expected);
-  expect(healthRow(el, "bar").textContent).toContain("Always open");
-  expect(healthRow(el, "bar").querySelector('[part="badge"]')?.textContent).toBe("Default");
+  expect(stationRow(el, "upstairs").textContent).toContain(expected);
+  expect(stationRow(el, "bar").textContent).toContain("Always open");
+  expect(stationRow(el, "bar").querySelector('[part="badge"]')?.textContent).toBe("Default");
   expect(q(el, '[data-test="edit-hours-bar"]')).toBeNull();
   expect(q(el, '[data-test="close-today-bar"]')).toBeNull();
 });
@@ -623,7 +623,7 @@ it("keeps station status in Stations instead of repeating it in Routing", async 
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
-  expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
+  expect(stationRow(el, "upstairs").textContent).toContain("Closed now");
   expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
 it("makes no outputs-down read", async () => {
@@ -631,11 +631,11 @@ it("makes no outputs-down read", async () => {
     listOutputsDown: vi.fn().mockResolvedValue({ printersDown: [], screensDark: [] }),
   });
   const el = await mount(a);
-  expect(healthRow(el, "bar").textContent).toContain("Bar");
+  expect(stationRow(el, "bar").textContent).toContain("Bar");
   expect(a.listOutputsDown).not.toHaveBeenCalled();
 });
 function stationHeadings(el: PrepStationsScreen) {
-  return [...(healthSummary(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
+  return [...(stationTable(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
     th.textContent?.trim(),
   );
 }
@@ -648,12 +648,12 @@ it("draws the Stations rows from the stations list with no health read and no he
   });
   expect("readStationHealth" in a).toBe(false);
   const el = await mount(a);
-  expect(healthRow(el, "bar").textContent).toContain("Bar");
-  expect(healthRow(el, "upstairs").textContent).toContain("Upstairs bar");
+  expect(stationRow(el, "bar").textContent).toContain("Bar");
+  expect(stationRow(el, "upstairs").textContent).toContain("Upstairs bar");
   expect(stationHeadings(el)).toEqual(["Name", "Today"]);
   for (const word of ["Waiting", "Being made", "Ready", "Late", "Oldest"])
-    expect(healthSummary(el)!.querySelector("thead")!.textContent).not.toContain(word);
-  expect(healthSummary(el)!.querySelector('[part~="number"]')).toBeNull();
+    expect(stationTable(el)!.querySelector("thead")!.textContent).not.toContain(word);
+  expect(stationTable(el)!.querySelector('[part~="number"]')).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
   const watched = liveData.interests.map((interest) => interest.type);
   for (const type of ["ticket_items", "working_orders", "print_jobs"])
@@ -663,7 +663,7 @@ it("without live data, starts no fifteen-second refresh", async () => {
   const interval = vi.spyOn(window, "setInterval");
   try {
     const el = await mount(api());
-    expect(healthRow(el, "bar").textContent).toContain("Bar");
+    expect(stationRow(el, "bar").textContent).toContain("Bar");
     expect(interval.mock.calls.map(([, delay]) => delay)).not.toContain(15_000);
   } finally {
     interval.mockRestore();
@@ -678,7 +678,7 @@ it("a manager's drag reorder saves the new order with no health read", async () 
   } as Partial<PrepStationsApi>);
   expect("readStationHealth" in a).toBe(false);
   const el = await mount(a);
-  const summary = healthSummary(el)!;
+  const summary = stationTable(el)!;
   const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
   const target = summary
     .querySelector('[data-test="station-menu-bar"]')!
@@ -698,10 +698,8 @@ it("a manager's drag reorder saves the new order with no health read", async () 
   await settle(el);
   expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
 });
-function healthRow(el: PrepStationsScreen, stationId: string) {
-  return healthSummary(el)!
-    .querySelector(`[data-test="station-menu-${stationId}"]`)!
-    .closest("tr")!;
+function stationRow(el: PrepStationsScreen, stationId: string) {
+  return stationTable(el)!.querySelector(`[data-test="station-menu-${stationId}"]`)!.closest("tr")!;
 }
 
 it("keeps whole-station editing out of Routing while showing the grid", async () => {
@@ -1223,9 +1221,9 @@ it.each(["opened_by_hand", "closed_by_hand"] as const)(
     );
     next.routing.todayEnds = { timeOfDay: "06:00", tomorrow: false };
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    expect(healthRow(el, "upstairs").textContent).toContain("until 06:00 today");
+    expect(stationRow(el, "upstairs").textContent).toContain("until 06:00 today");
     if (why === "closed_by_hand")
-      expect(healthRow(el, "upstairs").textContent).toContain(
+      expect(stationRow(el, "upstairs").textContent).toContain(
         "No replacement: the till will ask where to send its dishes.",
       );
     expect(q(el, '[data-test="change-fallback-bar"]')).toBeNull();
@@ -1236,7 +1234,7 @@ it("reports unreadable venue time on every Stations row", async () => {
   next.routing.clockReadable = false;
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   for (const id of ["bar", "upstairs"])
-    expect(healthRow(el, id).textContent).toContain(
+    expect(stationRow(el, id).textContent).toContain(
       "Opening hours are not applied: the venue's time zone or day cutover cannot be read.",
     );
 });
@@ -1414,7 +1412,7 @@ it.each([
     next.stations[1]!.active = false;
     next.routing.stations[1]!.active = false;
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    const row = healthRow(el, "upstairs");
+    const row = stationRow(el, "upstairs");
     expect(row.querySelector('[part="badge"]')!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(hint);
     const back = q(el, '[data-test="enable-upstairs"]')!;
@@ -1496,7 +1494,7 @@ it("refreshes the saved fallback when the following disable fails", async () => 
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
   expect((await openSettingsFallback(el)).value).toBe("bar");
-  expect(healthRow(el, "upstairs").textContent).toContain("Its work goes to Bar.");
+  expect(stationRow(el, "upstairs").textContent).toContain("Its work goes to Bar.");
   expect(
     q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
   ).toContain("could not be saved");
@@ -1515,9 +1513,9 @@ it("localizes the fallback search field in Spanish", async () => {
   );
 });
 
-function healthSummary(el: PrepStationsScreen) {
+function stationTable(el: PrepStationsScreen) {
   return el.shadowRoot
-    ?.querySelector("prep-station-health-table")
+    ?.querySelector("prep-station-table")
     ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
 }
 it("a live routing refresh keeps an open New station draft", async () => {
@@ -1533,7 +1531,7 @@ it("a live routing refresh keeps an open New station draft", async () => {
   expect(name).toBeTruthy();
   name!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft station" } }));
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() => expect(healthRow(el, "bar").textContent).toContain("Renamed bar"));
+  await vi.waitFor(() => expect(stationRow(el, "bar").textContent).toContain("Renamed bar"));
   expect(load).toHaveBeenCalledTimes(2);
   expect(name!.isConnected).toBe(true);
   expect(name!.value).toBe("Draft station");
@@ -1544,7 +1542,7 @@ it("releases its interests and clock on detach", async () => {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(view);
     const el = await mount(api({ liveData, load }));
-    expect(healthRow(el, "bar").textContent).toContain("Bar");
+    expect(stationRow(el, "bar").textContent).toContain("Bar");
     el.remove();
     expect(liveData.interests).toEqual([]);
     const count = load.mock.calls.length;
@@ -1591,7 +1589,7 @@ it("a station whose status has not arrived leaves Today blank", async () => {
       load: vi.fn().mockResolvedValue({ ...view, routing: { ...view.routing, stationTimes: [] } }),
     }),
   );
-  const row = healthSummary(el)?.querySelector("tbody tr");
+  const row = stationTable(el)?.querySelector("tbody tr");
   expect(row).toBeTruthy();
   expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });
@@ -1700,7 +1698,7 @@ it("has no station hours section, editor or Today actions", async () => {
   for (const id of ["bar", "upstairs"]) expect(q(el, `[data-test="edit-hours-${id}"]`)).toBeNull();
   expect(customElements.get("station-hours-form")).toBeUndefined();
   expect(el.shadowRoot!.textContent).not.toContain("Edit hours");
-  expect(healthRow(el, "upstairs").querySelector('[data-test="close-today-upstairs"]')).toBeNull();
+  expect(stationRow(el, "upstairs").querySelector('[data-test="close-today-upstairs"]')).toBeNull();
   expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
   expect(el.shadowRoot!.querySelector("station-hours-form")).toBeNull();
 });
@@ -1721,7 +1719,7 @@ it("Today redraws the scheduled label when the next background read no longer ca
       background: { load: vi.fn().mockResolvedValue(nextDay) } as unknown as PrepStationsApi,
     });
     const cell = () =>
-      healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
     expect(cell().textContent).toContain(
       "Closed now, closed by hand until 06:00 tomorrow. Its work goes to Bar.",
     );
@@ -1890,7 +1888,7 @@ async function mountToday(
 it("Today leaves default and unscheduled stations always open without a closure action", async () => {
   setLocale("en");
   const { el } = await mountToday(withUpstairs({ open: true, why: "no_hours" }));
-  const rows = healthSummary(el)!.querySelectorAll("tbody tr");
+  const rows = stationTable(el)!.querySelectorAll("tbody tr");
   for (const row of rows) {
     expect(row.querySelectorAll("td")[1]!.textContent!.trim()).toBe("Always open");
     expect(row.querySelectorAll("td")[1]!.querySelector("wt-button")).toBeNull();
@@ -1908,7 +1906,7 @@ it("Today names the chosen destination without offering a schedule action", asyn
       },
     ),
   );
-  const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+  const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
   expect(cell.textContent).toContain("Its work goes to Bar.");
   expect(cell.querySelector("wt-button")).toBeNull();
   expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
@@ -1919,7 +1917,7 @@ it("Today offers no hours action for disabled stations or an unreadable venue cl
   next.stations[1]!.active = false;
   next.routing.clockReadable = false;
   const { el } = await mountToday(next);
-  const cells = [...healthSummary(el)!.querySelectorAll("tbody tr")].map(
+  const cells = [...stationTable(el)!.querySelectorAll("tbody tr")].map(
     (row) => row.querySelectorAll("td")[1]!,
   );
   expect(cells[0]!.textContent).toContain("cannot be read");
@@ -1968,7 +1966,7 @@ it.each([
     const canvas = getComputedStyle(host).backgroundColor;
     document.body.style.background = canvas;
     document.documentElement.style.background = canvas;
-    const summary = healthSummary(el)!;
+    const summary = stationTable(el)!;
     expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
     expect(summary.querySelector('[data-test="schedule-closed"]')).toBeNull();
     expect(summary.textContent).toContain(
@@ -2019,7 +2017,7 @@ it.each([
         },
       }),
     );
-    const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+    const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
     expect(cell.textContent).toContain(expected);
     expect(
       cell.querySelector(`[data-test="${open ? "close" : "open"}-today-upstairs"]`),
@@ -2052,11 +2050,11 @@ it.each([false, true])(
         ...(live ? { liveData: new LiveData() } : {}),
         background: { load: backgroundLoad } as unknown as PrepStationsApi,
       });
-      expect(healthSummary(el)!.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
-      expect(healthSummary(el)!.textContent).toContain("Opens at 12:00");
+      expect(stationTable(el)!.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
+      expect(stationTable(el)!.textContent).toContain("Opens at 12:00");
       await vi.advanceTimersByTimeAsync(60_000);
       await settle(el);
-      const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
       expect(cell.textContent).toContain("Open until 01:00 tomorrow");
       expect(cell.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
       expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
@@ -2080,7 +2078,7 @@ it.each([
     const next = withUpstairs({ open: true, why: "in_hours" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
     const { el } = await mountToday(next);
-    const summary = healthSummary(el)!;
+    const summary = stationTable(el)!;
     const menu = summary.querySelector('wt-row-actions[data-test="station-menu-upstairs"]');
     expect(menu).not.toBeNull();
     expect(menu!.getAttribute("label")).toContain("Upstairs bar");
@@ -2097,7 +2095,7 @@ it("renames from Stations without submitting timing settings and closes before a
   const next = withUpstairs({ open: true, why: "in_hours" });
   const load = vi.fn().mockResolvedValueOnce(next).mockRejectedValue({ code: "connection.failed" });
   const { el, a } = await mountToday(next, { load });
-  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
+  const action = stationTable(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
@@ -2118,7 +2116,7 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
       .mockRejectedValueOnce({ code: "station.name_taken" })
       .mockResolvedValue(undefined),
   });
-  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
+  const action = stationTable(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
@@ -2147,14 +2145,14 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
 it("Stations row actions reuse default and retained disable/enable writes", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
   const { el, a } = await mountToday(next, { activateStation: vi.fn() });
-  const makeDefault = healthSummary(el)!.querySelector<HTMLElement>(
+  const makeDefault = stationTable(el)!.querySelector<HTMLElement>(
     '[data-test="make-default-upstairs"]',
   );
   expect(makeDefault).not.toBeNull();
   makeDefault!.click();
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("upstairs");
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="disable-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="disable-upstairs"]')!.click();
   await settle(el);
   expect(a.deactivateStation).not.toHaveBeenCalled();
   q(el, '[data-test="confirm-station-action"]')!.click();
@@ -2166,7 +2164,7 @@ it("Stations row actions reuse default and retained disable/enable writes", asyn
   next.stations[1]!.active = false;
   await (el as unknown as { requestUpdate(): void }).requestUpdate();
   await settle(el);
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="enable-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="enable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
@@ -2181,18 +2179,18 @@ it("reorders Stations with the keyboard, retains focus and leaves routing cells 
     });
   });
   const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
   expect(handle).not.toBeNull();
   handle!.focus();
   handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await settle(el);
   expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
   expect(
-    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
   ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
-  expect(healthSummary(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
+  expect(stationTable(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
   expect(next.routing.cells).toEqual(view.routing.cells);
   expect(next.routing.defaultStationId).toBe(view.routing.defaultStationId);
 });
@@ -2201,14 +2199,14 @@ it("restores the Stations order after refusal and never moves disabled rows", as
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
   const order = vi.fn().mockRejectedValue({ code: "connection.failed" });
   const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  expect(healthSummary(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
-  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  expect(stationTable(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
+  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
   expect(handle).not.toBeNull();
   handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await settle(el);
   expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
   expect(
-    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
   ).toEqual(["station-menu-bar", "station-menu-upstairs", "station-menu-retired"]);
@@ -2218,7 +2216,7 @@ it("persists a pointer reorder once on release and releases the drag on disconne
   const next = withUpstairs({ open: true, why: "in_hours" });
   const order = vi.fn().mockResolvedValue(undefined);
   const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const summary = healthSummary(el)!;
+  const summary = stationTable(el)!;
   const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
   expect(handle).not.toBeNull();
   const target = summary
@@ -2240,7 +2238,7 @@ it("persists a pointer reorder once on release and releases the drag on disconne
   document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
   await settle(el);
   expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-  const nextHandle = healthSummary(el)!.querySelector<HTMLButtonElement>(
+  const nextHandle = stationTable(el)!.querySelector<HTMLButtonElement>(
     '[data-test="drag-upstairs"]',
   )!;
   nextHandle.dispatchEvent(
@@ -2263,7 +2261,7 @@ it("keeps a general rename refusal below the field and permits retry", async () 
       .mockRejectedValueOnce({ code: "connection.failed" })
       .mockResolvedValue(undefined),
   });
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
   q(el, '[data-test="save-station-edit"]')!.click();
@@ -2282,7 +2280,7 @@ it("announces the reordered station and its position to a screen reader", async 
   const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
     reorderStations: vi.fn().mockResolvedValue(undefined),
   });
-  healthSummary(el)!
+  stationTable(el)!
     .querySelector<HTMLElement>('[data-test="drag-upstairs"]')!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await settle(el);
@@ -2322,7 +2320,7 @@ it.each([
       host.style.background = "var(--wt-color-bg)";
       document.body.style.background = getComputedStyle(host).backgroundColor;
       document.documentElement.style.background = getComputedStyle(host).backgroundColor;
-      const menu = healthSummary(el)!.querySelector(
+      const menu = stationTable(el)!.querySelector(
         'wt-row-actions[data-test="station-menu-upstairs"]',
       )!;
       await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
@@ -2346,7 +2344,7 @@ it.each([
         .querySelector<HTMLElement>('wt-button[slot="cancel"]')!
         .click();
       await settle(el);
-      const disabledMenu = healthSummary(el)!.querySelector(
+      const disabledMenu = stationTable(el)!.querySelector(
         'wt-row-actions[data-test="station-menu-retired"]',
       )!;
       await page.elementLocator(disabledMenu.shadowRoot!.querySelector("button")!).click();
@@ -3728,7 +3726,7 @@ it("a supervisor sees the stations read-only", async () => {
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.shadowRoot!.querySelectorAll('[role="tab"]')).toHaveLength(1);
-  const summary = healthSummary(el)!;
+  const summary = stationTable(el)!;
   expect(summary.textContent).toContain("Upstairs bar");
   expect(summary.textContent).toContain("Open now");
   expect(summary.querySelector("wt-row-actions")).toBeNull();
@@ -3877,12 +3875,12 @@ it.each(["ArrowUp", "Enter", "ArrowLeft"])(
     const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
       reorderStations: order,
     });
-    const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
+    const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
     handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     await settle(el);
     expect(order).not.toHaveBeenCalled();
     expect(
-      [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+      [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
         row.querySelector("wt-row-actions")!.getAttribute("data-test"),
       ),
     ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
@@ -3894,10 +3892,8 @@ it("Stations pointer drag ignores another pointer and outside rows, and a no-op 
   const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
     reorderStations: order,
   });
-  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>(
-    '[data-test="drag-upstairs"]',
-  )!;
-  const first = healthSummary(el)!
+  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
+  const first = stationTable(el)!
     .querySelector('[data-test="station-menu-bar"]')!
     .closest("tr")!
     .getBoundingClientRect();
@@ -3920,7 +3916,7 @@ it("Stations pointer drag ignores another pointer and outside rows, and a no-op 
   await settle(el);
   expect(order).not.toHaveBeenCalled();
   expect(
-    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
   ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
@@ -3956,7 +3952,7 @@ it.each(["tickets", "settings", "stations"])(
     const table =
       tab === "stations"
         ? el
-            .shadowRoot!.querySelector("prep-station-health-table")!
+            .shadowRoot!.querySelector("prep-station-table")!
             .shadowRoot!.querySelector("wt-data-table")!
         : el.shadowRoot!.querySelector(`[data-test="${tab}-table"]`)!;
     await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
@@ -5665,7 +5661,7 @@ it("edge scroll carries a held station past the visible summary and persists on 
   box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
   el.parentElement!.append(box);
   box.append(el);
-  const handle = healthSummary(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
+  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
   box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
   const start = handle.getBoundingClientRect();
   const bounds = box.getBoundingClientRect();
@@ -5712,7 +5708,7 @@ it("edge scroll Escape stops a held station without another reorder on release",
   box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
   el.parentElement!.append(box);
   box.append(el);
-  const handle = healthSummary(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
+  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
   box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
   const start = handle.getBoundingClientRect();
   const bounds = box.getBoundingClientRect();
@@ -5766,7 +5762,7 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
     el.parentElement!.append(box);
     box.append(el);
     const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
-    const handle = healthSummary(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
+    const handle = stationTable(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
     if (action === "up")
       box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
     const start = handle.getBoundingClientRect();

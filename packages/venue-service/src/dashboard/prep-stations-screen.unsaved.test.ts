@@ -125,7 +125,7 @@ async function mount(write?: Promise<void>, refreshFails = false) {
 async function open(screen: PrepStationsScreen, rename: boolean) {
   const root = rename
     ? screen
-        .shadowRoot!.querySelector("prep-station-health-table")!
+        .shadowRoot!.querySelector("prep-station-table")!
         .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!
     : screen.shadowRoot!;
   await expect

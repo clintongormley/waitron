@@ -168,7 +168,7 @@ async function choose(decision: "keep" | "discard") {
 
 async function open(screen: PrepStationsScreen, id = "kitchen") {
   const table = screen
-    .shadowRoot!.querySelector("prep-station-health-table")!
+    .shadowRoot!.querySelector("prep-station-table")!
     .shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>(`[data-test=disable-${id}]`)!.click();

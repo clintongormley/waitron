@@ -5,8 +5,8 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import type { PrepStation } from "./routing-client.js";
 import { t } from "./strings.js";
 
-@customElement("prep-station-health-table")
-export class StationHealthTable extends LitElement {
+@customElement("prep-station-table")
+export class StationTable extends LitElement {
   static override styles = [
     baseStyles,
     css`
@@ -73,7 +73,7 @@ export class StationHealthTable extends LitElement {
     );
     return html`<wt-data-table
       aria-label=${t("prep.title")}
-      data-test="health-summary"
+      data-test="station-table"
       .columns=${this.#columns()}
       .rows=${rows}
       .rowKey=${(station: PrepStation) => station.id}
@@ -83,6 +83,6 @@ export class StationHealthTable extends LitElement {
 }
 declare global {
   interface HTMLElementTagNameMap {
-    "prep-station-health-table": StationHealthTable;
+    "prep-station-table": StationTable;
   }
 }

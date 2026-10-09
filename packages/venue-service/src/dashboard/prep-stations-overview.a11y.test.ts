@@ -96,12 +96,12 @@ it.each([
       await vi.waitFor(() =>
         expect(
           screen
-            .shadowRoot!.querySelector("prep-station-health-table")
+            .shadowRoot!.querySelector("prep-station-table")
             ?.shadowRoot?.querySelector("wt-data-table")
             ?.shadowRoot?.querySelector("tbody tr")?.textContent,
         ).toContain("Bar"),
       );
-      const health = screen.shadowRoot!.querySelector("prep-station-health-table")!;
+      const health = screen.shadowRoot!.querySelector("prep-station-table")!;
       const table = health.shadowRoot!.querySelector("wt-data-table")!;
       expect(table.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
       expect(table.shadowRoot!.querySelector('[part~="number"]')).toBeNull();

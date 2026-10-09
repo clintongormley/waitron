@@ -29,7 +29,7 @@ async function mount(stations: readonly PrepStation[] = [bar], theme: "light" | 
   host.style.color = "var(--wt-color-text)";
   hosts.push(host);
   document.body.append(host);
-  const el = document.createElement("prep-station-health-table") as StationTable;
+  const el = document.createElement("prep-station-table") as StationTable;
   el.stations = stations;
   el.today = { bar: "Always open" };
   host.append(el);
