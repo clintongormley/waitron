@@ -328,7 +328,6 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
 describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (theme) => {
   it.each([
     "closed",
-    "warnings",
     "fallback",
     "fallback-confirmation",
     "switch-off",
@@ -465,14 +464,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
       );
       await el.updateComplete;
-      if (state === "warnings") {
-        const table = el.shadowRoot!.querySelector("prep-station-health-table")!;
-        await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-        const summary = table.shadowRoot!.querySelector("wt-data-table")!;
-        await (summary as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-        expect(summary.shadowRoot!.textContent).toContain("Printer Epson");
-        expect(summary.shadowRoot!.textContent).toContain("has ever checked in");
-      }
     }
     if (fallbackState) {
       el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(

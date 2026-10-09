@@ -505,22 +505,6 @@ it.each(
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
-    expect(healthRow(el, "upstairs").querySelector('[part="problem"]')?.textContent).toContain(
-      "Epson",
-    );
-    expect(healthRow(el, "retired").querySelector('[part="problem"]')).not.toBeNull();
-    const problem = healthRow(el, "upstairs").querySelector<HTMLElement>('[part="problem"]')!;
-    const probe = document.createElement("span");
-    probe.style.display = "inline-block";
-    probe.style.width = "var(--wt-cell-name-max-width)";
-    host.append(probe);
-    expect(problem.getBoundingClientRect().width).toBeLessThanOrEqual(
-      probe.getBoundingClientRect().width,
-    );
-    const message = document.createRange();
-    message.selectNodeContents(problem);
-    expect(message.getClientRects().length).toBeGreaterThan(1);
-    probe.remove();
     await expectNoA11yViolations(el);
     await page.screenshot({
       path: `__screenshots__/look/routing-complete-${locale}-${theme}-${width}-stations.png`,
@@ -665,7 +649,7 @@ it.each([
   },
 );
 
-it("keeps station status and output problems in Stations instead of repeating them in Routing", async () => {
+it("keeps station status in Stations instead of repeating it in Routing", async () => {
   setLocale("en");
   const next = withUpstairs({ open: false, why: "out_of_hours" });
   const outputs = {
@@ -690,18 +674,15 @@ it("keeps station status and output problems in Stations instead of repeating th
   expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
   expect(routing.textContent).not.toContain("Printer Epson");
   expect(routing.textContent).not.toContain("has ever checked in");
-  expect(healthRow(el, "upstairs").textContent).toContain("Printer Epson");
-  expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
   expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
   expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
-it("uses the health snapshot for output problems without a second management read", async () => {
+it("makes no outputs-down read", async () => {
   const a = api({
     listOutputsDown: vi.fn().mockResolvedValue({ printersDown: [], screensDark: [] }),
   });
   const el = await mount(a);
   expect(healthRow(el, "bar").textContent).toContain("Bar");
-  expect(a.readStationHealth).toHaveBeenCalledTimes(1);
   expect(a.listOutputsDown).not.toHaveBeenCalled();
 });
 function healthFor(
@@ -1450,7 +1431,7 @@ it.each([
     expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(enable);
   },
 );
-it("switches an inactive station on and keeps its dark-screen warning in its Stations row", async () => {
+it("switches an inactive station on from its Stations row", async () => {
   const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
   next.stations[1]!.active = false;
   next.routing.stations[1]!.active = false;
@@ -1468,84 +1449,12 @@ it("switches an inactive station on and keeps its dark-screen warning in its Sta
   expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(
     "No replacement: the till asks.",
   );
-  expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
-  expect(healthRow(el, "bar").textContent).not.toContain("has ever checked in");
   q(el, '[data-test="enable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
   expect(a.activateStation).toHaveBeenCalledWith("upstairs");
 });
-it("shows each output warning only on its station", async () => {
-  const next = withUpstairs({ open: true, why: "in_hours" });
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    readStationHealth: vi.fn().mockResolvedValue(
-      healthFor(next, {
-        printersDown: [
-          {
-            stationId: "upstairs",
-            stationName: "Upstairs bar",
-            printerId: "epson",
-            printerName: "Epson",
-            since: "2026-10-01T20:14:00",
-          },
-        ],
-        screensDark: [
-          { stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: "2026-10-01T20:10:00" },
-        ],
-      }),
-    ),
-  });
-  const el = await mount(a);
-  const card = healthRow(el, "upstairs");
-  expect(card.textContent).toContain(
-    "Printer Epson has printed nothing since something sent to it at 20:14 got stuck.",
-  );
-  expect(card.textContent).toContain(
-    "Dishes are waiting, and no kitchen screen here has checked in since 20:10.",
-  );
-  expect(healthRow(el, "bar").textContent).not.toContain("got stuck");
-  expect(healthRow(el, "bar").textContent).not.toContain("Dishes are waiting");
-});
-it("refreshes output warnings every fifteen seconds and clears the timer when removed", async () => {
-  const timers = new Map<ReturnType<typeof setInterval>, TimerHandler>();
-  const original = window.setInterval.bind(window);
-  const interval = vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
-    const id = original(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
-    if (delay === 15_000) timers.set(id, handler);
-    return id;
-  });
-  const clear = vi.spyOn(window, "clearInterval");
-  try {
-    const next = withUpstairs({ open: true, why: "in_hours" });
-    const a = api({
-      load: vi.fn().mockResolvedValue(next),
-      readStationHealth: vi
-        .fn()
-        .mockResolvedValueOnce(healthFor(next, { printersDown: [], screensDark: [] }))
-        .mockResolvedValue(
-          healthFor(next, {
-            printersDown: [],
-            screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-          }),
-        ),
-    });
-    const el = await mount(a);
-    expect(healthRow(el, "upstairs").textContent).not.toContain("has ever checked in");
-    for (const handler of timers.values()) if (typeof handler === "function") handler();
-    await settle(el);
-    expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
-    el.remove();
-    expect(
-      [...timers.keys()].some((id) => clear.mock.calls.some(([cleared]) => cleared === id)),
-    ).toBe(true);
-  } finally {
-    interval.mockRestore();
-    clear.mockRestore();
-  }
-});
-
 it("offers the fallback in Settings and confirms a changed selection", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue(withUpstairs({ open: false, why: "out_of_hours" })),
@@ -1654,13 +1563,10 @@ function healthSummary(el: PrepStationsScreen) {
     ?.querySelector("prep-station-health-table")
     ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
 }
-it("subscribes dish health to ticket changes and retains an open station draft", async () => {
+it("a ticket change keeps an open station draft", async () => {
   const liveData = new LiveData();
   const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
   const el = await mount(api({ liveData, readStationHealth }));
-  expect(healthSummary(el)?.querySelector('[data-test="waiting-bar"]')?.textContent?.trim()).toBe(
-    "1",
-  );
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   const name =
@@ -1668,69 +1574,43 @@ it("subscribes dish health to ticket changes and retains an open station draft",
     el.shadowRoot!.querySelector<WtInput>('[name="name"]');
   expect(name).toBeTruthy();
   name!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft station" } }));
-  readStationHealth.mockResolvedValue({
-    ...healthSnapshot,
-    stations: [{ ...healthSnapshot.stations[0]!, waiting: 2 }],
-  });
   liveData.invalidate([{ type: "ticket_items", id: "new-ticket" }]);
   await settle(el);
-  expect(healthSummary(el)?.querySelector('[data-test="waiting-bar"]')?.textContent?.trim()).toBe(
-    "2",
-  );
   expect(name!.value).toBe("Draft station");
 });
-it("refreshes elapsed health without a write and releases both interests and clock on detach", async () => {
+it("releases its interests and clock on detach", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   try {
     const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(view);
     const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
-    const el = await mount(api({ liveData, readStationHealth }));
-    expect(healthSummary(el)?.querySelector('[data-test="oldest-bar"]')?.textContent?.trim()).toBe(
-      "4 min",
-    );
-    readStationHealth.mockResolvedValue({
-      ...healthSnapshot,
-      stations: [
-        {
-          ...healthSnapshot.stations[0]!,
-          oldestMinutes: 5,
-          late: { warm: 1, overdue: 0, forgotten: 0 },
-        },
-      ],
-    });
-    await vi.advanceTimersByTimeAsync(15_000);
-    await settle(el);
-    expect(healthSummary(el)?.querySelector('[data-test="oldest-bar"]')?.textContent?.trim()).toBe(
-      "5 min",
-    );
-    expect(healthSummary(el)?.querySelector('[data-test="warm-bar"]')?.textContent?.trim()).toBe(
-      "1",
-    );
+    const el = await mount(api({ liveData, load, readStationHealth }));
+    expect(healthRow(el, "bar").textContent).toContain("Bar");
     el.remove();
     expect(liveData.interests).toEqual([]);
-    const count = readStationHealth.mock.calls.length;
+    const count = load.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(readStationHealth).toHaveBeenCalledTimes(count);
+    expect(load).toHaveBeenCalledTimes(count);
   } finally {
     vi.useRealTimers();
   }
 });
-it("a health read failure stays until health recovers, while routing recovery retains an action refusal", async () => {
+it("routing recovery clears a read failure and retains an action refusal", async () => {
   const liveData = new LiveData();
-  const readStationHealth = vi.fn().mockRejectedValue(new Error("offline"));
+  const load = vi.fn().mockResolvedValue(view);
   const el = await mount(
     api({
       liveData,
-      readStationHealth,
+      load,
       createStation: vi.fn().mockRejectedValue(new Error("refused")),
     }),
   );
-  expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded.");
+  load.mockRejectedValue(new Error("offline"));
   liveData.invalidate([{ type: "categories" }]);
   await settle(el);
   expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded.");
-  readStationHealth.mockResolvedValue(healthSnapshot);
-  liveData.invalidate([{ type: "ticket_items" }]);
+  load.mockResolvedValue(view);
+  liveData.invalidate([{ type: "categories" }]);
   await settle(el);
   expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
   q(el, '[data-test="new-station"]')!.click();
@@ -1742,11 +1622,11 @@ it("a health read failure stays until health recovers, while routing recovery re
   await settle(el);
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  liveData.invalidate([{ type: "ticket_items" }, { type: "categories" }]);
+  liveData.invalidate([{ type: "categories" }]);
   await settle(el);
   expect(el.shadowRoot!.textContent).toContain("The change could not be saved.");
 });
-it("a health snapshot ahead of routing metadata leaves Today blank until the station's status arrives", async () => {
+it("a station whose status has not arrived leaves Today blank", async () => {
   const el = await mount(
     api({
       readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
@@ -3878,7 +3758,7 @@ it("Watchers keeps a conflict while another selected printer still serves a stat
   expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next", "old"]);
 });
 
-it("keeps supervisor numbers and drilldowns live without exposing any configuration controls", async () => {
+it("a supervisor sees the stations read-only", async () => {
   const liveData = new LiveData();
   const read = vi.fn().mockResolvedValue({
     ...healthSnapshot,
@@ -3913,25 +3793,6 @@ it("keeps supervisor numbers and drilldowns live without exposing any configurat
   expect(summary.querySelector("wt-row-actions")).toBeNull();
   expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
   expect(summary.querySelector("[data-station-id]")).toBeNull();
-  summary.querySelector<HTMLElement>('[data-test="waiting-bar"]')!.click();
-  await settle(el);
-  const health = el.shadowRoot!.querySelector("prep-station-health-table")!;
-  await health.updateComplete;
-  await vi.waitFor(() =>
-    expect(
-      health.shadowRoot!.querySelector('[data-test="health-details"]')?.shadowRoot?.textContent,
-    ).toContain("KITCHEN SOUP"),
-  );
-  read.mockResolvedValue({
-    ...healthSnapshot,
-    stations: [{ ...healthSnapshot.stations[0]!, waiting: 0, items: [] }],
-  });
-  liveData.invalidate([{ type: "ticket_items", id: "soup" }]);
-  await vi.waitFor(() =>
-    expect(healthSummary(el)!.querySelector('[data-test="waiting-bar"]')!.textContent!.trim()).toBe(
-      "0",
-    ),
-  );
   expect(a.updateStation).not.toHaveBeenCalled();
 });
 

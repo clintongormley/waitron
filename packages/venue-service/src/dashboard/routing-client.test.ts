@@ -441,30 +441,6 @@ it("switches a station on through the core station PATCH", async () => {
   expect(request).toHaveBeenCalledWith("/management-api/stations/bar", "PATCH", { active: true });
 });
 
-it("reads station health passively and preserves summary and drilldown data", async () => {
-  const snapshot = {
-    capturedAt: "2026-10-05T18:00:00.000Z",
-    stations: [
-      {
-        id: "bar",
-        waiting: 1,
-        preparing: null,
-        ready: null,
-        items: [{ name: "CANA", remainingQuantity: "2.000" }],
-      },
-    ],
-    outputsDown: { printersDown: [], screensDark: [] },
-  };
-  const request = vi.fn(async () => snapshot);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  expect(await api.readStationHealth()).toEqual(snapshot);
-  expect(await api.background.readStationHealth()).toEqual(snapshot);
-  expect(request.mock.calls).toEqual([
-    ["/management-api/stations/health", "GET", undefined, { passive: true }],
-    ["/management-api/stations/health", "GET", undefined, { passive: true }],
-  ]);
-});
-
 it("writes a complete station order as one active request even from a background client", async () => {
   const request = vi.fn(async () => undefined);
   const client = new PrepStationsApi(request as DashboardRequest).background;

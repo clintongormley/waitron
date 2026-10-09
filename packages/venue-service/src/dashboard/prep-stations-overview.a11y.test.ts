@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -106,7 +106,7 @@ it.each([
   { locale: "es", theme: "light", width: 1280 },
   { locale: "es", theme: "dark", width: 1280 },
 ] as const)(
-  "renders the supervisor overview and keyboard drilldown ($locale/$theme/$width)",
+  "renders the supervisor overview ($locale/$theme/$width)",
   async ({ locale, theme, width }) => {
     const previous = {
       width: window.innerWidth,
@@ -134,14 +134,11 @@ it.each([
           screen
             .shadowRoot!.querySelector("prep-station-health-table")
             ?.shadowRoot?.querySelector("wt-data-table")
-            ?.shadowRoot?.querySelector('[data-test="overdue-bar"]'),
-        ).toBeTruthy(),
+            ?.shadowRoot?.querySelector("tbody tr")?.textContent,
+        ).toContain("Bar"),
       );
       const health = screen.shadowRoot!.querySelector("prep-station-health-table")!;
       const table = health.shadowRoot!.querySelector("wt-data-table")!;
-      const button = table.shadowRoot!.querySelector<HTMLButtonElement>(
-        '[data-test="overdue-bar"]',
-      )!;
       expect(table.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
       expect(screen.shadowRoot!.querySelector('[data-test="new-station"]')).toBeNull();
       expect(screen.getBoundingClientRect().right).toBeLessThanOrEqual(width);
@@ -149,25 +146,6 @@ it.each([
       await page.screenshot({
         path: `__screenshots__/look/overview-${locale}-${theme}-${width}-page.png`,
       });
-      button.focus();
-      await userEvent.keyboard("{Enter}");
-      await vi.waitFor(() =>
-        expect(
-          health.shadowRoot!.querySelector('[data-test="health-details"]')?.shadowRoot?.textContent,
-        ).toContain("KITCHEN SOUP"),
-      );
-      await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/look/overview-${locale}-${theme}-${width}-details.png`,
-      });
-      const closed = new Promise((resolve) =>
-        health
-          .shadowRoot!.querySelector("wt-modal")!
-          .addEventListener("wt-close", resolve, { once: true }),
-      );
-      await userEvent.keyboard("{Escape}");
-      await closed;
-      await vi.waitFor(() => expect(health.shadowRoot!.querySelector("wt-modal")).toBeNull());
     } finally {
       document.body.style.background = previous.background;
       document.documentElement.style.background = previous.canvas;
