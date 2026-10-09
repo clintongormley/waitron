@@ -576,6 +576,12 @@ text and takes the dark values from the `@media (prefers-color-scheme: dark)` bl
 **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
 there is no copy to keep in step.
 
+**Separate observation, 2026-10-09:** the final live A435-1 catalogue captures at
+`a68dc2188`, with the dashboard forced to the dark theme, showed a nearly black wordmark.
+The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIFIED**.
+**Next action:** measure the browser's media preference and the selected `<picture>` source
+against `data-wt-theme` in the live dashboard before deciding a fix.
+
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
