@@ -1217,6 +1217,18 @@ and classification remain for Task 27. Required project runs and retained-assert
 controls and LOOK receipts are in `task26-report.md` in the campaign receipts directory. Task 26
 has not been marked reviewed or complete; Tasks 27–29 remain, and the branch has not landed.
 
+**2026-10-09 reviewed Task 26 checkpoint:** supersedes the pending-review checkpoint above.
+The first review found lost area readiness/refusal behavior and retained route/constraint
+assertions. Both corrections are approved at `a4482aeb1a8816bb01df5eb33485af514661a54f`;
+`task26-fix-review.md` records scoped spec compliance and quality approval. Final focused runs
+report node 59, browser 173, readiness fixture 2 and restored guards 5 passing tests. Earlier
+server evidence reports 10,124 passing and six binary-dependent skips, detailed in
+`task26-report.md`; it is not a current-head full-package result. Changed-check and fixture
+inventories, controls and inspected captures remain in the lane's receipts directory.
+Tasks 27–29 remain. Task 29 also fixes the unsupported-country Calendar coverage label and
+EN/ES wording (`hours-calendar.ts`, both coverage paths; `dashboard/strings.ts`) to preserve
+owner-entered coverage for own holidays. No PR, push or landing has occurred.
+
 ---
 
 ### Task 27: Migration 0036 — named days lose their colour; local holidays go
