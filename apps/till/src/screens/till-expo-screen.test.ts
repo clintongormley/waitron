@@ -571,6 +571,33 @@ describe("till-expo-screen", () => {
           vi.useRealTimers();
         }
       }));
+
+    it("at a till, a refused Done or lever asks for no switch: Done says why, the lever re-reads", () =>
+      switching(async (switched) => {
+        const api = passApi(
+          [threeCourseOrder],
+          {},
+          {
+            markDevicePassDone: vi.fn().mockRejectedValue(refused()),
+            fireCourse: vi.fn().mockRejectedValue({
+              code: "kitchen_screen.not_allowed",
+              params: { screen: "pass" },
+            }),
+          },
+        );
+        const el = await mount({ api, fireControl: "expo" });
+        el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+        await flush(el);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+          codeMessage("device.unauthorized"),
+        );
+        vi.mocked(api.getDevicePassScreen).mockClear();
+        el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+        await flush(el);
+        expect(api.fireCourse).toHaveBeenCalledWith("wo-1", "co-2");
+        expect(api.getDevicePassScreen).toHaveBeenCalledTimes(1);
+        expect(switched).not.toHaveBeenCalled();
+      }));
   });
 
   it("offers Fire, Ready and Away on a kitchen display with Run the pass, through the device's routes", async () => {
