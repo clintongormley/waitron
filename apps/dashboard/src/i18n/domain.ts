@@ -177,8 +177,8 @@ export function statusName(value: string, locale: string = currentLocale()): str
 
 /** Spanish puts a variant's state in the feminine and a product's in the masculine. */
 export function productStatusName(active: boolean, variant: boolean): string {
-  if (variant) return t(active ? "product.variant_active_badge" : "product.variant_disabled_badge");
-  return t(active ? "product.active_badge" : "product.disabled_badge");
+  if (variant) return t(active ? "product.variant_active_badge" : "product.variant_archived_badge");
+  return t(active ? "product.active_badge" : "product.archived_badge");
 }
 
 export function vatClassName(value: string, locale: string = currentLocale()): string {

@@ -429,7 +429,7 @@ describe("catalogue-screen", () => {
     expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
   });
 
-  async function restoreDuringOutage(api: DashboardApi & { liveData: LiveData }) {
+  async function editDuringOutage(api: DashboardApi & { liveData: LiveData }) {
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     const alert = () => el.shadowRoot!.querySelector("[role=alert]");
@@ -437,11 +437,16 @@ describe("catalogue-screen", () => {
     api.liveData.refresh();
     await vi.waitFor(() => expect(alert()).not.toBeNull());
 
-    emit(list(el), "restore-product", { productId: "p1" });
+    emit(list(el), "edit-product", { productId: "p1" });
     await vi.waitFor(() => expect(api.getProductEditor).toHaveBeenCalledTimes(1));
     await flush(el);
-    expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+    if (!editor(el).open)
+      expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
 
+    if (editor(el).open) {
+      emit(editor(el), "wt-submit", { value });
+      await flush(el);
+    }
     const reads = vi.mocked(api.listUnits).mock.calls.length;
     vi.mocked(api.listUnits).mockResolvedValue(units);
     api.liveData.refresh();
@@ -450,22 +455,22 @@ describe("catalogue-screen", () => {
     return alert;
   }
 
-  it("drops a restore's failed read when the reads that failed beside it recover", async () => {
+  it("drops an editor's failed read when the reads that failed beside it recover", async () => {
     const api = Object.assign(
       stubApi({ getProductEditor: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
-    const alert = await restoreDuringOutage(api);
+    const alert = await editDuringOutage(api);
     expect(api.updateProductEditor).not.toHaveBeenCalled();
     expect(alert()).toBeNull();
   });
 
-  it("keeps a restore's failed write when the reads that failed beside it recover", async () => {
+  it("keeps an editor's failed write when the reads that failed beside it recover", async () => {
     const api = Object.assign(
       stubApi({ updateProductEditor: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
-    const alert = await restoreDuringOutage(api);
+    const alert = await editDuringOutage(api);
     expect(api.updateProductEditor).toHaveBeenCalledTimes(1);
     expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
   });
@@ -501,8 +506,7 @@ describe("catalogue-screen", () => {
     expect(editor(el).locales).toEqual(["es", "en"]);
   });
 
-  // Disable switches the product off and leaves its availability as it was.
-  it("confirms Disable and switches the product off without deleting its history", async () => {
+  it("confirms Archive and switches the product off without changing its availability", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -522,39 +526,36 @@ describe("catalogue-screen", () => {
   it.each([
     [
       "en-GB",
-      "Disable Croquetas",
-      "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
-      "Disable",
+      "Archive Croquetas",
+      "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.",
+      "Archive",
     ],
     [
       "es",
-      "Deshabilitar Croquetas",
-      "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan.",
-      "Deshabilitar",
+      "Archivar Croquetas",
+      "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
+      "Archivar",
     ],
-  ])(
-    "in %s, asks to Disable a product, never to Delete it",
-    async (locale, heading, body, action) => {
-      const before = currentLocale();
-      setLocale(locale);
-      try {
-        const api = stubApi();
-        const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-        await flush(el);
-        emit(list(el), "delete-product", { productId: "p1" });
-        await flush(el);
-        const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
-        expect(dialog.getAttribute("heading")).toBe(heading);
-        expect(dialog.querySelector("p")!.textContent!.trim()).toBe(body);
-        const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
-        expect(confirm.textContent!.trim()).toBe(action);
-      } finally {
-        setLocale(before);
-      }
-    },
-  );
+  ])("in %s, asks to archive a product permanently", async (locale, heading, body, action) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const api = stubApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "p1" });
+      await flush(el);
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+      expect(dialog.getAttribute("heading")).toBe(heading);
+      expect(dialog.querySelector("p")!.textContent!.trim()).toBe(body);
+      const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+      expect(confirm.textContent!.trim()).toBe(action);
+    } finally {
+      setLocale(before);
+    }
+  });
 
-  it("keeps the Disable confirmation open and reports a refused save inside it", async () => {
+  it("keeps the Archive confirmation open and reports a refused save inside it", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
@@ -574,9 +575,54 @@ describe("catalogue-screen", () => {
     expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
   });
 
-  describe("the Disable confirmation names the menus the product comes off", () => {
+  it.each(["archive", "save"])("names the live menus that refuse an %s", async (path) => {
+    const before = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(before));
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "product.on_live_menu",
+        params: {
+          products: [{ id: "v1", name: "Half" }],
+          menus: [
+            { id: "d", name: "Dinner" },
+            { id: "l", name: "Lunch Menu" },
+          ],
+        },
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    let message: Element | null;
+    if (path === "archive") {
+      emit(list(el), "delete-product", { productId: "p1" });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+      await flush(el);
+      message = await formMessageOf(
+        el.shadowRoot!.querySelector("[data-test=delete-dialog] wt-form-actions")!,
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=delete-dialog]")!.hasAttribute("open")).toBe(
+        true,
+      );
+    } else {
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-submit", {
+        value: { ...value, variants: [{ name: "Half", active: false }] },
+      });
+      await flush(el);
+      message = el.shadowRoot!.querySelector("[role=alert]");
+      expect(editor(el).open).toBe(true);
+    }
+    expect(message?.textContent?.trim()).toBe(
+      "It is on a live or scheduled menu. Take it off the menu and publish, then archive it. Menus: Dinner, Lunch Menu.",
+    );
+  });
+
+  describe("the Archive confirmation names the menus the product comes off", () => {
     const warning =
-      "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.";
+      "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.";
     const deferred = <T>() => {
       let resolve!: (value: T) => void;
       let reject!: (reason: unknown) => void;
@@ -590,7 +636,7 @@ describe("catalogue-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
     const bodyOf = (el: CatalogueScreen) =>
       dialogOf(el).querySelector("p")!.textContent!.replace(/\s+/g, " ").trim();
-    async function openDisable(api: DashboardApi, productId = "p1", locale = "en-GB") {
+    async function openArchive(api: DashboardApi, productId = "p1", locale = "en-GB") {
       const before = currentLocale();
       setLocale(locale);
       onTestFinished(() => setLocale(before));
@@ -603,46 +649,46 @@ describe("catalogue-screen", () => {
 
     it("says how many menus it comes off when the product is on two", async () => {
       const api = stubApi({ countProductMenus: vi.fn().mockResolvedValue(2) });
-      const el = await openDisable(api);
+      const el = await openArchive(api);
       expect(api.countProductMenus).toHaveBeenCalledWith(["p1"]);
       expect(bodyOf(el)).toBe(`${warning} It comes off the 2 menus it is on.`);
     });
 
     it("says the one menu it comes off in the singular", async () => {
-      const el = await openDisable(stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }));
+      const el = await openArchive(stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }));
       expect(bodyOf(el)).toBe(`${warning} It comes off the one menu it is on.`);
     });
 
     it("adds nothing when the product is on no menu", async () => {
-      const el = await openDisable(stubApi({ countProductMenus: vi.fn().mockResolvedValue(0) }));
+      const el = await openArchive(stubApi({ countProductMenus: vi.fn().mockResolvedValue(0) }));
       expect(bodyOf(el)).toBe(warning);
     });
 
     it("in Spanish, names the menus as cartas", async () => {
-      const el = await openDisable(
+      const el = await openArchive(
         stubApi({ countProductMenus: vi.fn().mockResolvedValue(3) }),
         "p1",
         "es",
       );
       expect(bodyOf(el)).toBe(
-        "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan. Sale de las 3 cartas en las que está.",
+        "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre. Sale de las 3 cartas en las que está.",
       );
     });
 
-    it("says every menu while the count is still loading, and Disable works meanwhile", async () => {
+    it("says every menu while the count is still loading, and Archive works meanwhile", async () => {
       const api = stubApi({ countProductMenus: vi.fn().mockReturnValue(new Promise(() => {})) });
-      const el = await openDisable(api);
+      const el = await openArchive(api);
       expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: false });
     });
 
-    it("says every menu when the count cannot be read, and Disable still works", async () => {
+    it("says every menu when the count cannot be read, and Archive still works", async () => {
       const api = stubApi({
         countProductMenus: vi.fn().mockRejectedValue({ code: "server.internal" }),
       });
-      const el = await openDisable(api);
+      const el = await openArchive(api);
       expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
       expect(dialogOf(el).textContent).not.toContain(codeMessage("server.internal"));
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
@@ -658,7 +704,7 @@ describe("catalogue-screen", () => {
       const api = stubApi({
         countProductMenus: vi.fn().mockImplementation(() => counts.shift()!.promise),
       });
-      const el = await openDisable(api);
+      const el = await openArchive(api);
       dialogOf(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
       await flush(el);
       emit(list(el), "delete-product", { productId: "p1" });
@@ -681,7 +727,7 @@ describe("catalogue-screen", () => {
           .mockResolvedValueOnce(4)
           .mockReturnValueOnce(new Promise(() => {})),
       });
-      const el = await openDisable(api);
+      const el = await openArchive(api);
       expect(bodyOf(el)).toContain("the 4 menus");
       dialogOf(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
       await flush(el);
@@ -692,14 +738,18 @@ describe("catalogue-screen", () => {
     });
   });
 
-  it("enables a disabled product from its own row through the editor's write, then shows the row as active", async () => {
-    const disabled = [{ ...products[0]!, active: false }];
-    const api = stubApi({
-      listProducts: vi
-        .fn()
-        .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? disabled : [])),
-      getProductEditor: vi.fn().mockResolvedValue({ ...value, active: false }),
-    });
+  async function archivedRowOffersView(api: DashboardApi, productId = "p1") {
+    const original = vi.mocked(api.listProducts).getMockImplementation()!;
+    vi.mocked(api.listProducts).mockImplementation(async (id: string) =>
+      (await original(id)).map((product) => ({
+        ...product,
+        active: product.id === productId ? false : product.active,
+        variants: product.variants.map((variant) => ({
+          ...variant,
+          active: variant.id === productId ? false : variant.active,
+        })),
+      })),
+    );
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     const table = await productTable(el);
@@ -708,31 +758,25 @@ describe("catalogue-screen", () => {
       "",
     );
     table.setExpanded("folder:c1", true);
+    table.setExpanded("p1", true);
     await table.updateComplete;
-    const row = () => table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p1"]')!;
-    expect(row().querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
-      "false",
-    );
-
-    vi.mocked(api.listProducts).mockImplementation((id: string) =>
-      Promise.resolve(id === "cat-a" ? products : []),
-    );
-    const enable = row().querySelector<HTMLElement>('[data-test="restore-p1"]');
-    expect(enable).not.toBeNull();
-    expect(enable!.textContent).toContain(t("product.enable"));
-    enable!.click();
-    await flush(el);
-    expect(api.getProductEditor).toHaveBeenCalledWith("p1");
-    expect(api.updateProductEditor).toHaveBeenCalledOnce();
-    expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: true });
-    await vi.waitFor(() =>
-      expect(row().querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
-        "true",
-      ),
-    );
-    expect(row().querySelector('[data-test="delete-p1"]')).not.toBeNull();
-    expect(row().querySelector('[data-test="restore-p1"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    const actions = table.shadowRoot!.querySelector<HTMLElement>(
+      `[data-test="actions-${productId}"]`,
+    )!;
+    expect(
+      [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+    ).toEqual([t("product.view")]);
+    const seen: unknown[] = [];
+    list(el).addEventListener("view-product", (event) => seen.push((event as CustomEvent).detail));
+    actions.querySelector<HTMLElement>(`[data-test="view-${productId}"]`)!.click();
+    expect(seen).toEqual([{ productId }]);
+    expect(api.getProductEditor).not.toHaveBeenCalled();
+    expect(api.updateProductEditor).not.toHaveBeenCalled();
+    expect(editor(el).open).toBe(false);
+    return el;
+  }
+  it("an archived product row offers View only", async () => {
+    await archivedRowOffersView(stubApi());
   });
 
   it("creates the complete aggregate once, closes, then refreshes the list", async () => {
@@ -1841,19 +1885,16 @@ describe("catalogue-screen", () => {
       });
     });
 
-    it("shows product.name_taken's message in the screen's banner when a restore from the list is refused", async () => {
-      const api = stubApi({
-        updateProductEditor: vi.fn().mockRejectedValue({
-          code: "product.name_taken",
-          params: { field: "name", name: "Croquetas" },
-          status: 409,
+    it("an archived row offers View only even when a write would refuse its name", async () => {
+      await archivedRowOffersView(
+        stubApi({
+          updateProductEditor: vi.fn().mockRejectedValue({
+            code: "product.name_taken",
+            params: { field: "name", name: "Croquetas" },
+            status: 409,
+          }),
         }),
-      });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-      await flush(el);
-      emit(list(el), "restore-product", { productId: "p1" });
-      await flush(el);
-      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(MESSAGE);
+      );
     });
   });
 
@@ -2703,9 +2744,7 @@ describe("catalogue-screen", () => {
       expect(location.pathname).toBe("/manage/catalogue/product/v1");
     });
 
-    // Disabling a variant switches it off through its own page's write, and leaves its availability
-    // and every other stored value as they were.
-    it("confirms a variant's Disable and switches the variant off through its own write", async () => {
+    it("confirms a variant's Archive and switches the variant off through its own write", async () => {
       history.replaceState(null, "", "/manage/catalogue");
       const api = variantApi();
       // Sold out as well, so a write that resets availability while removing is caught.
@@ -2722,21 +2761,21 @@ describe("catalogue-screen", () => {
       el.requestUpdate();
       await el.updateComplete;
       try {
-        expect(dialog.getAttribute("heading")).toBe("Disable Media ración");
+        expect(dialog.getAttribute("heading")).toBe("Archive Media ración");
         expect(dialog.textContent).toContain(
-          "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
+          "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
         );
         expect(
           el
             .shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!
             .textContent!.trim(),
-        ).toBe("Disable");
+        ).toBe("Archive");
         setLocale("es");
         el.requestUpdate();
         await el.updateComplete;
-        expect(dialog.getAttribute("heading")).toBe("Deshabilitar Media ración");
+        expect(dialog.getAttribute("heading")).toBe("Archivar Media ración");
         expect(dialog.textContent).toContain(
-          "Esto deshabilita la variante: la caja deja de ofrecerla y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarla, y sus ventas anteriores se conservan.",
+          "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
         );
       } finally {
         setLocale(before);
@@ -2744,7 +2783,7 @@ describe("catalogue-screen", () => {
         await el.updateComplete;
       }
       const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
-      expect(confirm.textContent!.trim()).toBe(t("product.disable"));
+      expect(confirm.textContent!.trim()).toBe(t("product.archive"));
       confirm.click();
       await flush(el);
       expect(api.getProductEditor).toHaveBeenCalledWith("v1");
@@ -2771,65 +2810,51 @@ describe("catalogue-screen", () => {
       expect(api.countProductMenus).toHaveBeenCalledWith(["v1"]);
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
       expect(dialog.querySelector("p")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on.",
+        "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept. It comes off the 2 menus it is on.",
       );
     });
 
-    it("restores a removed variant through its own write, then refreshes the list", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
-      const api = variantApi();
-      vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
-        Promise.resolve(id === "v1" ? { ...variantValue, active: false } : value),
-      );
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-      await flush(el);
-      vi.mocked(api.listProducts).mockClear();
-      emit(list(el), "restore-product", { productId: "v1" });
-      await flush(el);
-      expect(api.updateProductEditor).toHaveBeenCalledOnce();
-      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", { ...variantValue, active: true });
-      expect(api.listProducts).toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    it("an archived variant row offers View only", async () => {
+      await archivedRowOffersView(variantApi(), "v1");
     });
 
-    // A restore that was written and then could not reload the list is a load failure: the banner
-    // says why the list is stale, and the restore is not attempted again.
-    it("reports a failed reload after a written restore as a load failure", async () => {
+    it("reports a failed reload after a written archive as a load failure", async () => {
       history.replaceState(null, "", "/manage/catalogue");
       const api = variantApi();
       const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
       await flush(el);
       vi.mocked(api.listProducts).mockRejectedValue({ code: "catalogue.not_found" });
-      emit(list(el), "restore-product", { productId: "v1" });
+      emit(list(el), "delete-product", { productId: "v1" });
       await flush(el);
-      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
+        ...variantValue,
+        active: false,
+      });
       expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
         codeMessage("catalogue.not_found"),
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=delete-dialog]")!.hasAttribute("open")).toBe(
+        false,
       );
       expect((el as unknown as { busy: boolean }).busy).toBe(false);
     });
 
-    it("names the extras lists that refuse a variant's restore", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+    it("an archived variant offers View only even when a write would be refused by extras", async () => {
       const api = variantApi();
       vi.mocked(api.updateProductEditor).mockRejectedValue({
         code: "product.offered_as_extra",
         params: { field: "active", extraLists: [{ id: "ex-1", name: "Salsas" }] },
         status: 409,
       });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-      await flush(el);
-      emit(list(el), "restore-product", { productId: "v1" });
-      await flush(el);
-      const banner = el.shadowRoot!.querySelector("[role=alert]")?.textContent ?? "";
-      expect(banner).toContain(codeMessage("product.offered_as_extra"));
-      expect(banner).toContain("Salsas");
+      await archivedRowOffersView(api, "v1");
     });
 
-    it("names the extras lists that refuse a restore inside the variant's own editor", async () => {
+    it("names the extras lists that refuse a save inside the variant's own editor", async () => {
       history.replaceState(null, "", "/manage/catalogue/product/v1");
       const api = variantApi();
-      vi.mocked(api.getProductEditor).mockResolvedValue({ ...variantValue, active: false });
+      vi.mocked(api.getProductEditor).mockResolvedValue(variantValue);
       vi.mocked(api.updateProductEditor).mockRejectedValue({
         code: "product.offered_as_extra",
         params: {
@@ -2843,34 +2868,25 @@ describe("catalogue-screen", () => {
       });
       const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
       await flush(el);
-      editor(el).shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+      emit(editor(el), "wt-submit", { value: { ...variantValue, active: false } });
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith(
         "v1",
-        expect.objectContaining({ active: true }),
+        expect.objectContaining({ active: false }),
       );
       expect(editor(el).open).toBe(true);
       await editor(el).updateComplete;
       expect(await bottomOf(editor(el))).toBe(
         `${codeMessage("product.offered_as_extra")} Salsas, Toppings`,
       );
-      expect(
-        editor(el).shadowRoot!.querySelector("[data-test=restore]")!.hasAttribute("disabled"),
-      ).toBe(false);
+      expect((el as unknown as { busy: boolean }).busy).toBe(false);
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     });
 
-    it("reports a refused restore on the screen", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+    it("an archived variant offers View only even when a write would fail", async () => {
       const api = variantApi();
       vi.mocked(api.updateProductEditor).mockRejectedValue({ code: "server.internal" });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-      await flush(el);
-      emit(list(el), "restore-product", { productId: "v1" });
-      await flush(el);
-      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
-        codeMessage("server.internal"),
-      );
+      await archivedRowOffersView(api, "v1");
     });
   });
 

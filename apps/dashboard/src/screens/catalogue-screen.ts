@@ -47,23 +47,7 @@ import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
 import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
-
-/** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
-function extraListNames(error: unknown): string[] {
-  const lists = (error as { params?: { extraLists?: unknown } }).params?.extraLists;
-  if (!Array.isArray(lists)) return [];
-  return lists.flatMap((list: { name?: unknown }) =>
-    typeof list.name === "string" ? [list.name] : [],
-  );
-}
-
-/** A refusal's sentence, followed by the lists `product.offered_as_extra` names: the sentence
- * cannot say which lists the manager has to change. */
-function refusalText(code: string, extraLists: readonly string[]): string {
-  return code === "product.offered_as_extra" && extraLists.length
-    ? `${codeMessage(code)} ${extraLists.join(", ")}`
-    : codeMessage(code);
-}
+import { refusalText } from "../widgets/archive-refusal.js";
 
 @customElement("dashboard-catalogue-screen")
 export class CatalogueScreen extends LitElement {
@@ -120,10 +104,11 @@ export class CatalogueScreen extends LitElement {
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private refusedLists: string[] = [];
+  @state() private refusalParams: unknown = null;
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
-  /** How many Active menus the product in the Disable dialog is on; null while unread or unreadable. */
+  @state() private deleteErrorParams: unknown = null;
+  /** Null while the archive dialog's menu count is unread or unreadable. */
   @state() private deletingMenus: number | null = null;
   #deletingRead = 0;
   /** The list the nested form is EDITING, or null while it is creating one: this decides which write
@@ -275,6 +260,7 @@ export class CatalogueScreen extends LitElement {
 
   #showError(code: string | null, fromRead = false): void {
     this.errorKey = code;
+    this.refusalParams = null;
     this.#readErrorShown = fromRead;
   }
 
@@ -378,6 +364,7 @@ export class CatalogueScreen extends LitElement {
       ? { id: found.id, name: found.name, isVariant: product === undefined }
       : null;
     this.deleteErrorKey = null;
+    this.deleteErrorParams = null;
     this.#showError(null);
     if (found) void this.#readDeletingMenus(found.id);
   }
@@ -389,7 +376,7 @@ export class CatalogueScreen extends LitElement {
     try {
       menus = await (this.api.background ?? this.api).countProductMenus([productId]);
     } catch {
-      // The sentence for an unknown count stays; the read never blocks Disable.
+      // An unread count uses the unknown-count sentence.
     }
     if (read === this.#deletingRead) this.deletingMenus = menus;
   }
@@ -397,6 +384,7 @@ export class CatalogueScreen extends LitElement {
   #closeDelete(): void {
     this.deletingProduct = null;
     this.deleteErrorKey = null;
+    this.deleteErrorParams = null;
   }
 
   async #deleteProduct(): Promise<void> {
@@ -405,44 +393,17 @@ export class CatalogueScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     this.deleteErrorKey = null;
+    this.deleteErrorParams = null;
     try {
       const value = await this.api.getProductEditor(product.id);
       await this.api.updateProductEditor(product.id, { ...value, active: false });
     } catch (error) {
       this.deleteErrorKey = codeOf(error);
+      this.deleteErrorParams = (error as { params?: unknown }).params;
       this.busy = false;
       return;
     }
     this.#closeDelete();
-    try {
-      await this.#reloadProducts();
-    } catch (error) {
-      this.#showReadError(error);
-    } finally {
-      this.busy = false;
-    }
-  }
-
-  async #restoreProduct(productId: string): Promise<void> {
-    if (this.busy || !this.#knows(productId)) return;
-    this.busy = true;
-    this.#showError(null);
-    let value: ProductEditorValue;
-    try {
-      value = await this.api.getProductEditor(productId);
-    } catch (error) {
-      this.#showReadError(error);
-      this.busy = false;
-      return;
-    }
-    try {
-      await this.api.updateProductEditor(productId, { ...value, active: true });
-    } catch (error) {
-      this.#showError(codeOf(error));
-      this.refusedLists = extraListNames(error);
-      this.busy = false;
-      return;
-    }
     try {
       await this.#reloadProducts();
     } catch (error) {
@@ -493,7 +454,7 @@ export class CatalogueScreen extends LitElement {
       // problem is never said twice.
       if (written) this.#showReadError(error);
       else this.#showError(Object.keys(fieldErrors).length ? null : codeOf(error));
-      this.refusedLists = extraListNames(error);
+      this.refusalParams = (error as { params?: unknown }).params;
     } finally {
       this.busy = false;
     }
@@ -576,7 +537,7 @@ export class CatalogueScreen extends LitElement {
       return {
         [name]:
           code === "product.offered_as_extra" || code === "product.name_taken"
-            ? refusalText(code, extraListNames(error))
+            ? refusalText(code, params)
             : t("editor.field_rejected"),
       };
     }
@@ -712,6 +673,7 @@ export class CatalogueScreen extends LitElement {
   override render() {
     const locales = this.contentLanguages?.languages ?? [];
     const refusals = this.#childRefusalErrors();
+    const errorText = this.errorKey ? refusalText(this.errorKey, this.refusalParams) : "";
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
@@ -755,18 +717,10 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 this.#openDelete(event.detail.productId);
               }}
-              @restore-product=${(event: CustomEvent<{ productId: string }>) => {
-                event.stopPropagation();
-                void this.#restoreProduct(event.detail.productId);
-              }}
             ></dashboard-catalogue-browser>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${refusalText(this.errorKey, this.refusedLists)}</p>`
-          : nothing
-      }
+      ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();
@@ -822,8 +776,8 @@ export class CatalogueScreen extends LitElement {
         .open=${this.deletingProduct !== null}
         heading=${t(
           this.deletingProduct?.isVariant
-            ? "product.disable_variant_named"
-            : "product.disable_named",
+            ? "product.archive_variant_named"
+            : "product.archive_named",
         ).replace("{name}", this.deletingProduct?.name ?? "")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
@@ -833,14 +787,14 @@ export class CatalogueScreen extends LitElement {
         <p>
           ${t(
             this.deletingProduct?.isVariant
-              ? "product.disable_variant_warning"
-              : "product.disable_warning",
+              ? "product.archive_variant_warning"
+              : "product.archive_warning",
           )}
           ${offMenusSentence("product.off_menus", this.deletingMenus)}
         </p>
         <wt-form-actions
           slot="footer"
-          .error=${this.deleteErrorKey ? codeMessage(this.deleteErrorKey) : ""}
+          .error=${this.deleteErrorKey ? refusalText(this.deleteErrorKey, this.deleteErrorParams) : ""}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -852,7 +806,7 @@ export class CatalogueScreen extends LitElement {
             variant="danger"
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
-            >${t("product.disable")}</wt-button
+            >${t("product.archive")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

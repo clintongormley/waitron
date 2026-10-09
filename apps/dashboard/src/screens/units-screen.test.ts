@@ -557,15 +557,15 @@ describe("units-screen", () => {
       "p2",
     ]);
     expect(productTable.shadowRoot!.textContent).toContain("Café");
-    // The Status column reuses the product Active/Disabled labels (es-ES is the test locale).
+    // The Status column reuses the product Active/Archived labels (es-ES is the test locale).
     expect(
       productTable.shadowRoot!.querySelector('[data-sort="status"]')!.textContent!.trim(),
     ).toBe("Estado");
     const rowText = (id: string) =>
       productTable.shadowRoot!.querySelector(`tr[data-row-key="${id}"]`)!.textContent!;
     expect(rowText("p1")).toContain("Activo");
-    expect(rowText("p1")).not.toContain("Deshabilitado");
-    expect(rowText("p2")).toContain("Deshabilitado");
+    expect(rowText("p1")).not.toContain("Archivado");
+    expect(rowText("p2")).toContain("Archivado");
     expect(rowText("p2")).not.toContain("Inactivo");
     await enableProductSelection(el, dialog);
     // Each row's checkbox is the only place a screen reader hears which product it is ticking.
