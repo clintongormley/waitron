@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
+import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
@@ -372,3 +374,186 @@ it("destination deactivation retains other drafts against their original baselin
     destinationDepartmentIds: [],
   });
 });
+
+async function nativeSettingsDraft(kind: "tradingName" | "receivingProfileId" | "destination") {
+  const writes: unknown[][] = [];
+  const el = await mount((async (path, method, body) => {
+    if (method !== "GET") {
+      writes.push([path, method, body]);
+      return;
+    }
+    return path.endsWith("/profiles")
+      ? [{ id: "p1", name: "Restaurant desk" }]
+      : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };
+  }) as DashboardRequest);
+  await expect.poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]")).not.toBeNull();
+  const field =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=tradingName]")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  const profile = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=receivingProfileId]",
+  )!;
+  const destination = el.shadowRoot!.querySelector<HTMLInputElement>(
+    "[name=transferDestination-d2]",
+  )!;
+  const change = async (edited: boolean) => {
+    if (kind === "tradingName")
+      await userEvent.fill(page.elementLocator(input), edited ? "Draft trading name" : "Casa");
+    else if (kind === "receivingProfileId") await chooseOption(profile, edited ? "p1" : "");
+    else if (destination.checked !== edited)
+      await userEvent.click(page.elementLocator(destination));
+    await el.updateComplete;
+  };
+  const value = () =>
+    kind === "tradingName"
+      ? input.value
+      : kind === "receivingProfileId"
+        ? profile.value
+        : destination.checked;
+  const save =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  const state = async () => {
+    await save.updateComplete;
+    return {
+      variant: save.variant,
+      disabled: save.disabled,
+      nativeDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+    };
+  };
+  const cancel = async () => {
+    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=cancel-editor]",
+    )!;
+    await button.updateComplete;
+    await userEvent.click(page.elementLocator(button.shadowRoot!.querySelector("button")!));
+  };
+  return { el, writes, change, value, save, state, cancel };
+}
+
+it.each(["tradingName", "receivingProfileId", "destination"] as const)(
+  "native %s retains Keep, reverts cleanly and discards without writing",
+  async (kind) => {
+    const { writes, change, value, state, cancel } = await nativeSettingsDraft(kind);
+    const original = kind === "tradingName" ? "Casa" : kind === "receivingProfileId" ? "" : false;
+    const edited =
+      kind === "tradingName" ? "Draft trading name" : kind === "receivingProfileId" ? "p1" : true;
+    expect(await state()).toEqual({ variant: "secondary", disabled: true, nativeDisabled: true });
+    await change(true);
+    expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
+    expect(unload()).toBe(true);
+    await cancel();
+    await choice("keep");
+    expect(value()).toBe(edited);
+    expect(unload()).toBe(true);
+    expect(writes).toEqual([]);
+    await change(false);
+    expect(await state()).toEqual({ variant: "secondary", disabled: true, nativeDisabled: true });
+    expect(unload()).toBe(false);
+    await cancel();
+    await app.updateComplete;
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    await change(true);
+    await cancel();
+    await choice("discard");
+    await expect.poll(value).toBe(original);
+    expect(unload()).toBe(false);
+    expect(await state()).toEqual({ variant: "secondary", disabled: true, nativeDisabled: true });
+    expect(writes).toEqual([]);
+  },
+);
+
+it.each(["tradingName", "receivingProfileId"] as const)(
+  "an accepted %s save cancels a pending discard and protects the next draft",
+  async (kind) => {
+    const { el, writes, change, value, state, save, cancel } = await nativeSettingsDraft(kind);
+    await change(true);
+    await cancel();
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    save.click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect.poll(() => save.disabled).toBe(true);
+    await expect.poll(() => question.open).toBe(false);
+    expect(writes).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/settings",
+        "PUT",
+        {
+          name: "Restaurant",
+          tradingName: kind === "tradingName" ? "Draft trading name" : "Casa",
+          orderStart: "table",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          receiptPrintMode: "auto",
+          printTradingName: false,
+          transfers: {
+            receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
+            destinationDepartmentIds: [],
+          },
+        },
+      ],
+    ]);
+    expect(unload()).toBe(false);
+    await change(false);
+    const newValue = kind === "tradingName" ? "Casa" : "";
+    question.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(value()).toBe(newValue);
+    expect(unload()).toBe(true);
+    expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
+    await cancel();
+    await choice("discard");
+    await expect.poll(value).toBe(kind === "tradingName" ? "Draft trading name" : "p1");
+    expect(unload()).toBe(false);
+    expect(writes).toHaveLength(1);
+  },
+);
+
+it.each(["tradingName", "receivingProfileId"] as const)(
+  "a refused %s save remains dirty and retryable through Keep",
+  async (kind) => {
+    const { el, change, value, state, save, cancel } = await nativeSettingsDraft(kind);
+    const request = vi.fn(async () => {
+      throw { code: "management.request_invalid", params: { field: kind } };
+    });
+    el.api = new VenueServiceApi(request as DashboardRequest);
+    await change(true);
+    save.click();
+    await expect.poll(() => request.mock.calls.length).toBe(1);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector(`[name=${kind}]`)!.getAttribute("error"))
+      .not.toBe("");
+    expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
+    await cancel();
+    await choice("keep");
+    expect(value()).toBe(kind === "tradingName" ? "Draft trading name" : "p1");
+    expect(unload()).toBe(true);
+    expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
+    expect(request.mock.calls).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/settings",
+        "PUT",
+        {
+          name: "Restaurant",
+          tradingName: kind === "tradingName" ? "Draft trading name" : "Casa",
+          orderStart: "table",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          receiptPrintMode: "auto",
+          printTradingName: false,
+          transfers: {
+            receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
+            destinationDepartmentIds: [],
+          },
+        },
+      ],
+    ]);
+  },
+);

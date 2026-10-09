@@ -1603,3 +1603,33 @@ inventory before switching the public wrapper and removing the staged dashboard
 create spy. Public-screen LOOK, A13–A15, the two completed Claude reviews, normal
 push hook and current-head CI remain. No branch-review or package-coverage
 approval is claimed by this checkpoint.
+
+
+### Implementation checkpoint — Task A10 pending discard and native Settings drafts (2026-10-09)
+
+The dialog suites now carry pending-discard behavior for Add/Rename department and zone:
+a replacement ignores the old Discard event and retained Cancel/Save controls; an accepted
+save cancels the old leave question and commits the submitted name; newer input remains
+protected against a stale Discard and compares with the accepted name. The replacement's
+native dialog remains open, and Save's native button follows its dirty state.
+
+Settings checks now use the native trading-name input, receiving-profile picker and
+transfer-destination checkbox. Keep retains each choice, returning to the original value
+clears unload protection and makes the native Save button quiet and disabled, and Discard
+restores the value without writing. Accepted trading-name/profile saves cancel a pending
+Discard and protect a subsequent draft; refused saves retain the exact submitted body,
+dirty draft and available retry through Keep. No existing test body changes.
+
+The two complete draft files passed 49 cases. An independently installed disposable
+candidate passed the 19 new cases; deleting the dialog commit failed 8, permitting retained
+old dialog handlers failed 4, deleting the Settings commit failed 2, and removing draft
+restoration failed 5. Restoring the candidate passed 19. The initial replacement test
+incorrectly requested closure through the detached old modal; its failure is a test-harness
+correction, not a reproduced product defect. No production code changed in this checkpoint.
+
+These checks carry portions of the old pending-question, accepted-body, transfer Keep/Discard
+and native Save-state assertions. They do not complete the semantic audit. Settings input
+arriving during a pending write, transfer reconnect/live reads, translated refusals, post-save
+inheritance, opening-hours bounds and other mapped gaps remain. Keep the public legacy screen
+and its suites until those gaps close, then inventory retirement and switch the wrapper.
+Public LOOK, A13–A15, completed branch reviews, the push hook and current-head CI remain.

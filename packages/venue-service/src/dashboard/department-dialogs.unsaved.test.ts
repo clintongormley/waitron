@@ -313,3 +313,165 @@ it("disconnecting a dialog with a pending leave question closes the question and
   await expect.poll(() => question.open).toBe(false);
   expect(unload()).toBe(false);
 });
+
+it.each(cases)("$kind ignores a stale discard after a replacement dialog opens", async (dialog) => {
+  const el = await mount(dialog);
+  const request = vi.fn(async () => ({ id: "new" }));
+  el.api = testApi(request);
+  await change(el, "Departed draft");
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const closing = modal.requestClose("cancel");
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => question.open).toBe(true);
+  const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!;
+  const oldSave = el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
+  el.dialog = { kind: "rename-department", row: model.departments[1]! };
+  await el.updateComplete;
+  expect(await closing).toBe(false);
+  await expect.poll(() => question.open).toBe(false);
+  await change(el, "Replacement draft");
+  question.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  oldCancel.click();
+  oldSave.click();
+  await el.updateComplete;
+  const replacementModal = el.shadowRoot!.querySelector("wt-modal")!;
+  await replacementModal.updateComplete;
+  expect(replacementModal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(field(el).value).toBe("Replacement draft");
+  expect(unload()).toBe(true);
+  expect(request).not.toHaveBeenCalled();
+  const freshClose = replacementModal.requestClose("cancel");
+  await choose("keep");
+  expect(await freshClose).toBe(false);
+  expect(field(el).value).toBe("Replacement draft");
+});
+
+const acceptedNames = [
+  {
+    dialog: cases[0]!,
+    request: ["/management-api/venue-service/departments", "POST", { name: "Accepted name" }],
+  },
+  {
+    dialog: cases[1]!,
+    request: [
+      "/management-api/venue-service/departments/d1",
+      "PATCH",
+      { name: "Accepted name", tradingName: "Casa", defaultServiceMode: "prepay" },
+    ],
+  },
+  {
+    dialog: cases[2]!,
+    request: [
+      "/management-api/venue-service/zones",
+      "POST",
+      { name: "Accepted name", departmentId: "d1" },
+    ],
+  },
+  { dialog: cases[3]!, request: ["/management-api/zones/z1", "PATCH", { name: "Accepted name" }] },
+];
+it.each(acceptedNames)(
+  "$dialog.kind commits a save while a discard question is pending",
+  async ({ dialog, request: accepted }) => {
+    const el = await mount(dialog);
+    const request = vi.fn(async () => ({ id: "new" }));
+    el.api = testApi(request);
+    await change(el, " Accepted name ");
+    const closing = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    await expect.poll(() => el.dialog).toBeUndefined();
+    expect(await closing).toBe(false);
+    await expect.poll(() => question.open).toBe(false);
+    question.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(request.mock.calls).toEqual([accepted]);
+    expect(unload()).toBe(false);
+    el.dialog = { kind: "rename-department", row: model.departments[1]! };
+    await el.updateComplete;
+    await change(el, "Later draft");
+    question.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(field(el).value).toBe("Later draft");
+    expect(unload()).toBe(true);
+    expect(request.mock.calls).toEqual([accepted]);
+  },
+);
+
+it.each(acceptedNames)(
+  "$dialog.kind protects newer input when saving cancels a pending discard",
+  async ({ dialog, request: accepted }) => {
+    const el = await mount(dialog);
+    let finish!: (value: unknown) => void;
+    const request = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    el.api = testApi(request);
+    await change(el, " Accepted name ");
+    const closing = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    await expect.poll(() => request.mock.calls.length).toBe(1);
+    await change(el, "Newer protected name");
+    finish({ id: "new" });
+    expect(await closing).toBe(false);
+    await expect.poll(() => question.open).toBe(false);
+    await el.updateComplete;
+    question.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(field(el).value).toBe("Newer protected name");
+    expect(unload()).toBe(true);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+    await save.updateComplete;
+    expect({
+      variant: save.variant,
+      disabled: save.disabled,
+      nativeDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+    }).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
+    expect(request.mock.calls).toEqual([accepted]);
+    const close = modal.requestClose("cancel");
+    await choose("keep");
+    expect(await close).toBe(false);
+    expect(field(el).value).toBe("Newer protected name");
+    await change(el, "Accepted name");
+    await save.updateComplete;
+    expect({
+      variant: save.variant,
+      disabled: save.disabled,
+      nativeDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+    }).toEqual({ variant: "secondary", disabled: true, nativeDisabled: true });
+    expect(unload()).toBe(false);
+  },
+);
