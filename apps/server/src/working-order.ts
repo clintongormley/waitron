@@ -89,6 +89,7 @@ import {
   partyTables,
   parties,
   passItemMarks,
+  ticketItemMoves,
   partyTableLabels,
   withTransaction,
   workingOrderLines,
@@ -3912,6 +3913,17 @@ async function splitTicketItem(
     .where(eq(passItemMarks.ticketItemId, ticketItemId));
   if (passMarks.length) {
     await tx.insert(passItemMarks).values(passMarks.map((mark) => ({ ...mark, ticketItemId: id })));
+  }
+  const moves = await tx
+    .select()
+    .from(ticketItemMoves)
+    .where(eq(ticketItemMoves.workingOrderLineId, ticket!.workingOrderLineId));
+  if (moves.length) {
+    await tx
+      .insert(ticketItemMoves)
+      .values(
+        moves.map((move) => ({ ...move, id: randomUUID(), workingOrderLineId: splitLineId })),
+      );
   }
   return id;
 }

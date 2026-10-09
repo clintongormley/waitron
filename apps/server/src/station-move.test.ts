@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
@@ -13,6 +13,7 @@ import {
   orderGroups,
   printJobs,
   printers,
+  ticketItemMoves,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -20,7 +21,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -178,6 +179,14 @@ async function fireHeldBurger(group: Awaited<ReturnType<typeof heldBurger>>) {
       expectedPartyRevision: group.revision,
       operatorId: OPERATOR,
     }),
+  );
+}
+
+const mover = () => ({ deviceId: venue.cfg.origin.deviceId, personId: OPERATOR });
+
+async function movesOf(lineIds: string[]) {
+  return inTx(venue, (tx) =>
+    tx.select().from(ticketItemMoves).where(inArray(ticketItemMoves.workingOrderLineId, lineIds)),
   );
 }
 
@@ -540,11 +549,17 @@ describe("release", () => {
         .where(eq(workingOrders.id, group.tabId)),
     );
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, group.tabId, {
-        submissionId: randomUUID(),
-        lineIds: [group.lineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        group.tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [group.lineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     const at = new Date("2026-10-02T18:45:00.000Z");
     await handleOpenReleaseAlerts(at);
@@ -668,11 +683,17 @@ describe("release", () => {
     const group = await heldBurger();
     await handleOpenReleaseAlerts(new Date());
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, group.tabId, {
-        submissionId: randomUUID(),
-        lineIds: [group.lineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        group.tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [group.lineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     await inTx(venue, (tx) =>
       tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, grill)),
@@ -1242,6 +1263,153 @@ describe("release", () => {
 });
 
 describe("moveDishesToStation", () => {
+  it("a move records who moved each dish, from where, to where", async () => {
+    const tableId = await venue.table(`W-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    await orderForParty(venue, partyId, ["Burger", "Agua"], tabId);
+    const items = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    expect(items.map((item) => item.stationId)).toEqual([bar, bar]);
+    const [first, second] = items.map((item) => item.workingOrderLineId);
+    const movedAt = new Date("2026-10-02T19:00:00.000Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(movedAt);
+    try {
+      await inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          { submissionId: randomUUID(), lineIds: [first!], stationId: grill },
+          mover(),
+        ),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await movesOf([first!, second!])).toEqual([
+      {
+        id: expect.any(String),
+        workingOrderLineId: first,
+        fromStationId: bar,
+        toStationId: grill,
+        movedAt: movedAt.toISOString(),
+        movedByDeviceId: venue.cfg.origin.deviceId,
+        movedByPersonId: OPERATOR,
+      },
+    ]);
+    const answer = await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        { submissionId: randomUUID(), lineIds: [first!, second!], stationId: grill },
+        { deviceId: venue.cfg.origin.deviceId, personId: null },
+      ),
+    );
+    expect(answer.moved).toEqual([{ workingOrderLineId: second, fromStationId: bar }]);
+    const rows = await movesOf([first!, second!]);
+    expect(rows.filter((row) => row.workingOrderLineId === first)).toHaveLength(1);
+    expect(rows.filter((row) => row.workingOrderLineId === second)).toEqual([
+      expect.objectContaining({
+        fromStationId: bar,
+        toStationId: grill,
+        movedByDeviceId: venue.cfg.origin.deviceId,
+        movedByPersonId: null,
+      }),
+    ]);
+  });
+
+  it("adds no move row when a submission is replayed", async () => {
+    const { tabId, item } = await burger();
+    const request = {
+      submissionId: randomUUID(),
+      lineIds: [item.workingOrderLineId],
+      stationId: grill,
+    };
+    await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request, mover()));
+    await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request, mover()));
+    expect(await movesOf([item.workingOrderLineId])).toHaveLength(1);
+  });
+
+  it("asks assertFrom about each named dish's station, and moves nothing when it refuses", async () => {
+    const { tabId, item } = await burger();
+    const asked: string[] = [];
+    const before = await snapshot(tabId, item.id);
+    await expect(
+      inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill },
+          mover(),
+          {
+            assertFrom: (stationId) => {
+              asked.push(stationId);
+              throw new AppError("device.forbidden_station", { stationId });
+            },
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "device.forbidden_station", params: { stationId: bar } });
+    expect(asked).toEqual([bar]);
+    expect(await snapshot(tabId, item.id)).toEqual(before);
+    expect(await movesOf([item.workingOrderLineId])).toEqual([]);
+  });
+
+  it("copies a dish's move records, under new ids, to the line a quantity split makes", async () => {
+    const { tabId, item } = await burger();
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ quantity: 2000 })
+        .where(eq(workingOrderLines.id, item.workingOrderLineId));
+      await tx.update(ticketItems).set({ quantity: 2000 }).where(eq(ticketItems.id, item.id));
+      await moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill },
+        mover(),
+      );
+    });
+    const { splitLines } = await inTx(venue, (tx) =>
+      carveOffLines(tx, venue.cfg, tabId, tabId, [{ lineNo: 1, quantity: "1" }], {
+        refuseHeld: false,
+      }),
+    );
+    const splitLineId = splitLines.get(item.workingOrderLineId)!.id;
+    const [original] = await movesOf([item.workingOrderLineId]);
+    const copies = await movesOf([splitLineId]);
+    expect(copies).toEqual([
+      { ...original, id: expect.any(String), workingOrderLineId: splitLineId },
+    ]);
+    expect(copies[0]!.id).not.toBe(original!.id);
+  });
+
+  it("refuses a started dish before asking assertFrom", async () => {
+    const { tabId, item } = await burger();
+    await inTx(venue, (tx) =>
+      tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, item.id)),
+    );
+    const assertFrom = vi.fn();
+    await expect(
+      inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill },
+          mover(),
+          { assertFrom },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ticket.already_started" });
+    expect(assertFrom).not.toHaveBeenCalled();
+  });
+
   it("prints RECALLED through the order action for a watcher of the dish", async () => {
     const printerId = await inTx(venue, async (tx) => {
       const watcher = await createWatcher(tx, venue.cfg, {
@@ -1434,11 +1602,17 @@ describe("moveDishesToStation", () => {
     const { tabId, item } = await burger();
     const before = await Promise.all(printerIds.map(async (id) => (await jobs(id)).length));
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     const added = await Promise.all(
       printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
@@ -1480,7 +1654,7 @@ describe("moveDishesToStation", () => {
     vi.setSystemTime(movedAt);
     let first: Awaited<ReturnType<typeof moveDishesToStation>>;
     try {
-      first = await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, s1));
+      first = await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, s1, mover()));
     } finally {
       vi.useRealTimers();
     }
@@ -1519,11 +1693,17 @@ describe("moveDishesToStation", () => {
     expect(notices.at(-1)?.workingOrderId).toBe(tabId);
     expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
     const back = await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: s1.lineIds,
-        stationId: bar,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: s1.lineIds,
+          stationId: bar,
+        },
+        mover(),
+      ),
     );
     const beforeReplay = {
       bar: (await jobs(barPrinter)).length,
@@ -1538,7 +1718,9 @@ describe("moveDishesToStation", () => {
         )
       )[0]!.revision,
     };
-    const replay = await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, s1));
+    const replay = await inTx(venue, (tx) =>
+      moveDishesToStation(tx, venue.cfg, tabId, s1, mover()),
+    );
     const [after] = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
     );
@@ -1598,11 +1780,17 @@ describe("moveDishesToStation", () => {
     const barCount = (await jobs(barPrinter)).length;
     const grillCount = (await jobs(grillPrinter)).length;
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item!.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item!.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     expect(decodeTicket((await jobs(barPrinter))[barCount]!.payload)).toContain("HOLD CANCELLED");
     const movedPaper = decodeTicket((await jobs(grillPrinter))[grillCount]!.payload);
@@ -1634,11 +1822,17 @@ describe("moveDishesToStation", () => {
   it("sends added units to the moved station when an edit carries makeAt null", async () => {
     const { tabId, item } = await burger();
     const moved = await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     await inTx(venue, (tx) =>
       updateOrderLine(
@@ -1672,11 +1866,17 @@ describe("moveDishesToStation", () => {
   it("sends added units to an explicitly chosen station while keeping the moved record", async () => {
     const { tabId, item } = await burger();
     const moved = await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     await inTx(venue, (tx) =>
       updateOrderLine(
@@ -1706,11 +1906,17 @@ describe("moveDishesToStation", () => {
     const before = await snapshot(tabId, item.id);
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.already_started" });
     expect(await snapshot(tabId, item.id)).toEqual(before);
@@ -1727,11 +1933,17 @@ describe("moveDishesToStation", () => {
     const before = await snapshot(tabId, item.id);
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.already_started" });
     expect(await snapshot(tabId, item.id)).toEqual(before);
@@ -1748,11 +1960,17 @@ describe("moveDishesToStation", () => {
     const before = await snapshot(tabId, item.id);
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.already_started" });
     expect(await snapshot(tabId, item.id)).toEqual(before);
@@ -1762,11 +1980,17 @@ describe("moveDishesToStation", () => {
     const { tabId, item } = await burger();
     const before = await snapshot(tabId, item.id);
     const answer = await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item.workingOrderLineId],
-        stationId: bar,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item.workingOrderLineId],
+          stationId: bar,
+        },
+        mover(),
+      ),
     );
     expect(answer).toEqual({ revision: before.revision, stationId: bar, moved: [] });
     expect(await snapshot(tabId, item.id)).toEqual(before);
@@ -1802,11 +2026,17 @@ describe("moveDishesToStation", () => {
     };
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [line!.id],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [line!.id],
+            stationId: grill,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.not_sent" });
     expect({
@@ -1841,11 +2071,17 @@ describe("moveDishesToStation", () => {
     });
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, { ...venue.cfg, locationId: elsewhere }, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          { ...venue.cfg, locationId: elsewhere },
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "working_order.not_found" });
     expect(await snapshot(tabId, item.id)).toEqual(before);
@@ -1857,20 +2093,32 @@ describe("moveDishesToStation", () => {
     const before = await snapshot(one.tabId, one.item.id);
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, one.tabId, {
-          submissionId: randomUUID(),
-          lineIds: [other.item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          one.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [other.item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "tab.line_not_found" });
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, one.tabId, {
-          submissionId: randomUUID(),
-          lineIds: [one.item.workingOrderLineId],
-          stationId: randomUUID(),
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          one.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [one.item.workingOrderLineId],
+            stationId: randomUUID(),
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "station.not_found" });
     const foreignStation = await inTx(venue, async (tx) => {
@@ -1890,11 +2138,17 @@ describe("moveDishesToStation", () => {
     });
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, one.tabId, {
-          submissionId: randomUUID(),
-          lineIds: [one.item.workingOrderLineId],
-          stationId: foreignStation,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          one.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [one.item.workingOrderLineId],
+            stationId: foreignStation,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "station.not_found" });
     expect(await snapshot(one.tabId, one.item.id)).toEqual(before);
@@ -1910,22 +2164,34 @@ describe("moveDishesToStation", () => {
     const before = await snapshot(tabId, item.id);
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: inactive,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: inactive,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "route.station_inactive" });
     expect(await snapshot(tabId, item.id)).toEqual(before);
     await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", new Date()));
     try {
       const result = await inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       );
       expect(result.moved).toHaveLength(1);
     } finally {
@@ -1950,11 +2216,17 @@ describe("moveDishesToStation", () => {
       const before = await snapshot(tabId, item.id);
       await expect(
         inTx(venue, (tx) =>
-          moveDishesToStation(tx, venue.cfg, tabId, {
-            submissionId: randomUUID(),
-            lineIds: [item.workingOrderLineId],
-            stationId: grill,
-          }),
+          moveDishesToStation(
+            tx,
+            venue.cfg,
+            tabId,
+            {
+              submissionId: randomUUID(),
+              lineIds: [item.workingOrderLineId],
+              stationId: grill,
+            },
+            mover(),
+          ),
         ),
       ).rejects.toMatchObject({
         code:
@@ -1969,11 +2241,17 @@ describe("moveDishesToStation", () => {
     await inTx(venue, (tx) => writeEditSentLines(tx, false));
     try {
       const answer = await inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       );
       expect(answer.moved).toEqual([
         { workingOrderLineId: item.workingOrderLineId, fromStationId: bar },
@@ -1997,11 +2275,17 @@ describe("moveDishesToStation", () => {
     expect(item!.firedAt).toBeNull();
     const before = await snapshot(tabId, item!.id);
     const result = await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item!.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item!.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     expect(result.moved).toHaveLength(1);
     const after = await snapshot(tabId, item!.id);
@@ -2027,11 +2311,17 @@ describe("moveDishesToStation", () => {
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
       );
       const moved = await inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item!.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item!.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       );
       await inTx(venue, (tx) =>
         updateOrderLine(
@@ -2088,11 +2378,17 @@ describe("moveDishesToStation", () => {
         .where(eq(ticketItems.workingOrderLineId, submitted.groups[0]!.lineIds[0]!)),
     );
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: [item!.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [item!.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     const [marked] = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.id, item!.id)),
@@ -2116,20 +2412,32 @@ describe("moveDishesToStation", () => {
     const { tabId, item } = await burger();
     const submissionId = randomUUID();
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId,
-        lineIds: [item.workingOrderLineId],
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId,
+          lineIds: [item.workingOrderLineId],
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     const before = await snapshot(tabId, item.id);
     await expect(
       inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId,
-          lineIds: [item.workingOrderLineId],
-          stationId: bar,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId,
+            lineIds: [item.workingOrderLineId],
+            stationId: bar,
+          },
+          mover(),
+        ),
       ),
     ).rejects.toMatchObject({ code: "submission.id_reused" });
     expect(await snapshot(tabId, item.id)).toEqual(before);
@@ -2208,11 +2516,17 @@ describe("moveDishesToStation", () => {
       const before = await snapshot(tabId, drink!.id);
       await expect(
         inTx(venue, (tx) =>
-          moveDishesToStation(tx, venue.cfg, tabId, {
-            submissionId: randomUUID(),
-            lineIds: [drink!.workingOrderLineId],
-            stationId: grill,
-          }),
+          moveDishesToStation(
+            tx,
+            venue.cfg,
+            tabId,
+            {
+              submissionId: randomUUID(),
+              lineIds: [drink!.workingOrderLineId],
+              stationId: grill,
+            },
+            mover(),
+          ),
         ),
       ).rejects.toMatchObject({ code: "ticket.made_here" });
       expect(await snapshot(tabId, drink!.id)).toEqual(before);
@@ -2226,11 +2540,13 @@ describe("moveDishesToStation", () => {
       lineIds: [item.workingOrderLineId],
       stationId: grill,
     };
-    const first = await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request));
-    const before = await snapshot(tabId, item.id);
-    expect(await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request))).toEqual(
-      first,
+    const first = await inTx(venue, (tx) =>
+      moveDishesToStation(tx, venue.cfg, tabId, request, mover()),
     );
+    const before = await snapshot(tabId, item.id);
+    expect(
+      await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request, mover())),
+    ).toEqual(first);
     expect(await snapshot(tabId, item.id)).toEqual(before);
   });
 
@@ -2241,20 +2557,26 @@ describe("moveDishesToStation", () => {
       lineIds: [item.workingOrderLineId],
       stationId: grill,
     };
-    await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request));
+    await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request, mover()));
     await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: request.lineIds,
-        stationId: bar,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: request.lineIds,
+          stationId: bar,
+        },
+        mover(),
+      ),
     );
     const before = {
       barJobs: (await jobs(barPrinter)).length,
       grillJobs: (await jobs(grillPrinter)).length,
       notices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
     };
-    await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request));
+    await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request, mover()));
     expect(
       {
         barJobs: (await jobs(barPrinter)).length,
@@ -2285,11 +2607,17 @@ describe("moveDishesToStation", () => {
       });
       const before = await snapshot(tabId, item.id);
       const answer = await inTx(venue, (tx) =>
-        moveDishesToStation(tx, venue.cfg, tabId, {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        }),
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
       );
       expect(answer.moved).toEqual([
         { workingOrderLineId: item.workingOrderLineId, fromStationId: bar },
@@ -2347,11 +2675,17 @@ describe("moveDishesToStation", () => {
     const chips = lines.find((line) => line.productId === split.products.chips)!;
     const fryerBefore = await splitJobs(split.printers.fryer);
     const answer = await splitTx((tx) =>
-      moveDishesToStation(tx, split.cfg, split.party.tabId, {
-        submissionId: randomUUID(),
-        lineIds: [dish.id],
-        stationId: downstairs.stationId,
-      }),
+      moveDishesToStation(
+        tx,
+        split.cfg,
+        split.party.tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [dish.id],
+          stationId: downstairs.stationId,
+        },
+        { deviceId: split.cfg.origin.deviceId, personId: null },
+      ),
     );
     expect(answer.moved).toEqual([
       { workingOrderLineId: dish.id, fromStationId: split.stations.grill },
@@ -2373,11 +2707,17 @@ describe("moveDishesToStation", () => {
     const fryerJobsBeforeChipsMove = (await splitJobs(split.printers.fryer)).length;
     const grillJobsBeforeChipsMove = (await splitJobs(split.printers.grill)).length;
     const chipsMove = await splitTx((tx) =>
-      moveDishesToStation(tx, split.cfg, split.party.tabId, {
-        submissionId: randomUUID(),
-        lineIds: [chips.id],
-        stationId: split.stations.grill,
-      }),
+      moveDishesToStation(
+        tx,
+        split.cfg,
+        split.party.tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: [chips.id],
+          stationId: split.stations.grill,
+        },
+        { deviceId: split.cfg.origin.deviceId, personId: null },
+      ),
     );
     expect(chipsMove.moved).toEqual([
       { workingOrderLineId: chips.id, fromStationId: split.stations.fryer },
@@ -2426,11 +2766,17 @@ describe("moveDishesToStation", () => {
     expect(items.map((item) => item.stationId).sort()).toEqual([bar, fryer].sort());
     const before = (await jobs(grillPrinter)).length;
     const result = await inTx(venue, (tx) =>
-      moveDishesToStation(tx, venue.cfg, tabId, {
-        submissionId: randomUUID(),
-        lineIds: items.map((item) => item.lineId),
-        stationId: grill,
-      }),
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          lineIds: items.map((item) => item.lineId),
+          stationId: grill,
+        },
+        mover(),
+      ),
     );
     expect(result.moved).toHaveLength(2);
     const paper = (await jobs(grillPrinter)).slice(before).map((job) => decodeTicket(job.payload));

@@ -2892,11 +2892,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("station.not_found", { stationId: String(body.stationId) });
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        return moveDishesToStation(tx, cfg, id, {
-          submissionId,
-          lineIds,
-          stationId: body.stationId as string,
-        });
+        return moveDishesToStation(
+          tx,
+          cfg,
+          id,
+          { submissionId, lineIds, stationId: body.stationId as string },
+          { deviceId: session.deviceId, personId: session.personId },
+        );
       });
       return c.json(result);
     }),

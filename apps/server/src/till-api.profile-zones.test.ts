@@ -1026,11 +1026,17 @@ describe("a kitchen display", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, round.tabId));
       await inTx(v, (tx) =>
-        moveDishesToStation(tx, v.cfg, round.tabId, {
-          submissionId: randomUUID(),
-          lineIds: lines.map((line) => line.id),
-          stationId: pastry.id,
-        }),
+        moveDishesToStation(
+          tx,
+          v.cfg,
+          round.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: lines.map((line) => line.id),
+            stationId: pastry.id,
+          },
+          { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
+        ),
       );
     }
 

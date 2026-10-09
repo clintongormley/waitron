@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { ticketItemMoves, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
@@ -171,11 +171,23 @@ export interface StationMoveResult {
   moved: { workingOrderLineId: string; fromStationId: string }[];
 }
 
+export interface StationMover {
+  deviceId: string;
+  personId: string | null;
+}
+
+export interface StationMoveOptions {
+  /** Refuses a named dish by the station it sits at; runs inside the command so a replay skips it. */
+  assertFrom?: (stationId: string) => void | Promise<void>;
+}
+
 export async function moveDishesToStation(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   request: StationMoveRequest,
+  mover: StationMover,
+  options: StationMoveOptions = {},
 ): Promise<StationMoveResult> {
   const at = new Date();
   const lineIds = [...new Set(request.lineIds)].sort();
@@ -237,6 +249,8 @@ export async function moveDishesToStation(
         if (!stillMovable({ state: row.state!, awayAt: row.awayAt, madeHere: false }, row))
           throw new AppError("ticket.already_started", { ticketItemId: row.ticketItemId });
       }
+      if (options.assertFrom)
+        for (const lineId of lineIds) await options.assertFrom(byId.get(lineId)!.stationId!);
       const moving = rows.filter((row) => row.stationId !== request.stationId);
       if (moving.length === 0)
         return {
@@ -293,6 +307,16 @@ export async function moveDishesToStation(
         .returning({ id: ticketItems.id });
       if (changed.length !== moving.length)
         throw new Error("station move changed an unexpected number of ticket items");
+      await tx.insert(ticketItemMoves).values(
+        moving.map((row) => ({
+          workingOrderLineId: row.id,
+          fromStationId: row.stationId!,
+          toStationId: request.stationId,
+          movedAt: at.toISOString(),
+          movedByDeviceId: mover.deviceId,
+          movedByPersonId: mover.personId,
+        })),
+      );
       if (order.status === "open")
         await tx
           .update(workingOrderLines)
