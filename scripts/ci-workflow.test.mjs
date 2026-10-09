@@ -1287,12 +1287,14 @@ describe("the sharded jobs", () => {
   );
 
   // The packages the owner's four-minute bound (2026-10-09) split, at the counts it was split to.
-  it("shard the dashboard and venue service four ways and the till two ways", () => {
+  it("shard each package the number of ways its measured time needs", () => {
     const counts = Object.fromEntries(
       shardedJobs.map(({ pkg, body }) => [pkg, shardDenominator(body)]),
     );
-    expect(counts).toMatchObject({
+    expect(counts).toEqual({
       "@waitron/dashboard": 4,
+      "@waitron/db": 3,
+      "@waitron/server": 6,
       "@waitron/venue-service": 4,
       "@waitron/till": 2,
     });
