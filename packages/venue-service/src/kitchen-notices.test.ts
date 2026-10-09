@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   EACH_UNIT,
@@ -31,6 +31,7 @@ import { serviceSettings } from "./schema/settings.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
+  listStationsNotices,
   readClearingWorkflow,
   readEditSentLines,
   readKitchenTicketGrouping,
@@ -944,6 +945,128 @@ describe("listStationNotices", () => {
       (await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).map((n) => n.lineName),
     ).toEqual(["at the bar"]);
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, elsewhere))).toEqual([]);
+  });
+});
+
+describe("listStationsNotices", () => {
+  const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+  it("keeps each station's own newest fifty, oldest first, whatever another station holds", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    const base = Date.now() - 60 * 60_000;
+    for (let index = 0; index < 55; index += 1) {
+      const at = new Date(base + index * 1000).toISOString();
+      await noticeAt(v.grill, order.orderId, at, `G${index}`);
+      await noticeAt(v.bar, order.orderId, at, `B${index}`);
+    }
+    const elsewhere = await seedStation(await seedLocation("Other venue"), "Grill");
+    await noticeAt(elsewhere, order.orderId, minutesAgo(1), "elsewhere");
+
+    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.bar, v.grill, elsewhere]));
+
+    expect([...notices].map(([id, list]) => [id, list.map((notice) => notice.lineName)])).toEqual([
+      [v.bar, Array.from({ length: 50 }, (_, index) => `B${index + 5}`)],
+      [v.grill, Array.from({ length: 50 }, (_, index) => `G${index + 5}`)],
+      [elsewhere, []],
+    ]);
+  });
+
+  it("orders notices recorded in the same instant by insertion, and keeps the newest fifty of them", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const at = minutesAgo(1);
+    for (let index = 0; index < 51; index += 1) {
+      await noticeAt(v.grill, order.orderId, at, `N${index}`);
+    }
+
+    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.grill, v.bar]));
+
+    expect(notices.get(v.grill)!.map((notice) => notice.lineName)).toEqual(
+      Array.from({ length: 50 }, (_, index) => `N${index + 1}`),
+    );
+    expect(notices.get(v.bar)).toEqual([]);
+  });
+
+  it("answers a notice with every field the single-station read gives", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const [row] = await db
+      .insert(kitchenNotices)
+      .values({
+        stationId: v.bar,
+        workingOrderId: order.orderId,
+        orderLabel: "#1",
+        kind: "changed",
+        direction: "removed",
+        lineName: "Gin tonic",
+        unitName: { en: "glass", es: "copa" },
+        soldInEach: true,
+        quantity: 1500,
+        note: "sin hielo",
+        wasStarted: true,
+        cancelledExtra: "Hielo",
+        createdAt: minutesAgo(1),
+      })
+      .returning();
+
+    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.bar]));
+
+    expect(notices.get(v.bar)).toEqual([
+      {
+        id: row!.id,
+        stationId: v.bar,
+        workingOrderId: order.orderId,
+        orderLabel: "#1",
+        kind: "changed",
+        lineName: "Gin tonic",
+        unitName: { en: "glass", es: "copa" },
+        soldInEach: true,
+        quantity: thousandthsToDecimal(1500),
+        note: "sin hielo",
+        wasStarted: true,
+        movedTo: null,
+        direction: "removed",
+        cancelledExtra: "Hielo",
+        reroutedTo: null,
+        createdAt: row!.createdAt,
+      },
+    ]);
+  });
+
+  describe("the statements it sends", () => {
+    const sessionOf = (tx: Transaction) =>
+      (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
+    const statementsOf = (fn: (tx: Transaction) => Promise<unknown>) =>
+      inTx(async (tx) => {
+        const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+        try {
+          await fn(tx);
+          return prepared.mock.calls.map(([query]) => query as unknown as { sql: string });
+        } finally {
+          prepared.mockRestore();
+        }
+      });
+    const readsNotices = (query: { sql: string }) => query.sql.includes('from "kitchen_notices"');
+
+    it("reads three stations' notices in one statement, and sends no more statements than for one station", async () => {
+      const v = await venue();
+      const third = await seedStation(v.locationId, "Postre");
+      const one = await statementsOf((tx) => listStationsNotices(tx, v.cfg, [v.grill]));
+      const three = await statementsOf((tx) =>
+        listStationsNotices(tx, v.cfg, [v.grill, v.bar, third]),
+      );
+
+      expect(three.filter(readsNotices)).toHaveLength(1);
+      expect(three).toHaveLength(one.length);
+    });
+
+    it("sends none for no stations", async () => {
+      const v = await venue();
+      expect(await statementsOf((tx) => listStationsNotices(tx, v.cfg, []))).toEqual([]);
+      expect(await inTx((tx) => listStationsNotices(tx, v.cfg, []))).toEqual(new Map());
+    });
   });
 });
 

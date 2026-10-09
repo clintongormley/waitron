@@ -471,6 +471,25 @@ export interface ResolvedKitchenScreen {
   readonly zones: readonly ScreenSlot[] | null;
 }
 
+export interface StationNotice {
+  id: string;
+  stationId: string;
+  workingOrderId: string;
+  orderLabel: string;
+  kind: "recalled" | "void" | "changed" | "moved" | "rerouted";
+  lineName: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  quantity: Decimal;
+  note: string | null;
+  wasStarted: boolean;
+  movedTo: string | null;
+  direction: "added" | "removed" | null;
+  cancelledExtra: string | null;
+  reroutedTo: string | null;
+  createdAt: string;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
   assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;
@@ -980,26 +999,13 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     stationId: string,
-  ): Promise<
-    {
-      id: string;
-      stationId: string;
-      workingOrderId: string;
-      orderLabel: string;
-      kind: "recalled" | "void" | "changed" | "moved" | "rerouted";
-      lineName: string;
-      unitName: Record<string, string> | null;
-      soldInEach: boolean;
-      quantity: Decimal;
-      note: string | null;
-      wasStarted: boolean;
-      movedTo: string | null;
-      direction: "added" | "removed" | null;
-      cancelledExtra: string | null;
-      reroutedTo: string | null;
-      createdAt: string;
-    }[]
-  >;
+  ): Promise<StationNotice[]>;
+  /** `listStationNotices` for several stations in one statement; every station asked for has an entry. */
+  listStationsNotices(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationIds: readonly string[],
+  ): Promise<Map<string, StationNotice[]>>;
   /** Clears one notice; with `stationId`, only one at that station. */
   acknowledgeKitchenNotice(
     tx: Transaction,

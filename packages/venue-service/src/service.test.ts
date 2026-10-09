@@ -48,6 +48,7 @@ describe("VENUE_SERVICE", () => {
       "listSentDepartmentTransfers",
       "listServiceZones",
       "listStationNotices",
+      "listStationsNotices",
       "listZoneOffers",
       "menuState",
       "narrowDeviceKitchenScreens",

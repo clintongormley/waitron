@@ -1190,6 +1190,7 @@ describe("Device API — the device-guarded routes", () => {
         .returning({ id: kitchenNotices.id });
       const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
       const perStation = vi.spyOn(VENUE_SERVICE, "listStationNotices");
+      const batched = vi.spyOn(VENUE_SERVICE, "listStationsNotices");
       try {
         const stations = await read(app, jar);
         expect(stations.map((entry) => [entry.id, entry.notices?.map((n) => n.id)])).toEqual([
@@ -1197,8 +1198,10 @@ describe("Device API — the device-guarded routes", () => {
           [fria, [notice]],
         ]);
         expect(perStation).not.toHaveBeenCalled();
+        expect(batched).toHaveBeenCalledTimes(1);
       } finally {
         perStation.mockRestore();
+        batched.mockRestore();
       }
     });
 

@@ -27,6 +27,7 @@ export type {
   ExtraMakerOutcome,
   MakerResolver,
   StationTodayState,
+  StationNotice,
   KeepOpenSubject,
   ServiceMode,
   VenueServiceContribution,

@@ -53,6 +53,7 @@ import {
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
+  listStationsNotices,
   readClearingWorkflow,
   readEditSentLines,
   readKitchenTicketGrouping,
@@ -149,6 +150,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   getOrderContext: getOrderServiceContext,
   recordKitchenNotices,
   listStationNotices,
+  listStationsNotices,
   acknowledgeKitchenNotice,
   readEditSentLines,
   readClearingWorkflow,
