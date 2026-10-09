@@ -3566,7 +3566,7 @@ describe("the routing that names a period", () => {
       { rowKind: "all", rowLabel: null, zoneName: "Sala" },
       { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
       { rowKind: "category", rowLabel: "Cocktails", zoneName: "Sala" },
-      { rowKind: "product", rowLabel: "Mojito", zoneName: "Terraza" },
+      { rowKind: "product", rowLabel: "Cocktails › Mojito", zoneName: "Terraza" },
     ]);
     expect(before.get(periods.mediodia)).toEqual([
       { rowKind: "category", rowLabel: "Cocktails", zoneName: null },

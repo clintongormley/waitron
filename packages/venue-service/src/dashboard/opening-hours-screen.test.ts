@@ -379,7 +379,7 @@ describe("deleting a period that routing names", () => {
     const dialog = await removePeriod(el());
     expect(dialog.textContent).toContain("Delete Lunch?");
     expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
-      "Routing names this period in 2 cells. Their choices for it will be removed:",
+      "Also removed from 2 routing cells:",
     );
     expect(uses().map((item) => item.textContent!.trim())).toEqual([
       "All categories · Terrace",
@@ -394,7 +394,7 @@ describe("deleting a period that routing names", () => {
       .poll(() => uses().map((item) => item.textContent!.trim()))
       .toEqual(["Mojito · Bar"]);
     expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
-      "Routing names this period in 1 cell. Its choice for it will be removed:",
+      "Also removed from 1 routing cell:",
     );
 
     el().shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
@@ -414,7 +414,7 @@ describe("deleting a period that routing names", () => {
     host = await mount((async () => structuredClone(data)) as DashboardRequest);
     const dialog = await removePeriod(el());
     expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
-      "La asignación nombra este periodo en 2 celdas. Se quitarán sus opciones para él:",
+      "También se quitará de 2 celdas de asignación:",
     );
     expect(uses().map((item) => item.textContent!.trim())).toEqual([
       "Sin categoría · Todas las zonas",

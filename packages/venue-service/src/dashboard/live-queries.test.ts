@@ -89,6 +89,7 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "routing_cells",
     "routing_cell_periods",
     "categories",
+    "category_details",
     "products",
   ]);
 });
