@@ -123,9 +123,8 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
 };
 
 const PRINT_MODE_NAMES: NameTable = {
-  auto: { en: "Automatic", es: "Automático" },
+  auto: { en: "Always", es: "Siempre" },
   on_request: { en: "On request", es: "Bajo petición" },
-  never: { en: "Never", es: "Nunca" },
 };
 
 export function roleName(value: string, locale: string = currentLocale()): string {

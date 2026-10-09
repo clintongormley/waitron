@@ -748,6 +748,61 @@ describe("venue service management routes", () => {
     expect(await foreign.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
+  it.each(["department", "zone"] as const)(
+    "refuses Never and malformed %s receipt modes without changing rows",
+    async (kind) => {
+      const fx = await fixture();
+      const department = await withTransaction(db, async (tx) => {
+        const row = await createDepartment(
+          tx,
+          { locationId: fx.locationId },
+          {
+            name: "Receipt boundary",
+            defaultServiceMode: "prepay",
+          },
+        );
+        await configureZone(
+          tx,
+          { locationId: fx.locationId },
+          {
+            zoneId: fx.zoneId,
+            departmentId: row.id,
+          },
+        );
+        return row;
+      });
+      const path =
+        kind === "department"
+          ? `/management-api/venue-service/departments/${department.id}/sale-policy/receiptPrintMode`
+          : `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/receiptPrintMode`;
+      const rows = () =>
+        db.all(
+          kind === "department"
+            ? sql`select * from department_sale_policies where department_id = ${department.id}`
+            : sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`,
+        );
+      for (const value of ["auto", "on_request", ...(kind === "zone" ? [null] : [])]) {
+        expect((await send(fx.app, "PATCH", path, fx.managerCookie, { value })).status).toBe(204);
+        expect(rows()[0]).toMatchObject({ receipt_print_mode: value });
+      }
+      const before = rows();
+      for (const value of [
+        "never",
+        "unknown",
+        ["auto"],
+        1,
+        ...(kind === "department" ? [null] : []),
+      ]) {
+        const response = await send(fx.app, "PATCH", path, fx.managerCookie, { value });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "management.request_invalid", params: { field: "receiptPrintMode" } },
+        });
+        expect(rows()).toEqual(before);
+      }
+    },
+  );
+
   it("refuses an unknown zone policy field without clearing the receipt override", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, async (tx) => {
@@ -774,7 +829,7 @@ describe("venue service management routes", () => {
     expect(
       (
         await send(fx.app, "PATCH", `${base}/receiptPrintMode`, fx.managerCookie, {
-          value: "never",
+          value: "on_request",
         })
       ).status,
     ).toBe(204);
@@ -787,7 +842,7 @@ describe("venue service management routes", () => {
     });
     const saved = await db.execute<{ receipt_print_mode: string | null }>(sql`
       select receipt_print_mode from zone_sale_policies where zone_id = ${fx.zoneId}`);
-    expect(saved.rows).toEqual([{ receipt_print_mode: "never" }]);
+    expect(saved.rows).toEqual([{ receipt_print_mode: "on_request" }]);
   });
 
   it("serves no interval-list hours writes and no department hours in the venue read", async () => {

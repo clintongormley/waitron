@@ -608,10 +608,22 @@ function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover:
     parsedAs("zone_closed_times", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
 }
 
+function validateReceiptModes(tables: Tables): void {
+  for (const table of ["department_sale_policies", "zone_sale_policies"] as const) {
+    for (const row of tables[table] ?? []) {
+      const value = row.receipt_print_mode;
+      if (value === undefined || (table === "zone_sale_policies" && value === null)) continue;
+      if (typeof value !== "string" || (value !== "auto" && value !== "on_request"))
+        refuse(`${table}.receipt_print_mode`);
+    }
+  }
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
 ): void {
+  validateReceiptModes(tables);
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);

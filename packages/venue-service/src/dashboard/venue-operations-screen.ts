@@ -1439,9 +1439,7 @@ export class VenueOperationsScreen extends LitElement {
               ? t("venue.always")
               : receiptPrintMode === "on_request"
                 ? t("venue.on_request")
-                : receiptPrintMode === "never"
-                  ? t("venue.never")
-                  : "";
+                : "";
           const inheritedMode =
             row.kind === "zone"
               ? model.salePolicies.departments.find(
@@ -1453,7 +1451,7 @@ export class VenueOperationsScreen extends LitElement {
               ? t("venue.always")
               : inheritedMode === "on_request"
                 ? t("venue.on_request")
-                : t("venue.never");
+                : "";
           if (this.receiptEditor !== key)
             return html`<button
               type="button"
@@ -1476,7 +1474,6 @@ export class VenueOperationsScreen extends LitElement {
                 : []),
               { value: "auto", label: t("venue.always") },
               { value: "on_request", label: t("venue.on_request") },
-              { value: "never", label: t("venue.never") },
             ]}
             .value=${live(this.receiptDrafts[key] ?? stored ?? "")}
             ?disabled=${this.busy}
@@ -1497,13 +1494,13 @@ export class VenueOperationsScreen extends LitElement {
                   await this.api.setDepartmentSalePolicyField(
                     row.department.id,
                     "receiptPrintMode",
-                    value as "auto" | "on_request" | "never",
+                    value as "auto" | "on_request",
                   );
                 else
                   await this.api.setZoneSalePolicyOverride(
                     row.zone.id,
                     "receiptPrintMode",
-                    value ? (value as "auto" | "on_request" | "never") : null,
+                    value ? (value as "auto" | "on_request") : null,
                   );
                 const drafts = { ...this.receiptDrafts };
                 delete drafts[key];

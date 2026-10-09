@@ -1279,11 +1279,11 @@ describe("venue operations screen", () => {
               zoneId: "z1",
               paidWhen: "ticket_then_pay",
               collectionNumber: null,
-              receiptPrintMode: "never",
+              receiptPrintMode: "on_request",
               effective: {
                 paidWhen: "ticket_then_pay",
                 collectionNumber: "none",
-                receiptPrintMode: "never",
+                receiptPrintMode: "on_request",
                 printTradingName: true,
               },
             },
@@ -1298,7 +1298,7 @@ describe("venue operations screen", () => {
     expect(rows[0].textContent).toContain("Always");
     expect(rows[1].textContent).toContain("Pay on collection");
     expect(rows[1].textContent).toContain("None");
-    expect(rows[1].textContent).toContain("Never");
+    expect(rows[1].textContent).toContain("On request");
     expect(rows[2].textContent).toContain("Pay on collection");
     expect(rows[2].textContent).toContain("Numbered");
     expect(rows[2].textContent).toContain("On request");
@@ -1702,7 +1702,7 @@ describe("venue operations screen", () => {
 
   it("changes a department receipt choice and lets a zone inherit it", async () => {
     let departmentMode: "auto" | "on_request" = "auto";
-    let zoneMode: "never" | null = "never";
+    let zoneMode: "auto" | null = "auto";
     const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
       departmentMode = value;
     });
@@ -1754,11 +1754,7 @@ describe("venue operations screen", () => {
     expect(buttons()).toHaveLength(2);
     buttons()[0].click();
     await settle(el);
-    expect(control().options.map((option) => option.value)).toEqual([
-      "auto",
-      "on_request",
-      "never",
-    ]);
+    expect(control().options.map((option) => option.value)).toEqual(["auto", "on_request"]);
     await chooseOption(control(), "on_request");
     await vi.waitFor(() =>
       expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
@@ -1798,7 +1794,7 @@ describe("venue operations screen", () => {
       field: "receiptPrintMode",
       button: "edit-receipt",
       stored: "auto",
-      changed: "never",
+      changed: "on_request",
       label: "Always",
     },
   ] as const)("$field inline recovery", ({ field, button, stored, changed, label }) => {

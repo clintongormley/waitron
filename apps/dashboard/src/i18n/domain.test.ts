@@ -166,10 +166,10 @@ it("resolves a print-job-status token to Spanish and English, unknown value raw"
 });
 
 it("resolves a receipt-print-mode token to Spanish and English, unknown value raw", () => {
-  expect(printModeName("auto", "es")).toBe("Automático");
+  expect(printModeName("auto", "es")).toBe("Siempre");
   expect(printModeName("on_request", "es")).toBe("Bajo petición");
-  expect(printModeName("never", "es")).toBe("Nunca");
-  expect(printModeName("auto", "en")).toBe("Automatic");
+  expect(printModeName("never", "es")).toBe("never");
+  expect(printModeName("auto", "en")).toBe("Always");
   expect(printModeName("sometimes", "es")).toBe("sometimes");
 });
 

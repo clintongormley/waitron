@@ -126,7 +126,7 @@ const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
-const RECEIPT_PRINT_MODE = new Set(["auto", "on_request", "never"]);
+const RECEIPT_PRINT_MODE = new Set(["auto", "on_request"]);
 
 function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
   if (
@@ -140,7 +140,7 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
   if (field === "collectionNumber" && COLLECTION_NUMBER.has(value as string))
     return value as "none" | "numbered";
   if (field === "receiptPrintMode" && RECEIPT_PRINT_MODE.has(value as string))
-    return value as "auto" | "on_request" | "never";
+    return value as "auto" | "on_request";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
 }
@@ -691,7 +691,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               ctx.cfg,
               departmentId,
               field,
-              value as "auto" | "on_request" | "never",
+              value as "auto" | "on_request",
             );
           else
             await setDepartmentSalePolicyField(
@@ -820,7 +820,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               ctx.cfg,
               zoneId,
               "receiptPrintMode",
-              value as "auto" | "on_request" | "never" | null,
+              value as "auto" | "on_request" | null,
             );
           else throw new AppError("management.request_invalid", { field });
         });

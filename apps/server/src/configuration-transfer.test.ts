@@ -3518,7 +3518,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     });
     await tx
       .update(zoneSalePolicies)
-      .set({ receiptPrintMode: "never" })
+      .set({ receiptPrintMode: "auto" })
       .where(eq(zoneSalePolicies.zoneId, explicit.id));
     await tx
       .update(zoneSalePolicies)
@@ -3561,7 +3561,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     join zone_sale_policies q on q.zone_id=z.id
     where d.name='Receipt department' order by z.name`);
   expect(modes.rows).toEqual([
-    { name: "Explicit receipts", department_mode: "on_request", zone_mode: "never" },
+    { name: "Explicit receipts", department_mode: "on_request", zone_mode: "auto" },
     { name: "Inherited receipts", department_mode: "on_request", zone_mode: null },
   ]);
 });
