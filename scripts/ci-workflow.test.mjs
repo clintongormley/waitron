@@ -1025,6 +1025,45 @@ describe("the test shards", () => {
     },
     PNPM_LS_TEST_TIMEOUT_MS,
   );
+
+  it("print each test file's progress, keeping the default reporter beside it", () => {
+    const progress = '--reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"';
+    expect(existsSync(join(repoRoot, "scripts", "vitest-file-progress.mjs"))).toBe(true);
+
+    const streamStep = job(STREAM_JOB).body;
+    const steps = [
+      ...jobs.map(({ id, body }) => ({ id, step: shardStep(body) })),
+      {
+        id: STREAM_JOB,
+        step: streamStep.slice(streamStep.findIndex((l) => /- name: Run the stream/.test(l))),
+      },
+    ].filter(({ step }) => step !== undefined);
+
+    const commands = [];
+    for (const { id, step } of steps) {
+      const logical = step
+        .filter((line) => !line.trim().startsWith("#"))
+        .join("\n")
+        .replace(/\\\n\s*/g, " ")
+        .split("\n")
+        .map((line) => line.trim());
+      for (const command of logical) {
+        // The selection guard (`pnpm … ls | node … runnable test:coverage`) runs no tests.
+        if (command.includes(" runnable ")) continue;
+        const script = /^pnpm .*\b(test:coverage|test:shard)\b/.exec(command)?.[1];
+        if (script !== undefined) commands.push({ id, script, command });
+      }
+    }
+
+    // Every shard job, and the stream step, runs exactly one test command.
+    expect(commands.map(({ id }) => id).sort()).toEqual(steps.map(({ id }) => id).sort());
+    for (const { id, script, command } of commands) {
+      expect(command, id).toContain(progress);
+      // test:coverage passes no reporter of its own, so a lone --reporter would REPLACE the
+      // default one; test:shard's script already names it.
+      if (script === "test:coverage") expect(command, id).toContain("--reporter=default");
+    }
+  });
 });
 
 describe("the scope gates", () => {

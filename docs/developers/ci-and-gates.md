@@ -473,6 +473,21 @@ the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count.
 
+### Every test job prints which file is running
+
+Every `Run the … shard` step, and the stream tests' step, adds the reporter
+`scripts/vitest-file-progress.mjs`. It prints a `[file-progress] start` line when a test file is
+handed to a worker, an `end` line with its result and how long it took, and every 60 seconds a
+`still running:` line for each file not yet finished. Vitest's default reporter, off a terminal,
+names a file only when it finishes, so a job that hangs says nothing about where: on 2026-10-09
+`test-dashboard` in PR #1474's run 37932573955 printed its last finished file at 13:01:18 and then
+nothing until the job was cancelled at 13:04:44, about 13m47s after it started. Its cause was not
+established. In browser mode a file's `start` line means it was handed
+to a browser worker, which happens in batches, so it can come before the file is loaded. A
+`test:coverage` command passes `--reporter=default` beside it, because a lone `--reporter` replaces
+the default one; `test:shard` already names `default` and `blob`. Guard: the file-progress case in
+`scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text.
+
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
 The `ci` job has two steps, and each fails unless every needed job ended `success` or `skipped`;

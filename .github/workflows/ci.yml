@@ -680,7 +680,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/db" test:shard \
             --shard=${{ matrix.shard }}/3 \
-            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       # `if-no-files-found: error` is the guard that replaced the old `runnable test:coverage` check:
       # a `test:shard` that silently ran nothing (a missing script, a filter that matched nothing)
@@ -785,7 +786,8 @@ jobs:
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
             --exclude src/testing/s3-test-server.test.ts \
-            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
       # the shard, rather than a green that tested nothing (see test-heavy's upload step).
@@ -848,7 +850,8 @@ jobs:
             src/stream-loop.e2e.test.ts \
             src/stream-pause.e2e.test.ts \
             src/testing/s3-test-server.test.ts \
-            --outputFile=.vitest-reports/blob-stream.json
+            --outputFile=.vitest-reports/blob-stream.json \
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - name: Upload the stream tests' coverage blob
         if: always()
@@ -931,7 +934,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/fiscal-verifactu" test:coverage
+          pnpm --filter "@waitron/fiscal-verifactu" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # packages/ui alone, with its own browser runner.
   #
@@ -1009,7 +1013,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage
+          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - run: pnpm --filter @waitron/ui-core test:package
 
@@ -1064,7 +1069,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/till" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/till" test:coverage
+          pnpm --filter "@waitron/till" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # apps/dashboard alone: the admin/reporting dashboard app, the workspace's THIRD Chromium consumer
   # after packages/ui and apps/till. It has a shard of its own for the same reason test-till does — a
@@ -1117,7 +1123,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/dashboard" test:coverage
+          pnpm --filter "@waitron/dashboard" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # apps/setup alone: the setup-wizard browser app, the workspace's FOURTH Chromium consumer after
   # packages/ui, apps/till and apps/dashboard. It has a shard of its own for the same reason
@@ -1170,7 +1177,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/setup" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/setup" test:coverage
+          pnpm --filter "@waitron/setup" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Venue service combines server-side configuration tests with a Chromium dashboard project.
   # Its own runner installs Chromium and keeps browser execution out of the light package bins.
@@ -1212,7 +1220,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/venue-service" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/venue-service" test:coverage
+          pnpm --filter "@waitron/venue-service" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Adjustments combines database-backed policy tests with a Chromium dashboard project.
   # Its own runner installs Chromium and keeps browser execution out of the light package bins.
@@ -1254,7 +1263,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/adjustments" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/adjustments" test:coverage
+          pnpm --filter "@waitron/adjustments" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Bookings owns both a browser project and a database project. Its own runner keeps
   # Chromium out of the database bins and gives failures a package-specific job result.
@@ -1299,7 +1309,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/bookings" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/bookings" test:coverage
+          pnpm --filter "@waitron/bookings" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Media splits into a database project and a Chromium one, so its runner installs both test
   # prerequisites. The database half opens SQLite files through useVenueDb.
@@ -1344,7 +1355,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/media" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/media" test:coverage
+          pnpm --filter "@waitron/media" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The Stripe payment module, like bookings, owns both a database-backed node project and a Chromium
   # dashboard-panel project. Its own runner keeps Chromium out of the database bins and gives failures
@@ -1390,7 +1402,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/payments-stripe" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/payments-stripe" test:coverage
+          pnpm --filter "@waitron/payments-stripe" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The SumUp payment module, same shape as payments-stripe: a database-backed node project plus a
   # Chromium dashboard-panel project, on a runner of its own for the same reasons.
@@ -1435,7 +1448,8 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/payments-sumup" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/payments-sumup" test:coverage
+          pnpm --filter "@waitron/payments-sumup" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The remaining packages partition into two bins, with at most two package runners per bin.
   # Each subtracts OWN_SHARD_PACKAGES and the opposite bin from the changed scope;
@@ -1515,7 +1529,8 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage
+          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The second bin subtracts OWN_SHARD_PACKAGES and LIGHT_A_PACKAGES.
   test-light-b:
@@ -1589,7 +1604,8 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage
+          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
   # async. That makes it the cheapest mutation target in the repo, so its break: 90 is checked on a
