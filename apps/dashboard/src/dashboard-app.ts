@@ -1711,7 +1711,7 @@ export class DashboardApp extends LitElement {
     if (requested === "printing-rules") {
       const destination = this.#permittedScreen("prep-stations");
       this.#url.write(
-        { dashboard: destination, view: destination === "prep-stations" ? "tickets" : null },
+        { dashboard: destination, view: destination === "prep-stations" ? "stations" : null },
         true,
       );
       requested = destination;

@@ -3692,6 +3692,54 @@ it("a supervisor sees the stations read-only", async () => {
   expect(a.updateStation).not.toHaveBeenCalled();
 });
 
+it.each(["en", "es"] as const)(
+  "a manager's Stations table reads Printed on and Shown on, and a supervisor's reads neither (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const manager = await mountStations();
+    expect(stationHeadings(manager.el)).toEqual(
+      locale === "en"
+        ? ["Name", "Printed on", "Shown on", "Today"]
+        : ["Nombre", "Se imprime en", "Se muestra en", "Hoy"],
+    );
+    expect(q(manager.el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
+    expect(q(manager.el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe(
+      locale === "en" ? "No printer" : "Sin impresora",
+    );
+    expect(q(manager.el, '[data-test="screens-bar"]')!.textContent).toContain("Bar screen");
+    expect(q(manager.el, '[data-test="screens-upstairs"]')!.textContent).toContain("Other screen");
+    const host = document.createElement("div");
+    applyTokens(host);
+    document.body.append(host);
+    hosts.push(host);
+    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+    el.api = api({ load: vi.fn().mockResolvedValue(ticketView) });
+    el.readOnly = true;
+    host.append(el);
+    await settle(el);
+    expect(stationTable(el)!.textContent).toContain("Upstairs bar");
+    expect(stationHeadings(el)).toEqual(locale === "en" ? ["Name", "Today"] : ["Nombre", "Hoy"]);
+    expect(q(el, '[data-test^="printed-on-"]')).toBeNull();
+    expect(q(el, '[data-test^="screens-"]')).toBeNull();
+    expect(stationTable(el)!.textContent).not.toContain("Old printer");
+    expect(stationTable(el)!.textContent).not.toContain("Bar screen");
+  },
+);
+
+it("an old Tickets address opens Stations and rewrites the address", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/tickets");
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
+  await settle(el);
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(tabs.shadowRoot!.querySelector('[data-key="tickets"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[slot="tickets"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="tickets-table"]')).toBeNull();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
+});
+
 it("moves a configuration panel back to the overview when the screen becomes read-only", async () => {
   history.replaceState(null, "", "/manage/prep-stations/view/settings/test/bread");
   const a = api();

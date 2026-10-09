@@ -36,6 +36,12 @@ export class StationTable extends LitElement {
       wt-data-table::part(disabled) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(screens) {
+        display: grid;
+        gap: var(--wt-space-2);
+        max-width: calc(var(--wt-tap-min) * 5);
+        white-space: normal;
+      }
       wt-data-table::part(badge) {
         color: var(--wt-color-text-muted);
         margin-inline-start: var(--wt-space-2);
@@ -45,6 +51,10 @@ export class StationTable extends LitElement {
   @property({ attribute: false }) today: Readonly<Record<string, string | TemplateResult>> = {};
   @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
+  /** Each station's printers and screens, or none at all for a person who may not read them. */
+  @property({ attribute: false }) outputs?: Readonly<
+    Record<string, { printedOn: string | TemplateResult; shownOn: string | TemplateResult }>
+  >;
 
   #name(station: PrepStation) {
     return html`${this.actions[station.id] ?? nothing}<span
@@ -55,8 +65,29 @@ export class StationTable extends LitElement {
       ${station.active ? nothing : html`<span part="badge">${t("prep.health.disabled")}</span>`}`;
   }
   #columns(): DataTableColumn<PrepStation>[] {
+    const outputs = this.outputs;
     return [
       { key: "name", label: t("prep.name"), cell: (station) => this.#name(station) },
+      ...(outputs
+        ? [
+            {
+              key: "printedOn",
+              label: t("prep.printed_on"),
+              cell: (station: PrepStation) =>
+                html`<span data-test=${`printed-on-${station.id}`}
+                  >${outputs[station.id]?.printedOn ?? t("prep.no_printer")}</span
+                >`,
+            },
+            {
+              key: "shownOn",
+              label: t("prep.shown_on"),
+              cell: (station: PrepStation) =>
+                html`<span part="screens" data-test=${`screens-${station.id}`}
+                  >${outputs[station.id]?.shownOn ?? t("prep.none")}</span
+                >`,
+            },
+          ]
+        : []),
       {
         key: "today",
         label: t("prep.today_column"),

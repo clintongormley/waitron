@@ -20,6 +20,7 @@ type StationTable = HTMLElement & {
   stations: readonly PrepStation[];
   today: Record<string, string>;
   actions: Record<string, unknown>;
+  outputs?: Record<string, { printedOn: unknown; shownOn: unknown }>;
 };
 async function mount(stations: readonly PrepStation[] = [bar], theme: "light" | "dark" = "light") {
   const host = document.createElement("div");
@@ -113,6 +114,58 @@ it.each([
     const summary = el.shadowRoot!.querySelector("wt-data-table")!;
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(table(el)!.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(summary.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+  } finally {
+    await page.viewport(frame.width, frame.height);
+  }
+});
+
+const outputs = {
+  bar: {
+    printedOn: "Epson, Star",
+    shownOn: html`<span data-test="screen-device">Pantalla Cocina — station screen</span>`,
+  },
+};
+function headings(el: HTMLElement) {
+  return [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim());
+}
+it("reads each station's printers and screens in Printed on and Shown on, before Today", async () => {
+  const el = await mount();
+  el.outputs = outputs;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(headings(el)).toEqual(["Name", "Printed on", "Shown on", "Today"]);
+  const row = table(el)!.querySelector("tbody tr")!;
+  expect(row.querySelector('[data-test="printed-on-bar"]')!.textContent?.trim()).toBe(
+    "Epson, Star",
+  );
+  expect(row.querySelector('[data-test="screens-bar"] [data-test="screen-device"]')).not.toBeNull();
+  expect(row.querySelectorAll("td")[3]!.textContent?.trim()).toBe("Always open");
+  el.outputs = undefined;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(headings(el)).toEqual(["Name", "Today"]);
+  expect(table(el)!.querySelector('[data-test="printed-on-bar"]')).toBeNull();
+});
+it("names the read-out columns in Spanish", async () => {
+  setLocale("es");
+  const el = await mount();
+  el.outputs = outputs;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(headings(el)).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Hoy"]);
+});
+it.each([
+  ["en", 390],
+  ["es", 390],
+] as const)("keeps the table with its read-outs inside %s %ipx", async (locale, width) => {
+  const frame = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, 844);
+  try {
+    setLocale(locale);
+    const el = await mount([bar]);
+    el.outputs = outputs;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const summary = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(headings(el)).toHaveLength(4);
     expect(summary.getBoundingClientRect().right).toBeLessThanOrEqual(width);
   } finally {
     await page.viewport(frame.width, frame.height);

@@ -31,6 +31,15 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
             ]),
           )
         : {};
+    if (state === "manager")
+      el.outputs = {
+        bar: {
+          printedOn: "Epson",
+          shownOn: html`<span>Pantalla Cocina — station screen</span>
+            <a href="/manage/devices">Devices</a>`,
+        },
+        old: { printedOn: "No printer", shownOn: "None" },
+      };
     host.append(el);
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -38,6 +47,8 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
       .shadowRoot!.querySelector("wt-data-table")!
       .shadowRoot!.querySelectorAll("tbody tr");
     expect(rows).toHaveLength(state === "empty" ? 0 : 2);
+    if (state === "manager")
+      expect(rows[0]!.querySelector('[data-test="printed-on-bar"]')?.textContent).toBe("Epson");
     await expectNoA11yViolations(host);
   });
 });
