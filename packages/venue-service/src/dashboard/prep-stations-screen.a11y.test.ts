@@ -172,23 +172,19 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     if (state === "station" || state === "station-rest-on") {
-      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
-        new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
-      );
-      await el.updateComplete;
-      const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+      const table = el
+        .shadowRoot!.querySelector("prep-station-table")!
+        .shadowRoot!.querySelector("wt-data-table")!;
       await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-      const button = table.shadowRoot!.querySelector<HTMLElement>(
-        '[data-test="edit-settings-rest-bar"]',
-      )!;
-      expect(button.textContent?.trim()).toBe(state === "station-rest-on" ? "Yes" : "No");
-      button.click();
+      table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
       await el.updateComplete;
-      const choice = table.shadowRoot!.querySelector('[data-test="settings-choice"]')!;
-      await (choice as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-      expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(
-        state === "station-rest-on" ? "Yes" : "No",
-      );
+      const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+      await editor.updateComplete;
+      const rest = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        "wt-switch[name=showsRestOfOrder]",
+      )!;
+      await rest.updateComplete;
+      expect(rest.checked).toBe(state === "station-rest-on");
     }
     if (state === "editor" || state === "invalid") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();

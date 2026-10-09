@@ -3763,7 +3763,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
 describe("dashboard URL navigation", () => {
   it.each([
-    ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/tickets"],
+    ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/stations"],
     ["supervisor", ["venue.view"], ["venue-service"], "/manage/prep-stations/view/stations"],
     ["manager", [], [], "/manage/overview"],
   ] as const)(

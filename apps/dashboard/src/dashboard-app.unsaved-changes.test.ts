@@ -830,7 +830,6 @@ it.each([
   { use: { kind: "included-menu" }, path: "/manage/menus/menu/menu-two/view/structure" },
   { use: { kind: "menu-preview" }, path: "/manage/menus/menu/menu-one/view/preview" },
   { use: { kind: "routing-device" }, path: "/manage/devices" },
-  { use: { kind: "routing-watcher" }, path: "/manage/prep-stations/view/watchers" },
 ] as const)(
   "the rendered $use.kind link asks before leaving actual edited profile input",
   async ({ use, path }) => {
@@ -972,17 +971,15 @@ it.each([
       },
     );
     let link: HTMLAnchorElement;
-    if (use.kind === "routing-device" || use.kind === "routing-watcher") {
-      await navigationGuardFor(window)!.write("/manage/prep-stations/view/tickets");
-      await expect
-        .poll(() =>
-          m.app
-            .shadowRoot!.querySelector("dashboard-prep-stations-screen")
-            ?.shadowRoot?.querySelector("[data-test=tickets-table]"),
-        )
-        .not.toBeNull();
-      const prep = m.app.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;
-      const table = prep.shadowRoot!.querySelector("wt-data-table")!;
+    if (use.kind === "routing-device") {
+      await navigationGuardFor(window)!.write("/manage/prep-stations/view/stations");
+      const stations = () =>
+        m.app
+          .shadowRoot!.querySelector("dashboard-prep-stations-screen")
+          ?.shadowRoot?.querySelector("prep-station-table")
+          ?.shadowRoot?.querySelector("wt-data-table") ?? null;
+      await expect.poll(stations).not.toBeNull();
+      const table = stations()!;
       await expect.poll(() => table.shadowRoot!.querySelector(`a[href="${path}"]`)).not.toBeNull();
       link = table.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${path}"]`)!;
     } else if (use.kind === "included-menu") {
@@ -1044,8 +1041,8 @@ it.each([
     expect(location.pathname).toBe(
       use.kind === "included-menu"
         ? "/manage/profile/view/structure"
-        : use.kind === "routing-device" || use.kind === "routing-watcher"
-          ? "/manage/profile/view/tickets"
+        : use.kind === "routing-device"
+          ? "/manage/profile/view/stations"
           : "/manage/profile",
     );
     await choose(m, "keep");

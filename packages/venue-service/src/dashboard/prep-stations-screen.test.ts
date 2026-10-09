@@ -96,7 +96,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     ...overrides,
   } as unknown as PrepStationsApi;
 }
-it("shows watcher table relationships and Tickets follow lines", async () => {
+it("shows watcher table relationships", async () => {
   setLocale("en");
   const pass = {
     id: "pass",
@@ -151,13 +151,6 @@ it("shows watcher table relationships and Tickets follow lines", async () => {
   expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
   expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
   expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
-  const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
-  await (tickets as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  const follows = tickets.shadowRoot!.querySelector('[data-test="watchers-bar"]')!;
-  expect(follows.textContent).toContain("Pass, Terrace runner");
-  expect(follows.querySelector("a")?.getAttribute("href")).toBe(
-    "/manage/prep-stations/view/watchers",
-  );
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
 
@@ -488,39 +481,32 @@ it.each(
     q(el, "wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
     await settle(el);
     tabs.scrollIntoView();
-    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "tickets" } }));
+    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
-    const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
-    await (tickets as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-    expect(tickets.shadowRoot!.querySelector('[data-test="screens-bar"]')!.textContent).toContain(
-      "Bar screen",
-    );
-    expect(tickets.shadowRoot!.querySelector('[data-test="watchers-bar"]')!.textContent).toContain(
-      "Pass",
-    );
+    expect(q(el, '[data-test="screens-bar"]')!.textContent).toContain("Bar screen");
     await expectNoA11yViolations(el);
     await page.screenshot({
-      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-tickets.png`,
+      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-shown-on.png`,
     });
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "settings" } }));
     await settle(el);
     const settings = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
     await (settings as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-    const rest = settings.shadowRoot!.querySelector<HTMLElement>(
-      '[data-test="edit-settings-rest-bar"]',
+    expect(settings.shadowRoot!.querySelector('[data-test="edit-settings-rest-bar"]')).toBeNull();
+    const warm = settings.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="edit-settings-warmAfterMinutes-bar"]',
     )!;
-    expect(rest.textContent?.trim()).toBe("No");
-    await page.elementLocator(rest).click();
+    await page.elementLocator(warm).click();
     await settle(el);
-    const choice = settings.shadowRoot!.querySelector('[data-test="settings-choice"]')!;
-    expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe("No");
+    const minutes = settings.shadowRoot!.querySelector<WtInput>('[data-test="settings-minutes"]')!;
+    expect(minutes.value).toBe("");
     await expectNoA11yViolations(el);
     await page.screenshot({
       path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-settings.png`,
     });
     settings.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-settings-cell"]')!.click();
     await settle(el);
-    expect(settings.shadowRoot!.querySelector('[data-test="settings-choice"]')).toBeNull();
+    expect(settings.shadowRoot!.querySelector('[data-test="settings-minutes"]')).toBeNull();
     history.replaceState(null, "", "/manage");
   } finally {
     document.body.style.background = previous.body;
@@ -583,37 +569,38 @@ it.each([
 });
 
 it.each([
-  ["management.request_invalid", { field: "showsRestOfOrder" }, true],
-  ["station.not_found", {}, false],
+  ["management.request_invalid", { field: "showsRestOfOrder" }, "The change could not be saved."],
+  ["station.not_found", {}, "The change could not be saved. This station could not be found."],
 ] as const)(
-  "shows a %s refusal in Settings without changing the saved station choice",
-  async (code, params, fieldError) => {
+  "shows a %s refusal of Show the rest of the order in the station editor without changing the saved choice",
+  async (code, params, message) => {
     setLocale("en");
     const a = api({ updateStation: vi.fn().mockRejectedValue({ code, params }) });
     const el = await mount(a);
-    const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
-    await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-    const cell = (selector: string) => table.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    cell('[data-test="edit-settings-rest-bar"]').click();
+    const rest = () =>
+      el
+        .shadowRoot!.querySelector("prep-station-editor")!
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "wt-switch[name=showsRestOfOrder]",
+        )!;
+    q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
-    cell('[data-test="settings-choice"]').dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "yes" } }),
-    );
+    expect(rest().checked).toBe(false);
+    rest().dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
     await settle(el);
-    cell('[data-test="save-settings-cell"]').click();
+    q(el, '[data-test="save-station-edit"]')!.click();
     await settle(el);
     expect(a.updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
-    const choice = cell('[data-test="settings-choice"]') as WtCombobox;
-    expect(!!choice.error).toBe(fieldError);
-    if (fieldError) expect(choice.error).toContain("could not be saved");
-    else expect(cell("wt-form-actions").shadowRoot!.textContent).toContain("could not be saved");
-    expect(cell('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
-    cell('[data-test="cancel-settings-cell"]').click();
+    await vi.waitFor(() =>
+      expect((q(el, "wt-form-actions") as HTMLElement & { error: string }).error).toBe(message),
+    );
+    expect(rest().checked).toBe(true);
+    expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
+    q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
-    expect(cell('[data-test="edit-settings-rest-bar"]').textContent?.trim()).toBe("No");
-    cell('[data-test="edit-settings-rest-bar"]').click();
-    await settle(el);
-    expect((cell('[data-test="settings-choice"]') as WtCombobox).value).toBe("no");
+    expect(rest().checked).toBe(false);
   },
 );
 
@@ -650,7 +637,7 @@ it("draws the Stations rows from the stations list with no health read and no he
   const el = await mount(a);
   expect(stationRow(el, "bar").textContent).toContain("Bar");
   expect(stationRow(el, "upstairs").textContent).toContain("Upstairs bar");
-  expect(stationHeadings(el)).toEqual(["Name", "Today"]);
+  expect(stationHeadings(el)).toEqual(["Name", "Printed on", "Shown on", "Today"]);
   for (const word of ["Waiting", "Being made", "Ready", "Late", "Oldest"])
     expect(stationTable(el)!.querySelector("thead")!.textContent).not.toContain(word);
   expect(stationTable(el)!.querySelector('[part~="number"]')).toBeNull();
@@ -758,7 +745,7 @@ it("rejects unordered thresholds beside overdue in Settings and retains station 
   expect(a.deactivateStation).toHaveBeenCalledWith("bar");
 });
 
-it("shows linked printers and kitchen screens in Tickets", async () => {
+it("shows linked printers and kitchen screens in Stations", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue({
       ...view,
@@ -776,10 +763,8 @@ it("shows linked printers and kitchen screens in Tickets", async () => {
     }),
   });
   const el = await mount(a);
-  const table = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
-  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  const printers = table.shadowRoot!.querySelector('[data-test="edit-printers-bar"]')!;
-  const screens = table.shadowRoot!.querySelector('[data-test="screens-bar"]')!;
+  const printers = q(el, '[data-test="printed-on-bar"]')!;
+  const screens = q(el, '[data-test="screens-bar"]')!;
   expect(printers.textContent).toContain("Bar printer");
   expect(screens.textContent).toContain("Bar display");
   expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices");
@@ -1591,7 +1576,7 @@ it("a station whose status has not arrived leaves Today blank", async () => {
   );
   const row = stationTable(el)?.querySelector("tbody tr");
   expect(row).toBeTruthy();
-  expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
+  expect(row!.querySelector("td:last-child")?.textContent?.trim()).toBe("");
 });
 
 it("opens the default Stations tab and places Add station, the only create action, beside the tabs", async () => {
@@ -1604,7 +1589,6 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
     { key: "routing", label: "Routing" },
-    { key: "tickets", label: "Tickets" },
     { key: "watchers", label: "Watchers" },
     { key: "settings", label: "Settings" },
   ]);
@@ -1618,15 +1602,19 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(q(el, '[data-test="new-watcher"]')).toBeNull();
 });
 
-it.each(["tickets", "watchers", "settings"])(
-  "opens the %s tab an old tester link names, and its next tab change drops the tester's product",
-  async (tab) => {
+it.each([
+  ["tickets", "stations"],
+  ["watchers", "watchers"],
+  ["settings", "settings"],
+])(
+  "opens the %s tab an old tester link names (showing %s), and its next tab change drops the tester's product",
+  async (tab, shown) => {
     history.replaceState(null, "", `/manage/prep-stations/view/${tab}/test/bread`);
     const el = await mount(api());
     const tabs = el.shadowRoot!.querySelector("wt-tabs");
     expect(tabs, "the page owns a tab strip").not.toBeNull();
     await tabs!.updateComplete;
-    expect(tabs!.value).toBe(tab);
+    expect(tabs!.value).toBe(shown);
     tabs!.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
     await settle(el);
     expect(location.pathname).toBe("/manage/prep-stations/view/routing");
@@ -1719,7 +1707,7 @@ it("Today redraws the scheduled label when the next background read no longer ca
       background: { load: vi.fn().mockResolvedValue(nextDay) } as unknown as PrepStationsApi,
     });
     const cell = () =>
-      stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelector("td:last-child")!;
     expect(cell().textContent).toContain(
       "Closed now, closed by hand until 06:00 tomorrow. Its work goes to Bar.",
     );
@@ -1851,7 +1839,7 @@ it.each([
       document.documentElement.style.background = canvas;
       const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
       await tabs.updateComplete;
-      for (const key of ["stations", "routing", "tickets", "watchers", "settings"]) {
+      for (const key of ["stations", "routing", "watchers", "settings"]) {
         const button = tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!;
         await page.elementLocator(button).click();
         await settle(el);
@@ -1890,8 +1878,8 @@ it("Today leaves default and unscheduled stations always open without a closure 
   const { el } = await mountToday(withUpstairs({ open: true, why: "no_hours" }));
   const rows = stationTable(el)!.querySelectorAll("tbody tr");
   for (const row of rows) {
-    expect(row.querySelectorAll("td")[1]!.textContent!.trim()).toBe("Always open");
-    expect(row.querySelectorAll("td")[1]!.querySelector("wt-button")).toBeNull();
+    expect(row.querySelector("td:last-child")!.textContent!.trim()).toBe("Always open");
+    expect(row.querySelector("td:last-child")!.querySelector("wt-button")).toBeNull();
   }
 });
 it("Today names the chosen destination without offering a schedule action", async () => {
@@ -1906,7 +1894,7 @@ it("Today names the chosen destination without offering a schedule action", asyn
       },
     ),
   );
-  const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+  const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelector("td:last-child")!;
   expect(cell.textContent).toContain("Its work goes to Bar.");
   expect(cell.querySelector("wt-button")).toBeNull();
   expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
@@ -1917,8 +1905,8 @@ it("Today offers no hours action for disabled stations or an unreadable venue cl
   next.stations[1]!.active = false;
   next.routing.clockReadable = false;
   const { el } = await mountToday(next);
-  const cells = [...stationTable(el)!.querySelectorAll("tbody tr")].map(
-    (row) => row.querySelectorAll("td")[1]!,
+  const cells = [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
+    row.querySelector("td:last-child")!,
   );
   expect(cells[0]!.textContent).toContain("cannot be read");
   expect(cells[1]!.textContent!.trim()).toBe("Disabled");
@@ -2017,7 +2005,7 @@ it.each([
         },
       }),
     );
-    const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+    const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelector("td:last-child")!;
     expect(cell.textContent).toContain(expected);
     expect(
       cell.querySelector(`[data-test="${open ? "close" : "open"}-today-upstairs"]`),
@@ -2054,7 +2042,9 @@ it.each([false, true])(
       expect(stationTable(el)!.textContent).toContain("Opens at 12:00");
       await vi.advanceTimersByTimeAsync(60_000);
       await settle(el);
-      const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      const cell = stationTable(el)!
+        .querySelectorAll("tbody tr")[1]!
+        .querySelector("td:last-child")!;
       expect(cell.textContent).toContain("Open until 01:00 tomorrow");
       expect(cell.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
       expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
@@ -2430,41 +2420,60 @@ const ticketView: PrepStationsView = {
     },
   ],
 };
-async function mountTickets(overrides: Partial<PrepStationsApi> = {}) {
-  history.replaceState(null, "", "/manage/prep-stations/view/tickets");
+async function mountStations(overrides: Partial<PrepStationsApi> = {}) {
+  history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(ticketView),
-    setStationPrinters: vi.fn().mockResolvedValue(undefined),
+    updateStation: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   });
   const el = await mount(a);
   await settle(el);
-  const table = el.shadowRoot!.querySelector<HTMLElement>(
-    'wt-data-table[data-test="tickets-table"]',
-  );
-  expect(table, "Tickets lists station outputs").not.toBeNull();
-  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  return { el, a, table: table! };
+  return { el, a };
 }
-const ticketQ = (table: HTMLElement, selector: string) =>
-  table.shadowRoot!.querySelector<HTMLElement>(selector);
+const stationEditor = (el: PrepStationsScreen) =>
+  el.shadowRoot!.querySelector("prep-station-editor");
+const editorQ = <T extends HTMLElement = HTMLElement>(el: PrepStationsScreen, selector: string) =>
+  stationEditor(el)?.shadowRoot?.querySelector<T>(selector) ?? null;
+async function settleEditor(el: PrepStationsScreen) {
+  await settle(el);
+  await stationEditor(el)?.updateComplete;
+}
+const printersOf = (el: PrepStationsScreen) =>
+  editorQ<WtCombobox>(el, 'wt-combobox[name="printerIds"]');
+async function openPrinters(el: PrepStationsScreen, stationId = "bar") {
+  q(el, `[data-test="edit-${stationId}"]`)!.click();
+  await settleEditor(el);
+  const combo = printersOf(el);
+  expect(combo, "the station editor offers the station's printers").not.toBeNull();
+  await combo!.updateComplete;
+  return combo!;
+}
+async function pickPrinters(el: PrepStationsScreen, values: string[]) {
+  printersOf(el)!.dispatchEvent(new CustomEvent("wt-change", { detail: { values } }));
+  await settleEditor(el);
+}
+const editorSave = (el: PrepStationsScreen) =>
+  editorQ<HTMLElement & { disabled: boolean }>(el, '[data-test="save-station-edit"]')!;
+const editorMessage = (el: PrepStationsScreen) =>
+  editorQ<HTMLElement & { error: string }>(el, "wt-form-actions")!.error;
+async function cancelEditor(el: PrepStationsScreen) {
+  editorQ(el, '[data-test="cancel-station-edit"]')!.click();
+  await vi.waitFor(() => expect(stationEditor(el)).toBeNull());
+  await settle(el);
+}
 
-it("Tickets names each station's printed and current screen outputs with separate relationship links", async () => {
-  const { table } = await mountTickets();
-  expect(table.shadowRoot!.textContent).toContain("Old printer");
-  const bar = ticketQ(table, '[data-test="screens-bar"]')!;
+it("Stations names each station's printers and the screens that show it, with a link to Devices", async () => {
+  const { el } = await mountStations();
+  const printed = q(el, '[data-test="printed-on-bar"]')!;
+  expect(printed.textContent).toContain("Old printer");
+  const bar = q(el, '[data-test="screens-bar"]')!;
   expect(bar.textContent).toContain("Bar screen");
   expect(bar.textContent).not.toContain("Other screen");
   expect(bar.textContent).not.toContain("Disabled screen");
   expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
-  const watchers = ticketQ(table, '[data-test="watchers-bar"]')!;
-  expect(watchers.textContent).toContain("Pass");
-  expect(watchers.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/prep-stations/view/watchers",
-  );
-  expect(ticketQ(table, '[data-test="watchers-upstairs"]')!.textContent).not.toContain("Pass");
+  expect(printed.querySelector("wt-combobox, button")).toBeNull();
   expect(bar.querySelector("wt-combobox")).toBeNull();
-  expect(watchers.querySelector("wt-combobox")).toBeNull();
 });
 
 it.each([
@@ -2487,7 +2496,7 @@ it.each([
     ],
   },
 ])(
-  "Tickets names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
+  "Stations names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
   async ({ locale, bar, upstairs }) => {
     const server = structuredClone(ticketView);
     server.devices.push(
@@ -2522,23 +2531,19 @@ it.each([
       },
     );
     setLocale(locale);
-    const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
+    const { el } = await mountStations({ load: vi.fn().mockResolvedValue(server) });
     const names = (id: string) =>
-      [
-        ...ticketQ(table, `[data-test="screens-${id}"]`)!.querySelectorAll(
-          "[data-test=screen-device]",
-        ),
-      ].map((device) => device.textContent!.trim());
+      [...q(el, `[data-test="screens-${id}"]`)!.querySelectorAll("[data-test=screen-device]")].map(
+        (device) => device.textContent!.trim(),
+      );
     expect(names("bar")).toEqual(bar);
     expect(names("upstairs")).toEqual(upstairs);
   },
 );
 
-it("Tickets opens its printer cell as a multi-select, explains unavailable choices and saves once", async () => {
-  const { el, a, table } = await mountTickets();
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+it("the station editor offers printers as a multi-select, explains unavailable choices and saves once", async () => {
+  const { el, a } = await mountStations();
+  const combo = await openPrinters(el);
   expect(combo.multiple).toBe(true);
   expect(combo.values).toEqual(["old"]);
   expect(combo.options.find((o) => o.value === "watcher")).toMatchObject({
@@ -2549,88 +2554,64 @@ it("Tickets opens its printer cell as a multi-select, explains unavailable choic
     disabled: true,
     description: "Disabled",
   });
-  combo.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { values: ["old", "next"] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await settle(el);
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await pickPrinters(el, ["old", "next"]);
+  expect(a.updateStation).not.toHaveBeenCalled();
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", ["old", "next"]),
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["old", "next"] }),
   );
-  await settle(el);
-  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  await vi.waitFor(() => expect(printersOf(el)).toBeNull());
 });
 
-it("Tickets cancels a pending selection without submitting it", async () => {
-  const { el, a, table } = await mountTickets();
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
-  );
-  await settle(el);
-  ticketQ(table, '[data-test="cancel-printers-bar"]')!.click();
-  await settle(el);
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain("Old printer");
+it("the station editor cancels a pending printer selection without submitting it", async () => {
+  const { el, a } = await mountStations();
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  await cancelEditor(el);
+  expect(a.updateStation).not.toHaveBeenCalled();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
+  expect((await openPrinters(el)).values).toEqual(["old"]);
 });
 
-it("Tickets retains a refused set beside its field and allows correction and retry", async () => {
+it("the station editor retains a refused printer set beside its field and allows correction and retry", async () => {
   const save = vi
     .fn()
     .mockRejectedValueOnce({ code: "printer.makes_and_watches" })
     .mockResolvedValue(undefined);
-  const { el, table } = await mountTickets({ setStationPrinters: save });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
+  const { el } = await mountStations({ updateStation: save });
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
+  await vi.waitFor(() =>
+    expect(printersOf(el)!.error).toBe("Choose active printers that no watcher uses."),
   );
-  await settle(el);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
-  await vi.waitFor(() => expect(ticketQ(table, '[data-field-error="printerIds"]')).not.toBeNull());
-  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual([
-    "next",
-  ]);
-  expect(
-    (ticketQ(table, '[data-test="save-printers-bar"]') as HTMLElement & { disabled: boolean })
-      .disabled,
-  ).toBe(false);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  expect(printersOf(el)!.values).toEqual(["next"]);
+  expect(editorSave(el).disabled).toBe(false);
+  editorSave(el).click();
   await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  await vi.waitFor(() => expect(printersOf(el)).toBeNull());
 });
 
-it("Tickets closes after the write succeeds even if its following refresh fails", async () => {
+it("the station editor closes after the write succeeds even if its following refresh fails", async () => {
   const load = vi.fn().mockResolvedValueOnce(ticketView).mockRejectedValue(new Error("offline"));
-  const { el, table } = await mountTickets({ load });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  await editSaveField(el, ticketQ(table, '[data-test="station-printers-bar"]')!, ["next"]);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  const { el } = await mountStations({ load });
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded."),
   );
-  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  expect(printersOf(el)).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("The change could not be saved.");
 });
 
-it("Tickets lets a retained disabled printer be removed, then refuses to offer it again", async () => {
+it("the station editor lets a retained disabled printer be removed, then refuses to offer it again", async () => {
   const retained = {
     ...ticketView,
     stationPrinters: [{ stationId: "bar", printerId: "disabled" }],
   };
-  const { el, a, table } = await mountTickets({ load: vi.fn().mockResolvedValue(retained) });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-  await combo.updateComplete;
+  const { el, a } = await mountStations({ load: vi.fn().mockResolvedValue(retained) });
+  const combo = await openPrinters(el);
   expect(combo.options.find((o) => o.value === "disabled")!.disabled).toBe(false);
   combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
   await combo.updateComplete;
@@ -2638,53 +2619,46 @@ it("Tickets lets a retained disabled printer be removed, then refuses to offer i
     (option) => option.textContent?.includes("Disabled printer"),
   )!;
   choice.click();
-  await settle(el);
+  await settleEditor(el);
   expect(combo.values).toEqual([]);
   expect(combo.options.find((o) => o.value === "disabled")!.disabled).toBe(true);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
-  await vi.waitFor(() => expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", []));
-});
-
-it("Tickets keeps a failed selection editable while reporting a general refusal at the page", async () => {
-  const { el, table } = await mountTickets({
-    setStationPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
-  });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  await editSaveField(el, ticketQ(table, '[data-test="station-printers-bar"]')!, ["next"]);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain("The change could not be saved."),
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: [] }),
   );
-  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).error).toBe("");
-  expect(
-    (ticketQ(table, '[data-test="save-printers-bar"]') as HTMLElement & { disabled: boolean })
-      .disabled,
-  ).toBe(false);
 });
 
-it("Tickets preserves an open printer draft when mappings refresh live", async () => {
+it("the station editor keeps a failed printer selection editable while reporting a general refusal", async () => {
+  const { el } = await mountStations({
+    updateStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
+  await vi.waitFor(() => expect(editorMessage(el)).toBe("The change could not be saved."));
+  expect(printersOf(el)!.error).toBe("");
+  expect(printersOf(el)!.values).toEqual(["next"]);
+  expect(editorSave(el).disabled).toBe(false);
+});
+
+it("the station editor preserves an open printer draft when mappings refresh live", async () => {
   const liveData = new LiveData();
   const load = vi
     .fn()
     .mockResolvedValueOnce(ticketView)
     .mockResolvedValue({ ...ticketView, stationPrinters: [] });
-  const { el, a, table } = await mountTickets({ liveData, load });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["old", "next"] } }),
-  );
-  await settle(el);
+  const { el, a } = await mountStations({ liveData, load });
+  await openPrinters(el);
+  await pickPrinters(el, ["old", "next"]);
   liveData.invalidate([{ type: "station_printers", id: "bar" }]);
   await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-  await settle(el);
-  const retained = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox | null;
+  await settleEditor(el);
+  const retained = printersOf(el);
   expect(retained, "mapping refresh retains the editable selection").not.toBeNull();
   expect(retained!.values).toEqual(["old", "next"]);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", ["old", "next"]),
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["old", "next"] }),
   );
 });
 
@@ -2698,7 +2672,7 @@ it.each([
   ["es", "light", 1280],
   ["es", "dark", 1280],
 ] as const)(
-  "Tickets picker and refusal are accessible in %s %s at %ipx",
+  "the station editor's printer picker and refusal are accessible in %s %s at %ipx",
   async (locale, theme, width) => {
     const previous = {
       width: window.innerWidth,
@@ -2710,17 +2684,14 @@ it.each([
       await page.viewport(width, 900);
       setLocale(locale);
       const save = vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" });
-      const { el, table } = await mountTickets({ setStationPrinters: save });
+      const { el } = await mountStations({ updateStation: save });
       const host = el.parentElement!;
       host.setAttribute("data-theme", theme);
       host.style.background = "var(--wt-color-bg)";
       document.body.style.background = getComputedStyle(host).backgroundColor;
       document.documentElement.style.background = getComputedStyle(host).backgroundColor;
       await expectNoA11yViolations(host);
-      ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-      await settle(el);
-      const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-      await combo.updateComplete;
+      const combo = await openPrinters(el);
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
       await combo.updateComplete;
       const list = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -2728,8 +2699,8 @@ it.each([
       expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-      await editSaveField(el, combo, ["next"]);
-      ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+      await pickPrinters(el, ["next"]);
+      editorSave(el).click();
       await vi.waitFor(() => expect(combo.error).not.toBe(""));
       expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
@@ -2742,43 +2713,43 @@ it.each([
 );
 
 it.each([
-  ["en", "2 printers", "No results"],
-  ["es", "2 impresoras", "Sin resultados"],
-])("Tickets localises multiple choices and an empty search in %s", async (locale, count, empty) => {
-  setLocale(locale!);
-  const { el, table } = await mountTickets();
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["old", "next"] } }));
-  await settle(el);
-  await combo.updateComplete;
-  expect(combo.shadowRoot!.querySelector(".trigger")!.textContent).toContain(count);
-  combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
-  await combo.updateComplete;
-  const search = combo.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
-  search.value = "missing printer";
-  search.dispatchEvent(new Event("input", { bubbles: true }));
-  await combo.updateComplete;
-  expect(combo.shadowRoot!.querySelector(".empty")!.textContent).toContain(empty);
-});
+  ["en", "No results"],
+  ["es", "Sin resultados"],
+])(
+  "the station editor names its chosen printers and localises an empty search in %s",
+  async (locale, empty) => {
+    setLocale(locale!);
+    const { el } = await mountStations();
+    const combo = await openPrinters(el);
+    await pickPrinters(el, ["old", "next"]);
+    await combo.updateComplete;
+    expect(combo.shadowRoot!.querySelector(".trigger")!.textContent).toContain(
+      "Old printer, Next printer",
+    );
+    combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+    await combo.updateComplete;
+    const search = combo.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+    search.value = "missing printer";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await combo.updateComplete;
+    expect(combo.shadowRoot!.querySelector(".empty")!.textContent).toContain(empty);
+  },
+);
 
-it("Tickets retains station printer memberships independently for each station", async () => {
+it("the station editor retains printer memberships independently for each station", async () => {
   setLocale("en");
-  const { el, a, table } = await mountTickets();
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain("Old printer");
-  expect(ticketQ(table, '[data-test="edit-printers-upstairs"]')!.textContent).toContain("None");
-  for (const [stationId, ids, label] of [
-    ["bar", ["old"], "Bar: Printed on"],
-    ["upstairs", [], "Upstairs bar: Printed on"],
+  const { el, a } = await mountStations();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
+  expect(q(el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe("No printer");
+  for (const [stationId, ids, name] of [
+    ["bar", ["old"], "Bar"],
+    ["upstairs", [], "Upstairs bar"],
   ] as const) {
-    ticketQ(table, `[data-test="edit-printers-${stationId}"]`)!.click();
-    await settle(el);
-    const combo = ticketQ(table, `[data-test="station-printers-${stationId}"]`) as WtCombobox;
+    const combo = await openPrinters(el, stationId);
+    expect(editorQ<WtInput>(el, 'wt-input[name="stationName"]')!.value).toBe(name);
     expect(combo.values).toEqual(ids);
     expect(combo.getAttribute("name")).toBe("printerIds");
-    expect(combo.label).toBe(label);
-    await combo.updateComplete;
+    expect(combo.label).toBe("Printers");
     combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
     await combo.updateComplete;
     expect(combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.name).toBe("printerIds");
@@ -2788,90 +2759,75 @@ it("Tickets retains station printer memberships independently for each station",
     expect(old.getAttribute("aria-selected")).toBe(stationId === "bar" ? "true" : "false");
     expect(next.getAttribute("aria-selected")).toBe("false");
     combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
-    ticketQ(table, `[data-test="cancel-printers-${stationId}"]`)!.click();
-    await settle(el);
+    await cancelEditor(el);
   }
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
+  expect(a.updateStation).not.toHaveBeenCalled();
 });
 
 it.each([true, false])(
-  "Tickets persists a printer membership change and reflects its stored selection (attach=%s)",
+  "the station editor persists a printer membership change and Stations shows the stored set (attach=%s)",
   async (attach) => {
     setLocale("en");
     let stored = [...ticketView.stationPrinters];
     const load = vi.fn(async () => ({ ...ticketView, stationPrinters: stored }));
-    const save = vi.fn(async (stationId: string, ids: string[]) => {
+    const save = vi.fn(async (stationId: string, body: { printerIds?: string[] }) => {
       stored = [
         ...stored.filter((row) => row.stationId !== stationId),
-        ...ids.map((printerId) => ({ stationId, printerId })),
+        ...(body.printerIds ?? []).map((printerId) => ({ stationId, printerId })),
       ];
     });
-    const { el, table } = await mountTickets({ load, setStationPrinters: save });
-    ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-    await settle(el);
-    const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-    combo.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { values: attach ? ["old", "next"] : [] } }),
-    );
-    await settle(el);
-    ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+    const { el } = await mountStations({ load, updateStation: save });
+    await openPrinters(el);
+    await pickPrinters(el, attach ? ["old", "next"] : []);
+    editorSave(el).click();
     await vi.waitFor(() =>
-      expect(save).toHaveBeenCalledExactlyOnceWith("bar", attach ? ["old", "next"] : []),
+      expect(save).toHaveBeenCalledExactlyOnceWith("bar", {
+        printerIds: attach ? ["old", "next"] : [],
+      }),
     );
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
     await settle(el);
-    const cell = ticketQ(table, '[data-test="edit-printers-bar"]')!;
-    expect(cell.textContent?.trim()).toBe(attach ? "Old printer, Next printer" : "None");
-    expect(load).toHaveBeenCalledTimes(2);
-    cell.click();
-    await settle(el);
-    expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual(
-      attach ? ["old", "next"] : [],
+    expect(q(el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe(
+      attach ? "Old printer, Next printer" : "No printer",
     );
+    expect((await openPrinters(el)).values).toEqual(attach ? ["old", "next"] : []);
   },
 );
 
-it("Tickets keeps the stored membership and editable draft after a station refusal", async () => {
+it("the station editor keeps the stored membership and editable draft after a station refusal", async () => {
   setLocale("en");
-  const { el, a, table } = await mountTickets({
-    setStationPrinters: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+  const { el, a } = await mountStations({
+    updateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
   });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
-  );
-  await settle(el);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain(
-      "This station is disabled. Choose an active station.",
+    expect(editorMessage(el)).toBe(
+      "The change could not be saved. This station could not be found.",
     ),
   );
-  expect(el.shadowRoot!.textContent).not.toContain("station.not_found");
-  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual([
-    "next",
-  ]);
+  expect(stationEditor(el)!.shadowRoot!.textContent).not.toContain("station.not_found");
+  expect(printersOf(el)!.values).toEqual(["next"]);
   expect(a.load).toHaveBeenCalledTimes(1);
-  ticketQ(table, '[data-test="cancel-printers-bar"]')!.click();
-  await settle(el);
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent?.trim()).toBe(
-    "Old printer",
-  );
+  await cancelEditor(el);
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
 });
 
 it.each([
-  ["en", "No results"],
-  ["es", "Sin resultados"],
+  ["en", "No prep stations yet"],
+  ["es", "No hay estaciones de preparación todavía"],
 ] as const)(
-  "Tickets shows its localised empty state and no printer action with no stations (%s)",
+  "Stations shows its localised empty state and no printer read-out with no stations (%s)",
   async (locale, message) => {
     setLocale(locale);
-    const { a, table } = await mountTickets({
+    const { el, a } = await mountStations({
       load: vi.fn().mockResolvedValue({ ...ticketView, stations: [], stationPrinters: [] }),
     });
-    expect(table.shadowRoot!.textContent).toContain(message);
-    expect(ticketQ(table, '[data-test^="edit-printers-"]')).toBeNull();
-    expect(a.setStationPrinters).not.toHaveBeenCalled();
+    expect(stationTable(el)!.textContent).toContain(message);
+    expect(q(el, '[data-test^="printed-on-"]')).toBeNull();
+    expect(stationTable(el)!.querySelector('[data-test^="edit-"]')).toBeNull();
+    expect(a.updateStation).not.toHaveBeenCalled();
   },
 );
 
@@ -3593,7 +3549,6 @@ it("Watchers clears only a resolved printer conflict after Tickets releases ever
 
 it("Watchers restores the saved printer set after cancelling a refused attachment", async () => {
   const { el, a } = await mountWatcherPrinters({
-    setStationPrinters: vi.fn(),
     setWatcherPrinters: vi
       .fn()
       .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
@@ -3623,7 +3578,7 @@ it("Watchers restores the saved printer set after cancelling a refused attachmen
     ),
   ).toEqual(["Pass printer"]);
   expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]);
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
+  expect(a.updateStation).not.toHaveBeenCalled();
 });
 
 it.each([
@@ -3927,8 +3882,8 @@ it("preserves unknown printer ids on both output surfaces", async () => {
   const server = structuredClone(ticketView);
   server.stationPrinters = [{ stationId: "bar", printerId: "missing-station-printer" }];
   server.watchers[0]!.printerIds = ["missing-watcher-printer"];
-  const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain(
+  const stations = await mountStations({ load: vi.fn().mockResolvedValue(server) });
+  expect(q(stations.el, '[data-test="printed-on-bar"]')!.textContent).toContain(
     "missing-station-printer",
   );
   const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
@@ -3937,7 +3892,7 @@ it("preserves unknown printer ids on both output surfaces", async () => {
   );
 });
 
-it.each(["tickets", "settings", "stations"])(
+it.each(["settings", "stations"])(
   "%s orders tied station positions by name and keeps disabled stations last",
   async (tab) => {
     const server = structuredClone(ticketView);
@@ -4066,15 +4021,13 @@ it("keeps an attempted watcher Rename invalid through whitespace until a name is
   expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
 });
 
-it("Tickets names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
+it("the station editor names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
   setLocale("en");
   const server = structuredClone(ticketView);
   server.watchers = [];
   server.printers.find((row) => row.id === "watcher")!.watcherId = "missing-watcher";
-  const { el, table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const choice = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  const { el } = await mountStations({ load: vi.fn().mockResolvedValue(server) });
+  const choice = await openPrinters(el);
   expect(choice.options.find((row) => row.value === "watcher")).toEqual({
     value: "watcher",
     label: "Pass printer",
@@ -4383,16 +4336,11 @@ it.each(["rename", "remove"] as const)(
   },
 );
 
-it("keeps a disabled watcher out of the stations' watcher lists and the printer pickers", async () => {
-  const { el, table } = await mountTickets({
+it("keeps a disabled watcher out of the printer pickers", async () => {
+  const { el } = await mountStations({
     load: vi.fn().mockResolvedValue(retainedWatchersView()),
   });
-  const follows = ticketQ(table, '[data-test="watchers-bar"]')!.textContent!;
-  expect(follows).toContain("Pass, Runner");
-  expect(follows).not.toContain("Old pass");
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const choice = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  const choice = await openPrinters(el);
   expect(choice.options.find((row) => row.value === "spare-printer")).toEqual({
     value: "spare-printer",
     label: "Spare printer",
@@ -4400,6 +4348,7 @@ it("keeps a disabled watcher out of the stations' watcher lists and the printer 
     description: undefined,
   });
   history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  await cancelEditor(el);
   const watcherPicker = await openWatcherPrinters(el);
   expect(watcherPicker.options.find((row) => row.value === "spare-printer")?.description).toBe(
     undefined,
@@ -5817,7 +5766,6 @@ describe("Save follows changes", () => {
     "watcher-pass",
     "watcher-follows",
     "watcher-zones",
-    "rest",
     "timing",
     "fallback",
   ] as const;
@@ -5830,24 +5778,20 @@ describe("Save follows changes", () => {
         zones: [{ id: "terrace", name: "Terrace", active: true }],
       }),
       updateWatcher: vi.fn(),
-      setStationPrinters: vi.fn(),
       setWatcherPrinters: vi.fn(),
       setStationFallback: vi.fn(),
       ...overrides,
     });
     const el = await mount(a);
     await settle(el);
-    const query = (selector: string) =>
-      q(el, selector) ??
-      ticketQ(q(el, '[data-test="tickets-table"]')!, selector) ??
-      settingsQ(el, selector);
+    const query = (selector: string) => q(el, selector) ?? settingsQ(el, selector);
     const info = {
       create: ["new-station", "save-station", 'wt-input[name="name"]', "", "New station"],
       rename: ["edit-bar", "save-station-edit", 'wt-input[name="stationName"]', "Bar", "New bar"],
       printers: [
-        "edit-printers-bar",
-        "save-printers-bar",
-        '[data-test="station-printers-bar"]',
+        "edit-bar",
+        "save-station-edit",
+        'wt-combobox[name="printerIds"]',
         ["old"],
         ["next"],
       ],
@@ -5885,13 +5829,6 @@ describe("Save follows changes", () => {
         '[data-test="watcher-cell-input"]',
         ["__every__"],
         ["terrace"],
-      ],
-      rest: [
-        "edit-settings-rest-bar",
-        "save-settings-cell",
-        '[data-test="settings-choice"]',
-        "no",
-        "yes",
       ],
       timing: [
         "edit-settings-warmAfterMinutes-bar",
@@ -5946,7 +5883,6 @@ describe("Save follows changes", () => {
         a.createStation,
         a.updateStation,
         a.updateWatcher,
-        a.setStationPrinters,
         a.setWatcherPrinters,
         a.setStationFallback,
       ])
@@ -6042,7 +5978,6 @@ describe("Save follows changes", () => {
     "watcher-name",
     "watcher-printers",
     "watcher-pass",
-    "rest",
     "timing",
   ] as const)("%s stays primary during a write and retryable after refusal", async (mode) => {
     let refuse!: (error: unknown) => void;
@@ -6053,7 +5988,6 @@ describe("Save follows changes", () => {
     const form = await openSave(mode, {
       updateStation: save,
       updateWatcher: save,
-      setStationPrinters: save,
       setWatcherPrinters: save,
     });
     await form.edit(form.changed);
@@ -6082,7 +6016,7 @@ describe("Save follows changes", () => {
     await state(form.button(), false);
     form.button().click();
     await settle(form.el);
-    expect(form.a.setStationPrinters).not.toHaveBeenCalled();
+    expect(form.a.updateStation).not.toHaveBeenCalled();
   });
   it("a standalone station rename preserves newer input after committing the submitted name", async () => {
     let complete!: () => void;
@@ -6130,7 +6064,6 @@ describe("The station editor", () => {
     const a = api({
       load: vi.fn().mockResolvedValue(ticketView),
       updateStation: vi.fn().mockResolvedValue(undefined),
-      setStationPrinters: vi.fn(),
       ...overrides,
     });
     const el = await mount(a);
@@ -6156,7 +6089,6 @@ describe("The station editor", () => {
       showsRestOfOrder: true,
     });
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
-    expect(a.setStationPrinters).not.toHaveBeenCalled();
   });
   it("puts a refused printer under Printers and keeps the editor open", async () => {
     const { el, a } = await openEdit({

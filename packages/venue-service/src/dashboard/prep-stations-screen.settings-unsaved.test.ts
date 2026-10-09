@@ -141,7 +141,9 @@ async function mount(write?: Promise<void>, refreshFails = false, initial = view
   const screen = app.shadowRoot!.querySelector<PrepStationsScreen>(
     "dashboard-prep-stations-screen",
   )!;
-  await expect.poll(() => cell(screen, "[data-test=edit-settings-rest-bar]")).not.toBeNull();
+  await expect
+    .poll(() => cell(screen, "[data-test=edit-settings-warmAfterMinutes-bar]"))
+    .not.toBeNull();
   return { screen, writes };
 }
 function cell(screen: PrepStationsScreen, selector: string) {
@@ -158,19 +160,21 @@ async function settle(screen: PrepStationsScreen) {
   await (screen.shadowRoot!.querySelector("[data-test=settings-table]") as LitElement)
     ?.updateComplete;
 }
-async function open(screen: PrepStationsScreen, field = "rest", station = "bar") {
+async function open(screen: PrepStationsScreen, field = "warmAfterMinutes", station = "bar") {
   cell(screen, `[data-test=edit-settings-${field}-${station}]`)!.click();
   await settle(screen);
 }
-async function change(screen: PrepStationsScreen, value: string, selector = "settings-choice") {
+async function change(screen: PrepStationsScreen, value: string, selector = "settings-minutes") {
   cell(screen, `[data-test=${selector}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await settle(screen);
 }
-function shown(screen: PrepStationsScreen, selector = "settings-choice") {
+function shown(screen: PrepStationsScreen, selector = "settings-minutes") {
   return (cell(screen, `[data-test=${selector}]`) as WtCombobox | WtInput | null)?.value;
 }
+const isOpen = (screen: PrepStationsScreen, field: string) =>
+  cell(screen, `[data-test=edit-settings-${field}-bar]`) === null;
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -193,17 +197,17 @@ it.each(["cancel", "escape"])(
   async (how) => {
     const { screen, writes } = await mount();
     await open(screen);
-    await change(screen, "yes");
+    await change(screen, "6");
     expect(unload()).toBe(true);
     if (how === "cancel") cell(screen, "[data-test=cancel-settings-cell]")!.click();
     else
-      cell(screen, "[data-test=settings-choice]")!.dispatchEvent(
+      cell(screen, "[data-test=settings-minutes]")!.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
       );
     expect((await question()).open).toBe(true);
-    expect(shown(screen)).toBe("yes");
+    expect(shown(screen)).toBe("6");
     await choose("keep");
-    expect(shown(screen)).toBe("yes");
+    expect(shown(screen)).toBe("6");
     expect(writes).toEqual([]);
     cell(screen, "[data-test=cancel-settings-cell]")!.click();
     await choose("discard");
@@ -211,21 +215,24 @@ it.each(["cancel", "escape"])(
     expect(unload()).toBe(false);
     expect(writes).toEqual([]);
     await open(screen);
-    expect(shown(screen)).toBe("no");
+    expect(shown(screen)).toBe("");
   },
 );
 it("asks before replacing one edited Settings cell with another", async () => {
   const { screen, writes } = await mount();
   await open(screen);
-  await change(screen, "yes");
-  await open(screen, "warmAfterMinutes");
+  await change(screen, "6");
+  await open(screen, "overdueAfterMinutes");
   expect((await question()).open).toBe(true);
   await choose("keep");
-  expect(shown(screen)).toBe("yes");
-  expect(shown(screen, "settings-minutes")).toBeUndefined();
-  await open(screen, "warmAfterMinutes");
+  expect(shown(screen)).toBe("6");
+  expect(isOpen(screen, "warmAfterMinutes")).toBe(true);
+  expect(isOpen(screen, "overdueAfterMinutes")).toBe(false);
+  await open(screen, "overdueAfterMinutes");
   await choose("discard");
   await settle(screen);
+  expect(isOpen(screen, "overdueAfterMinutes")).toBe(true);
+  expect(isOpen(screen, "warmAfterMinutes")).toBe(false);
   expect(shown(screen, "settings-minutes")).toBe("");
   expect(unload()).toBe(false);
   expect(writes).toEqual([]);
@@ -233,14 +240,14 @@ it("asks before replacing one edited Settings cell with another", async () => {
 it("a reverted cell and an unchanged timing cell leave without a warning", async () => {
   const { screen, writes } = await mount();
   await open(screen);
-  await change(screen, "yes");
-  await change(screen, "no");
+  await change(screen, "6");
+  await change(screen, "");
   expect(unload()).toBe(false);
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   await settle(screen);
   expect((await question()).open).toBe(false);
   expect(shown(screen)).toBeUndefined();
-  await open(screen, "warmAfterMinutes");
+  await open(screen, "overdueAfterMinutes");
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   await settle(screen);
   expect(shown(screen, "settings-minutes")).toBeUndefined();
@@ -250,34 +257,34 @@ it("keeps refused Settings values protected and clears protection on the accepte
   const wait = deferred();
   const { screen, writes } = await mount(wait.promise);
   await open(screen);
-  await change(screen, "yes");
+  await change(screen, "6");
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await settle(screen);
   wait.reject({ code: "station.not_found" });
   await settle(screen);
-  expect(shown(screen)).toBe("yes");
+  expect(shown(screen)).toBe("6");
   expect(unload()).toBe(true);
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   await choose("keep");
-  expect(shown(screen)).toBe("yes");
+  expect(shown(screen)).toBe("6");
   app.api.updateStation = async (id, body) => {
     writes.push({ id, body });
   };
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await expect.poll(() => shown(screen)).toBeUndefined();
   expect(writes).toEqual([
-    { id: "bar", body: { showsRestOfOrder: true } },
-    { id: "bar", body: { showsRestOfOrder: true } },
+    { id: "bar", body: { warmAfterMinutes: 6 } },
+    { id: "bar", body: { warmAfterMinutes: 6 } },
   ]);
   expect(unload()).toBe(false);
 });
 it("commits an accepted Settings value before a failing refresh", async () => {
   const { screen, writes } = await mount(undefined, true);
   await open(screen);
-  await change(screen, "yes");
+  await change(screen, "6");
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await expect.poll(() => shown(screen)).toBeUndefined();
-  expect(writes).toEqual([{ id: "bar", body: { showsRestOfOrder: true } }]);
+  expect(writes).toEqual([{ id: "bar", body: { warmAfterMinutes: 6 } }]);
   expect(unload()).toBe(false);
   await expect.poll(() => screen.shadowRoot!.textContent).toContain("could not be loaded");
 });
@@ -299,7 +306,7 @@ it("timing values compare their submitted numbers while invalid text remains uns
 it("keeps the Settings tab and its draft visible until the leave decision", async () => {
   const { screen, writes } = await mount();
   await open(screen);
-  await change(screen, "yes");
+  await change(screen, "6");
   const tabs = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
   const leave = () =>
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
@@ -310,7 +317,7 @@ it("keeps the Settings tab and its draft visible until the leave decision", asyn
   expect(location.pathname).toBe("/manage/prep-stations/view/settings");
   await choose("keep");
   expect(tabs.value).toBe("settings");
-  expect(shown(screen)).toBe("yes");
+  expect(shown(screen)).toBe("6");
   leave();
   await choose("discard");
   await expect.poll(() => tabs.value).toBe("stations");
@@ -321,12 +328,13 @@ it("keeps the Settings tab and its draft visible until the leave decision", asyn
 it("ignores stale field events after another Settings editor replaces their owner", async () => {
   const { screen, writes } = await mount();
   await open(screen);
-  const old = cell(screen, "[data-test=settings-choice]")!;
-  await open(screen, "warmAfterMinutes");
-  old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "yes" } }));
+  const old = cell(screen, "[data-test=settings-minutes]")!;
+  await open(screen, "overdueAfterMinutes");
+  old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "6" } }));
   await settle(screen);
+  expect(isOpen(screen, "overdueAfterMinutes")).toBe(true);
   expect(shown(screen, "settings-minutes")).toBe("");
-  expect(shown(screen)).toBeUndefined();
+  expect(isOpen(screen, "warmAfterMinutes")).toBe(false);
   expect(unload()).toBe(false);
   expect(writes).toEqual([]);
 });
@@ -336,39 +344,40 @@ it.each(["resolve", "reject"] as const)(
     const wait = deferred();
     const { screen, writes } = await mount(wait.promise);
     await open(screen);
-    await change(screen, "yes");
+    await change(screen, "6");
     cell(screen, "[data-test=save-settings-cell]")!.click();
     await settle(screen);
     screen.remove();
     expect(unload()).toBe(false);
     app.shadowRoot!.prepend(screen);
     await settle(screen);
-    await open(screen, "warmAfterMinutes");
-    await change(screen, "6", "settings-minutes");
+    await open(screen, "overdueAfterMinutes");
+    await change(screen, "12", "settings-minutes");
     if (result === "resolve") wait.resolve();
     else wait.reject({ code: "station.not_found" });
     await settle(screen);
-    expect(shown(screen, "settings-minutes")).toBe("6");
+    expect(shown(screen, "settings-minutes")).toBe("12");
     expect(unload()).toBe(true);
-    expect(writes).toEqual([{ id: "bar", body: { showsRestOfOrder: true } }]);
+    expect(writes).toEqual([{ id: "bar", body: { warmAfterMinutes: 6 } }]);
   },
 );
 it("holds the submitted value during a save and refuses replacement and extra writes", async () => {
   const wait = deferred();
   const { screen, writes } = await mount(wait.promise);
   await open(screen);
-  await change(screen, "yes");
+  await change(screen, "6");
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await settle(screen);
-  await change(screen, "no");
+  await change(screen, "");
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
-  await open(screen, "warmAfterMinutes");
+  await open(screen, "overdueAfterMinutes");
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await settle(screen);
-  expect(shown(screen)).toBe("yes");
-  expect(shown(screen, "settings-minutes")).toBeUndefined();
+  expect(shown(screen)).toBe("6");
+  expect(isOpen(screen, "warmAfterMinutes")).toBe(true);
+  expect(isOpen(screen, "overdueAfterMinutes")).toBe(false);
   expect((await question()).open).toBe(false);
-  expect(writes).toEqual([{ id: "bar", body: { showsRestOfOrder: true } }]);
+  expect(writes).toEqual([{ id: "bar", body: { warmAfterMinutes: 6 } }]);
   wait.resolve();
   await expect.poll(() => shown(screen)).toBeUndefined();
   expect(unload()).toBe(false);
@@ -378,12 +387,12 @@ it("ignores an old Save control after another Settings cell replaces it", async 
   const { screen, writes } = await mount();
   await open(screen);
   const oldSave = cell(screen, "[data-test=save-settings-cell]")!;
-  await open(screen, "warmAfterMinutes");
-  await change(screen, "6", "settings-minutes");
+  await open(screen, "overdueAfterMinutes");
+  await change(screen, "12", "settings-minutes");
   oldSave.click();
   await settle(screen);
   expect(writes).toEqual([]);
-  expect(shown(screen, "settings-minutes")).toBe("6");
+  expect(shown(screen, "settings-minutes")).toBe("12");
   expect(unload()).toBe(true);
 });
 it("a timing override's equivalent submitted number is clean", async () => {
@@ -415,20 +424,20 @@ it("protects a fallback choice until its existing two-step confirmation writes i
   });
   const { screen, writes } = await mount(undefined, false, initial);
   await open(screen, "fallback", "grill");
-  await change(screen, "");
+  await change(screen, "", "settings-choice");
   expect(unload()).toBe(true);
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   await choose("keep");
-  expect(shown(screen)).toBe("");
-  await change(screen, "bar");
+  expect(shown(screen, "settings-choice")).toBe("");
+  await change(screen, "bar", "settings-choice");
   expect(unload()).toBe(false);
-  await change(screen, "");
+  await change(screen, "", "settings-choice");
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await settle(screen);
   expect(writes).toEqual([]);
   expect(unload()).toBe(true);
   cell(screen, "[data-test=save-settings-cell]")!.click();
-  await expect.poll(() => shown(screen)).toBeUndefined();
+  await expect.poll(() => shown(screen, "settings-choice")).toBeUndefined();
   expect(writes).toEqual([{ id: "grill", target: null }]);
   expect(unload()).toBe(false);
 });
@@ -436,15 +445,15 @@ it("protects a fallback choice until its existing two-step confirmation writes i
 it("a successful write makes an older pending Cancel answer inert", async () => {
   const { screen, writes } = await mount();
   await open(screen);
-  await change(screen, "yes");
+  await change(screen, "6");
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   const old = await question();
   expect(old.open).toBe(true);
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await expect.poll(() => shown(screen)).toBeUndefined();
   expect((await question()).open).toBe(false);
-  await open(screen, "warmAfterMinutes");
-  await change(screen, "6", "settings-minutes");
+  await open(screen, "overdueAfterMinutes");
+  await change(screen, "12", "settings-minutes");
   old.dispatchEvent(
     new CustomEvent("wt-unsaved-choice", {
       detail: { decision: "discard" },
@@ -453,14 +462,14 @@ it("a successful write makes an older pending Cancel answer inert", async () => 
     }),
   );
   await settle(screen);
-  expect(shown(screen, "settings-minutes")).toBe("6");
+  expect(shown(screen, "settings-minutes")).toBe("12");
   expect(unload()).toBe(true);
-  expect(writes).toEqual([{ id: "bar", body: { showsRestOfOrder: true } }]);
+  expect(writes).toEqual([{ id: "bar", body: { warmAfterMinutes: 6 } }]);
 });
 it("a disconnected Settings draft releases unload protection and its pending answer", async () => {
   const { screen, writes } = await mount();
   await open(screen);
-  await change(screen, "yes");
+  await change(screen, "6");
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   const old = await question();
   expect(old.open).toBe(true);
@@ -469,8 +478,8 @@ it("a disconnected Settings draft releases unload protection and its pending ans
   expect((await question()).open).toBe(false);
   app.shadowRoot!.prepend(screen);
   await settle(screen);
-  await open(screen, "warmAfterMinutes");
-  await change(screen, "6", "settings-minutes");
+  await open(screen, "overdueAfterMinutes");
+  await change(screen, "12", "settings-minutes");
   old.dispatchEvent(
     new CustomEvent("wt-unsaved-choice", {
       detail: { decision: "discard" },
@@ -479,7 +488,7 @@ it("a disconnected Settings draft releases unload protection and its pending ans
     }),
   );
   await settle(screen);
-  expect(shown(screen, "settings-minutes")).toBe("6");
+  expect(shown(screen, "settings-minutes")).toBe("12");
   expect(writes).toEqual([]);
 });
 
@@ -489,12 +498,12 @@ it.each(["light", "dark"])(
     const { screen } = await mount();
     app.setAttribute("data-theme", theme);
     await open(screen);
-    await change(screen, "yes");
+    await change(screen, "6");
     cell(screen, "[data-test=cancel-settings-cell]")!.click();
     expect((await question()).open).toBe(true);
     await expectNoA11yViolations(app);
     await choose("keep");
-    expect(shown(screen)).toBe("yes");
+    expect(shown(screen)).toBe("6");
     await expectNoA11yViolations(app);
   },
 );
@@ -540,26 +549,36 @@ it("immediately saved service controls remain exempt while saving and after a re
   expect((await question()).open).toBe(false);
 });
 
-it.each(["rest", "warmAfterMinutes"])(
+function withGrill() {
+  const initial = structuredClone(view);
+  initial.stations.push({
+    ...structuredClone(initial.stations[0]!),
+    id: "grill",
+    name: "Grill",
+    isDefault: false,
+  });
+  initial.routing.stations.push({ id: "grill", name: "Grill", active: true });
+  initial.routing.stationTimes.push({
+    ...structuredClone(initial.routing.stationTimes[0]!),
+    stationId: "grill",
+    fallbackStationId: "bar",
+  });
+  return initial;
+}
+it.each(["fallback", "warmAfterMinutes"])(
   "native Escape keeps the Settings %s warning open until the next answer",
   async (field) => {
-    const { screen, writes } = await mount();
-    await open(screen, field);
-    await change(
-      screen,
-      field === "rest" ? "yes" : "8",
-      field === "rest" ? "settings-choice" : "settings-minutes",
-    );
-    const control = cell(
-      screen,
-      field === "rest" ? "[data-test=settings-choice]" : "[data-test=settings-minutes]",
-    ) as WtCombobox | WtInput;
+    const choice = field === "fallback";
+    const { screen, writes } = await mount(undefined, false, withGrill());
+    await open(screen, field, choice ? "grill" : "bar");
+    const selector = choice ? "settings-choice" : "settings-minutes";
+    const value = choice ? "" : "8";
+    await change(screen, value, selector);
+    const control = cell(screen, `[data-test=${selector}]`) as WtCombobox | WtInput;
     await control.updateComplete;
-    const native = control.shadowRoot!.querySelector<HTMLElement>(
-      field === "rest" ? ".trigger" : "input",
-    )!;
+    const native = control.shadowRoot!.querySelector<HTMLElement>(choice ? ".trigger" : "input")!;
     await userEvent.click(native);
-    if (field === "rest") {
+    if (choice) {
       await userEvent.keyboard("{Escape}");
       await expect
         .poll(() => control.shadowRoot!.querySelector("[popover]")!.matches(":popover-open"))
@@ -570,9 +589,7 @@ it.each(["rest", "warmAfterMinutes"])(
     await expect.poll(async () => (await question()).open).toBe(true);
     await userEvent.keyboard("{Escape}");
     await expect.poll(async () => (await question()).open).toBe(false);
-    expect(shown(screen, field === "rest" ? "settings-choice" : "settings-minutes")).toBe(
-      field === "rest" ? "yes" : "8",
-    );
+    expect(shown(screen, selector)).toBe(value);
     expect(unload()).toBe(true);
     expect(writes).toEqual([]);
   },

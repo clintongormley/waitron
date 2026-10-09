@@ -450,17 +450,6 @@ it("writes a complete station order as one active request even from a background
   ]);
 });
 
-it("saves a station's complete printer set in one non-passive request", async () => {
-  const request = vi.fn(async () => undefined);
-  await new PrepStationsApi(request as DashboardRequest).background.setStationPrinters("bar", [
-    "p2",
-    "p1",
-  ]);
-  expect(request.mock.calls).toEqual([
-    ["/management-api/stations/bar/printers", "PUT", { printerIds: ["p2", "p1"] }],
-  ]);
-});
-
 it("submits a whole watcher printer set as an active write even from a background client", async () => {
   const request = vi.fn(async () => undefined);
   const api = new PrepStationsApi(request as DashboardRequest).background;
