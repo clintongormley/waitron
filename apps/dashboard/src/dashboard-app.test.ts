@@ -7057,6 +7057,7 @@ describe("mounted staged department pages", () => {
   async function mountDepartments(
     path = "/manage/venue-operations",
     permissions = ["venue_service.manage"],
+    missingPeriods = false,
   ) {
     history.replaceState(null, "", path);
     const model = {
@@ -7090,7 +7091,9 @@ describe("mounted staged department pages", () => {
         name: id === "z1" ? "Terrace" : "Bar",
         active: true,
       })),
-      readiness: [],
+      readiness: missingPeriods
+        ? [{ code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" }]
+        : [],
       salePolicies: { departments: [], zones: [] },
       settings: { editSentLines: true },
       kitchenTicketGrouping: "combined",
@@ -7285,4 +7288,52 @@ describe("mounted staged department pages", () => {
       expect(history.length).toBe(count);
     },
   );
+
+  it("the real Opening hours link keeps Settings edits until Discard and then pushes its department", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
+    const box = await draft(app);
+    const link = find(app, '[data-test="setup"] a') as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/department/d1");
+    const pushed = vi.spyOn(history, "pushState");
+    link.click();
+    await choose(app, "keep");
+    expect(pushed).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
+    expect(box.value).toBe("Draft restaurant");
+    expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
+    link.click();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
+    expect(
+      pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
+    ).toEqual(["/manage/opening-hours/department/d1"]);
+    expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
+  });
+
+  it("the real Opening hours link has its own history entry and returns through Back and Forward", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
+    await expect.poll(() => find(app, '[data-test="setup"] a')).not.toBeNull();
+    find(app, '[data-test="setup"] a')!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    const length = history.length;
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => find(app, "department-settings")).not.toBeNull();
+    expect(history.length).toBe(length);
+    const box = await draft(app);
+    history.forward();
+    await choose(app, "keep");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(history.length).toBe(length);
+    expect(box.value).toBe("Draft restaurant");
+    expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
+    history.forward();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
+    expect(history.length).toBe(length);
+    expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
+  });
 });

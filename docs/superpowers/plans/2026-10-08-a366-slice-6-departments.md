@@ -1693,3 +1693,42 @@ with a generic error each failed the corresponding new assertions. The restored 
 cases passed. These experiments do not complete A10: post-save inheritance/overrides,
 opening-hours history/bounds, remaining native/focus checks and the same-request Settings
 input reconciliation still precede retirement and the public switch.
+
+
+### Implementation checkpoint: A10 saved policies and Opening hours (2026-10-09)
+
+Ten added browser cases carry more of the original assertions. Four native-control sequences
+save each department service setting, show its new hint on a following zone, save an explicit
+zone override and clear it back to the department. Each request body is checked. The sequences
+carry the old paid-timing, collection-number, receipt-choice and explicit-override cases
+(`venue-operations-screen.test.ts`, “changes paid timing on a department and lets a zone
+inherit it again”, “changes a department collection number and lets a zone inherit it”,
+“changes a department receipt choice and lets a zone inherit it”, and “shows an explicit zone
+override after saving”) on the new fields and Save flow.
+
+Two mounted DashboardApp cases use its real capture-phase link handler, its shared draft
+coordinator and navigation guard: Keep retains the Settings draft, Discard pushes the exact
+department Opening hours address once, and Back/Forward keeps the history length and honors
+the draft decision. Four language/theme cases check the missing-period warning and its link
+at measured 390 px and run axe. These carry the surviving Opening hours link/history and
+warning bounds contracts; they do not keep the retired tree or readiness table.
+
+The affected eleven venue browser files passed 194 cases, the complete DashboardApp file
+passed 381, and the unchanged fiscal pair passed 20. Scoped venue/dashboard types, focused
+lint and formatting passed; four root guards passed 50 cases. In an installed disposable
+checkout, omitting the action refresh, dropping saved zone overrides and replacing inherited
+hints each failed four cases; using the wrong Opening hours department failed two, bypassing
+the guarded dirty write failed one, and removing warning wrapping failed four. Restored
+source passed all ten new cases. The candidate was removed.
+
+The initial small history harness lacked DashboardApp's link handler and disconnected its
+Vitest iframe. Its tests were moved to the real app. The initial policy helper matched a
+switch as a combobox; its selector now names the tag and both controls are driven natively.
+Initial label expectations were corrected to the declared translations. These are test
+harness corrections, not product defects. No production code or old assertion was changed.
+
+A10 remains incomplete: finish the remaining native/focus checks and reconcile same-request
+Settings input with its retained busy-input assertion before the retirement inventory and
+public wrapper switch. Then remove the staged create spy, rerun mounted integration/public
+LOOK, and finish A13–A15 and the branch gates. Receipts stay in the lane's
+`receipts/a366-6a/a10-policy-history/`, outside the repository.

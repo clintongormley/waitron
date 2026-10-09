@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -179,4 +180,50 @@ describe.each(["light", "dark"] as const)("department-page %s", (theme) => {
     }
     await expectNoA11yViolations(host);
   });
+  it.each(["en", "es"] as const)(
+    "the Opening hours warning fits a phone and is accessible in %s",
+    async (locale) => {
+      const previous = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(390, 1100);
+        expect(window.innerWidth).toBe(390);
+        setLocale(locale);
+        const el = (await mountThemed(
+          "<department-page></department-page>",
+          theme,
+        )) as HTMLElementTagNameMap["department-page"];
+        host.style.width = "calc(100vw - 32px)";
+        const view = structuredClone(model);
+        view.departments = [view.departments[0]!];
+        const name = "Restaurant".repeat(25);
+        view.departments[0]!.name = name;
+        view.readiness = [
+          { code: "department.no_periods", departmentId: "d1", departmentName: name },
+        ];
+        el.model = view;
+        el.departmentId = "d1";
+        await el.updateComplete;
+        await el.shadowRoot!.querySelector("department-settings")!.updateComplete;
+        const setup = el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup]")!;
+        expect(setup.textContent).toContain(
+          locale === "en" ? "has no opening periods." : "no tiene períodos de apertura.",
+        );
+        const link = setup.querySelector<HTMLAnchorElement>("a")!;
+        expect(link.getAttribute("href")).toBe("/manage/opening-hours/department/d1");
+        expect(link.textContent!.trim()).toBe(
+          locale === "en" ? "Set up Opening hours" : "Configura los horarios de apertura",
+        );
+        const bounds = el.getBoundingClientRect();
+        for (const rect of [setup.getBoundingClientRect(), ...link.getClientRects()]) {
+          expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+          expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+          expect(rect.width).toBeGreaterThan(0);
+        }
+        expect(setup.scrollWidth).toBeLessThanOrEqual(setup.clientWidth + 1);
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(previous[0]!, previous[1]!);
+      }
+    },
+  );
 });
