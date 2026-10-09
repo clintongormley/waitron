@@ -1,5 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { dashboardPath } from "../navigation.js";
+import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -131,6 +131,23 @@ export class CanvasEditorScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
+      }
+      .parent-trail {
+        margin-bottom: var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
+      }
+      .parent-trail a {
+        color: var(--wt-color-primary-text);
+        text-decoration: underline;
+      }
+      .parent-trail .sep {
+        margin-left: var(--wt-space-2);
+        color: var(--wt-color-primary-text);
+      }
+      .editor-head .title {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
       .editor-head {
         display: flex;
@@ -1310,8 +1327,20 @@ export class CanvasEditorScreen extends LitElement {
         data-editing-id=${this.editingId ?? nothing}
         data-form-factor=${draft?.formFactor ?? nothing}
       >
+        <nav class="parent-trail" aria-label=${t("canvas_editor.trail")}>
+          <a
+            data-own-click
+            href="/manage/canvas-editor"
+            @click=${(event: MouseEvent) => {
+              if (leftToBrowser(event)) return;
+              event.preventDefault();
+              void this.#requestCancelEditor();
+            }}
+            >${t("canvas_editor.title")}</a
+          ><span class="sep" aria-hidden="true">›</span>
+        </nav>
         <div class="editor-head">
-          <span class="label" data-test="editor-name">${this.draftName}</span>
+          <h1 class="title" data-test="editor-name">${this.draftName}</h1>
           <div class="actions">
             <wt-button
               variant="secondary"

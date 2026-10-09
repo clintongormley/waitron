@@ -2984,6 +2984,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A398 — device-profile editor heading remains to align with the sub-page pattern.**
+  The editor repeats the list title and has no parent link above the heading
+  (`apps/dashboard/src/screens/device-profiles-screen.ts`, `#renderEditor`). Deferred from lane E's
+  canvas-heading change because lane A's A366-5A changes that screen. Re-check its landed editor,
+  then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
+
 - **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"** — found by #612
   while pruning comments. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing
   but `i18n/t.test.ts` (`t.ts` registers `{ en, es }` with the kit), so that test's "registers

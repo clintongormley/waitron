@@ -6899,3 +6899,37 @@ describe("inline translation application leave paths", () => {
     },
   );
 });
+
+it("lets the canvas parent link use the editor's own Cancel handler inside the shell", async () => {
+  history.replaceState(null, "", "/manage/canvas-editor");
+  const canvas = {
+    id: "c1",
+    name: "Counter",
+    definition: {
+      formFactor: "till",
+      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
+    },
+  };
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api: stubApi({ listCanvases: async () => [canvas], getCanvas: async () => canvas }),
+  });
+  await flush(el);
+  const screen = el.shadowRoot!.querySelector("dashboard-canvas-editor-screen")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=edit-c1]")).not.toBeNull();
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+  await expect.poll(() => screen.shadowRoot!.querySelector("nav a")).not.toBeNull();
+  const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("nav a")!;
+  let reachedEditor = false;
+  link.addEventListener(
+    "click",
+    () => {
+      reachedEditor = true;
+    },
+    { once: true },
+  );
+  link.click();
+  expect(reachedEditor).toBe(true);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+    .not.toBeNull();
+});
