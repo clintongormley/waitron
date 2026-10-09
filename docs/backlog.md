@@ -4260,6 +4260,16 @@ the tree. What remains, largest first:
   an effect after a dialog closes are probably exposed the same way. Fixing it once in `wt-dialog`
   would change when every dialog reports closing, so it is an owner decision; no action queued.
 
+- **The `ci` summary job accepts a skipped merge job even when its package was selected.** Today the
+  merge jobs' `if:` conditions match their shards', so the combination does not arise; Codex said
+  in A441's review (#1477) that the rule predates that branch, which was not checked against git
+  history. No action queued.
+
+- **The progress reporter's consumer list names all 49 tested members by hand**
+  (`ROOT_SCOPE_CONSUMERS`, `scripts/changed-scope.mjs`), so every new package must be added to it.
+  A "run every package" rule for that one file would remove the step but changes how CI picks
+  packages; raised by A441's simplify review (#1477). No action queued.
+
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
