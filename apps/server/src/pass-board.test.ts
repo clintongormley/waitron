@@ -331,6 +331,22 @@ describe("a pass's sections", () => {
       [party.tabId]: { courses: [], groups: [["BURG"]] },
     });
   });
+
+  it("a pass monitor drops a course whose dishes are all away and keeps the order's waiting course", async () => {
+    const { v, grill, counterId } = await twoSectionVenue();
+    const counterItems = await inTx(v, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, counterId)),
+    );
+    const starter = counterItems.find((item) => item.stationId !== grill)!;
+    await inTx(v, (tx) =>
+      tx
+        .update(ticketItems)
+        .set({ awayAt: new Date().toISOString() })
+        .where(eq(ticketItems.id, starter.id)),
+    );
+    const board = await inTx(v, (tx) => listPassMonitor(tx, v.cfg, EVERY));
+    expect(sections(board)[counterId]).toEqual({ courses: [["Mains", ["BURG"]]], groups: [] });
+  });
 });
 
 describe("markPassItems", () => {
