@@ -485,6 +485,12 @@ interface PaperRest {
   shows: boolean;
 }
 
+/** Live station printer assignments and stations already read for a superset of a plan's stations. */
+interface KnownStations {
+  mappings: readonly PrinterMapping[];
+  stations: Awaited<ReturnType<typeof readStations>>;
+}
+
 /**
  * The kitchen tickets for a set of just-fired lines, routed by {@link routeKitchenTickets} over the
  * involved stations in name order. A `HOLD` ticket's `firedItems` are the held items printed in
@@ -503,8 +509,8 @@ async function planKitchenTickets(
     makers = true,
     watchers: copies = "all",
     rerouted,
-    restOfOrderExcept,
     papers,
+    known,
   }: {
     reprint: boolean;
     mark?: "HOLD" | "FIRE";
@@ -512,22 +518,29 @@ async function planKitchenTickets(
     makers?: boolean;
     watchers?: WatcherCopies;
     rerouted?: ReadonlyMap<string, { stationId: string; stationName: string }>;
-    restOfOrderExcept?: ReadonlySet<string>;
     papers?: ReadonlyMap<string, PaperRest>;
+    known?: KnownStations;
   },
 ): Promise<KitchenJob[]> {
   if (firedItems.length === 0) return [];
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  const mappingRows = makers ? await printerMappings(tx, stationIds) : [];
+  const mappingRows = !makers
+    ? []
+    : known === undefined
+      ? await printerMappings(tx, stationIds)
+      : known.mappings.filter((mapping) => stationIds.includes(mapping.stationId));
   const watcherRows = copies === "none" ? [] : await readWatcherPrinters(tx, cfg);
   if (mappingRows.length === 0 && watcherRows.length === 0) return [];
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStations(tx, stationIds);
+  const stationNames =
+    known === undefined
+      ? await readStations(tx, stationIds)
+      : new Map(stationIds.map((id) => [id, known.stations.get(id)!]));
   const order = await readOrderHeader(tx, cfg, orderId);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
@@ -570,9 +583,7 @@ async function planKitchenTickets(
   // Each printer's rest of the order: null for none, else the stations whose dishes it leaves out.
   const restLeavesOut = new Map<string, readonly string[] | null>();
   for (const route of routes) {
-    const shows =
-      route.stationIds.some((id) => stationById.get(id)!.showsRestOfOrder) &&
-      !route.stationIds.some((id) => restOfOrderExcept?.has(id));
+    const shows = route.stationIds.some((id) => stationById.get(id)!.showsRestOfOrder);
     for (const { printerId } of route.printers) {
       const paper = papers?.get(printerId);
       restLeavesOut.set(
@@ -1523,17 +1534,25 @@ export async function reprintOrderTickets(
 ): Promise<void> {
   const [fired, held] = (await readReprintParts(tx, [orderId])).get(orderId)!;
   const firedStations = new Set(fired.items.map((item) => item.stationId));
-  const papers = await joinedPapers(tx, firedStations, held.items);
+  const heldStations = new Set(held.items.map((item) => item.stationId));
+  const stationIds = [...new Set([...firedStations, ...heldStations])];
+  if (stationIds.length === 0) return;
+  const known: KnownStations = {
+    mappings: await printerMappings(tx, stationIds),
+    stations: await readStations(tx, stationIds),
+  };
+  const papers = joinedPapers(firedStations, heldStations, known);
   const jobs = await planKitchenTickets(tx, cfg, orderId, fired.items, {
     reprint: true,
     watchers: "all",
     papers,
+    known,
   });
   const holdJobs = await planKitchenTickets(tx, cfg, orderId, held.items, {
     reprint: true,
     mark: held.mark,
     watchers: "all",
-    restOfOrderExcept: firedStations,
+    known,
     papers: new Map(
       [...papers].map(([printerId, paper]) => [printerId, { ...paper, shows: false }]),
     ),
@@ -1559,19 +1578,16 @@ export async function reprintOrderTickets(
  * station of the fired part shows it, or a station of the held part does and no held station there
  * has fired work (decisions 3 and 5).
  */
-async function joinedPapers(
-  tx: Transaction,
+function joinedPapers(
   firedStations: ReadonlySet<string>,
-  heldItems: readonly FiredItem[],
-): Promise<Map<string, PaperRest>> {
-  const heldStations = new Set(heldItems.map((item) => item.stationId));
+  heldStations: ReadonlySet<string>,
+  { mappings, stations }: KnownStations,
+): Map<string, PaperRest> {
   const papers = new Map<string, PaperRest>();
   if (firedStations.size === 0 || heldStations.size === 0) return papers;
-  const stationIds = [...new Set([...firedStations, ...heldStations])];
-  const stations = await readStations(tx, stationIds);
   const shows = (id: string) => stations.get(id)!.showsRestOfOrder;
   const byPrinter = new Map<string, { fired: string[]; held: string[] }>();
-  for (const { printerId, stationId } of await printerMappings(tx, stationIds)) {
+  for (const { printerId, stationId } of mappings) {
     const paper = byPrinter.get(printerId) ?? { fired: [], held: [] };
     if (firedStations.has(stationId)) paper.fired.push(stationId);
     if (heldStations.has(stationId)) paper.held.push(stationId);
