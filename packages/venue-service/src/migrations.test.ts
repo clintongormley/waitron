@@ -466,6 +466,48 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     return { ...v, dateId };
   }
 
+  it("removes the retired local-holiday table and named-day colour column", async () => {
+    expect(
+      (await db.execute(sql`select name from sqlite_master where name = 'local_holidays'`)).rows,
+    ).toEqual([]);
+    expect((await columnsOf("special_dates")).map((column) => column.name)).not.toContain("colour");
+  });
+
+  it.each([
+    ["repeat", "2026-12-25", "12-24", "holiday", "special_dates_repeat_ck"],
+    ["kind", "2026-12-25", null, "party", "special_dates_kind_ck"],
+  ])(
+    "refuses an invalid named-day %s at the database",
+    async (_, date, repeatOn, kind, constraint) => {
+      const v = await venue();
+      const error = await captureError(() =>
+        db.transaction((tx) =>
+          tx.execute(sql`insert into special_dates
+      (id, location_id, date, name, colour, repeat_on, kind)
+      values (${randomUUID()}, ${v.locationId}, ${date}, 'Named day', 'red', ${repeatOn}, ${kind})`),
+        ),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain(constraint);
+    },
+  );
+
+  it("refuses two repeating named days on the same month and day in one venue", async () => {
+    const v = await venue();
+    await db.execute(sql`insert into special_dates (id, location_id, date, name, colour, repeat_on)
+      values (${randomUUID()}, ${v.locationId}, '2026-12-25', 'First', 'red', '12-25')`);
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(sql`insert into special_dates
+      (id, location_id, date, name, colour, repeat_on)
+      values (${randomUUID()}, ${v.locationId}, '2027-12-25', 'Second', 'red', '12-25')`),
+      ),
+    );
+    expect(engineErrorMessage(error)).toContain(
+      "UNIQUE constraint failed: special_dates.location_id, special_dates.repeat_on",
+    );
+  });
+
   it("defaults a named day to the normal week without a repeat", async () => {
     const v = await namedDayZone();
     const [row] = await db.select().from(specialDates).where(eq(specialDates.id, v.dateId));

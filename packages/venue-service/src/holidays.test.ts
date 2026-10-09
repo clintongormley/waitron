@@ -22,7 +22,7 @@ import { saveSpecialDate } from "./hours.js";
 import * as packageIndex from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
-import { holidayGeographies, localHolidays } from "./schema/holidays.js";
+import { holidayGeographies } from "./schema/holidays.js";
 import { specialDates } from "./schema/hours.js";
 
 const suite = useVenueDb({
@@ -183,7 +183,7 @@ async function moveTo(cfg: VenueScope, address: Address) {
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
 async function seedRetired(tx: Transaction, cfg: VenueScope, date: string, name: string) {
-  const [geography] = await tx
+  await tx
     .insert(holidayGeographies)
     .values({
       locationId: cfg.locationId,
@@ -193,13 +193,13 @@ async function seedRetired(tx: Transaction, cfg: VenueScope, date: string, name:
       cityKey: "villa real",
     })
     .returning();
-  await tx.insert(localHolidays).values({ geographyId: geography!.id, date, name });
+  await tx.insert(specialDates).values({ locationId: cfg.locationId, date, name, kind: "holiday" });
 }
 
 async function stored() {
   return run(async (tx) => ({
     geographies: await tx.select().from(holidayGeographies).orderBy(asc(holidayGeographies.id)),
-    entries: await tx.select().from(localHolidays).orderBy(asc(localHolidays.id)),
+    entries: await tx.select().from(specialDates).orderBy(asc(specialDates.id)),
   }));
 }
 

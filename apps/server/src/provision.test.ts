@@ -130,7 +130,7 @@ describe("provisionVenue", () => {
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
         (select cast(count(*) as int) from holiday_geographies) as geographies,
-        (select cast(count(*) as int) from local_holidays) as entries`);
+        (select cast(count(*) as int) from special_dates) as entries`);
     expect(rows[0]).toEqual({ geographies: 0, entries: 0 });
     const read = await withTransaction(db, async (tx) => ({
       may: await readHolidays(tx, cfg, "2026-05-01", "2026-05-31"),
@@ -438,7 +438,7 @@ describe("clearProvisionFixture", () => {
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from local_holidays) as entries,
+        (select cast(count(*) as int) from special_dates) as entries,
         (select cast(count(*) as int) from holiday_geographies) as geographies,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });

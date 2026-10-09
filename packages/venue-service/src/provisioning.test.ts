@@ -383,7 +383,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         await db.execute(sql`
           select
             (select count(*) from holiday_geographies) as geographies,
-            (select count(*) from local_holidays) as entries`)
+            (select count(*) from special_dates) as entries`)
       ).rows[0];
 
     await runSeed();

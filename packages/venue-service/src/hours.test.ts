@@ -222,7 +222,7 @@ async function storedWeek(subject: HoursSubject) {
 const specialInput = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
   date: "2026-10-09",
   name: "Harvest festival",
-  colour: "amber",
+
   closeWholeVenue: false,
   cells: [],
   ...overrides,
@@ -569,7 +569,7 @@ describe("special dates", () => {
       id: expect.any(String),
       date: "2026-10-09",
       name: "Harvest festival",
-      colour: "blue",
+
       closeWholeVenue: false,
     });
 
@@ -607,7 +607,7 @@ describe("special dates", () => {
       specialInput({
         date: "2026-10-12",
         name: "Founders' day",
-        colour: "purple",
+
         closeWholeVenue: true,
         cells: [{ subject: f.deli, cell: { mode: "inherit", periods: [] } }],
       }),
@@ -619,7 +619,7 @@ describe("special dates", () => {
       id: first.id,
       date: "2026-10-12",
       name: "Founders' day",
-      colour: "blue",
+
       closeWholeVenue: true,
     });
     expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, first.id))).toEqual({
@@ -1043,7 +1043,7 @@ describe("hours either side of a special date", () => {
       id: saved.id,
       date: "2026-10-09",
       name: "Harvest festival",
-      colour: "blue",
+
       closeWholeVenue: true,
       cells: input.cells,
     });
@@ -1437,7 +1437,7 @@ describe("the station hours model on one date", () => {
     const moved = await saveDate(
       f,
       first.id,
-      specialInput({ date: "2026-10-13", name: "Moved", colour: "blue", cells: [closedDeli] }),
+      specialInput({ date: "2026-10-13", name: "Moved", cells: [closedDeli] }),
     );
     expect(moved.id).toBe(first.id);
     expect(await dateSnapshot(f, f.deli, "2026-10-13")).toMatchObject({
@@ -1556,7 +1556,7 @@ describe("the calendar's Closed colour", () => {
     });
     expect(await tone(f, "2026-10-19")).toBe("standard");
     expect(await tone(f, "2026-10-20")).toBe("closed");
-    for (const [date, colour, open] of [
+    for (const [date, _colour, open] of [
       ["2026-10-21", "green", false],
       ["2026-10-22", "purple", true],
       ["2026-10-23", "red", true],
@@ -1566,7 +1566,6 @@ describe("the calendar's Closed colour", () => {
         null,
         specialInput({
           date,
-          colour,
           cells: [{ subject: f.bar, cell: { mode: "all_day", periods: [] } }],
         }),
       );
@@ -1607,11 +1606,7 @@ describe("the calendar's Closed colour", () => {
     expect(await tone(f, "2026-10-21")).toBe("blue");
     await setDepartmentActive(terrace, false);
     expect(await tone(f, "2026-10-21")).toBe("closed");
-    await saveDate(
-      f,
-      null,
-      specialInput({ date: "2026-10-26", colour: "blue", closeWholeVenue: true }),
-    );
+    await saveDate(f, null, specialInput({ date: "2026-10-26", closeWholeVenue: true }));
     expect(await tone(f, "2026-10-26")).toBe("closed");
   });
 });
@@ -1697,7 +1692,7 @@ describe("holiday facts beside the calendar", () => {
     const added = await saveDate(
       f,
       null,
-      specialInput({ date: "2026-10-14", name: "Our own party", colour: "purple" }),
+      specialInput({ date: "2026-10-14", name: "Our own party" }),
     );
     let days = await calendar(f, reader);
     expect(days[1]!.specialDate).toEqual({
@@ -1707,16 +1702,12 @@ describe("holiday facts beside the calendar", () => {
       id: added.id,
       date: "2026-10-14",
       name: "Our own party",
-      colour: "blue",
+
       closeWholeVenue: false,
     });
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await saveDate(
-      f,
-      added.id,
-      specialInput({ date: "2026-10-14", name: "Renamed party", colour: "blue" }),
-    );
+    await saveDate(f, added.id, specialInput({ date: "2026-10-14", name: "Renamed party" }));
     days = await calendar(f, reader);
     expect(days[1]!.specialDate?.name).toBe("Renamed party");
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
@@ -1744,7 +1735,7 @@ describe("holiday facts beside the calendar", () => {
           id: added.id,
           date: "2026-10-16",
           name: "Harvest festival",
-          colour: "blue",
+
           closeWholeVenue: false,
         },
         holidays: [FACTS[2]],
@@ -1753,14 +1744,19 @@ describe("holiday facts beside the calendar", () => {
     ]);
   });
 
-  it("ignores the old reserved colour values and stores the kind's colour", async () => {
+  it("ignores the old reserved colour values and stores only the kind", async () => {
     const f = await fixture();
     for (const [index, colour] of ["standard", "closed"].entries()) {
       const date = index === 0 ? "2026-10-09" : "2026-10-10";
-      const saved = await saveDate(f, null, specialInput({ date, colour: colour as never }));
-      expect(saved).toMatchObject({ date, colour: "blue", kind: "working_day" });
+      const saved = await saveDate(f, null, {
+        ...specialInput({ date }),
+        colour,
+      } as SpecialDateInput);
+      expect(saved).toMatchObject({ date, kind: "working_day" });
       const [row] = await db.select().from(specialDates).where(eq(specialDates.id, saved.id));
-      expect(row).toMatchObject({ date, colour: "blue", kind: "working_day" });
+      expect(row).toMatchObject({ date, kind: "working_day" });
+      expect(saved).not.toHaveProperty("colour");
+      expect(row).not.toHaveProperty("colour");
     }
     expect(
       await withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-09", "2026-10-10")),
@@ -1795,7 +1791,6 @@ describe("duplicating a special date", () => {
       f,
       null,
       specialInput({
-        colour: "purple",
         cells: [
           { subject: f.restaurant, cell: { mode: "periods", periods: [lunch, dinner] } },
           { subject: f.deli, cell: { mode: "closed", periods: [] } },
@@ -2730,7 +2725,7 @@ describe("Hours with the holiday store", () => {
       specialInput({
         date: "2026-12-18",
         name: "Summer opening",
-        colour: "purple",
+
         closeWholeVenue: true,
         cells: [
           { subject: f.bar, cell: { mode: "periods", periods: [period("12:00", "15:00")] } },
@@ -2761,7 +2756,7 @@ describe("Hours with the holiday store", () => {
         id: expect.any(String),
         date: "2026-12-25",
         name: "National label · Regional label",
-        colour: "blue",
+
         closeWholeVenue: true,
       },
       {
@@ -2771,7 +2766,7 @@ describe("Hours with the holiday store", () => {
         id: expect.any(String),
         date: "2026-12-29",
         name: "Summer opening",
-        colour: "blue",
+
         closeWholeVenue: true,
       },
     ]);
@@ -3002,7 +2997,7 @@ describe("named-day station occurrences", () => {
           locationId: f.cfg.locationId,
           date: "2026-12-25",
           name: "Navidad",
-          colour: "red",
+
           repeatOn: "12-25",
           closeWholeVenue: true,
           ...overrides,
@@ -3348,7 +3343,7 @@ describe("named-day writes", () => {
 });
 
 describe("named-day response and colour", () => {
-  it("ignores the old colour and derives it from the kind, even when colour is absent", async () => {
+  it("returns the named-day kind without a stored colour", async () => {
     const f = await fixture();
     const saved = await saveDate(f, null, {
       date: "2026-12-25",
@@ -3363,18 +3358,17 @@ describe("named-day response and colour", () => {
       id: expect.any(String),
       date: "2026-12-25",
       name: "Christmas",
-      colour: "red",
       kind: "holiday",
       repeats: true,
       ownHours: true,
       closeWholeVenue: false,
     });
+    expect(saved).not.toHaveProperty("colour");
     const edited = await saveDate(f, saved.id, {
-      ...specialInput({ date: "2026-12-25", colour: "purple" }),
+      ...specialInput({ date: "2026-12-25" }),
       kind: "working_day",
     });
     expect(edited).toMatchObject({
-      colour: "blue",
       kind: "working_day",
       repeats: true,
       ownHours: true,

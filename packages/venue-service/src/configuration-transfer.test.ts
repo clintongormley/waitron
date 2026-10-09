@@ -84,7 +84,6 @@ function validTables(): Tables {
         location_id: "location",
         date: "2026-12-25",
         name: "Christmas",
-        colour: "red",
         close_whole_venue: 0,
       },
     ],
@@ -122,7 +121,6 @@ describe("named days in configuration transfer", () => {
           location_id: "venue",
           date: "2026-12-25",
           name: "Christmas",
-          colour: "red",
           kind: "holiday",
           repeat_on: null,
           own_hours: 0,
@@ -368,9 +366,9 @@ describe("validateHoursConfiguration", () => {
     ],
     ["a blank name", (t) => (t.special_dates![0]!.name = "  "), "special_dates.name"],
     [
-      "a colour outside the palette",
-      (t) => (t.special_dates![0]!.colour = "pink"),
-      "special_dates.colour",
+      "a kind outside the vocabulary",
+      (t) => (t.special_dates![0]!.kind = "party"),
+      "special_dates",
     ],
     [
       "a whole-venue flag other than 0 or 1",
@@ -438,7 +436,6 @@ describe("validateHoursConfiguration", () => {
       location_id: "location",
       date: "2026-12-24",
       name: "Christmas Eve",
-      colour: "amber",
       close_whole_venue: 0,
     });
     tables.special_date_hours!.push({

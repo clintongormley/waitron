@@ -3788,7 +3788,7 @@ describe("opening hours in a configuration transfer", () => {
         dates.push({
           date: date.date,
           name: date.name,
-          colour: date.colour,
+          kind: date.kind,
           closeWholeVenue: date.closeWholeVenue,
           cells: date.cells
             .map((entry) => ({
@@ -3859,7 +3859,6 @@ describe("opening hours in a configuration transfer", () => {
         {
           date: "2026-12-24",
           name: "Christmas Eve",
-          colour: "amber",
           closeWholeVenue: false,
           cells: [
             { subject: restaurant, cell: { mode: "periods", periods: [p("12:00", "18:00")] } },
@@ -3875,7 +3874,6 @@ describe("opening hours in a configuration transfer", () => {
         {
           date: "2026-12-25",
           name: "Christmas",
-          colour: "red",
           closeWholeVenue: true,
           cells: [{ subject: deli, cell: ALL_DAY }],
         },
@@ -3888,7 +3886,6 @@ describe("opening hours in a configuration transfer", () => {
         {
           date: "2027-01-01",
           name: "New Year",
-          colour: "blue",
           closeWholeVenue: false,
           cells: [{ subject: bar, cell: ALL_DAY }],
         },
@@ -4245,7 +4242,6 @@ describe("opening hours in a configuration transfer", () => {
         {
           date: "2026-12-31",
           name: "New Year's Eve",
-          colour: "purple",
           closeWholeVenue: false,
           cells: [{ subject: pase, cell: CLOSED }],
         },
@@ -4336,7 +4332,6 @@ describe("opening hours in a configuration transfer", () => {
         {
           date: "2026-09-25",
           name: "Late night",
-          colour: "purple",
           closeWholeVenue: false,
           cells: [
             { subject: restaurant, cell: { mode: "periods", periods: [p("22:00", "03:00")] } },
@@ -4510,14 +4505,14 @@ describe("public holidays in a configuration transfer", () => {
       select country, province_code, city, city_key, area_key
       from holiday_geographies order by city_key`);
     const ids = await db.execute<{ id: string; city: string }>(sql`
-      select id, city from holiday_geographies`);
+      select id, city from locations`);
     const city = new Map(ids.rows.map((row) => [row.id, row.city]));
-    const entries = await db.execute<{ geography_id: string; date: string; name: string }>(sql`
-      select geography_id, date, name from local_holidays order by date, name`);
+    const entries = await db.execute<{ location_id: string; date: string; name: string }>(sql`
+      select location_id, date, name from special_dates order by date, name`);
     return {
       geographies: geographies.rows,
       entries: entries.rows.map((row) => ({
-        city: city.get(row.geography_id),
+        city: city.get(row.location_id),
         date: row.date,
         name: row.name,
       })),
@@ -4542,7 +4537,6 @@ describe("public holidays in a configuration transfer", () => {
           date: "2026-01-06",
           name: "Reyes",
           kind: "holiday",
-          colour: "red",
           closeWholeVenue: true,
           cells: [],
         },
@@ -4692,7 +4686,7 @@ describe("public holidays in a configuration transfer", () => {
       select
         (select cast(count(*) as int) from tenants where tax_id = ${target.taxId}) as tenants,
         (select cast(count(*) as int) from holiday_geographies) as geographies,
-        (select cast(count(*) as int) from local_holidays) as entries,
+        (select cast(count(*) as int) from special_dates) as entries,
         (select cast(count(*) as int) from special_dates) as special_dates`);
     expect(persisted.rows[0]).toEqual({ tenants: 0, geographies: 0, entries: 0, special_dates: 0 });
   });

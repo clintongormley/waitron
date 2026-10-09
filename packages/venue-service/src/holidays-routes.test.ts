@@ -32,7 +32,8 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { holidayGeographies, localHolidays } from "./schema/holidays.js";
+import { holidayGeographies } from "./schema/holidays.js";
+import { specialDates } from "./schema/hours.js";
 
 // A spy over the real reader, so the Hours page can be shown to read holidays exactly once.
 vi.mock("./holidays.js", async (importOriginal) => {
@@ -177,14 +178,9 @@ async function rows(fx: Fixture) {
     .orderBy(asc(holidayGeographies.id));
   const entries = await db
     .select()
-    .from(localHolidays)
-    .where(
-      inArray(
-        localHolidays.geographyId,
-        geographies.map(({ id }) => id),
-      ),
-    )
-    .orderBy(asc(localHolidays.id));
+    .from(specialDates)
+    .where(inArray(specialDates.locationId, ids))
+    .orderBy(asc(specialDates.id));
   return { geographies, entries };
 }
 

@@ -298,8 +298,8 @@ describe("Hours calendar: the month", () => {
     const el = await mount(api);
     expect(text(dayButton(el, "2026-10-12"))).toBe("12 Fiesta Nacional");
     const label = day(el, "2026-10-12").querySelector<HTMLElement>('[data-test="special-name"]')!;
-    expect(getComputedStyle(label).backgroundColor).toBe(token(el, "--wt-color-palette-red"));
-    expect(getComputedStyle(label).color).toBe(token(el, "--wt-color-on-palette-red"));
+    expect(getComputedStyle(label).backgroundColor).toBe(token(el, "--wt-color-palette-blue"));
+    expect(getComputedStyle(label).color).toBe(token(el, "--wt-color-on-palette-blue"));
     expect(dayButton(el, "2026-10-12").getAttribute("aria-label")).toBe(
       "Monday, 12 October 2026, Fiesta Nacional",
     );
