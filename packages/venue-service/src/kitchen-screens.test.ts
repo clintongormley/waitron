@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -1726,6 +1726,20 @@ describe("a profile save narrowing its devices", () => {
     expect(await removalsOf(pass)).toEqual([]);
   });
 
+  it("gives an every device back the kind offered again as it was, losing no station it never showed", async () => {
+    const venue = await seedVenue();
+    const grillOnly = { station: { stationIds: [venue.grill], zoneIds: null } };
+    await set(venue, venue.kds, grillOnly);
+    const all = await seedDevice(venue, venue.kds, "All");
+    await choose(venue, all, venue.kds, [station(null)]);
+    await expect(set(venue, venue.kds, { pass: every })).resolves.toEqual([
+      lost(all, "All", { screens: ["station"] }),
+    ]);
+    await expect(set(venue, venue.kds, grillOnly)).resolves.toEqual([]);
+    expect(await removalsOf(all)).toEqual([]);
+    expect((await shown(venue, all))[0]!.stations).toEqual([slot(venue.grill, "Grill")]);
+  });
+
   it("restores a kind and narrows its stations in one save", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, { pass: every });
@@ -1926,6 +1940,35 @@ describe("a device narrowed against another profile", () => {
     ]);
   });
 
+  it("gives a kind back on a switch losing no station the device never showed, and a till what its profile never bounded", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { station: every });
+    const strict = await seedProfile("kds");
+    await set(venue, strict, { station: { stationIds: [venue.grill], zoneIds: null } });
+    const all = await seedDevice(venue, venue.kds, "All");
+    await choose(venue, all, venue.kds, [{ kind: "station", ...every }]);
+    await set(venue, venue.kds, { pass: every });
+    await expect(narrow(venue, all, strict)).resolves.toBeNull();
+    expect(await removalsOf(all)).toEqual([]);
+
+    const till = await seedDevice(venue, venue.till, "Till");
+    await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
+    const strictTill = await seedProfile("till");
+    await set(venue, strictTill, { station: { stationIds: [venue.grill], zoneIds: null } });
+    await expect(narrow(venue, till, strictTill)).resolves.toEqual({
+      deviceId: till,
+      deviceName: "Till",
+      lost: {
+        screens: [],
+        stations: [
+          { id: venue.cold, name: "Cold" },
+          { id: venue.pastry, name: "Pastry" },
+        ],
+        zones: [],
+      },
+    });
+  });
+
   it("narrows a device at another location against that location's stations", async () => {
     const venue = await seedVenue();
     const elsewhere = await seedVenue();
@@ -1941,5 +1984,46 @@ describe("a device narrowed against another profile", () => {
       deviceName: "Away",
       lost: { screens: [], stations: [{ id: elsewhere.cold, name: "Cold" }], zones: [] },
     });
+  });
+});
+
+describe("the statements a device's kitchen screens are read in", () => {
+  const sessionOf = (tx: Transaction) =>
+    (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
+  const statementsOf = (fn: (tx: Transaction) => Promise<unknown>) =>
+    scoped(async (tx) => {
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      try {
+        await fn(tx);
+        return prepared.mock.calls.map(([query]) => query as unknown as { sql: string });
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+  const from = (table: string) => (query: { sql: string }) => query.sql.includes(`from "${table}"`);
+
+  it("reads each device's removals once, and only the profile rows of the devices it resolves", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { station: every, pass: every });
+    await set(venue, venue.till, { pass: { stationIds: [venue.grill], zoneIds: null } });
+    const line = await seedDevice(venue, venue.kds, "Line");
+    await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
+    const till = await seedDevice(venue, venue.till, "Till");
+    await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
+
+    for (const read of [
+      (tx: Transaction) => assertPassScreenZone(tx, venue.cfg, till, venue.dining),
+      (tx: Transaction) => readStationScreens(tx, venue.cfg),
+      (tx: Transaction) => readDeviceKitchenScreens(tx, venue.cfg, till),
+    ]) {
+      const statements = await statementsOf(read);
+      expect(statements.filter(from("device_kitchen_screen_removals"))).toHaveLength(1);
+      expect(statements.filter(from("device_kitchen_screens"))).toHaveLength(1);
+      const profileRows = statements.filter(from("device_profile_kitchen_screens"));
+      expect(profileRows).toHaveLength(1);
+      expect(profileRows[0]!.sql).toContain(
+        '"device_profile_kitchen_screens"."device_profile_id" in',
+      );
+    }
   });
 });

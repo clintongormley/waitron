@@ -59,15 +59,15 @@ export async function readProfileKitchenScreens(
 async function readStored(
   tx: Transaction,
   cfg: VenueScope,
-  profileId?: string,
+  profileIds?: readonly string[],
 ): Promise<Map<string, MutableScreens>> {
   const rows = await tx
     .select()
     .from(deviceProfileKitchenScreens)
     .where(
-      profileId === undefined
+      profileIds === undefined
         ? undefined
-        : eq(deviceProfileKitchenScreens.deviceProfileId, profileId),
+        : inArray(deviceProfileKitchenScreens.deviceProfileId, [...profileIds]),
     );
   const stations = await tx
     .select({
@@ -83,9 +83,9 @@ async function readStored(
     .where(
       and(
         eq(kitchenStations.locationId, cfg.locationId),
-        profileId === undefined
+        profileIds === undefined
           ? undefined
-          : eq(deviceProfileKitchenScreenStations.deviceProfileId, profileId),
+          : inArray(deviceProfileKitchenScreenStations.deviceProfileId, [...profileIds]),
       ),
     )
     .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
@@ -100,9 +100,9 @@ async function readStored(
     .where(
       and(
         eq(floorZones.locationId, cfg.locationId),
-        profileId === undefined
+        profileIds === undefined
           ? undefined
-          : eq(deviceProfileKitchenScreenZones.deviceProfileId, profileId),
+          : inArray(deviceProfileKitchenScreenZones.deviceProfileId, [...profileIds]),
       ),
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
@@ -143,7 +143,7 @@ export async function setProfileKitchenScreens(
   screens: ProfileKitchenScreens,
 ): Promise<NarrowedDevice[]> {
   const formFactor = await liveFormFactor(tx, profileId);
-  const stored = (await readStored(tx, cfg, profileId)).get(profileId) ?? {};
+  const stored = (await readStored(tx, cfg, [profileId])).get(profileId) ?? {};
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
   const checked: { kind: KitchenScreenKind; scope: KitchenScreenScope }[] = [];
   for (const kind of kinds) {
@@ -176,7 +176,8 @@ export async function setProfileKitchenScreens(
     const after = { formFactor, screens: await profileScreensAt(tx, id, profileId) };
     const targets = onProfile.filter((device) => device.locationId === id);
     const scope = { locationId: brandLocationId(id) };
-    narrowed.push(...(await narrowDevices(tx, scope, targets, before.get(id)!, after)));
+    const was = { formFactor, screens: before.get(id)! };
+    narrowed.push(...(await narrowDevices(tx, scope, targets, was, after)));
   }
   const order = new Map(onProfile.map((device, index) => [device.id, index]));
   return narrowed.sort((a, b) => order.get(a.deviceId)! - order.get(b.deviceId)!);
@@ -188,7 +189,7 @@ async function profileScreensAt(
   profileId: string,
 ): Promise<MutableScreens> {
   const here = { locationId: brandLocationId(locationId) };
-  return (await readStored(tx, here, profileId)).get(profileId) ?? {};
+  return (await readStored(tx, here, [profileId])).get(profileId) ?? {};
 }
 
 async function checkedStations(
@@ -281,7 +282,7 @@ export async function addProfileKitchenScreen(
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {
-  const current = (await readStored(tx, cfg, profileId)).get(profileId)?.[screen.kind];
+  const current = (await readStored(tx, cfg, [profileId])).get(profileId)?.[screen.kind];
   if (current === undefined) {
     await insertScreen(tx, profileId, screen.kind, screen);
     return;
@@ -462,7 +463,7 @@ async function checkChoice(
   if (kinds.size !== screens.length || (sharedDisplay && screens.length > 1) || bothPassKinds) {
     refuseChoice("screens", "one_only");
   }
-  const offered = (await readStored(tx, cfg, profileId)).get(profileId) ?? {};
+  const offered = (await readStored(tx, cfg, [profileId])).get(profileId) ?? {};
   const places = await placesHere(tx, cfg);
   for (const screen of screens) {
     const bound = offered[screen.kind];
@@ -619,17 +620,36 @@ export async function readDevicesKitchenScreens(
   return new Map(deviceIds.map((id) => [id, resolved.get(id) ?? []]));
 }
 
+/** The targets' removal rows and effective choices, as a caller that already read them passes on. */
+interface DeviceReads {
+  readonly removals: readonly Removal[];
+  readonly choices: Map<string, Map<KitchenScreenKind, KitchenScreenScope>>;
+}
+
+async function readDeviceState(
+  tx: Transaction,
+  deviceIds: readonly string[],
+): Promise<DeviceReads> {
+  const removals = await readRemovals(tx, deviceIds);
+  return { removals, choices: await readEffectiveChoices(tx, deviceIds, removals) };
+}
+
 /** Each device's resolved kitchen screens, read in a fixed number of queries. */
 async function resolveDevices(
   tx: Transaction,
   cfg: VenueScope,
   targets: readonly { id: string; profileId: string }[],
+  read?: DeviceReads,
 ): Promise<Map<string, ResolvedKitchenScreen[]>> {
   if (targets.length === 0) return new Map();
-  const ids = targets.map((device) => device.id);
-  const allRemovals = await readRemovals(tx, ids);
-  const choices = await readEffectiveChoices(tx, ids, allRemovals);
-  const offeredByProfile = await readStored(tx, cfg);
+  const { removals: allRemovals, choices } =
+    read ??
+    (await readDeviceState(
+      tx,
+      targets.map((device) => device.id),
+    ));
+  const profileIds = [...new Set(targets.map((device) => device.profileId))];
+  const offeredByProfile = await readStored(tx, cfg, profileIds);
   const places = await placesHere(tx, cfg);
 
   const resolved = new Map<string, ResolvedKitchenScreen[]>();
@@ -718,7 +738,7 @@ async function narrowDevices(
   tx: Transaction,
   cfg: VenueScope,
   targets: readonly { id: string; label: string }[],
-  before: MutableScreens,
+  before: Offer,
   after: Offer,
 ): Promise<NarrowedDevice[]> {
   const ids = targets.map((device) => device.id);
@@ -759,7 +779,9 @@ async function narrowDevices(
         removals.push({ deviceId: device.id, screen: kind });
         continue;
       }
-      const shownBefore = before[kind];
+      // A kind `before` did not offer showed the device nothing, so an every list loses nothing;
+      // an explicit list still records what `after` leaves out, because the read shows that list.
+      const boundBefore = boundOf(before, kind);
       const lose = (
         chosenIds: readonly string[] | null,
         beforeIds: readonly string[] | null | undefined,
@@ -767,12 +789,12 @@ async function narrowDevices(
         all: readonly Place[],
       ) => {
         if (afterIds === null) return [];
-        const shown = chosenIds ?? beforeIds ?? active(all);
+        const shown = chosenIds ?? (boundBefore === undefined ? [] : (beforeIds ?? active(all)));
         return shown.filter((id) => !afterIds.includes(id) && !already(id));
       };
       for (const stationId of lose(
         chosen.stationIds,
-        shownBefore?.stationIds,
+        boundBefore?.stationIds,
         bound.stationIds,
         places.stations,
       )) {
@@ -782,7 +804,7 @@ async function narrowDevices(
       if (kind === "station") continue;
       for (const zoneId of lose(
         chosen.zoneIds,
-        shownBefore?.zoneIds,
+        boundBefore?.zoneIds,
         bound.zoneIds,
         places.zones,
       )) {
@@ -825,15 +847,20 @@ export async function narrowDeviceKitchenScreens(
       label: devices.label,
       profileId: devices.deviceProfileId,
       locationId: devices.locationId,
+      formFactor: deviceProfiles.formFactor,
     })
     .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(eq(devices.id, deviceId));
   if (device === undefined) return null;
   const after = {
     formFactor: await liveFormFactor(tx, profileId),
     screens: await profileScreensAt(tx, device.locationId, profileId),
   };
-  const before = await profileScreensAt(tx, device.locationId, device.profileId);
+  const before = {
+    formFactor: device.formFactor,
+    screens: await profileScreensAt(tx, device.locationId, device.profileId),
+  };
   const here = { locationId: brandLocationId(device.locationId) };
   const [narrowed] = await narrowDevices(tx, here, [device], before, after);
   return narrowed ?? null;
@@ -864,13 +891,18 @@ export async function assertPassScreenZone(
   deviceId: string,
   zoneId: string | null,
 ): Promise<void> {
-  if (!(await readEffectiveChoices(tx, [deviceId])).get(deviceId)!.has("pass")) {
+  const [device] = await tx
+    .select({ id: devices.id, profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.locationId, cfg.locationId)));
+  if (device === undefined) throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
+  const read = await readDeviceState(tx, [deviceId]);
+  if (!read.choices.get(deviceId)!.has("pass")) {
     throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
   }
-  const pass = (await readDeviceKitchenScreens(tx, cfg, deviceId)).find(
-    (screen) => screen.kind === "pass",
-  );
-  if (pass === undefined) throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
+  const pass = (await resolveDevices(tx, cfg, [device], read))
+    .get(deviceId)!
+    .find((screen) => screen.kind === "pass")!;
   if (pass.zones === null) return;
   if (!pass.zones.some((zone) => zone.available && zone.id === zoneId)) {
     throw new AppError("kitchen_screen.zone_not_allowed", { zoneId });
@@ -904,12 +936,13 @@ export async function readStationScreens(
       ),
     )
     .orderBy(asc(devices.id));
-  const choices = await readEffectiveChoices(
+  const read = await readDeviceState(
     tx,
     displays.map((display) => display.id),
   );
+  const { choices } = read;
   const running = displays.filter((display) => choices.get(display.id)!.has("station"));
-  const resolved = await resolveDevices(tx, cfg, running);
+  const resolved = await resolveDevices(tx, cfg, running, read);
   return running.map(({ id }) => {
     const explicit = new Set(
       options.withSwitchedOff === true ? (choices.get(id)!.get("station")!.stationIds ?? []) : [],
