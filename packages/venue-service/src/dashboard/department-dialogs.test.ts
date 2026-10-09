@@ -715,3 +715,60 @@ it("clean native Escape closes, emits closed and performs no write", async () =>
   expect(closed).toHaveBeenCalledTimes(1);
   expect(request).not.toHaveBeenCalled();
 });
+
+it.each([6, 7])(
+  "clears a recovered impact read error after reconnect for Disable kind %s",
+  async (index) => {
+    let fresh!: (value: unknown) => void;
+    const request = vi
+      .fn<(path: string, method?: string) => Promise<unknown>>()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            fresh = resolve;
+          }),
+      );
+    const { el } = await mount(dialogs[index]!, request);
+    expect(await bottom(el)).toBe("The change could not be saved.");
+    expect(save(el).disabled).toBe(true);
+    const parent = el.parentNode!;
+    el.remove();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    parent.append(el);
+    await el.updateComplete;
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(save(el).disabled).toBe(true);
+    fresh({ zones: [{ id: "z1", name: "Recovered impact", activeTableCount: 3 }] });
+    await expect.poll(() => save(el).disabled).toBe(false);
+    expect(el.shadowRoot!.textContent).toContain("Recovered impact");
+    expect(await bottom(el)).toBe("");
+  },
+);
+
+it.each([6, 7])(
+  "preserves a Disable action refusal across reconnect for kind %s",
+  async (index) => {
+    const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(
+      async (_path, method) => {
+        if (method === "GET") return { zones: [] };
+        throw { code: "zone.table_in_use", params: { tableName: "4" } };
+      },
+    );
+    const { el } = await mount(dialogs[index]!, request);
+    save(el).click();
+    await expect
+      .poll(() => bottom(el))
+      .toBe("Table 4 has an open tab. Close it before disabling this department.");
+    const parent = el.parentNode!;
+    el.remove();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    parent.append(el);
+    await el.updateComplete;
+    expect(await bottom(el)).toBe(
+      "Table 4 has an open tab. Close it before disabling this department.",
+    );
+    expect(save(el).disabled).toBe(false);
+    expect(request.mock.calls.filter((call) => call[1] === "GET")).toHaveLength(1);
+  },
+);

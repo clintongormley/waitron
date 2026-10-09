@@ -69,6 +69,7 @@ export class DepartmentDialogs extends LitElement {
   @state() private attempted = false;
   @state() private refused: Partial<Record<keyof Draft, string>> = {};
   @state() private failure = "";
+  @state() private impactFailure = "";
   @state() private clash?: Clash;
   @state() private impact?: DepartmentRemovalImpact;
   private opened?: DepartmentDialog;
@@ -101,6 +102,7 @@ export class DepartmentDialogs extends LitElement {
       this.attempted = false;
       this.refused = {};
       this.failure = "";
+      this.impactFailure = "";
       this.clash = undefined;
       this.impact = undefined;
       const dialog = this.dialog;
@@ -164,9 +166,12 @@ export class DepartmentDialogs extends LitElement {
         dialog.kind === "disable-department"
           ? await this.api.departmentRemovalImpact(dialog.row.id)
           : await this.api.zoneRemovalImpact(dialog.row.id);
-      if (this.current(dialog, generation)) this.impact = impact;
+      if (this.current(dialog, generation)) {
+        this.impact = impact;
+        this.impactFailure = "";
+      }
     } catch (error) {
-      if (this.current(dialog, generation)) this.failure = this.refusal(error);
+      if (this.current(dialog, generation)) this.impactFailure = this.refusal(error);
     } finally {
       if (this.current(dialog, generation)) this.busy = false;
     }
@@ -428,7 +433,7 @@ export class DepartmentDialogs extends LitElement {
         </div>
         <wt-form-actions
           slot="footer"
-          .error=${[this.failure, marked ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}
+          .error=${[this.failure || this.impactFailure, marked ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}
           ><wt-button
             slot="cancel"
             variant="secondary"
