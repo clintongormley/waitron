@@ -514,7 +514,13 @@ export async function configureZone(
       target: [zoneServicePolicies.zoneId],
       set: { departmentId: input.departmentId },
     });
-  if (input.orderStart === undefined && existing !== undefined) return;
+  if (input.orderStart === undefined && existing !== undefined) {
+    await tx
+      .insert(zoneSalePolicies)
+      .values({ zoneId: input.zoneId })
+      .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
+    return;
+  }
   await tx
     .insert(zoneSalePolicies)
     .values({ zoneId: input.zoneId, orderStart: input.orderStart ?? null })

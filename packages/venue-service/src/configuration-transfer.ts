@@ -619,11 +619,23 @@ function validateReceiptModes(tables: Tables): void {
   }
 }
 
+function validateOrderStarts(tables: Tables): void {
+  for (const table of ["department_sale_policies", "zone_sale_policies"] as const) {
+    for (const row of tables[table] ?? []) {
+      const value = row.order_start;
+      if (value === undefined || (table === "zone_sale_policies" && value === null)) continue;
+      if (typeof value !== "string" || (value !== "table" && value !== "counter"))
+        refuse(`${table}.order_start`);
+    }
+  }
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
 ): void {
   validateReceiptModes(tables);
+  validateOrderStarts(tables);
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);
