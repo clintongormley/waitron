@@ -1471,3 +1471,22 @@ A10 remains incomplete: finish the full kept-assertion audit, switch the public 
 verify actual DashboardApp history, permissions and receipt/parent links. A11–A15 and the
 branch review/hook/current-head CI/authorised landing gates remain. No old assertion, fiscal
 source, migration, guard or coverage setting changed in this checkpoint.
+
+
+### Implementation checkpoint — Task A10 service field refusal audit (2026-10-09)
+
+The retained refusal rule in `venue-operations-screen.test.ts` ("puts a refusal that names a
+field under that field until that field changes, and leaves Save usable") also applies to the
+four service settings on the new department and zone forms. The shared fields emit the whole
+value; the department handler was treating every emitted field as edited, and the zone handler
+was clearing every refusal. Eight new Chromium cases failed at the lost refusal before either
+handler changed. Both forms now clear only a refusal whose value changed. The cases also check
+that the bottom message survives, Save remains available, and correcting the refused field
+clears its message. Comboboxes and the collection switch use their real controls.
+
+The two complete files pass 65 cases; the focused service-fields, form, draft, accessibility,
+shell-action and load files pass 201 cases. In an installed detached candidate, restoring each
+original handler fails its four cases; restoring both fixes passes all eight. Existing test
+bodies and the public legacy wrapper remain unchanged. Task A10 is still incomplete: the full
+old assertion audit, public switch and mounted DashboardApp checks remain before A11–A15 and
+the branch gates.

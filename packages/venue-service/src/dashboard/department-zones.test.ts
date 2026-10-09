@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
@@ -312,3 +313,44 @@ it("an unshown field refusal stays at the bottom instead of marking a service fi
   expect(fields().errors).toEqual({});
   expect(button("save-zone").disabled).toBe(false);
 });
+
+it.each([
+  ["orderStart", "counter", "paidWhen", "ticket_then_pay"],
+  ["paidWhen", "ticket_then_pay", "collectionNumber", "numbered"],
+  ["collectionNumber", "numbered", "paidWhen", "ticket_then_pay"],
+  ["receiptPrintMode", "auto", "paidWhen", "ticket_then_pay"],
+] as const)(
+  "a refused %s survives a different service edit until its own value changes",
+  async (refused, corrected, other, value) => {
+    await mount();
+    el.api = new VenueServiceApi((async () => {
+      throw { code: "management.request_invalid", params: { field: refused } };
+    }) as DashboardRequest);
+    await change({ orderStart: "table" });
+    button("save-zone").click();
+    const message = "This value was not accepted. Change it and save again.";
+    await expect.poll(() => fields().errors[refused]).toBe(message);
+    await fields().updateComplete;
+    await chooseOption(
+      fields().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(`[name=${other}]`)!,
+      value,
+    );
+    await el.updateComplete;
+    expect(fields().errors[refused]).toBe(message);
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+      "Correct the highlighted fields to continue.",
+    );
+    expect(button("save-zone").disabled).toBe(false);
+    await fields().updateComplete;
+    await chooseOption(
+      fields().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        `[name=${refused}]`,
+      )!,
+      corrected,
+    );
+    await el.updateComplete;
+    expect(fields().errors[refused]).toBeUndefined();
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(button("save-zone").disabled).toBe(false);
+  },
+);

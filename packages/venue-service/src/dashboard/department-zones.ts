@@ -306,8 +306,16 @@ export class DepartmentZones extends LitElement {
                 ) => {
                   e.stopPropagation();
                   if (disabled) return;
+                  const refused = { ...this.refused };
+                  for (const field of [
+                    "orderStart",
+                    "paidWhen",
+                    "collectionNumber",
+                    "receiptPrintMode",
+                  ] as const)
+                    if (this.draft![field] !== e.detail.value[field]) delete refused[field];
                   this.draft = copy(e.detail.value);
-                  this.refused = {};
+                  this.refused = refused;
                   this.scope?.changed();
                 }}
               ></dashboard-service-settings-fields>

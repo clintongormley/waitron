@@ -954,3 +954,56 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   expect(zones).toEqual([{ zoneId: "z1" }]);
   expect(shell).toHaveLength(1);
 });
+
+it.each([
+  ["orderStart", "counter", "paidWhen", "ticket_then_pay"],
+  ["paidWhen", "ticket_then_pay", "receiptPrintMode", "on_request"],
+  ["collectionNumber", "numbered", "paidWhen", "ticket_then_pay"],
+  ["receiptPrintMode", "on_request", "paidWhen", "ticket_then_pay"],
+] as const)(
+  "a refused %s survives a different service edit until its own value changes",
+  async (refused, corrected, other, value) => {
+    const { el } = await mount(structuredClone(model), {
+      code: "management.request_invalid",
+      params: { field: refused },
+    });
+    await change(el, "name", "Revised");
+    save(el).click();
+    const service = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+    const message = "This value was not accepted. Change it and save again.";
+    await expect.poll(() => service.errors[refused]).toBe(message);
+    await service.updateComplete;
+    await chooseOption(
+      service.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(`[name=${other}]`)!,
+      value,
+    );
+    await el.updateComplete;
+    expect(service.errors[refused]).toBe(message);
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(save(el).disabled).toBe(false);
+    await service.updateComplete;
+    if (refused === "collectionNumber") {
+      const toggle =
+        service.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "[name=collectionNumber]",
+        )!;
+      await toggle.updateComplete;
+      toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+      await toggle.updateComplete;
+      expect(toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(
+        corrected === "numbered",
+      );
+    } else {
+      await chooseOption(
+        service.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          `[name=${refused}]`,
+        )!,
+        corrected,
+      );
+    }
+    await el.updateComplete;
+    expect(service.errors[refused]).toBeUndefined();
+    expect(await bottom(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
+  },
+);

@@ -516,7 +516,8 @@ export class DepartmentSettings extends LitElement {
               "collectionNumber",
               "receiptPrintMode",
             ] as const)
-              this.changed(field, e.detail.value[field]);
+              if (this.draft![field] !== e.detail.value[field])
+                this.changed(field, e.detail.value[field]);
           }}
         ></dashboard-service-settings-fields>
         ${
