@@ -936,7 +936,11 @@ function focusedInTable(el: MenuStructureTable): string | undefined {
   return (table(el).shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
 }
 
-async function press(el: MenuStructureTable, key: string, which: "ArrowUp" | "ArrowDown") {
+async function press(
+  el: MenuStructureTable,
+  key: string,
+  which: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
+) {
   grip(el, key).focus();
   await userEvent.keyboard(`{${which}}`);
   await settle(el);
@@ -1069,6 +1073,223 @@ it("moves nothing by key while busy", async () => {
   await settle(el);
   expect(moves).toEqual([]);
   expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+});
+
+describe("moving into or out of a section by key", () => {
+  const movedInto = (item: string, section: string) =>
+    t("action.moved_into").replace("{item}", item).replace("{section}", section);
+  const movedOut = (item: string, list: string) =>
+    t("action.moved_out").replace("{item}", item).replace("{list}", list);
+
+  /** Lunch after Lemonade left Drinks for the top level, after Drinks. */
+  function lemonadeOutNodes(): MenuStructureNode[] {
+    const drinks = drinksNode("m-drinks");
+    drinks.children = drinks.children!.filter((child) => child.memberId !== "m-lemonade");
+    return [
+      productNode("m-burger", "p-burger"),
+      drinks,
+      productNode("m-lemonade", "p-lemonade"),
+      favourites(),
+    ];
+  }
+
+  it("lists all four arrows as the grip's shortcuts", async () => {
+    const el = await mount();
+    expect(grip(el, "m-burger").getAttribute("aria-keyshortcuts")).toBe(
+      "ArrowUp ArrowDown ArrowLeft ArrowRight",
+    );
+  });
+
+  it("keeps ArrowLeft and ArrowRight on a grip from scrolling the page, even when they move nothing", async () => {
+    const el = await mount();
+    expect(keyOn(el, "m-burger", "ArrowLeft").defaultPrevented).toBe(true);
+    expect(keyOn(el, "m-burger", "ArrowRight").defaultPrevented).toBe(true);
+  });
+
+  it("ArrowRight moves a member into the section drawn directly above it, at its end, and announces it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-drinks/m-lemonade", "ArrowRight");
+    expect(intos).toEqual([
+      { from: ["m-drinks"], memberId: "m-lemonade", to: ["m-drinks", "m-beer"] },
+    ]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe(movedInto("Lemonade", "Beer"));
+    // The host answers with the menu read again; nothing moves before that.
+    expect(shown(el)).toEqual([
+      "m-burger",
+      "m-drinks",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer",
+      "m-drinks/m-lemonade",
+      "m-fav",
+    ]);
+  });
+
+  it.each([
+    ["the first member, with nothing above it", lunchNodes, "m-burger"],
+    ["a product above", lunchNodes, "m-drinks"],
+    ["a section above that sits inside the moved section elsewhere", lunchNodes, "m-fav"],
+    [
+      "an included menu above",
+      () => [...lunchNodes(), wines(), productNode("m-rioja", "p-rioja")],
+      "m-rioja",
+    ],
+    [
+      "a section above already holding the product",
+      () => [drinksNode("m-drinks"), productNode("m-lager-top", "p-lager")],
+      "m-lager-top",
+    ],
+    [
+      "a product no longer in the catalogue",
+      () => [drinksNode("m-drinks"), productNode("m-gone", "p-gone")],
+      "m-gone",
+    ],
+  ])("ArrowRight sends and announces nothing with %s", async (_, nodes, key) => {
+    const el = await mount({ nodes: nodes() });
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, key, "ArrowRight");
+    expect(intos).toEqual([]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe("");
+  });
+
+  it("ArrowLeft moves a member out of its section to the place after that section, and announces it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    expect(intos).toEqual([{ from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 2 }]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe(movedOut("Lemonade", "Lunch Menu"));
+  });
+
+  it("ArrowLeft out of a nested section names that section's list and counts the order on screen", async () => {
+    const el = await mount();
+    await toggle(el, "m-fav");
+    await toggle(el, "m-fav/m-fav-drinks");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-fav/m-fav-drinks/m-beer", "ArrowLeft");
+    expect(intos).toEqual([
+      { from: ["m-fav", "m-fav-drinks"], memberId: "m-beer", to: ["m-fav"], position: 2 },
+    ]);
+    expect(announced(el)).toBe(movedOut("Beer", "Favourites"));
+
+    // Drinks moves above Burger on screen before the host answers; the place counts that order.
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks", "ArrowUp");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    expect(intos.at(-1)).toEqual({
+      from: ["m-drinks"],
+      memberId: "m-lemonade",
+      to: [],
+      position: 1,
+    });
+  });
+
+  it.each([
+    ["at the top level", lunchNodes, [], "m-burger"],
+    [
+      "into a list already holding the product",
+      lunchNodes,
+      ["m-drinks", "m-drinks/m-beer"],
+      "m-drinks/m-beer/m-lager-2",
+    ],
+    [
+      "for a product no longer in the catalogue",
+      () => {
+        const drinks = drinksNode("m-drinks");
+        drinks.children!.push(productNode("m-gone", "p-gone"));
+        return [drinks];
+      },
+      ["m-drinks"],
+      "m-drinks/m-gone",
+    ],
+  ])("ArrowLeft sends and announces nothing %s", async (_, nodes, open, key) => {
+    const el = await mount({ nodes: nodes() });
+    for (const section of open) await toggle(el, section);
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, key, "ArrowLeft");
+    expect(intos).toEqual([]);
+    expect(moves).toEqual([]);
+    expect(announced(el)).toBe("");
+  });
+
+  it("focuses the moved row's grip once the host is no longer busy after the menu is read again", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    el.busy = true;
+    await settle(el);
+    el.nodes = lemonadeOutNodes();
+    await settle(el);
+    expect(shown(el)).toContain("m-lemonade");
+    expect(focusedInTable(el)).not.toBe("drag-m-lemonade");
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-lemonade");
+  });
+
+  it("waits for the menu read again, not only for the host to stop being busy", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    el.busy = true;
+    await settle(el);
+    el.busy = false;
+    await settle(el);
+    grip(el, "m-burger").focus();
+    el.busy = true;
+    await settle(el);
+    el.nodes = lemonadeOutNodes();
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-lemonade");
+  });
+
+  it("focuses the moved row's grip inside the section the host opens for it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowRight");
+    el.busy = true;
+    await settle(el);
+    const drinks = drinksNode("m-drinks");
+    const lemonade = drinks.children!.pop()!;
+    drinks.children![1]!.children!.push(lemonade);
+    el.nodes = [productNode("m-burger", "p-burger"), drinks, favourites()];
+    el.current = ["m-drinks", "m-beer"];
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-drinks/m-beer/m-lemonade");
+  });
+
+  it("focuses the grip where the member was when the menu read again does not move it", async () => {
+    const el = await mount();
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    // Focus can leave the grip while the host waits; it comes back all the same.
+    grip(el, "m-burger").focus();
+    el.busy = true;
+    await settle(el);
+    el.nodes = lunchNodes();
+    el.busy = false;
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-drinks/m-lemonade");
+  });
+
+  it("leaves a same-list move's focus alone when a later read of the menu arrives", async () => {
+    const el = await mount();
+    await press(el, "m-burger", "ArrowDown");
+    grip(el, "m-fav").focus();
+    el.nodes = [drinksNode("m-drinks"), productNode("m-burger", "p-burger"), favourites()];
+    await settle(el);
+    expect(focusedInTable(el)).toBe("drag-m-fav");
+  });
 });
 
 /** Sends a pointer event from `target`, placed over `over` (by default the target itself). */
