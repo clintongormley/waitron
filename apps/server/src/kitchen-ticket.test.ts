@@ -388,8 +388,7 @@ describe("one ticket for several stations sharing a printer", () => {
       "2 x Steak",
       "Pastry",
       "1 x Tart",
-      "-- Also on this order (not for this",
-      "station) --",
+      "-- Also on this order --",
       "1 x Salad — Cold",
       "",
     ]);
@@ -472,15 +471,13 @@ describe("the rest of the order on a station's ticket", () => {
     );
     const own = lines.indexOf("1 x Fish");
     const burger = lines.indexOf("2 x Burger — Grill");
-    expect(lines.slice(own + 1, burger).join(" ")).toBe(
-      "-- Also on this order (not for this station) --",
-    );
+    expect(lines.slice(own + 1, burger).join(" ")).toBe("-- Also on this order --");
     expect(lines.slice(burger)).toEqual(["2 x Burger — Grill", "1 x Chips — Fryer (on hold)", ""]);
   });
 
   it.each([
-    ["es-ES", "-- También en este pedido (no para esta estación) --", "(en espera)"],
-    ["fr-FR", "-- Also on this order (not for this station) --", "(on hold)"],
+    ["es-ES", "-- También en este pedido --", "(en espera)"],
+    ["fr-FR", "-- Also on this order --", "(on hold)"],
   ])("uses the expected wording for %s", (locale, heading, held) => {
     const lines = printedLines(
       formatKitchenTicket(

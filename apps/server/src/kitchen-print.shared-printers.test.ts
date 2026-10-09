@@ -290,8 +290,7 @@ describe("a printer shared by several stations", () => {
       "1.000 x Steak",
       "Pastry",
       "1.000 x Tart",
-      "-- Also on this order (not for this",
-      "station) --",
+      "-- Also on this order --",
       "1.000 x Salad — Cold",
       "",
     ]);
@@ -323,8 +322,7 @@ describe("a printer shared by several stations, on the rest of the order", () =>
       "1.000 x Steak",
       "Pastry",
       "1.000 x Tart",
-      "-- Also on this order (not for this",
-      "station) --",
+      "-- Also on this order --",
       "1.000 x Salad — Cold",
       "",
     ]);
