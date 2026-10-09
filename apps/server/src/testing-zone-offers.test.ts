@@ -197,6 +197,7 @@ describe("offerProducts", () => {
         open: true,
         zoneOpen: true,
         periodName: "Always",
+        zoneKeepOpen: null,
         keepOpen: {
           periodId: savedPeriod!.id,
           periodName: "Always",
