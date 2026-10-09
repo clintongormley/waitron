@@ -149,8 +149,6 @@ describe("a kitchen display's notice in place of a queue", () => {
       expect(changed).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(15_000);
       expect(changed).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(15_000);
-      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
     }));
 
   it("asks for a re-boot when a different screen is chosen in place of the one taken", () =>
@@ -177,8 +175,6 @@ describe("a kitchen display's notice in place of a queue", () => {
       await vi.advanceTimersByTimeAsync(15_000);
       expect(unauthorized).toHaveBeenCalledTimes(1);
       expect(changed).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(15_000);
-      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
     }));
 
   it("with no screen chosen yet, waits for one and asks for a re-boot once it is chosen", () =>
@@ -207,6 +203,34 @@ describe("a kitchen display's notice in place of a queue", () => {
       answerLate(passBack);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(changed).not.toHaveBeenCalled();
+    }));
+
+  it("asks once when two reads that overlap both say the choice changed", () =>
+    withFakeTimers(async () => {
+      const answers: ((value: DeviceIdentity) => void)[] = [];
+      const getDeviceIdentity = vi.fn(
+        () => new Promise<DeviceIdentity>((resolve) => answers.push(resolve)),
+      );
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(answers).toHaveLength(2);
+      answers[0]!(passBack);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changed).toHaveBeenCalledTimes(1);
+      answers[1]!(passBack);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changed).toHaveBeenCalledTimes(1);
+    }));
+
+  it("asks again at a later refresh while it is still on the page after asking", () =>
+    withFakeTimers(async () => {
+      const getDeviceIdentity = vi.fn().mockResolvedValue(passBack);
+      const { changed } = await mountNotice(getDeviceIdentity);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(changed).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(changed).toHaveBeenCalledTimes(2);
     }));
 
   it("stops reading once it is taken off the page", () =>

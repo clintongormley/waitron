@@ -61,8 +61,9 @@ const REFRESH_MS = 15_000;
 
 /**
  * A kitchen display's notice in place of a queue. It reads the device's choice at the screens'
- * refresh pace and emits `kitchen-screen-changed` once the choice gives it something else to show,
- * so the app re-boots to it, or `device-unauthorized` when the device is refused.
+ * refresh pace and emits `kitchen-screen-changed` when the choice gives it something else to show,
+ * so the app re-boots to it, or `device-unauthorized` when the device is refused. While it is still
+ * on the page after emitting, as when that re-boot failed, a later read emits again.
  */
 @customElement("till-kitchen-screen-notice")
 export class TillKitchenScreenNotice extends LitElement {
@@ -72,6 +73,8 @@ export class TillKitchenScreenNotice extends LitElement {
   #timer?: ReturnType<typeof setInterval>;
   #request = 0;
   #applied = 0;
+  /** Reads numbered up to here were sent before the last event, which answered them. */
+  #answered = 0;
 
   /** Light DOM: the card host styles the notice. */
   protected override createRenderRoot(): HTMLElement {
@@ -105,10 +108,10 @@ export class TillKitchenScreenNotice extends LitElement {
 
   /** An answer older than the one already taken says nothing. */
   #answer(request: number, event?: "kitchen-screen-changed" | "device-unauthorized"): void {
-    if (!this.isConnected || request < this.#applied) return;
+    if (request <= this.#answered || !this.isConnected || request < this.#applied) return;
     this.#applied = request;
     if (event === undefined) return;
-    clearInterval(this.#timer);
+    this.#answered = this.#request;
     this.dispatchEvent(new CustomEvent(event, { bubbles: true, composed: true }));
   }
 

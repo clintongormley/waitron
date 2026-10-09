@@ -1819,7 +1819,7 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       expect(queueWidget(el)!.stationId).toBe("st-g");
       expect(api.getStationQueue).toHaveBeenLastCalledWith("st-g");
       await vi.advanceTimersByTimeAsync(15_000);
-      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }
@@ -1872,6 +1872,37 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       expect(el.shadowRoot!.querySelector("nav.picker, till-station-queue")).toBeNull();
       await vi.advanceTimersByTimeAsync(15_000);
       expect(api.getStationQueue).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves the open station at the next refresh when it is taken out of the choice", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const { el, api } = await mountOperator(
+        vi
+          .fn()
+          .mockResolvedValueOnce(
+            identity([
+              stationScreen([
+                { id: "st-g", name: "Grill", available: true },
+                { id: "st-f", name: "Fryer", available: true },
+              ]),
+            ]),
+          )
+          .mockResolvedValue(
+            identity([stationScreen([{ id: "st-f", name: "Fryer", available: true }])]),
+          ),
+      );
+      expect(queueWidget(el)!.stationId).toBe("st-g");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(picks(el)).toEqual(["st-f"]);
+      expect(queueWidget(el)!.stationId).toBe("st-f");
+      expect(api.getStationQueue).toHaveBeenLastCalledWith("st-f");
+      expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
@@ -2462,14 +2493,14 @@ describe("till-station-screen 15-second refresh", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    vi.advanceTimersByTime(30_000); // read 2 set out at 15 s, read 3 at 30 s
+    await vi.advanceTimersByTimeAsync(30_000); // read 2 set out at 15 s, read 3 at 30 s
     await flush(el);
     expect(api.getStationQueue).toHaveBeenCalledTimes(3);
-    vi.advanceTimersByTime(5_000); // read 2 answers at 35 s, after read 3 set out
+    await vi.advanceTimersByTimeAsync(5_000); // read 2 answers at 35 s, after read 3 set out
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-2"]);
-    vi.advanceTimersByTime(15_000); // read 3 answers at 50 s
+    await vi.advanceTimersByTimeAsync(15_000); // read 3 answers at 50 s
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
@@ -2489,11 +2520,11 @@ describe("till-station-screen 15-second refresh", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    vi.advanceTimersByTime(31_000); // read 2 out since 15 s; read 3 set out at 30 s and answered
+    await vi.advanceTimersByTimeAsync(31_000); // read 2 out since 15 s; read 3 set out at 30 s and answered
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
-    vi.advanceTimersByTime(4_000); // read 2 answers at 35 s
+    await vi.advanceTimersByTimeAsync(4_000); // read 2 answers at 35 s
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
@@ -3080,7 +3111,7 @@ describe("till-station-screen out-of-date banner", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-stale]");
 
   async function tick(el: TillStationScreen, ms = 15_000): Promise<void> {
-    vi.advanceTimersByTime(ms);
+    await vi.advanceTimersByTimeAsync(ms);
     await flush(el);
   }
 

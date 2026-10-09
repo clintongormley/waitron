@@ -765,7 +765,7 @@ describe("till-expo-screen", () => {
       expect(api.getDevicePassScreen).toHaveBeenCalledTimes(1);
       expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
       await vi.advanceTimersByTimeAsync(15_000);
-      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
       expect(api.getDevicePassScreen).toHaveBeenCalledTimes(2);
       expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
     } finally {
@@ -874,7 +874,7 @@ describe("till-expo-screen", () => {
         expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
       }));
 
-    it("becomes the pass monitor when its pass board is refused and the choice is now a monitor", () =>
+    it("becomes the pass monitor when the choice is now a monitor, whose pass board is refused", () =>
       withFakeTimers(async () => {
         const api = passApi(
           [threeCourseOrder],
@@ -892,10 +892,59 @@ describe("till-expo-screen", () => {
         await vi.advanceTimersByTimeAsync(15_000);
         await el.updateComplete;
         expect(api.getDevicePassMonitor).toHaveBeenCalledTimes(1);
+        expect(api.getDevicePassScreen).toHaveBeenCalledTimes(1);
         expect(el.shadowRoot!.querySelector('[data-order="5"]')).not.toBeNull();
         expect(el.shadowRoot!.querySelector(".board button, .board wt-button")).toBeNull();
         expect(el.shadowRoot!.querySelector(".stale[data-stale]")).toBeNull();
       }));
+
+    it("marks its pass board out of date, reading no other board, when it is refused and the choice is unchanged", () =>
+      withFakeTimers(async () => {
+        const getDevicePassMonitor = vi.fn();
+        const api = passApi([threeCourseOrder], {}, { getDevicePassMonitor });
+        const el = await mount({ api });
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+        vi.mocked(api.getDevicePassScreen).mockRejectedValue(refused());
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getDevicePassScreen).toHaveBeenCalledTimes(2);
+        expect(getDevicePassMonitor).not.toHaveBeenCalled();
+        expect(api.getExpoQueue).not.toHaveBeenCalled();
+        expect(el.shadowRoot!.querySelector(".stale[data-stale]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-done="ti-0"]')).not.toBeNull();
+      }));
+
+    it.each([
+      ["pass", '[data-done="ti-0"]', true],
+      ["pass_monitor", '[data-order="5"]', false],
+    ] as const)("leaves All stations for a %s chosen while it is open", (kind, shown, buttons) =>
+      withFakeTimers(async () => {
+        const board = { orders: [threeCourseOrder], stations: [], zones: null };
+        const api = stubApi([threeCourseOrder], {
+          getDevicePassMonitor: vi.fn().mockResolvedValue(board),
+        });
+        const el = await mount({ api });
+        expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
+        vi.mocked(api.getDeviceIdentity).mockResolvedValue(
+          identity([{ kind, available: true, stations: [], zones: null }]),
+        );
+        await vi.advanceTimersByTimeAsync(15_000);
+        await el.updateComplete;
+        expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
+        expect(
+          kind === "pass" ? api.getDevicePassScreen : api.getDevicePassMonitor,
+        ).toHaveBeenCalledTimes(1);
+        expect(el.shadowRoot!.querySelector(shown)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".board button, .board wt-button") !== null).toBe(
+          buttons,
+        );
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
+        expect(
+          kind === "pass" ? api.getDevicePassScreen : api.getDevicePassMonitor,
+        ).toHaveBeenCalledTimes(2);
+      }),
+    );
   });
 
   it("reports a refused Undo and keeps the dish Done", async () => {

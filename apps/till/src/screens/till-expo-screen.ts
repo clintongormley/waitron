@@ -534,13 +534,11 @@ export class TillExpoScreen extends LitElement {
   }
 
   /**
-   * A failed read shows All stations, as a till did before a device could choose, and is read again
-   * at each refresh until one answers; after that a failed read keeps what the last one said. The
-   * choice is read again at each refresh while a narrowing has taken the pass screen, and when the
-   * board is refused `device.unauthorized` (`refused`), where an unchanged choice reads no board.
-   * True when the screen now follows a different choice.
+   * At a till the device's choice is read before each board read, so the board follows a change made
+   * while the screen is open. Until a read answers, All stations shows; after that a failed read
+   * keeps what the last one said.
    */
-  async #loadChoice(signal?: AbortSignal, refused?: "pass" | "monitor"): Promise<boolean> {
+  async #loadChoice(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
     let pass;
     let read = true;
@@ -552,39 +550,38 @@ export class TillExpoScreen extends LitElement {
     } catch {
       read = false;
     }
-    if (!this.isConnected || request < this.#appliedChoice || (!read && this.#choiceRead))
-      return false;
-    this.#appliedChoice = request;
-    this.#choiceRead ||= read;
-    const passGone = pass?.available === false;
-    const next = passGone
-      ? null
-      : pass === undefined
-        ? "all"
-        : pass.kind === "pass"
-          ? "pass"
-          : "monitor";
-    if (refused !== undefined && next === refused) return false;
-    this.passGone = passGone;
-    this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";
-    if (next !== this.selected) {
-      this.orders = [];
-      this.lostLines = [];
-      this.nothingLeft = false;
-      this.doneNotice = undefined;
+    if (!this.isConnected || request < this.#appliedChoice) return;
+    if (read || !this.#choiceRead) {
+      this.#appliedChoice = request;
+      this.#choiceRead = read;
+      this.passGone = pass?.available === false;
+      this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";
+      const next = this.passGone
+        ? null
+        : pass === undefined
+          ? "all"
+          : pass.kind === "pass"
+            ? "pass"
+            : "monitor";
+      if (next !== this.selected) {
+        this.orders = [];
+        this.lostLines = [];
+        this.nothingLeft = false;
+        this.doneNotice = undefined;
+      }
+      this.selected = next;
     }
-    this.selected = next;
-    await this.#reload(signal, false, refused === undefined);
-    return true;
+    await this.#reload(signal);
   }
 
   async #refresh(): Promise<void> {
-    const choosing = this.#followsChoice() && (!this.#choiceRead || this.selected === null);
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
     try {
-      await (choosing ? this.#loadChoice(read.signal) : this.#reload(read.signal, true));
+      await (this.#followsChoice()
+        ? this.#loadChoice(read.signal)
+        : this.#reload(read.signal, true));
     } finally {
       clearTimeout(limit);
       this.#refreshReads.delete(read);
@@ -599,9 +596,9 @@ export class TillExpoScreen extends LitElement {
   /**
    * A kitchen display's own read (`probe`: on connect and each refresh) refused
    * `device.unauthorized` emits `device-unauthorized`, so the app re-boots to what the device's
-   * identity now says, as a station screen's does; any other failure keeps the last-known board.
+   * identity now says, as a station screen's does. Any other failure keeps the last-known board.
    */
-  async #reload(signal?: AbortSignal, probe = false, followChoice = true): Promise<void> {
+  async #reload(signal?: AbortSignal, probe = false): Promise<void> {
     const boardId = this.#boardId();
     if (boardId === null) return;
     const request = ++this.#request;
@@ -621,23 +618,15 @@ export class TillExpoScreen extends LitElement {
       this.tableChanged = this.#tableChangedNext;
       this.#tableChangedNext = null;
     } catch (error) {
-      const refused = (error as { code?: string } | null)?.code === "device.unauthorized";
-      if (probe && refused && this.#onDevice()) {
+      if (
+        probe &&
+        this.#onDevice() &&
+        (error as { code?: string } | null)?.code === "device.unauthorized"
+      ) {
         this.dispatchEvent(
           new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
         );
-        return;
-      }
-      if (
-        refused &&
-        followChoice &&
-        boardId !== "all" &&
-        this.#followsChoice() &&
-        this.#isCurrent(boardId) &&
-        (await this.#loadChoice(signal, boardId))
-      )
-        return;
-      if (request > this.#appliedRequest && this.#isCurrent(boardId)) this.stale = true;
+      } else if (request > this.#appliedRequest && this.#isCurrent(boardId)) this.stale = true;
     }
   }
 

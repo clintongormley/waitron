@@ -318,9 +318,7 @@ export class TillStationScreen extends LitElement {
     this.#refreshReads.add(read);
     try {
       if (this.deviceMode) await this.#loadDevice(read.signal);
-      else if (!this.#choiceRead || this.stationScreenGone || this.lostStations.length > 0)
-        await this.#load(read.signal);
-      else await this.#reload(read.signal, true);
+      else await this.#load(read.signal);
     } finally {
       clearTimeout(limit);
       this.#refreshReads.delete(read);
@@ -361,15 +359,14 @@ export class TillStationScreen extends LitElement {
 
   /**
    * The picker lists the device's chosen stations, or every station when it has no choice; a choice
-   * a narrowing emptied lists none. Run again at a refresh until a read of the choice answers, and
-   * while a narrowing's line shows, keeping the open station when it is still listed. Once a read
-   * has answered, a failed one keeps what it said.
+   * a narrowing emptied lists none. Run again at each refresh, keeping the open station when it is
+   * still listed. Once a read has answered, a failed one keeps what it said.
    */
   async #load(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
     const choice = this.#readStationChoice();
     try {
-      const listed = await this.api.listStations();
+      const listed = await this.api.listStations({ signal });
       const screen = await choice;
       if (request < this.#appliedChoice) return;
       this.#appliedChoice = request;
