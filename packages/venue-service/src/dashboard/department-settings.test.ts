@@ -855,3 +855,102 @@ it("a different destination set with the same count is still an edit", async () 
   expect(save(el).disabled).toBe(false);
   expect(save(el).variant).toBe("primary");
 });
+
+it("a destination deactivated while transfers remain shown can be corrected without losing a name edit", async () => {
+  const view = structuredClone(model);
+  view.departments.push({
+    id: "d4",
+    name: "Cafe",
+    tradingName: "Coffee",
+    defaultServiceMode: "prepay",
+    active: true,
+  });
+  const { el, writes } = await mount(view);
+  await change(el, "name", "Name draft");
+  el.shadowRoot!.querySelector<HTMLInputElement>("[name=transferDestination-d2]")!.click();
+  await el.updateComplete;
+  const live = structuredClone(view);
+  live.departments[1]!.active = false;
+  el.model = live;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=transfers-section]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[name=transferDestination-d2]")).toBeNull();
+  expect(field(el, "name").value).toBe("Name draft");
+  expect(save(el).disabled).toBe(false);
+  el.shadowRoot!.querySelector<HTMLInputElement>("[name=transferDestination-d4]")!.click();
+  await el.updateComplete;
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({
+    name: "Name draft",
+    transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d4"] },
+  });
+  await expect.poll(() => save(el).disabled).toBe(true);
+});
+it("owned zone links emit through the dashboard capture boundary while plain links remain shell-owned", async () => {
+  const { el } = await mount();
+  const shell: string[] = [];
+  const zones: unknown[] = [];
+  el.addEventListener("zone-change", (e) => zones.push((e as CustomEvent).detail));
+  const capture = (event: MouseEvent) => {
+    if (event.defaultPrevented) return;
+    const anchor = event
+      .composedPath()
+      .find(
+        (node): node is HTMLAnchorElement =>
+          node instanceof HTMLAnchorElement && node.hasAttribute("href"),
+      );
+    if (!anchor) return;
+    if (anchor.getAttribute("aria-disabled") === "true") {
+      event.preventDefault();
+      return;
+    }
+    if (
+      event.button !== 0 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey ||
+      anchor.hasAttribute("data-own-click") ||
+      anchor.hasAttribute("download") ||
+      anchor.getAttribute("href")?.startsWith("#") ||
+      (anchor.target !== "" && anchor.target !== "_self")
+    )
+      return;
+    const url = new URL(anchor.href);
+    if (
+      url.origin !== location.origin ||
+      (url.pathname !== "/manage" && !url.pathname.startsWith("/manage/"))
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    shell.push(url.pathname + url.search);
+  };
+  hosts[0]!.addEventListener("click", capture, { capture: true });
+  const zone = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-zone=z1]")!;
+  zone.click();
+  expect(zones).toEqual([{ zoneId: "z1" }]);
+  expect(shell).toEqual([]);
+  el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=edit-receipt]")!.click();
+  expect(shell).toEqual(["/manage/venue-settings/view/receipts?departmentId=d1"]);
+  const observed: boolean[] = [];
+  const cancelBrowserDefault = (event: MouseEvent) => {
+    observed.push(event.defaultPrevented);
+    event.preventDefault();
+  };
+  hosts[0]!.addEventListener("click", cancelBrowserDefault);
+  for (const modifier of ["ctrlKey", "metaKey", "shiftKey", "altKey"]) {
+    zone.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        [modifier]: true,
+      }),
+    );
+  }
+  expect(observed).toEqual([false, false, false, false]);
+  expect(zones).toEqual([{ zoneId: "z1" }]);
+  expect(shell).toHaveLength(1);
+});

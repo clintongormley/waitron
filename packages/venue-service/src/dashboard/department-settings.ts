@@ -207,6 +207,24 @@ export class DepartmentSettings extends LitElement {
         this.scope?.commit(this.baseline!);
       }
     }
+    const availableDestinations = new Set(
+      this.model!.departments.filter(
+        (department) => department.active && department.id !== row.id,
+      ).map((department) => department.id),
+    );
+    if (
+      [this.draft!, this.baseline!].some((value) =>
+        value.transfers?.destinationDepartmentIds.some((id) => !availableDestinations.has(id)),
+      )
+    ) {
+      this.draft = copy(this.draft!);
+      this.baseline = copy(this.baseline!);
+      for (const value of [this.draft, this.baseline])
+        if (value.transfers)
+          value.transfers.destinationDepartmentIds =
+            value.transfers.destinationDepartmentIds.filter((id) => availableDestinations.has(id));
+      this.scope?.commit(this.baseline);
+    }
     if (this.isConnected && !this.scope) {
       const { coordinator, scope } = draftScopeFor(this, {
         id: this,
@@ -381,6 +399,8 @@ export class DepartmentSettings extends LitElement {
       await this.api.saveDepartmentSettings(id, submitted);
       if (this.current(id, generation)) {
         const committed = copy(submitted);
+        if (!submitted.transfers && this.showsTransfers)
+          committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;
         this.scope?.commit(committed);
@@ -506,6 +526,7 @@ export class DepartmentSettings extends LitElement {
                 ${this.differing.map(
                   ({ zone, labels }, index) =>
                     html`${index ? ", " : nothing}<a
+                        data-own-click
                         data-zone=${zone.id}
                         href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/zones/zone/${encodeURIComponent(zone.id)}`}
                         @click=${(e: MouseEvent) => {
