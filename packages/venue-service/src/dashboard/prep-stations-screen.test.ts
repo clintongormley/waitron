@@ -4598,7 +4598,7 @@ describe("Routing grid", () => {
       ...view,
       routing: {
         ...view.routing,
-        zones: [{ id: "terrace", name: "Terrace" }],
+        zones: [{ id: "terrace", name: "Terrace", departmentId: null }],
         products: [
           { id: "bread", name: "Bread", categoryId: "food" },
           { id: "water", name: "Water", categoryId: null },

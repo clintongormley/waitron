@@ -109,7 +109,7 @@ export interface RoutingModel {
   todayEnds: { timeOfDay: string; tomorrow: boolean } | null;
   clockReadable: boolean;
   /** Active zones in display order: the grid's columns. */
-  zones: { id: string; name: string }[];
+  zones: { id: string; name: string; departmentId: string | null }[];
   categories: GridCategory[];
   /** Active top-level products; a disabled product's stored cells are left out of `cells` too. */
   products: GridProduct[];

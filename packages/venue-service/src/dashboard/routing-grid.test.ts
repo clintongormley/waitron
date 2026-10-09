@@ -52,8 +52,8 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
     todayEnds: null,
     clockReadable: true,
     zones: [
-      { id: "terrace", name: "Terrace" },
-      { id: "inside", name: "Inside" },
+      { id: "terrace", name: "Terrace", departmentId: null },
+      { id: "inside", name: "Inside", departmentId: null },
     ],
     categories: [
       { id: "drinks", name: "Drinks", parentId: null },
@@ -459,7 +459,7 @@ describe("venue-routing-grid", () => {
     const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     await userEvent.click(trigger(box));
     await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
-    el.model = routing({ zones: [{ id: "inside", name: "Inside" }] });
+    el.model = routing({ zones: [{ id: "inside", name: "Inside", departmentId: null }] });
     await el.updateComplete;
     expect(box.isConnected).toBe(false);
     expect(combo(el, "c:drinks", "inside")).not.toBe(box);

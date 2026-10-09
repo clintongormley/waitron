@@ -7,7 +7,7 @@ import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import { PrepStationsScreen } from "./prep-stations-screen.js";
 const view: PrepStationsView = {
   routing: {
-    zones: [{ id: "terrace", name: "Terrace" }],
+    zones: [{ id: "terrace", name: "Terrace", departmentId: null }],
     categories: [
       { id: "drinks", name: "Drinks", parentId: null },
       { id: "food", name: "Food", parentId: null },

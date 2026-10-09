@@ -1095,7 +1095,11 @@ export async function routingModel(
   const cutover = clock.dayCutover.slice(0, 5);
   const nextChange = nextChangeFinder(rules, at, clock, moment);
   const restricted = await stationsRestrictedFrom(tx, cfg, moment?.civilDate ?? null);
-  const zones = await activeZones(tx, cfg);
+  const zoneDepartment = await zoneDepartments(tx, cfg);
+  const zones = (await activeZones(tx, cfg)).map((zone) => ({
+    ...zone,
+    departmentId: zoneDepartment.get(zone.id) ?? null,
+  }));
   const gridProducts = await tx
     .select({ id: products.id, name: products.name, categoryId: products.categoryId })
     .from(products)

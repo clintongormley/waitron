@@ -28,8 +28,8 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
     todayEnds: null,
     clockReadable: true,
     zones: [
-      { id: "terrace", name: "Terrace" },
-      { id: "inside", name: "Inside" },
+      { id: "terrace", name: "Terrace", departmentId: null },
+      { id: "inside", name: "Inside", departmentId: null },
     ],
     categories: [
       { id: "drinks", name: "Drinks", parentId: null },

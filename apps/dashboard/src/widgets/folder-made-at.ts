@@ -5,6 +5,7 @@ import {
   followFallbacks,
   selectionRulesFromModel,
   selectRoutingCell,
+  targetKey,
   type MakerChoice,
   type RoutingModel,
   type RoutingRules,
@@ -126,7 +127,11 @@ export function folderMadeAt(
   };
 
   const linesAt = new Set(
-    routing.cells.filter(({ periods }) => (periods ?? []).length > 0).map(cellKey),
+    routing.cells
+      .filter(({ target, periods }) =>
+        (periods ?? []).some((line) => targetKey(line.target) !== targetKey(target)),
+      )
+      .map(cellKey),
   );
 
   const result = new Map<string, FolderMadeAt>();

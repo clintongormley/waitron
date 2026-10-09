@@ -245,6 +245,7 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     "products",
     "floor_zones",
+    "zone_service_policies",
     "station_fallbacks",
     "station_day_states",
     "hours_week_cells",

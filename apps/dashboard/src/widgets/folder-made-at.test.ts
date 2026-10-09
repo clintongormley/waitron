@@ -53,7 +53,7 @@ function routing(overrides: Partial<RoutingModel> = {}): RoutingModel {
     periods: [],
     todayEnds: null,
     clockReadable: true,
-    zones: [{ id: "terrace-zone", name: "Terrace" }],
+    zones: [{ id: "terrace-zone", name: "Terrace", departmentId: null }],
     categories: CATEGORIES.map(({ id, name, parentId }) => ({ id, name, parentId })),
     products: [],
     cells: [],
@@ -308,9 +308,9 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     const result = folderMadeAt(
       routing({
         zones: [
-          { id: "terrace-zone", name: "Terrace" },
-          { id: "patio-zone", name: "Patio" },
-          { id: "hall-zone", name: "Hall" },
+          { id: "terrace-zone", name: "Terrace", departmentId: null },
+          { id: "patio-zone", name: "Patio", departmentId: null },
+          { id: "hall-zone", name: "Hall", departmentId: null },
         ],
         cells: [
           onCategory("drinks", station("bar")),
@@ -446,6 +446,20 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
       }),
     );
     expect(noPreparation.get("drinks")?.someElsewhere).toBe(true);
+  });
+
+  it("does not qualify a category whose only period line names its own plain station", () => {
+    const result = madeAt(
+      routing({
+        cells: [
+          {
+            ...onCategory("drinks", station("bar")),
+            periods: [{ periodId: "lunch", target: station("bar") }],
+          },
+        ],
+      }),
+    );
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 });
 

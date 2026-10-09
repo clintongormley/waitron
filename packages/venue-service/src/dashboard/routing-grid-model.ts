@@ -223,23 +223,36 @@ export interface CellPeriodLines {
   readonly lines: readonly PeriodLineText[];
 }
 
-/** Three or more periods read "first–last" only when they run on in their one department's order. */
+/**
+ * Three or more periods read "first–last" only when they run on in their one department's order.
+ * A name repeated within the line carries its department.
+ */
 function periodsText(periods: readonly RoutingPeriod[], all: readonly RoutingPeriod[]): string {
+  const names = periods.map(({ name }) => name);
+  const repeated = new Set(names.filter((name, i) => names.indexOf(name) !== i));
+  const named = (period: RoutingPeriod) =>
+    repeated.has(period.name)
+      ? format("routing.period_in_department", {
+          period: period.name,
+          department: period.departmentName,
+        })
+      : period.name;
   const first = periods[0]!;
   const last = periods[periods.length - 1]!;
-  if (periods.length <= 2) return periods.map(({ name }) => name).join(", ");
+  if (periods.length <= 2) return periods.map(named).join(", ");
   const department = all.filter(({ departmentId }) => departmentId === first.departmentId);
   const from = department.indexOf(first);
   const runsOn = periods.every((period, i) => department[from + i] === period);
   return runsOn
-    ? format("routing.period_span", { first: first.name, last: last.name })
-    : format("routing.period_more", { first: first.name, count: String(periods.length - 1) });
+    ? format("routing.period_span", { first: named(first), last: named(last) })
+    : format("routing.period_more", { first: named(first), count: String(periods.length - 1) });
 }
 
 /**
  * A coordinate's period lines, one per target, each ordered and ordered among themselves by the
  * model's period order. A coordinate with no cell of its own shows the lines of the cell that
- * decides it. A line's period the model does not list is left out.
+ * decides it. A line's period the model does not list is left out, and so, in a zone column, is a
+ * line of another department's period, which the server never applies there.
  */
 export function cellPeriodLines(
   model: RoutingModel,
@@ -249,11 +262,16 @@ export function cellPeriodLines(
   const cells = new Map(model.cells.map((cell) => [cellKey(cell), cell]));
   const order = new Map(model.periods.map((period, i) => [period.id, i]));
   const categoryOf = new Map(model.products.map(({ id, categoryId }) => [id, categoryId]));
+  const zoneDepartment = new Map(model.zones.map(({ id, departmentId }) => [id, departmentId]));
 
-  const linesOf = (stored: readonly PeriodLine[]): PeriodLineText[] => {
+  const linesOf = (stored: readonly PeriodLine[], zoneId: string | null): PeriodLineText[] => {
     const byTarget = new Map<string, { target: RouteTarget; periods: RoutingPeriod[] }>();
+    const departmentId = zoneId === null ? undefined : (zoneDepartment.get(zoneId) ?? null);
+    const applies = (periodId: string) =>
+      departmentId === undefined ||
+      model.periods[order.get(periodId)!]!.departmentId === departmentId;
     const known = stored
-      .filter(({ periodId }) => order.has(periodId))
+      .filter(({ periodId }) => order.has(periodId) && applies(periodId))
       .sort((a, b) => order.get(a.periodId)! - order.get(b.periodId)!);
     for (const { periodId, target } of known) {
       const key = targetKey(target);
@@ -274,10 +292,10 @@ export function cellPeriodLines(
 
   return (row, zoneId) => {
     const own = cells.get(cellKey({ row, zoneId }));
-    if (own !== undefined) return { inherited: false, lines: linesOf(own.periods ?? []) };
+    if (own !== undefined) return { inherited: false, lines: linesOf(own.periods ?? [], zoneId) };
     const category = row.kind === "product" ? (categoryOf.get(row.productId) ?? null) : null;
     const { decidedBy } = selectRoutingCell(rules, row, zoneId, category);
     const deciding = decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
-    return { inherited: true, lines: linesOf(deciding?.periods ?? []) };
+    return { inherited: true, lines: linesOf(deciding?.periods ?? [], zoneId) };
   };
 }

@@ -554,8 +554,8 @@ describe("stored preparation rules", () => {
       expect(model.zones.some((zone) => zone.id === garden!.id)).toBe(false);
       expect({ ...model, cells: sortCells(model.cells) }).toEqual({
         zones: [
-          { id: inside!.id, name: "Upstairs" },
-          { id: f.terrace, name: "Terrace" },
+          { id: inside!.id, name: "Upstairs", departmentId: f.department },
+          { id: f.terrace, name: "Terrace", departmentId: f.department },
         ],
         categories: [
           { id: f.beer, name: "Beer", parentId: f.drinks },
@@ -622,7 +622,7 @@ describe("stored preparation rules", () => {
       );
       const own = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(own.cells).toEqual([{ row: categoryRow(f.drinks), zoneId: null, target: noPrep }]);
-      expect(own.zones).toEqual([{ id: f.terrace, name: "Terrace" }]);
+      expect(own.zones).toEqual([{ id: f.terrace, name: "Terrace", departmentId: f.department }]);
       expect((await loadRoutingRules(tx, other.cfg, null)).cells).toEqual([
         { row: categoryRow(other.drinks), zoneId: other.terrace, target: station(other.bar) },
       ]);
@@ -3223,6 +3223,21 @@ describe("saving a cell's period choices", () => {
     tx
       .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
       .from(routingCellPeriods);
+
+  it("gives each zone of the model its department, or null where it serves none", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      const [garden] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Garden" })
+        .returning();
+      const { zones } = await routingModel(tx, f.cfg, at);
+      expect(zones).toEqual([
+        { id: garden!.id, name: "Garden", departmentId: null },
+        { id: f.patio, name: "Patio", departmentId: f.barDepartment },
+        { id: f.terrace, name: "Terrace", departmentId: f.department },
+      ]);
+    }));
 
   it("keeps a cell's lines when a save leaves them out, and clears them with an empty list", async () =>
     scoped(async (tx) => {
