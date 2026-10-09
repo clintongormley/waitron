@@ -32,7 +32,8 @@ const orderMoveRefusals: Record<string, StringKey> = {
 
 /** The move dialog's own sentence for a refusal code, if it has one. */
 export function moveRefusalKey(code: string, wholeOrder: boolean): StringKey | undefined {
-  return (wholeOrder ? orderMoveRefusals : moveRefusals)[code];
+  const table = wholeOrder ? orderMoveRefusals : moveRefusals;
+  return Object.hasOwn(table, code) ? table[code] : undefined;
 }
 
 const NO_STATION = "__station_choice_none__";
@@ -60,7 +61,7 @@ export class TillStationChoiceDialog extends LitElement {
   @property() selected: string | null | undefined = undefined;
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
-  /** The move names every dish of an order that can still move, not one dish. */
+  /** The move is of a whole order, not one dish. */
   @property({ type: Boolean }) wholeOrder = false;
 
   @state() private active = true;

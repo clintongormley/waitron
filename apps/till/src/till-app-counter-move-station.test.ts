@@ -10,8 +10,9 @@ import type { TillStationChoiceDialog } from "./widgets/station-choice-dialog.js
 import type { CanvasDef } from "./layout.js";
 import type { CounterWaitingOrder, Station, TillApi, ZoneOfferCatalogue } from "./api/client.js";
 
-// Move to station on a paid counter order waiting to be handed over: one request naming every dish
-// of the order that can still move, through the table's move route and dialog.
+// Move to station on a paid counter order waiting to be handed over: one request naming, at most 100
+// at a time, the order's movable dishes not already at the chosen station, through the table's move
+// route and dialog.
 
 const canvas: CanvasDef = {
   formFactor: "till",
@@ -49,7 +50,7 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  service: { open: true, periodName: null, keepOpen: null },
+  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
   context: {
     departmentName: "Restaurant",
     zoneId: "zone-counter",
@@ -94,13 +95,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 let api: TillApi;
 
-/** The server's side: a move that succeeds leaves the order with nothing left to move. */
+/** The server's side: a moved dish is still queued, so it is still listed as movable, at its new
+ * station. */
 function waitingServer(first: CounterWaitingOrder[] = [paid]) {
   const server = {
     waiting: first,
     listCounterWaiting: vi.fn(async () => server.waiting),
-    moveDishStation: vi.fn(async (_id: string, body: { stationId: string }) => {
-      server.waiting = server.waiting.map((row) => ({ ...row, movableDishes: [] }));
+    moveDishStation: vi.fn(async (_id: string, body: { lineIds: string[]; stationId: string }) => {
+      server.waiting = server.waiting.map((row) => ({
+        ...row,
+        movableDishes: row.movableDishes.map((dish) =>
+          body.lineIds.includes(dish.lineId) ? { ...dish, stationId: body.stationId } : dish,
+        ),
+      }));
       return { revision: 2, stationId: body.stationId, moved: [] };
     }),
   };
@@ -234,7 +241,7 @@ describe("till-app: moving a paid counter order to another station", () => {
     expect(dialog(el)!.currentStationId).toBeNull();
   });
 
-  it("sends one move naming every dish the list holds when the station is chosen, then closes", async () => {
+  it("sends one move naming every dish the list holds that is not already at the chosen station, then closes", async () => {
     const el = await openMove();
     listNow(el, [
       {
@@ -262,7 +269,12 @@ describe("till-app: moving a paid counter order to another station", () => {
   });
 
   it("reads the kitchen queue and then the waiting list again after the move", async () => {
-    const el = await openMove();
+    const server = waitingServer();
+    server.moveDishStation.mockImplementation(async (_id, body) => {
+      server.waiting = [{ ...paid, movableDishes: [] }];
+      return { revision: 2, stationId: body.stationId, moved: [] };
+    });
+    const el = await openMove(server);
     const queueReads = vi.mocked(api.getStationQueue).mock.calls.length;
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
 
@@ -342,6 +354,10 @@ describe("till-app: moving a paid counter order to another station", () => {
   it.each([
     ["has left the list", [] as CounterWaitingOrder[]],
     ["has nothing left to move", [{ ...paid, movableDishes: [] }]],
+    [
+      "has every dish at the chosen station already",
+      [{ ...paid, movableDishes: [{ lineId: "line-1", stationId: "grill" }] }],
+    ],
   ])(
     "sends nothing, and closes, when the order %s before the station is chosen",
     async (_how, rows) => {
@@ -367,6 +383,30 @@ describe("till-app: moving a paid counter order to another station", () => {
 
     const sent = vi.mocked(api.moveDishStation).mock.calls[0]![1].lineIds;
     expect(sent).toEqual(movableDishes.slice(0, 100).map((dish) => dish.lineId));
+  });
+
+  it("a second move to the same station sends only the dishes the first left behind", async () => {
+    const movableDishes = Array.from({ length: 101 }, (_, n) => ({
+      lineId: `line-${n}`,
+      stationId: "kitchen",
+    }));
+    const server = waitingServer([{ ...paid, movableDishes }]);
+    const el = await openMove(server);
+    await choose(el);
+    expect(dialog(el)).toBeNull();
+
+    moveButton(el)!.click();
+    await flush(el);
+    expect(dialog(el)!.currentStationId).toBeNull();
+    await choose(el);
+
+    const calls = vi.mocked(api.moveDishStation).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1].lineIds).toEqual(movableDishes.slice(0, 100).map((dish) => dish.lineId));
+    expect(calls[1]![1].lineIds).toEqual(["line-100"]);
+    expect(server.waiting[0]!.movableDishes).toEqual(
+      movableDishes.map((dish) => ({ ...dish, stationId: "grill" })),
+    );
   });
 
   it("is not offered on a device whose profile may not take orders", async () => {

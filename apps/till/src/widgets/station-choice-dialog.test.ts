@@ -5,7 +5,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
 import type { Station } from "../api/client.js";
 import "./station-choice-dialog.js";
-import type { TillStationChoiceDialog } from "./station-choice-dialog.js";
+import { moveRefusalKey, type TillStationChoiceDialog } from "./station-choice-dialog.js";
 
 const stations: Station[] = [
   {
@@ -226,4 +226,21 @@ describe("till-station-choice-dialog", () => {
       codeMessage("station.not_found"),
     );
   });
+
+  it.each([false, true])(
+    "has no sentence of its own for a code naming an inherited property (whole order: %s)",
+    (wholeOrder) => {
+      expect(moveRefusalKey("constructor", wholeOrder)).toBeUndefined();
+    },
+  );
+
+  it.each([false, true])(
+    "shows the shared sentence for a refusal coded `constructor` (whole order: %s)",
+    async (wholeOrder) => {
+      const el = await mount({ mode: "move", wholeOrder, refusal: "constructor" });
+      expect(root(el).querySelector("[data-body]")?.lastElementChild?.textContent?.trim()).toBe(
+        codeMessage("constructor"),
+      );
+    },
+  );
 });

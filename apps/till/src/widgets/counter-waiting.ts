@@ -12,7 +12,7 @@ export interface PayWaitingOrderDetail {
   serviceMode: CounterWaitingOrder["serviceMode"];
 }
 
-/** How a row, its buttons' names and the move dialog's heading name the order: `#12 Mesa 4`. */
+/** How the row's buttons' names and the move dialog's heading name the order: `#12 Mesa 4`. */
 export function waitingScope(order: CounterWaitingOrder): string {
   return `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
 }

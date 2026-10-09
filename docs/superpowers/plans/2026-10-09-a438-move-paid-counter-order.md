@@ -69,6 +69,9 @@ order" (`docs/backlog.md`, till area; no detail file).
 9. **At most 100 dishes per request** (the route refuses more, `till-api.ts`). The till sends the
    first 100 by the order the server lists them; any left over are still listed after the re-read, so
    a second press moves them. Tested with 101.
+   _2026-10-09, fix wave:_ a moved dish stays listed as movable at its new station, so the till leaves
+   out dishes already at the chosen station before taking the first 100, and closes without sending
+   when none is left. Without that, a second press named the same 100 again.
 10. **Extras with a kitchen record of their own stay where they are** when their dish moves: that is
    today's route behaviour (`station-move.test.ts`, "moves a dish without moving its split-off chips
    at another station") and the table screen's too. Not a defect of this item.

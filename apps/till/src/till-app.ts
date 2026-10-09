@@ -2570,10 +2570,7 @@ export class TillApp extends LitElement {
     return this.#refreshList("waiting", "refresh.waiting");
   }
 
-  /**
-   * For the refresh behind a write that has already succeeded: its failure is a load failure, so it
-   * never reaches the write's own error handling.
-   */
+  /** Never throws: a failure is said in the list's own retry notice. */
   #refreshAfterWrite(list: RefreshList, messageKey: StringKey): Promise<void> {
     return this.#refreshList(list, messageKey, TABLE_REQUEST_LIMIT_MS);
   }
@@ -6295,16 +6292,17 @@ export class TillApp extends LitElement {
     if (this.movingStation !== open) return;
     const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
     if (open.busy || stationId === null || stationId === open.stationId) return;
-    const row = this.#movableWaitingRow(open.workingOrderId);
-    if (row === undefined) {
+    // A moved dish is still listed as movable, at its new station: left in, a second press after a
+    // capped move would name the same dishes again and never reach the rest.
+    const lineIds = (this.#movableWaitingRow(open.workingOrderId)?.movableDishes ?? [])
+      .filter((dish) => dish.stationId !== stationId)
+      .slice(0, MOVE_STATION_MAX_LINES)
+      .map((dish) => dish.lineId);
+    if (lineIds.length === 0) {
       this.movingStation = null;
       return;
     }
-    const body = {
-      submissionId: crypto.randomUUID(),
-      lineIds: row.movableDishes.slice(0, MOVE_STATION_MAX_LINES).map((dish) => dish.lineId),
-      stationId,
-    };
+    const body = { submissionId: crypto.randomUUID(), lineIds, stationId };
     const busy = { ...open, busy: true, refusal: null };
     this.movingStation = busy;
     this.errorKey = undefined;
