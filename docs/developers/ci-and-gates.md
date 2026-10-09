@@ -534,6 +534,18 @@ under 'Repository permissions for "Actions"', has the row
 where IAT is that page's "installation access token". So the `ci` job alone holds `actions: read`,
 the permission GitHub lists for that endpoint; a run without it was not tried.
 
+The first step makes one exception to "skipped passes" (A452): when `changes` reports
+`code == "true"` and a coverage merge job's own gate `"true"`, that merge job ending `skipped`
+fails, with a message such as
+`@waitron/db was selected but its coverage merge job test-heavy-merge was skipped`. A skipped merge
+job for a selected package means that package's coverage bar was never checked. The step holds a
+table of the five merge jobs (`test-heavy-merge`, `test-server-merge`, `test-till-merge`,
+`test-dashboard-merge`, `test-venue-service-merge`), each with the gate and package its own job
+reads. When some job also failed or was cancelled, the step stops on that failure's message first.
+With no `changes` outputs to read, nothing counts as selected and this check does not fire; a
+`changes` job that failed is already caught as a failure. The second step does not make this
+check.
+
 Why two. Until A274 the first step fired only on `failure` or `cancelled`, and that let a
 cancellation through: in run 37368759185 attempt 1 (2026-10-05, PR head `4123486d0`),
 `test-dashboard` was cancelled with "The job was not acquired by Runner of type hosted even after
@@ -582,7 +594,8 @@ Run 37368759185 attempt 2 showed the same shape with 26 jobs.
 `scripts/ci-workflow.test.mjs` runs each step's script: the first on sample `needs` results, the
 second against a stand-in `gh` that serves sample pages and failures, once with its default six
 tries and ten-second delay through a stand-in `sleep` that records each wait. It also fails if a
-needed job sets a `name:`. GitHub alone evaluates `toJSON(needs)` and answers the API. That guard is
+needed job sets a `name:`. It runs the first step with each merge job skipped while its package is
+selected, and compares the step's merge table with ci.yml's `-merge` jobs, reading both as text. GitHub alone evaluates `toJSON(needs)` and answers the API. That guard is
 weaker than its name: it reads ci.yml as text, extracts each step by its `name:` and checks the
 first step has no `if:` key, the second has `if: always()` and `timeout-minutes: 5`, and each keeps
 its `env:` lines; an `if:` reaching a step another way — a job-level change, or YAML spelled

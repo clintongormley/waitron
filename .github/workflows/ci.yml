@@ -1836,6 +1836,11 @@ jobs:
       # change could not affect; a job skipped because something it needs failed is caught by that
       # failure. The step has no `if:`, so it always runs and prints what each needed job reported.
       #
+      # One exception to "skipped passes": a coverage merge job skipped while `changes` selected its
+      # package fails, because then that package's coverage bar was never checked. The table at the
+      # top of the script names each merge job's gate and package. When a job also failed, that
+      # failure's message is the one printed.
+      #
       # A job GitHub cancelled because no runner picked it up reached `ci` as neither `failure` nor
       # `cancelled`, so this step can pass it. The next step reads each needed job's conclusion
       # from GitHub's jobs API instead of from `needs`. See docs/developers/ci-and-gates.md, "The
@@ -1845,12 +1850,24 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           jq --unbuffered -nr '
-            $ENV.NEEDS | fromjson
+            {
+              "test-heavy-merge": { gate: "heavy", package: "@waitron/db" },
+              "test-server-merge": { gate: "server", package: "@waitron/server" },
+              "test-till-merge": { gate: "till", package: "@waitron/till" },
+              "test-dashboard-merge": { gate: "dashboard", package: "@waitron/dashboard" },
+              "test-venue-service-merge": { gate: "venue_service", package: "@waitron/venue-service" },
+            } as $merges
+            | $ENV.NEEDS | fromjson
             | if type != "object" or length == 0 then error("no needed job results to read") else . end
+            | (.changes.outputs // {}) as $scope
             | to_entries
             | (.[] | "\(.key): \(.value.result)"),
               (map(select(.value.result != "success" and .value.result != "skipped") | .key)
-               | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end)
+               | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end),
+              (map(select(.value.result == "skipped" and $merges[.key] != null
+                          and $scope.code == "true" and $scope[$merges[.key].gate] == "true")
+                   | "\($merges[.key].package) was selected but its coverage merge job \(.key) was skipped")
+               | if length > 0 then error(join("; ")) else empty end)
           '
 
       # While no needed job sets a `name:`, its API entries are named by its id: `lint`, a matrix's
