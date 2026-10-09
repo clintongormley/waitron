@@ -985,9 +985,35 @@ Done button at the toolbar's end turns it off and puts focus back on Reorder, si
 disappears; pressing Reorder again turns it off too. Opening a menu, or going back to the list,
 turns it off, so each menu opens with it off (`structureReordering`,
 `apps/dashboard/src/screens/menus-screen.ts`). Outside the mode no row has a grip, so neither a
-pointer nor the keyboard can move a member. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
-it; a pointer drag starts from the grip only, and offers only places among the member's siblings,
-with Products' ghost and gap (the shared `apps/dashboard/src/widgets/tree-drag.ts`). When a window
+pointer nor the keyboard can move a member.
+
+A grip moves a member anywhere in its own menu, not only among its siblings (owner decision
+2026-10-07, A338: "if i drag a product in the menu into a different section, it doesn't move"). A
+pointer drag starts from the grip only, with Products' ghost and gap (the shared
+`apps/dashboard/src/widgets/tree-drag.ts`). Over the middle half of the row of a closed or empty
+section the menu owns, a release puts the member at the end of that section; the row's first cell
+is marked `part="drop-target"` and no gap is drawn. Over any other row, or the top or bottom
+quarter of that one, the gap shows beside the row: before it while the pointer is in the row's
+upper half, after its last drawn row while in its lower half. Beside a sibling the release
+reorders the list as before (`wt-member-move`); beside a row of another list it moves the member
+into that list at that place (`wt-member-move-into`). Nothing is offered — no gap, no mark, and a
+release sends nothing — over the dragged row or anything drawn inside it, over a list inside a
+dragged section wherever that list is drawn, over a row inside an included menu, over a list that
+already holds the same product or section, over the dragged member's own list where it is drawn in
+another place, and, for a product no longer in the catalogue, anywhere but beside its siblings. On
+a grip, ArrowUp and ArrowDown move the member one place within its own list. ArrowRight moves it to
+the end of the sibling drawn directly above it, when that sibling is a section the menu owns that
+does not already hold the same product or section and is not the moved section or one inside it.
+ArrowLeft moves a member out of its section to the place directly after that section, unless that
+list already holds the same product or section; at the top level it does nothing. Neither of
+these two keys moves a product no longer in the catalogue. Each key
+announces the move, and the grip lists the four keys in `aria-keyshortcuts`. A move into another
+list sends the same request as Move to section… (`moveMembersInto`), so a moved product keeps the
+menu's price for it. The screen then reads the menu again and opens the destination so the moved
+row is drawn; after ArrowLeft or ArrowRight, focus goes to the moved row's grip, or back to the old
+grip when no such row is drawn. A refusal shows in the tab's member error line, naming the
+destination list when it is not the list on screen, and the menu is read again; a move whose list
+another change has taken off the menu sends nothing and reads the menu again. When a window
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
 the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
 member; at the top level, which has no row, to the toolbar's Add menu, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
