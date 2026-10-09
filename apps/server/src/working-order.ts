@@ -465,15 +465,13 @@ export async function priceOrderLines(
       requestedLines,
       requestedLines.map((line) => line.menuItemId),
     ));
-  const service =
-    periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)
-      ? await VENUE_SERVICE.resolveDepartmentService(
-          tx,
-          cfg,
-          (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!)).departmentId,
-          new Date(),
-        )
-      : null;
+  let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
+  if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
+    const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!);
+    const at = new Date();
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, context.zoneId, at);
+    service = await VENUE_SERVICE.resolveDepartmentService(tx, cfg, context.departmentId, at);
+  }
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
@@ -1084,6 +1082,7 @@ export async function createOpenOrder(
     deliveryTableId?: string | null;
     zoneId?: string;
     partyId?: string | null;
+    existingService?: boolean;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
     invoiceChoice?: {
@@ -1124,6 +1123,9 @@ export async function createOpenOrder(
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
+  }
+  if (effectiveZoneId !== undefined && placement.existingService !== true) {
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, effectiveZoneId, new Date());
   }
   const pricedLines = await priceOrderLines(
     tx,

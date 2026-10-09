@@ -737,7 +737,7 @@ service shapes gain the field; the availability batch count gains those three re
   is added, so neither route map in `till-api.profile-actions.test.ts` or
   `till-api.profile-zones.test.ts` changes.
 
-- [ ] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`, Terrace closed
+- [x] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`, Terrace closed
   23:30–06:00: seat a Terrace table at 23:29 → 200, at 23:30 → 409 `service_zone.closed` (fails
   today with 200: nothing checks closed times); a walk-up sale, a park and a pay in the Terrace at
   23:45 → refused and no `working_orders` row written; a walk-up sale with a Terrace delivery table
@@ -745,10 +745,10 @@ service shapes gain the field; the availability batch count gains those three re
   edit → accepted; payment → accepted; a split → accepted; a party seated at 23:00 with no bill
   orders its first item at 23:45 → refused and no bill row left; a handheld draft for that party
   submitted at 23:45 → refused; `/api/zones` answers `closed: true` for the Terrace at 23:45.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; see them pass;** the server package; `pnpm --filter @waitron/server typecheck`.
-- [ ] **Step 5: Commit** — `feat(server): a closed zone takes no new order or item (A366)`.
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run; see them pass;** the server package; `pnpm --filter @waitron/server typecheck`.
+- [x] **Step 5: Commit** — `feat(server): a closed zone takes no new order or item (A366)`.
 
 ---
 
