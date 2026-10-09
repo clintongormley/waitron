@@ -1,3 +1,4 @@
+import type { LocationId } from "./ids.js";
 export type ReceiptText = Readonly<Record<string, string>>;
 
 export interface DepartmentReceiptConfig {
@@ -89,4 +90,27 @@ export function untranslatedLanguages(
   return languages.filter((language) =>
     written.some((text) => writtenText(text, language) === undefined),
   );
+}
+
+export type ReceiptPaperWidth = "58mm" | "80mm";
+export interface StoredReceiptLogoRaster {
+  widthDots: number;
+  heightDots: number;
+  data: string;
+}
+export type ReceiptLogoRasters = Record<ReceiptPaperWidth, StoredReceiptLogoRaster>;
+export interface ReceiptLogoRaster {
+  widthDots: number;
+  heightDots: number;
+  bits: Uint8Array;
+}
+export interface DepartmentReceiptDiagnostic {
+  operation: "readPrintedDepartmentReceipt";
+  departmentId: string;
+  code: "receipt.read_failed";
+}
+export interface DepartmentReceiptScope {
+  locationId: LocationId;
+  receiptLanguages: readonly string[];
+  receiptDiagnostic?: (event: DepartmentReceiptDiagnostic) => void;
 }

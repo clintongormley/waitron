@@ -1936,6 +1936,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/printing':
+        specifier: workspace:*
+        version: link:../printing
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../reporting

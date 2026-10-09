@@ -32,6 +32,7 @@
     "@waitron/identity": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/printing": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/server-kit": "workspace:*",

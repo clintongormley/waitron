@@ -159,3 +159,12 @@ export type {
   VenueReceiptConfig,
   VenueReceiptSettings,
 } from "./receipt-text.js";
+
+export type {
+  ReceiptPaperWidth,
+  StoredReceiptLogoRaster,
+  ReceiptLogoRasters,
+  ReceiptLogoRaster,
+  DepartmentReceiptDiagnostic,
+  DepartmentReceiptScope,
+} from "./receipt-text.js";

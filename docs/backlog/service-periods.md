@@ -32,7 +32,8 @@ their full text.
   revised 2026-10-10 to the owner's later receipt overrides, in two pull requests: each department's
   receipt with translated subtitle and footer, then the department page's Receipt tab after
   slice 6. Parts 3A and 6A have landed (#1469/#1488). Slice 7's pure shapes,
-  two-language resolver and validators are built; persistence, presentation and editors remain.
+  two-language resolver, validators and scoped department persistence are built on Lane E's
+  receipt branch; routes, presentation and editors remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
