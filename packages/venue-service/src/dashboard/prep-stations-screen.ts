@@ -135,6 +135,10 @@ export class PrepStationsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
+      /* The tabs keep half the row whatever the font's width (A424). */
+      wt-tabs::part(tab-actions) {
+        max-width: 50%;
+      }
       wt-data-table::part(watcher-cell),
       wt-data-table::part(printer-cell),
       wt-data-table::part(screens-cell) {
