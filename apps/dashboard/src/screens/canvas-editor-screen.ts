@@ -142,7 +142,7 @@ export class CanvasEditorScreen extends LitElement {
       }
       .parent-trail .sep {
         margin-left: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
+        color: var(--wt-color-primary-text);
       }
       .editor-head .title {
         margin: 0;
@@ -1327,8 +1327,9 @@ export class CanvasEditorScreen extends LitElement {
         data-editing-id=${this.editingId ?? nothing}
         data-form-factor=${draft?.formFactor ?? nothing}
       >
-        <nav class="parent-trail" aria-label=${t("canvas_editor.title")}>
+        <nav class="parent-trail" aria-label=${t("canvas_editor.trail")}>
           <a
+            data-own-click
             href="/manage/canvas-editor"
             @click=${(event: MouseEvent) => {
               if (leftToBrowser(event)) return;

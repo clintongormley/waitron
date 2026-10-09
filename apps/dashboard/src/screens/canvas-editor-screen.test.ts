@@ -1696,10 +1696,11 @@ describe("canvas editor sub-page heading", () => {
     const root = el.shadowRoot!;
     const nav = root.querySelector("nav")!;
     expect(nav).not.toBeNull();
-    expect(nav.getAttribute("aria-label")).toBe(t("canvas_editor.title"));
     const link = nav.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("/manage/canvas-editor");
     expect(link.textContent!.trim()).toBe(t("canvas_editor.title"));
+    expect(nav.getAttribute("aria-label")).not.toBe(link.textContent!.trim());
+    expect(getComputedStyle(nav.querySelector(".sep")!).color).toBe(getComputedStyle(link).color);
     const headings = root.querySelectorAll("h1");
     expect(headings).toHaveLength(1);
     expect(headings[0]!.textContent).toBe("Counter till");

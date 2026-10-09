@@ -1761,6 +1761,7 @@ export const en = {
   "sales.no_printers":
     "No active printer at this location. Ask a manager to add one under Printers.",
   "canvas_editor.title": "Canvases",
+  "canvas_editor.trail": "Path to this canvas",
   "canvas_editor.create": "New canvas",
   "canvas_editor.duplicate": "Duplicate",
   "canvas_editor.delete_confirm": "Delete",
@@ -4268,6 +4269,7 @@ export const es: Record<StringKey, string> = {
   "sales.no_printers":
     "No hay ninguna impresora activa en este local. Pide a un encargado que añada una en Impresoras.",
   "canvas_editor.title": "Lienzos",
+  "canvas_editor.trail": "Ruta hasta este lienzo",
   "canvas_editor.create": "Nuevo lienzo",
   "canvas_editor.duplicate": "Duplicar",
   "canvas_editor.delete_confirm": "Eliminar",
