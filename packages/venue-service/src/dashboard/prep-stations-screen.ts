@@ -306,6 +306,7 @@ export class PrepStationsScreen extends LitElement {
   /** A written choice the grid keeps showing until a read replaces the model. */
   #writtenChoice?: RoutingPending;
   #cellRun = 0;
+  #stationEditRun = 0;
   #stationScope?: DraftScope<NewStation>;
   #stationBaseline?: NewStation;
   #stationIdentity?: object;
@@ -670,6 +671,7 @@ export class PrepStationsScreen extends LitElement {
   }
   override disconnectedCallback() {
     this.#cellRun++;
+    this.#stationEditRun++;
     if (
       this.#stationIdentity ||
       this.pending !== undefined ||
@@ -1166,14 +1168,17 @@ export class PrepStationsScreen extends LitElement {
   }
   async #saveStationEdit(token: object, detail: StationEditorSave) {
     const edit = this.stationEdit;
-    const current = () => this.isConnected && this.stationEdit?.token === token;
     if (
       !edit ||
-      !current() ||
+      !this.isConnected ||
+      edit.token !== token ||
       this.stationEditBusy ||
       !this.view?.stations.some((station) => station.id === edit.station.id)
     )
       return;
+    const run = ++this.#stationEditRun;
+    const current = () =>
+      this.isConnected && this.stationEdit?.token === token && this.#stationEditRun === run;
     this.stationEditBusy = true;
     this.stationEditRefusal = undefined;
     try {

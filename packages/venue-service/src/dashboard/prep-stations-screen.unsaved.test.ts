@@ -409,3 +409,41 @@ for (const rename of [false, true]) {
     expect(writes).toEqual([]);
   });
 }
+
+for (const outcome of ["written", "refused"] as const) {
+  it(`Edit ignores a save ${outcome} after reconnect once a newer save is sent`, async () => {
+    const { screen } = await mount();
+    const requests: { name: unknown; write: ReturnType<typeof deferred> }[] = [];
+    app.api.updateStation = (async (_id: string, body: { name?: unknown }) => {
+      const write = deferred();
+      requests.push({ name: body.name, write });
+      await write.promise;
+    }) as PrepStationsApi["updateStation"];
+    const first = await open(screen, true);
+    await field(first, "First");
+    first.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+    await expect.poll(() => requests.length).toBe(1);
+    screen.remove();
+    await screen.updateComplete;
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    const modal = modalIn(screen)!;
+    await field(modal, "Second");
+    const save = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-station-edit]",
+    )!;
+    save.click();
+    await expect.poll(() => requests.length).toBe(2);
+    expect(requests.map((request) => request.name)).toEqual(["First", "Second"]);
+    await expect.poll(() => save.loading).toBe(true);
+    if (outcome === "written") requests[0]!.write.resolve();
+    else requests[0]!.write.reject({ code: "station.name_taken" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await screen.updateComplete;
+    expect(modalIn(screen)).not.toBeNull();
+    expect(save.loading).toBe(true);
+    expect(modal.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error).toBe("");
+    requests[1]!.write.resolve();
+    await expect.poll(() => modalIn(screen)).toBeNull();
+  });
+}
