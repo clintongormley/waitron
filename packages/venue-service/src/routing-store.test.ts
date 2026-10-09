@@ -3149,6 +3149,24 @@ describe("routing during a service period", () => {
       expect(asked).toEqual([f.department]);
     }));
 
+  it("asks for no period when no cell has period lines", async () =>
+    scoped(async (tx) => {
+      const f = await periodFixture(tx);
+      await tx.delete(routingCellPeriods);
+      const asked: string[] = [];
+      const resolver = await routingAt(tx, f.cfg, fridayAt("13:00"), {
+        runningPeriod: async (departmentId) => {
+          asked.push(departmentId);
+          return (await resolveDepartmentService(tx, f.cfg, departmentId, fridayAt("13:00")))
+            .periodId;
+        },
+      });
+      expect(await resolver.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, made(f.upstairs)]]),
+      );
+      expect(asked).toEqual([]);
+    }));
+
   it("uses Any other time and asks for no period while the venue's clock cannot be read", async () =>
     scoped(async (tx) => {
       const f = await periodFixture(tx);

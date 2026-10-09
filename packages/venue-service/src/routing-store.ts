@@ -862,7 +862,8 @@ function storedUuid(id: string): string {
 
 /**
  * `runningPeriod` answers a department's running period at `at`; it is asked at most once per
- * department, the first time a dish in one of its zones is routed.
+ * department, the first time a dish in one of its zones is routed, and never when no cell has
+ * period lines.
  */
 export async function routingAt(
   tx: Transaction,
@@ -880,11 +881,12 @@ export async function routingAt(
   const periods = new Map<string, string | null>();
   const rules: RoutingRules = { ...snapshotted.rules, zoneDepartment };
   const routedMoment: RoutingMoment | null = moment === null ? null : { ...moment, periods };
+  const anyPeriodLines = (rules.cellPeriods?.size ?? 0) > 0;
   const enterZone = async (zoneId: string | null) => {
     if (zoneId === null) return;
     const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
     zoneDepartment.set(zoneId, departmentId);
-    if (moment !== null && !periods.has(departmentId))
+    if (moment !== null && anyPeriodLines && !periods.has(departmentId))
       periods.set(departmentId, await runningPeriod(departmentId));
   };
   let stationNames: ReadonlyMap<string, StationTodayState> | undefined;
