@@ -15,7 +15,7 @@ import {
   replaceMenuWeek,
   setRoutingCell,
   setStationFallback,
-  zoneServicePolicies,
+  zoneSalePolicies,
 } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
@@ -80,23 +80,27 @@ export async function seedFloor(
   const restaurantName = floor.departmentNames.restaurant[locale];
   await tx.execute(sql`
     update departments
-    set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant},
-        default_service_mode = 'table_tab'
+    set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant}
     where id = ${defaultPolicy.department_id}`);
+  await tx
+    .update(departmentSalePolicies)
+    .set({ orderStart: "table" })
+    .where(eq(departmentSalePolicies.departmentId, defaultPolicy.department_id));
   const [deliRow] = await tx
     .insert(departments)
     .values({
       locationId,
       name: floor.departmentNames.deli[locale],
       tradingName: departmentTradingNames.deli,
-      defaultServiceMode: "prepay",
       active: true,
     })
     .returning({ id: departments.id });
   const deliDepartmentId = deliRow?.id;
   if (deliDepartmentId === undefined)
     throw new Error("seedFloor: failed to create deli department");
-  await tx.insert(departmentSalePolicies).values({ departmentId: deliDepartmentId });
+  await tx
+    .insert(departmentSalePolicies)
+    .values({ departmentId: deliDepartmentId, orderStart: "counter" });
 
   const zoneIds = new Map<string, string>();
   for (const zone of floor.zones) {
@@ -114,9 +118,12 @@ export async function seedFloor(
       await tx.execute(sql`
         update floor_zones set name = ${zone.name[locale]}, display_order = ${zone.displayOrder}
         where id = ${zoneId}`);
-      await tx.execute(sql`
-        update zone_service_policies set service_mode = 'prepay'
-        where zone_id = ${zoneId}`);
+    }
+    if (zone.key === "bar") {
+      await tx
+        .update(zoneSalePolicies)
+        .set({ orderStart: "counter" })
+        .where(eq(zoneSalePolicies.zoneId, zoneId));
     }
     zoneIds.set(zone.key, zoneId);
   }
@@ -127,9 +134,9 @@ export async function seedFloor(
     displayOrder: 3,
   });
   await tx
-    .update(zoneServicePolicies)
-    .set({ serviceMode: "prepay" })
-    .where(eq(zoneServicePolicies.zoneId, upstairsBarZone.id));
+    .update(zoneSalePolicies)
+    .set({ orderStart: "counter" })
+    .where(eq(zoneSalePolicies.zoneId, upstairsBarZone.id));
 
   if (menuIds !== undefined) {
     const downstairsBarZoneId = zoneIds.get("bar");

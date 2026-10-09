@@ -84,7 +84,7 @@ async function terraceVenue() {
     await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
     await routeProductTo(tx, v.cfg, v.productId("Caña"), bar);
     const terrace = (await createZone(tx, v.cfg, { name: "Terrace" })).id;
-    await offerProducts(tx, v.cfg, { zone: { zoneId: terrace }, serviceMode: "table_tab" });
+    await offerProducts(tx, v.cfg, { zone: { zoneId: terrace }, orderStart: "table" });
     return { grill, bar, terrace };
   });
   const outside = await seat(v, await v.table("Outside", terrace));

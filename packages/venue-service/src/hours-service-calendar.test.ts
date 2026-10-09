@@ -43,14 +43,12 @@ async function fixture() {
           locationId: cfg.locationId,
           name: "Dining",
           tradingName: "Dining",
-          defaultServiceMode: "table_tab",
           isDefault: true,
         },
         {
           locationId: cfg.locationId,
           name: "Terrace",
           tradingName: "Terrace",
-          defaultServiceMode: "table_tab",
           active: false,
         },
       ])

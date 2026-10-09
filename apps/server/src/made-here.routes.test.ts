@@ -1216,7 +1216,7 @@ describe("made-here route wiring", () => {
           .where(eq(products.name, "Caña"));
         const offers = await offerProducts(tx, venue.cfg, {
           zone: { zoneId: zone!.id },
-          serviceMode,
+          orderStart: "counter",
           productIds: [lager!.id],
         });
         return { zoneId: offers.zoneId, menuItemId: offers.offerFor(lager!.id) };

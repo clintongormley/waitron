@@ -837,7 +837,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {
         name: "Mesas",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const [zone] = await tx
         .insert(floorZones)

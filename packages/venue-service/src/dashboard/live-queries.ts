@@ -88,6 +88,8 @@ export const QUERY_DEPENDENCIES = {
   operations: [
     "departments",
     "zone_service_policies",
+    "department_sale_policies",
+    "zone_sale_policies",
     "menu_periods",
     "menu_period_staff_menus",
     "menu_day_timetables",

@@ -248,7 +248,10 @@ async function offerAtCounter(
   mode: OrderFlow = "prepay",
 ): Promise<SeededVenue> {
   const offers = await withTransaction(suite.db, (tx) =>
-    offerProducts(tx, cfg, { serviceMode: mode, paidWhen: mode }),
+    offerProducts(tx, cfg, {
+      orderStart: "counter",
+      paidWhen: mode,
+    }),
   );
   const offered = (name: string): OfferedProduct => {
     const product = available.find((p) => p.name === name)!;
@@ -1534,7 +1537,7 @@ describe("prepare & collect — zone payment timing", () => {
   it("uses each zone's pay timing through payment, placement and collection in one department", async () => {
     const { cfg, cafe, zoneId: prepayZoneId } = await setupVenue();
     const collectZone = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { zone: "tables", serviceMode: "prepay" }),
+      offerProducts(tx, cfg, { zone: "tables", orderStart: "counter" }),
     );
     await suite.db.execute(sql`
       update zone_sale_policies set paid_when = 'ticket_then_pay'

@@ -121,7 +121,9 @@ describe("seedFloor", () => {
           dataSet: CASA_DELGADO_ES,
         });
         const { rows } = await tx.execute<{ name: string; trading_name: string }>(
-          sql`select name, trading_name from departments where location_id = ${locationId} order by default_service_mode desc`,
+          sql`select d.name, d.trading_name from departments d
+              join department_sale_policies p on p.department_id = d.id
+              where d.location_id = ${locationId} order by p.order_start desc`,
         );
         return rows;
       });

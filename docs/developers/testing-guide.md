@@ -1144,7 +1144,7 @@ far. `packages/adjustments`, `packages/media` and `packages/venue-service` regis
 `parkPointerCommands` in their vitest configs and DO get the reset, through `packages/ui`: their
 a11y suites (`packages/adjustments/src/dashboard/reasons-screen.a11y.test.ts`,
 `packages/media/src/dashboard/image-library.a11y.test.ts` and
-`packages/venue-service/src/dashboard/venue-operations-screen.a11y.test.ts`) import
+`packages/venue-service/src/dashboard/departments-list.a11y.test.ts`) import
 `packages/ui/src/a11y-helpers.ts`, whose line 22 is `beforeEach(() => commands.parkPointer())`.
 Each of those packages' vitest configs says so in a comment beside the registration.
 

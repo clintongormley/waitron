@@ -3980,6 +3980,12 @@ describe("dashboard URL navigation", () => {
             routes: [],
             hours: [],
             readiness: [],
+            floorZones: [],
+            salePolicies: { departments: [], zones: [] },
+            kitchenTicketGrouping: "combined",
+            printHeldWork: false,
+            releaseReminderMinutes: null,
+            clearingWorkflow: false,
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -3991,7 +3997,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           el
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -4004,7 +4011,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           refreshed
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -4024,7 +4032,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           refreshed
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -4046,6 +4055,12 @@ describe("dashboard URL navigation", () => {
             routes: [],
             hours: [],
             readiness: [],
+            floorZones: [],
+            salePolicies: { departments: [], zones: [] },
+            kitchenTicketGrouping: "combined",
+            printHeldWork: false,
+            releaseReminderMinutes: null,
+            clearingWorkflow: false,
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -4074,7 +4089,8 @@ describe("dashboard URL navigation", () => {
         Boolean(
           el
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+            ?.shadowRoot?.querySelector("venue-departments-shell")
+            ?.shadowRoot?.querySelector("departments-list"),
         ),
       )
       .toBe(true);
@@ -6932,4 +6948,402 @@ it("lets the canvas parent link use the editor's own Cancel handler inside the s
   await expect
     .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
     .not.toBeNull();
+});
+
+describe("department list links inside dashboard capture", () => {
+  async function listInDashboard() {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    const list = document.createElement("departments-list");
+    list.model = {
+      departments: [
+        {
+          id: "d1",
+          name: "Dining room",
+          tradingName: "Dining",
+
+          active: true,
+        },
+      ],
+      zones: [],
+      floorZones: [],
+      readiness: [],
+      salePolicies: { departments: [], zones: [] },
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      printHeldWork: false,
+      releaseReminderMinutes: 10,
+      clearingWorkflow: false,
+    };
+    el.shadowRoot!.append(list);
+    await list.updateComplete;
+    const table = list.shadowRoot?.querySelector("wt-data-table");
+    expect(table, "the module registers and renders the department list").toBeTruthy();
+    await table!.updateComplete;
+    const link = table!.shadowRoot!.querySelector<HTMLAnchorElement>(
+      '[data-test="open-department-name-d1"]',
+    )!;
+    return { el, list, link };
+  }
+  it("delivers a plain department link once to its page owner without dashboard capture navigating first", async () => {
+    const { el, list, link } = await listInDashboard();
+    const before = location.href;
+    const opened = vi.fn();
+    list.addEventListener("open-department", opened);
+    const event = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ departmentId: "d1" });
+    await flush(el);
+    expect(location.href).toBe(before);
+  });
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])(
+    "leaves a modified department link to the browser even inside dashboard capture: %j",
+    async (options) => {
+      const { el, list, link } = await listInDashboard();
+      const before = location.href;
+      const opened = vi.fn();
+      list.addEventListener("open-department", opened);
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        ...options,
+      });
+      let preventedBeforeHarness: boolean | undefined;
+      link.addEventListener(
+        "click",
+        (click) => {
+          preventedBeforeHarness = click.defaultPrevented;
+          click.preventDefault();
+        },
+        { once: true },
+      );
+      link.dispatchEvent(event);
+      expect(preventedBeforeHarness).toBe(false);
+      expect(opened).not.toHaveBeenCalled();
+      await flush(el);
+      expect(location.href).toBe(before);
+    },
+  );
+});
+
+describe("mounted public department pages", () => {
+  afterEach(() => vi.restoreAllMocks());
+  function deep(root: ParentNode, selector: string): HTMLElement | null {
+    const own = root.querySelector<HTMLElement>(selector);
+    if (own) return own;
+    for (const child of root.querySelectorAll("*")) {
+      const found = child.shadowRoot ? deep(child.shadowRoot, selector) : null;
+      if (found) return found;
+    }
+    return null;
+  }
+  async function mountDepartments(
+    path = "/manage/venue-operations",
+    permissions = ["venue_service.manage"],
+    missingPeriods = false,
+  ) {
+    history.replaceState(null, "", path);
+    const model = {
+      departments: [
+        {
+          id: "d1",
+          name: "Restaurant",
+          tradingName: "Casa",
+          active: true,
+        },
+        {
+          id: "d2",
+          name: "Deli",
+          tradingName: "Shop",
+
+          active: false,
+        },
+      ],
+      zones: ["z1", "z2"].map((id) => ({
+        id,
+        name: id === "z1" ? "Terrace" : "Bar",
+        departmentId: "d1",
+        departmentName: "Restaurant",
+        serviceMode: "table_tab",
+        active: true,
+      })),
+      floorZones: ["z1", "z2"].map((id) => ({
+        id,
+        name: id === "z1" ? "Terrace" : "Bar",
+        active: true,
+      })),
+      readiness: missingPeriods
+        ? [{ code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" }]
+        : [],
+      salePolicies: { departments: [], zones: [] },
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      printHeldWork: false,
+      releaseReminderMinutes: null,
+      clearingWorkflow: false,
+    };
+    const request: DashboardRequest = async (url) => {
+      if (url === "/management-api/venue-service") return structuredClone(model) as never;
+      if (url === "/management-api/venue-service/opening-hours")
+        return {
+          timeZone: "Europe/Madrid",
+          clockReadable: true,
+          dayCutover: "06:00",
+          menus: [],
+          namedDays: [],
+          departments: model.departments.map(({ id, name, active }) => ({
+            id,
+            name,
+            active,
+            zones: [],
+            periods: [],
+            week: [],
+            dates: [],
+          })),
+        } as never;
+      if (url.endsWith("/transfers"))
+        return {
+          departmentId: "d1",
+          receivingProfileId: null,
+          destinationDepartmentIds: [],
+        } as never;
+      if (url === "/management-api/zones?includeInactive=true") return model.floorZones as never;
+      return [] as never;
+    };
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          role: "manager",
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          permissions,
+          modules: ["venue-service"],
+        }),
+      }),
+      request,
+    });
+    await flush(el);
+    return el;
+  }
+  function find(app: DashboardApp, selector: string) {
+    return deep(app.shadowRoot!, selector);
+  }
+  async function choose(app: DashboardApp, decision: "keep" | "discard") {
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => question.open).toBe(false);
+  }
+  async function draft(app: DashboardApp) {
+    await expect.poll(() => find(app, "department-settings")).not.toBeNull();
+    const box = find(app, 'wt-input[name="name"]') as WtInput;
+    await box.updateComplete;
+    await userEvent.fill(
+      page.elementLocator(box.shadowRoot!.querySelector("input")!),
+      "Draft restaurant",
+    );
+    await flush(app);
+    return box;
+  }
+  it("opens the department list through the dashboard route and a department through its real name link", async () => {
+    const app = await mountDepartments();
+    await expect.poll(() => find(app, "departments-list")).not.toBeNull();
+    expect(find(app, "departments-list")!.textContent).not.toContain("Ready for service");
+    await expect.poll(() => find(app, '[data-test="open-department-name-d1"]')).not.toBeNull();
+    find(app, '[data-test="open-department-name-d1"]')!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => find(app, "h1")).not.toBeNull();
+    expect(find(app, "h1")!.textContent!.trim()).toBe("Restaurant");
+    expect(find(app, 'a[href="/manage/venue-operations"]')!.textContent!.trim()).toBe(
+      "Departments",
+    );
+  });
+  it("the real parent link asks before discarding Settings and restores the department list", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const box = await draft(app);
+    find(app, 'a[href="/manage/venue-operations"]')!.click();
+    await choose(app, "keep");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(box.value).toBe("Draft restaurant");
+    find(app, 'a[href="/manage/venue-operations"]')!.click();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => find(app, "departments-list")).not.toBeNull();
+    expect(box.isConnected).toBe(false);
+  });
+  it("real Back keeps a dirty department, then Discard reaches the list and Forward reopens saved values", async () => {
+    const app = await mountDepartments();
+    await expect.poll(() => find(app, '[data-test="open-department-name-d1"]')).not.toBeNull();
+    find(app, '[data-test="open-department-name-d1"]')!.click();
+    const box = await draft(app);
+    history.back();
+    await choose(app, "keep");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(box.value).toBe("Draft restaurant");
+    history.back();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    history.forward();
+    await expect.poll(() => find(app, 'wt-input[name="name"]')?.getAttribute("name")).toBe("name");
+    expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+  it("the real receipt link keeps its department and asks before leaving a Settings draft", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", [
+      "venue_service.manage",
+      "venue.view",
+      "venue.configure",
+    ]);
+    const box = await draft(app);
+    find(app, '[data-test="edit-receipt"]')!.click();
+    await choose(app, "keep");
+    expect(box.value).toBe("Draft restaurant");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    find(app, '[data-test="edit-receipt"]')!.click();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/venue-settings/view/receipts");
+    expect(new URL(location.href).searchParams.get("departmentId")).toBe("d1");
+    expect(box.isConnected).toBe(false);
+  });
+  it.each([{ permissions: [] }, { permissions: ["venue.view"] }])(
+    "a department deep link still requires its own permission: %j",
+    async ({ permissions }) => {
+      const app = await mountDepartments("/manage/venue-operations/department/d1", permissions);
+      expect(location.pathname).toBe("/manage/overview");
+      expect(find(app, "department-settings")).toBeNull();
+      expect(navItem(app, "venue-operations")).toBeNull();
+    },
+  );
+  it("the real Zones tab asks, keeps the draft, and navigates after Discard", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const box = await draft(app);
+    const tab = find(app, 'button[data-key="zones"]')!;
+    tab.click();
+    await choose(app, "keep");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(box.value).toBe("Draft restaurant");
+    expect(tab.getAttribute("aria-selected")).toBe("false");
+    tab.click();
+    await choose(app, "discard");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/d1/view/zones");
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect(box.value).toBe("Restaurant");
+  });
+  it("a real zone choice replaces history and Settings clears the selected zone", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1/view/zones/zone/z1");
+    await expect.poll(() => find(app, '[data-test="zone-z2"]')).not.toBeNull();
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    find(app, '[data-test="zone-z2"]')!.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/d1/view/zones/zone/z2");
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledTimes(1);
+    find(app, 'button[data-key="settings"]')!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(find(app, 'button[data-key="settings"]')!.getAttribute("aria-selected")).toBe("true");
+  });
+  it("a disabled department deep link keeps its parent and read-only fields", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d2");
+    await expect.poll(() => find(app, 'wt-input[name="name"]')).not.toBeNull();
+    expect((find(app, 'wt-input[name="name"]') as WtInput).disabled).toBe(true);
+    expect(find(app, '[data-test="department-status"]')!.textContent).toContain("Disabled");
+    expect(find(app, '[data-test="enable-department"]')).not.toBeNull();
+    expect(find(app, 'a[href="/manage/venue-operations"]')!.textContent!.trim()).toBe(
+      "Departments",
+    );
+    expect(find(app, '[data-test="save-editor"]')).toBeNull();
+  });
+  it("an unknown department keeps its address and returns through the real parent link", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/gone");
+    await expect.poll(() => find(app, "venue-departments-shell")).not.toBeNull();
+    const shell = find(app, "venue-departments-shell")!;
+    expect(shell.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe(
+      "This department no longer exists.",
+    );
+    expect(location.pathname).toBe("/manage/venue-operations/department/gone");
+    expect(find(app, "department-settings")).toBeNull();
+    find(app, 'a[href="/manage/venue-operations"]')!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => find(app, "departments-list")).not.toBeNull();
+  });
+  it.each(["departments", "zones", "status", "menus", "kitchen"])(
+    "a saved %s bookmark opens the list without an extra history entry",
+    async (view) => {
+      const count = history.length;
+      const app = await mountDepartments(`/manage/venue-operations/view/${view}?source=bookmark`);
+      await expect.poll(() => find(app, "departments-list")).not.toBeNull();
+      expect(location.pathname).toBe("/manage/venue-operations");
+      expect(location.search).toBe("?source=bookmark");
+      expect(history.length).toBe(count);
+    },
+  );
+
+  it("the real Opening hours link keeps Settings edits until Discard and then pushes its department", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
+    const box = await draft(app);
+    const link = find(app, '[data-test="setup"] a') as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/department/d1");
+    const pushed = vi.spyOn(history, "pushState");
+    link.click();
+    await choose(app, "keep");
+    expect(pushed).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
+    expect(box.value).toBe("Draft restaurant");
+    expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
+    link.click();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
+    expect(
+      pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
+    ).toEqual(["/manage/opening-hours/department/d1"]);
+    expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
+  });
+
+  it("the real Opening hours link has its own history entry and returns through Back and Forward", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
+    await expect.poll(() => find(app, '[data-test="setup"] a')).not.toBeNull();
+    find(app, '[data-test="setup"] a')!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    const length = history.length;
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => find(app, "department-settings")).not.toBeNull();
+    expect(history.length).toBe(length);
+    const box = await draft(app);
+    history.forward();
+    await choose(app, "keep");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(history.length).toBe(length);
+    expect(box.value).toBe("Draft restaurant");
+    expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
+    history.forward();
+    await choose(app, "discard");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d1");
+    expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
+    expect(history.length).toBe(length);
+    expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
+  });
 });

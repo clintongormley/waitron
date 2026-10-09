@@ -28,10 +28,6 @@ export const departments = table(
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     tradingName: label("trading_name").notNull(),
-    // Not the enumText/enumCheck pair, here or in the four other checked value-set columns in this
-    // file: enumCheck joins the values with ", " and these constraints have no space, so
-    // substituting it rewrites the constraint.
-    defaultServiceMode: label("default_service_mode").notNull(),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
@@ -46,10 +42,6 @@ export const departments = table(
       foreignColumns: [locations.id],
       name: "departments_location_fk",
     }),
-    check(
-      "departments_service_mode_ck",
-      sql`${t.defaultServiceMode} in ('table_tab','prepay','ticket_then_pay')`,
-    ),
   ],
 );
 
@@ -59,8 +51,6 @@ export const zoneServicePolicies = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // Not enumText: see departments.default_service_mode.
-    serviceMode: label("service_mode"),
     isCounterDefault: flag("is_counter_default").notNull().default(false),
   },
   (t) => [
@@ -83,21 +73,19 @@ export const zoneServicePolicies = table(
     uniqueIndex("zone_service_policies_one_counter_default_key")
       .on(t.locationId)
       .where(sql`${t.isCounterDefault}`),
-    check(
-      "zone_service_policies_mode_ck",
-      sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','ticket_then_pay')`,
-    ),
   ],
 );
 
+const orderStart = enumType(["table", "counter"]);
 const paidWhen = enumType(["prepay", "ticket_then_pay"]);
 const collectionNumber = enumType(["none", "numbered"]);
-const receiptMode = enumType(["auto", "on_request", "never"]);
+const receiptMode = enumType(["auto", "on_request"]);
 
 export const departmentSalePolicies = table(
   "department_sale_policies",
   {
     departmentId: id("department_id").primaryKey(),
+    orderStart: orderStart("order_start").notNull().default("counter"),
     paidWhen: paidWhen("paid_when").notNull().default("prepay"),
     collectionNumber: collectionNumber("collection_number").notNull().default("none"),
     receiptPrintMode: receiptMode("receipt_print_mode").notNull().default("auto"),
@@ -109,6 +97,7 @@ export const departmentSalePolicies = table(
       foreignColumns: [departments.id],
       name: "department_sale_policies_department_fk",
     }),
+    check("department_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("department_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("department_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
     check("department_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
@@ -119,6 +108,7 @@ export const zoneSalePolicies = table(
   "zone_sale_policies",
   {
     zoneId: id("zone_id").primaryKey(),
+    orderStart: orderStart("order_start"),
     paidWhen: paidWhen("paid_when"),
     collectionNumber: collectionNumber("collection_number"),
     receiptPrintMode: receiptMode("receipt_print_mode"),
@@ -129,6 +119,7 @@ export const zoneSalePolicies = table(
       foreignColumns: [zoneServicePolicies.zoneId],
       name: "zone_sale_policies_zone_fk",
     }),
+    check("zone_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("zone_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("zone_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
     check("zone_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
@@ -221,7 +212,6 @@ export const orderServiceContexts = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // Not enumText: see departments.default_service_mode.
     serviceMode: label("service_mode").notNull(),
   },
   (t) => [
@@ -266,9 +256,7 @@ export const workingLineContexts = table(
     unitName: json<Record<string, string>>("unit_name").notNull(),
     unitPrecision: count("unit_precision").notNull(),
     soldInEach: flag("sold_in_each").notNull().default(false),
-    // Not enumText: see departments.default_service_mode.
     hardwareUnit: label("hardware_unit"),
-    // Not enumText: see departments.default_service_mode.
     vatClass: label("vat_class").notNull(),
     allergens:
       json<Record<string, { presence: "contains" | "may_contain"; source?: string }>>("allergens"),

@@ -57,13 +57,13 @@ beforeAll(async () => {
   ({ indoor, indoorDepartment } = await inTx(venue, async (tx) => {
     const department = await createDepartment(tx, venue.cfg, {
       name: "Interior",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const zone = await createServiceZone(tx, venue.cfg, {
       name: "Interior",
       departmentId: department.id,
     });
-    await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, serviceMode: "table_tab" });
+    await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
     return { indoor: zone.id, indoorDepartment: department.id };
   }));
   terraceTill = await zoneTill(terrace);

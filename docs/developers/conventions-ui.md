@@ -306,8 +306,8 @@ the server checks each at the route, never trusting the till's copy:
 Close the editor after the write succeeds, then refresh the list separately; retaining a create form
 with a save error invites a duplicate submission. The Departments and zones screen's regression resolves creation,
 rejects the following load and checks the closed modal plus load error
-(`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`, “refreshing the list
-fails”).
+(`packages/venue-service/src/dashboard/venue-departments-shell.actions.test.ts`, “a successful
+write with failed refresh closes the dialog and reports a load failure”).
 
 **The dashboard shell and its sessions**
 

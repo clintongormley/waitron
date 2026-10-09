@@ -1364,7 +1364,7 @@ describe("workforce facts after venue corrections", () => {
 describe("open kitchen work during venue corrections", () => {
   it("refuses the clock while preserving sent line and station assignments on a display correction", async () => {
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, venue.cfg, { serviceMode: "ticket_then_pay" }),
+      offerProducts(tx, venue.cfg, { orderStart: "counter" }),
     );
     const cfg = await deviceRequestCfg(suite.db, venue.cfg);
     const clock: TrustedClock = {
@@ -1516,7 +1516,7 @@ it("refuses a changed cutover that empties an offset placement and rolls back ot
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, venue.cfg, {
       name: "Offset clock department",
-      defaultServiceMode: "prepay",
+      orderStart: "counter",
     });
     const menu = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`)).rows[0]!
       .id;

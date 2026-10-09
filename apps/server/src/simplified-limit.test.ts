@@ -64,7 +64,7 @@ useVenueDb({
         .returning({ id: floorZones.id });
       ticketThenPay = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
         paidWhen: "ticket_then_pay",
         productIds,
       });

@@ -1570,7 +1570,7 @@ describe("mountCatalogueApi — products", () => {
         .returning();
       const department = await createDepartment(tx, cfg, {
         name: "Dining",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
       await setRoutingCell(

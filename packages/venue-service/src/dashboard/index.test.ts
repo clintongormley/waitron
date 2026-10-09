@@ -138,7 +138,11 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       expect.objectContaining({ method: "GET" }),
     );
     await vi.waitFor(() =>
-      expect(screen.shadowRoot!.querySelector('[data-test="readiness"]')).not.toBeNull(),
+      expect(
+        screen
+          .shadowRoot!.querySelector("venue-departments-shell")!
+          .shadowRoot!.querySelector("departments-list"),
+      ).not.toBeNull(),
     );
   });
 

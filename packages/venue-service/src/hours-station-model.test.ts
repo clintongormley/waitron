@@ -49,7 +49,6 @@ async function fixture() {
         locationId: cfg.locationId,
         name: "Dining",
         tradingName: "Dining",
-        defaultServiceMode: "table_tab",
         isDefault: true,
       })
       .returning();
@@ -407,7 +406,6 @@ it("keeps local department names for timetable refusals outside the editable sta
         locationId: f.cfg.locationId,
         name: "Closed dining",
         tradingName: "Closed dining",
-        defaultServiceMode: "table_tab",
         active: false,
       })
       .returning();
@@ -415,7 +413,6 @@ it("keeps local department names for timetable refusals outside the editable sta
       locationId: f.other,
       name: "Foreign dining",
       tradingName: "Foreign dining",
-      defaultServiceMode: "table_tab",
     });
     return row!.id;
   });

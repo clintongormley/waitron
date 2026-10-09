@@ -53,10 +53,10 @@ async function venue() {
       })
       .returning();
     const cfg = { locationId: locationId(place!.id) };
-    const a = await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "table_tab" });
+    const a = await createDepartment(tx, cfg, { name: "Deli", orderStart: "table" });
     const b = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const az = await createServiceZone(tx, cfg, { name: "Deli counter", departmentId: a.id });
     const bz = await createServiceZone(tx, cfg, { name: "Restaurant counter", departmentId: b.id });
@@ -398,7 +398,7 @@ describe("departmental tab transfers", () => {
         const foreign = await createDepartment(
           tx,
           { locationId: locationId(other!.id) },
-          { name: "Other venue", defaultServiceMode: "table_tab" },
+          { name: "Other venue", orderStart: "table" },
         );
         target = foreign.id;
       }
@@ -1151,5 +1151,70 @@ describe("departmental tab transfers", () => {
       state: "received",
       receivedAt: "2026-10-07T08:00:00.000Z",
     });
+  });
+});
+
+describe("combined department transfer settings", () => {
+  it("saves a usable receiving profile with the department fields", async () => {
+    const v = await venue();
+    await withTransaction(suite.db, async (tx) => {
+      await service.saveDepartmentSettings(tx, v.cfg, v.b, {
+        name: "New restaurant",
+        tradingName: "Receipt name",
+        printTradingName: true,
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+        transfers: { receivingProfileId: v.profile, destinationDepartmentIds: [v.a] },
+      });
+      expect(await service.readDepartmentTransferSettings(tx, v.cfg, v.b)).toEqual({
+        departmentId: v.b,
+        receivingProfileId: v.profile,
+        destinationDepartmentIds: [v.a],
+      });
+      expect(await service.resolveSalePolicy(tx, v.cfg, v.bz)).toEqual({
+        zoneId: v.bz,
+        departmentId: v.b,
+        departmentName: "New restaurant",
+        tradingName: "Receipt name",
+        printTradingName: true,
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "on_request",
+      });
+    });
+  });
+
+  it("rolls back every department field when its receiving profile belongs elsewhere", async () => {
+    const v = await venue();
+    const before = await withTransaction(suite.db, async (tx) => ({
+      policy: await service.resolveSalePolicy(tx, v.cfg, v.az),
+      transfers: await service.readDepartmentTransferSettings(tx, v.cfg, v.a),
+    }));
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        service.saveDepartmentSettings(tx, v.cfg, v.a, {
+          name: "New deli",
+          tradingName: "Changed receipt",
+          printTradingName: true,
+          orderStart: "counter",
+          paidWhen: "ticket_then_pay",
+          collectionNumber: "numbered",
+          receiptPrintMode: "on_request",
+          transfers: { receivingProfileId: v.profile, destinationDepartmentIds: [v.b] },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "department_transfer.settings_invalid",
+      params: { field: "receivingProfileId" },
+    });
+    expect(
+      await withTransaction(suite.db, async (tx) => ({
+        policy: await service.resolveSalePolicy(tx, v.cfg, v.az),
+        transfers: await service.readDepartmentTransferSettings(tx, v.cfg, v.a),
+      })),
+    ).toEqual(before);
   });
 });

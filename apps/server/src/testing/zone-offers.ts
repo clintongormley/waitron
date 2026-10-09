@@ -8,7 +8,6 @@ import {
   requireMenuRoot,
   resolveAccessibleCatalogueIds,
 } from "@waitron/catalogue";
-import type { ServiceMode } from "@waitron/module";
 import {
   configureZone,
   createDepartment,
@@ -35,8 +34,7 @@ export interface OfferProductsOptions {
   /** `"counter"` (default) is the venue's counter-default zone, created if the venue has none;
    *  `"tables"` is a zone of its own for dining tables. */
   zone?: "counter" | "tables" | { zoneId: string };
-  /** Defaults to `"prepay"`, or `"table_tab"` for `zone: "tables"`. */
-  serviceMode?: ServiceMode;
+  orderStart?: "table" | "counter";
   paidWhen?: "prepay" | "ticket_then_pay";
   /** Defaults to every top-level product of the location's accessible catalogues. */
   productIds?: readonly string[];
@@ -61,8 +59,8 @@ export async function offerProducts(
   options: OfferProductsOptions = {},
 ): Promise<ZoneOffers> {
   const zone = options.zone ?? "counter";
-  const serviceMode = options.serviceMode ?? (zone === "tables" ? "table_tab" : "prepay");
-  const zoneId = await resolveZone(tx, cfg, zone, serviceMode);
+  const orderStart = options.orderStart ?? (zone === "tables" ? "table" : "counter");
+  const zoneId = await resolveZone(tx, cfg, zone, orderStart);
   if (options.paidWhen !== undefined) {
     await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", options.paidWhen);
   }
@@ -94,7 +92,7 @@ async function resolveZone(
   tx: Transaction,
   cfg: Cfg,
   zone: NonNullable<OfferProductsOptions["zone"]>,
-  serviceMode: ServiceMode,
+  orderStart: "table" | "counter",
 ): Promise<string> {
   let zoneId: string;
   if (typeof zone === "object") {
@@ -118,8 +116,8 @@ async function resolveZone(
     .select({ departmentId: zoneServicePolicies.departmentId })
     .from(zoneServicePolicies)
     .where(eq(zoneServicePolicies.zoneId, zoneId));
-  const departmentId = policy?.departmentId ?? (await department(tx, cfg, serviceMode));
-  await configureZone(tx, cfg, { zoneId, departmentId, serviceMode });
+  const departmentId = policy?.departmentId ?? (await department(tx, cfg, orderStart));
+  await configureZone(tx, cfg, { zoneId, departmentId, orderStart });
   if (zone === "counter") {
     await tx
       .update(zoneServicePolicies)
@@ -140,12 +138,14 @@ async function floorZone(tx: Transaction, cfg: Cfg, name: string): Promise<strin
   return created!.id;
 }
 
-async function department(tx: Transaction, cfg: Cfg, serviceMode: ServiceMode): Promise<string> {
+async function department(
+  tx: Transaction,
+  cfg: Cfg,
+  orderStart: "table" | "counter",
+): Promise<string> {
   const active = (await listDepartments(tx, cfg)).find((row) => row.active);
   if (active !== undefined) return active.id;
-  return (
-    await createDepartment(tx, cfg, { name: "Test department", defaultServiceMode: serviceMode })
-  ).id;
+  return (await createDepartment(tx, cfg, { name: "Test department", orderStart })).id;
 }
 
 /**

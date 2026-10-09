@@ -14,6 +14,7 @@ import {
   kitchenStations,
   locations,
   UNIQUE_VIOLATION,
+  withTransaction,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
@@ -137,6 +138,22 @@ async function indexesOf(
   }
   return out;
 }
+
+describe("retired service-style storage", () => {
+  it.each([
+    {
+      statement: sql`update departments set default_service_mode = 'prepay'`,
+      column: "default_service_mode",
+    },
+    {
+      statement: sql`update zone_service_policies set service_mode = 'prepay'`,
+      column: "service_mode",
+    },
+  ])("refuses a write to the retired $column column", async ({ statement, column }) => {
+    const refused = await captureError(() => withTransaction(db, (tx) => tx.execute(statement)));
+    expect(engineErrorMessage(refused)).toContain(`no such column: ${column}`);
+  });
+});
 
 describe("the venue-service migration set carries no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
@@ -375,7 +392,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         locationId,
         name: "Bar",
         tradingName: "Bar",
-        defaultServiceMode: "prepay",
       })
       .returning({ id: departments.id });
     const menu = await db.transaction((tx) => createCatalogue(tx, { name: "Drinks" }));
@@ -386,6 +402,188 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       menuId: menu.id,
     };
   }
+
+  async function orderStartPolicies() {
+    const v = await venue();
+    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
+      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    return v;
+  }
+
+  it.each(["department", "zone"] as const)(
+    "receipt storage refuses Never on %s inserts and updates",
+    async (kind) => {
+      const v = await orderStartPolicies();
+      const insert =
+        kind === "department"
+          ? sql`insert into department_sale_policies (department_id, receipt_print_mode) values (${v.departmentId}, 'never')`
+          : sql`insert into zone_sale_policies (zone_id, receipt_print_mode) values (${v.zoneId}, 'never')`;
+      await expect(withTransaction(db, (tx) => tx.execute(insert))).rejects.toThrow(
+        kind === "department"
+          ? "department_sale_policies_receipt_mode_ck"
+          : "zone_sale_policies_receipt_mode_ck",
+      );
+      await db.execute(
+        kind === "department"
+          ? sql`insert into department_sale_policies (department_id) values (${v.departmentId})`
+          : sql`insert into zone_sale_policies (zone_id) values (${v.zoneId})`,
+      );
+      const read = () =>
+        db.all(
+          kind === "department"
+            ? sql`select receipt_print_mode from department_sale_policies where department_id = ${v.departmentId}`
+            : sql`select receipt_print_mode from zone_sale_policies where zone_id = ${v.zoneId}`,
+        );
+      expect(read()).toEqual([{ receipt_print_mode: kind === "department" ? "auto" : null }]);
+      for (const mode of ["auto", "on_request", ...(kind === "zone" ? [null] : [])]) {
+        await db.execute(
+          kind === "department"
+            ? sql`update department_sale_policies set receipt_print_mode = ${mode} where department_id = ${v.departmentId}`
+            : sql`update zone_sale_policies set receipt_print_mode = ${mode} where zone_id = ${v.zoneId}`,
+        );
+        expect(read()).toEqual([{ receipt_print_mode: mode }]);
+      }
+      const before = read();
+      const update =
+        kind === "department"
+          ? sql`update department_sale_policies set receipt_print_mode = 'never' where department_id = ${v.departmentId}`
+          : sql`update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${v.zoneId}`;
+      await expect(withTransaction(db, (tx) => tx.execute(update))).rejects.toThrow(
+        kind === "department"
+          ? "department_sale_policies_receipt_mode_ck"
+          : "zone_sale_policies_receipt_mode_ck",
+      );
+      expect(read()).toEqual(before);
+      if (kind === "department")
+        await expect(
+          withTransaction(db, (tx) =>
+            tx.execute(
+              sql`update department_sale_policies set receipt_print_mode = null where department_id = ${v.departmentId}`,
+            ),
+          ),
+        ).rejects.toThrow(
+          "NOT NULL constraint failed: department_sale_policies.receipt_print_mode",
+        );
+    },
+  );
+
+  it("order start defaults to counter for a department and null for a zone", async () => {
+    const v = await orderStartPolicies();
+    await db.execute(sql`insert into department_sale_policies (department_id)
+      values (${v.departmentId})`);
+    await db.execute(sql`insert into zone_sale_policies (zone_id) values (${v.zoneId})`);
+    expect(
+      (
+        await db.execute(sql`select order_start from department_sale_policies
+      where department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ order_start: "counter" }]);
+    expect(
+      (
+        await db.execute(sql`select order_start from zone_sale_policies
+      where zone_id = ${v.zoneId}`)
+      ).rows,
+    ).toEqual([{ order_start: null }]);
+  });
+
+  it("order start stores table and counter independently on each policy", async () => {
+    const v = await orderStartPolicies();
+    await db.execute(sql`insert into department_sale_policies (department_id, order_start)
+      values (${v.departmentId}, 'table')`);
+    await db.execute(sql`insert into zone_sale_policies (zone_id, order_start)
+      values (${v.zoneId}, 'counter')`);
+    expect(
+      (
+        await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
+      from department_sale_policies p join zone_sale_policies q on q.zone_id = ${v.zoneId}
+      where p.department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ department_start: "table", zone_start: "counter" }]);
+    await db.execute(sql`update department_sale_policies set order_start = 'counter'
+      where department_id = ${v.departmentId}`);
+    await db.execute(sql`update zone_sale_policies set order_start = 'table'
+      where zone_id = ${v.zoneId}`);
+    expect(
+      (
+        await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
+      from department_sale_policies p join zone_sale_policies q on q.zone_id = ${v.zoneId}
+      where p.department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ department_start: "counter", zone_start: "table" }]);
+    await db.execute(
+      sql`update zone_sale_policies set order_start = null where zone_id = ${v.zoneId}`,
+    );
+    expect(
+      (
+        await db.execute(sql`select order_start from zone_sale_policies
+      where zone_id = ${v.zoneId}`)
+      ).rows,
+    ).toEqual([{ order_start: null }]);
+  });
+
+  it.each(["department", "zone"] as const)(
+    "order start rejects an unknown value on %s policy insert and update",
+    async (policy) => {
+      const v = await orderStartPolicies();
+      const insert =
+        policy === "department"
+          ? sql`insert into department_sale_policies (department_id, order_start)
+            values (${v.departmentId}, 'tab')`
+          : sql`insert into zone_sale_policies (zone_id, order_start) values (${v.zoneId}, 'tab')`;
+      const insertError = await captureError(() => withTransaction(db, (tx) => tx.execute(insert)));
+      expect(isRefusal(insertError, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(insertError)).toContain(
+        policy === "department"
+          ? "department_sale_policies_order_start_ck"
+          : "zone_sale_policies_order_start_ck",
+      );
+      await db.execute(
+        policy === "department"
+          ? sql`insert into department_sale_policies (department_id, order_start)
+            values (${v.departmentId}, 'table')`
+          : sql`insert into zone_sale_policies (zone_id, order_start) values (${v.zoneId}, 'counter')`,
+      );
+      const update =
+        policy === "department"
+          ? sql`update department_sale_policies set order_start = 'tab' where department_id = ${v.departmentId}`
+          : sql`update zone_sale_policies set order_start = 'tab' where zone_id = ${v.zoneId}`;
+      const updateError = await captureError(() => withTransaction(db, (tx) => tx.execute(update)));
+      expect(isRefusal(updateError, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(updateError)).toContain(
+        policy === "department"
+          ? "department_sale_policies_order_start_ck"
+          : "zone_sale_policies_order_start_ck",
+      );
+      expect(
+        (
+          await db.execute(
+            policy === "department"
+              ? sql`select order_start from department_sale_policies where department_id = ${v.departmentId}`
+              : sql`select order_start from zone_sale_policies where zone_id = ${v.zoneId}`,
+          )
+        ).rows,
+      ).toEqual([{ order_start: policy === "department" ? "table" : "counter" }]);
+    },
+  );
+
+  it("order start refuses explicit department null instead of applying its default", async () => {
+    const v = await orderStartPolicies();
+    const error = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx.execute(sql`insert into department_sale_policies (department_id, order_start)
+        values (${v.departmentId}, null)`),
+      ),
+    );
+    expect(engineErrorMessage(error)).toContain(
+      "NOT NULL constraint failed: department_sale_policies.order_start",
+    );
+    expect(
+      (
+        await db.execute(sql`select department_id from department_sale_policies
+      where department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([]);
+  });
 
   /**
    * Asserts that `statement` is refused by a foreign key — but not WHICH one: SQLite's message names
@@ -883,8 +1081,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await refusal(
       // `id` and `created_at` are named, or the insert is refused as NOT NULL before the foreign
       // key is reached.
-      sql`insert into departments (id, location_id, name, trading_name, default_service_mode, created_at)
-        values (${randomUUID()}, ${missing}, 'X', 'X', 'prepay', ${new Date().toISOString()})`,
+      sql`insert into departments (id, location_id, name, trading_name, created_at)
+        values (${randomUUID()}, ${missing}, 'X', 'X', ${new Date().toISOString()})`,
       "departments_location_fk",
     );
     await refusal(

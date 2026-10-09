@@ -201,7 +201,6 @@ describe("VenueServiceApi", () => {
     const department = {
       name: "Deli",
       tradingName: "Deli counter",
-      defaultServiceMode: "prepay" as const,
     };
     await api.updateDepartment("d1", department);
     expect(
@@ -351,11 +350,10 @@ describe("VenueServiceApi", () => {
     await api.createDepartment({
       name: "Deli",
       tradingName: "Casa Delgado Deli",
-      defaultServiceMode: "prepay",
     });
     await api.deactivateDepartment("d1");
     expect("replaceHours" in api).toBe(false);
-    await api.configureZone("z1", { departmentId: "d1", serviceMode: null });
+    await api.configureZone("z1", { departmentId: "d1" });
     expect("allowMenu" in api).toBe(false);
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
@@ -399,5 +397,107 @@ describe("VenueServiceApi", () => {
       expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
     }
     expect(onSuccess).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("combined settings requests", () => {
+  it("sends every department field and optional transfers in one active PUT", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }))
+      .background;
+    await api.saveDepartmentSettings("d1", {
+      name: "Dining",
+      tradingName: "Receipt",
+      printTradingName: true,
+      orderStart: "table",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+      receiptPrintMode: "on_request",
+      transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
+    });
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/settings",
+        "PUT",
+        {
+          name: "Dining",
+          tradingName: "Receipt",
+          printTradingName: true,
+          orderStart: "table",
+          paidWhen: "ticket_then_pay",
+          collectionNumber: "numbered",
+          receiptPrintMode: "on_request",
+          transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
+        },
+      ],
+    ]);
+  });
+
+  it("sends four inherited zone settings in one PUT and preserves a refusal", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "service_zone.not_found" } }, 404));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await expect(
+      api.saveZoneServiceSettings("z1", {
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      }),
+    ).rejects.toMatchObject({ code: "service_zone.not_found" });
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/zones/z1/service-settings",
+        "PUT",
+        {
+          orderStart: null,
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+        },
+      ],
+    ]);
+  });
+});
+
+it("creates a department through the real request with name only", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(
+    jsonResponse(
+      {
+        id: "d3",
+        name: "Brunch",
+        tradingName: "Brunch",
+
+        active: true,
+      },
+      201,
+    ),
+  );
+  const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+  expect(await api.createDepartment({ name: "Brunch" })).toEqual({
+    id: "d3",
+    name: "Brunch",
+    tradingName: "Brunch",
+
+    active: true,
+  });
+  expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/departments", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: '{"name":"Brunch"}',
   });
 });

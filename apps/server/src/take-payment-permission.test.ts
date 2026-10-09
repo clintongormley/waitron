@@ -53,7 +53,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     counter = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     const [session] = db.all<{ id: string }>(
       sql`select id from sessions where person_id = ${venue.operatorId} and ended_at is null`,

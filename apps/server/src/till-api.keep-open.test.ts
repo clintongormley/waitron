@@ -73,7 +73,7 @@ beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
   const f = await run(async (tx) => {
     const department = (
-      await createDepartment(tx, v.cfg, { name: "Restaurant", defaultServiceMode: "prepay" })
+      await createDepartment(tx, v.cfg, { name: "Restaurant", orderStart: "counter" })
     ).id;
     const zone = (await createServiceZone(tx, v.cfg, { name: "Dining", departmentId: department }))
       .id;
@@ -155,8 +155,7 @@ beforeEach(async () => {
   managerCookie = await cookie(manager, "1234");
   staffCookie = await cookie(staff, "5555");
   const deli = await run(async (tx) => {
-    const id = (await createDepartment(tx, v.cfg, { name: "Deli", defaultServiceMode: "prepay" }))
-      .id;
+    const id = (await createDepartment(tx, v.cfg, { name: "Deli", orderStart: "counter" })).id;
     return {
       id,
       zone: (await createServiceZone(tx, v.cfg, { name: "Deli counter", departmentId: id })).id,
@@ -405,7 +404,7 @@ describe("the till keeps a zone open today", () => {
       await configureZone(tx, v.cfg, {
         zoneId: zone,
         departmentId: department,
-        serviceMode: "table_tab",
+        orderStart: "table",
       });
       await replaceMenuWeek(
         tx,

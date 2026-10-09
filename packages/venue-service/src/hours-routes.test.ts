@@ -113,7 +113,6 @@ async function fixture(): Promise<Fixture> {
       locationId: location,
       name,
       tradingName: `${name} trading`,
-      defaultServiceMode: "table_tab",
       isDefault,
     });
     const [restaurant, deli] = await tx

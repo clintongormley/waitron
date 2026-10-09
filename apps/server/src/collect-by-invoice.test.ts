@@ -43,12 +43,12 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     ticketThenPayZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
       )
     ).zoneId;
     issueAtPaymentZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "tables", serviceMode: "prepay" }),
+        offerProducts(tx, venue.cfg, { zone: "tables", orderStart: "counter" }),
       )
     ).zoneId;
   },

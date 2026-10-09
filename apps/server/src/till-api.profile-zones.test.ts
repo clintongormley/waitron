@@ -308,9 +308,9 @@ beforeAll(async () => {
     await configureZone(tx, v.cfg, {
       zoneId: bar.id,
       departmentId: restaurantId,
-      serviceMode: "prepay",
+      orderStart: "counter",
     });
-    const deli = await createDepartment(tx, v.cfg, { name: "Deli", defaultServiceMode: "prepay" });
+    const deli = await createDepartment(tx, v.cfg, { name: "Deli", orderStart: "counter" });
     const deliCounter = await createServiceZone(tx, v.cfg, {
       name: "Deli counter",
       departmentId: deli.id,
@@ -322,11 +322,11 @@ beforeAll(async () => {
     const barOffers = await offerProducts(tx, v.cfg, { zone: { zoneId: bar.id } });
     const deliCounterOffers = await offerProducts(tx, v.cfg, {
       zone: { zoneId: deliCounter.id },
-      serviceMode: "prepay",
+      orderStart: "counter",
     });
     const deliTablesOffers = await offerProducts(tx, v.cfg, {
       zone: { zoneId: deliTables.id },
-      serviceMode: "table_tab",
+      orderStart: "table",
     });
     // A menu the Deli sells from, offered in the bar as well.
     const specials = await createCatalogue(tx, { name: "Deli specials" });
@@ -1257,7 +1257,7 @@ describe("a Restaurant profile in its own zones", () => {
         name: "Terrace",
         departmentId: await departmentOf(tx, v.tables.zoneId),
       });
-      await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id }, serviceMode: "table_tab" });
+      await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
       return {
         terrace: zone.id,
         table: (await createTable(tx, v.cfg, { label: "T9", zoneId: zone.id })).id,
@@ -1394,7 +1394,7 @@ describe("the bill and invoice lookups", () => {
   const deliTableItem = async () =>
     (
       await inTx(v, (tx) =>
-        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, serviceMode: "table_tab" }),
+        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
       )
     ).offerFor(v.productId("Agua"));
 
@@ -1406,7 +1406,7 @@ describe("the bill and invoice lookups", () => {
       ),
       (
         await inTx(v, (tx) =>
-          offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, serviceMode: "table_tab" }),
+          offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
         )
       ).offerFor(v.productId("Agua")),
       "Lookup Deli",
@@ -1457,7 +1457,7 @@ describe("the bill and invoice lookups", () => {
     const restBill = await unpaidBill(await v.table("R8"), v.item("Agua"), "Crowded Sala");
     const deliItem = (
       await inTx(v, (tx) =>
-        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, serviceMode: "table_tab" }),
+        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
       )
     ).offerFor(v.productId("Agua"));
     for (let index = 0; index < 21; index++) {

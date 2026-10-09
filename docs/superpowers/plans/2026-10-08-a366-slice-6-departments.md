@@ -22,31 +22,39 @@
 > about 150 calls with the task unfinished stops at a passing or cleanly red point, commits, and
 > returns a handover: done, left, files, each check's state.
 >
-> **Green between tasks.** Before its commit, every task runs its package's whole node project
-> (`pnpm --filter @waitron/venue-service exec vitest run --project node`;
-> `pnpm --filter @waitron/server exec vitest run` for `apps/server`, which has one project), the
-> browser files it touched (`pnpm --filter @waitron/venue-service exec vitest run --project browser
-> <files>`), and the typecheck of every package it touched. A task touching a browser package checks
-> headroom first (`memory_pressure | grep free`). Read each run's `Tests` count.
+> **Green between tasks (owner preference, 2026-10-09).** Run focused behavioural files/cases
+> for the changed paths and scoped types before committing. Use
+> `pnpm --filter @waitron/venue-service exec vitest run --project node <files>` and
+> `pnpm --filter @waitron/server exec vitest run <files>`, plus touched browser files with
+> `--project browser`. Check headroom first (`memory_pressure | rg free`); read the `Tests`
+> count. Full package suites and coverage belong to current-head CI. Broaden a local run only
+> for a justified failure or cross-package concern, naming the reason. Each whole UI task gets
+> one full LOOK in EN/ES, light/dark, 1280/390; repeat only after a visual change or failure.
 >
-> **What this plan was read against.** `main` at **`c3d037a5d`**, which already holds slice 1
-> (#1460, merged as `685a6074b`), so there is no slice 1 branch to read and every `file:line` below
-> is a `main` line. It builds on the [slice 1 plan](2026-10-07-a366-slice-1-service-periods.md)
-> (landed) and the unbuilt [slice 2](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md),
+> **Audited base, 2026-10-09.** This revision reads the current tree at
+> **`87b46b024fcac68a6240949964768b9fbc7d4972`**, landed slice 3A (#1469), after slice 1
+> (#1460). Do not rebuild either. The original plan read `c3d037a5d`; numeric citations not
+> refreshed below describe that earlier read and must be relocated by identifier before use.
+> The dated source inventory below supersedes its independence claims. This is a source audit,
+> not runtime verification. Read [slice 1](2026-10-07-a366-slice-1-service-periods.md),
+> [slice 2](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md),
 > [slice 3](2026-10-08-a366-slice-3-station-controls.md),
 > [slice 4](2026-10-08-a366-slice-4-prep-stations.md),
-> [slice 5](2026-10-08-a366-slice-5-monitors.md) and
-> [slice 7](2026-10-08-a366-slice-7-receipts-per-department.md) plans, and on the floor plan's
-> [A429 plan](2026-10-08-floor-plan.md) (decision 12 and Task 2.7). Before each part, re-read every
-> cited line in a file another slice has changed since `c3d037a5d`
-> (`git diff --stat c3d037a5d HEAD -- <path>`).
+> [slice 5](2026-10-08-a366-slice-5-monitors.md),
+> [slice 7](2026-10-08-a366-slice-7-receipts-per-department.md) and
+> [A429](2026-10-08-floor-plan.md) for retained contracts.
 >
-> **Start Part A at once (it needs slice 1 only, which has landed); Part B only after slice 2 has
-> merged; Part C only after Part A and A429's slice 2 (the floor plan editor) have merged.**
+> **Owner answers are complete.** Lane E `questions.md`, heading `2026-10-09 ~09:40`,
+> completed ~10:05, accepts decisions 1–19 with overrides to 4, 8, 12 and 17. The #1462
+> Swap answer puts Cancel first, then Save, in every replacement form and dialog.
+>
+> **Delivery:** Lane E builds Part A, Tasks A1–A15, in one PR now. Parts B and C stay with
+> Lane D: B after slice 2; C after Part A and A429's floor-plan editor. Slice 7 is pending
+> in Lane E after 6A, with no current slice 7 branch. Do not edit another lane's checkout.
 
 **Goal:** the Departments page becomes a list of departments, each opening its own page with a
 Settings tab and a Zones tab, as the approved mock-ups (screens 2 and 3 of `all-screens-v3.html`,
-kept outside the tree) describe. A venue with one department opens that department straight away.
+kept outside the tree) describe. The bare address always opens the list, even with one department; every department page has a Departments parent link.
 A department and a zone set the same four service settings in the same words — How orders start,
 When counter service is used (with "Print a numbered collection ticket"), and Print a receipt — and
 a zone leaves a setting empty to follow its department. The service style (`table_tab`, `prepay`,
@@ -61,12 +69,12 @@ two tables that already hold the other service settings per department and per z
 resolved by the reader that already resolves them (`resolveSalePolicy`,
 `packages/venue-service/src/operations.ts:570-611`). The zone's order flow that the till and the
 server read (`resolveZoneContext(...).serviceMode`, `:521-555`, and the snapshot written when an
-order opens, `recordOrderServiceContext`, `:947-965`) is worked out from it: `table_tab` when the
+order opens, `recordOrderServiceContext`, `:957-975`) is worked out from it: `table_tab` when the
 zone starts orders at a table, otherwise the zone's paid-when. The order snapshot
 (`order_service_contexts.service_mode`) and the module contract's `ServiceMode` keep their three
-values, so the till and every server path that reads an order's flow do not change. The old columns
+values, so order-flow readers retain their behaviour. Receipt-mode types and fixtures on the till do change (decision 17); money, VAT, fiscal hashes, drawer rules and login stay untouched. The old columns
 are written beside the new one while the readers and the fixtures move (expand, then contract), and
-dropped in the last migration. The dashboard page is split out of the 2030-line
+dropped in the last migration. Receipt modes finish as `auto | on_request` (Always / On request); obsolete `never` retires through Task A2 without converting venue data. The dashboard page is split out of
 `venue-operations-screen.ts` into a list element, a department page element and its two tab
 elements, built beside the old page and switched in one task.
 
@@ -83,22 +91,25 @@ Departments and zones screen's missing busy check on close
 (`docs/backlog.md:3438-3445`).
 
 **Risk path:** FULL ceremony, two run-it reviews per pull request: migrations (Part A adds two
-columns, rebuilding the two sale-policy tables to add their checks, and rebuilds `departments` and
-`zone_service_policies` to drop two), a changed cross-package contract
+columns, rebuilds the two sale-policy tables for order-start and receipt-mode checks (Tasks A1/A2),
+then rebuilds `departments` and `zone_service_policies` to drop two), a changed cross-package contract
 (`EffectiveSalePolicy`, `packages/module/src/module.ts:79-88`, and the venue-service routes' bodies
 and answers), and what an order's recorded flow is worked out from (decision 3: no order's flow is expected to
 change, which Task A3b's tests hold; the zone answers that echoed the stored style do change).
 
-**Venue reset: needed — required for Part A.** The last migration drops
+**Venue reset: required for Part A under the owner's pre-live retirement decision.** The last migration drops
 `departments.default_service_mode` and `zone_service_policies.service_mode`; both carry a CHECK, so
 drizzle-kit rebuilds both tables, and a rebuild of `departments` was refused on a venue holding rows
 the last time it shipped: the upgrade walk lists `venue-service/0020_retire_invoice_first` in its
 `RESETS` as refused with "DROP TABLE `departments`" and "FOREIGN KEY constraint failed"
 (`scripts/migration-upgrade.test.ts:251-253`), and `0027_retire_zone_menus` the same for
 `zone_service_policies` (`:254-257`). Expected, not measured for this migration: the same refusal.
-Task A14 runs the walk and adds the `RESETS` entry with what it prints. Part A's first line:
-**"venue reset needed — required: the migration that retires the service style is refused on a
-venue with departments and zones"** (with the walk's words if they differ). Parts B and C add no
+Task A2 contracts receipt-mode checks to `auto/on_request`; old `never` rows
+require a reset, not conversion SQL. Task A14 runs the walk. Under the pre-live reset authorization,
+record only a measured retirement refusal in RESETS; do not change guard instructions or logic
+to excuse failure. Part A's first line:
+**"venue reset needed — required: service-style columns and obsolete receipt modes are retired"**.
+Describe any rebuild refusal as expected until measured, then add the walk's actual words in the PR. Parts B and C add no
 migration: "no venue reset needed".
 
 ---
@@ -111,11 +122,10 @@ migration: "no venue reset needed".
 
 - `packages/venue-service/src/`: `schema/service.ts`, `operations.ts`, `routes.ts`, `errors.ts`
   (only if a new code is needed — decision 9 says none is), `provisioning.ts`,
-  `configuration-transfer.ts` (only its test: whole rows are copied, so the new column travels;
-  checked by test), `index.ts`, `migrations.test.ts`, `operations.test.ts`, `routes.test.ts`,
+  `configuration-transfer.ts` (sale-policy enum validation and round-trip tests; whole-row transfer is tested, not assumed), `index.ts`, `migrations.test.ts`, `operations.test.ts`, `routes.test.ts`,
   `provisioning.test.ts`, `schema/service.test.ts`, `schema/schema-conformance.test.ts:17` (a
   comment naming `default_service_mode`), and the venue-service tests that set the old columns
-  (Task A13b's list); `drizzle/` (three generated migrations)
+  (Task A13b's list); `drizzle/` (A1 add-only/checked generations, A2 receipt-mode contraction, A14 style retirement; inspect actual generated steps)
 - `packages/venue-service/src/dashboard/`: `client.ts`, `live-queries.ts` (the `operations` list
   gains `department_sale_policies` and `zone_sale_policies`, decision 19) and its test, `strings.ts`, `venue-operations-screen.ts` (becomes the shell), new
   `service-settings-fields.ts`, `departments-list.ts`, `department-page.ts`,
@@ -124,15 +134,17 @@ migration: "no venue reset needed".
   `.unsaved.test.ts`, `.a11y.test.ts` (pruned to the shell's cases), `venue-navigation.test.ts`,
   `department-transfers.a11y.test.ts` (moved onto the Settings tab), `client.test.ts`,
   `index.test.ts`
-- `packages/module/src/module.ts` (`EffectiveSalePolicy`, `:79-88`, gains `orderStart`;
+- `packages/module/src/module.ts` (`EffectiveSalePolicy`, `:79-88`, gains `orderStart` and narrows receipt mode to `auto | on_request`;
   `ServiceZoneSummary.serviceMode` and `ServiceMode` stay — decision 4; the configuration writers'
   inputs are venue-service's own, not the module contract's)
-- `apps/dashboard/src/navigation.ts` (the `venue-operations` children) and `navigation.test.ts`
+- `apps/dashboard/src/navigation.ts` (the `venue-operations` children) and `navigation.test.ts`;
+  `i18n/domain.ts` and `domain.test.ts` (receipt-mode labels and obsolete-token checks)
 - `apps/server/src/`: `till-api.ts` (the offers answers' hand mapping, `:1330-1331`,
   `:1358-1359`, decision 3); `testing/service-zone.ts`, `testing/zone-offers.ts`,
   `testing/order-venue.ts`, `testing/venue-fixtures.ts`; the server tests that set the old columns
   (Task A3a, A12a and A12b lists); `testing/fixtures/configuration-v1-before-printing-retirement.json` (only if the import
   test reads its `default_service_mode`; Task A14 checks)
+- All receipt consumer paths/focused checks in the dated inventory below belong to this path set.
 - `apps/server/scripts/demo-seed/seed-floor.ts` (`:81-131`), `seed.test.ts` (`:414-439`,
   `:553-558`), `seed-floor.test.ts:124`
 - `scripts/migration-upgrade.test.ts` (`RESETS`), `scripts/schema-constraints.test.ts` (`:480` and
@@ -153,7 +165,7 @@ property, if it has none).
 
 | What (spec) | Needs | What was checked |
 | --- | --- | --- |
-| The list, the department page, the Settings tab, "How orders start", the service settings in the same words, the tree and old tabs removed (§6, §9.1, §12) | **Slice 1 only (landed).** | The Setup column's "has no opening periods" reads slice 1's periods through the readiness reader (`listVenueReadiness`, `operations.ts:340-431`, `department.no_periods` at `:377-384`), already on `main`. The service settings are today's sale-policy tables plus one column (`schema/service.ts:99-138`); none of slices 2–5's plans changes those tables (a search of the four plan files for `department_sale_policies`, `zone_sale_policies`, `default_service_mode`, `salePolic`, `serviceMode` and `venue-operations` found no line, run 2026-10-08 on the four files at `c3d037a5d`). |
+| The list, the department page, the Settings tab, "How orders start", the service settings in the same words, the tree and old tabs removed (§6, §9.1, §12) | **Slices 1 and 3A already landed; no pending slice 2/4/5 dependency.** | The Setup column's "has no opening periods" reads slice 1's periods through the readiness reader (`listVenueReadiness`, `operations.ts:340-431`, `department.no_periods` at `:377-384`), already on `main`. The actual slice 2/5 diff read on 2026-10-09 found no sale-policy-table change, but shared contracts, configuration transfer, fixtures and journals overlap. See the dated inventory below. |
 | Tab transfers on the Settings tab (§9.1) | **Neither slice 5 nor any other.** | The transfer settings and their rules exist today (`routes.ts:893-936`; `department-transfers.ts:76-92`, `:117-162`, which refuse a kitchen-display profile and a profile not scoped to the department). Slice 5 changes which screens a profile's devices may run (the owner's answers of 2026-10-08 ~22:05, `~/waitron-campaign/questions.md`, override its plan: any device may run a kitchen-display working screen or a view-only monitor), not who may receive a transfer. This slice reads the receiving-profile choices from today's route (`GET .../transfers/profiles`, `routes.ts:904-911`) and so shows whatever slice 5 leaves that route answering. |
 | The zone's one-line summary of its closed times, linking to Opening hours (§9.1) | **Slice 2 → Part B.** | Closed times do not exist until slice 2 (its Tasks 2, 8: `zone_closed_times`, `replaceZoneClosedWeek`, the `zones` array in `OpeningHoursModel`); slice 2 leaves "the Departments page's Zones tab and its closed-times summary" to this slice (`2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md:70-71`). The link targets slice 2's zone view (its Task 16, `zone` in the Opening hours URL). |
 | "Edit floor plan" / "Add a floor plan" and the small plan preview (§9.1) | **A429 slice 2 → Part C.** | A429 decision 12 (`2026-10-08-floor-plan.md:123-127`) puts the action on today's zone row menu and leaves "the plan's preview on the zone page" to this slice; the editor's URL and the canvas primitive arrive in A429 Tasks 2.3–2.4 (`:1113-1132`) and the entry point in Task 2.7 (`:1138-1140`). |
@@ -161,28 +173,30 @@ property, if it has none).
 | Prep stations (slice 4) | **Neither.** | Slice 4 changes `configureZone` (`operations.ts:433-469`; its Task A5 and decision 10: a zone moved to another department loses its cells' period choices for the old department, `2026-10-08-a366-slice-4-prep-stations.md:767-768`). This slice's "Move to another department" calls the same route and inherits whatever slice 4 decides; its own change to `configureZone` is the input (decision 2), in a different part of the function. |
 | Kitchen-display screens and monitors (slice 5) | **Neither.** | As above for transfers; slice 5 touches device profiles' screens and the devices that run them, not departments or zones. |
 
-**Conclusion.** **Part A** (Tasks A1–A15) needs slice 1 only, which has landed, so it can be built
-now, beside slices 2–5; building it before slices 2–5 departs from the spec's order (decision 1).
+**Part A** (Tasks A1–A15) starts from landed slices 1 and 3A and may build beside pending
+slices 2, 4 and 5 under the explicit overlap waiver (decision 1).
 **Part B** (Task B1, the closed-times summary) needs slice 2. **Part C** (Task C1, the floor plan
 action and preview) needs A429's slice 2. Slice 7's Part B needs Part A of this slice (its Receipt
 tab goes on this slice's department page).
 
 ### 3. Files shared with other slices (same files, different areas)
 
-- **Slice 2** (unbuilt): `packages/venue-service/src/operations.ts` (`listZoneOffers`, slice 2
+- **Slice 2** (active Lane D branch, pending): `packages/venue-service/src/operations.ts` (`listZoneOffers`, slice 2
   Task 10; this slice changes `resolveZoneContext`, `listServiceZones`, `resolveSalePolicy` and
   the configuration writers), `routes.ts`, `errors.ts`, `index.ts`, `migrations.test.ts`,
   `dashboard/strings.ts`, `apps/dashboard/src/navigation.ts` (slice 2 Task 16 adds `zone` to the
   `opening-hours` children; this slice adds a `venue-operations` entry), `apps/server/src/till-api.ts`
   (slice 2's closed-zone refusals; this slice's one line in the dead-ends route), the venue-service
   journal.
-- **Slice 3** (unbuilt): `operations.ts`, `routes.ts`, `till-api.ts`, `module.ts`, the journal.
+- **Slice 3A** (landed #1469, base above): preserve `keepOpen`, menu `orderable`/`sendable`,
+  `ZoneOffers.service: ZoneMenuState["service"]`, station state fields and mounted live APIs.
+  Only slice 3 Part B remains pending after slice 2. Do not repeat its build or replace its tests.
 - **Slice 4** (unbuilt): `operations.ts` (`configureZone`), `packages/ui/src/components/wt-tabs.ts`
   (its Task A12 adds an overflow mark; this slice's department page uses `wt-tabs` as it is),
   `routes.ts`, the journal.
 - **Slice 5** (Part A may land first): `module.ts`, `routes.ts`, the journal,
   `apps/server/src/testing/*` fixtures.
-- **Slice 7** (Part A may land first): `routes.ts` (`departments-and-zones` gains `isDefault`,
+- **Slice 7** (Lane E, pending after 6A; no current branch): `routes.ts` (`departments-and-zones` gains `isDefault`,
   slice 7 decision 14), `dashboard/strings.ts`; slice 7 Part A's Receipts page is where this slice's
   Settings tab links "Edit the receipt" (decision 11), and slice 7 Part B adds the Receipt tab to
   this slice's department page and moves the trading name and its switch onto it.
@@ -192,21 +206,89 @@ tab goes on this slice's department page).
   action onto the zone panel; if after, A429 Task 2.7 adds it to the zone panel instead (Part C
   then adds only the preview).
 
-A drizzle migration-number clash in the venue-service journal is repaired by regeneration, never
-by hand (CLAUDE.md §3).
+**Explicit overlap waiver for 6A.** Slice 2 (Lane D), slice 5 (Lane A) and this branch may
+progress in their own checkouts. Whoever lands second rebases and regenerates clashing migrations
+from main's journal, never by hand. Run the normal migration guards and focused affected checks
+after reconciliation. Do not alter guard instructions, thresholds or exclusions to excuse failures.
+Slice 7 later reconciles this same path set; no other-lane edits are authorized.
+
+### 4. Audited source inventory (2026-10-09)
+
+`git rev-parse HEAD` returned the full base above. Read-only `git diff main...HEAD` in active
+checkouts and clean `git status --short` returned slice 2 head
+`eb8258a220c91fd1fa8d185dd15be42e525e947a` and slice 5 head
+`0d3b07d919dbe6e4b8b3e6a07793bd69de219c90`. Lane E's `receipts/a366-6a/*orientation.txt`
+locates those branches; actual diffs, not orientation lists alone, inform this audit.
+
+- Slice 2 changes offer/state answers with `zoneOpen`, transfer acceptance, routes, configuration
+  validators, live-query dependencies, module contracts, till/server fixtures and dashboard
+  navigation (`zone`, `month`). Its compared module/operations shapes lack base slice 3A's
+  `keepOpen` and `sendable`; reconcile by retaining both branches' fields and response assertions.
+  Its venue-service 0035/0036 journal entries overlap the base's landed station/extension migrations.
+  Part B must re-read its eventually landed model.
+- Slice 5 removes profile station/watcher tables from `schema/service.ts`, changes configuration
+  transfer's profile table list and module kitchen-screen contracts, server/till fixtures/tests,
+  and core/venue-service journals. Its venue-service 0034/0035 clash with this base. Its compared
+  sale-policy enum still has the old receipt values. Preserve its kitchen-screen changes and
+  re-read actual landed transfer-profile eligibility; a plan search does not establish it.
+- Current `module.ts:270-289` and `operations.ts:865-910` carry `keepOpen` and menu
+  `orderable`/`sendable`; `till-api.ts:1065-1066` mounts live-control APIs. A3b's mapping sites are
+  now `till-api.ts:1340-1342`, `:1368-1370`, and context writers `operations.ts:957-1007`.
+  Keep all slice 3A fields in combined results and full-response pins.
+
+**Receipt mode path set, Task A2.** Re-run
+`rg -n 'receiptPrintMode|receipt_print_mode|ReceiptPrintMode|RECEIPT_PRINT_MODE|receiptMode|on_request' apps packages scripts docs`
+before receipt-mode contraction and after rebases. Read each hit by concept; this inventory records source
+reads, not runtime proof. Exact test line numbers are refreshed in the Changed test checks commit.
+
+| Consumer / current receipt | Planned change and focused checks |
+| --- | --- |
+| `packages/venue-service/src/schema/service.ts:97-136` | Remove `never` from the enum and both CHECKs in A2 after its consumers and fixtures move. Keep `on_request`. Keep department default auto and zone default null. `schema/service.test.ts`, `migrations.test.ts`, schema-conformance and migration guards. |
+| `packages/venue-service/src/operations.ts:560-719` | Effective/list policy types and writes, explicit defaults and null inheritance. `operations.test.ts`; no stored-row conversion. |
+| `packages/venue-service/src/routes.ts:139-153`, `:735-741`, `:864-870` | Enum set and casts, per-field and combined writes accept auto/on_request; obsolete modes and department null refuse with field/code, zone null inherits. `routes.test.ts`. |
+| `packages/module/src/module.ts:86` | Narrow `EffectiveSalePolicy.receiptPrintMode`, preserve `ServiceMode` and slice 3A fields. Scoped module/server/till/dashboard/venue-service types. |
+| `packages/venue-service/src/dashboard/client.ts:25-37`, `venue-operations-screen.ts:1430-1506`, `strings.ts:314-315`, `:996-997` | Drop Never from the client and old tree before receipt-mode contraction, although A10 later removes tree. Retire receipt-only Never labels; preserve On request text. Client/screen tests, then A5/A8/A9. |
+| `apps/dashboard/src/i18n/domain.ts:125-129`, `domain.test.ts:168-173` | `printModeName` maps auto/on_request to Always/On request. Retired never follows the existing unknown-token fallback; on_request keeps its current label. `rg printModeName apps packages` found only definition/tests at this base. |
+| `apps/till/src/api/client.ts:381`, `till-app.ts:1936`, `:2437`, `:2826`, `:8336` | Change wire/state types to auto/on_request, retain auto defaults and original-receipt availability. Focused `api/client.test.ts`, `till-app.test.ts` receipt cases, `till-app-boot-and-counter.test.ts`, `till-app-parties.test.ts`. Keep order-flow/login behaviour. |
+| `apps/server/src/till-api.ts:1342`, `:1370`, `till-api.test.ts:1811-1839` | Pass-through auto/on_request; preserve response/live fields. Opposing override values, null clear and inherited readback. |
+| `apps/server/src/receipt-print.ts:202-225`, `:251` onward | Automatic F2 still gates on auto, no-context default auto; F1 delivery and ungated reprint stay. Helper unions and fixtures in `receipt-print.test.ts`, `till-api.receipt.test.ts`; no drawer/fiscal implementation changes. |
+| `apps/server/src/bill-payments.test.ts:1121-1127`, `bill-payments-api.test.ts:1482`, `till-api.fiscal-sale-paths.test.ts:2680` | Never fixtures become on_request; retain F1/F2 document counts and payment/refund/fiscal assertions. No golden/inmutabilidad edits. |
+| `packages/venue-service/src/provisioning.ts:44-48`, `apps/server/scripts/demo-seed/seed-floor.ts:97` | Explicit department auto, zone null; `provisioning.test.ts`, demo `seed.test.ts`/`seed-floor.test.ts`. Setup/applyVenue callers reach this module contribution; identifier search found no independent receipt option. |
+| `packages/venue-service/src/configuration-transfer.ts`, `apps/server/src/configuration-transfer.ts:558-594`, `:599` onward | Export whole rows; import validates contributions then inserts against schema checks. Add receipt-mode validation in the module with precise `setup.request_invalid` field before writes. Round-trip auto/on_request/null under new ids in server `configuration-transfer.test.ts`; obsolete bundle rejections in module `configuration-transfer.test.ts` and server `configuration-import.test.ts`. |
+| Retired-field/route controls: server `configuration-transfer.ts:464`, `configuration-import.test.ts:126-140`, `print-api.printer-wiring.test.ts:619-632`, `venue-details.test.ts:1240` | Keep all retired-location receipt-field inputs refused, including on_request and never; do not weaken their assertions. Historical v1 JSON stays old/refused unless A14's actual failure requires a documented fixture change. |
+
+Other valid auto fixtures in till native-reload/suite fixtures, server device-equipment,
+printing-retirement-upgrade and db drawer-opens tests need no semantic change. Keep assertions.
+Preserve unrelated `never` prose/types and reprint behaviour. Shipped migrations/snapshots keep
+historical values/hashes. A final negative search targets live receipt acceptance/declarations,
+not every `never` in the repository.
+
+**Changed receipt checks, decision 17.** Known base sites: venue-service
+`operations.test.ts:1077-1147`, `routes.test.ts:776-790`, dashboard
+`venue-operations-screen.test.ts:1281-1285`, `:1703-1778`, `:1800`, server
+`till-api.test.ts:1814-1833`, `configuration-transfer.test.ts:3417-3473`, and dashboard
+`domain.test.ts:169-172`. Replace successful never checks with On request checks,
+and add separate never-rejection cases. Keep existing on_request assertions. Use opposing
+auto/on_request department and zone values in inheritance and transfer tests: changing a never
+zone fixture to on_request while its department is also on_request would hide an override defect.
+Receipt/bill/till matrices keep both supported modes and every distinct F1/F2, replay,
+original/reprint, missing-printer and drawer assertion.
+Record each changed assertion's exact before/after in the dedicated Changed test checks commit
+and PR. List fixture-only changes separately, including fiscal-sale-paths, with no changed expect.
+
 
 ---
 
 ## Decisions this plan makes that the spec does not
 
-Each is the DEFAULT to build; the owner may override any when reviewing the plan.
+The owner accepted these on 2026-10-09 with the stated overrides. They govern the build; obsolete defaults are retired here.
 
-1. **Three pull requests, the first now.** Part A (everything but the closed-times summary and
+1. **Three pull requests, Part A now in Lane E, Parts B/C in Lane D.** Part A (everything but the closed-times summary and
    the floor plan) after slice 1, which has landed; Part B after slice 2; Part C after A429's
-   slice 2. This departs from §13's order (slices 2–5 before 6). Why: Part A needs nothing from
-   slices 2–5 (section 2), and slice 7 Part B waits on it. Override: one pull request after slice
-   5, in the spec's order.
-2. **"How orders start" is stored with the other service settings.** DEFAULT: a column
+   slice 2. The owner accepted this departure from the original serial §13 order. Part A uses
+   landed slices 1/3A and needs no pending slice 2/4/5 feature; Lane E's slice 7 follows it.
+   Parts B/C remain with Lane D.
+2. **"How orders start" is stored with the other service settings.** Approved: a column
    `order_start` (`'table'` or `'counter'`) on `department_sale_policies` (not null, default
    `'counter'`) and on `zone_sale_policies` (null = follow the department), read by
    `resolveSalePolicy` as the zone's value else the department's, exactly as `paid_when` is
@@ -220,17 +302,17 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
    already ignore (decision 3) and §12 says the service style goes.
 3. **A counter order's flow is its paid-when — as it already is.** Today an order's record is
    `table_tab` when the zone's service style is `table_tab`, else the zone's paid-when
-   (`recordOrderServiceContext`, `operations.ts:954-957`; `retargetOrderServiceContext`,
-   `:978-981`; the offers answers, `apps/server/src/till-api.ts:1330-1331`, `:1358-1359`), so the
+   (`recordOrderServiceContext`, `operations.ts:964-967`; `retargetOrderServiceContext`,
+   `:988-991`; offers answers, `apps/server/src/till-api.ts:1340-1342`, `:1368-1370`), so the
    style's `prepay` / `ticket_then_pay` difference never reaches an order. The other readers of
    the zone's style on an order's path compare it with `table_tab` only (`move-bill.ts:244`,
-   `:428`; `working-order.ts:1242`; the till's counter zone list, `till-api.ts:1334-1336`). The one
-   order-path reader that takes the raw value, `POST /api/dead-ends/sale` (the read at
-   `till-api.ts:1447-1451`), gives the same answer for `prepay` and `ticket_then_pay` on a new order
-   (the plan's reviewer evaluated the route's expression, `:1454-1463`, for each value: `table_tab`
-   pay false, place true; `prepay` and `ticket_then_pay` pay true, place true). The raw value also
+   `:428`; `working-order.ts:1242`; the till's counter zone list, `till-api.ts:1334-1336`). The
+   dead-ends route reads the raw zone mode (`till-api.ts:1457-1461`) and computes payment/placing
+   dispatch at `:1464-1474`. The earlier plan reviewer evaluated its prior expression for a new
+   order and reported equal counter answers; that read is not runtime proof. A3b runs the
+   real-route controls against the audited current tree before claiming equivalence. The raw value also
    reaches the old page's Service style column and the zones the routes answer (`routes.ts:592`,
-   `:603`; `venue-operations-screen.ts:1719`). DEFAULT: `resolveZoneContext` and
+   `:603`; `venue-operations-screen.ts:1719`). Approved: `resolveZoneContext` and
    `listServiceZones` answer `serviceMode` as `orderStart === "table" ? "table_tab" : paidWhen`,
    which keeps every order's flow as today; the zone ANSWERS change where a zone's stored style was
    `ticket_then_pay` with paid-when `prepay` (they now say `prepay`), and the checks pinning that
@@ -245,14 +327,18 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
    and `/prep`) are run first with the update deleted: if they pass, the update is deleted (it had
    no effect); if one fails, find what read the style before changing anything — STOP if it is not
    explained.
-4. **The order's own record keeps its three values.** `order_service_contexts.service_mode`
+4. **The order's own record keeps its three values in slice 6; split it later.** `order_service_contexts.service_mode`
    (`schema/service.ts:263-295`) and the module contract's `ServiceMode`
    (`packages/module/src/module.ts:71`) stay `table_tab | prepay | ticket_then_pay`: they record how
    one order runs (table service, counter paid before preparation, counter paid at collection — the
    spec's three replacements, §6), not a setting. The till (`apps/till/src/api/client.ts:374-396`,
    `till-app.ts:2406-2407`) and every server reader of an order's flow (`move-bill.ts`,
    `working-order.ts:5562-5584`, `:5876-5892`, `till-sale.ts:1547-1559`, `receipt-print.ts:216`) are
-   not changed.
+   unchanged for order-flow behaviour. Decision 17 separately changes receipt-mode types/fixtures.
+   A15 adds the owner-requested future split: served-at (`table/counter`) and payment-due
+   (`before-kitchen/collection/end-tab`). Cited readers are `till-sale.ts:1548`,
+   `receipt-print.ts:216`, `working-order.ts:3111-3128` (`serviceModesMatch`) and `move-bill.ts:245`.
+   No implementation of that split or change to recorded orders belongs to slice 6.
 5. **A new department starts with counter service, paid before preparation, no collection
    ticket, receipt always.** These are the columns' defaults today (`schema/service.ts:103-106`)
    plus decision 2's `'counter'`; today's Add department dialog defaults the style to `prepay`
@@ -267,7 +353,7 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
    "not muted" entry). The Transfers and Opening hours row actions go: transfers move to the
    Settings tab (§9.1) and Opening hours has its own department picker (slice 1).
 7. **The Setup column shows the readiness reader's issues for that department, in today's
-   sentences.** DEFAULT: `department.no_periods` for the department (with today's "Set up Opening
+   sentences.** Approved: `department.no_periods` for the department (with today's "Set up Opening
    hours" link, using the path form `/manage/opening-hours/department/<id>`, which the Opening hours
    screen reads; today's query form, `venue-operations-screen.ts:49-50`, cannot select the
    department, because `UrlStateController` reads path segments only,
@@ -285,14 +371,12 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
    department: Patio", each with "Add to a department" (a dialog choosing an active department,
    `configureZone`). The page's department view shows the same issues for itself, on a line under
    its heading.
-8. **One department: the page opens it.** DEFAULT: when the venue has exactly one department,
-   active or not, `/manage/venue-operations` shows that department's page with no "Departments ›"
-   line (there is no list to go back to) and with "+ Add department" beside the heading; adding a
-   second one opens the new department's page, and from then on the bare address shows the list.
-   A department address (`/manage/venue-operations/department/<id>`) always shows that department.
-   A254 §2 and §9.1 ("A venue with one department skips the list") do not say how a second is added;
-   this is the default.
-9. **One Save per tab, one request per Save.** DEFAULT: two new routes, each one transaction
+8. **Always show the department list (owner override).** `/manage/venue-operations` shows
+   the list with zero, one or several departments, active or disabled. Every department address
+   opens its page with the Departments parent link above its name. Add department is on the
+   list; after adding, open its page. A254's single-department bypass is superseded here;
+   do not rewrite that historical spec.
+9. **One Save per tab, one request per Save.** Approved: two new routes, each one transaction
    (CLAUDE.md §3: one `withTransaction` per request):
    `PUT /management-api/venue-service/departments/:departmentId/settings`, body
    `{ name, tradingName, printTradingName, orderStart, paidWhen, collectionNumber, receiptPrintMode,
@@ -315,8 +399,7 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
    "their current routes … unless slice 6 changed them") can each write their own field.
 10. **The Settings tab.** In order: Name; "Service settings" — How orders start (Table service /
     Counter service), "When counter service is used" (Paid before preparation / Paid at collection,
-    and the switch "Print a numbered collection ticket"), Print a receipt (Always / On request /
-    Never); a line "Zones that differ: Terrace (Counter service), Bar (Receipt on request)", each
+    and the switch "Print a numbered collection ticket"), Print a receipt (Always / On request); a line "Zones that differ: Terrace (Counter service), Bar (Receipt on request)", each
     zone a link to the Zones tab with that zone chosen, or nothing when none differs; "On the
     receipt" — Trading name and the switch "Print the trading name above the legal name" (today's
     "Print it", `venue-operations-screen.ts:1234-1268`), and a link "Edit the receipt" (decision
@@ -329,7 +412,7 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
     `name`, `orderStart`, `paidWhen`, `collectionNumber`, `receiptPrintMode`, `tradingName`,
     `printTradingName`, `transferDestination-<id>`, `receivingProfileId`.
 11. **Where the trading name, its switch and the receipt's print mode live until slice 7 Part B.**
-    DEFAULT: the trading name and "Print the trading name above the legal name" are in the
+    Approved: the trading name and "Print the trading name above the legal name" are in the
     Settings tab's "On the receipt" section; "Print a receipt" is a service setting (§6, §9.1) on
     the Settings tab and on each zone; "Edit the receipt" links to
     `/manage/venue-settings/view/receipts?departmentId=<id>` (today's "Preview" link,
@@ -341,30 +424,30 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
     (`aria-pressed` on the chosen one; a disabled zone's button says "(disabled)" in muted text),
     then "+ Add zone". The chosen zone (in the URL as `zone`; the first zone when none is named)
     shows: its name as an `h2`; its service settings, each empty field following the department
-    with the department's value as its placeholder ("Same as the department: Table service");
+    with only the localized inherited value as its placeholder (for example "Table service");
     one Save (`PUT .../zones/:zoneId/service-settings`); and a ⋮ menu with **Rename**, Move to
     another department (only when another active department exists), and Disable, or Enable when
     disabled and the department is active (today's rule, `:1582-1595`). **Rename is in the menu
     rather than an editable name field** because a zone's name is a core table renamed through
     `PATCH /management-api/zones/:id` under `venue.configure` with its own clash rules
     (`apps/server/src/management-api.ts:1674-1709`, `tables.ts:293-354`), so one Save could not
-    cover both in one transaction (decision 9). Override: a name field in the zone's form, saved by
+    cover both in one transaction (decision 9). Not selected: a name field in the zone's form, saved by
     a second request before the settings. A department with no zones shows "No zones yet." and the
-    Add button. **On a zone, "Print a numbered collection ticket" is a three-way choice** (Same as
-    the department / Print / Don't print), not the department's switch, because a switch cannot
-    say "follow"; §6 calls it a switch without saying how a zone follows it.
+    Add button. **On a zone, "Print a numbered collection ticket" offers Print / Don't print**
+    with a clearable empty state. Empty stores null and its placeholder is only the inherited
+    Print or Don't print value. The department retains a switch. No inheritance prefix, follow
+    option label or explanatory sentence is added to an empty zone field (owner override).
 13. **The "Departments ›" line follows the sub-page pattern by hand, as a plain link.** The
-    pattern (`docs/developers/design-system.md:3058-3067`) is drawn by one page today, by hand
-    (`apps/dashboard/src/screens/menus-screen.ts:2899-2918`). DEFAULT: the department page draws it
-    the same way: a `nav` named "Departments" holding `<a href="/manage/venue-operations">` and the
+    A335/A398 pattern (`docs/developers/design-system.md:3072-3090`) is drawn by the menu and
+    canvas editors. The department page draws it the same way: a `nav` named "Departments" holding `<a href="/manage/venue-operations">` and the
     `›`, then the department's name as the one `h1`, then "(Disabled)" in brackets after it when it
     is. The link needs no click handler of its own: the dashboard app catches a click on a
     `/manage/…` anchor in the capture phase (unless the anchor opts out with `data-own-click`, is a
     download, a `#` link, another target or `aria-disabled`), leaves a modifier-click to the browser
     and navigates through the leave guard (`#onAppLink`, `apps/dashboard/src/dashboard-app.ts:862`, `:1545-1574`). The
-    pattern names no shared component, so none is added. Override: a `wt-*` heading primitive (with
+    pattern names no shared component, so none is added. Not selected: a `wt-*` heading primitive (with
     its token and a11y tests, CLAUDE.md §3) that both pages use.
-14. **Addresses.** `/manage/venue-operations` (the list, or decision 8's single department);
+14. **Addresses.** `/manage/venue-operations` (always the list);
     `/manage/venue-operations/department/<id>` (the Settings tab);
     `/manage/venue-operations/department/<id>/view/zones[/zone/<zoneId>]`. `apps/dashboard/src/navigation.ts`
     gains `"venue-operations": { department: "department", view: "view", zone: "zone" }`, and the
@@ -382,18 +465,21 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
     A331's save rule (`draftScopeFor`, `saveActionState`, an early return in the save handler),
     sets `.dismissible=${false}` while its request runs (`packages/ui/src/components/wt-dialog.ts:120-132`;
     closes the backlog entry at `docs/backlog/dashboard.md:110-119` for this screen), and keeps
-    today's refusal mapping: a name clash with a disabled department or zone offers "Enable
+    Cancel first, then Save, including all replacement inline forms (the #1462 Swap override),
+    and today's refusal mapping: a name clash with a disabled department or zone offers "Enable
     <name>" (`venue-operations-screen.ts:715-726`).
 16. **The page stays manager-only, with no read-only view.** `requiresPermission:
     "venue_service.manage"` and no `readPermission` (`packages/venue-service/src/dashboard/index.ts:16-22`),
     as today. Zone rename, disable and enable keep calling the core zone routes under
     `venue.configure`, as today.
-17. **"Print a receipt"'s three values keep today's meaning.** On request and Never behave the same
-    today (`enqueueSaleReceipt`, `apps/server/src/receipt-print.ts:202-225`, prints automatically
-    only for `auto`; the till offers "Print receipt" whenever the mode is not `auto`,
-    `apps/till/src/till-app.ts:8289`). This slice changes the words only. Recorded for the owner,
-    not changed.
-18. **A disabled department's page and a disabled zone are read-only.** DEFAULT: the Settings tab
+17. **Receipt mode is only `auto | on_request` (owner override).** Always is auto; On request
+    is on_request. Retire obsolete never from every live receipt enum, CHECK,
+    accepted write, reader type, import validator, export fixture and UI choice. The audited path
+    list above belongs to Task A2. Preserve automatic F2 gating, F1 delivery, manual originals/
+    reprints, drawer, money/VAT/hash and login behaviour. Old venue rows reset before use; no
+    conversion SQL or compatibility reader. Move never consumers/fixtures while the storage still accepts never, then narrow
+    enum/checks and reject never (Task A2).
+18. **A disabled department's page and a disabled zone are read-only.** Approved: the Settings tab
     and a disabled zone's settings show their values with every field disabled, a line "Enable this
     department to change its settings" (or "… this zone …") and the Enable action; no Save. Why: the
     writers refuse an inactive department or zone (decision 9), and enabling first is today's order
@@ -403,29 +489,23 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
     (`QUERY_DEPENDENCIES.operations`, `packages/venue-service/src/dashboard/live-queries.ts:68-87`)
     names `departments` and `zone_service_policies` but neither sale-policy table, so today a
     paid-when change made in another tab reaches it only at the 60-second refresh
-    (`venue-operations-screen.ts:443`). DEFAULT: add `department_sale_policies` and
+    (`venue-operations-screen.ts:443`). Approved: add `department_sale_policies` and
     `zone_sale_policies`; `scripts/live-subscriptions.test.ts` says whether the server's change
     feed knows them (CLAUDE.md §3: an unknown name closes the tab's whole stream).
 
-## Where the code differs from what the spec assumes
+## Current source and the revised spec
 
-- §6 says a department "sets each one" of the service settings and a zone "leaves the field empty
-  to follow it": three of the four already work this way (`department_sale_policies` /
-  `zone_sale_policies`, `schema/service.ts:99-138`); the service style is the one with a different
-  home (decision 2).
-- §9.1's "Settings tab: name; the Service settings of section 6": the trading name and its switch
-  are not in §9.1's Settings list but are on today's tree; §11 puts them on the Receipt tab, which
-  slice 7 Part B builds (decision 11).
-- §9.1's Zones tab ⋮ menu lists "Move to another department and Disable"; a zone's rename needs
-  the menu too (decision 12).
-- §6 says How orders start "is the default; staff can still choose per order (A254 §3.1)". Today it
-  is a rule, not a default: seating a party in a counter zone is refused
-  (`service_zone.mode_incompatible`, `apps/server/src/working-order.ts:1241-1250`), and a table zone
-  is left out of the till's counter zone list (`till-api.ts:1334-1336`). Choosing per order is
-  A254 §3.1's open question, which the spec leaves open (§14). This slice keeps today's rule.
-- §12's "the 'Ready for service' tabs": the readiness is a section, not tabs
-  (`venue-operations-screen.ts:978-997`); the tabs below it are the older Departments / Service
-  zones tables (`:2009-2020`). Both go.
+- Three service settings already share department/zone sale-policy storage at the audited base;
+  order-start still lives in the old service-style columns (decision 2).
+- Trading name and its switch stay temporarily in Settings until slice 7 Part B adds the Receipt
+  tab. A Rename zone action is in the zone menu because core zone naming has its own route.
+- Revised §6 retains the current zone rule. `working-order.ts:1251-1258` refuses seating in a
+  counter zone, and `till-api.ts:1344-1345` excludes table zones from the counter picker.
+  Per-order choice remains A254's open question, not a slice 6 implementation.
+- Revised §12 removes the Ready for service section and the old department/zone table tabs,
+  matching `venue-operations-screen.ts`'s current structure.
+- Receipt modes in this base still use auto/on_request/never; §6 and decision 17 are the target
+  auto/on_request contract. The inventory and ordered A1/A2 checkpoints cover that transition.
 
 ## Global constraints
 
@@ -457,10 +537,10 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
   service / Servicio de mesa; Counter service / Servicio en mostrador; When counter service is used
   / Cuando se usa el servicio en mostrador; Paid before preparation / Se paga antes de preparar;
   Paid at collection / Se paga al recoger; Print a numbered collection ticket / Imprimir un tique
-  de recogida numerado; Print a receipt / Imprimir el recibo; Same as the department: {value} /
-  Como el departamento: {value}; Zones that differ / Zonas con otros ajustes; Edit the receipt /
+  de recogida numerado; Print a receipt / Imprimir el recibo; Zones that differ / Zonas con otros ajustes; Edit the receipt /
   Editar el recibo; Departments / Departamentos (the trail's link). Reuse `venue.always`,
-  `venue.on_request`, `venue.never`.
+  `venue.on_request` as wording for on_request; retire receipt-only `venue.never`. Empty zone
+  placeholders contain only the localized inherited value. Every footer has Cancel before Save.
 - Coverage stays at 98/98/98/95 in every package touched.
 - Comments only for an invariant or a non-obvious why; no history. When the schema's comment "Not
   the enumText/enumCheck pair … here or in the four other checked value-set columns"
@@ -473,6 +553,9 @@ Each is the DEFAULT to build; the owner may override any when reviewing the plan
 
 Tests pinning these may change, under the commit rule above:
 
+- Single-department list bypass/omitted parent link; receipt-policy never value,
+  label and acceptance (On request remains on_request); inheritance-prefix wording and labeled follow
+  option. Keep negative obsolete-input controls and unrelated never values.
 - The service style as a department and zone setting: `departments.default_service_mode`,
   `zone_service_policies.service_mode`, their checks, the `defaultServiceMode` / `serviceMode`
   inputs and answers (`listDepartments`, `listServiceZones`' `serviceModeOverride`, the
@@ -509,7 +592,7 @@ its test in the task named.
    Terrace overrides to counter service, paid at collection; its Bar follows everything. Change the
    Restaurant to receipts on request: the Bar's receipt follows, the Terrace keeps its own counter
    setting and follows the receipt; the Settings tab's "Zones that differ" names only the Terrace;
-   the Terrace's empty receipt field's placeholder reads "Same as the department: On request"
+   the Terrace's empty receipt field's placeholder reads "On request" only
    (Tasks A2, A8, A9).
 2. **Table or counter decides the till.** A table-service department with a counter-service zone:
    seating a party in that zone is refused (`service_zone.mode_incompatible`,
@@ -518,19 +601,27 @@ its test in the task named.
    paying sends the dishes (Task A3b).
 3. **The two settings that used to be one.** A department set to counter service and paid at
    collection: a new order's snapshot is `ticket_then_pay`, the collection ticket prints at placing
-   when "Print a numbered collection ticket" is on (`working-order.ts:5580-5582`), and not when it
+   when "Print a numbered collection ticket" is on (`working-order.ts`, collection-ticket placing path), and not when it
    is off (Task A3b).
 4. **Unsaved edits across addresses.** Edit the Restaurant's receipt setting, then click the Zones
-   tab, another department in the trail, or the browser's back button: the leave question asks;
+   tab, the Departments parent link then another department, or the browser's back button: the leave question asks;
    Keep stays with the edit; Discard goes. The same on a zone, switching zone. Reconnecting the page
    keeps asking. Escape during a dialog's save does not close it (Tasks A7, A8, A9, A10).
-5. **One department, then two.** A fresh venue opens straight on its department; "+ Add
-   department" makes a second and opens it; the bare address now shows the list; disabling the
-   second still shows the list (two departments exist) (Task A10).
-6. **The retirement migration on a populated venue.** The upgrade walk shows the refusal Task A14
-   records in `RESETS`, and a freshly migrated venue sells at a counter and at a table (Task A14).
-7. **Export and import.** A configuration bundle carries each department's and zone's
-   `order_start` under the importing venue's ids (Task A1).
+5. **Zero, one, then two departments.** Bare address always shows the list; Open/Add go to
+   a department page with its parent link. Disabled departments do not bypass the list. Ordinary
+   parent/back navigation guards drafts; modified links retain browser handling (A335/A398, A10).
+6. **Retirement on a populated venue.** Read actual upgrade output for both sale-policy
+   check rebuilds and style-column retirement; record only a measured authorized refusal,
+   preserve guard logic. A fresh reset venue sells at both counter and table (Tasks A1/A2/A14).
+7. **Export/import and receipt defaults.** Round-trip order_start, opposing auto/on_request
+   department/zone modes and null under remapped ids. Current-version never refuses
+   with `setup.request_invalid` and precise table/column field before any write. New/provisioned/
+   demo department mode is auto, zone is null; no-order-context printing defaults auto. F2 auto
+   queues one original, on_request none; F1 delivery and manual original/reprint stay (Task A2).
+8. **Hints and footer order.** Clear every zone field; only its inherited localized value is
+   the rendered placeholder. Collection ticket offers Print / Don't print with clear-to-null.
+   Cancel precedes Save on all forms/dialogs; save-handler early returns and reconnect preserve
+   drafts. Null department receipt mode and obsolete tokens refuse (Tasks A4/A5/A7/A8/A9).
 
 ---
 
@@ -538,45 +629,43 @@ its test in the task named.
 
 ### Task A1: Migration — "How orders start" on the service settings (add only)
 
-**Files:**
-- Modify: `packages/venue-service/src/schema/service.ts` (`departmentSalePolicies :99-118`,
-  `zoneSalePolicies :120-138`), `packages/venue-service/drizzle/` (two generated migrations)
-- Test: `packages/venue-service/src/schema/service.test.ts`, `migrations.test.ts`,
-  `apps/server/src/configuration-transfer.test.ts` (a round trip),
-  `scripts/schema-constraints.test.ts` (run; edit only if it lists these tables' checks)
+**Files:** `packages/venue-service/src/schema/service.ts`, `drizzle/`, `schema/service.test.ts`,
+`migrations.test.ts`; server `configuration-transfer.test.ts`. Receipt enums and consumers stay
+unchanged in this task. Run schema/migration guards without changing their rules.
 
 **Interfaces:**
 
 ```ts
 const orderStart = enumType(["table", "counter"]);
-// departmentSalePolicies gains
+// departmentSalePolicies
 orderStart: orderStart("order_start").notNull().default("counter"),
 check("department_sale_policies_order_start_ck", enumCheck(t.orderStart)),
-// zoneSalePolicies gains (null = follow the department)
+// zoneSalePolicies: null inherits
 orderStart: orderStart("order_start"),
 check("zone_sale_policies_order_start_ck", enumCheck(t.orderStart)),
 ```
 
-- [ ] **Step 1: Failing tests:** a department policy row without `order_start` reads `counter`; a
-  zone row reads `null`; `'tab'` is refused by each table's check; a configuration bundle exported
-  with a department at `table` and a zone at `counter` imports with both values under the new ids.
-  Run `pnpm --filter @waitron/venue-service exec vitest run --project node src/schema/service.test.ts src/migrations.test.ts`;
-  watch them fail (no such column).
-- [ ] **Step 2: Generate twice.** First the two columns without their checks (`pnpm --filter
-  @waitron/venue-service exec drizzle-kit generate`), then add the two checks and generate again —
-  the second generation rebuilds both tables. Before it, list the foreign keys pointing at
-  `department_sale_policies` and `zone_sale_policies` (`grep -rn "departmentSalePolicies\.\|zoneSalePolicies\." packages/*/src/schema`);
-  expected none, so the rebuilds carry their rows. Read the generated SQL.
-- [ ] **Step 3: Run; see them pass;** the venue-service node project; from the root
-  `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts`
-  (the walk must carry both tables' rows through both steps); `pnpm --filter
-  @waitron/fiscal-verifactu exec vitest run inmutabilidad src/write-path.e2e.test.ts` unedited;
-  the server's `configuration-transfer.test.ts`; typecheck.
-- [ ] **Step 4: Commit** — `feat(venue-service): a department and a zone say how orders start (A366)`.
+- [ ] **Step 1: RED.** Department missing order_start reads counter; zone missing it reads null;
+  explicit table/counter values persist; a table department/counter zone bundle remaps both ids.
+  Run focused schema/migration and server transfer cases and watch missing-column failures.
+- [ ] **Step 2: Add-only generation.** Add order_start columns without checks; leave receipt
+  enum/checks unchanged and generate. Do not combine added columns with a table rebuild.
+  Read SQL; rerun focused default/transfer cases to green.
+- [ ] **Step 3: CHECK RED/GREEN.** Add cases rejecting tab on both policy tables, and department
+  null, with valid table/counter and zone null controls. Observe the missing-check failures.
+  List incoming foreign keys and trigger-body references to both policy tables, including their
+  ON DELETE rules. Add only the order-start checks and generate a second migration. Read the
+  SQL and run focused schema/migration/transfer cases and scoped types.
+- [ ] **Step 4: Migration verification.** Run
+  `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts`.
+  Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad src/write-path.e2e.test.ts`
+  with both suites unedited. Read generated SQL and upgrade results; expected row preservation is
+  not a receipt. Investigate any refusal rather than hiding it through a guard edit.
+- [ ] **Step 5: Commit** signed off: `feat(venue-service): a department and a zone say how orders start (A366)`.
 
 ---
 
-### Task A2: The service settings carry "How orders start"; the old style is written beside it
+### Task A2: Retire Never, contract receipt modes, and carry "How orders start"
 
 **Files:**
 - Modify: `packages/venue-service/src/operations.ts` (`createDepartment :145-174`,
@@ -590,6 +679,12 @@ check("zone_sale_policies_order_start_ck", enumCheck(t.orderStart)),
 - Test: `operations.test.ts`, `routes.test.ts`, `provisioning.test.ts`, `dashboard/client.test.ts`,
   `dashboard/live-queries.test.ts`; run `scripts/live-subscriptions.test.ts`
 
+**Receipt files:** every path in the dated receipt inventory, including schema/drizzle, module,
+server/till/dashboard clients and fixtures, provision/demo, and module/server transfer validation.
+The existing order-start writer changes below remain in this task after the receipt checkpoints.
+Use passing signed-off subcommits for the receipt checkpoints if task size requires it; all remain
+inside A2 and the single Part A PR. Keep on_request throughout; no enum expansion or wire rename is needed.
+
 **Behaviour:** `resolveSalePolicy` and `listSalePolicies` answer `orderStart` (zone's else
 department's). The sale-policy routes accept the field `orderStart` (`table`/`counter`, `null` on a
 zone). Writing `orderStart` through any writer also writes the old style beside it, so the two
@@ -602,17 +697,44 @@ place of the old one (Tasks A12–A13 move the callers onto it); given neither, 
 writes `counter` (style `prepay`). Provisioning writes `counter`.
 Nothing READS `order_start` for an order's flow yet.
 
-- [ ] **Step 1: Failing tests:** `resolveSalePolicy` answers `orderStart` (department `table`, zone
+- [x] **Receipt checkpoint 1: refuse Never at the boundaries, then move its fixtures.**
+  Add RED cases rejecting never through the department/zone per-field routes and current-version
+  configuration import, with status/code/field and unchanged rows. Keep auto/on_request/null
+  readback and round-trip controls. Remove never from route validators, old tree choices and
+  receipt-only labels; add module import validation before writes. Keep the schema temporarily
+  unchanged while successful never fixtures move to on_request, preserving opposing department
+  and zone values. Keep existing on_request assertions and list changed never checks separately.
+  Run focused affected files and scoped types. Preserve fiscal, payment, drawer and login checks.
+- [x] **Receipt checkpoint 2: storage refuses Never.** Re-scan every consumer. Add RED raw never
+  insert/update refusal tests for both sale-policy CHECKs, then narrow receiptMode and public,
+  dashboard and till types to auto/on_request. Department null still refuses; zone null and both
+  supported explicit values remain accepted. List incoming foreign keys/triggers, generate the
+  receipt-check contraction separately from column additions, read SQL and run A1 migration
+  guards. No conversion UPDATE or compatibility reader: reset obsolete pre-live venue data.
+- [x] **Receipt checkpoint 3: HTTP/import/printing regressions.** Per-field routes reject never
+  with 400 management.request_invalid and field receiptPrintMode; A4 adds the same combined PUT
+  regression when those endpoints exist. Arrays/numbers/unknown strings and department null
+  refuse; zone null reads the department value. Current-version import rejects never with
+  setup.request_invalid and field department_sale_policies.receipt_print_mode or
+  zone_sale_policies.receipt_print_mode, leaving the target unchanged. Missing department mode
+  defaults to auto, absent/null zone follows, explicit department null refuses. Round-trip opposing
+  auto/on_request policies and inherited null under new ids. Keep F2 auto one original /
+  on_request none, F1 selected delivery, no-context auto, till on-request original availability,
+  ungated originals/reprints, collection-ticket and drawer assertions. Run focused consumer
+  cases and scoped types; package suites/coverage remain CI's job.
+
+- [x] **Step 1: Failing tests:** `resolveSalePolicy` answers `orderStart` (department `table`, zone
   override `counter` → `counter`; zone `null` → the department's); the department route writes it,
   and `"tab"` is refused 400 `management.request_invalid` with `field: "orderStart"` (the route
   names the field, `routes.ts:152`, as `routes.test.ts` pins for `paidWhen`); each mirroring rule
   above, both directions, read back from both columns; `createDepartment({ name, orderStart:
   "table" })` stores `table_tab` beside it; the live query lists the two sale-policy tables. Run;
   watch them fail.
-- [ ] **Step 2: Implement.** One private helper per direction, used by every writer.
-- [ ] **Step 3: Run** both node projects (venue-service, server), `pnpm exec vitest run
-  scripts/live-subscriptions.test.ts`; typecheck venue-service, module, server, dashboard.
-- [ ] **Step 4: Commit** — `feat(venue-service): the service settings carry how orders start (A366)`.
+- [x] **Step 2: Implement.** One private helper per direction, used by every writer; retain slice 3A
+  keepOpen/orderable/sendable fields in all response shapes and existing whole-shape pins.
+- [x] **Step 3: Run** focused affected venue-service/server node files, `pnpm exec vitest run
+  scripts/live-subscriptions.test.ts`; typecheck venue-service, module, server, dashboard and till.
+- [x] **Step 4: Commit** — `feat(venue-service): the service settings carry how orders start (A366)`.
 
 ---
 
@@ -639,9 +761,9 @@ and read each hit — the grep also matches assertions, which are NOT changed):
   (Restaurant `table`; Deli and the two bars `counter`) so the demo keeps its table service once the
   readers switch
 
-- [ ] **Step 1:** make the changes; run the server package and the venue-service node project:
+- [x] **Step 1:** make the changes; run focused affected server/venue-service behavioural files:
   green, with `git diff` showing no changed `expect`.
-- [ ] **Step 2: Commit** — `test: fixtures that write the service style directly also say how orders start (A366)`.
+- [x] **Step 2: Commit** — `test: fixtures that write the service style directly also say how orders start (A366)`.
 
 ---
 
@@ -651,8 +773,8 @@ and read each hit — the grep also matches assertions, which are NOT changed):
 - Modify: `packages/venue-service/src/operations.ts` (`listServiceZones :79-113`,
   `resolveZoneContext :521-555`: LEFT join `department_sale_policies` and `zone_sale_policies`; a
   department with no policy row reads the column defaults, as a fresh row would;
-  `recordOrderServiceContext :947-965` and `retargetOrderServiceContext :968-999` then store the
-  context's `serviceMode` directly), `apps/server/src/till-api.ts` (`:1330-1331`, `:1358-1359`: the
+  `recordOrderServiceContext :957-975` and `retargetOrderServiceContext :978-1009` then store the
+  context's `serviceMode` directly), `apps/server/src/till-api.ts` (`:1340-1342`, `:1368-1370`: the
   mapping they do by hand is the context's own value now; the answers keep their shape)
 - Test: `operations.test.ts`, `apps/server/src/working-order.test.ts`, `till-api.test.ts`
 
@@ -663,7 +785,7 @@ and read each hit — the grep also matches assertions, which are NOT changed):
 until Task A13a removes it. Nothing reads the old columns for behaviour after this task; Task A2's
 writers keep them in step for the old page.
 
-- [ ] **Step 1: Failing tests** — cases where the new and old words DISAGREE, written directly:
+- [x] **Step 1: Failing tests** — cases where the new and old words DISAGREE, written directly:
   `order_start = 'table'` with the old style `prepay`: seating a party works (fails today:
   `service_zone.mode_incompatible`); `order_start = 'counter'` with the old style `table_tab`:
   seating is refused `service_zone.mode_incompatible` (assert status and code) and the zone is in
@@ -678,9 +800,9 @@ writers keep them in step for the old page.
   expect a zone stored as `ticket_then_pay` with paid-when `prepay` to answer `ticket_then_pay`; they
   now expect `prepay`, and each gains a case where paid-when is `ticket_then_pay` answering
   `ticket_then_pay`, so the check stays as strict.
-- [ ] **Step 2: Implement; Step 3: run** both node projects; `git diff --stat -- apps/till` empty
-  (the till's answers keep their shape); typecheck.
-- [ ] **Step 4: Commit** — `feat(venue-service): a zone's order flow follows how orders start and when counter orders are paid (A366)`.
+- [x] **Step 2: Implement; Step 3: run** focused affected venue-service/server node files; `git diff -- apps/till` contains only A2's
+  inventoried receipt changes (order-flow answers keep their shape); typecheck.
+- [x] **Step 4: Commit** — `feat(venue-service): a zone's order flow follows how orders start and when counter orders are paid (A366)`.
 
 ---
 
@@ -699,18 +821,18 @@ writers keep them in step for the old page.
 export interface DepartmentSettingsInput {
   name: string; tradingName: string; printTradingName: boolean;
   orderStart: "table" | "counter"; paidWhen: "prepay" | "ticket_then_pay";
-  collectionNumber: "none" | "numbered"; receiptPrintMode: "auto" | "on_request" | "never";
+  collectionNumber: "none" | "numbered"; receiptPrintMode: "auto" | "on_request";
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
 export async function saveDepartmentSettings(tx: Transaction, cfg: VenueScope, departmentId: string, input: DepartmentSettingsInput): Promise<void>;
 export interface ZoneServiceSettingsInput {
   orderStart: "table" | "counter" | null; paidWhen: "prepay" | "ticket_then_pay" | null;
-  collectionNumber: "none" | "numbered" | null; receiptPrintMode: "auto" | "on_request" | "never" | null;
+  collectionNumber: "none" | "numbered" | null; receiptPrintMode: "auto" | "on_request" | null;
 }
 export async function saveZoneServiceSettings(tx: Transaction, cfg: VenueScope, zoneId: string, input: ZoneServiceSettingsInput): Promise<void>;
 ```
 
-- [ ] **Step 1: Failing tests:** one PUT saves every field and reads back through
+- [x] **Step 1: Failing tests:** one PUT saves every field and reads back through
   `GET /management-api/venue-service`; a name taken by another department → 409
   `department.name_taken`, and NOTHING of the body is written (the sale policy and transfers read
   back unchanged — the one-transaction check); a disabled department's name → 409
@@ -718,13 +840,15 @@ export async function saveZoneServiceSettings(tx: Transaction, cfg: VenueScope, 
   unknown key → 400; a transfer to itself → 400 `department_transfer.settings_invalid`, nothing
   written; another venue's department → 404 `department.not_found`; a disabled department → the
   refusal its writers give today (assert the code the test observes and name it in the commit);
-  the zone PUT writes four values and four nulls; a disabled zone → today's refusal
+  the zone PUT writes four values and four nulls, including on_request/auto receipt and inherited null;
+  each PUT rejects never (400 management.request_invalid, field receiptPrintMode),
+  department receipt null refuses and all writes remain unchanged on refusal; a disabled zone → today's refusal
   (`operations.ts:705-719`); the old-style mirror (Task A2) also happens through these routes. Run;
   watch them fail (404, no route).
-- [ ] **Step 2: Implement**, reusing the existing validators (`requireName`, the sale-policy value
+- [x] **Step 2: Implement**, reusing the existing validators (`requireName`, the sale-policy value
   sets, the transfer body checks at `routes.ts:913-936`).
-- [ ] **Step 3: Run** the venue-service node project and the server package; typecheck.
-- [ ] **Step 4: Commit** — `feat(venue-service): save a department's settings and a zone's service settings in one request each (A366)`.
+- [x] **Step 3: Run** focused affected venue-service/server behavioural files; typecheck.
+- [x] **Step 4: Commit** — `feat(venue-service): save a department's settings and a zone's service settings in one request each (A366)`.
 
 ---
 
@@ -740,28 +864,35 @@ export async function saveZoneServiceSettings(tx: Transaction, cfg: VenueScope, 
 ```ts
 export interface ServiceSettingsValue {
   orderStart: "table" | "counter" | null; paidWhen: "prepay" | "ticket_then_pay" | null;
-  collectionNumber: "none" | "numbered" | null; receiptPrintMode: "auto" | "on_request" | "never" | null;
+  collectionNumber: "none" | "numbered" | null; receiptPrintMode: "auto" | "on_request" | null;
 }
 // <dashboard-service-settings-fields .value .follows=${departmentEffective | undefined}
 //   .errors .disabled> — fires `service-settings-change` with { value } (app-owned element:
 //   plain event name, CLAUDE.md §3)
 ```
 
-**Behaviour:** four fields as decision 10 words them, `wt-combobox` for the three choices and
-`wt-switch` for the collection ticket. With `follows` set (a zone), each field has an empty first
-choice whose label and the field's placeholder read "Same as the department: <value>"; empty is
-`null`; the collection ticket is decision 12's three-way choice. Without `follows` (a department)
-no field is empty. "When counter service is used" carries decision 10's hint when How orders start
-is Table service. Field names per decision 10. `disabled` disables every field (decision 18).
+**Behaviour:** four fields as decision 10 words them, shared `wt-combobox` controls and a
+department `wt-switch` for the collection ticket. With follows set (a zone), each choice is
+clearable to empty (null); only the placeholder names the inherited localized value. Collection
+ticket offers Print / Don't print with that clearable empty state. Without `follows` (a department)
+no field is empty. Use the existing combobox empty-value behaviour (`wt-combobox.ts:382-390`,
+`:487-490`, `:1018`): an accessible Clear choice can send the empty value while
+showEmptyOption stays false, so the closed trigger paints only its inherited-value placeholder.
+Clear is a clearing action, not a labeled inheritance choice. Test the actual inner trigger
+`.value.placeholder` text, not only the host property; no new primitive is planned.
+On a department only, "When counter service is used" carries decision 10's hint when How
+orders start is Table service. A zone adds no hint beyond the inherited-value placeholder. Field names per decision 10. `disabled` disables every field (decision 18).
 
-- [ ] **Step 1: Failing tests** (Chromium): a department value draws each field's choice; changing
+- [x] **Step 1: Failing tests** (Chromium): a department value draws each field's choice; changing
   each fires the event with the new value; a zone with all `null` shows each placeholder naming the
-  department's value, in English and Spanish; choosing "Same as the department" fires `null`; the
+  department's value only in EN/ES; clearing each fires null; Print/Don't print sends numbered/none;
+  receipt choices exactly auto/on_request; assert rendered empty placeholder equals inherited text with
+  no prefix/follow option label; the
   names are semantic; `disabled` disables all four. a11y: department, zone and disabled states,
   both themes. Run; watch them fail.
-- [ ] **Step 2: Implement; Step 3: run** the venue-service browser files; LOOK in EN and ES, both
+- [x] **Step 2: Implement; Step 3: run** the venue-service browser files; LOOK in EN and ES, both
   themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the service settings fields a department and a zone share (A366)`.
+- [x] **Step 4: Commit** — `feat(venue-service): the service settings fields a department and a zone share (A366)`.
 
 ---
 
@@ -778,7 +909,7 @@ the name link and Open fire `open-department` with the id; Rename, Disable, Enab
 department" fire their own events (the dialogs are Task A7). Input: the `VenueServiceView` the page
 already loads (`client.ts:60-88`).
 
-- [ ] **Step 1: Failing tests** (Chromium): rows and columns for two departments, one disabled
+- [x] **Step 1: Failing tests** (Chromium): rows and columns for two departments, one disabled
   (its "Disabled" note muted — assert the computed colour equals `--wt-color-text-muted`'s); Setup
   shows "has no opening periods" with the path-form link, a zone's unpublished menu prefixed by its
   name, nothing for a ready department; the default-station line; the "No department is enabled"
@@ -789,8 +920,8 @@ already loads (`client.ts:60-88`).
   the end; at 390 px the menu stays on screen (carried from `venue-operations-screen.test.ts:3397`,
   "the venue tables at phone width", its assertion kept). a11y both themes, with and without
   issues. Run; watch them fail.
-- [ ] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the department list with a Setup column (A366)`.
+- [x] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
+- [x] **Step 4: Commit** — `feat(venue-service): the department list with a Setup column (A366)`.
 
 ---
 
@@ -820,16 +951,27 @@ width (`:2131`, cited at `docs/developers/design-system.md:425`), "refreshing th
 `docs/developers/conventions-ui.md:276`); and the `.unsaved.test.ts` cases for the old department,
 zone and new-zone editors.
 
-- [ ] **Step 1: Failing tests** (Chromium), beside the carried ones: each dialog's Save is quiet and
+- [x] **Step 1: Failing tests** (Chromium), beside the carried ones: each dialog's Save is quiet and
   disabled until its draft changes; a real Escape pressed during a save leaves the dialog open
   (`userEvent.keyboard("{Escape}")` in Chromium, not a hand-built event); the move dialog lists only
   the other active departments and keeps the zone's override; renaming a disabled department and a
   disabled zone (decision 18: if a route refuses it, hide Rename for the disabled one and say so in
   the commit); the unsaved file's leave question and reconnect case. a11y each dialog, both themes.
-  Run; watch the new ones fail.
-- [ ] **Step 2: Implement; Step 3: run** the browser files touched (old and new); LOOK in EN and
+  Assert Cancel precedes Save in every footer, including keyboard order. Run; watch the new ones fail.
+- [x] **Step 2: Implement; Step 3: run** the browser files touched (old and new); LOOK in EN and
   ES, both themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the department and zone dialogs (A366)`.
+- [x] **Step 4: Commit** — `feat(venue-service): the department and zone dialogs (A366)`.
+
+**Checkpoint, 2026-10-09:** A7 is built at `033bfe599`, with reviewed reconnect and read-error
+recovery fixes at `bd8ef9327` and `eb89223cb`. The original form assertions remain intact until
+A10 retires the old screen. New dialog tests cover the surviving field, keyboard, draft and
+request behavior; Add focus and failed-refresh assertions stay with the shell for A10.
+Name-only department POST acceptance moved forward from A13a because the real route refused
+that request before the A7 change. Explicit invalid styles still refuse; A13a owns their
+retirement. The dialogs remain standalone until A10. The final focused dialog/unsaved/client
+run passed 115 tests; actual routes, accessibility, scoped types and deletion controls have
+separate receipts in the campaign's A7 report. Whole-branch review and current-head package
+coverage remain outstanding.
 
 ---
 
@@ -838,12 +980,14 @@ zone and new-zone editors.
 **Files:**
 - Create: `packages/venue-service/src/dashboard/department-page.ts`, `department-settings.ts`, and
   `.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts` for each
-- Modify: `dashboard/strings.ts`; move `department-transfers.a11y.test.ts`'s cases onto the
-  Settings tab (and the transfer cases of `venue-operations-screen.test.ts:3813`, assertions
-  unchanged, re-pointed from the modal to the section)
+- Modify: `dashboard/strings.ts`; carry the surviving transfer assertions into the Settings
+  suites. Keep `department-transfers.a11y.test.ts` and the transfer describe in
+  `venue-operations-screen.test.ts` unchanged until Task A10 replaces their shell. Their
+  modal, transfer-only write and page-wide load-error assertions describe behavior this
+  slice removes; Task A10 retires those pins and retains the destination, profile, refusal,
+  bounds and accessibility checks.
 
-**Behaviour:** `department-page`: decision 13's trail and heading (no trail when decision 8 says
-so), the Setup line (decision 7), "(Disabled)" and an Enable button for a disabled department, and
+**Behaviour:** `department-page`: decision 13's parent link and heading (the link always shows), the Setup line (decision 7), "(Disabled)" and an Enable button for a disabled department, and
 `wt-tabs` Settings / Zones from a `view` property (it fires `view-change`; the shell owns the URL,
 Task A10). `department-settings`: decision 10's form, read-only per decision 18 when disabled; one
 Save sending `saveDepartmentSettings` (Task A4), transfers included only when shown; A331's rule
@@ -852,15 +996,23 @@ for the name and the transfers) beside that field. Transfers load from `loadDepa
 (`client.ts:135`) when shown; a load failure says so in that section only, and the rest of the form
 still saves (without `transfers`).
 
-- [ ] **Step 1: Failing tests** (Chromium) — Review focus 1 and 4: the trail's link and the `h1`;
-  Save quiet until a change, sends one request with every field; "Zones that differ" names exactly
+- [x] **Step 1: Failing tests** (Chromium) — Review focus 1 and 4: the trail's link and the `h1`;
+  parent link present even with one department, modified-click browser handling, long-name h1 wrap;
+  Cancel before Save; Save quiet until a change, sends one request with every field; "Zones that differ" names exactly
   the zones whose stored overrides differ, each a link firing the zone; transfers hidden with one
   active department and shown with two; a name clash beside the name with Enable; a transfer
   refusal beside the destinations; a disabled department read-only with Enable; the unsaved file:
   the leave question on a tab switch event and on reconnect. a11y both themes: Settings with and
   without transfers, disabled, a refusal shown. Run; watch them fail.
-- [ ] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the department page and its Settings tab (A366)`.
+- [x] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
+- [x] **Step 4: Commit** — `feat(venue-service): the department page and its Settings tab (A366)`.
+
+**2026-10-09 checkpoint:** standalone page and Settings form reviewed at `b4279ae1397c3433affc9a9aa51c7883b443b307`.
+The final A8 Chromium run passed 80 cases, including both transfer-read/save completion orders,
+reconciliation of deactivated destinations and the zone-link capture boundary. Real dashboard
+navigation, Back, Enable requests and unknown-department handling remain Task A10 checks.
+The unchanged layout was inspected in EN/ES, both themes, at measured 1280/390 CSS pixels;
+its captured images are scaled. Package-wide coverage and current-head CI remain final gates.
 
 ---
 
@@ -879,8 +1031,9 @@ A zone the Settings tab linked to is chosen.
 
 - [ ] **Step 1: Failing tests** (Chromium) — Review focus 1 and 4: buttons in display order with
   `aria-pressed`; a disabled zone muted with "(disabled)" and read-only; the chosen zone's empty
-  fields show the department's values; Save quiet until a change, sends four values with `null`
-  for "same as the department"; Move offered only with another active department; Enable only when
+  rendered placeholders show only the inherited values; clear receipt and collection-ticket choices
+  to null and read inherited auto/on_request and Print/Don't print; Cancel precedes Save; Save quiet until a change, sends four values with `null`
+  for cleared fields that inherit; Move offered only with another active department; Enable only when
   the department is active (carried from `venue-operations-screen.test.ts:848`, assertions
   unchanged); switching zone with an unsaved edit fires the leave question;
   reconnect keeps asking; "No zones yet." with the Add button. a11y both themes. Run; watch them
@@ -913,18 +1066,29 @@ By this task Tasks A6–A9 have moved every case that pins kept behaviour; what 
 files pins removed behaviour (the lists and their column choosers, `:2572`, `:2603`; the tree's
 cells; the readiness section) and is deleted under "Changed test checks", each named.
 
-- [ ] **Step 1: Failing tests** (Chromium) — Review focus 5: one department opens straight on its
-  page with no trail and an Add button; Add opens the new department; the bare address then shows
-  the list; with a disabled second department the list still shows; a department address shows it;
+- [ ] **Step 1: Failing tests** (Chromium) — Review focus 5: bare address lists zero, one or two departments,
+  including disabled ones; Open shows the single department with its parent link; Add opens the new
+  department with the same link; returning to bare address shows the list;
   an unknown id says it no longer exists; old bookmarks land on the bare address; a browser back
   with an unsaved Settings edit asks. Run; watch them fail.
-- [ ] **Step 2: Implement; delete; Step 3: run** the venue-service browser project in full
-  (headroom first), its node project, the dashboard app's navigation tests; typecheck venue-service
-  and dashboard.
+- [ ] **Step 2: Implement; delete; Step 3: run** focused shell/component/navigation browser
+  files (headroom first), affected node files and scoped venue-service/dashboard types. Package
+  suites/coverage run in CI; broaden locally only for a named concern.
 - [ ] **Step 4: Commit** — `feat(venue-service): Departments opens a list of departments, each with its own page (A366)`,
   with the `Changed test checks (A366 slice 6):` commit before it.
 
 ---
+
+**A10 load-ownership staging ruling, 2026-10-09:** Keep the public legacy wrapper and its
+assertions intact while testing the load handoff in the unregistered `VenueOperationsLoader`
+base class. The final public wrapper can extend this class when its assertion audit is complete;
+there is no second dashboard route. Its QueryController reads the existing operations query,
+passes snapshots to the staged shell, and accepts the shell's successful action refreshes.
+A shared query retains its first observer's reader (`LiveData.observe`), so an action snapshot's
+freshness fence is shared by the observers of that LiveData. A later action refresh invalidates
+all operations dependencies, including when the change feed delivers nothing. Cost if wrong:
+fold this base into the public wrapper at retirement. A10 is still incomplete; the removed-row
+draft audit, public switch and mounted DashboardApp checks remain.
 
 ### Task A11: Phone width, both themes and the look pass
 
@@ -958,8 +1122,8 @@ in Task A12b, which then removes the old input from the helpers. The demo seed's
 to `order_start` (changed test checks: the same departments and zones, the same table/counter
 split, read from the new column).
 
-- [ ] **Step 1:** change; run the server package: green with no other `expect` changed.
-- [ ] **Step 2: Commit** — `test(server): helpers and the demo say how orders start (A366)`.
+- [x] **Step 1:** change; run focused affected server files: green with no other `expect` changed.
+- [x] **Step 2: Commit** — `test(server): helpers and the demo say how orders start (A366)`.
 
 ---
 
@@ -973,8 +1137,8 @@ of drizzle inserts into `departments`, which the column's `NOT NULL` needs until
 stay. When every caller has moved, remove the helpers' old input. If the list is over about 20
 files, split it in two commits by file.
 
-- [ ] **Step 1:** change the inputs only; run the server package: green, no `expect` changed.
-- [ ] **Step 2: Commit** — `test(server): tests say how orders start (A366)`.
+- [x] **Step 1:** change the inputs only; run focused affected server files: green, no `expect` changed.
+- [x] **Step 2: Commit** — `test(server): tests say how orders start (A366)`.
 
 ---
 
@@ -994,14 +1158,14 @@ any of `{ name, tradingName }` (decision 9; a body naming `defaultServiceMode` i
 and keeps the zone's settings (it no longer clears an override when the field is missing,
 `routes.ts:845-848`); the answers drop `defaultServiceMode` and `serviceModeOverride`.
 
-- [ ] **Step 1: Failing tests:** the refusal (status and code); a PATCH with only `{ tradingName }`
+- [x] **Step 1: Failing tests:** the refusal (status and code); a PATCH with only `{ tradingName }`
   changes the trading name and nothing else; moving a zone keeps its `order_start` override. Run;
   watch them fail.
-- [ ] **Step 2: Implement; move `routes.test.ts`'s inputs** (decision 3's mapping; `expect`s that
+- [x] **Step 2: Implement; move `routes.test.ts`'s inputs** (decision 3's mapping; `expect`s that
   pin the removed inputs and answers are changed test checks, each listed).
-- [ ] **Step 3: Run** the venue-service node project, the server package, the venue-service
+- [x] **Step 3: Run** focused affected venue-service/server behavioural files, the venue-service
   browser files that stub the API; typecheck venue-service and dashboard.
-- [ ] **Step 4: Commit** — `refactor(venue-service): the department and zone routes speak of how orders start (A366)`.
+- [x] **Step 4: Commit** — `refactor(venue-service): the department and zone routes speak of how orders start (A366)`.
 
 ---
 
@@ -1019,9 +1183,9 @@ column is `NOT NULL` until Task A14). The greps also match drizzle inserts' `def
 keys; those stay until Task A14. If `operations.test.ts`'s inputs alone pass about 60
 changes, commit it separately from the other files.
 
-- [ ] **Step 1:** change; run the venue-service node project and the server package: green; any
+- [x] **Step 1:** change; run focused affected venue-service/server behavioural files: green; any
   `expect` that pinned a removed input or answer is a listed changed check.
-- [ ] **Step 2: Commit** — `refactor(venue-service): the configuration writers take how orders start (A366)`.
+- [x] **Step 2: Commit** — `refactor(venue-service): the configuration writers take how orders start (A366)`.
 
 ---
 
@@ -1044,17 +1208,18 @@ changes, commit it separately from the other files.
   `configuration-import.test.ts` fails on its `default_service_mode` (read the failure first: an old
   bundle is already refused for its migration version, `apps/server/src/configuration-transfer.ts:573-577`)
 
-- [ ] **Step 1:** list the foreign keys that point at `departments` and `zone_service_policies` and
-  their `ON DELETE` (`grep -rn "foreignColumns: \[departments.id\]\|foreignColumns: \[zoneServicePolicies" packages/*/src/schema`);
+- [x] **Step 1:** list the foreign keys that point at `departments` and `zone_service_policies` and
+  their `ON DELETE` (`rg -n 'foreignColumns: \[departments.id\]|foreignColumns: \[zoneServicePolicies' packages --glob '*.ts'`);
   write the list into the commit message.
-- [ ] **Step 2:** drop the columns in the schema; generate; read the SQL (two rebuilds).
-- [ ] **Step 3:** run `pnpm exec vitest run scripts/migration-upgrade.test.ts`: expected to fail at
-  this step with a refusal (section "Venue reset"). Add the `RESETS` entry with the words it
-  prints, as `0020`'s and `0027`'s are. If it carries the rows instead, add nothing and change
-  Part A's first line to "no venue reset needed".
-- [ ] **Step 4: Run** the guards of Task A1 step 3, the fiscal pair unedited, both node projects,
+- [x] **Step 2:** drop the columns in the schema; generate; read the SQL (two rebuilds).
+- [x] **Step 3:** run `pnpm exec vitest run scripts/migration-upgrade.test.ts`; retain actual
+  output. The retirement refusal is expected, not measured. Any RESETS entry is limited to the observed
+  retirement refusal under the pre-live reset authorization; no blanket guard exemption. If these rebuilds carry rows,
+  add no entry; Part A still requires a pre-live reset for obsolete receipt modes. Report the
+  separate reset reasons accurately.
+- [x] **Step 4: Run** the migration guards listed in Task A1, the fiscal pair unedited, focused affected venue-service/server node files,
   the server's `configuration-import.test.ts` and `configuration-transfer.test.ts`; typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): the service style is retired (A366) — venue reset needed`.
+- [x] **Step 5: Commit** — `feat(venue-service): the service style is retired (A366) — venue reset needed`.
   If the task passes about 100 calls, commit the insert and assertion moves first (they can be
   written while the column still exists only for inserts that do not need it — otherwise keep one
   commit and hand over).
@@ -1065,21 +1230,22 @@ changes, commit it separately from the other files.
 
 **Files:** `docs/developers/design-system.md` (`:425` and `docs/developers/conventions-ui.md:276`
 re-pointed to the moved cases; `:676`'s "policy tree" sentence; `:3227-3228`'s addresses; a short
-"Departments" section: the list, the page, the two tabs, the service settings' follow rule and
-placeholder wording), `docs/developers/testing-guide.md:1128` (only if the a11y file it names was
+"Departments" section: list/page/tabs, inherited-value-only placeholders, auto/on_request modes
+and Cancel-before-Save footers), `docs/developers/testing-guide.md:1128` (only if the a11y file it names was
 renamed or emptied), `docs/developers/conventions-data.md` (where the service settings live; an
 order's flow is worked out from How orders start and paid-when), `docs/backlog.md` and
-`docs/backlog/service-periods.md` (the A366 entry: slice 6 Part A built, Parts B and C left; delete
-the "Disabled note not muted" entry; narrow A331's batch 4b to what venue operations no longer
-holds), `docs/backlog/dashboard.md:110-119` (the Departments page's dialogs now ignore a close while
+`docs/backlog/service-periods.md` (the A366 entry: mark Part A built only after implementation/landing, Parts B/C left with Lane D;
+add/retain the separate future order-context split; delete
+the "Disabled note not muted" and #1462 Save-before-Cancel entries only when the replacement
+behaviour is verified; narrow A331's batch 4b to what venue operations no longer holds), `docs/backlog/dashboard.md:110-119` (the Departments page's dialogs now ignore a close while
 busy — narrow the entry).
 
-- [ ] **Step 1:** LOOK once more at the demo venue (`wa-wt demo <worktree>`): Departments lists
-  Restaurant and Deli; the Restaurant's Settings say Table service; its bar zones differ with
+- [x] **Step 1:** check the actual seeded dashboard in an isolated demo venue (`wa-wt demo <worktree>`): Departments lists
+  Restaurant and bar and Deli; the Restaurant's Settings say Table service; its bar zones differ with
   Counter service. Screenshots outside the repository.
-- [ ] **Step 2:** the docs; run `pnpm exec vitest run scripts/claude-md-pointers.test.ts` after any
+- [x] **Step 2:** the docs; run `pnpm exec vitest run scripts/claude-md-pointers.test.ts` after any
   path a doc names moved.
-- [ ] **Step 3: Commit** — `docs: departments and their service settings (A366)`.
+- [x] **Step 3: Commit** — `docs: departments and their service settings (A366)`.
 
 ---
 
@@ -1128,6 +1294,601 @@ or panel, keep its test and its permission rule (hidden without `venue.configure
 
 ## After the last task of each part
 
-Run `/finish-branch` with this worktree and this plan. Part A's pull request's first line is the
+Run `/finish-branch` with this worktree and this plan. FULL ceremony requires **two completed
+Claude run-it whole-branch reviews** on throwaway complete candidate trees. The second reviewer
+receives a fresh task with this checklist set aside; then compare findings with requirements.
+Retain both reports, triage/fix accepted defects and verify the final reviewed tree. Keep fiscal
+golden fixtures and inmutabilidad unedited, run normal signed-off commit/push hooks, and wait
+for package suites/coverage on current-head CI. Never bypass a failing guard or hook. Part A's pull request's first line is the
 venue-reset line under "Venue reset"; it lists the changed test checks and the fixtures that
 changed how they set the service style. Then update the backlog's A366 entry with what remains.
+
+
+### Implementation checkpoint — Task A9 (2026-10-09)
+
+The standalone `department-zones` component is built. It takes `model`, `api`,
+`departmentId` and `zone`; it emits `zone-change` with `{ zoneId }`, `add-zone` with
+`{ departmentId }`, Rename/Move/Disable/Enable events with `{ zoneId }`, and `saved`
+with `{ zoneId }`. Task A10 still owns screen composition, URL updates, dialogs,
+permissions, refresh failures and focus return. The existing policy-tree Enable
+route assertions remain unchanged until that integration.
+
+Observed checks: the initial eight rendering and four draft cases failed before the
+component existed; native error rendering, busy action guards and refusal focus
+also failed before their fixes. The final focused seven-file run passed 84 tests;
+four root UI/document guard files passed 46 tests. The standalone source's focused
+coverage was 99.34/95.68/100/100 (statements/branches/functions/lines); package-wide
+coverage remains a current-head CI gate. Five installed deletion controls failed
+for leave protection, parent-active Enable gating, read-only changes, reconnect
+baseline and stale-save completion; restored browser cases passed 20 tests.
+
+The look pass used the dashboard's registered icons, English and Spanish, both
+themes, and CSS viewport widths 1280 and 390. Saved captures are scaled to 922 and
+281 pixels respectively. This is a standalone view, not dashboard integration.
+
+Ruling: no implicit Enter submission is installed on this tab because every field
+is a choice; `submitOnEnter` accepts only native single-line text inputs
+(`packages/ui-core/src/submit-on-enter.ts`). Choice Enter leaves the draft intact;
+Save submits it. Cost if wrong: revise keyboard handling if a text field is added.
+Task-start's brief extractor rejected the alphanumeric A9 heading; the exact A9
+section was read directly and the original base retained.
+
+Task A9 was executed inline. Its whole-branch Claude reviews remain in the final
+finish-branch gate; no independent task-review approval is claimed here. The
+previous tasks' deferred fixture-duplication and framework-warning findings remain.
+
+### Implementation checkpoint — Task A10 navigation foundation (2026-10-09)
+
+Task A10 is in progress. The dashboard path map now retains `department`, `view`
+and `zone`. The department list registers through the venue-service screen entry
+point. Its name link leaves modified clicks to the browser and marks its own plain
+click handler so the dashboard's capture listener does not navigate before the
+list emits `open-department`.
+
+Observed checks: five URL cases failed before the map entry, five standalone
+modified-click cases failed before the handler guard, and six mounted dashboard
+capture cases failed before the fixes. Removing the test's direct component import
+also exposed missing module registration; six explicit rendering assertions failed
+before adding the screen's import. The final dashboard navigation and app files
+passed 374 tests; four focused module files passed 55 tests. Scoped types, lint and
+format checks passed. Installed disposable candidates failed when the map entry,
+click ownership marker, modifier guard or component registration was deleted;
+restored selections passed. Test harness failures and a control script's outdated
+pre-format search are retained in the external receipts.
+
+These checks cover the URL controller and a real department list hosted inside a
+mounted dashboard. They do not yet cover the screen selecting a department page.
+No existing assertion changed or legacy test was retired. Continue A10 with the
+shell switch, dialog navigation, history leave protection, permission checks,
+refresh failures and focus return. Audit the retained assertions before retiring
+the policy-tree, list-table, inline-editor and transfer-modal suites. A10's full
+look pass and A11–A15 remain, along with the whole-branch review and CI gates.
+
+
+### Implementation checkpoint — Task A10 staged routing shell (2026-10-09)
+
+The internal `venue-departments-shell.ts` composes the department list, page and
+Zones tab. It reads the address, pushes department and tab changes, replaces zone
+changes, replaces old view bookmarks with the list, and displays the approved
+missing-department sentence in English and Spanish. It is not yet consumed by
+`venue-operations-screen.ts`; the public screen and its legacy tests remain intact.
+
+Observed checks: the empty component failed all 17 routing cases before implementation.
+The final eight-file browser selection passed 79 tests, including three additional
+checks using a real leave coordinator and navigation guard around the staged shell.
+These exercised a real tab click, browser Back with Keep/Discard, and an external
+route to an unknown department. They are not mounted DashboardApp checks. Types,
+focused lint and 46 root guard cases passed. In an installed disposable worktree,
+deleting zone-event wiring failed two tests; deleting post-write restoration failed
+two tests; restoring both passed all 20 shell cases. The test harness's initial
+missing-module failure, two premature render reads and two type errors are retained
+in the campaign receipts rather than counted as passing verification.
+
+The staged list, Settings, Zones and missing-department states were captured in
+English and Spanish, both themes, at CSS widths 1280 and 390. The 32 viewport
+captures were inspected through scaled contact sheets. This was not a full-page
+capture or a mounted dashboard look pass.
+
+Ruling: stage this internal composition before replacing the public screen so the
+legacy assertions remain available for the kept-behavior audit. It adds no public
+route or compatibility path. If this split proves unnecessary, inline the component
+when the wrapper switches. Task A10 remains in progress: wire dialogs, Enable,
+refresh failures and focus return; audit and carry every surviving assertion; then
+replace the old tree and editors and run the mounted dashboard integration matrix.
+A11–A15 and the final review, push, CI and landing gates remain.
+
+
+### Implementation checkpoint — Task A10 staged actions (2026-10-09)
+
+The internal shell now opens the department and zone dialogs from child events. A new
+department opens after its successful write and refresh; a moved zone selects the first
+remaining zone in the viewed department. Enable writes only `active: true`. Dialogs close
+before their passive refresh, and Add/row-menu focus returns after Cancel or a same-page
+save. Action refusals and load failures have separate messages. The action tests exercise
+snapshot replacement, a failed stale refresh, navigation during refresh, repeated Enable
+events and responses from a previous connection.
+
+Task A10 remains in progress. The public wrapper and every legacy assertion remain intact.
+The staged shell emits `model-change` after applying an action refresh. The wrapper switch
+must reconcile that with its existing QueryController/live snapshot ownership and preserve
+its initial/passive read contract; this checkpoint does not verify the mounted DashboardApp.
+Audit every kept legacy assertion before retiring its old suite, including dirty zone actions,
+receipt/parent links, permissions and history. A11–A15 and the final branch workflow remain.
+
+Receipts are local under Lane E's `receipts/a366-6a/a10-actions/`: initial 16 failing action
+cases, five additional focus/late-response failures and one read-recovery failure; final
+19 focused browser files / 347 cases pass. Six guard-removal experiments failed, followed
+by 26 passing restored action cases in an installed disposable checkout. Scoped types and
+lint pass. Thirty-two staged dialog/error screenshots cover EN/ES, both themes and CSS
+1280/390 widths; scaled sheets were inspected. They are viewport captures, not a full-page
+or mounted-dashboard rendering claim. Package coverage and whole-branch review remain
+later gates. No existing assertion, fiscal source, migration, guard or coverage setting
+changed in this checkpoint.
+
+### Implementation checkpoint — Task A10 zone action draft guard (2026-10-09)
+
+Ruling: Move and Disable request the selected zone's draft scope before opening their
+dialogs, because their refresh can remove that editor or make it read-only. Rename and
+Add keep their immediate action events. If this interpretation is wrong, the cost is an
+extra discard question before Move or Disable; the public wrapper remains staged.
+
+The component's two new dirty-action cases first failed because the shared question stayed
+closed. Keep retains the exact draft and emits no action; Discard restores the baseline
+before emitting the selected zone id. Clean actions and Rename have positive controls.
+Two staged-shell cases use the real menu buttons and shared leave controller, then inspect
+the dialog's kind and row. The mounted DashboardApp is still outside this checkpoint.
+
+Focused Chromium verification: six files, 91 passing cases, including zone accessibility.
+In an installed disposable clone, replacing only the new action leave request with its
+continuation produced four failures; restoring it produced four passes. Raw logs and
+cleanup receipts are local under Lane E's `receipts/a366-6a/a10-draft-guards/`.
+Sixteen viewport captures cover Move/Disable questions in EN/ES, light/dark and CSS
+1280/390 widths; all four scaled contact sheets were inspected. Existing test files gained
+assertions without deleting or changing their previous lines.
+
+Task A10 remains in progress. Next: the exact kept-assertion audit and public wrapper switch,
+live-query/snapshot ownership and mounted-dashboard history/permission/receipt/parent checks.
+A11–A15, final visual checks and the authorised branch workflow remain.
+
+
+### Implementation checkpoint — Task A10 removed rows and focus (2026-10-09)
+
+The bounded audit carries the removed-department/parent dirty-name cases into Rename dialogs,
+with Keep/Discard, unload protection and no-write assertions. A move destination removed by a
+live model update is absent from choices and cannot be saved. The legacy assertions remain
+in place pending the complete retirement audit.
+
+Focus returns after dialog close and after the action refresh releases the busy state. If the
+opener is gone, the shell uses the current Add department/Add zone action, or the parent link
+on a missing-department page. A zone's physical menu button can survive a switch to another
+zone; its rendered `data-zone-id` must still match the dialog's row before it can receive focus.
+Two initial focus cases failed, and a later remaining-zone reproduction failed before that
+identity check. The final focused browser command covered twelve files and passed 285 cases.
+A staged LOOK checked sixteen EN/ES, light/dark, CSS1280/390 views and exposed the reused-menu
+case; captures are scaled viewport images, not mounted-dashboard or full-page evidence.
+
+A10 remains incomplete: finish the full kept-assertion audit, switch the public wrapper and
+verify actual DashboardApp history, permissions and receipt/parent links. A11–A15 and the
+branch review/hook/current-head CI/authorised landing gates remain. No old assertion, fiscal
+source, migration, guard or coverage setting changed in this checkpoint.
+
+
+### Implementation checkpoint — Task A10 service field refusal audit (2026-10-09)
+
+The retained refusal rule in `venue-operations-screen.test.ts` ("puts a refusal that names a
+field under that field until that field changes, and leaves Save usable") also applies to the
+four service settings on the new department and zone forms. The shared fields emit the whole
+value; the department handler was treating every emitted field as edited, and the zone handler
+was clearing every refusal. Eight new Chromium cases failed at the lost refusal before either
+handler changed. Both forms now clear only a refusal whose value changed. The cases also check
+that the bottom message survives, Save remains available, and correcting the refused field
+clears its message. Comboboxes and the collection switch use their real controls.
+
+The two complete files pass 65 cases; the focused service-fields, form, draft, accessibility,
+shell-action and load files pass 201 cases. In an installed detached candidate, restoring each
+original handler fails its four cases; restoring both fixes passes all eight. Existing test
+bodies and the public legacy wrapper remain unchanged. Task A10 is still incomplete: the full
+old assertion audit, public switch and mounted DashboardApp checks remain before A11–A15 and
+the branch gates.
+
+
+### Implementation checkpoint — Task A10 pending dialog input (2026-10-09)
+
+The old Save-state and unsaved suites retain input entered after a request begins. Four new
+Add/Rename dialog cases carry that invariant: the submitted name becomes the accepted baseline,
+newer text remains dirty and the dialog stays open. The dialogs emit `written` for that retained
+draft; the shell refreshes passively without closing it or following a new address. A failed
+refresh appears as a load failure outside the dialog. Save and Cancel wait for the refresh,
+while the name remains editable. A synthetic Save press is also refused during that wait.
+
+Observed failures: four cases dropped the newer name; two shell cases made no refresh after a
+retained write; a corrected stalled-refresh case left Save enabled. The new cases pass after
+the dialog and shell changes. No original assertion has been retired or changed. The old
+public wrapper remains active. Continue A10's full kept-assertion audit and public switch,
+then mounted DashboardApp integration and A11–A15.
+
+### Implementation checkpoint — Task A12a (2026-10-09)
+
+A12a ran before the remaining A10 retirement audit because it uses the A3 writer contract and
+does not depend on the public screen switch. The server offer helper accepts `orderStart`,
+keeps its existing `serviceMode` callers until A12b, and leaves `paidWhen` separate. The table-zone
+helper and order-venue fixture now pass the new word. The demo floor writes its table/counter
+choices through sale policies; only the deli insert still supplies the required legacy column.
+
+Three new real-store cases initially recorded the wrong order snapshot when `orderStart` opposed
+the named zone's default. After the helper change, the complete offer suite passed 16 cases.
+The focused 16-file server run passed 442 cases, including both demo files and the direct
+service-zone/order-venue consumers. The unchanged fiscal golden and immutability files passed
+20 cases. Scoped server types passed after removing the unused legacy-policy import.
+
+Changed checks: the demo's exact department and zone rows now read `order_start` instead of
+legacy style columns, retaining every name, trading name, counter-default flag and menu list.
+The floor trading-name check orders departments by `order_start`, keeping its expected rows
+unchanged. These are the A12a checks authorised above; all other existing assertions remain.
+A10's audit/public switch and A12b–A15 remain unfinished.
+
+
+### Implementation checkpoint — Task A12b (2026-10-09)
+
+A12b moves 85 direct and shorthand helper/writer inputs across 39 server test files from
+`serviceMode` / `defaultServiceMode` to `orderStart`, then removes the old input from
+`OfferProductsOptions`. Counter-only fixture parameters use the literal `counter`; mixed
+recorded-flow cases map `table_tab` to `table`, otherwise `counter`. Existing `paidWhen` inputs
+and recorded-order `serviceMode` answers stay. The adjustments fixture drops its now-unused
+style parameter. Raw database inserts and updates still name the old columns until A14.
+
+Before those fixture edits, an installed disposable checkout with the helper's old fallback
+removed failed two of three `watch-zones.test.ts` cases with `service_zone.mode_incompatible`.
+After the changes, the final focused run over the 39 affected files passed 2,512 tests.
+Server typechecking, focused lint, formatting and the five pointer-guard cases passed.
+The unchanged fiscal golden and immutability files passed 20 cases. An AST audit compared
+7,558 `expect` expression statements against the task's starting commit, ignoring whitespace;
+all matched. A second AST scan found no old direct or shorthand input on `offerProducts`,
+`createDepartment` or `configureZone` under `apps/server`.
+
+In the final installed candidate, the helper and watch-zone files passed 19 cases. Changing
+Terrace's new `orderStart` input from `table` to `counter` failed two cases; restoring it passed
+all 19. The final affected sources matched the candidate's hashes. These checks do not replace
+package coverage or current-head CI. No UI changed in A12b; A10/A11's final LOOK remains open.
+A10's assertion audit, public screen switch and mounted dashboard integration, A11 and A13–A15
+remain unfinished. Part A still needs its whole-branch reviews, normal push hook and CI.
+
+
+### Implementation checkpoint — Task A10 mounted dashboard staging (2026-10-09)
+
+`dashboard-app.test.ts`, "mounted staged department pages", mounts the staged loader through
+the contribution's `create` function while keeping DashboardApp's permissions, navigation,
+leave questions and history real. The contribution spy is restored after each case. Vite's
+glob loaders keep these local fixtures outside the dashboard compiler's source tree.
+
+The cases cover the name link, parent link, native Back/Forward, receipt department query,
+Settings/ Zones leave questions, zone replacement, disabled and unknown departments, old
+bookmarks and permission refusal. They do not establish that the public wrapper uses the loader.
+The unmodified public wrapper produced four missing-page failures in the initial six-case probe;
+the staged contribution passed those cases. The expanded dashboard file ran 379 cases successfully
+with `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`.
+
+A10 remains incomplete: finish the full old assertion mapping, retire only the approved removed
+checks, switch the public wrapper and remove the staged contribution spy. Then run these cases
+through the public screen, followed by A11 and A13–A15 and the branch gates.
+
+
+### Implementation checkpoint — Task A10 assertion audit and late name replies (2026-10-09)
+
+The first semantic audit now accounts for the declarations in all four old screen
+suites. Its read-only mappings identify retained checks that still need to move:
+post-save inheritance, translated action refusals, native field events, live reads
+with open dialog errors, transfer draft and load races, and pending leave
+questions. The old screen and suites remain intact. A matching replacement test
+title or a standalone screenshot does not close those gaps.
+
+Eight new browser cases reproduced stale name refusals and Enable offers after
+new native input arrived during the request. Add and Rename dialogs now apply
+those replies only while the displayed name matches the submitted name. The
+request still releases its busy state, so the newer draft can be submitted.
+Nine additional cases carry native Cancel/Escape Keep/Discard and disconnecting
+with a pending question; four carry native Save-button state through clean,
+changed, trimmed-reverted and refused names. No previous test body changed.
+
+Observed checks: the final thirteen-file browser selection passed 535 tests,
+including the unchanged legacy behavior suites. The unedited fiscal pair passed
+20 tests; scoped venue-service types, focused lint and formatting passed. An
+installed disposable candidate failed four cases when either stale-reply check
+was removed, four when native Save disabling was removed, and nine when dialog
+leave interception was removed. Restoring the source passed all 21 selected
+cases. These controls verify the checks added here, not the remaining audit gaps.
+
+Task A10 remains incomplete. Finish the carried-assertion gaps and retirement
+inventory before switching the public wrapper and removing the staged dashboard
+create spy. Public-screen LOOK, A13–A15, the two completed Claude reviews, normal
+push hook and current-head CI remain. No branch-review or package-coverage
+approval is claimed by this checkpoint.
+
+
+### Implementation checkpoint — Task A10 pending discard and native Settings drafts (2026-10-09)
+
+The dialog suites now carry pending-discard behavior for Add/Rename department and zone:
+a replacement ignores the old Discard event and retained Cancel/Save controls; an accepted
+save cancels the old leave question and commits the submitted name; newer input remains
+protected against a stale Discard and compares with the accepted name. The replacement's
+native dialog remains open, and Save's native button follows its dirty state.
+
+Settings checks now use the native trading-name input, receiving-profile picker and
+transfer-destination checkbox. Keep retains each choice, returning to the original value
+clears unload protection and makes the native Save button quiet and disabled, and Discard
+restores the value without writing. Accepted trading-name/profile saves cancel a pending
+Discard and protect a subsequent draft; refused saves retain the exact submitted body,
+dirty draft and available retry through Keep. No existing test body changes.
+
+The two complete draft files passed 49 cases. An independently installed disposable
+candidate passed the 19 new cases; deleting the dialog commit failed 8, permitting retained
+old dialog handlers failed 4, deleting the Settings commit failed 2, and removing draft
+restoration failed 5. Restoring the candidate passed 19. The initial replacement test
+incorrectly requested closure through the detached old modal; its failure is a test-harness
+correction, not a reproduced product defect. No production code changed in this checkpoint.
+
+These checks carry portions of the old pending-question, accepted-body, transfer Keep/Discard
+and native Save-state assertions. They do not complete the semantic audit. Settings input
+arriving during a pending write, transfer reconnect/live reads, translated refusals, post-save
+inheritance, opening-hours bounds and other mapped gaps remain. Keep the public legacy screen
+and its suites until those gaps close, then inventory retirement and switch the wrapper.
+Public LOOK, A13–A15, completed branch reviews, the push hook and current-head CI remain.
+
+
+### Implementation checkpoint: A10 native validation and transfer reconnect (2026-10-09)
+
+You can now follow the surviving native-field assertions in the replacement suites:
+`department-dialogs.test.ts` covers code-only `department.not_found` refusals in Move
+and Add to department; native input, first-invalid focus and validation corrections
+in English and Spanish; and reopening Add/Rename after validation or a request refusal.
+The Add cases retain the quiet, disabled unchanged form. After a refused write,
+a later invalid edit shows both the request failure and the field correction message;
+starting the retry clears the old refusal, and success closes the dialog.
+
+`department-settings.test.ts` carries the native trading-name refusal through an
+unrelated name edit and its own correction, including native invalid state, focus,
+retained submitted values and usable Save. Its same-department reconnect cases complete
+the departed and fresh transfer reads in both orders. They assert the fresh receiving
+profile, choices and destination checkbox, the retained name draft, and a quiet Save
+when that draft returns to its baseline.
+
+The 21 new cases passed. In an independently installed disposable checkout, removing
+the transfer generation check failed 2; code-only destination mapping failed 2;
+clearing unrelated field refusals failed 1; native trading-name handling
+failed 1; native dialog-name handling failed 16; and clearing the reopened dialog's
+failure failed 8. Restoring the source passed 21. These controls preceded a test-only
+fixture type correction: the two Move fixtures were written as a typed literal table
+with the same values instead of slicing the full dialog union. The final affected
+14-file run passed 565 cases, scoped types, focused lint and formatting passed, and
+the unchanged fiscal pair passed 20. No production code or previous test body changed.
+
+The initial failures were harness corrections: an incorrect zone configure URL,
+trying to validate an unchanged Add draft, and expecting a request refusal to disappear
+on a local edit. They are not reproduced product defects. The type correction and
+initial logs remain in the campaign receipts.
+
+A10 remains incomplete. Before you retire the original suites, finish the mapped
+live-read/open-dialog, translated Enable, post-save inheritance, opening-hours and
+remaining native/focus assertions. Reconcile the retained same-request input behavior
+with the existing busy-input check. Then inventory removed checks, switch the public
+wrapper, remove the staged create spy and rerun mounted dashboard checks and public
+LOOK. A13–A15, branch reviews, the normal push hook and current-head CI remain.
+
+
+### Implementation checkpoint: A10 live reads and translated Enable retries (2026-10-09)
+
+Nine added browser cases carry the original screen's live-read/error separation
+(`venue-operations-screen.test.ts`, “keeps a refusal above Save when the list refreshes
+behind the editor” and “says a failed refresh at the top of the screen while an editor
+is open, not above Save”) and department/zone Enable behavior in English and Spanish.
+The composed loader keeps an open dialog's name and refusal through a failed live read
+and recovery. Enable refusals send one exact PATCH, leave the disabled controls available,
+and perform no refresh. Successful retries remove the disabled state and clear the page
+alert; the zone checks inspect the zone itself.
+
+The old test bodies and public wrapper remain intact. In an installed disposable
+candidate, resetting a refusal on a model replacement, suppressing read alerts, omitting
+the Enable refresh, sending `active: false`, or replacing the parent-department refusal
+with a generic error each failed the corresponding new assertions. The restored nine
+cases passed. These experiments do not complete A10: post-save inheritance/overrides,
+opening-hours history/bounds, remaining native/focus checks and the same-request Settings
+input reconciliation still precede retirement and the public switch.
+
+
+### Implementation checkpoint: A10 saved policies and Opening hours (2026-10-09)
+
+Ten added browser cases carry more of the original assertions. Four native-control sequences
+save each department service setting, show its new hint on a following zone, save an explicit
+zone override and clear it back to the department. Each request body is checked. The sequences
+carry the old paid-timing, collection-number, receipt-choice and explicit-override cases
+(`venue-operations-screen.test.ts`, “changes paid timing on a department and lets a zone
+inherit it again”, “changes a department collection number and lets a zone inherit it”,
+“changes a department receipt choice and lets a zone inherit it”, and “shows an explicit zone
+override after saving”) on the new fields and Save flow.
+
+Two mounted DashboardApp cases use its real capture-phase link handler, its shared draft
+coordinator and navigation guard: Keep retains the Settings draft, Discard pushes the exact
+department Opening hours address once, and Back/Forward keeps the history length and honors
+the draft decision. Four language/theme cases check the missing-period warning and its link
+at measured 390 px and run axe. These carry the surviving Opening hours link/history and
+warning bounds contracts; they do not keep the retired tree or readiness table.
+
+The affected eleven venue browser files passed 194 cases, the complete DashboardApp file
+passed 381, and the unchanged fiscal pair passed 20. Scoped venue/dashboard types, focused
+lint and formatting passed; four root guards passed 50 cases. In an installed disposable
+checkout, omitting the action refresh, dropping saved zone overrides and replacing inherited
+hints each failed four cases; using the wrong Opening hours department failed two, bypassing
+the guarded dirty write failed one, and removing warning wrapping failed four. Restored
+source passed all ten new cases. The candidate was removed.
+
+The initial small history harness lacked DashboardApp's link handler and disconnected its
+Vitest iframe. Its tests were moved to the real app. The initial policy helper matched a
+switch as a combobox; its selector now names the tag and both controls are driven natively.
+Initial label expectations were corrected to the declared translations. These are test
+harness corrections, not product defects. No production code or old assertion was changed.
+
+A10 remains incomplete: finish the remaining native/focus checks and reconcile same-request
+Settings input with its retained busy-input assertion before the retirement inventory and
+public wrapper switch. Then remove the staged create spy, rerun mounted integration/public
+LOOK, and finish A13–A15 and the branch gates. Receipts stay in the lane's
+`receipts/a366-6a/a10-policy-history/`, outside the repository.
+
+
+### Implementation checkpoint: A10 pending inputs and native action/focus checks (2026-10-09)
+
+The owner answered A to Lane E's 19:29 question: the new Settings fields remain usable
+while Save waits. Exactly two expectations in `department-settings.test.ts` changed,
+in their own `Changed test checks (A366 slice 6):` commit: the pending name field is
+enabled, and its later name remains visible. Disconnect/reconnect and late-result
+assertions remain unchanged.
+
+The native trading-name case failed at `native.disabled` before the two-line fix.
+The pending zone audit also reproduced a lost retained behavior: the legacy Configure
+zone pending-edit case passed, while the four new service-field cases failed because
+the fields were disabled. Field read-only state now follows the zone/department,
+while Save, Cancel, zone switching and row actions remain locked during the write.
+Both forms commit the submitted snapshot, so later input remains a new unsaved change.
+
+Added checks cover the native receiving-profile pending edit, each zone field's clean,
+changed, reverted, pending and refused action states, name-dialog pending action states,
+loaded Disable actions and dirty Escape/Keep/Discard focus back to the row menu.
+The twelve affected browser files passed 372 cases. After correcting the new focus
+test's request capture, its complete file passed 8 cases. Fiscal golden and
+inmutabilidad tests remain unedited and passed 20 cases. The retained old suites and
+public wrapper remain unchanged; this checkpoint does not retire assertions.
+
+Deletion controls in an independently installed candidate failed for disabled zone
+fields, committing the latest zone draft, duplicate zone submission, wrong zone action
+colour, committing the latest Settings draft and dropping Escape focus return. Restored
+source passed the selected native cases. The pending component LOOK covers department
+Settings and Zones in EN/ES, both themes, measured 390/1280 px; the screenshots and
+computed colours are retained outside the repository under Lane E's
+`receipts/a366-6a/a10-settings-input-resume/`.
+
+Next: complete the semantic retirement inventory, switch the public wrapper, remove
+the staged create spy and verify mounted public navigation and LOOK. A13–A15, two
+completed Claude reviews, normal push hook, current-head CI and authorised landing
+remain. Do not repeat the pending-input diagnosis or ask for the settled exception.
+
+
+### Implementation checkpoint: A10 retained-behavior audit fixes (2026-10-09)
+
+The early semantic audit identified missing checks on replacement screens. Added
+native/browser assertions reproduced lost Add-zone focus after URL selection,
+missing receipt search, English Move labels in Spanish, blank trading-name validation
+and stale generic refusal messages after returning to saved values. Minimal fixes
+followed the observed failures. Added checks also carry exact refused zone requests,
+Disable confirmation and impact wording, native print-trading-name outcomes, browser
+ownership of Opening hours links, raw-event containment, disabled-parent assignment,
+Rename availability and inherited-versus-explicit colours. Accessibility scans now
+include an open disabled-row menu, asserted invalid fields and desktop localized
+missing-period warnings.
+
+The affected replacement suites passed 448 tests in 15 files. A later run passed
+316 tests in six files, including all four unchanged legacy suites, the shell suite
+and the corrected page shadow-root checks. Package type checking, scoped lint,
+formatting and diff checks passed. Independently installed deletion controls failed
+for focus (two cases), required trading name (one), stale generic refusal (six) and
+missing receipt search (two); restored source passed the selected eleven cases.
+Existing expect expressions remain present; that comparison does not establish
+behavioral equivalence. The public wrapper and four legacy suites remain unchanged.
+
+Receipts and the detailed old-to-new audit delta stay in Lane E's
+`receipts/a366-6a/a10-switch/`. This is not retirement approval or public LOOK.
+Next reconcile the late/drafts inventory with subsequent carried tests, complete
+A10's public switch and mounted public checks, then A13–A15 and branch gates.
+
+
+### Implementation checkpoint: A10 late-completion and reconnect audit (2026-10-09)
+
+The bounded source audit found three retained assertions missing from the replacement
+suites: successful Enable after newer name input, Rename after enabling the conflicting
+row, and Settings reconnect after a tick outside the page. Added checks carry all three.
+The English/Spanish department/zone Rename cases first failed because Enable closed
+Rename. The fix reports the now-active name conflict, retains the attempted name and
+original baseline, and emits the passive-refresh event without accepting the rename.
+The shell case checks that the existing row becomes active while the current row keeps
+its name, the dialog stays open and the address stays on the same department.
+
+No existing assertion or legacy suite is retired at this checkpoint. The full retirement
+inventory and public switch remain pending. Resume at that inventory, remove the staged
+DashboardApp create spy when switching, and run mounted public navigation and LOOK.
+A13–A15 and the authorised branch gates remain. Detailed audit, execution and visual
+receipts stay in Lane E's `receipts/a366-6a/a10-public-switch/`.
+
+### Implementation checkpoint: A10 public screen switch (2026-10-09)
+
+The registered screen now uses the QueryController loader and department shell. The dashboard
+integration suite no longer substitutes its module-create function. Its existing mounted cases
+first gave 15 failures with the legacy destination, then all 17 passed through the public screen.
+The four legacy screen suites and the separate transfer-modal accessibility suite are retired
+under the [case map](2026-10-09-a366-6a-screen-case-map.md). URL, shared request/live-data and
+saved-bookmark consumers retain their expected values with the new rendered destination.
+The old URL fixtures gain only absent operation fields. Three added checks carry department
+sorting, Spanish published-menu readiness and native input containment at the page boundary.
+
+The public LOOK covers the list, Settings, Zones, unknown department and Add/Rename/Move/Disable
+in EN/ES, both themes and measured 390/1280 CSS pixels. The image capture scales differ from
+those viewport widths; Lane E retains the PNG dimensions and contact sheets. The transient
+harness draft and logs of its synthetic-event/missing-destination fixture corrections are retained in receipts.
+Unused legacy translation keys are removed; the dynamic department/zone name-refusal keys stay.
+Current documentation points to the replacement tests. Task A13 retires the route/client/writer
+fields next; A14/A15 and the branch review, hook, CI and authorised landing remain. This is a
+passing public-switch checkpoint, not branch readiness.
+
+
+### Implementation checkpoint: A14 service-style storage retirement (2026-10-09)
+
+The generated `0040_retire_service_style` rebuilds `departments` and
+`zone_service_policies` without their old style columns or checks. Configuration writers and
+provisioning now write only the sale-policy `order_start`; the recorded order-mode vocabulary
+and its check stay. Direct/raw fixtures remove the old required column or redundant write while
+keeping their new policy setup. Historical configuration-v1 JSON remains unchanged.
+
+Two new retired-column write tests failed before generation, then passed. In an independently
+installed candidate, removing the last migration journal entry reproduced both failures;
+restoring it passed all 29 migration tests. The synthetic-row upgrade walk first refused
+`DROP TABLE departments` with `FOREIGN KEY constraint failed`. Only that measured refusal is
+recorded in its reset list; the walk and the other six A1 migration guards then passed (382 cases).
+The incoming-key inventory from the previous snapshot names the department keys from sale policies,
+zone assignments, profile access, recorded order contexts, receipt headers, week/special-date hours,
+menu periods/timetables, transfer desks/destinations/log and period extensions, and the zone-policy
+key from zone sale policies. Each declares `ON DELETE no action`.
+
+Verification: 35 venue node files / 1450 cases passed. The first affected server run passed 649
+cases and failed one old-column write in a table-state fixture; that fixture was corrected,
+then the table-state and served-at fiscal fixture files passed 128 cases. The latter loses only
+an obsolete assignment field, with all captured assertions unchanged. Configuration import and
+transfer passed in the first server run. The fiscal gate pair passed 20 cases without edits.
+Three scoped types, touched-source lint, and the pointer/journal/column guards passed.
+
+Existing test changes are signed separately in `70ff1cf3`: mirror checks become exact
+`order_start` checks, obsolete invoice-first writes target the new policy checks, authored
+provisioning reads retain counter/paid-at-collection, and the schema guard lists remove only
+A14's named checks. Local before/after inventory and logs are retained under Lane E's
+`receipts/a366-6a/a14-retirement/`; the captured-expression audit does not prove semantic
+equivalence or enumerate all parameter rows. A15, final branch reconciliation, both completed
+Claude reviews, the normal hook, current-head CI and authorised locked landing remain.
+
+
+### Implementation checkpoint: A15 documentation and seeded demo (2026-10-09)
+
+Task A15 updates the department list/page and address contract, inheritance placeholders,
+receipt modes, Cancel-before-Save footers, service-setting storage and recorded order-flow
+documentation. The disabled-note backlog entry is removed: the list's computed-colour case
+passed, and a browser-only inactive-zone probe matched the muted token. Busy-close and save-rule
+follow-ups are narrowed to the replacement dialogs/forms; the post-slice-7 audit stays open.
+
+The actual demo dashboard was started with `wa-wt demo` using a private `WA_WT_STATE`.
+It showed Restaurant and bar with table service, Deli with counter service and both bar zones
+with counter overrides. English/Spanish, light/dark and measured 390/1280 px captures cover
+the list, both departments' Settings, the Zones tab and a selected bar, including the scrollable
+form bottoms. Screenshots and the replayable harness stay outside the repository. The owned
+stack was stopped and the feature checkout's prior `.env` restored. No shared venue was reset.
+
+Focused checks passed: 431 browser behaviour cases, 99 accessibility cases, 19 demo-seed cases,
+232 policy/route cases, five documentation-pointer cases and 20 unedited fiscal cases. These
+are focused results, not package coverage or branch approval. Whole-branch reconciliation,
+two completed Claude run-it reviews, the normal push hook, current-head CI and authorised
+locked landing remain. Preserve the earlier changed-check inventories and Settings exception
+in the PR. Parts B/C and the future recorded-order split remain separate work.

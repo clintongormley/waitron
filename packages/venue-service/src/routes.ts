@@ -2,7 +2,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
-import type { ModuleRouteContext, ModuleRoutes, ServiceMode } from "@waitron/module";
+import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -14,6 +14,10 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import {
+  saveDepartmentSettings,
+  saveZoneServiceSettings,
+  type DepartmentSettingsInput,
+  type ZoneServiceSettingsInput,
   configureZone,
   createServiceZone,
   activateDepartment,
@@ -122,25 +126,28 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "holiday.invalid": 400,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
-const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
-const RECEIPT_PRINT_MODE = new Set(["auto", "on_request", "never"]);
+const RECEIPT_PRINT_MODE = new Set(["auto", "on_request"]);
 
 function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
   if (
     zone &&
     value === null &&
-    (field === "paidWhen" || field === "collectionNumber" || field === "receiptPrintMode")
+    (field === "orderStart" ||
+      field === "paidWhen" ||
+      field === "collectionNumber" ||
+      field === "receiptPrintMode")
   )
     return null;
+  if (field === "orderStart" && (value === "table" || value === "counter")) return value;
   if (field === "paidWhen" && PAID_WHEN.has(value as string))
     return value as "prepay" | "ticket_then_pay";
   if (field === "collectionNumber" && COLLECTION_NUMBER.has(value as string))
     return value as "none" | "numbered";
-  if (field === "receiptPrintMode" && RECEIPT_PRINT_MODE.has(value as string))
-    return value as "auto" | "on_request" | "never";
+  if (field === "receiptPrintMode" && typeof value === "string" && RECEIPT_PRINT_MODE.has(value))
+    return value as "auto" | "on_request";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
 }
@@ -151,11 +158,19 @@ function onlyKeys(body: object, allowed: readonly string[]): void {
   if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
 }
 
-function requireMode(value: unknown, field: string): ServiceMode {
-  if (typeof value !== "string" || !MODES.has(value as ServiceMode)) {
-    throw new AppError("management.request_invalid", { field });
-  }
-  return value as ServiceMode;
+function requireTransferSettings(value: unknown) {
+  if (!isRecord(value)) throw new AppError("management.request_invalid", { field: "transfers" });
+  onlyKeys(value, ["receivingProfileId", "destinationDepartmentIds"]);
+  const receivingProfileId = requireNullableBodyUuid(
+    value.receivingProfileId,
+    "receivingProfileId",
+  );
+  if (!Array.isArray(value.destinationDepartmentIds))
+    throw new AppError("management.request_invalid", { field: "destinationDepartmentIds" });
+  const destinationDepartmentIds = value.destinationDepartmentIds.map((id) =>
+    requireBodyUuid(id, "destinationDepartmentIds"),
+  );
+  return { receivingProfileId, destinationDepartmentIds };
 }
 
 function requireDisplayOrder(value: unknown): number {
@@ -632,26 +647,113 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.put("/management-api/venue-service/departments/:departmentId/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, [
+          "name",
+          "tradingName",
+          "printTradingName",
+          "orderStart",
+          "paidWhen",
+          "collectionNumber",
+          "receiptPrintMode",
+          "transfers",
+        ]);
+        const input: DepartmentSettingsInput = {
+          name: requireName(body.name, "name"),
+          tradingName: requireName(body.tradingName, "tradingName"),
+          printTradingName: requireSalePolicyField(
+            "printTradingName",
+            body.printTradingName,
+            false,
+          ) as boolean,
+          orderStart: requireSalePolicyField(
+            "orderStart",
+            body.orderStart,
+            false,
+          ) as DepartmentSettingsInput["orderStart"],
+          paidWhen: requireSalePolicyField(
+            "paidWhen",
+            body.paidWhen,
+            false,
+          ) as DepartmentSettingsInput["paidWhen"],
+          collectionNumber: requireSalePolicyField(
+            "collectionNumber",
+            body.collectionNumber,
+            false,
+          ) as DepartmentSettingsInput["collectionNumber"],
+          receiptPrintMode: requireSalePolicyField(
+            "receiptPrintMode",
+            body.receiptPrintMode,
+            false,
+          ) as DepartmentSettingsInput["receiptPrintMode"],
+          ...(body.transfers === undefined
+            ? {}
+            : { transfers: requireTransferSettings(body.transfers) }),
+        };
+        await gated(sessionId, (tx) => saveDepartmentSettings(tx, ctx.cfg, departmentId, input));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/zones/:zoneId/service-settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
+        const input: ZoneServiceSettingsInput = {
+          orderStart: requireSalePolicyField(
+            "orderStart",
+            body.orderStart,
+            true,
+          ) as ZoneServiceSettingsInput["orderStart"],
+          paidWhen: requireSalePolicyField(
+            "paidWhen",
+            body.paidWhen,
+            true,
+          ) as ZoneServiceSettingsInput["paidWhen"],
+          collectionNumber: requireSalePolicyField(
+            "collectionNumber",
+            body.collectionNumber,
+            true,
+          ) as ZoneServiceSettingsInput["collectionNumber"],
+          receiptPrintMode: requireSalePolicyField(
+            "receiptPrintMode",
+            body.receiptPrintMode,
+            true,
+          ) as ZoneServiceSettingsInput["receiptPrintMode"],
+        };
+        await gated(sessionId, (tx) => saveZoneServiceSettings(tx, ctx.cfg, zoneId, input));
+        return c.body(null, 204);
+      }),
+    );
+
     app.patch("/management-api/venue-service/departments/:departmentId", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["active", "name", "tradingName"]);
         if (body.active !== undefined && typeof body.active !== "boolean") {
           throw new AppError("management.request_invalid", { field: "active" });
         }
         const active = body.active;
         const edit =
-          active === undefined ||
-          body.name !== undefined ||
-          body.tradingName !== undefined ||
-          body.defaultServiceMode !== undefined
+          body.name !== undefined || body.tradingName !== undefined || active === undefined
             ? {
-                name: requireName(body.name, "name"),
-                tradingName: requireName(body.tradingName, "tradingName"),
-                defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
+                ...(body.name === undefined ? {} : { name: requireName(body.name, "name") }),
+                ...(body.tradingName === undefined
+                  ? {}
+                  : { tradingName: requireName(body.tradingName, "tradingName") }),
               }
             : undefined;
+        if (active === undefined && edit !== undefined && Object.keys(edit).length === 0) {
+          throw new AppError("management.request_invalid", { field: "name" });
+        }
         await gated(sessionId, async (tx) => {
           if (edit !== undefined) await updateDepartment(tx, ctx.cfg, departmentId, edit);
           if (active === true) await activateDepartment(tx, ctx.cfg, departmentId);
@@ -669,7 +771,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         const value = requireSalePolicyField(field, body.value, false);
         await gated(sessionId, async (tx) => {
-          if (field === "paidWhen")
+          if (field === "orderStart")
+            await setDepartmentSalePolicyField(
+              tx,
+              ctx.cfg,
+              departmentId,
+              "orderStart",
+              value as "table" | "counter",
+            );
+          else if (field === "paidWhen")
             await setDepartmentSalePolicyField(
               tx,
               ctx.cfg,
@@ -691,7 +801,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               ctx.cfg,
               departmentId,
               field,
-              value as "auto" | "on_request" | "never",
+              value as "auto" | "on_request",
             );
           else
             await setDepartmentSalePolicyField(
@@ -737,6 +847,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["name", "tradingName"]);
         const department = await gated(sessionId, (tx) =>
           createDepartment(tx, ctx.cfg, {
             name: requireString(body.name, "name"),
@@ -744,7 +855,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               body.tradingName === undefined
                 ? undefined
                 : requireString(body.tradingName, "tradingName"),
-            defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
           }),
         );
         return c.json(department, 201);
@@ -776,14 +886,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["departmentId"]);
         await gated(sessionId, (tx) =>
           configureZone(tx, ctx.cfg, {
             zoneId,
             departmentId: requireBodyUuid(body.departmentId, "departmentId"),
-            serviceMode:
-              body.serviceMode === null || body.serviceMode === undefined
-                ? null
-                : requireMode(body.serviceMode, "serviceMode"),
           }),
         );
         return c.body(null, 204);
@@ -798,7 +905,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         const value = requireSalePolicyField(field, body.value, true);
         await gated(sessionId, async (tx) => {
-          if (field === "paidWhen")
+          if (field === "orderStart")
+            await setZoneSalePolicyOverride(
+              tx,
+              ctx.cfg,
+              zoneId,
+              "orderStart",
+              value as "table" | "counter" | null,
+            );
+          else if (field === "paidWhen")
             await setZoneSalePolicyOverride(
               tx,
               ctx.cfg,
@@ -820,7 +935,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               ctx.cfg,
               zoneId,
               "receiptPrintMode",
-              value as "auto" | "on_request" | "never" | null,
+              value as "auto" | "on_request" | null,
             );
           else throw new AppError("management.request_invalid", { field });
         });
@@ -853,21 +968,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["receivingProfileId", "destinationDepartmentIds"]);
-        const receivingProfileId = requireNullableBodyUuid(
-          body.receivingProfileId,
-          "receivingProfileId",
-        );
-        if (!Array.isArray(body.destinationDepartmentIds))
-          throw new AppError("management.request_invalid", { field: "destinationDepartmentIds" });
-        const destinationDepartmentIds = body.destinationDepartmentIds.map((value) =>
-          requireBodyUuid(value, "destinationDepartmentIds"),
-        );
+        const input = requireTransferSettings(body);
         await gated(sessionId, (tx) =>
-          setDepartmentTransferSettings(tx, ctx.cfg, departmentId, {
-            receivingProfileId,
-            destinationDepartmentIds,
-          }),
+          setDepartmentTransferSettings(tx, ctx.cfg, departmentId, input),
         );
         return c.body(null, 204);
       }),

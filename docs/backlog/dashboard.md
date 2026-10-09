@@ -114,9 +114,9 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   `wt-dialog` sets `closedby="none"` while `dismissible` is off. Why that screen behaved
   differently has not been established. The same keydown guard is on other dashboard forms:
   those whose tests press a real Escape during a save also ignore a close while busy in their
-  `wt-close` handler, except the Departments and zones screen
-  (`packages/venue-service/src/dashboard/venue-operations-screen.ts`), whose handler has no such
-  check and which does not set `dismissible`. The rest were tried only with a hand-built
+  `wt-close` handler. Slice 6's department and zone dialogs now set `dismissible` to false
+  while busy and refuse a close through their guard; their real-Escape cases are in
+  `packages/venue-service/src/dashboard/department-dialogs.test.ts`. The rest were tried only with a hand-built
   `KeyboardEvent` (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
   `option-list-form`, `option-label-form` and `variant-form`, under `apps/dashboard/src`) or not at all
   (`#guardEscape` in `apps/dashboard/src/screens/menus-screen.ts`). **Next action:** repeat the reasons-screen case
@@ -757,8 +757,11 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   Transfers) and its three inline name editors now open quiet and turn blue on the first edit; the
   inline Save and Cancel became `wt-button`s. Looked at on 2026-10-08 with the screen mounted with
   test data (English light 1280px; Spanish dark 390px with long names), screenshots in
-  `~/waitron-campaign-b/a331-4b-shots/`: no defect found. Left open: the inline editors put Save
-  before Cancel, the editor window puts Cancel first (as on `main`).
+  `~/waitron-campaign-b/a331-4b-shots/`: no defect found. A366 slice 6A replaces these inline editors
+  with Rename dialogs, plus department Settings and zone settings, with Cancel before Save.
+  Native keyboard-order checks are in
+  `packages/venue-service/src/dashboard/department-dialogs.test.ts`; reconnect checks live in
+  each replacement form's sibling `*.unsaved.test.ts`. The post-slice-7 audit below remains open.
 - **Re-check the venue-service screens once after A366 slice 7.** Each A366 slice builds the rule
   into the forms it creates or rewrites (owner, 2026-10-08); after slice 7 lands, run batch 4b's
   audit once more over `packages/venue-service/src/dashboard/` and gate any form a slice missed.

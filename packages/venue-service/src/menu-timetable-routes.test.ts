@@ -76,10 +76,9 @@ async function routed() {
   const mostrador = await zone("Mostrador deli");
   const made = await scoped(async (tx) => {
     const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "table_tab" })
+      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" }))
-      .id;
+    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
     await configureZone(tx, cfg, { zoneId: barra, departmentId: restaurant });
     await configureZone(tx, cfg, { zoneId: mostrador, departmentId: deli });
     const menu = async (name: string) => {

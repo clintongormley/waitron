@@ -99,7 +99,7 @@ async function fixture(tx: Transaction, suffix = "") {
     .returning();
   const department = await createDepartment(tx, cfg, {
     name: "Dining",
-    defaultServiceMode: "table_tab",
+    orderStart: "table",
   });
   await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
   const stations = await tx
@@ -1763,7 +1763,7 @@ describe("routing previews", () => {
           .returning();
         const takeaway = await createDepartment(tx, f.cfg, {
           name: "Takeaway",
-          defaultServiceMode: "table_tab",
+          orderStart: "table",
         });
         await configureZone(tx, f.cfg, { zoneId: patio!.id, departmentId: takeaway.id });
         await serveAndPublish(tx, f, [f.burger]);
@@ -1940,7 +1940,7 @@ describe("routing previews", () => {
           .returning();
         const department = await createDepartment(tx, cfg, {
           name: `${name} service`,
-          defaultServiceMode: "table_tab",
+          orderStart: "table",
         });
         await configureZone(tx, cfg, { zoneId: row!.id, departmentId: department.id });
         return row!.id;

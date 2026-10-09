@@ -2701,7 +2701,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     await createServiceZone(tx, cfg, { name: "Dining room", departmentId: restaurant.id });
     const terrace = await createServiceZone(tx, cfg, {
@@ -2805,7 +2805,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const terrace = await createServiceZone(tx, cfg, {
       name: "Terrace",
@@ -3493,6 +3493,60 @@ describe("venue detail edits and configuration boundaries", () => {
   );
 });
 
+it.each(["department_sale_policies", "zone_sale_policies"])(
+  "refuses obsolete %s receipt data before changing the target venue",
+  async (table) => {
+    const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-06T10:00:00Z"),
+      versions,
+    );
+    const bad = {
+      ...exported,
+      tables: {
+        ...exported.tables,
+        [table]: exported.tables[table]!.map((row) => ({ ...row, receipt_print_mode: "never" })),
+      },
+    };
+    expect(bad.tables[table]).not.toHaveLength(0);
+    const before = {
+      departments: targetSuite.db.all(sql`select * from departments`),
+      departmentPolicies: targetSuite.db.all(sql`select * from department_sale_policies`),
+      zonePolicies: targetSuite.db.all(sql`select * from zone_sale_policies`),
+    };
+    await expect(
+      withTransaction(targetSuite.db, (tx) =>
+        importConfigurationTables(
+          tx,
+          bad,
+          { locationId: target.locationId },
+          ALL_MODULES,
+          versions,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: `${table}.receipt_print_mode` },
+    });
+    expect(targetSuite.db.all(sql`select * from departments`)).toEqual(before.departments);
+    expect(targetSuite.db.all(sql`select * from department_sale_policies`)).toEqual(
+      before.departmentPolicies,
+    );
+    expect(targetSuite.db.all(sql`select * from zone_sale_policies`)).toEqual(before.zonePolicies);
+  },
+);
+
 it("transfers department receipt choices and explicit or inherited zone choices in format 2", async () => {
   const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
     db: suite.db,
@@ -3502,7 +3556,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Receipt department",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     await tx
       .update(departmentSalePolicies)
@@ -3518,7 +3572,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     });
     await tx
       .update(zoneSalePolicies)
-      .set({ receiptPrintMode: "never" })
+      .set({ receiptPrintMode: "auto" })
       .where(eq(zoneSalePolicies.zoneId, explicit.id));
     await tx
       .update(zoneSalePolicies)
@@ -3561,7 +3615,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     join zone_sale_policies q on q.zone_id=z.id
     where d.name='Receipt department' order by z.name`);
   expect(modes.rows).toEqual([
-    { name: "Explicit receipts", department_mode: "on_request", zone_mode: "never" },
+    { name: "Explicit receipts", department_mode: "on_request", zone_mode: "auto" },
     { name: "Inherited receipts", department_mode: "on_request", zone_mode: null },
   ]);
 });
@@ -3575,7 +3629,7 @@ it("transfers a department's customer and staff period menus to its zone under n
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Restaurante de cartas",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const barra = await createServiceZone(tx, scope, {
       name: "Barra de cartas",
@@ -3680,7 +3734,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
       name: "Comedor de rutas",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const terraza = await createServiceZone(tx, scope, {
       name: "Terraza de rutas",
@@ -3906,7 +3960,6 @@ describe("opening hours in a configuration transfer", () => {
         locationId: source.locationId,
         name: "Deli",
         tradingName: "Deli",
-        defaultServiceMode: "prepay",
       });
       await tx.insert(kitchenStations).values([
         { locationId: source.locationId, name: "Bar" },
@@ -3997,7 +4050,7 @@ describe("opening hours in a configuration transfer", () => {
     const ids = await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, cfg, {
         name: "Outdoor service",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const zone = await createServiceZone(tx, cfg, {
         name: "Terrace",
@@ -4861,11 +4914,11 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
   const original = await withTransaction(suite.db, async (tx) => {
     const a = await createDepartment(tx, cfg, {
       name: "Transfer deli",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const b = await createDepartment(tx, cfg, {
       name: "Transfer restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const zone = await createServiceZone(tx, cfg, {
       name: "Transfer receiving zone",
@@ -4976,7 +5029,7 @@ it.each([-15, 14])(
         .where(eq(locations.id, scope.locationId));
       const department = await createDepartment(tx, scope, {
         name: "Period transfer",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       });
       const customer = await createCatalogue(tx, { name: "Period customer" });
       const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
@@ -5095,3 +5148,90 @@ it.each([-15, 14])(
     );
   },
 );
+
+it("transfers order start policies under new department and zone ids", async () => {
+  const source = await applyVenue(planVenue(venue("B13572478"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, {
+      name: "Order start department",
+      orderStart: "table",
+    });
+    const explicit = await createServiceZone(tx, scope, {
+      name: "Counter override",
+      departmentId: department.id,
+    });
+    const inherited = await createServiceZone(tx, scope, {
+      name: "Department follower",
+      departmentId: department.id,
+    });
+    await tx.execute(sql`update department_sale_policies set order_start = 'table'
+      where department_id = ${department.id}`);
+    await tx.execute(sql`update zone_sale_policies set order_start = 'counter'
+      where zone_id = ${explicit.id}`);
+    return { departmentId: department.id, explicitId: explicit.id, inheritedId: inherited.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const exported = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-09T10:00:00Z"),
+    versions,
+  );
+  expect(
+    exported.tables.department_sale_policies!.find(
+      (row) => row.department_id === sourceIds.departmentId,
+    )!.order_start,
+  ).toBe("table");
+  expect(
+    exported.tables.zone_sale_policies!.find((row) => row.zone_id === sourceIds.explicitId)!
+      .order_start,
+  ).toBe("counter");
+  expect(
+    exported.tables.zone_sale_policies!.find((row) => row.zone_id === sourceIds.inheritedId)!
+      .order_start,
+  ).toBeNull();
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(exported, "a strong passphrase"),
+    "a strong passphrase",
+  );
+  const target = await applyVenue(planVenue(venue("B13572479"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+  });
+  expect(target.locationId).not.toBe(source.locationId);
+  const imported = await targetSuite.db.execute<{
+    department_id: string;
+    zone_id: string;
+    name: string;
+    department_start: string;
+    zone_start: string | null;
+  }>(sql`select d.id as department_id, z.id as zone_id, z.name,
+    p.order_start as department_start, q.order_start as zone_start
+    from floor_zones z join zone_service_policies s on s.zone_id = z.id
+    join departments d on d.id = s.department_id
+    join department_sale_policies p on p.department_id = d.id
+    join zone_sale_policies q on q.zone_id = z.id
+    where d.name = 'Order start department' order by z.name`);
+  expect(
+    imported.rows.map(({ name, department_start, zone_start }) => ({
+      name,
+      department_start,
+      zone_start,
+    })),
+  ).toEqual([
+    { name: "Counter override", department_start: "table", zone_start: "counter" },
+    { name: "Department follower", department_start: "table", zone_start: null },
+  ]);
+  for (const row of imported.rows) {
+    expect(row.department_id).not.toBe(sourceIds.departmentId);
+    expect(row.zone_id).not.toBe(sourceIds.explicitId);
+    expect(row.zone_id).not.toBe(sourceIds.inheritedId);
+  }
+});

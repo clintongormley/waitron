@@ -37,9 +37,8 @@ async function venue() {
       })
       .returning();
     const cfg = { locationId: locationId(row!.id) };
-    const departmentId = (
-      await createDepartment(db, cfg, { name: "Dining", defaultServiceMode: "table_tab" })
-    ).id;
+    const departmentId = (await createDepartment(db, cfg, { name: "Dining", orderStart: "table" }))
+      .id;
     const zone = async (name: string, displayOrder: number, active = true) => {
       const [z] = await db
         .insert(floorZones)
@@ -119,7 +118,7 @@ describe("zone closed times", () => {
     await expect(
       tx((db) => replaceZoneClosedWeek(db, a.cfg, b.terrace, week([]))),
     ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: b.terrace } });
-    await tx((db) => createDepartment(db, b.cfg, { name: "Other", defaultServiceMode: "prepay" }));
+    await tx((db) => createDepartment(db, b.cfg, { name: "Other", orderStart: "counter" }));
     await tx((db) => deactivateDepartment(db, b.cfg, b.departmentId));
     await expect(
       tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week([]))),

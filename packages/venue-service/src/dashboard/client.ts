@@ -5,7 +5,6 @@ export interface Department {
   id: string;
   name: string;
   tradingName: string;
-  defaultServiceMode: ServiceMode;
   active: boolean;
 }
 export interface DepartmentRemovalImpact {
@@ -17,13 +16,13 @@ export interface ServiceZone {
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
-  serviceModeOverride: ServiceMode | null;
   active?: boolean;
 }
 export type PaidWhen = "prepay" | "ticket_then_pay";
 export type CollectionNumber = "none" | "numbered";
-export type ReceiptPrintMode = "auto" | "on_request" | "never";
+export type ReceiptPrintMode = "auto" | "on_request";
 export interface DepartmentSalePolicy {
+  orderStart: "table" | "counter";
   departmentId: string;
   paidWhen: PaidWhen;
   collectionNumber: CollectionNumber;
@@ -31,12 +30,20 @@ export interface DepartmentSalePolicy {
   printTradingName: boolean;
 }
 export interface ZoneSalePolicy {
+  orderStart: "table" | "counter" | null;
   zoneId: string;
   paidWhen: PaidWhen | null;
   collectionNumber: CollectionNumber | null;
   receiptPrintMode: ReceiptPrintMode | null;
   effective: Omit<DepartmentSalePolicy, "departmentId">;
 }
+export interface DepartmentSettingsInput extends Omit<DepartmentSalePolicy, "departmentId"> {
+  name: string;
+  tradingName: string;
+  transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
+}
+export type ZoneServiceSettingsInput = Omit<ZoneSalePolicy, "zoneId" | "effective">;
+
 export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
@@ -152,23 +159,29 @@ export class VenueServiceApi {
     );
   }
 
-  createDepartment(input: {
-    name: string;
-    tradingName: string;
-    defaultServiceMode: ServiceMode;
-  }): Promise<Department> {
+  saveDepartmentSettings(departmentId: string, input: DepartmentSettingsInput): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/departments/${departmentId}/settings`,
+      "PUT",
+      input,
+    );
+  }
+
+  saveZoneServiceSettings(zoneId: string, input: ZoneServiceSettingsInput): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/zones/${zoneId}/service-settings`,
+      "PUT",
+      input,
+    );
+  }
+
+  createDepartment(input: { name: string; tradingName?: string }): Promise<Department> {
     return this.request("/management-api/venue-service/departments", "POST", input);
   }
 
   updateDepartment(
     departmentId: string,
-    input:
-      | {
-          name: string;
-          tradingName: string;
-          defaultServiceMode: ServiceMode;
-        }
-      | { active: true },
+    input: { name?: string; tradingName?: string; active?: boolean },
   ): Promise<void> {
     return this.request(
       `/management-api/venue-service/departments/${departmentId}`,
@@ -189,10 +202,7 @@ export class VenueServiceApi {
     return this.#read(`/management-api/venue-service/zones/${zoneId}/removal-impact`);
   }
 
-  configureZone(
-    zoneId: string,
-    input: { departmentId: string; serviceMode: ServiceMode | null },
-  ): Promise<void> {
+  configureZone(zoneId: string, input: { departmentId: string }): Promise<void> {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
   }
 
@@ -224,11 +234,9 @@ export class VenueServiceApi {
     );
   }
 
-  setZoneSalePolicyOverride<K extends "paidWhen" | "collectionNumber" | "receiptPrintMode">(
-    zoneId: string,
-    field: K,
-    value: ZoneSalePolicy[K],
-  ): Promise<void> {
+  setZoneSalePolicyOverride<
+    K extends "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode",
+  >(zoneId: string, field: K, value: ZoneSalePolicy[K]): Promise<void> {
     return this.request(
       `/management-api/venue-service/zones/${zoneId}/sale-policy/${field}`,
       "PATCH",

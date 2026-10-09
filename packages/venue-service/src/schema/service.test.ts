@@ -36,7 +36,7 @@ const EXPECTED: Record<
   departments: {
     table: departments,
     foreignKeys: ["departments_location_fk"],
-    checks: ["departments_service_mode_ck"],
+    checks: [],
     indexes: ["departments_one_default_per_location_key"],
     uniqueConstraints: ["departments_location_name_key"],
     primaryKeys: [],
@@ -45,6 +45,7 @@ const EXPECTED: Record<
     table: departmentSalePolicies,
     foreignKeys: ["department_sale_policies_department_fk"],
     checks: [
+      "department_sale_policies_order_start_ck",
       "department_sale_policies_paid_when_ck",
       "department_sale_policies_collection_number_ck",
       "department_sale_policies_receipt_mode_ck",
@@ -60,7 +61,7 @@ const EXPECTED: Record<
       "zone_service_policies_zone_fk",
       "zone_service_policies_department_fk",
     ],
-    checks: ["zone_service_policies_mode_ck"],
+    checks: [],
     indexes: ["zone_service_policies_one_counter_default_key"],
     uniqueConstraints: [],
     primaryKeys: ["zone_service_policies_pk"],
@@ -69,6 +70,7 @@ const EXPECTED: Record<
     table: zoneSalePolicies,
     foreignKeys: ["zone_sale_policies_zone_fk"],
     checks: [
+      "zone_sale_policies_order_start_ck",
       "zone_sale_policies_paid_when_ck",
       "zone_sale_policies_collection_number_ck",
       "zone_sale_policies_receipt_mode_ck",

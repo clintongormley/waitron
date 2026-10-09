@@ -1928,3 +1928,81 @@ describe("zone closed times in configuration transfer", () => {
     );
   });
 });
+
+describe("configuration receipt modes", () => {
+  it.each(["department_sale_policies", "zone_sale_policies"])(
+    "refuses Never and malformed %s receipt values",
+    (table) => {
+      for (const value of [
+        "never",
+        "unknown",
+        ["auto"],
+        1,
+        ...(table === "department_sale_policies" ? [null] : []),
+      ]) {
+        expect(() =>
+          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+            [table]: [{ receipt_print_mode: value }],
+          }),
+        ).toThrowError(refusal(`${table}.receipt_print_mode`));
+      }
+    },
+  );
+  it.each(["department_sale_policies", "zone_sale_policies"])(
+    "accepts both modes and absent %s receipt values",
+    (table) => {
+      for (const value of [
+        "auto",
+        "on_request",
+        undefined,
+        ...(table === "zone_sale_policies" ? [null] : []),
+      ]) {
+        expect(() =>
+          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+            [table]: [value === undefined ? {} : { receipt_print_mode: value }],
+          }),
+        ).not.toThrow();
+      }
+    },
+  );
+});
+
+describe("configuration order starts", () => {
+  it.each(["department_sale_policies", "zone_sale_policies"])(
+    "refuses malformed %s order starts",
+    (table) => {
+      for (const value of [
+        "tab",
+        "",
+        ["table"],
+        1,
+        false,
+        {},
+        ...(table === "department_sale_policies" ? [null] : []),
+      ]) {
+        expect(() =>
+          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+            [table]: [{ order_start: value }],
+          }),
+        ).toThrowError(refusal(`${table}.order_start`));
+      }
+    },
+  );
+  it.each(["department_sale_policies", "zone_sale_policies"])(
+    "accepts explicit and absent %s order starts",
+    (table) => {
+      for (const value of [
+        "table",
+        "counter",
+        undefined,
+        ...(table === "zone_sale_policies" ? [null] : []),
+      ]) {
+        expect(() =>
+          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+            [table]: [value === undefined ? {} : { order_start: value }],
+          }),
+        ).not.toThrow();
+      }
+    },
+  );
+});

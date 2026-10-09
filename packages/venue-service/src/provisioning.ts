@@ -38,14 +38,13 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
               locationId: node.locationId,
               name: location[0]!.name,
               tradingName: location[0]!.name,
-              defaultServiceMode: "prepay",
               isDefault: true,
             })
             .returning({ id: departments.id })
         )[0]!.id;
       await tx
         .insert(departmentSalePolicies)
-        .values({ departmentId })
+        .values({ departmentId, orderStart: "counter" })
         .onConflictDoNothing({ target: departmentSalePolicies.departmentId });
 
       const existing = await tx
@@ -75,7 +74,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             locationId: node.locationId,
             zoneId: zone[0]!.id,
             departmentId,
-            serviceMode: null,
             isCounterDefault: true,
           })
           .onConflictDoUpdate({

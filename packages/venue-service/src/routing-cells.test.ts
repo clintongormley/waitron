@@ -67,7 +67,7 @@ async function venue(tx: Transaction, suffix = "") {
     .returning();
   const department = await createDepartment(tx, cfg, {
     name: "Dining",
-    defaultServiceMode: "table_tab",
+    orderStart: "table",
   });
   for (const zone of zones)
     await configureZone(tx, cfg, { zoneId: zone.id, departmentId: department.id });
@@ -467,7 +467,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     const before = await readStoredCells(f);
     expect(before).toEqual([expect.objectContaining({ zone_id: f.terrace, station_id: f.bar })]);
     const closed = await scoped((tx) =>
-      createDepartment(tx, f.cfg, { name: "Closed", defaultServiceMode: "table_tab" }),
+      createDepartment(tx, f.cfg, { name: "Closed", orderStart: "table" }),
     );
     await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
     await expect(
@@ -491,7 +491,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     await scoped((tx) => deactivateServiceZone(tx, f.cfg, f.terrace));
     expect(await readStoredCells(f)).toEqual([]);
     const closed = await scoped((tx) =>
-      createDepartment(tx, f.cfg, { name: "Closed", defaultServiceMode: "table_tab" }),
+      createDepartment(tx, f.cfg, { name: "Closed", orderStart: "table" }),
     );
     await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
     await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id }));
@@ -506,7 +506,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     };
     await refusesBoth();
     const open = await scoped((tx) =>
-      createDepartment(tx, f.cfg, { name: "Open", defaultServiceMode: "table_tab" }),
+      createDepartment(tx, f.cfg, { name: "Open", orderStart: "table" }),
     );
     await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: open.id }));
     await refusesBoth();

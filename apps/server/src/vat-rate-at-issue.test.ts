@@ -204,7 +204,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     };
   });
   const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-    counter: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
+    counter: await offerProducts(tx, cfg, {
+      orderStart: "counter",
+      paidWhen: orderFlow,
+    }),
     tables: await offerProducts(tx, cfg, { zone: "tables" }),
   }));
   return { cfg, products, counter, tables };

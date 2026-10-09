@@ -15,10 +15,19 @@
 > [revised slice 7 plan](../plans/2026-10-08-a366-slice-7-receipts-per-department.md)
 > state the target contract. Slice 1 landed in #1460; receipt work remains unbuilt.
 
+> **2026-10-09 departments revision:** the owner's completed slice 6 answers (~09:40–10:05)
+> govern sections 6, 9.1, 12–14 and the
+> [revised slice 6 plan](../plans/2026-10-08-a366-slice-6-departments.md). Always open the
+> department list, even with one department; every department page has its parent link.
+> Empty zone hints contain only the inherited value. Receipt modes are auto/on_request
+> (Always/On request), with pre-live reset instead of converting obsolete modes. Cancel
+> precedes Save everywhere. Slice 3A landed in #1469 at
+> `87b46b024fcac68a6240949964768b9fbc7d4972`; 6A and then 7A remain pending in Lane E.
+
 **Status:** owner decisions of 2026-10-07, from one brainstorm with mockups. The owner approved
 this written spec on 2026-10-07, including section 15's three defaults. Backlog item **A366**. Behaviour below is the target design, not a
-claim about what runs today; section 2 is the only part that describes today's code, and it cites
-where.
+claim about what runs today; section 2 records the code read when the design was approved,
+with source pointers. The dated slice 6 plan inventory describes the newer base as a source audit.
 
 **What this replaces.** Where this document disagrees with an earlier one, this one wins:
 
@@ -47,7 +56,7 @@ third grid. The Departments and zones page mixes department and zone settings in
 an older pair of tables below it, and links away to edit the receipt. The owner asked for one idea
 instead of three, and for configuration pages that are only about configuration.
 
-## 2. What exists today
+## 2. Code snapshot when approved (2026-10-07)
 
 - **Department hours change nothing at the till.** `resolveOpeningDateHours`
   (`packages/venue-service/src/hours.ts`) is exported and called nowhere; department hours were
@@ -162,14 +171,23 @@ leaves the field empty to follow it, and the empty field's placeholder shows the
 value.
 
 - **How orders start:** table service (a tab, paid at the end) or counter service (a one-off sale).
-  It is the default; staff can still choose per order (A254 §3.1).
-- **When counter service is used:** paid before preparation or at collection; and a switch, "Print
-  a numbered collection ticket".
-- **Print a receipt:** always, on request or never.
+  Slice 6 retains today's zone rule: table seating in a counter zone is refused and table zones
+  stay out of the counter picker. Choosing per order remains A254 §3.1's open question, not a
+  behaviour this design claims is implemented (slice 6 plan, source audit and Task A3b).
+- **When counter service is used:** paid before preparation or at collection. The department
+  has a switch, "Print a numbered collection ticket"; a zone offers Print / Don't print and a
+  clearable empty state whose placeholder is only the department's inherited Print or Don't print.
+- **Print a receipt:** Always / On request, stored as auto/on_request only. A zone can clear it to
+  null, showing only the inherited localized value as its placeholder. No inheritance prefix or
+  follow option label is shown. Obsolete never policy values are refused in the final
+  writers, imports and checks; existing pre-live venues reset rather than convert those rows.
 
 The service style (`table_tab`, `prepay`, `ticket_then_pay` in `departments.default_service_mode`)
 goes: table service, counter service paid before preparation, and counter service paid at
-collection replace its three values.
+collection replace its three values as configuration. The recorded order context
+`order_service_contexts.service_mode` and shared ServiceMode retain table_tab/prepay/ticket_then_pay
+in slice 6. The owner requested a separate future split into served-at (table/counter) and
+payment-due (before-kitchen/collection/end-tab); it remains in the backlog.
 
 **Closed times.** A zone can be closed for part of its department's open time, never open when the
 department is closed. It has no periods or menus of its own. Closed times are set per day of the
@@ -228,13 +246,19 @@ Nothing on them shows live state. Live controls are in section 10.
 ### 9.1 Departments
 
 - **The list:** department, trading name, zones and a Setup column that shows only what is missing
-  ("'Counter' period has no menu") or "Disabled". Open, Rename and Disable are in each row's ⋮ menu.
-  A venue with one department skips the list and opens that department (A254 §2).
+  (department has no opening periods; a zone menu is unpublished or empty) or "Disabled".
+  Use the existing readiness reader's issues, not a new missing-period-menu code. Open, Rename and
+  Disable (or Enable) are in each row's ⋮ menu.
+  The bare address always shows this list, even with one department. Every department page has
+  a Departments parent link above its one item-name heading, following A335/A398. This owner
+  override supersedes A254 §2's bypass without rewriting that historical spec.
 - **Settings tab:** name; the Service settings of section 6, with a line naming the zones that
   differ; tab transfers (who this department may send tabs to, and which device profile receives
-  them), shown only when the venue has two or more departments.
+  them), shown only with two or more active departments. Saving forms and dialogs put Cancel
+  first, then Save, with A331 draftScopeFor/saveActionState, a save-handler early return, and
+  unsaved-change/reconnect checks.
 - **Zones tab:** one button per zone and "+ Add zone". A zone shows its name, its service settings,
-  a one-line summary of its closed times linking to Opening hours, and a ⋮ menu with Move to
+  a one-line summary of its closed times linking to Opening hours, and a ⋮ menu with Rename, Move to
   another department and Disable. A zone with tables shows a small plan preview and "Edit floor
   plan", which opens the full-screen editor; a zone without tables shows "Add a floor plan". There
   is no separate "tonight" plan in this design.
@@ -338,7 +362,7 @@ Part B puts the editor in the department's Receipt tab after slice 6 provides th
 - **Only logo, phone, email, subtitle and footer move to departments.** Logo and contact fields
   are the same in every language. Trading name and its print switch keep their existing
   department-policy ownership and are recorded on the sale; Print a receipt (always, on
-  request or never), with the zones that differ, remains the service setting of section 6.
+  request; auto/on_request), with the zones that differ, remains the service setting of section 6.
 - **Current authored fields, recorded department.** A print, reprint, copy, A4 invoice and till
   receipt read that sale's recorded department's current fields, including when the department
   has been disabled. Only the trading name and its switch are the sale's receipt-header snapshot.
@@ -400,7 +424,10 @@ SQL/upgrade/foreign-key probes before making migration-runtime claims.
 ## 12. What goes away
 
 The Menu timetable screen; department and station hours; the all-day menu; zone menu choices; a
-department's separate list of orderable menus (it becomes its periods' menus); the service style; the tree table and the "Ready for service" tabs; the "?" help on Order number; the
+department's separate list of orderable menus (it becomes its periods' menus); the configured
+service style (the recorded order mode stays); single-department list bypass; obsolete receipt-policy
+never value; inheritance-prefix hints and labeled follow options; the tree table,
+"Ready for service" section and old department/zone tabs; the "?" help on Order number; the
 station fallback setting; the "Where is this made?" tester; watchers and the Tickets and Watchers tabs; the two-a-year local-holiday
 cap; Venue settings' authored logo, phone, email, single-string subtitle and footer, which become
 department fields (subtitle/footer per language); boot-authored receipt trim and the preview-only
@@ -413,7 +440,11 @@ slice that changes a shipped table says "venue reset needed" in its pull request
 
 ## 13. Build order
 
-Build the slices in this order, each with its own plan. Item 7 has the approved two-PR split:
+The numbered slices describe the product areas. Owner-approved lane order overrides the original
+serial order: slices 1 and 3A have landed; Lane E builds slice 6 Part A now, then slice 7.
+Slice 6 Parts B/C stay with Lane D after slice 2/A429 respectively. Active slices 2 and 5 have
+an explicit overlap waiver with 6A; whoever lands second reconciles source and regenerates journal
+clashes. No other-lane checkout edits. Item 7 retains the approved two-PR split:
 
 1. **Periods with menus.** Periods with a customer menu and staff-only menus; days and the normal
    week; the till sells only the current period's menus; the Opening hours page's Week (department
@@ -430,9 +461,8 @@ Build the slices in this order, each with its own plan. Item 7 has the approved 
    in the same words for both; the tree table and old tabs removed.
 7. **Receipts per department**, with translated subtitle and footer, in two PRs: Part A's
    standalone department editor and Part B's Department Receipt tab (depends on slice 6).
-   _(2026-10-09 lane order: BUILD waits for same-lane A366-3A landing, then A366-6A, before
-   A366-7A. Documentation overlap is waived for the STEP 0 revision; do not generate migrations
-   alongside parked 3A.)_
+   _(2026-10-09 lane order: slice 3A already landed #1469; BUILD proceeds with A366-6A, then
+   A366-7A. Do not repeat the landed slice 3A build or receipt STEP 0 documentation work.)_
 
 ## 14. Later work, not in this design
 
@@ -440,6 +470,8 @@ Build the slices in this order, each with its own plan. Item 7 has the approved 
 - Floor plan and sales monitors.
 - A "tonight" copy of the floor plan that resets each day.
 - A254 §3.1's questions about tabs at a counter, and its advisor questions.
+- Split the recorded order service mode into served-at and payment-due facts (owner, 2026-10-09;
+  [backlog](../../backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)).
 
 ## 15. Defaults the owner accepted with the spec
 

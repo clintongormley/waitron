@@ -36,7 +36,7 @@ useVenueDb({
 
 beforeAll(async () => {
   counter = await withTransaction(venue.db, (tx) =>
-    offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
+    offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
   );
   const session = await withTransaction(venue.db, (tx) =>
     startManagementSession(tx, { personId: venue.adminId }),
@@ -384,7 +384,7 @@ describe("a receipt-language change while orders are open", () => {
   it("accepts a change while an order is placed, and the order can still be collected", async () => {
     reset();
     const placing = await withTransaction(venue.db, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     const id = randomUUID();
     try {
@@ -416,7 +416,7 @@ describe("a receipt-language change while orders are open", () => {
       ).toEqual([{ "es-ES": "Paella valenciana" }]);
     } finally {
       await withTransaction(venue.db, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
       );
     }
   });
@@ -424,7 +424,7 @@ describe("a receipt-language change while orders are open", () => {
   it("accepts a change while an already-issued order is placed, and collecting it keeps the language it was filed in", async () => {
     reset();
     const placing = await withTransaction(venue.db, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     const id = randomUUID();
     const filed = () => ({
@@ -465,7 +465,7 @@ describe("a receipt-language change while orders are open", () => {
       expect(filed()).toEqual(before);
     } finally {
       await withTransaction(venue.db, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
       );
     }
   });

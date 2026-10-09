@@ -35,11 +35,35 @@ their full text.
   "Where is this made?" tester and the Stations tab's live kitchen numbers removed; Part B —
   station hours and fallbacks removed, closing a station with open dishes asks what to do with
   them, and each station's worked-out times. Its new decisions 29–37 wait for the owner.
-  Slice 6's plan is written ahead of lane D (A366-6p, 2026-10-08): [slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md),
-  in three pull requests — the department list and page, "How orders start" and the service
-  settings shared by departments and zones, now (it needs slice 1 only); each zone's closed times
-  on its Zones tab after slice 2; the floor plan on the Zones tab after A429's editor — with its
-  open decisions at its top.
+  Slice 6's remaining work is Part B's closed-times summary and Part C's floor-plan entry,
+  in Lane D after slice 2/A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
+
+## Refresh service settings on an open till
+
+A till already signed in keeps its loaded payment flow when a department or zone policy changes.
+Its menu-state poll does not carry the policy, and reloading offers after a menu change still
+keeps that flow. A fresh sign-in reads the changed policy. Decide when an empty till should adopt
+new settings and how an existing basket keeps its recorded facts, then update the poll and its
+consumer. Left open by A366 slice 6 Part A; the branch's real-route and browser probes are in
+its review receipts. This entry does not establish when the behavior began.
+
+## Split an order's recorded service mode into two facts
+
+The owner requested this future change on 2026-10-09 while answering slice 6 decision 4.
+`order_service_contexts.service_mode` combines where service happens and when payment is due.
+Replace it later with two plain facts: served-at (`table/counter`) and payment-due
+(`before-kitchen/collection/end-tab`). The split is outside slice 6: keep its existing three
+modes (`table_tab/prepay/ticket_then_pay`), recorded orders and till behaviour unchanged there.
+
+Trace the writer/snapshot and every reader before choosing the replacement contract. Cited
+readers at the slice 6 audited base `87b46b024fcac68a6240949964768b9fbc7d4972`:
+`apps/server/src/till-sale.ts:1548` (payment dispatch), `apps/server/src/receipt-print.ts:216`
+(collection ticket at payment), `apps/server/src/working-order.ts:3111-3128`
+(`serviceModesMatch`) and `apps/server/src/move-bill.ts:245` (table-mode check). Also trace
+venue-service's record/retarget/read context functions and the till API/client/order-flow
+readers listed in slice 6 decision 4. These are source pointers, not a runtime receipt or
+an exhaustive future implementation plan. Preserve payment, money/VAT, hashes, drawer and
+login behaviour; decide the future schema/contract and test it separately.
 
 ## Opening hours dated-save refusal presentation
 
@@ -85,16 +109,10 @@ Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2
 
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
-- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
-  implemented through A261.** The first department is named after the venue; the
-  four-value service style splits into separate settings, and a tab no longer needs a table; hours
-  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
-  [Spec](../superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
-  open, including advisor questions Q21, Q14, Q27 and Q22.
-  Its §4 day types and §5 placement are revised by A261. A261 step 2 names the sole department on
-  Departments and zones; other screens still await their own one-department survey. Tab billing
-  remains open; the shared calendar is built by A261 step 5 (below), and its public holidays by
-  step 6.
+Tabs without tables and the remaining department-name survey stay open. Re-check the advisor
+questions in [the earlier spec](../superpowers/specs/2026-10-03-departments-service-styles-hours-design.md)
+and the compliance question list before carrying them forward. A366 supersedes its service-style
+and hours proposals; the historical spec keeps its dated pointers.
 
 ## Smaller notes from the Hours reviews
 

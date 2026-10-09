@@ -1288,12 +1288,28 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4, 6 and 7, and slice 5 Part B.**
-  Station-hours and fallback retirement, period routing, combined tickets, department pages and
-  department receipts remain in slices 4, 6 and 7; retiring watchers (slice 5 Part B) waits for
-  slice 4's combined tickets. Slice 7's plan/spec apply the owner's
-  2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
+  APPROVED 2026-10-07; remaining work is slices 4 and 7, slice 5 Part B, and slice 6 Parts B/C.**
+  Station-hours and fallback retirement, period routing, combined tickets and department
+  receipts remain; retiring watchers waits for combined tickets. Slice 6's remaining parts
+  add the closed-times summary and floor-plan entry. Slice 7 applies the owner's receipt answers.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+
+- **Refresh service settings on an open till** — decide how changed department/zone policy
+  reaches an empty till and preserves an existing basket's facts, then carry it through polling.
+  Fresh sign-in reads changed settings; the open till keeps its loaded flow.
+  [Detail](backlog/service-periods.md#refresh-service-settings-on-an-open-till)
+
+- **Service-policy import completeness** — run a real import with department or zone policy
+  rows omitted. If it commits, reject or repair that incomplete shape before service begins.
+  The review's import probes stopped before these tables; reachability remains unverified.
+- **Concurrent department settings edits** — decide whether two managers editing the same
+  department need stale-write protection. The form sends its whole draft; a runtime overlap
+  probe remains to be run before choosing a conflict policy.
+
+- **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
+  Served at a table or counter; payment due before the kitchen, at collection or at the end of
+  the tab. Slice 6 keeps the three-value order record and its behaviour.
+  [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
 
 - **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
   own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
@@ -1314,18 +1330,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
   the setting directly in the database. [Detail](backlog/service-periods.md#changing-the-business-day-start-after-saving-service-hours)
 
-- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
-  implemented through A261.** The first department is named after the venue; the
-  four-value service style splits into separate settings, and a tab no longer needs a table; hours
-  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
-  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
-  open, including advisor questions Q21, Q14, Q27 and Q22. [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
-
-- **The "Disabled" note a zone or department can show is not muted** — left open for the owner by
-  A301 (#1335, A261 step 2). A zone with no department shows its "Not configured" note apart from
-  its name, in the muted text colour. Left open for the owner: the "Disabled" note a zone or
-  department can show in the same place is not muted (it was not before A301 either), so the two
-  notes now look different.
+- **Departments, service styles and opening hours (A254, owner 2026-10-03) — residuals.**
+  Tabs without tables, the remaining department-name survey, and advisor questions stay open.
+  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md);
+  [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
 
 - **A rename refusal without a supplied name remains a database error, rather than returning an
   undefined name** — left open by A261-2d (#1274).
@@ -3513,18 +3521,18 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
-  instrumented eight-case matrix reached the bottom in every case. The earlier cause is
-  unverified. If it recurs, capture the current scroll/limit, pointer position, drag state and
-  visible box before attributing it to the scroll helper.
+  instrumented eight-case matrix reached the bottom in every case. A 2026-10-09 venue-service
+  browser run also missed the Prep stations drag test's 1500 ms bound at
+  `prep-stations-screen.test.ts:6556`: scrollTop was 266, against a required value above 317.
+  An isolated run of the complete file on the branch's earlier head passed. The cause remains
+  unverified. Capture the current scroll/limit, pointer position, drag state and visible box
+  before attributing it to the scroll helper.
 
 - **Re-check the venue-service screens for the save rule once after A366 slice 7 (A331, owner
   2026-10-08)** — OPEN. Each A366 slice builds the rule into the forms it creates or rewrites;
   after slice 7 lands, run A331 batch 4b's audit once more over
   `packages/venue-service/src/dashboard/` and gate any form a slice missed.
   [Detail](backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07)
-
-- **The Departments and zones inline name editors put Save before Cancel**, while the screen's
-  editor window puts Cancel first, as `design-system.md` → Forms asks. Left open by A331 batch 4b (#1462).
 
 - **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
   The native status colour fields show an ellipsis instead of the full label in the inspected

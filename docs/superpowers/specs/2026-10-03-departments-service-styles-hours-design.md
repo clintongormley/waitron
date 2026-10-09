@@ -1,5 +1,10 @@
 # Departments, service styles and opening hours
 
+> **2026-10-10 — A366 slice 6 Part A:** the department page now chooses where orders start
+> separately from counter payment timing. The old four-value service-style proposals below
+> are historical; [the service-times design](2026-10-07-service-times-departments-and-stations-design.md)
+> governs the current settings. Recorded orders retain their three payment-flow values.
+
 > **2026-10-07 — A366:** §4 (opening hours) are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
 
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the

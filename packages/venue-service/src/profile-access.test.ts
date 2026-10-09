@@ -96,9 +96,9 @@ async function seedVenue(): Promise<Venue> {
   const ids = await scoped(async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
-    const deli = await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" });
+    const deli = await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" });
     const dining = await createServiceZone(tx, cfg, {
       name: "Dining room",
       departmentId: restaurant.id,

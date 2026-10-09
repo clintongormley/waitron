@@ -79,7 +79,7 @@ useVenueDb({
       return (
         await offerProducts(tx, v.cfg, {
           zone: { zoneId: zone!.id },
-          serviceMode: "ticket_then_pay",
+          orderStart: "counter",
         })
       ).zoneId;
     });

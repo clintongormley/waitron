@@ -33,7 +33,7 @@ import {
 } from "@waitron/shared";
 import {
   createDepartment,
-  departments,
+  departmentSalePolicies,
   createServiceZone,
   deleteMenuPeriod,
   menuPeriods,
@@ -183,10 +183,9 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
     const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "prepay" })
+      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" })
     ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" }))
-      .id;
+    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
     for (const departmentId of [restaurant, deli]) {
       const initialPeriods = await tx
         .select({ id: menuPeriods.id })
@@ -620,9 +619,9 @@ describe("service periods gate only added dishes and added stored quantities", (
     const v = await mealVenue();
     await offsetLunch(v, 15);
     await suite.db
-      .update(departments)
-      .set({ defaultServiceMode: "table_tab" })
-      .where(eq(departments.id, v.restaurant));
+      .update(departmentSalePolicies)
+      .set({ orderStart: "table" })
+      .where(eq(departmentSalePolicies.departmentId, v.restaurant));
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, v.cfg, { label: "Grace table", zoneId: v.sala }),
     );
@@ -1020,9 +1019,9 @@ describe("service periods gate only added dishes and added stored quantities", (
       let path: string;
       if (kind === "fired") {
         await suite.db
-          .update(departments)
-          .set({ defaultServiceMode: "table_tab" })
-          .where(eq(departments.id, v.restaurant));
+          .update(departmentSalePolicies)
+          .set({ orderStart: "table" })
+          .where(eq(departmentSalePolicies.departmentId, v.restaurant));
         const { id: tableId } = await withTransaction(suite.db, (tx) =>
           createTable(tx, v.cfg, { label: "Fired meal table", zoneId: v.sala }),
         );
@@ -1092,9 +1091,9 @@ describe("service periods gate only added dishes and added stored quantities", (
       at(mondayAt("13:50"));
       const v = await mealVenue();
       await suite.db
-        .update(departments)
-        .set({ defaultServiceMode: "table_tab" })
-        .where(eq(departments.id, v.restaurant));
+        .update(departmentSalePolicies)
+        .set({ orderStart: "table" })
+        .where(eq(departmentSalePolicies.departmentId, v.restaurant));
       const { id: tableId } = await withTransaction(suite.db, (tx) =>
         createTable(tx, v.cfg, { label: "Meal table", zoneId: v.sala }),
       );

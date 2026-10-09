@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { LitElement } from "lit";
 import { UrlStateController } from "@waitron/ui";
 import { registerIcons } from "@waitron/ui";
@@ -12,7 +12,70 @@ const hosts: LitElement[] = [];
 const before = location.href;
 afterEach(() => {
   hosts.splice(0).forEach((host) => host.remove());
+  vi.restoreAllMocks();
   history.replaceState(null, "", before);
+});
+
+it.each([
+  { path: "/manage/venue-operations/department/deli", department: "deli", view: null, zone: null },
+  {
+    path: "/manage/venue-operations/department/deli/view/zones",
+    department: "deli",
+    view: "zones",
+    zone: null,
+  },
+  {
+    path: "/manage/venue-operations/department/deli/view/zones/zone/patio",
+    department: "deli",
+    view: "zones",
+    zone: "patio",
+  },
+  {
+    path: "/manage/venue-operations/department/deli%2Fbar/view/zones/zone/patio%2Froof",
+    department: "deli/bar",
+    view: "zones",
+    zone: "patio/roof",
+  },
+])(
+  "preserves department navigation through a dashboard rewrite: $path",
+  ({ path, department, view, zone }) => {
+    history.replaceState(null, "", `${path}?dev=1&source=saved%20link#settings`);
+    const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+    hosts.push(host);
+    const url = new UrlStateController(host, () => {}, dashboardPath);
+    document.body.append(host);
+    expect(url.read("department")).toBe(department);
+    expect(url.read("view")).toBe(view);
+    expect(url.read("zone")).toBe(zone);
+    const push = vi.spyOn(history, "pushState");
+    url.write({ dashboard: "venue-operations" }, true);
+    expect(location.pathname).toBe(path);
+    expect(location.search).toBe("?dev=1&source=saved%20link");
+    expect(location.hash).toBe("#settings");
+    expect(push).not.toHaveBeenCalled();
+  },
+);
+
+it("pushes a department tab, replaces its zone, and clears both when returning to Departments", () => {
+  history.replaceState(null, "", "/manage/venue-operations/department/deli?dev=1");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  url.write({ view: "zones" });
+  expect(location.pathname).toBe("/manage/venue-operations/department/deli/view/zones");
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(replace).not.toHaveBeenCalled();
+  url.write({ zone: "patio" }, true);
+  expect(location.pathname).toBe("/manage/venue-operations/department/deli/view/zones/zone/patio");
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(replace).toHaveBeenCalledTimes(1);
+  url.write({ department: null, view: null, zone: null });
+  expect(location.pathname).toBe("/manage/venue-operations");
+  expect(location.search).toBe("?dev=1");
+  expect(push).toHaveBeenCalledTimes(2);
 });
 
 it("preserves the Prep stations tab and tester when the dashboard rewrites its destination", () => {

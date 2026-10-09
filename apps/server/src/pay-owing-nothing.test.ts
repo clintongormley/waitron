@@ -68,7 +68,7 @@ useVenueDb({
         vatClass: "general",
       });
       freeWaterId = water.id;
-      return offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" });
+      return offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
     });
   },
 });
@@ -271,7 +271,7 @@ describe("the card reader on a bill whose every line was given away", () => {
         .returning({ id: floorZones.id });
       const offered = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
         productIds: [productIdOf("Caña")],
       });
       await tx.execute(sql`

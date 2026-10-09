@@ -80,7 +80,7 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     ticketThenPayZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
       )
     ).zoneId;
     prepayZone = await inTx(venue, async (tx) => {
@@ -89,7 +89,7 @@ useVenueDb({
         .values({ locationId: venue.cfg.locationId, name: "Barra prepago" })
         .returning({ id: floorZones.id });
       return (
-        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, serviceMode: "prepay" })
+        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" })
       ).zoneId;
     });
     const session = await inTx(venue, async (tx) => {

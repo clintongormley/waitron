@@ -520,7 +520,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "zone_closed_times_weekday_ck",
   "zone_closed_times_step_ck",
   "holiday_geographies_city_ck",
-  "departments_service_mode_ck",
   "deployment_environment_ck",
   "deployment_singleton_ck",
   "drawer_opens_reason_ck",
@@ -702,7 +701,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "working_orders_settled_at_ck",
   "working_orders_source_ck",
   "working_orders_source_device_ck",
-  "zone_service_policies_mode_ck",
 ];
 
 /** Every migration set, applied into one database in the manifest's order, as the product does. */
