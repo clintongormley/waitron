@@ -385,3 +385,19 @@ it("retired local-holiday routes are absent for a signed-in manager", async () =
   }
   expect(await rows(fx)).toEqual(before);
 });
+
+it("refuses the retained area write to a read-only supervisor, staff, an absent and an expired session", async () => {
+  const fx = await fixture({ province: "Lleida", city: "Vielha" });
+  const before = await rows(fx);
+  for (const cookie of [fx.supervisor, fx.staff])
+    await refused(await send(fx, "PUT", "/holiday-area", cookie, { areaKey: "aran" }), 403, {
+      code: "authorization.not_permitted",
+    });
+  await refused(await send(fx, "PUT", "/holiday-area", undefined, { areaKey: "aran" }), 401, {
+    code: "management_session.required",
+  });
+  await refused(await send(fx, "PUT", "/holiday-area", fx.expired, { areaKey: "aran" }), 401, {
+    code: "management_session.expired",
+  });
+  expect(await rows(fx)).toEqual(before);
+});

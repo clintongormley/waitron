@@ -149,7 +149,7 @@ function server(liveData?: LiveData) {
       body?: unknown,
       options?: { passive?: boolean },
     ) => Promise<unknown>
-  >(async (path, method) => {
+  >(async (_path, method) => {
     const queue = method === "GET" ? state.reads : state.writes;
     const answer = method === "GET" ? state.model : undefined;
     const next = queue.length > 0 ? queue.shift() : answer;

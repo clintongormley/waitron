@@ -15,7 +15,6 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readNamedDaysModel } from "./named-days.js";
-import { saveSpecialDate } from "./hours.js";
 import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";

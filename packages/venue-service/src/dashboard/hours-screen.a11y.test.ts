@@ -95,7 +95,7 @@ async function mount(
 ): Promise<HoursScreen> {
   history.replaceState(null, "", "/manage/hours");
   await mountThemed("<div></div>", theme);
-  const request = async (path: string, method: string) => {
+  const request = async (_path: string, method: string) => {
     if (method === "GET") {
       if (options.pendingRead) return new Promise(() => {});
       if (options.failRead) throw { code: "connection.failed" };
@@ -188,7 +188,8 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
   "the named days list": async (theme) => {
     const el = await mount(theme);
     await showTab(el, "dates");
-    expect(deep(el, '[data-test="local-entries"]')).not.toBeNull();
+    expect(deep(el, "local-holidays-editor")).toBeNull();
+    expect(deep(el, "wt-data-table")).not.toBeNull();
     return el;
   },
   "the named days list, read-only": async (theme) => {

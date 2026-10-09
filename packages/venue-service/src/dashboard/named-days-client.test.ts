@@ -49,7 +49,6 @@ describe("NamedDaysApi", () => {
           "tenants",
           "locations",
           "holiday_geographies",
-          "local_holidays",
         ].map((type) => ({ type })),
       );
       api.rereadWatches();
