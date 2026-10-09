@@ -1882,7 +1882,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       from zone_service_policies
       where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
-      insert into zone_sale_policies (zone_id) values (${second!.id})`);
+      insert into zone_sale_policies (zone_id, order_start) values (${second!.id}, 'counter')`);
     await withTransaction(suite.db, async (tx) => {
       const [policy] = await tx
         .select({ departmentId: zoneServicePolicies.departmentId })
