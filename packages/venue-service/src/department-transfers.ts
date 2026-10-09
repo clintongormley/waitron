@@ -22,6 +22,7 @@ import {
   retargetOrderServiceContext,
   type VenueScope,
 } from "./operations.js";
+import { assertZoneTakesNewOrders } from "./zone-closed-times.js";
 import { readProfileZones } from "./profile-access.js";
 import { departments, orderServiceContexts } from "./schema/service.js";
 import {
@@ -418,6 +419,7 @@ export async function acceptDepartmentTransfer(
     if (table === undefined)
       throw new AppError("department_transfer.destination_invalid", { field: "tableId" });
   }
+  await assertZoneTakesNewOrders(tx, cfg, input.zoneId, new Date());
   const accepted = await resolveRequest(tx, request.id, receiver, {
     status: "accepted",
     destinationZoneId: input.zoneId,

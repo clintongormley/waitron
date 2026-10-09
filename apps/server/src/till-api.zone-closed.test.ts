@@ -1,10 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { locations, parties, workingOrders, workingOrderLines, withTransaction } from "@waitron/db";
+import {
+  locations,
+  parties,
+  partyTables,
+  workingOrders,
+  workingOrderLines,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  configureZone,
+  createServiceZone,
+  orderServiceContexts,
   menuPeriods,
   replaceMenuWeek,
   zoneServicePolicies,
@@ -339,4 +349,168 @@ describe("existing service in a closed zone", () => {
         });
     },
   );
+});
+
+describe("moving into closed zones", () => {
+  async function moveVenue() {
+    const v = await venue();
+    const dining = await withTransaction(suite.db, async (tx) => {
+      const [policy] = await tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, v.zoneId));
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: "Dining room",
+        departmentId: policy!.departmentId,
+      });
+      await configureZone(tx, v.cfg, {
+        zoneId: zone.id,
+        departmentId: policy!.departmentId,
+        serviceMode: "table_tab",
+      });
+      return zone;
+    });
+    return { v, dining: dining.id };
+  }
+  async function freeTable(v: BillVenue, zoneId: string) {
+    return withTransaction(suite.db, (tx) =>
+      createTable(tx, v.cfg, { label: randomUUID(), zoneId }),
+    );
+  }
+  async function seated(v: BillVenue, zoneId: string) {
+    const t = await freeTable(v, zoneId);
+    const answer = await request(v, "POST", `/api/tables/${t.id}/seat`, {});
+    expect(answer).toMatchObject({ status: 200 });
+    return { tableId: t.id, ...answer.json } as {
+      tableId: string;
+      partyId: string;
+      tabId: string;
+      revision: number;
+    };
+  }
+  async function moveRows() {
+    return {
+      bills: await orderRows(),
+      parties: await suite.db.select().from(parties),
+      tables: await suite.db.select().from(partyTables),
+      contexts: await suite.db.select().from(orderServiceContexts),
+    };
+  }
+  it.each(["free table", "held table", "counter"])(
+    "refuses a bill entering a closed zone at a %s and rolls back its move",
+    async (target) => {
+      const { v, dining } = await moveVenue();
+      const source = await seated(v, dining);
+      const holder = target === "held table" ? await seated(v, v.zoneId) : null;
+      const destination = holder ?? (await freeTable(v, v.zoneId));
+      const before = await moveRows();
+      at("23:45");
+      expect(
+        await request(v, "POST", `/api/bills/${source.tabId}/move`, {
+          to:
+            target === "counter"
+              ? { counter: { zoneId: v.zoneId } }
+              : { tableId: "tableId" in destination ? destination.tableId : destination.id },
+          partyId: source.partyId,
+          expectedPartyRevision: source.revision,
+          otherPartyId: holder?.partyId ?? null,
+          ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
+          bills: "separate",
+        }),
+      ).toEqual(refused(v));
+      expect(await moveRows()).toEqual(before);
+    },
+  );
+  it.each(["free table", "held table", "no bill"])(
+    "refuses guests entering a closed zone with %s and keeps both parties unchanged",
+    async (target) => {
+      const { v, dining } = await moveVenue();
+      const source = await seated(v, dining);
+      const holder = target === "held table" ? await seated(v, v.zoneId) : null;
+      const destination = holder ?? (await freeTable(v, v.zoneId));
+      if (target === "no bill")
+        await withTransaction(suite.db, async (tx) => {
+          await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, source.partyId));
+          await tx.delete(workingOrders).where(eq(workingOrders.id, source.tabId));
+        });
+      const before = await moveRows();
+      at("23:45");
+      expect(
+        await request(v, "POST", `/api/parties/${source.partyId}/move`, {
+          toTableId: "tableId" in destination ? destination.tableId : destination.id,
+          expectedPartyRevision: source.revision,
+          otherPartyId: holder?.partyId ?? null,
+          ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
+          bills: "separate",
+        }),
+      ).toEqual(refused(v));
+      expect(await moveRows()).toEqual(before);
+    },
+  );
+  it.each([
+    ["bill", false],
+    ["bill", true],
+    ["guests", false],
+    ["guests", true],
+  ] as const)("allows %s to move with same-zone=%s", async (kind, sameZone) => {
+    const { v, dining } = await moveVenue();
+    const source = await seated(v, v.zoneId);
+    const zoneId = sameZone ? v.zoneId : dining;
+    const destination = await freeTable(v, zoneId);
+    at("23:45");
+    const answer =
+      kind === "bill"
+        ? await request(v, "POST", `/api/bills/${source.tabId}/move`, {
+            to: { tableId: destination.id },
+            partyId: source.partyId,
+            expectedPartyRevision: source.revision,
+            otherPartyId: null,
+          })
+        : await request(v, "POST", `/api/parties/${source.partyId}/move`, {
+            toTableId: destination.id,
+            expectedPartyRevision: source.revision,
+            otherPartyId: null,
+          });
+    expect(answer).toMatchObject({ status: 200 });
+    const [context] = await suite.db
+      .select()
+      .from(orderServiceContexts)
+      .where(eq(orderServiceContexts.workingOrderId, source.tabId));
+    expect(context!.zoneId).toBe(zoneId);
+    const links = await suite.db
+      .select()
+      .from(partyTables)
+      .where(eq(partyTables.partyId, answer.json.partyId as string));
+    expect(links.filter((row) => row.leftAt === null).map((row) => row.tableId)).toEqual([
+      destination.id,
+    ]);
+  });
+  it("lets a presented bill move to a closed zone while keeping its recorded zone", async () => {
+    const { v, dining } = await moveVenue();
+    const source = await seated(v, dining);
+    const destination = await freeTable(v, v.zoneId);
+    await withTransaction(suite.db, (tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, source.tabId)),
+    );
+    at("23:45");
+    const answer = await request(v, "POST", `/api/bills/${source.tabId}/move`, {
+      to: { tableId: destination.id },
+      partyId: source.partyId,
+      expectedPartyRevision: source.revision,
+      otherPartyId: null,
+    });
+    expect(answer.status).toBe(200);
+    const [context] = await suite.db
+      .select()
+      .from(orderServiceContexts)
+      .where(eq(orderServiceContexts.workingOrderId, source.tabId));
+    expect(context!.zoneId).toBe(dining);
+    const links = await suite.db
+      .select()
+      .from(partyTables)
+      .where(eq(partyTables.partyId, answer.json.partyId as string));
+    expect(links.filter((row) => row.leftAt === null).map((row) => row.tableId)).toEqual([
+      destination.id,
+    ]);
+  });
 });

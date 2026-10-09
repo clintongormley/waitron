@@ -771,16 +771,16 @@ the target table's zone is closed and differs from the party's zone (`partyZone`
 no open bill cannot move in either. Moving within the closed zone, or out of it, is allowed.
 Accepting a department transfer into a closed zone is refused; the request stays pending.
 
-- [ ] **Step 1: Failing tests** at 23:45: a Dining room bill → free Terrace table → refused (fails
+- [x] **Step 1: Failing tests** at 23:45: a Dining room bill → free Terrace table → refused (fails
   today: the move succeeds); a Terrace bill → Dining room → accepted; a Terrace bill → another
   Terrace table → accepted; guests moved from the Dining room to a free Terrace table → refused;
   a Dining room party moved onto a table a Terrace party holds (merge) → refused; a Dining room
   party with no bill moved to a free Terrace table → refused; a transfer accepted into the Terrace →
   refused and still pending.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts` and `pnpm --filter @waitron/venue-service exec vitest run --project node src/department-transfers.test.ts`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; see them pass;** the server package and the venue-service node project.
-- [ ] **Step 5: Commit** — `feat(server): no bill or party moves into a closed zone (A366)`.
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts` and `pnpm --filter @waitron/venue-service exec vitest run --project node src/department-transfers.test.ts`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run; see them pass;** the server package and the venue-service node project.
+- [x] **Step 5: Commit** — `feat(server): no bill or party moves into a closed zone (A366)`.
 
 ---
 
