@@ -261,3 +261,60 @@ it("preserves current station cells when the calendar snapshot says there are no
     ],
   ]);
 });
+
+it("the replacement named-day watch reads passively, reports failure and recovery, and stops when detached", async () => {
+  const live = new LiveData();
+  const updated = { ...model, area: { ...model.area, chosen: "aran" } };
+  const answers: (NamedDaysModel | Error)[] = [model, new Error("offline"), updated];
+  const request = vi.fn(async () => {
+    const next = answers.shift()!;
+    if (next instanceof Error) throw next;
+    return next;
+  });
+  const apply = vi.fn();
+  const failed = vi.fn();
+  const recovered = vi.fn();
+  const stop = new clients.NamedDaysApi(request as DashboardRequest, live).watchNamedDays(
+    "2026-10-01",
+    "2026-10-31",
+    apply,
+    failed,
+    recovered,
+  );
+  await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(model));
+  expect(request.mock.calls).toEqual([
+    [
+      "/management-api/venue-service/named-days?from=2026-10-01&to=2026-10-31",
+      "GET",
+      undefined,
+      { passive: true },
+    ],
+  ]);
+  live.invalidate([{ type: "locations" }]);
+  await vi.waitFor(() => expect(failed).toHaveBeenCalledWith(new Error("offline")));
+  live.invalidate([{ type: "holiday_geographies" }]);
+  await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(updated));
+  expect(recovered).toHaveBeenCalledTimes(1);
+  stop();
+  expect(live.interests).toEqual([]);
+  live.invalidate([{ type: "special_dates" }]);
+  live.refresh();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(request).toHaveBeenCalledTimes(3);
+});
+
+it("the replacement named-day watch rereads after a write with live data and without it", async () => {
+  for (const live of [new LiveData(), undefined]) {
+    const request = vi.fn(async () => model);
+    const api = new clients.NamedDaysApi(request as DashboardRequest, live);
+    const apply = vi.fn();
+    const stop = api.watchNamedDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    api.rereadWatches();
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    stop();
+    api.rereadWatches();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(request).toHaveBeenCalledTimes(2);
+  }
+});

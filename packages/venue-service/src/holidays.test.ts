@@ -301,15 +301,13 @@ describe("reading a venue's holidays", () => {
   it("gives each civil year its own coverage, counting entries in the whole year", async () => {
     const cfg = await venue();
     await run((tx) =>
-      tx
-        .insert(specialDates)
-        .values({
-          locationId: cfg.locationId,
-          date: "2026-03-19",
-          name: "Our holiday",
-          kind: "holiday",
-          colour: "purple",
-        }),
+      tx.insert(specialDates).values({
+        locationId: cfg.locationId,
+        date: "2026-03-19",
+        name: "Our holiday",
+        kind: "holiday",
+        colour: "purple",
+      }),
     );
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-12-01", "2027-01-31"));
     expect(read.facts.map(({ id }) => id)).toEqual(["shipped:new-year-2027"]);
@@ -483,15 +481,13 @@ describe("an address that does not resolve", () => {
   it("counts own named holidays for a known province whose region is unknown", async () => {
     const cfg = await venue({ province: "Lostshire" });
     await run((tx) =>
-      tx
-        .insert(specialDates)
-        .values({
-          locationId: cfg.locationId,
-          date: "2026-03-19",
-          name: "Our holiday",
-          kind: "holiday",
-          colour: "purple",
-        }),
+      tx.insert(specialDates).values({
+        locationId: cfg.locationId,
+        date: "2026-03-19",
+        name: "Our holiday",
+        kind: "holiday",
+        colour: "purple",
+      }),
     );
     const read = await run((tx) => store.readHolidays(tx, cfg, ...year));
     expect(read.facts).toEqual([]);
@@ -912,4 +908,36 @@ it("lets a Spanish venue add more own holidays than the informational local numb
     (await run((tx) => packageIndex.readHolidays(tx, cfg, "2026-12-01", "2026-12-01"))).coverage[0]!
       .local,
   ).toBe("owner_entered");
+});
+
+it("reuses a holiday area's geography for an equivalent city spelling", async () => {
+  const cfg = await venue({ province: "Isleshire", city: "  Villa   Real  " });
+  const saved = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" })))!;
+  expect(saved.city).toBe("Villa   Real");
+  await moveTo(cfg, { city: "VILLA REAL" });
+  expect((await run((tx) => store.readHolidayAreaModel(tx, cfg))).chosen).toBe("isle-a");
+  const again = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-b" })))!;
+  expect(again.id).toBe(saved.id);
+  expect(
+    (await stored()).geographies.filter(({ locationId }) => locationId === cfg.locationId),
+  ).toHaveLength(1);
+});
+
+it("the retained area writer stores a city trimmed at the address's full length", async () => {
+  for (const city of ["  Villa Real  ", "x".repeat(5000)]) {
+    const cfg = await venue({ province: "Isleshire", city });
+    const saved = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" })))!;
+    expect(saved.city).toBe(city.trim());
+  }
+});
+
+it("the area choice keeps cities with different accents and punctuation apart", async () => {
+  const cfg = await venue({ province: "Isleshire", city: "Puerto Ísla" });
+  await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }));
+  for (const city of ["Puerto Isla", "Puerto-Ísla"]) {
+    await moveTo(cfg, { city });
+    expect((await run((tx) => store.readHolidayAreaModel(tx, cfg))).chosen).toBeNull();
+  }
+  await moveTo(cfg, { city: "PUERTO I\u0301SLA" });
+  expect((await run((tx) => store.readHolidayAreaModel(tx, cfg))).chosen).toBe("isle-a");
 });

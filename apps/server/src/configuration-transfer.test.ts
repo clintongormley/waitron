@@ -4697,6 +4697,31 @@ describe("public holidays in a configuration transfer", () => {
     expect(persisted.rows[0]).toEqual({ tenants: 0, geographies: 0, entries: 0, special_dates: 0 });
   });
 
+  it("refuses a retired local-holiday table in a bundle and writes no venue", async () => {
+    const { versions, transferred } = await preparedWithHolidays("B45004411");
+    const edited: ConfigurationBundle = {
+      ...transferred,
+      tables: { ...transferred.tables, local_holidays: [] },
+    };
+    const refusal = { code: "setup.request_invalid", params: { field: "tables" } };
+    expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining(refusal),
+    );
+    const target = venue("B45004422");
+    await expect(
+      applyVenue(planVenue(target, ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const persisted = await targetSuite.db.execute<{ tenants: number }>(
+      sql`select cast(count(*) as int) as tenants from tenants where tax_id = ${target.taxId}`,
+    );
+    expect(persisted.rows).toEqual([{ tenants: 0 }]);
+  });
+
   it("refuses a bundle exported before the holiday tables existed, as an older venue-service schema", async () => {
     const { versions, transferred } = await preparedWithHolidays("B45003311");
     const journal = JSON.parse(
