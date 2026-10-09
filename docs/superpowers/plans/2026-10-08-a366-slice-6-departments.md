@@ -1449,3 +1449,25 @@ assertions without deleting or changing their previous lines.
 Task A10 remains in progress. Next: the exact kept-assertion audit and public wrapper switch,
 live-query/snapshot ownership and mounted-dashboard history/permission/receipt/parent checks.
 A11–A15, final visual checks and the authorised branch workflow remain.
+
+
+### Implementation checkpoint — Task A10 removed rows and focus (2026-10-09)
+
+The bounded audit carries the removed-department/parent dirty-name cases into Rename dialogs,
+with Keep/Discard, unload protection and no-write assertions. A move destination removed by a
+live model update is absent from choices and cannot be saved. The legacy assertions remain
+in place pending the complete retirement audit.
+
+Focus returns after dialog close and after the action refresh releases the busy state. If the
+opener is gone, the shell uses the current Add department/Add zone action, or the parent link
+on a missing-department page. A zone's physical menu button can survive a switch to another
+zone; its rendered `data-zone-id` must still match the dialog's row before it can receive focus.
+Two initial focus cases failed, and a later remaining-zone reproduction failed before that
+identity check. The final focused browser command covered twelve files and passed 285 cases.
+A staged LOOK checked sixteen EN/ES, light/dark, CSS1280/390 views and exposed the reused-menu
+case; captures are scaled viewport images, not mounted-dashboard or full-page evidence.
+
+A10 remains incomplete: finish the full kept-assertion audit, switch the public wrapper and
+verify actual DashboardApp history, permissions and receipt/parent links. A11–A15 and the
+branch review/hook/current-head CI/authorised landing gates remain. No old assertion, fiscal
+source, migration, guard or coverage setting changed in this checkpoint.

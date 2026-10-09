@@ -105,10 +105,31 @@ export class VenueDepartmentsShell extends LitElement {
   }
   async #closeDialog() {
     const opener = this.#opener;
+    const dialog = this.dialog;
     this.dialog = undefined;
     this.#opener = undefined;
     await this.updateComplete;
-    if (this.isConnected && opener?.isConnected) opener.focus();
+    await this.#returnFocus(opener, dialog);
+  }
+  async #returnFocus(opener?: HTMLElement, dialog?: DepartmentDialog) {
+    const path = location.pathname;
+    const generation = this.#generation;
+    const list = this.shadowRoot?.querySelector("departments-list");
+    const zones = this.shadowRoot?.querySelector("department-zones");
+    await list?.updateComplete;
+    await zones?.updateComplete;
+    if (!this.#current(generation) || this.busy || this.dialog || location.pathname !== path)
+      return;
+    const root = opener?.getRootNode();
+    const zoneId = root instanceof ShadowRoot ? root.host.getAttribute("data-zone-id") : null;
+    const sameRow = zoneId === null || (dialog && "row" in dialog && zoneId === dialog.row.id);
+    const target =
+      opener?.isConnected && sameRow
+        ? opener
+        : (list?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-department]") ??
+          zones?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-zone]") ??
+          this.shadowRoot?.querySelector<HTMLElement>("nav a"));
+    target?.focus();
   }
   async #refresh(generation: object) {
     const snapshot = this.model;
@@ -154,8 +175,8 @@ export class VenueDepartmentsShell extends LitElement {
     if (this.#current(generation)) {
       this.busy = false;
       await this.updateComplete;
-      if (this.#current(generation) && location.pathname === path && opener?.isConnected)
-        opener.focus();
+      if (this.#current(generation) && location.pathname === path)
+        await this.#returnFocus(opener, dialog);
     }
   }
   async #enable(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {

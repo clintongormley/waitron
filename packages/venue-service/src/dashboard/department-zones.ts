@@ -279,7 +279,11 @@ export class DepartmentZones extends LitElement {
           ? html`<div class="form">
               <div class="heading">
                 <h2>${row.name}</h2>
-                <wt-row-actions label=${`${row.name}: ${t("venue.actions")}`} align="end">
+                <wt-row-actions
+                  data-zone-id=${row.id}
+                  label=${`${row.name}: ${t("venue.actions")}`}
+                  align="end"
+                >
                   <wt-button
                     variant="secondary"
                     align="start"

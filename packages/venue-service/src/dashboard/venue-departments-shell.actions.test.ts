@@ -433,3 +433,129 @@ it("a delivered recovery snapshot clears an earlier load failure", async () => {
   await shell.updateComplete;
   expect(alert(shell)).toBe("");
 });
+
+it.each(["cancel", "save"] as const)(
+  "closing with %s returns focus to Add when the edited department disappears",
+  async (ending) => {
+    const { shell, loaded, request } = await mount();
+    const list = shell.shadowRoot!.querySelector("departments-list")!;
+    await list.updateComplete;
+    const table = list.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-department-d1]")!.click();
+    const el = await dialogs(shell);
+    const next = view();
+    next.departments = next.departments.filter((row) => row.id !== "d1");
+    shell.model = next;
+    loaded(next);
+    await shell.updateComplete;
+    await list.updateComplete;
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector("[data-test=rename-department-d1]")).toBeNull();
+    if (ending === "save") await saveName(el, "Retained name");
+    else el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+    await expect.poll(() => el.dialog).toBeUndefined();
+    await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+    await expect
+      .poll(() => list.shadowRoot!.activeElement)
+      .toBe(list.shadowRoot!.querySelector("[data-test=add-department]"));
+    if (ending === "cancel") expect(request).not.toHaveBeenCalled();
+  },
+);
+
+it("a saved rename returns focus to the same row menu after refresh", async () => {
+  const { shell, loaded } = await mount();
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const action = table.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-department-d1]")!;
+  action.click();
+  const el = await dialogs(shell);
+  const next = view();
+  next.departments[0]!.name = "Brunch";
+  loaded(next);
+  await saveName(el, "Brunch");
+  await expect.poll(() => shell.model.departments[0]!.name).toBe("Brunch");
+  await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+  await list.updateComplete;
+  await table.updateComplete;
+  const menu = table
+    .shadowRoot!.querySelector("[data-test=rename-department-d1]")!
+    .closest("wt-row-actions")!;
+  expect(menu.getAttribute("label")).toBe("Brunch: Actions");
+  await expect
+    .poll(() => menu.shadowRoot!.activeElement)
+    .toBe(menu.shadowRoot!.querySelector("button"));
+});
+
+it("Cancel returns focus to Add zone when the edited zone disappears", async () => {
+  const { shell, request } = await mount(
+    "/manage/venue-operations/department/d1/view/zones/zone/z1",
+  );
+  const zones = shell.shadowRoot!.querySelector("department-zones")!;
+  await zones.updateComplete;
+  zones.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-zone]")!.click();
+  const el = await dialogs(shell);
+  const next = view();
+  next.zones = [];
+  next.floorZones = [];
+  shell.model = next;
+  await shell.updateComplete;
+  await zones.updateComplete;
+  expect(zones.shadowRoot!.querySelector("[data-test=rename-zone]")).toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await expect.poll(() => el.dialog).toBeUndefined();
+  await expect
+    .poll(() => zones.shadowRoot!.activeElement)
+    .toBe(zones.shadowRoot!.querySelector("[data-test=add-zone]"));
+  expect(request).not.toHaveBeenCalled();
+});
+
+it("Cancel returns focus to the parent link when the zone's department disappears", async () => {
+  const { shell, request } = await mount(
+    "/manage/venue-operations/department/d1/view/zones/zone/z1",
+  );
+  const zones = shell.shadowRoot!.querySelector("department-zones")!;
+  await zones.updateComplete;
+  zones.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-zone]")!.click();
+  const el = await dialogs(shell);
+  const next = view();
+  next.departments = next.departments.filter((row) => row.id !== "d1");
+  shell.model = next;
+  await shell.updateComplete;
+  expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await expect.poll(() => el.dialog).toBeUndefined();
+  const parent = shell.shadowRoot!.querySelector<HTMLAnchorElement>("nav a")!;
+  expect(parent.getAttribute("href")).toBe("/manage/venue-operations");
+  await expect.poll(() => shell.shadowRoot!.activeElement).toBe(parent);
+  expect(request).not.toHaveBeenCalled();
+});
+
+it("Cancel returns focus to Add zone when the row menu is reused for a different zone", async () => {
+  const { shell, request } = await mount(
+    "/manage/venue-operations/department/d1/view/zones/zone/z1",
+  );
+  const zones = shell.shadowRoot!.querySelector("department-zones")!;
+  await zones.updateComplete;
+  const action = zones.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-zone]")!;
+  const trigger = action.closest("wt-row-actions")!.shadowRoot!.querySelector("button")!;
+  action.click();
+  const el = await dialogs(shell);
+  const next = view();
+  next.zones = next.zones.filter((row) => row.id !== "z1");
+  next.floorZones = next.floorZones.filter((row) => row.id !== "z1");
+  shell.model = next;
+  await shell.updateComplete;
+  await zones.updateComplete;
+  expect(trigger.isConnected).toBe(true);
+  expect(zones.shadowRoot!.querySelector("h2")!.textContent).toBe("z2");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await expect.poll(() => el.dialog).toBeUndefined();
+  const add =
+    zones.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=add-zone]")!;
+  await expect.poll(() => zones.shadowRoot!.activeElement).toBe(add);
+  expect(add.shadowRoot!.activeElement).toBe(add.shadowRoot!.querySelector("button"));
+  expect(request).not.toHaveBeenCalled();
+});

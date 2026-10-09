@@ -144,6 +144,25 @@ it("creates a department with name only and emits the saved id", async () => {
   });
   expect(saved.mock.calls[0]![0].detail).toEqual({ departmentId: "new" });
 });
+
+it("a move cannot save a destination removed by a live read", async () => {
+  const { el, request } = await mount({ kind: "move-zone", row: view.floorZones[0]! });
+  const destination =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+  await chooseOption(destination, "d2");
+  expect(destination.value).toBe("d2");
+  const next = structuredClone(view);
+  next.departments = next.departments.filter((row) => row.id !== "d2");
+  el.model = next;
+  await el.updateComplete;
+  expect(destination.options).toEqual([]);
+  save(el).click();
+  await el.updateComplete;
+  expect(request).not.toHaveBeenCalled();
+  expect(destination.error).toBe("This field is required.");
+  expect(save(el).disabled).toBe(true);
+  expect(el.dialog?.kind).toBe("move-zone");
+});
 it("move lists only other active departments and preserves the override", async () => {
   const { el, request } = await mount(dialogs[4]!);
   const box = field(el, "departmentId") as unknown as HTMLElementTagNameMap["wt-combobox"];

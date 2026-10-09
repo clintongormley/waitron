@@ -215,3 +215,56 @@ it.each(["move-zone", "disable-zone"])(
     expect(app.leave.coordinator.isDirty()).toBe(false);
   },
 );
+
+it.each([
+  ["rename-department", { departmentId: "d1" }, "Retained name"],
+  ["rename-zone", { zoneId: "z1" }, "Garden"],
+] as const)(
+  "%s retains its edited name when a live read removes the department",
+  async (action, detail, name) => {
+    const { shell } = await mount(
+      action === "rename-zone"
+        ? "/manage/venue-operations/department/d1/view/zones/zone/z1"
+        : "/manage/venue-operations",
+    );
+    const request = vi.spyOn(shell.api, "updateDepartment");
+    const zoneWrite = vi.spyOn(shell.api, "updateZone");
+    shell
+      .shadowRoot!.querySelector(
+        action === "rename-zone" ? "department-zones" : "departments-list",
+      )!
+      .dispatchEvent(new CustomEvent(action, { detail, bubbles: true, composed: true }));
+    await shell.updateComplete;
+    const dialogs = shell.shadowRoot!.querySelector("department-dialogs")!;
+    await dialogs.updateComplete;
+    const field =
+      dialogs.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    field.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: name }, bubbles: true, composed: true }),
+    );
+    await dialogs.updateComplete;
+    const next = structuredClone(model);
+    next.departments = [];
+    shell.model = next;
+    await shell.updateComplete;
+    await dialogs.updateComplete;
+    expect(field.value).toBe(name);
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    const cancel = dialogs.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!;
+    cancel.click();
+    await choose("keep");
+    expect(field.value).toBe(name);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    cancel.click();
+    await choose("discard");
+    await expect.poll(() => dialogs.dialog).toBeUndefined();
+    expect(dialogs.shadowRoot!.querySelector("[name=name]")).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+    expect(zoneWrite).not.toHaveBeenCalled();
+    const clean = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
+  },
+);
