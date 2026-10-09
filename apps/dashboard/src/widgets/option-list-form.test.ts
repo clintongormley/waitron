@@ -1092,7 +1092,9 @@ it("sends one wt-cancel when its dialog is dismissed with Escape while the form 
   let cancels = 0;
   host.addEventListener("wt-cancel", () => cancels++);
 
+  const closed = closeOf(el);
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(cancels).toBe(1));
   await closeReportsDelivered();
 
@@ -1279,6 +1281,16 @@ it("ignores a drag whose row was removed mid-gesture, leaving the save's message
 // ---------------------------------------------------------------------------
 // The option editor stacked over the list
 
+/**
+ * Resolves on the form's modal `wt-close`, which a dismissal's report follows. Chromium sends the
+ * native close only with a later rendered frame, which a busy runner can hold back past
+ * `vi.waitFor`'s one second.
+ */
+function closeOf(form: OptionListForm | OptionLabelForm): Promise<unknown> {
+  const modal = form.shadowRoot!.querySelector("wt-modal")!;
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
+
 function dialogOf(form: OptionListForm | OptionLabelForm): HTMLDialogElement {
   return form.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
 }
@@ -1304,7 +1316,9 @@ it("closes only the option editor on Escape, and puts focus back on that row's a
   host.addEventListener("wt-cancel", () => cancels++);
   const actions = await openByHand(el, 1);
 
+  const closed = closeOf(editor(el));
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(editor(el).open).toBe(false));
   await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(false));
 
@@ -1336,7 +1350,9 @@ it("puts focus back on the option's name when the editor its name opened closes"
   await editor(el).updateComplete;
   await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(true));
 
+  const closed = closeOf(editor(el));
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(dialogOf(editor(el)).open).toBe(false));
 
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(nameButton(el, 1)));

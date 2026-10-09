@@ -1006,7 +1006,11 @@ it("keeps missing-report completeness unknown and closes a complete selected-lan
   q(el, "[data-test=edit-translations-ca]")!.click();
   await flush(el);
   expect(translations(el).open).toBe(true);
+  const closed = new Promise((resolve) =>
+    translationModal(el).addEventListener("wt-close", resolve, { once: true }),
+  );
   translations(el).shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await closed;
   await vi.waitFor(() => expect(translations(el).open).toBe(false));
 });
 
@@ -1015,7 +1019,11 @@ it("reopens for another language without keeping the preceding language's fields
   const el = await mount(client);
   q(el, "[data-test=edit-translations-en]")!.click();
   await flush(el);
+  const closed = new Promise((resolve) =>
+    translationModal(el).addEventListener("wt-close", resolve, { once: true }),
+  );
   translations(el).shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await closed;
   await vi.waitFor(() => expect(translations(el).open).toBe(false));
   q(el, "[data-test=edit-translations-de]")!.click();
   await flush(el);
