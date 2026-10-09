@@ -12,7 +12,6 @@ import type {
   JoinRequestRow,
   Printer,
   Station,
-  Watcher,
 } from "../api/client.js";
 
 /**
@@ -47,30 +46,20 @@ const stations: Station[] = [
   },
 ];
 
-const watchers: Watcher[] = [
-  {
-    id: "w1",
-    name: "Pass",
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-    displayOrder: 0,
-    active: true,
-    printerIds: [],
-  },
-];
-
 const devices: DeviceRow[] = [
   {
     id: "d1",
     madeHereStationIds: [],
     approvedProfileIds: ["dp1"],
     kind: "kds_station",
-    stationId: "s1",
-    watcherId: null,
-    binding: { name: "Cocina", active: true },
+    kitchenScreens: [
+      {
+        kind: "station",
+        available: true,
+        stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
+        zones: null,
+      },
+    ],
     label: "Pantalla Cocina",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
@@ -90,9 +79,7 @@ const devices: DeviceRow[] = [
     madeHereStationIds: [],
     approvedProfileIds: [],
     kind: "kds_station",
-    stationId: null,
-    watcherId: null,
-    binding: null,
+    kitchenScreens: [],
     label: "Pase",
     active: false,
     lastSeenAt: null,
@@ -217,7 +204,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
-    listWatchers: vi.fn().mockResolvedValue(watchers),
+    listZones: vi.fn().mockResolvedValue([]),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([
       {
@@ -407,8 +394,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         ...devices[0]!,
         id: "till",
         kind: "till",
-        stationId: null,
-        binding: null,
+        kitchenScreens: [],
         madeHereStationIds: ["s2"],
       };
       const { el, host } = await mountWidget<DevicesScreen>(
@@ -450,13 +436,72 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     },
   );
 
+  it.each([390, 1280])(
+    "renders a kitchen display's Edit dialog with a pass monitor's lists and a station no longer available accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const slot = (id: string, name: string, available = true) => ({
+        id,
+        name,
+        available,
+        switchedOff: false,
+      });
+      const screen: DeviceRow = {
+        ...devices[0]!,
+        id: "monitor",
+        deviceProfileId: "dp3",
+        kitchenScreens: [
+          {
+            kind: "pass_monitor",
+            available: true,
+            stations: [slot("s1", "Cocina"), slot("s9", "Deli", false)],
+            zones: [slot("z1", "Terraza")],
+          },
+        ],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            listDevices: vi.fn().mockResolvedValue([screen]),
+            listZones: vi.fn().mockResolvedValue([
+              { id: "z1", name: "Terraza", displayOrder: 0, active: true },
+              { id: "z2", name: "Salón", displayOrder: 1, active: true },
+            ]),
+            listProfileKitchenScreens: vi.fn().mockResolvedValue([
+              {
+                profileId: "dp3",
+                screens: { pass_monitor: { stationIds: null, zoneIds: null } },
+              },
+            ]),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=edit-device-monitor]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-gone]")).not.toBeNull(),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z2]")).not.toBeNull();
+      const dialog = el
+        .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const body = dialog.querySelector<HTMLElement>(".body")!;
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
   it("renders a till's Edit dialog with Save quiet, and then with a change, accessibly", async () => {
     const till: DeviceRow = {
       ...devices[0]!,
       id: "till",
       kind: "till",
-      stationId: null,
-      binding: null,
+      kitchenScreens: [],
       madeHereStationIds: ["s2"],
     };
     const { el, host } = await mountWidget<DevicesScreen>(
@@ -497,8 +542,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         ...devices[0]!,
         id: "till",
         kind: "till",
-        stationId: null,
-        binding: null,
+        kitchenScreens: [],
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
       };
@@ -583,8 +627,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         ...devices[0]!,
         id: "till",
         kind: "till",
-        stationId: null,
-        binding: null,
+        kitchenScreens: [],
         approvedProfileIds: ["dp1", "dp-bar"],
       };
       const { el, host } = await mountWidget<DevicesScreen>(
@@ -670,11 +713,11 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await flush(el);
       expect(
         (
-          el.shadowRoot!.querySelector("[data-test=pair-binding]") as HTMLElement & {
+          el.shadowRoot!.querySelector("[data-test=pair-screen]") as HTMLElement & {
             placeholder: string;
           }
         ).placeholder,
-      ).toBe(t("devices.binding_none_listed"));
+      ).toBe(t("devices.kitchen_screen_none_offered"));
       const pairDialog = el
         .shadowRoot!.querySelector("[data-test=pair-modal]")!
         .shadowRoot!.querySelector("dialog")!;
@@ -699,8 +742,14 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         returning: {
           name: "Pase",
           profileId: "dp3",
-          stationId: "s1",
-          watcherId: null,
+          kitchenScreens: [
+            {
+              kind: "station",
+              available: true,
+              stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
+              zones: null,
+            },
+          ],
           profileRetired: false,
         },
       };
@@ -727,7 +776,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-choice]")).not.toBeNull());
       el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
       await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("[data-test=pair-binding]")).not.toBeNull(),
+        expect(el.shadowRoot!.querySelector("[data-test=pair-screen]")).not.toBeNull(),
       );
       await flush(el);
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
@@ -867,8 +916,13 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp3");
       await el.updateComplete;
-      const binding = el.shadowRoot!.querySelector("[data-test=pair-binding]")!;
-      await chooseOption(binding, "station:s1");
+      const screen = el.shadowRoot!.querySelector("[data-test=pair-screen]")!;
+      await chooseOption(screen, "station");
+      await el.updateComplete;
+      el.shadowRoot!.querySelector("[data-test=pair-screen-every-station]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: false } }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=pair-submit]")!.click();
       await vi.waitFor(() =>
         expect(
@@ -877,12 +931,14 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         ).not.toBe(""),
       );
       await flush(el);
-      await userEvent.click(binding.shadowRoot!.querySelector(".trigger")!);
       expect(
-        Array.from(binding.shadowRoot!.querySelectorAll(".group-heading")).map((group) =>
-          group.textContent?.trim(),
-        ),
-      ).toEqual(["Estaciones", "Puntos de seguimiento"]);
+        Array.from(
+          el.shadowRoot!.querySelectorAll<HTMLElement & { label: string }>(
+            "[data-test=pair-screen-stations] wt-switch",
+          ),
+        ).map((toggle) => toggle.label),
+      ).toEqual(["Todas las estaciones", "Cocina", "Barra"]);
+      await userEvent.click(screen.shadowRoot!.querySelector(".trigger")!);
       await userEvent.keyboard("{Escape}");
       await flush(el);
       await expectNoA11yViolations(host);
@@ -943,6 +999,7 @@ describe("devices-screen a11y — the numeric match", () => {
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
         name: "Pantalla pase",
         profileId: "dp1",
+        kitchenScreens: [],
       }),
     );
   });

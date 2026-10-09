@@ -643,10 +643,8 @@ export interface DeviceRow {
   /** The profiles staff may switch the device to: its active profile first, then the others. */
   approvedProfileIds: string[];
   kind: string;
-  stationId: string | null;
-  watcherId: string | null;
-  /** The stored station's or watcher's name, and whether it is switched on; null when it holds neither. */
-  binding: { name: string; active: boolean } | null;
+  /** Its kitchen screens as the server resolves them, a kind a narrowing took listed after them. */
+  kitchenScreens: ResolvedKitchenScreen[];
   label: string;
   active: boolean;
   lastSeenAt: string | null;
@@ -768,6 +766,29 @@ export interface KitchenScreenScope {
  */
 export type ProfileKitchenScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
 
+export interface DeviceKitchenScreen extends KitchenScreenScope {
+  kind: KitchenScreenKind;
+}
+
+/** One station or zone of a device's kitchen screen: shown, or no longer available. */
+export interface ScreenSlot {
+  id: string;
+  name: string;
+  available: boolean;
+  switchedOff: boolean;
+}
+
+/** A device's kitchen screen as the server reads it back. */
+export interface ResolvedKitchenScreen {
+  kind: KitchenScreenKind;
+  /** False when a profile narrowing took this kind from the device. */
+  available: boolean;
+  /** Display order, the device's own list or else what its profile allows it. */
+  stations: ScreenSlot[];
+  /** null: no zone filter. */
+  zones: ScreenSlot[] | null;
+}
+
 /** A device a profile save narrowed, and what it lost. */
 export interface NarrowedDevice {
   deviceId: string;
@@ -807,8 +828,7 @@ export interface JoinRequestRow {
 export interface ReturningDetails {
   name: string;
   profileId: string;
-  stationId: string | null;
-  watcherId: string | null;
+  kitchenScreens: ResolvedKitchenScreen[];
   /** Its profile was deleted, so Enable must be given another. */
   profileRetired: boolean;
 }
@@ -2926,8 +2946,7 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      stationId?: string;
-      watcherId?: string;
+      kitchenScreens: DeviceKitchenScreen[];
     },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
@@ -3050,10 +3069,8 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      /** Absent or null clears it; a kitchen screen needs exactly one of this and `watcherId`. */
-      stationId?: string | null;
-      /** Absent or null clears it; a kitchen screen needs exactly one of this and `stationId`. */
-      watcherId?: string | null;
+      /** Replaces the device's kitchen screens and clears what narrowings took; absent leaves them. */
+      kitchenScreens?: DeviceKitchenScreen[];
       /** Null puts the role on Use default. */
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;

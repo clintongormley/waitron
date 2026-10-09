@@ -134,6 +134,36 @@ it.each([
       "floor_zones",
     ],
   ],
+  // `GET /management-api/devices` (apps/server/src/device-api.ts): each device with its profile,
+  // equipment and kitchen screens, which `readDevicesKitchenScreens`
+  // (packages/venue-service/src/kitchen-screens.ts) resolves against the profile's lists, the
+  // stations and zones, and what narrowings took. No watchers: a device no longer holds one.
+  [
+    "listDevices",
+    [],
+    [
+      "devices",
+      "device_profiles",
+      "kitchen_stations",
+      "device_made_here_stations",
+      "device_approved_profiles",
+      "printer_holders",
+      "card_reader_holders",
+      "device_card_readers",
+      "device_profile_printers",
+      "device_profile_card_readers",
+      "printers",
+      "card_readers",
+      "device_kitchen_screens",
+      "device_kitchen_screen_stations",
+      "device_kitchen_screen_zones",
+      "device_kitchen_screen_removals",
+      "device_profile_kitchen_screens",
+      "device_profile_kitchen_screen_stations",
+      "device_profile_kitchen_screen_zones",
+      "floor_zones",
+    ],
+  ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
   // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
   // mode adds today's classification (`currentClassifications`, packages/catalogue).
