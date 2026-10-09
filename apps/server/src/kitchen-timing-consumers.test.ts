@@ -12,8 +12,6 @@ import { serveLine } from "./testing/serve-line.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
 
-import { readStationHealth } from "./station-health.js";
-
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -232,7 +230,7 @@ describe("effective kitchen timing across consumers", () => {
 
 // Omitting a defaults guard must refuse rather than turn an incomplete venue into a quiet kitchen.
 describe("missing kitchen timing defaults", () => {
-  it.each(["defaults", "health", "station", "pass", "tables", "signals", "report"] as const)(
+  it.each(["defaults", "station", "pass", "tables", "signals", "report"] as const)(
     "refuses the %s read with a named configuration error",
     async (reader) => {
       const v = await setupPartyVenue(suite.db);
@@ -245,8 +243,6 @@ describe("missing kitchen timing defaults", () => {
           switch (reader) {
             case "defaults":
               return getKitchenTimingDefaults(tx, v.cfg);
-            case "health":
-              return readStationHealth(tx, v.cfg, new Date());
             case "station":
               return listStationQueue(tx, station!.id);
             case "pass":

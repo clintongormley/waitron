@@ -2121,6 +2121,28 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }[];
   }
 
+  it("lets supervisors load station metadata without granting station writes", async () => {
+    const name = unique("Supervisor view");
+    const id = await createStation(name);
+    const response = await req(
+      "/stations?includeDisabled=true",
+      { method: "GET" },
+      supervisorCookie,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toContainEqual(
+      expect.objectContaining({ id, name, active: true, isDefault: false }),
+    );
+    const write = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: "Denied" }) },
+      supervisorCookie,
+    );
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect((await listStations()).find((station) => station.id === id)?.name).toBe(name);
+    expect((await req("/stations", { method: "GET" })).status).toBe(401);
+  });
   it("explicitly lists retained disabled station metadata without changing the default active-only list", async () => {
     const id = await createStation(unique("Retained metadata"));
     await req(`/stations/${id}`, { method: "DELETE" }, managerCookie);
