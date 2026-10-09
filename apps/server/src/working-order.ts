@@ -6722,6 +6722,16 @@ export async function listExpoQueue(
   );
 }
 
+/** Not made at the till, of an order neither abandoned nor collected, at any location. Whether the
+ *  dish is away or served is the caller's filter. */
+export function liveKitchenDish(): SQL | undefined {
+  return and(
+    eq(ticketItems.madeHere, false),
+    ne(workingOrders.status, "abandoned"),
+    isNull(workingOrders.collectedAt),
+  );
+}
+
 /** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
 export async function readPassBoard(
   tx: Transaction,
@@ -6779,14 +6789,7 @@ export async function readPassBoard(
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(
-      and(
-        eq(ticketItems.madeHere, false),
-        ne(workingOrders.status, "abandoned"),
-        isNull(workingOrders.collectedAt),
-        scope,
-      ),
-    )
+    .where(and(liveKitchenDish(), scope))
     .orderBy(
       workingOrders.openedAt,
       sql`${kitchenCourses.displayOrder} asc nulls first`,
