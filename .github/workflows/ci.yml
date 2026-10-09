@@ -674,6 +674,8 @@ jobs:
       # both flags were silently dropped, each shard ran the FULL suite and wrote the default `blob.json`,
       # and `if-no-files-found: error` on the upload is what caught it (run 33906337559, all six shards).
       - name: Run the db shard
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/db" test:shard \
@@ -774,6 +776,8 @@ jobs:
       # tests, and the suite of the S3 test server they start, run in test-server-stream instead;
       # `--exclude` adds to the config's own excludes.
       - name: Run the server shard
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
@@ -921,6 +925,8 @@ jobs:
       # The guard first, same reason as every shard: pnpm answers "nothing to do" with exit 0 and a
       # line on stdout, so a shard whose filter selects nothing reports success having run no tests.
       - name: Run the fiscal-verifactu shard
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
@@ -1200,6 +1206,8 @@ jobs:
       - run: pnpm --filter @waitron/venue-service exec playwright install chromium
 
       - name: Run the venue-service shard
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/venue-service" ls --depth -1 --json \
@@ -1240,6 +1248,8 @@ jobs:
       - run: pnpm --filter @waitron/adjustments exec playwright install chromium
 
       - name: Run the adjustments shard
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/adjustments" ls --depth -1 --json \
@@ -1283,6 +1293,7 @@ jobs:
 
       - name: Run the bookings shard
         env:
+          TMPDIR: /dev/shm
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1327,6 +1338,7 @@ jobs:
 
       - name: Run the media shard
         env:
+          TMPDIR: /dev/shm
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1372,6 +1384,7 @@ jobs:
 
       - name: Run the payments-stripe shard
         env:
+          TMPDIR: /dev/shm
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1416,6 +1429,7 @@ jobs:
 
       - name: Run the payments-sumup shard
         env:
+          TMPDIR: /dev/shm
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1450,6 +1464,7 @@ jobs:
 
       - name: Run the light-a shard
         env:
+          TMPDIR: /dev/shm
           SCOPE: ${{ needs.changes.outputs.scope }}
           PACKAGES: ${{ needs.changes.outputs.packages }}
         run: |
@@ -1526,6 +1541,7 @@ jobs:
 
       - name: Run the light-b shard
         env:
+          TMPDIR: /dev/shm
           SCOPE: ${{ needs.changes.outputs.scope }}
           PACKAGES: ${{ needs.changes.outputs.packages }}
         run: |
