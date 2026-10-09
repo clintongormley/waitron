@@ -204,6 +204,21 @@ describe("adjustment reason management routes", () => {
     expect(await reasonCount()).toBe(0);
   });
 
+  it("answers an unknown reason in the reorder body with 400 and preserves the order", async () => {
+    const fx = await fixture();
+    const manager = fx.cookie.manager;
+    await send(fx.app, "POST", REASONS, manager, COMPLAINT);
+    const before = await (await send(fx.app, "GET", REASONS, manager)).json();
+
+    const response = await send(fx.app, "PUT", ORDER, manager, { ids: [MISSING] });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "adjustment_reason.not_found", params: { reasonId: MISSING } },
+    });
+    expect(await (await send(fx.app, "GET", REASONS, manager)).json()).toEqual(before);
+  });
+
   it("answers a taken name with 409 and an unknown reason with 404", async () => {
     const fx = await fixture();
     const manager = fx.cookie.manager;

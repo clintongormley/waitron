@@ -51,6 +51,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "adjustment_reason.name_taken": 409,
 };
 const run = createErrorBoundary(STATUS, "adjustment.failed");
+const runReorder = createErrorBoundary(
+  { ...STATUS, "adjustment_reason.not_found": 400 },
+  "adjustment.failed",
+);
 
 /** Whole cents at most: a third decimal place would be rounded away at the row. */
 const AMOUNT = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,2})?$/;
@@ -289,7 +293,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
     );
 
     app.put("/management-api/adjustments/reason-order", (c) =>
-      run(c, log, async () => {
+      runReorder(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
         await gated(sessionId, (tx) => reorderAdjustmentReasons(tx, requireIds(body.ids)));
