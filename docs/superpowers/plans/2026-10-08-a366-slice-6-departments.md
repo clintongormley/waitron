@@ -1490,3 +1490,19 @@ original handler fails its four cases; restoring both fixes passes all eight. Ex
 bodies and the public legacy wrapper remain unchanged. Task A10 is still incomplete: the full
 old assertion audit, public switch and mounted DashboardApp checks remain before A11–A15 and
 the branch gates.
+
+
+### Implementation checkpoint — Task A10 pending dialog input (2026-10-09)
+
+The old Save-state and unsaved suites retain input entered after a request begins. Four new
+Add/Rename dialog cases carry that invariant: the submitted name becomes the accepted baseline,
+newer text remains dirty and the dialog stays open. The dialogs emit `written` for that retained
+draft; the shell refreshes passively without closing it or following a new address. A failed
+refresh appears as a load failure outside the dialog. Save and Cancel wait for the refresh,
+while the name remains editable. A synthetic Save press is also refused during that wait.
+
+Observed failures: four cases dropped the newer name; two shell cases made no refresh after a
+retained write; a corrected stalled-refresh case left Save enabled. The new cases pass after
+the dialog and shell changes. No original assertion has been retired or changed. The old
+public wrapper remains active. Continue A10's full kept-assertion audit and public switch,
+then mounted DashboardApp integration and A11–A15.

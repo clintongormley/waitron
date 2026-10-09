@@ -150,6 +150,14 @@ export class VenueDepartmentsShell extends LitElement {
       return false;
     }
   }
+  async #written(event: Event) {
+    event.stopPropagation();
+    if (this.busy) return;
+    const generation = this.#generation;
+    this.busy = true;
+    await this.#refresh(generation);
+    if (this.#current(generation)) this.busy = false;
+  }
   async #saved(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {
     event.stopPropagation();
     if (this.busy) return;
@@ -292,7 +300,9 @@ export class VenueDepartmentsShell extends LitElement {
         .api=${this.api}
         .model=${this.model}
         .dialog=${this.dialog}
+        .refreshing=${this.busy}
         @saved=${this.#saved}
+        @written=${this.#written}
         @closed=${(event: Event) => {
           event.stopPropagation();
           void this.#closeDialog();

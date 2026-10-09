@@ -64,6 +64,7 @@ export class DepartmentDialogs extends LitElement {
   @property({ attribute: false }) api!: VenueServiceApi;
   @property({ attribute: false }) model!: VenueServiceView;
   @property({ attribute: false }) dialog?: DepartmentDialog;
+  @property({ attribute: false }) refreshing = false;
   @state() private draft: Draft = { name: "", departmentId: "" };
   @state() private busy = false;
   @state() private attempted = false;
@@ -240,6 +241,7 @@ export class DepartmentDialogs extends LitElement {
       !dialog ||
       !this.isConnected ||
       this.busy ||
+      this.refreshing ||
       (!enable && !this.confirming && saveActionState(this.scope).unchanged)
     )
       return;
@@ -309,8 +311,11 @@ export class DepartmentDialogs extends LitElement {
         }
       if (this.current(dialog, generation)) {
         this.scope?.commit(submitted);
-        this.dialog = undefined;
-        this.emit("saved", detail);
+        if (this.scope?.isDirty()) this.emit("written", detail);
+        else {
+          this.dialog = undefined;
+          this.emit("saved", detail);
+        }
       }
     } catch (error) {
       if (this.current(dialog, generation)) {
@@ -333,7 +338,7 @@ export class DepartmentDialogs extends LitElement {
   private readonly beforeClose = async (reason: LeaveReason) => {
     const dialog = this.dialog,
       generation = this.generation;
-    if (!dialog || !this.isConnected || this.busy) return false;
+    if (!dialog || !this.isConnected || this.busy || this.refreshing) return false;
     if (!this.scope || !this.leave) return true;
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.current(dialog, generation) && outcome === "proceeded";
@@ -360,7 +365,7 @@ export class DepartmentDialogs extends LitElement {
     const dialog = this.dialog;
     if (!dialog) return nothing;
     const generation = this.generation,
-      current = () => this.current(dialog, generation) && !this.busy;
+      current = () => this.current(dialog, generation) && !this.busy && !this.refreshing;
     const errors = { ...(this.attempted ? this.errors : {}), ...this.refused };
     const marked = Object.keys(errors).length > 0;
     const state = saveActionState(this.scope);
@@ -370,7 +375,7 @@ export class DepartmentDialogs extends LitElement {
         open
         size=${this.confirming ? "compact" : "standard"}
         heading=${this.heading(dialog)}
-        .dismissible=${!this.busy}
+        .dismissible=${!this.busy && !this.refreshing}
         .beforeClose=${this.beforeClose}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
@@ -398,10 +403,10 @@ export class DepartmentDialogs extends LitElement {
                     .value=${this.draft.departmentId}
                     .options=${this.choices}
                     .error=${errors.departmentId ?? ""}
-                    ?disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
-                      if (current()) this.changed("departmentId", event.detail.value);
+                      if (this.current(dialog, generation))
+                        this.changed("departmentId", event.detail.value);
                     }}
                   ></wt-combobox>`
                 : html`<wt-input
@@ -410,10 +415,10 @@ export class DepartmentDialogs extends LitElement {
                     required
                     .value=${this.draft.name}
                     .error=${errors.name ?? ""}
-                    ?disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
-                      if (current()) this.changed("name", event.detail.value);
+                      if (this.current(dialog, generation))
+                        this.changed("name", event.detail.value);
                     }}
                   ></wt-input>`
           }
@@ -422,7 +427,7 @@ export class DepartmentDialogs extends LitElement {
               ? html`<wt-button
                   variant="secondary"
                   data-test="enable-name-clash"
-                  ?disabled=${this.busy}
+                  ?disabled=${this.busy || this.refreshing}
                   @click=${() => {
                     if (current()) void this.save(this.clash);
                   }}
@@ -438,7 +443,7 @@ export class DepartmentDialogs extends LitElement {
             slot="cancel"
             variant="secondary"
             data-test="cancel-editor"
-            ?disabled=${this.busy}
+            ?disabled=${this.busy || this.refreshing}
             @click=${() => {
               if (current())
                 void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
@@ -447,7 +452,7 @@ export class DepartmentDialogs extends LitElement {
           ><wt-button
             data-test="save-editor"
             variant=${this.confirming ? "danger" : state.variant}
-            ?disabled=${this.busy || (this.confirming ? !this.impact : state.unchanged || (this.attempted && Object.keys(this.errors).length > 0))}
+            ?disabled=${this.busy || this.refreshing || (this.confirming ? !this.impact : state.unchanged || (this.attempted && Object.keys(this.errors).length > 0))}
             @click=${() => {
               if (current()) void this.save();
             }}

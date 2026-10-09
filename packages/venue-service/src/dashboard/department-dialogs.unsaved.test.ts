@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
@@ -188,5 +189,71 @@ it.each(["move-zone", "add-to-department"] as const)(
     expect(await discard).toBe(true);
     await expect.poll(() => el.dialog).toBeUndefined();
     expect(unload()).toBe(false);
+  },
+);
+
+it.each(cases)(
+  "$kind keeps input arriving during its save dirty against the submitted name",
+  async (dialog) => {
+    const el = await mount(dialog);
+    let finish!: (value: unknown) => void;
+    const request = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    el.api = testApi(request);
+    const written: unknown[] = [];
+    el.addEventListener("written", (event) => written.push((event as CustomEvent).detail));
+    const closed = vi.fn();
+    el.addEventListener("saved", closed);
+    await change(el, "Submitted name");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    await expect.poll(() => request.mock.calls.length).toBe(1);
+    await field(el).updateComplete;
+    expect(field(el).shadowRoot!.querySelector("input")!.disabled).toBe(false);
+    await userEvent.fill(
+      page.elementLocator(field(el).shadowRoot!.querySelector("input")!),
+      "Newer name",
+    );
+    await el.updateComplete;
+    expect(field(el).value).toBe("Newer name");
+    finish({ id: "new" });
+    await expect.poll(() => written.length).toBe(1);
+    expect(el.dialog).toEqual(dialog);
+    expect(closed).not.toHaveBeenCalled();
+    expect(unload()).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
+        .disabled,
+    ).toBe(false);
+    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await choose("keep");
+    expect(await close).toBe(false);
+    expect(field(el).value).toBe("Newer name");
+    await change(el, " Submitted name ");
+    expect(unload()).toBe(false);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
+        .disabled,
+    ).toBe(true);
+    expect(request.mock.calls).toEqual([
+      dialog.kind === "add-department"
+        ? ["/management-api/venue-service/departments", "POST", { name: "Submitted name" }]
+        : dialog.kind === "rename-department"
+          ? [
+              "/management-api/venue-service/departments/d1",
+              "PATCH",
+              { name: "Submitted name", tradingName: "Casa", defaultServiceMode: "prepay" },
+            ]
+          : dialog.kind === "add-zone"
+            ? [
+                "/management-api/venue-service/zones",
+                "POST",
+                { name: "Submitted name", departmentId: "d1" },
+              ]
+            : ["/management-api/zones/z1", "PATCH", { name: "Submitted name" }],
+    ]);
   },
 );

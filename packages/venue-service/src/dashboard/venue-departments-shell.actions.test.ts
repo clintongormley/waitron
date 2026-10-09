@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
+import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import "./venue-departments-shell.js";
@@ -44,7 +45,12 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
   setLocale("en");
 });
-async function mount(path = "/manage/venue-operations", model = view()) {
+async function mount(
+  path = "/manage/venue-operations",
+  model = view(),
+  write?: Promise<unknown>,
+  read?: Promise<unknown>,
+) {
   history.replaceState(null, "", path);
   const shell = document.createElement("venue-departments-shell");
   applyTokens(shell);
@@ -54,9 +60,11 @@ async function mount(path = "/manage/venue-operations", model = view()) {
   const request = vi.fn(async (url: string, method = "GET") => {
     if (method !== "GET") {
       if (writeFailure) throw writeFailure;
+      await write;
       return { id: "new" };
     }
     if (url === "/management-api/venue-service") {
+      await read;
       if (readFailure) throw readFailure;
       return loaded;
     }
@@ -558,4 +566,110 @@ it("Cancel returns focus to Add zone when the row menu is reused for a different
   await expect.poll(() => zones.shadowRoot!.activeElement).toBe(add);
   expect(add.shadowRoot!.activeElement).toBe(add.shadowRoot!.querySelector("button"));
   expect(request).not.toHaveBeenCalled();
+});
+
+it.each(["success", "failure"] as const)(
+  "a retained newer dialog draft survives the successful write's %s refresh",
+  async (outcome) => {
+    let finish!: () => void;
+    const write = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const { shell, request, loaded, failRead } = await mount(
+      "/manage/venue-operations/department/d1",
+      view(),
+      write,
+    );
+    emit(shell.shadowRoot!.querySelector("department-page")!, "rename-department", {
+      departmentId: "d1",
+    });
+    const el = await dialogs(shell);
+    await saveName(el, "Submitted");
+    await expect
+      .poll(() => request.mock.calls.filter((call) => call[1] === "PATCH").length)
+      .toBe(1);
+    const box = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    await box.updateComplete;
+    await userEvent.fill(page.elementLocator(box.shadowRoot!.querySelector("input")!), "Newer");
+    const next = view();
+    next.departments[0]!.name = "Submitted";
+    loaded(next);
+    if (outcome === "failure") failRead(new Error("offline"));
+    finish();
+    await expect
+      .poll(
+        () =>
+          request.mock.calls.filter((call) => call[0] === "/management-api/venue-service").length,
+      )
+      .toBe(1);
+    await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+    expect(el.dialog?.kind).toBe("rename-department");
+    expect(box.value).toBe("Newer");
+    expect(box.isConnected).toBe(true);
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
+      passive: true,
+    });
+    if (outcome === "success") {
+      expect(shell.model.departments[0]!.name).toBe("Submitted");
+      expect(alert(shell)).toBe("");
+    } else {
+      expect(alert(shell)).toBe("The venue configuration could not be loaded.");
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    }
+    expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
+      [
+        "/management-api/venue-service/departments/d1",
+        "PATCH",
+        { name: "Submitted", tradingName: "Casa", defaultServiceMode: "prepay" },
+      ],
+    ]);
+  },
+);
+
+it("a retained dialog cannot write again while its successful write is refreshing", async () => {
+  let finishWrite!: () => void, finishRead!: () => void;
+  const write = new Promise<void>((resolve) => {
+    finishWrite = resolve;
+  });
+  const read = new Promise<void>((resolve) => {
+    finishRead = resolve;
+  });
+  const { shell, request, loaded } = await mount(
+    "/manage/venue-operations/department/d1",
+    view(),
+    write,
+    read,
+  );
+  emit(shell.shadowRoot!.querySelector("department-page")!, "rename-department", {
+    departmentId: "d1",
+  });
+  const el = await dialogs(shell);
+  await saveName(el, "Submitted");
+  await expect.poll(() => request.mock.calls.filter((call) => call[1] === "PATCH").length).toBe(1);
+  const box = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  await box.updateComplete;
+  await userEvent.fill(page.elementLocator(box.shadowRoot!.querySelector("input")!), "Newer");
+  finishWrite();
+  await expect.poll(() => shell.getAttribute("aria-busy")).toBe("true");
+  const save =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  await expect.poll(() => save.disabled).toBe(true);
+  await save.updateComplete;
+  expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+  save.click();
+  await el.updateComplete;
+  expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toHaveLength(1);
+  const next = view();
+  next.departments[0]!.name = "Submitted";
+  loaded(next);
+  finishRead();
+  await expect.poll(() => save.disabled).toBe(false);
+  expect(box.value).toBe("Newer");
+  next.departments[0]!.name = "Newer";
+  loaded(next);
+  save.click();
+  await expect.poll(() => el.dialog).toBeUndefined();
+  await expect.poll(() => shell.model.departments[0]!.name).toBe("Newer");
+  expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toHaveLength(2);
 });
