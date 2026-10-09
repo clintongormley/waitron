@@ -2,6 +2,7 @@ import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
+import { textSearch } from "@waitron/shared";
 import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -250,7 +251,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("reordering") && !this.reordering && this.#drag) {
+    if ((changed.has("reordering") || changed.has("search")) && !this.#reorderable && this.#drag) {
       const active = this.#drag.active;
       this.#finishDrag();
       if (active) blockClickAfterDrag(true);
@@ -363,11 +364,8 @@ export class MenuStructureTable extends LitElement {
 
   /** While a search or filter hides rows, a grip moves only past the siblings the person can see. */
   #shownSiblingRows(row: Row): Row[] {
-    const table = this.#table()!;
-    const root = table.shadowRoot!;
-    return table.sortedSiblings(
-      this.#siblingRows(row).filter((sibling) => shownRow(root, sibling.key) !== null),
-    );
+    const root = this.#table()!.shadowRoot!;
+    return this.#siblingRows(row).filter((sibling) => shownRow(root, sibling.key) !== null);
   }
 
   /** Whether the list holding `row` already holds `ref`. */
@@ -780,9 +778,15 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
+  /** A search draws closest matches first, not the menu's order, so nothing is reordered during
+   * one. */
+  get #reorderable(): boolean {
+    return this.reordering && textSearch(this.search) === undefined;
+  }
+
   #grip(row: Row) {
     if (!this.reordering) return nothing;
-    if (row.readOnly) return gripSpace;
+    if (row.readOnly || !this.#reorderable) return gripSpace;
     return html`<button
       part="drag-grip"
       type="button"

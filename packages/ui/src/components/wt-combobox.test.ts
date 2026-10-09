@@ -880,7 +880,7 @@ test("a combobox that has never been opened lists everything and has no active r
   expect(el.shadowRoot!.querySelector(".option.active")).toBeNull();
 });
 
-test("ignores the spaces around the typed text when filtering and when offering to add it", async () => {
+test("ignores leading spaces; a trailing space finishes the word; the add row trims both", async () => {
   const { el, trigger } = await mountWithOptions();
   el.allowAdd = true;
   await el.updateComplete;

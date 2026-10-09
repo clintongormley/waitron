@@ -3056,32 +3056,48 @@ describe("search and the Available filter", () => {
     expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
   });
 
-  it("moves a grip past only the siblings drawn, sending the full list's index", async () => {
+  it("draws no reorder grip while a search is typed, and draws them again once it is cleared", async () => {
     const el = await mount();
-    const moves = listen(el, "wt-member-move");
-    // Burger and Favourites match; Drinks, between them, is hidden.
     await search(el, "u");
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
-    await press(el, "m-fav", "ArrowUp");
-    expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 0 }]);
-    // A search draws the closest match first, so Burger stays above Favourites.
-    expect(shown(el)).toEqual(["m-burger", "m-fav"]);
-    expect(announced(el)).toBe(reordered("Favourites", 1, 2));
-    expect(focusedInTable(el)).toBe("drag-m-fav");
-    // The full order is now Favourites, Burger, Drinks; Favourites is the last one drawn.
-    await press(el, "m-fav", "ArrowDown");
-    expect(moves).toHaveLength(1);
-    await press(el, "m-burger", "ArrowDown");
-    expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 0 });
+    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
+    for (const key of shown(el))
+      expect(row(el, key)!.querySelector('[part~="grip-space"]'), key).not.toBeNull();
     await search(el, "");
-    expect(shown(el)).toEqual(["m-burger", "m-fav", "m-drinks"]);
+    expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
+      "drag-m-burger",
+      "drag-m-drinks",
+      "drag-m-fav",
+    ]);
   });
 
-  it("sends the full list's index when a hidden sibling sits before the shown ones", async () => {
+  it("ends a drag held when a search of only punctuation is typed, sending no move once it is cleared", async () => {
     const el = await mount();
     const moves = listen(el, "wt-member-move");
-    // Drinks and Favourites match; Burger, first in the list, is hidden.
-    await search(el, "i");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
+    await settle(el);
+    expect(marked(el, "dragging")).toEqual(["m-burger"]);
+    await search(el, "&");
+    await search(el, "");
+    pointer(nameAt(el, "m-fav"), "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
+    pointer(nameAt(el, "m-fav"), "pointerup");
+    await settle(el);
+    expect(moves).toEqual([]);
+    expect(marked(el, "dragging")).toEqual([]);
+    expect(marked(el, "drop-gap-after")).toEqual([]);
+    expect(ghost(el)).toBeNull();
+  });
+
+  it("sends the full list's index when the Available filter hides a sibling before the shown ones", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    const moves = listen(el, "wt-member-move");
+    // Drinks and Favourites hold the unavailable Lemonade; Burger, first in the list, is hidden.
+    await chooseAvailable(el, "no");
     expect(shown(el).filter((key) => !key.includes("/"))).toEqual(["m-drinks", "m-fav"]);
     await press(el, "m-fav", "ArrowUp");
     expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 1 }]);
