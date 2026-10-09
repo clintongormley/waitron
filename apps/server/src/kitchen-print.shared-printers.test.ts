@@ -23,7 +23,7 @@ import { createTable } from "./tables.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { commandNames, printedLines } from "./testing/decode-ticket.js";
 import { fireNewOrder, setupVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -440,6 +440,11 @@ describe("a reprint on a printer shared by several stations", () => {
       );
       expect(shared.stationIds).toEqual([venue.y, venue.z].sort());
       expect(shared.lineCount).toBe(fired.length + held.length);
+      const commands = commandNames(shared.payload);
+      expect(commands.filter((name) => name === "GS V")).toHaveLength(1);
+      expect(commands.filter((name) => name === "ESC d")).toHaveLength(1);
+      expect(commands.filter((name) => name === "ESC @")).toHaveLength(1);
+      expect(commands.slice(-2)).toEqual(["ESC d", "GS V"]);
     },
   );
 });
@@ -507,8 +512,9 @@ describe("the rest of the order on a reprint that joins fired and held work on o
       });
       const { p, reprints } = result;
 
-      const printed = onPrinter(reprints, p).printed;
+      const { printed, payload } = onPrinter(reprints, p);
       expect(printed.filter((text) => text.startsWith("-- Also on this order"))).toHaveLength(1);
+      expect(commandNames(payload).filter((name) => name === "GS V")).toHaveLength(1);
       expect(printed.filter((text) => text.includes(" — "))).toEqual(["1.000 x Salad — Cold"]);
     },
   );

@@ -242,6 +242,28 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   return b.feedAndCut().bytes();
 }
 
+const TICKET_START = esc().init().bytes();
+const TICKET_END = esc().feedAndCut().bytes();
+
+function startsWith(bytes: Uint8Array, prefix: Uint8Array, at = 0): boolean {
+  return bytes.length - at >= prefix.length && prefix.every((byte, i) => bytes[at + i] === byte);
+}
+
+/**
+ * Two {@link formatKitchenTicket} payloads as one paper: `first` without its feed and cut, then
+ * `second` without its `ESC @`, so the printer cuts once, after `second`.
+ */
+export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8Array {
+  const kept = first.length - TICKET_END.length;
+  if (!startsWith(first, TICKET_END, Math.max(kept, 0)) || !startsWith(second, TICKET_START)) {
+    throw new RangeError("joinKitchenTickets takes two whole kitchen tickets");
+  }
+  const joined = new Uint8Array(kept + second.length - TICKET_START.length);
+  joined.set(first.subarray(0, kept));
+  joined.set(second.subarray(TICKET_START.length), kept);
+  return joined;
+}
+
 /**
  * A slip for one line the kitchen has on paper, telling the cook what changed without reprinting the
  * order. For fired work: `VOID` (cancelled after firing), `RECALLED` (pulled back to held) or `MOVED`

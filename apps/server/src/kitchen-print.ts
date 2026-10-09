@@ -39,6 +39,7 @@ import {
   crossRefText,
   formatCorrectionSlip,
   formatKitchenTicket,
+  joinKitchenTickets,
 } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
@@ -1522,9 +1523,9 @@ async function readReprintTargets(
 /**
  * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
  * stamped with the reprint time, not the original fire time. Fired and HOLD sections for one
- * printer go as one job, linked to every station either carries, whatever stations each covers;
- * for a station printer, separate jobs could clear an earlier failure for dishes the later section
- * does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An
+ * printer go as one job, cut once, linked to every station either carries, whatever stations each
+ * covers; for a station printer, separate jobs could clear an earlier failure for dishes the later
+ * section does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An
  * order with nothing to print is a no-op.
  */
 export async function reprintOrderTickets(
@@ -1565,7 +1566,7 @@ export async function reprintOrderTickets(
       jobs.push(hold);
       continue;
     }
-    same.bytes = concatBytes(same.bytes, hold.bytes);
+    same.bytes = joinKitchenTickets(same.bytes, hold.bytes);
     same.stationIds = [...new Set([...same.stationIds, ...hold.stationIds])];
     same.lineIds = [...new Set([...same.lineIds, ...hold.lineIds])];
   }
@@ -1576,7 +1577,8 @@ export async function reprintOrderTickets(
  * Each station printer a reprint gives both fired and held work, as one paper: the rest of the order
  * prints once, on its fired part, and lists dishes at stations on neither part. It prints when a
  * station of the fired part shows it, or a station of the held part does and no held station there
- * has fired work (decisions 3 and 5).
+ * has fired work.
+ * Decisions 3 and 5 of docs/superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md.
  */
 function joinedPapers(
   firedStations: ReadonlySet<string>,
@@ -1601,13 +1603,6 @@ function joinedPapers(
     });
   }
   return papers;
-}
-
-function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const joined = new Uint8Array(a.length + b.length);
-  joined.set(a);
-  joined.set(b, a.length);
-  return joined;
 }
 
 /** A kitchen ticket for a bill and station not printed after `JOBS_WAITING_MS`, or given up on. */

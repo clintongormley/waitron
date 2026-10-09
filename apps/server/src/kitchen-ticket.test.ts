@@ -7,9 +7,15 @@ import {
   crossRefText,
   formatCorrectionSlip,
   formatKitchenTicket,
+  joinKitchenTickets,
 } from "./kitchen-ticket.js";
 import type { KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
-import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
+import {
+  commandNames,
+  decodeTicket,
+  printedCommands,
+  printedLines,
+} from "./testing/decode-ticket.js";
 
 // Reads the printed text back from the images each line is drawn as; the final three bytes are always
 // the full cut, GS V 0 (0x1D 0x56 0x00).
@@ -387,6 +393,54 @@ describe("one ticket for several stations sharing a printer", () => {
       "1 x Salad — Cold",
       "",
     ]);
+  });
+});
+
+describe("joinKitchenTickets", () => {
+  const ticket = (mark: "HOLD" | undefined, name: string): Uint8Array =>
+    formatKitchenTicket(
+      {
+        reprint: true,
+        mark,
+        scope: "station",
+        stationName: "Grill",
+        tableLabel: "Mesa 4",
+        orderNumber: "A-17",
+        firedAt: new Date(2026, 7, 17, 14, 30),
+        items: [{ qty: 1, name }],
+      },
+      KITCHEN_80,
+    );
+
+  it("prints both tickets on one paper, with one start and one feed and cut at its end", () => {
+    const joined = joinKitchenTickets(ticket(undefined, "Steak"), ticket("HOLD", "Tart"));
+    const commands = commandNames(joined);
+    expect(commands.filter((name) => name === "ESC @")).toHaveLength(1);
+    expect(commands.filter((name) => name === "ESC d")).toHaveLength(1);
+    expect(commands.filter((name) => name === "GS V")).toHaveLength(1);
+    expect([...joined.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
+    expect(printedLines(joined)).toEqual([
+      "*** REPRINT ***",
+      "Grill",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "1 x Steak",
+      "*** REPRINT ***",
+      "*** HOLD ***",
+      "Grill",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "1 x Tart",
+      "",
+    ]);
+  });
+
+  it("refuses bytes that are not two whole tickets", () => {
+    const whole = ticket(undefined, "Steak");
+    expect(() => joinKitchenTickets(whole.slice(0, -1), whole)).toThrow(RangeError);
+    expect(() => joinKitchenTickets(whole, whole.slice(2))).toThrow(RangeError);
   });
 });
 
