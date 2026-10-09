@@ -4496,7 +4496,7 @@ describe("closed department ordering", () => {
         lines: [pendingLine],
         orderId: "wo-closed-zone",
         zoneName: "Terrace",
-        service: { open: true, zoneOpen: false, periodName: "Lunch" },
+        service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
         "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",

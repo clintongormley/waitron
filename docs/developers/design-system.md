@@ -183,7 +183,7 @@ date also shows a clock icon and an accessible Own hours label. Text uses the co
 `--wt-color-on-palette-…` or `--wt-color-on-day-…` token. Colour is never the only signal.
 
 **2026-10-09, A366 slice 2:** the date colour picker and transitional stored `colour` are retired
-(`packages/venue-service/src/schema/hours.ts` and migration `0036_hard_jubilee.sql`). The palette
+(`packages/venue-service/src/schema/hours.ts` and migration `0038_clammy_klaw.sql`). The palette
 below remains available as shared tokens; Calendar's named mode uses only the red, purple, blue,
 standard and Closed fills. The earlier six-colour date choice is recorded in the historical
 [Hours plan](../superpowers/plans/2026-10-05-hours.md).

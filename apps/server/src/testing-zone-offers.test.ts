@@ -194,7 +194,8 @@ describe("offerProducts", () => {
       );
       expect(served.defaultMenuId).toBe(venue.catalogueId);
       expect(served.service).toEqual({
-        open: true, zoneOpen: true,
+        open: true,
+        zoneOpen: true,
         periodName: "Always",
         keepOpen: {
           periodId: savedPeriod!.id,

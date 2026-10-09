@@ -241,7 +241,7 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
-  "venue-service/0036_hard_jubilee": {
+  "venue-service/0038_clammy_klaw": {
     lost: ["special_date_hours", "special_date_hours_periods", "zone_closed_times"],
   },
   "venue-service/0033_aromatic_slapstick": {

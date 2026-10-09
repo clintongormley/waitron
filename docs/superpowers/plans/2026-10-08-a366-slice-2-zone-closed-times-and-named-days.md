@@ -40,6 +40,12 @@
 > **Revised 2026-10-08** after a fresh-context review; the coordinator's rulings changed decisions
 > 6 and 13, and added the station readers, the guest moves and the task splits.
 
+> **Rebase 2026-10-09:** main added slice 3 Part A migrations 0035 and 0036.
+> Regeneration moved this slice’s add-only step to `0037_first_doctor_doom.sql` and
+> its rebuild to `0038_clammy_klaw.sql`; the original task receipts below retain their
+> original names. The upgrade run measured the same loss of `special_date_hours`,
+> `special_date_hours_periods` and `zone_closed_times` at the regenerated rebuild.
+
 **Goal:** a zone can be closed for part of its department's open time; while it is, the till
 starts no order and adds no item there. The venue's own named days — unlimited, each with a kind,
 a yearly repeat and either the normal week's hours or its own — replace the special dates and the

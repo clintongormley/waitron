@@ -904,7 +904,12 @@ export async function menuState(
   const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
   const published = await zoneLiveDocuments(tx, zoneId);
   return {
-    service: { open: service.open, zoneOpen: !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId), periodName: service.periodName, keepOpen: service.keepOpen },
+    service: {
+      open: service.open,
+      zoneOpen: !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId),
+      periodName: service.periodName,
+      keepOpen: service.keepOpen,
+    },
     menus: published.map(({ menuId, versionId }) => ({
       menuId,
       versionId,

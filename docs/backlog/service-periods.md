@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7, each planned then built without
+  APPROVED 2026-10-07; remaining work is slice 3 Part B and slices 4–7, each planned then built without
   stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -18,11 +18,6 @@ their full text.
   [Spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
-  Slice 2 is in progress in campaign lane D. Tasks 1–29 are reviewed and complete on the branch; the final validation matrix, whole-branch review and current-head CI remain. Task 26 retires the local-holiday API,
-  editor, facts and transfer entries while retaining Calendar holiday-area choice, public holidays
-  and own named holidays. Task 26 and its retained-area corrections are reviewed and complete;
-  Task 27's migration is reviewed and complete, with a venue reset required. Task 28's demo closure is reviewed and complete at `7164de81`: the Terrace closes from 23:00 to its saved business-day changeover, after practice sales are seeded. The branch has not landed. Task 29 also corrects the Calendar coverage label and EN/ES wording
-  for an unsupported public-holiday country, so own holidays still show as owner-entered.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired
   after slice 4. Revised 2026-10-08 to the owner's answers (any device may run a station or pass

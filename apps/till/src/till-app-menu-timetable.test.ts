@@ -291,7 +291,10 @@ afterEach(() => {
 
 describe("period service at the counter", () => {
   it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
-    const running = { ...BARRA, service: { open: true, zoneOpen: true, periodName: "Breakfast", keepOpen: null } };
+    const running = {
+      ...BARRA,
+      service: { open: true, zoneOpen: true, periodName: "Breakfast", keepOpen: null },
+    };
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => running) });
     await signIn(el);
     add(el, DESAYUNOS);

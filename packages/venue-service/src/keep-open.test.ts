@@ -215,7 +215,6 @@ describe("keeping a period open today", () => {
         ...f.cfg,
         date: "2026-10-09",
         name: "Closed",
-        colour: "red",
         closeWholeVenue: true,
       });
     });

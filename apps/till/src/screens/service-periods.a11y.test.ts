@@ -48,7 +48,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               const store = new WorkingOrderStore();
               store.addProduct(coffee, "2");
               const shared = {
-                service: { open: true, zoneOpen: false, periodName: "Lunch" },
+                service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
                 zoneName: "Terrace",
                 departmentName: "Restaurant",
                 products: [coffee],

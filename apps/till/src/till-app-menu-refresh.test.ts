@@ -2103,7 +2103,8 @@ describe("a device behind the live version (§9)", () => {
 
 describe("keep-open changes refresh the order screen", () => {
   const initialService = {
-    open: true, zoneOpen: true,
+    open: true,
+    zoneOpen: true,
     periodName: "Lunch",
     keepOpen: {
       periodId: "lunch",
@@ -2212,7 +2213,8 @@ describe("keep-open changes refresh the order screen", () => {
 
 it("passes keep-open recovery through a standalone table drill", async () => {
   const service = {
-    open: false, zoneOpen: true,
+    open: false,
+    zoneOpen: true,
     periodName: null,
     keepOpen: {
       periodId: "lunch",
@@ -2235,7 +2237,8 @@ it("passes keep-open recovery through a standalone table drill", async () => {
         ...menuState("v1"),
         service: {
           ...service,
-          open: true, zoneOpen: true,
+          open: true,
+          zoneOpen: true,
           periodName: "Lunch",
           keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
         },
@@ -2250,7 +2253,8 @@ it("passes keep-open recovery through a standalone table drill", async () => {
             ...DINING,
             service: {
               ...service,
-              open: true, zoneOpen: true,
+              open: true,
+              zoneOpen: true,
               periodName: "Lunch",
               keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
             },

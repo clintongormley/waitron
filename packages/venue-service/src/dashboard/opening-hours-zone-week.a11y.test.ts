@@ -77,13 +77,11 @@ describe.each(["en", "es"])("Zone week %s", (locale) => {
           }
         }
         if (state === "refused") {
-          week
-            .shadowRoot!.querySelector("service-grid")!
-            .dispatchEvent(
-              new CustomEvent("grid-block-change", {
-                detail: { columnKey: "1", index: 0, startsAt: "11:00", endsAt: "13:00" },
-              }),
-            );
+          week.shadowRoot!.querySelector("service-grid")!.dispatchEvent(
+            new CustomEvent("grid-block-change", {
+              detail: { columnKey: "1", index: 0, startsAt: "11:00", endsAt: "13:00" },
+            }),
+          );
           await week.updateComplete;
           week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
           await expect

@@ -418,7 +418,7 @@ The individual department's Follow the normal week DELETE route is retired (`rou
 Local holidays are own Holiday days, without an entry cap; annual repeats count as owner-entered
 local coverage in the year they occur (`readHolidays`, `holidays.ts`). They are separate from
 shipped public facts. The transitional `colour` column is gone from `schema/hours.ts`, and
-`packages/venue-service/drizzle/0036_hard_jubilee.sql` drops it and `local_holidays`; this change
+`packages/venue-service/drizzle/0038_clammy_klaw.sql` drops it and `local_holidays`; this change
 requires a venue reset. The earlier A261 storage account below is historical.
 
 ### Earlier A261 hours storage
