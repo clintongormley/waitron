@@ -36,6 +36,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "unit.not_found": 404,
   "unit.in_use": 409,
   "product.not_found": 404,
+  "product.archived": 409,
 };
 const run = createErrorBoundary(STATUS, "units.failed");
 

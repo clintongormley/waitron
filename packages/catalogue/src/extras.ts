@@ -183,21 +183,24 @@ function listValues(input: ExtraListInput) {
   return values;
 }
 
-/**
- * Refuses an item naming a product no `products` row holds, as `extras.invalid` carrying that item's
- * position, so an editor can put the message beside the input; the foreign key under it names no
- * field. ONE grouped read for the whole body. Both sides of the comparison are lower-case ids.
- */
+/** Refuses missing and archived products with the item's body position for the editor. */
 async function assertProductsExist(tx: Transaction, input: ExtraListInput): Promise<void> {
   const named = [...new Set(input.items.map((item) => item.productId))];
   if (named.length === 0) return;
   const rows = await tx
-    .select({ id: products.id })
+    .select({ id: products.id, active: products.active, parentActive: parentProducts.active })
     .from(products)
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, named));
-  const held = new Set(rows.map((row) => row.id));
+  const held = new Map(rows.map((row) => [row.id, row.active && row.parentActive !== false]));
   const at = input.items.findIndex((item) => !held.has(item.productId));
   if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
+  const archived = input.items.findIndex((item) => held.get(item.productId) === false);
+  if (archived !== -1)
+    throw new AppError("product.archived", {
+      productId: input.items[archived]!.productId,
+      field: `items.${archived}.productId`,
+    });
 }
 
 type SavedItem = { productId: string; portion: number };

@@ -1,3 +1,5 @@
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,11 +9,8 @@ import "./product-list.js";
 import type { ProductList } from "./product-list.js";
 import type { Product } from "../api/client.js";
 
-/**
- * The fixture covers all THREE allergen states, both active/inactive badges, the Unavailable badge,
- * a product with and without an image, and variant rows. The Inactive product sits behind the status
- * filter, so one case shows every status.
- */
+registerIcons(DASHBOARD_ICONS);
+
 const products: Product[] = [
   {
     id: "p1",
@@ -484,6 +483,84 @@ describe.each(["light", "dark"] as const)("product media link a11y (%s)", (theme
         expect(getComputedStyle(media).outlineStyle).not.toBe("none");
         await expectNoA11yViolations(host);
       } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+});
+
+describe.each(["light", "dark"] as const)("archive row actions a11y (%s)", (theme) => {
+  it.each(["en", "es"])(
+    "renders Archive and View popovers in %s at desktop and phone width",
+    async (locale) => {
+      const before = { locale: currentLocale(), width: innerWidth, height: innerHeight };
+      setLocale(locale);
+      try {
+        for (const width of [1280, 390]) {
+          await page.viewport(width, 844);
+          expect(innerWidth).toBe(width);
+          const { el, host } = await mountWidget<ProductList>(
+            "dashboard-product-list",
+            {
+              products: [
+                products[0]!,
+                { ...products[0]!, id: "archived", name: "Archived dish", active: false },
+              ],
+            },
+            theme,
+          );
+          const table = el.shadowRoot!.querySelector("wt-data-table")!;
+          await table.updateComplete;
+          await chooseOption(
+            table.shadowRoot!.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!,
+            "",
+          );
+          await table.updateComplete;
+          for (const id of ["p1", "archived"]) {
+            const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+              `[data-test="actions-${id}"]`,
+            )!;
+            expect(
+              [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+            ).toEqual(id === "p1" ? [t("action.edit"), t("product.archive")] : [t("product.view")]);
+            const icon = menu.shadowRoot!.querySelector("wt-icon")!;
+            await icon.updateComplete;
+            expect(icon.shadowRoot!.querySelector("svg")).not.toBeNull();
+            menu.show();
+            await menu.updateComplete;
+            const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+            expect(popup.matches(":popover-open")).toBe(true);
+            const bounds = popup.getBoundingClientRect();
+            expect(bounds.height).toBeGreaterThan(0);
+            expect(bounds.left).toBeGreaterThanOrEqual(0);
+            expect(bounds.right).toBeLessThanOrEqual(innerWidth);
+            expect(bounds.top).toBeGreaterThanOrEqual(0);
+            expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
+            for (const button of menu.querySelectorAll("wt-button")) {
+              const actionBounds = button.getBoundingClientRect();
+              expect(actionBounds.top).toBeGreaterThanOrEqual(bounds.top);
+              expect(actionBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
+            }
+            await expectNoA11yViolations(host);
+            if (import.meta.env.VITE_A435_TASK7_CAPTURE === "1") {
+              await page.screenshot({
+                element: host,
+                path: `__screenshots__/a435-task7/list-${locale}-${theme}-${width}-${id}.png`,
+              });
+              if (id === "p1") {
+                popup.setAttribute("data-testid", "a435-archive-popup");
+                await page.screenshot({
+                  element: page.getByTestId("a435-archive-popup"),
+                  path: `__screenshots__/a435-task7/menu-${locale}-${theme}-${width}.png`,
+                });
+              }
+            }
+            menu.hide();
+          }
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before.locale);
         await page.viewport(before.width, before.height);
       }
     },

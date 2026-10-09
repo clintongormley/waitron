@@ -157,3 +157,5 @@ export * from "./content-translation-targets.js";
 export * from "./content-translation-writes.js";
 
 export * from "./content-translations.js";
+
+export { assertProductWritable } from "./archive.js";

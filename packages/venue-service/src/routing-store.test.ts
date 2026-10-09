@@ -1645,7 +1645,7 @@ describe("routing previews", () => {
       scoped(async (tx) => {
         const f = await withExtras(tx);
         await serveAndPublish(tx, f, [f.burger]);
-        await updateProduct(tx, f.cheese, { active: false });
+        await tx.update(products).set({ active: false }).where(eq(products.id, f.cheese));
         const moves = await previewRoutingChange(tx, f.cfg, cheeseToBar(f));
         expect(extraMoves(moves)).toEqual([]);
       }));

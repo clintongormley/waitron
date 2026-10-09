@@ -29,6 +29,7 @@ import {
   engineErrorMessage,
   diningTables,
   parties,
+  products,
   partyTables,
   floorZones,
   invoiceSeries,
@@ -2294,7 +2295,7 @@ describe("zone offers from the published menus", () => {
       const before = (await listZoneOffers(tx, cfg, venue.diningZone)).offers.map((o) => o.id);
       expect(before).toEqual([venue.menuItemId, venue.lemonadeOffer, venue.burgerOffer]);
       await updateProduct(tx, venue.lemonade, { available: false });
-      await updateProduct(tx, venue.burger, { active: false });
+      await tx.update(products).set({ active: false }).where(eq(products.id, venue.burger));
 
       const served = (await listZoneOffers(tx, cfg, venue.diningZone)).offers;
       expect(served.map((offer) => [offer.id, offer.available])).toEqual([
@@ -2460,7 +2461,7 @@ describe("zone offers from the published menus", () => {
       });
 
       await updateProduct(tx, venue.burger, { available: false });
-      await updateProduct(tx, venue.productId, { active: false });
+      await tx.update(products).set({ active: false }).where(eq(products.id, venue.productId));
       await tx.execute(sql`update products set available = false where id = ${venue.large}`);
       await updateProduct(tx, venue.extraMint, { available: false });
       await updateProduct(tx, venue.offMenu, { available: false });
@@ -2672,7 +2673,7 @@ describe("each served menu's structure and Device Home Page", () => {
       const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
       )!.id;
-      await updateProduct(tx, venue.cola, { active: false });
+      await tx.update(products).set({ active: false }).where(eq(products.id, venue.cola));
       await publish(tx, venue.dinner);
       const served = await listZoneOffers(tx, venue.cfg, venue.diningZone);
       expect(served.offers.map((offer) => offer.id)).not.toContain(colaOffer);

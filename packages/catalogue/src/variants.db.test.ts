@@ -205,14 +205,22 @@ describe("setProductVariants stores each variant as a product under its parent",
         .from(menuItemVariantOverrides),
     ).toEqual([{ variantId: w125!.id }]);
 
-    const restored = await app((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
-    expect(restored.map(({ id, active }) => ({ id, active }))).toEqual([
-      { id: w125!.id, active: true },
-      { id: w175!.id, active: true },
-    ]);
+    const beforeRestore = await storedVariants(f.parentId);
+    await expect(
+      app((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en")),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: w175!.id, field: "variants.1.active" },
+    });
+    expect(await storedVariants(f.parentId)).toEqual(beforeRestore);
+    expect(
+      await suite.db
+        .select({ variantId: menuItemVariantOverrides.variantId })
+        .from(menuItemVariantOverrides),
+    ).toEqual([{ variantId: w125!.id }]);
   });
 
-  it("writes each sent variant's active as sent, in the order sent, the left-out ones after", async () => {
+  it("orders writable variants by their sent positions, preserves archived order, and refuses restoration", async () => {
     const f = await fixture();
     const [w125, w175, w250] = await app((tx) =>
       setProductVariants(
@@ -224,40 +232,59 @@ describe("setProductVariants stores each variant as a product under its parent",
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!, w250!], "en"));
     const flags = async () =>
-      (await storedVariants(f.parentId)).map(({ id, variant_order, active }) => ({
-        id,
-        variant_order,
-        active,
-      }));
+      (await storedVariants(f.parentId))
+        .map(({ id, variant_order, active }) => ({
+          id,
+          variant_order,
+          active,
+        }))
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
-    // 175 ml was removed; sent back Inactive it stays Inactive, at the place it was sent.
+    // An archived row keeps its stored order, even when sent at another position.
     const saved = await app((tx) =>
       setProductVariants(tx, f.parentId, [{ ...w175!, active: false }, w125!], "en"),
     );
-    expect(await flags()).toEqual([
-      { id: w175!.id, variant_order: 0, active: 0 },
-      { id: w125!.id, variant_order: 1, active: 1 },
-      { id: w250!.id, variant_order: 2, active: 0 },
-    ]);
-    expect(saved.map(({ id, active }) => ({ id, active }))).toEqual([
-      { id: w175!.id, active: false },
-      { id: w125!.id, active: true },
-      { id: w250!.id, active: false },
-    ]);
-
-    await app((tx) =>
-      setProductVariants(
-        tx,
-        f.parentId,
-        [{ ...w250!, active: false }, { ...w175!, active: true }, w125!],
-        "en",
-      ),
+    expect(await flags()).toEqual(
+      [
+        { id: w125!.id, variant_order: 1, active: 1 },
+        { id: w250!.id, variant_order: 2, active: 0 },
+        { id: w175!.id, variant_order: 2, active: 0 },
+      ].sort((a, b) => String(a.id).localeCompare(String(b.id))),
     );
-    expect(await flags()).toEqual([
-      { id: w250!.id, variant_order: 0, active: 0 },
-      { id: w175!.id, variant_order: 1, active: 1 },
-      { id: w125!.id, variant_order: 2, active: 1 },
-    ]);
+    expect(
+      saved
+        .map(({ id, active }) => ({ id, active }))
+        .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    ).toEqual(
+      [
+        { id: w125!.id, active: true },
+        { id: w250!.id, active: false },
+        { id: w175!.id, active: false },
+      ].sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    );
+
+    const beforeRestore = await storedVariants(f.parentId);
+    await expect(
+      app((tx) =>
+        setProductVariants(
+          tx,
+          f.parentId,
+          [{ ...w250!, active: false }, { ...w175!, active: true }, w125!],
+          "en",
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: w175!.id, field: "variants.1.active" },
+    });
+    expect(await storedVariants(f.parentId)).toEqual(beforeRestore);
+    expect(await flags()).toEqual(
+      [
+        { id: w125!.id, variant_order: 1, active: 1 },
+        { id: w250!.id, variant_order: 2, active: 0 },
+        { id: w175!.id, variant_order: 2, active: 0 },
+      ].sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    );
   });
 
   it("creates a new variant sent Inactive as Inactive", async () => {
@@ -286,7 +313,6 @@ describe("setProductVariants stores each variant as a product under its parent",
     expect(await storedVariants(f.parentId)).toEqual([]);
   });
 
-  // A re-save that leaves `active` out must not restore a removed variant without saying so.
   it("keeps a variant sent by id with no active as it already is, Active or Inactive", async () => {
     const f = await fixture();
     const saved = await app((tx) =>
@@ -695,7 +721,7 @@ describe("a variant's per-menu settings", () => {
     ).toEqual([{ variantId: w125!.id, price: 430 }]);
   });
 
-  it("refuses an Inactive variant's price, writing nothing, and one made Active again has none", async () => {
+  it("refuses an archived variant's price and restoration, keeping its siblings' prices unchanged", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
@@ -705,13 +731,16 @@ describe("a variant's per-menu settings", () => {
       app((tx) => setMenuVariantPrice(tx, f.offerId, w175!.id, "6.50")),
     ).rejects.toMatchObject({ code: "product.variant_not_found", params: { variantId: w175!.id } });
     expect(await suite.db.select().from(menuItemVariantOverrides)).toEqual([]);
-    await app((tx) =>
-      setProductVariants(tx, f.parentId, [w125!, { ...w175!, active: true }], "en"),
-    );
-    expect(await app((tx) => listMenuVariants(tx, f.offerId))).toContainEqual({
-      variantId: w175!.id,
-      price: null,
+    await expect(
+      app((tx) => setProductVariants(tx, f.parentId, [w125!, { ...w175!, active: true }], "en")),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: w175!.id, field: "variants.1.active" },
     });
+    expect(await app((tx) => listMenuVariants(tx, f.offerId))).toEqual([
+      { variantId: w125!.id, price: null },
+    ]);
+    expect(await suite.db.select().from(menuItemVariantOverrides)).toEqual([]);
   });
 
   it.each([["-1.00"], ["1.001"], ["2,50"]])(

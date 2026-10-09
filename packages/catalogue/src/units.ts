@@ -164,7 +164,6 @@ export async function assignProductUnit(
   productId: string,
   unitId: string,
 ): Promise<void> {
-  // No row lock: `withTransaction` is the venue file's one write lock (packages/db/src/tenancy.ts).
   const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (unit === undefined) throw new AppError("unit.not_found", { unitId });
   const [product] = await tx
@@ -198,6 +197,19 @@ export async function reassignProductsToUnit(
         .where(and(inArray(products.id, productIds), isTopLevelProduct)),
     ),
   );
+  const [archived] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(
+      and(
+        eq(products.active, false),
+        inArray(
+          products.id,
+          tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
+        ),
+      ),
+    );
+  if (archived !== undefined) throw new AppError("product.archived", { productId: archived.id });
   if (targetUnitId === null) {
     // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present.
     await tx
@@ -238,7 +250,6 @@ export async function productsUsingUnit(
 }
 
 export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
-  // No row lock: `withTransaction` is the venue file's one write lock (packages/db/src/tenancy.ts).
   const [existing] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (existing === undefined) throw new AppError("unit.not_found", { unitId });
   const references = await productsUsingUnit(tx, unitId);

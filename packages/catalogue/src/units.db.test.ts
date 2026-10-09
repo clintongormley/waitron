@@ -14,6 +14,7 @@ import {
   reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
+import { productUnits, units } from "./schema/units.js";
 import { plantStoredUnit, racePair, storedUnitId } from "../test/fixtures.js";
 
 /**
@@ -314,4 +315,104 @@ describe("a variant's stored unit row, from before a variant always took its pro
     expect(await app((tx) => storedUnitId(tx, parent))).toBe(target.id);
     expect(await app((tx) => storedUnitId(tx, variant))).toBe(source.id);
   });
+});
+
+it.each(["target", "each"])(
+  "refuses a mixed active/archived reassignment to %s without changing either product",
+  async (destination) => {
+    await seedTenant(suite.db);
+    const active = await product();
+    const archived = await product();
+    const source = await kg();
+    const target = await kg();
+    await app(async (tx) => {
+      await assignProductUnit(tx, active, source.id);
+      await assignProductUnit(tx, archived, source.id);
+      await tx
+        .update(products)
+        .set({ active: false, pricingUnit: "weight" })
+        .where(inArray(products.id, [archived]));
+    });
+    const reassignment = app((tx) =>
+      reassignProductsToUnit(
+        tx,
+        source.id,
+        [active, archived],
+        destination === "each" ? null : target.id,
+      ),
+    );
+    await expect(reassignment).rejects.toMatchObject({ code: "product.archived" });
+    await expect(reassignment).rejects.toHaveProperty("params", { productId: archived });
+    expect(await app((tx) => storedUnitId(tx, active))).toBe(source.id);
+    expect(await app((tx) => storedUnitId(tx, archived))).toBe(source.id);
+    expect(
+      (
+        await suite.db
+          .select({ pricingUnit: products.pricingUnit })
+          .from(products)
+          .where(inArray(products.id, [archived]))
+      )[0]?.pricingUnit,
+    ).toBe("weight");
+  },
+);
+
+it("skips an archived selection already moved off the source while moving an active product", async () => {
+  await seedTenant(suite.db);
+  const active = await product();
+  const archived = await product();
+  const source = await kg();
+  const other = await kg();
+  const target = await kg();
+  await app(async (tx) => {
+    await assignProductUnit(tx, active, source.id);
+    await assignProductUnit(tx, archived, other.id);
+    await tx
+      .update(products)
+      .set({ active: false })
+      .where(inArray(products.id, [archived]));
+  });
+  await app((tx) => reassignProductsToUnit(tx, source.id, [active, archived], target.id));
+  expect(await app((tx) => storedUnitId(tx, active))).toBe(target.id);
+  expect(await app((tx) => storedUnitId(tx, archived))).toBe(other.id);
+});
+
+it("retains an archived product's unit and refuses deletion or reassignment without any write", async () => {
+  await seedTenant(suite.db);
+  const archivedId = await product();
+  const source = await app((tx) =>
+    createUnit(tx, { name: { en: "portion" }, abbreviation: { en: "p" }, precision: 0 }, "en"),
+  );
+  const target = await app((tx) =>
+    createUnit(tx, { name: { en: "other" }, abbreviation: { en: "o" }, precision: 0 }, "en"),
+  );
+  await app(async (tx) => {
+    await assignProductUnit(tx, archivedId, source.id);
+    await tx
+      .update(products)
+      .set({ active: false })
+      .where(inArray(products.id, [archivedId]));
+  });
+  const snapshot = () =>
+    app(async (tx) => ({
+      products: await tx.select().from(products),
+      units: await tx.select().from(units),
+      references: await tx.select().from(productUnits),
+    }));
+  const before = await snapshot();
+  await expect(app((tx) => deleteUnit(tx, source.id))).rejects.toMatchObject({
+    code: "unit.in_use",
+    params: { products: [{ id: archivedId, name: "Soup", active: false }] },
+  });
+  expect(await snapshot()).toEqual(before);
+  for (const destination of [null, target.id]) {
+    await expect(
+      app((tx) => reassignProductsToUnit(tx, source.id, [archivedId], destination)),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: archivedId },
+    });
+    expect(await snapshot()).toEqual(before);
+  }
+  await app((tx) => deleteUnit(tx, target.id));
+  expect(await app((tx) => listUnits(tx))).toEqual([source]);
 });

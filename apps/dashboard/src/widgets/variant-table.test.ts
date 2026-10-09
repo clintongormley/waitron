@@ -103,10 +103,13 @@ async function click(el: VariantTable, id: string) {
 const unitButton = (el: VariantTable) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="pricing-unit"]')!;
 
-it("draws no status dropdown: whether Inactive variants show is the host's to say", async () => {
-  const el = await mountTable({ variants: withRemoved() });
+it("draws no status dropdown or show/hide toggle for archived variants", async () => {
+  const el = await mountTable({
+    variants: withRemoved(),
+    archivedIds: new Set([threeVariants()[1]!.id!]),
+  });
   expect(el.shadowRoot!.querySelector("wt-combobox[name=variant-status]")).toBeNull();
-  expect(el.showInactive).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-test=show-inactive]")).toBeNull();
   expect(cells(el, 1)).toEqual(["Media", "Doble"]);
 });
 
@@ -376,11 +379,6 @@ it("marks the row a reported problem belongs to, and leaves the others alone", a
 const withRemoved = (): ProductEditorVariant[] =>
   threeVariants().map((variant, index) => (index === 1 ? { ...variant, active: false } : variant));
 
-async function showInactive(el: VariantTable, show = true) {
-  el.showInactive = show;
-  await el.updateComplete;
-}
-
 it("shows a variant with no price of its own as the base price it sells at", async () => {
   const el = await mountTable({
     basePrice: "9.00",
@@ -394,37 +392,40 @@ it("shows a variant with no price of its own as the base price it sells at", asy
 it.each([
   {
     locale: "en-GB",
-    disable: "Disable",
-    enable: "Enable",
+    archive: "Archive",
+    keep: "Keep",
     remove: "Remove",
-    badge: "Disabled",
+    badge: "Archived when saved",
     none: "Every variant is disabled.",
   },
   {
     locale: "es-ES",
-    disable: "Deshabilitar",
-    enable: "Habilitar",
+    archive: "Archivar",
+    keep: "Conservar",
     remove: "Eliminar",
-    badge: "Deshabilitada",
+    badge: "Se archivará al guardar",
     none: "Todas las variantes están deshabilitadas.",
   },
 ])(
-  "in $locale, disables and enables a saved variant, and removes one never saved",
-  async ({ locale, disable, enable, remove, badge, none }) => {
+  "in $locale, archives and keeps a saved variant, and removes one never saved",
+  async ({ locale, archive, keep, remove, badge, none }) => {
     setLocale(locale);
     try {
       const el = await mountTable({ variants: withRemoved() });
-      await showInactive(el);
-      const label = (test: string) =>
-        el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.textContent!.trim();
+      const label = (test: string) => {
+        const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`);
+        expect(control, test).not.toBeNull();
+        return control!.textContent!.trim();
+      };
+      expect(label("remove-0")).toBe(archive);
       expect([label("remove-0"), label("restore-1"), label("remove-2")]).toEqual([
-        disable,
-        enable,
+        archive,
+        keep,
         remove,
       ]);
       expect(label("inactive-1")).toBe(badge);
       el.variants = el.variants.map((variant) => ({ ...variant, id: variant.name, active: false }));
-      el.showInactive = false;
+      el.archivedIds = new Set(el.variants.map((variant) => variant.id!));
       await el.updateComplete;
       expect(label("no-variants")).toBe(none);
     } finally {
@@ -433,34 +434,41 @@ it.each([
   },
 );
 
-it("hides disabled variants until the host asks for them, in their place in the list", async () => {
-  const el = await mountTable({ variants: withRemoved() });
+it("never draws a row whose id was archived before this draft, even with a row error", async () => {
+  const el = await mountTable({
+    variants: threeVariants(),
+    archivedIds: new Set([threeVariants()[1]!.id!]),
+  });
   expect(cells(el, 1)).toEqual(["Media", "Doble"]);
-  const names = () => cells(el, 1).map((text) => text.replace(/\s+/g, " "));
-  await showInactive(el);
-  expect(names()).toEqual(["Media", `Entera ${t("product.variant_disabled_badge")}`, "Doble"]);
-  await showInactive(el, false);
-  expect(names()).toEqual(["Media", "Doble"]);
+  el.errors = { 1: "Introduce un nombre" };
+  await el.updateComplete;
+  expect(cells(el, 1)).toEqual(["Media", "Doble"]);
+  expect(el.shadowRoot!.querySelector('[data-test="actions-1"]')).toBeNull();
 });
 
-it("says so when every variant is disabled and hidden", async () => {
+it("says so when every variant was archived before and keeps those rows hidden", async () => {
   const el = await mountTable();
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')).toBeNull();
   el.variants = el.variants.map((variant) => ({ ...variant, id: variant.name, active: false }));
+  el.archivedIds = new Set(el.variants.map((variant) => variant.id!));
   await el.updateComplete;
   expect(rows(el)).toHaveLength(0);
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')!.textContent!.trim()).toBe(
     t("editor.variants_all_disabled"),
   );
-  await showInactive(el);
-  expect(rows(el)).toHaveLength(3);
-  expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')).toBeNull();
+  el.variants = [...el.variants];
+  await el.updateComplete;
+  expect(rows(el)).toHaveLength(0);
 });
 
 it("names each row by its place in the whole list, hidden rows included", async () => {
-  const el = await mountTable({ variants: withRemoved() });
+  const el = await mountTable({
+    variants: withRemoved(),
+    archivedIds: new Set([threeVariants()[1]!.id!]),
+  });
   const edit = listen(el, "wt-edit");
   const remove = listen(el, "wt-remove");
+  expect(rows(el).map((row) => row.getAttribute("data-test"))).toEqual(["row-0", "row-2"]);
   // Doble is the second row on screen and the THIRD variant the host holds.
   await click(el, "edit-2");
   await click(el, "remove-2");
@@ -468,9 +476,8 @@ it("names each row by its place in the whole list, hidden rows included", async 
   expect(remove.mock.calls[0]![0].detail).toEqual({ index: 2 });
 });
 
-it("offers Restore instead of Remove on an Inactive variant", async () => {
+it("offers Keep instead of Remove on a variant archived in this draft", async () => {
   const el = await mountTable({ variants: withRemoved() });
-  await showInactive(el);
   expect(el.shadowRoot!.querySelector('[data-test="remove-1"]')).toBeNull();
   const restore = listen(el, "wt-restore");
   await click(el, "restore-1");
@@ -489,7 +496,10 @@ it("opens a saved variant's own page, and offers nothing to open for one never s
 });
 
 it("moves a row among the rows on screen and reports the move in the whole list", async () => {
-  const el = await mountTable({ variants: withRemoved() });
+  const el = await mountTable({
+    variants: withRemoved(),
+    archivedIds: new Set([threeVariants()[1]!.id!]),
+  });
   const reordered = listen(el, "wt-reorder");
   handles(el)[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   await el.updateComplete;
@@ -510,7 +520,7 @@ it("moves a row among the rows on screen and reports the move in the whole list"
   );
 });
 
-it("shows every row when a problem is reported against a hidden Inactive one", async () => {
+it("shows a problem beside a variant archived in this draft", async () => {
   const el = await mountTable({ variants: withRemoved(), errors: { 1: "Introduce un nombre" } });
   expect(cells(el, 1)[1]).toContain("Entera");
   expect(el.shadowRoot!.querySelector('[data-test="error-1"]')).not.toBeNull();
@@ -518,7 +528,6 @@ it("shows every row when a problem is reported against a hidden Inactive one", a
 
 it("changes nothing from Open or Restore while the product is being saved", async () => {
   const el = await mountTable({ variants: withRemoved(), busy: true });
-  await showInactive(el);
   const seen = ["wt-open", "wt-restore"].map((name) => listen(el, name));
   await click(el, "open-0");
   await click(el, "restore-1");
@@ -527,16 +536,14 @@ it("changes nothing from Open or Restore while the product is being saved", asyn
 
 it("shows every row when a variant is added that the hidden rows would hide", async () => {
   const el = await mountTable({ variants: withRemoved().slice(0, 2) });
-  expect(cells(el, 1)).toHaveLength(1);
+  expect(cells(el, 1)).toHaveLength(2);
   el.variants = [...el.variants, { ...threeVariants()[2]!, active: false }];
   await el.updateComplete;
   expect(cells(el, 1).map((text) => text.split(/\s/)[0])).toEqual(["Media", "Entera", "Doble"]);
-  // Hiding them again is honoured: the new row showed them once, not for good.
-  await showInactive(el, false);
-  expect(cells(el, 1)).toHaveLength(1);
+  expect(el.shadowRoot!.querySelector("[data-test=show-inactive]")).toBeNull();
 });
 
-it("tells the host when it shows the Inactive rows itself, and only then", async () => {
+it("does not ask the host for a show/hide toggle when a draft row has an error", async () => {
   const el = await mountTable({ variants: withRemoved() });
   const shown = listen(el, "wt-show-inactive");
   el.variants = [...el.variants];
@@ -544,10 +551,8 @@ it("tells the host when it shows the Inactive rows itself, and only then", async
   expect(shown).not.toHaveBeenCalled();
   el.errors = { 1: "Introduce un nombre" };
   await el.updateComplete;
-  expect(el.showInactive).toBe(true);
-  expect(shown).toHaveBeenCalledOnce();
-  expect(shown.mock.calls[0]![0].detail).toEqual({ show: true });
-  expect(shown.mock.calls[0]![0].composed).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-test=error-1]")).not.toBeNull();
+  expect(shown).not.toHaveBeenCalled();
 });
 
 it("shows no price hint at all while the product has no base price yet", async () => {
@@ -625,7 +630,6 @@ const focused = (el: VariantTable) => {
 it("keeps focus on a row's actions when Remove or Restore leaves the row on screen", async () => {
   const el = await mountTable({ variants: withRemoved() });
   applyRemoveAndRestore(el);
-  await showInactive(el);
   await chooseFromMenu(el, "restore", 1);
   await expect.poll(() => focused(el)).toBe("actions-1");
   await chooseFromMenu(el, "remove", 1);
@@ -633,17 +637,22 @@ it("keeps focus on a row's actions when Remove or Restore leaves the row on scre
   expect(el.variants[1]!.active).toBe(false);
 });
 
-it("moves focus to the next row on screen when Remove hides the row, and leaves it to the host when none is left", async () => {
-  const el = await mountTable();
+it("moves focus to the next unsaved row when Remove drops a row, and leaves it to the host when none is left", async () => {
+  const el = await mountTable({
+    variants: threeVariants().map((variant) => {
+      const fresh = { ...variant };
+      delete fresh.id;
+      return fresh;
+    }),
+  });
   applyRemoveAndRestore(el);
   await chooseFromMenu(el, "remove", 0);
-  await expect.poll(() => focused(el)).toBe("actions-1");
-  // Doble was never saved, so it leaves the list and there is no row after it: focus goes back up.
-  await chooseFromMenu(el, "remove", 2);
-  await expect.poll(() => focused(el)).toBe("actions-1");
+  await expect.poll(() => focused(el)).toBe("actions-0");
+  expect(el.variants.map((variant) => variant.name)).toEqual(["Entera", "Doble"]);
   await chooseFromMenu(el, "remove", 1);
+  await expect.poll(() => focused(el)).toBe("actions-0");
+  await chooseFromMenu(el, "remove", 0);
   await el.updateComplete;
-  // No row is left on screen, so the next control is outside the table: the host's to choose.
   expect(rows(el)).toHaveLength(0);
   expect(focused(el)).toBeNull();
 });
@@ -729,7 +738,6 @@ it("opens a variant's edit window from a click anywhere on its row", async () =>
   await atDesktopWidth(async () => {
     const el = await mountTable({ variants: withRemoved() });
     const edit = listen(el, "wt-edit");
-    await showInactive(el);
     // What is under the pointer on the name and on the price is what gets the click.
     const onName = hit(el, rows(el)[2]!.children[1]!);
     const onPrice = hit(el, rows(el)[0]!.children[2]!);

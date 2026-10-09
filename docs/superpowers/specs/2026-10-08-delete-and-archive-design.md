@@ -225,9 +225,9 @@ sits, so one dialog shows the whole picture.
 
 ### Products
 
-- **Archive replaces Disable** on the product list row, the editor footer, the variant table and the
-  folder bulk action; deleting a folder's contents archives the products in it. Products land before
-  the shared dialog exists, so they keep their own confirmation dialogs, reworded and showing the
+- **Archive replaces Disable** on the product list row, the variant table and the folder
+  bulk action. The editor footer gains no Archive action. Deleting a folder's contents archives the
+  products in it. Products land before the shared dialog exists, so they keep their own confirmation dialogs, reworded and showing the
   live-menu refusal. The confirmation says "This can't be undone." The dashboard's warnings that say "You can enable it again"
   (`product.disable_warning` and its siblings in `apps/dashboard/src/i18n/strings.ts`) are rewritten.
 - **Refused while a published menu includes it**, live now or scheduled to go live: as a dish, as any
@@ -237,21 +237,32 @@ sits, so one dialog shows the whole picture.
   or folder delete with any such product inside is refused whole, and lists them.
 - **Variants:** archiving a product archives every variant. A variant can be archived on its own. No
   save brings an archived variant back.
-- **The server refuses every write to an archived product or variant** with `product.archived`:
-  switching it on, editing it, and adding it to an extras list, which today is allowed. Adding one
+- **The server refuses these writes to an archived product or variant** with `product.archived`:
+  switching it on, editing it, and adding it to an extras list. Adding one
   to a menu or a home-screen shortcut is already refused, with `menu_section.membership_invalid`
   (`checkRef`, `packages/catalogue/src/section-members.ts`), and keeps that code. The paths to close, from the 2026-10-08 inventory:
   `patchProduct` (`packages/catalogue/src/operations.ts`), `writeProductVariants`
   (`packages/catalogue/src/variants.ts`), the product editor save
-  (`PUT /management-api/products/:id/editor`), the product update route, and the extras-list save
-  (`packages/catalogue/src/extras.ts`). The dashboard's three Enable actions are removed.
+  (`PUT /management-api/products/:id/editor`), the `updateProduct` writer, and the extras-list save
+  (`packages/catalogue/src/extras.ts`). Setting its course and setting its recipe are also refused.
+  Translation fixes, the main reporting category and folder moves remain allowed; moving a folder
+  carries its archived products with it. Explicitly selected product and variant targets accept
+  names-only fixes through `PUT /management-api/content-translations/:language`; the automatic
+  missing-translations list still leaves archived families out. A draft opened before archiving
+  must be reviewed against the new activity state before saving. The dashboard's Enable actions
+  are removed. A unit assigned to an archived product remains in use: neither deleting that unit
+  nor reassigning the archived product is allowed, so the retained details keep their unit.
 - **Removed when archived:** its places in menu drafts (as today) and in extras lists (new; the
-  dialog says so in its warning rather than counting them, which would need a new read). Its recipe, options and routing rules stay, for the read-only view.
+  dialog names the extras lists in its warning rather than counting them). Its recipe, options and
+  routing rules stay, for the read-only view.
 - **The sold-out switch** is left as it was. Every reader that sells a product requires it to be on
   AND available, so an archived product never sells whatever the switch says; the read-only view does
   not show the switch.
-- **Dashboard:** the Status filter offers Active and Archived; an archived product opens read-only,
-  with no Save, Archive or availability control; the "Show disabled" toggles go.
+- **Dashboard:** the Status filter offers Active and Archived; an archived product opens
+  in a read-only details panel when you choose View, with no Save, Archive or availability control.
+  View does not open the editor. The editor shows no variants archived before it opened and has no
+  "Show disabled" toggle. Archiving a saved variant in the editor keeps its row visible with
+  "Archived when saved" and a Keep action until you save; Keep cancels that staged archive.
 - **Configuration export and import** carry archived products still archived, as today.
 - **Backlog:** the owner's decision answers the entry "There is no permanent delete for a product
   that was never sold", which the commit adding this spec removed in favour of A435.

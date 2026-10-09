@@ -1338,6 +1338,19 @@ and LOOK, in both themes and at phone width. A browser-mode package has the harn
 `apps/server`'s string-rendered pages have none, so write the rendered string to a file and open it
 with the workspace's playwright Chromium.
 
+Before calling a capture dark-theme evidence, check the rendered colours. In the dashboard,
+`apps/dashboard/src/main.ts` applies tokens to `document.documentElement`; set `data-theme` on
+that root, then read the dialog's computed background and text colours. Setting it only on
+`#app` does not select the root's dark tokens. Record the computed colours beside the measured
+viewport size, and reject the capture if light and dark resolve to the same colours.
+
+A435-1's first details-panel captures on 2026-10-09 set the attribute on `#app` and reported white
+surfaces for both themes. The corrected Playwright run set it on `document.documentElement` and
+recorded dialog backgrounds of `rgb(255, 255, 255)` in light and `rgb(34, 38, 46)` in dark, at
+390px and 1280px in English and Spanish. Both sets of metadata are retained in the lane's local
+`receipts/a435-1-task9/visual-invalid-theme.json` and `visual.json`; only the corrected set is
+dark-theme evidence. These colour values describe that run, not a permanent token contract.
+
 `scripts/trust-page-logo.test.ts` checks only that the logo pasted into the server's source still
 matches the brand lockup; it does not check that the page renders, that either theme is readable,
 or that the logo is visible at all.

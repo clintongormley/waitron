@@ -232,7 +232,9 @@ function resolved(
     ? "role"
     : !structure.rootMatched
       ? "ownership"
-      : !structure.active || !structure.ownerActive || !structure.childActive
+      : row.kind !== "product" &&
+          row.kind !== "variant" &&
+          (!structure.active || !structure.ownerActive || !structure.childActive)
         ? "inactive"
         : null;
   const effectiveSelectedText = effective[language] ?? null;

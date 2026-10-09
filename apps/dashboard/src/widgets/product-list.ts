@@ -1136,11 +1136,9 @@ export class ProductList extends LitElement {
         key: "active",
         choosable: "shown",
         label: t("product.status"),
-        // A variant of an Inactive product answers Inactive (see rowActive), so it moves with its
-        // product and never leaves it behind as an empty context row; its badge still shows its OWN
-        // flag.
-        cell: ({ product, variant }) => {
-          const active = variant?.active ?? product.active;
+        cell: (row) => {
+          const { product, variant } = row;
+          const active = rowActive(row);
           return html`<span
               part="badge"
               data-test="active-badge"
@@ -1156,7 +1154,7 @@ export class ProductList extends LitElement {
           value: (row) => (rowActive(row) ? "active" : "inactive"),
           options: [
             { value: "active", label: t("product.active_badge") },
-            { value: "inactive", label: t("product.disabled_badge") },
+            { value: "inactive", label: t("product.archived_badge") },
           ],
           initial: "active",
         },
@@ -1180,33 +1178,35 @@ export class ProductList extends LitElement {
         label: t("staff.actions"),
         align: "end",
         pinned: "end",
-        cell: ({ product, variant }) => {
-          const { id, name, active } = variant ?? product;
-          const restore = !active;
-          const removal = restore
-            ? { event: "restore-product" as const, test: "restore", label: t("product.enable") }
-            : {
-                event: "delete-product" as const,
-                test: "delete",
-                label: t("product.disable"),
-              };
+        cell: (row) => {
+          const { id, name } = row.variant ?? row.product;
           return html`<wt-row-actions
             align="end"
             data-test=${`actions-${id}`}
             label=${`${t("staff.actions")}: ${name}`}
-            ><wt-button
-              align="start"
-              variant="secondary"
-              data-test=${`edit-${id}`}
-              @click=${() => this.#send("edit-product", { productId: id })}
-              >${t("action.edit")}</wt-button
-            ><wt-button
-              align="start"
-              variant=${restore ? "secondary" : "danger"}
-              data-test=${`${removal.test}-${id}`}
-              @click=${() => this.#send(removal.event, { productId: id })}
-              >${removal.label}</wt-button
-            ></wt-row-actions
+            >${
+              rowActive(row)
+                ? html`<wt-button
+                      align="start"
+                      variant="secondary"
+                      data-test=${`edit-${id}`}
+                      @click=${() => this.#send("edit-product", { productId: id })}
+                      >${t("action.edit")}</wt-button
+                    ><wt-button
+                      align="start"
+                      variant="danger"
+                      data-test=${`delete-${id}`}
+                      @click=${() => this.#send("delete-product", { productId: id })}
+                      >${t("product.archive")}</wt-button
+                    >`
+                : html`<wt-button
+                    align="start"
+                    variant="secondary"
+                    data-test=${`view-${id}`}
+                    @click=${() => this.#send("view-product", { productId: id })}
+                    >${t("product.view")}</wt-button
+                  >`
+            }</wt-row-actions
           >`;
         },
       },

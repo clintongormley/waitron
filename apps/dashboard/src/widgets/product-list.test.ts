@@ -334,7 +334,7 @@ describe("product-list", () => {
     });
   });
 
-  it("uses a named kebab menu containing Edit and Disable", async () => {
+  it("uses a named kebab menu containing Edit and Archive", async () => {
     const products = [product({ id: "p7", name: "Tarta de queso" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const actions = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="actions-p7"]')!;
@@ -342,7 +342,7 @@ describe("product-list", () => {
     expect(actions.getAttribute("label")).toContain("Tarta de queso");
     expect(actions.querySelector('[data-test="edit-p7"]')?.textContent).toContain(t("action.edit"));
     expect(actions.querySelector('[data-test="delete-p7"]')?.textContent).toContain(
-      t("product.disable"),
+      t("product.archive"),
     );
   });
 
@@ -801,7 +801,7 @@ describe("product-list", () => {
     expect(select.options.map((option) => option.label)).toEqual([
       t("product.filter_status_all"),
       t("product.active_badge"),
-      t("product.disabled_badge"),
+      t("product.archived_badge"),
     ]);
     expect(select.value).toBe("active");
     expect(rowKeys(root)).toEqual(["sold-out"]);
@@ -1034,25 +1034,25 @@ describe("product-list", () => {
     [
       "en-GB",
       {
-        disable: "Disable",
-        enable: "Enable",
-        products: ["Active", "Disabled"],
-        variants: ["Active", "Disabled"],
-        filter: ["Any status", "Active", "Disabled"],
+        disable: "Archive",
+        enable: "View",
+        products: ["Active", "Archived"],
+        variants: ["Active", "Archived"],
+        filter: ["Any status", "Active", "Archived"],
       },
     ],
     [
       "es-ES",
       {
-        disable: "Deshabilitar",
-        enable: "Habilitar",
-        products: ["Activo", "Deshabilitado"],
-        variants: ["Activa", "Deshabilitada"],
-        filter: ["Cualquier estado", "Activo", "Deshabilitado"],
+        disable: "Archivar",
+        enable: "Ver",
+        products: ["Activo", "Archivado"],
+        variants: ["Activa", "Archivada"],
+        filter: ["Cualquier estado", "Activo", "Archivado"],
       },
     ],
   ])(
-    "in %s, offers Disable and Enable and shows Active or Disabled, agreeing with the noun",
+    "in %s, offers Archive and View and shows Active or Archived, agreeing with the noun",
     async (locale, words) => {
       setLocale(locale);
       const removed = { ...bunVariant, id: "large", name: "Large", active: false };
@@ -1071,8 +1071,8 @@ describe("product-list", () => {
         root.querySelector<HTMLElement>(`[data-test="${test}"]`)!.textContent!.trim();
       expect(label("delete-bun")).toBe(words.disable);
       expect(label("delete-small")).toBe(words.disable);
-      expect(label("restore-large")).toBe(words.enable);
-      expect(label("restore-off")).toBe(words.enable);
+      expect(label("view-large")).toBe(words.enable);
+      expect(label("view-off")).toBe(words.enable);
       const badge = (key: string) =>
         root
           .querySelector<HTMLElement>(`tr[data-row-key="${key}"] [data-test=active-badge]`)!
@@ -1084,7 +1084,7 @@ describe("product-list", () => {
     },
   );
 
-  it("gives a variant row its own Edit and Disable, and Enable once it is disabled", async () => {
+  it("gives an active variant Edit and Archive, and an archived variant only View", async () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", variants: [bunVariant, removed] })],
@@ -1101,31 +1101,32 @@ describe("product-list", () => {
       t("action.edit"),
     );
     expect(actions.querySelector('[data-test="delete-small"]')!.textContent).toContain(
-      t("product.disable"),
+      t("product.archive"),
     );
-    expect(actions.querySelector('[data-test="restore-small"]')).toBeNull();
+    expect(actions.querySelector('[data-test="view-small"]')).toBeNull();
     const large = root.querySelector<HTMLElement>('[data-test="actions-large"]')!;
     expect(large.querySelector('[data-test="delete-large"]')).toBeNull();
-    expect(large.querySelector('[data-test="restore-large"]')!.textContent).toContain(
-      t("product.enable"),
+    expect(large.querySelectorAll("wt-button")).toHaveLength(1);
+    expect(large.querySelector('[data-test="view-large"]')!.textContent).toContain(
+      t("product.view"),
     );
 
     const seen: [string, string][] = [];
-    for (const name of ["edit-product", "delete-product", "restore-product"])
+    for (const name of ["edit-product", "delete-product", "view-product"])
       el.addEventListener(name, (event) =>
         seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
       );
     actions.querySelector<HTMLElement>('[data-test="edit-small"]')!.click();
     actions.querySelector<HTMLElement>('[data-test="delete-small"]')!.click();
-    large.querySelector<HTMLElement>('[data-test="restore-large"]')!.click();
+    large.querySelector<HTMLElement>('[data-test="view-large"]')!.click();
     expect(seen).toEqual([
       ["edit-product", "small"],
       ["delete-product", "small"],
-      ["restore-product", "large"],
+      ["view-product", "large"],
     ]);
   });
 
-  it("under a disabled product, each variant offers what its own status calls for", async () => {
+  it("under an archived product, every variant offers View only", async () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -1137,21 +1138,23 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>('tr[data-row-key="off"] .tree-toggle')!.click();
     await table.updateComplete;
-    for (const id of ["off", "large"]) {
+    for (const id of ["off", "large", "small"]) {
       const actions = root.querySelector<HTMLElement>(`[data-test="actions-${id}"]`)!;
-      expect(actions.querySelector(`[data-test="delete-${id}"]`)).toBeNull();
-      expect(actions.querySelector(`[data-test="restore-${id}"]`)!.textContent).toContain(
-        t("product.enable"),
-      );
+      expect(
+        [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+      ).toEqual([t("product.view")]);
+      expect(actions.querySelector(`[data-test="view-${id}"]`)).not.toBeNull();
+      expect(
+        root
+          .querySelector(
+            `tr[data-row-key="${id === "off" ? id : `off:${id}`}"] [data-test=active-badge]`,
+          )
+          ?.getAttribute("data-active"),
+      ).toBe("false");
     }
-    const small = root.querySelector<HTMLElement>('[data-test="actions-small"]')!;
-    expect(small.querySelector('[data-test="restore-small"]')).toBeNull();
-    expect(small.querySelector('[data-test="delete-small"]')!.textContent).toContain(
-      t("product.disable"),
-    );
   });
 
-  it("offers Enable and not Disable on a disabled product's own row, and Disable on an active one", async () => {
+  it("offers only View on an archived product and Edit and Archive on an active one", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun" }), product({ id: "off", name: "Anchoas", active: false })],
     });
@@ -1159,22 +1162,21 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     const off = root.querySelector<HTMLElement>('[data-test="actions-off"]')!;
     expect(off.querySelector('[data-test="delete-off"]')).toBeNull();
-    expect(off.querySelector('[data-test="restore-off"]')!.textContent).toContain(
-      t("product.enable"),
-    );
+    expect(off.querySelectorAll("wt-button")).toHaveLength(1);
+    expect(off.querySelector('[data-test="view-off"]')!.textContent).toContain(t("product.view"));
     const bun = root.querySelector<HTMLElement>('[data-test="actions-bun"]')!;
     expect(bun.querySelector('[data-test="restore-bun"]')).toBeNull();
     expect(bun.querySelector('[data-test="delete-bun"]')!.textContent).toContain(
-      t("product.disable"),
+      t("product.archive"),
     );
 
     const seen: [string, string][] = [];
-    for (const name of ["delete-product", "restore-product"])
+    for (const name of ["delete-product", "view-product"])
       el.addEventListener(name, (event) =>
         seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
       );
-    off.querySelector<HTMLElement>('[data-test="restore-off"]')!.click();
-    expect(seen).toEqual([["restore-product", "off"]]);
+    off.querySelector<HTMLElement>('[data-test="view-off"]')!.click();
+    expect(seen).toEqual([["view-product", "off"]]);
   });
 
   // The three-state allergen invariant: null=PENDING, {}=none, {…}=declared. PENDING and none MUST
@@ -3099,8 +3101,8 @@ describe("the product list as a tree", () => {
 
   it.each([
     ["Edit", "edit-small", "edit-product", "small"],
-    ["Disable", "delete-small", "delete-product", "small"],
-    ["Enable", "restore-large", "restore-product", "large"],
+    ["Archive", "delete-small", "delete-product", "small"],
+    ["View", "view-large", "view-product", "large"],
   ])(
     "closes a product row's menu when %s is chosen from it, and sends only that request",
     async (_label, button, request, productId) => {
@@ -3114,7 +3116,7 @@ describe("the product list as a tree", () => {
       root.querySelector<HTMLElement>(".tree-toggle")!.click();
       await table.updateComplete;
       const seen: [string, string][] = [];
-      for (const name of ["edit-product", "delete-product", "restore-product"])
+      for (const name of ["edit-product", "delete-product", "view-product"])
         el.addEventListener(name, (event) =>
           seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
         );
@@ -3132,8 +3134,8 @@ describe("the product list as a tree", () => {
 
   it.each([
     ["Edit", "edit-bread", "edit-product", "bread"],
-    ["Disable", "delete-bread", "delete-product", "bread"],
-    ["Enable", "restore-stale", "restore-product", "stale"],
+    ["Archive", "delete-bread", "delete-product", "bread"],
+    ["View", "view-stale", "view-product", "stale"],
   ])(
     "closes a top-level product's menu when %s is chosen from it, and sends only that request",
     async (_label, button, request, productId) => {
@@ -3145,7 +3147,7 @@ describe("the product list as a tree", () => {
       });
       await choose(el, "active", "");
       const seen: [string, string][] = [];
-      for (const name of ["edit-product", "delete-product", "restore-product"])
+      for (const name of ["edit-product", "delete-product", "view-product"])
         el.addEventListener(name, (event) =>
           seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
         );

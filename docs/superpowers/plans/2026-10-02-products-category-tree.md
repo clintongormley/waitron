@@ -1,5 +1,9 @@
 # The Products screen as a category tree — Implementation Plan
 
+> Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
+> Products and variants now archive permanently. See [the current product guide](../../products.md)
+> for Archive, View and the editor's staged Archive/Keep actions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the dashboard's Products screen into one tree — an "All products" row with every category opening in place, adds and renames from each row's ⋮ menu, a clearer drag, prices with their unit, and "category" wording — as the owner approved on 2026-10-02 (backlog A208, which also builds A205).

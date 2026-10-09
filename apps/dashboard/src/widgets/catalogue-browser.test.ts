@@ -2159,7 +2159,7 @@ it.each([
     "en-GB",
     { b: contents(1, 3) },
     "1 category and 3 products move to Drinks",
-    "Also: deletes 1 category and disables 3 products. They move to Drinks.",
+    "Also: deletes 1 category and archives 3 products. They move to Drinks.",
   ],
   ["en-GB", { b: contents(1, 0) }, "1 category moves to Drinks", "Also: deletes 1 category."],
   ["en-GB", { b: contents(2, 0) }, "2 categories move to Drinks", "Also: deletes 2 categories."],
@@ -2167,25 +2167,25 @@ it.each([
     "en-GB",
     { d: contents(0, 1) },
     "1 product moves to No category",
-    "Also: disables 1 product. It moves to No category.",
+    "Also: archives 1 product. It moves to No category.",
   ],
   [
     "en-GB",
     { b: contents(0, 2) },
     "2 products move to Drinks",
-    "Also: disables 2 products. They move to Drinks.",
+    "Also: archives 2 products. They move to Drinks.",
   ],
   [
     "en-GB",
     { b: contents(2, 3, 0, 0, 2) },
     "2 categories and 3 products move to Drinks",
-    "Also: deletes 2 categories and disables 3 products. They move to Drinks.",
+    "Also: deletes 2 categories and archives 3 products. They move to Drinks.",
   ],
   [
     "en-GB",
     { b: contents(1, 3, 3, 1) },
     "1 category and 3 products move to Drinks",
-    "Also: deletes 1 category and 2 kitchen routing rules and disables 3 products. They move to Drinks.",
+    "Also: deletes 1 category and 2 kitchen routing rules and archives 3 products. They move to Drinks.",
   ],
   [
     "en-GB",
@@ -2197,19 +2197,19 @@ it.each([
     "en-GB",
     { b: contents(1, 1), f: contents(0, 1) },
     "1 category and 2 products move to each category's parent",
-    "Also: deletes 1 category and disables 2 products. They move to each category's parent.",
+    "Also: deletes 1 category and archives 2 products. They move to each category's parent.",
   ],
   [
     "en-GB",
     { r: contents(0, 1) },
     "1 product moves to Drinks › Wine",
-    "Also: disables 1 product. It moves to Drinks › Wine.",
+    "Also: archives 1 product. It moves to Drinks › Wine.",
   ],
   [
     "es",
     { b: contents(1, 3) },
     "1 categoría y 3 productos pasan a Drinks",
-    "También: elimina 1 categoría y deshabilita 3 productos. Pasan a Drinks.",
+    "También: elimina 1 categoría y archiva 3 productos. Pasan a Drinks.",
   ],
   ["es", { b: contents(1, 0) }, "1 categoría pasa a Drinks", "También: elimina 1 categoría."],
   ["es", { b: contents(2, 0) }, "2 categorías pasan a Drinks", "También: elimina 2 categorías."],
@@ -2217,13 +2217,13 @@ it.each([
     "es",
     { d: contents(0, 1) },
     "1 producto pasa a Sin categoría",
-    "También: deshabilita 1 producto. Pasa a Sin categoría.",
+    "También: archiva 1 producto. Pasa a Sin categoría.",
   ],
   [
     "es",
     { b: contents(1, 3, 4, 1) },
     "1 categoría y 3 productos pasan a Drinks",
-    "También: elimina 1 categoría y 3 reglas de envío a cocina y deshabilita 3 productos. Pasan a Drinks.",
+    "También: elimina 1 categoría y 3 reglas de envío a cocina y archiva 3 productos. Pasan a Drinks.",
   ],
   [
     "es",
@@ -2235,7 +2235,7 @@ it.each([
     "es",
     { b: contents(1, 1), f: contents(0, 1) },
     "1 categoría y 2 productos pasan a la categoría superior de cada una",
-    "También: elimina 1 categoría y deshabilita 2 productos. Pasan a la categoría superior de cada una.",
+    "También: elimina 1 categoría y archiva 2 productos. Pasan a la categoría superior de cada una.",
   ],
 ] as const)(
   "words both answers about the contents from the active products, the subcategories and the rules inside, leaving out what is zero (%s, case %#)",
@@ -2307,12 +2307,12 @@ it.each([
   [
     "en-GB",
     "1 kitchen routing rule names these categories and will be removed.",
-    "Also: deletes 1 category and 2 kitchen routing rules and disables 2 products. They move to No category.",
+    "Also: deletes 1 category and 2 kitchen routing rules and archives 2 products. They move to No category.",
   ],
   [
     "es",
     "1 regla de envío a cocina nombra estas categorías y se eliminará.",
-    "También: elimina 1 categoría y 2 reglas de envío a cocina y deshabilita 2 productos. Pasan a Sin categoría.",
+    "También: elimina 1 categoría y 2 reglas de envío a cocina y archiva 2 productos. Pasan a Sin categoría.",
   ],
 ] as const)(
   "names the selected categories' own routing rules under either answer, and lists the rules inside among what deleting the contents removes (%s)",
@@ -2349,7 +2349,7 @@ it("warns of no routing rules under either answer when the selected category nam
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("form")!.textContent).not.toContain("name these categories");
   expect(contentsLabels(el)[1]).toBe(
-    "Also: deletes 1 category and 2 kitchen routing rules and disables 2 products. They move to No category.",
+    "Also: deletes 1 category and 2 kitchen routing rules and archives 2 products. They move to No category.",
   );
 });
 it("counts the own rules of every selected category under either answer, a subcategory selected with its parent included", async () => {
@@ -2371,7 +2371,7 @@ it("counts the own rules of every selected category under either answer, a subca
     "3 kitchen routing rules name these categories and will be removed.",
   );
   expect(contentsLabels(el)[1]).toBe(
-    "Also: deletes 1 category and 1 kitchen routing rule and disables 2 products. They move to No category.",
+    "Also: deletes 1 category and 1 kitchen routing rule and archives 2 products. They move to No category.",
   );
 });
 it("shows the new counts instead of deleting when only the category's own routing rules changed", async () => {
@@ -2480,18 +2480,18 @@ it.each([
   [
     "en-GB",
     { folders: 1, products: 3, activeProducts: 2 },
-    "Also: deletes 1 category and disables 2 products. They move to No category.",
+    "Also: deletes 1 category and archives 2 products. They move to No category.",
   ],
   [
     "en-GB",
     { folders: 0, products: 4, activeProducts: 2 },
-    "Also: disables 2 products. They move to No category.",
+    "Also: archives 2 products. They move to No category.",
   ],
   ["en-GB", { folders: 0, products: 2, activeProducts: 0 }, null],
   [
     "es",
     { folders: 1, products: 3, activeProducts: 1 },
-    "También: elimina 1 categoría y deshabilita 1 producto. Pasa a Sin categoría.",
+    "También: elimina 1 categoría y archiva 1 producto. Pasa a Sin categoría.",
   ],
   ["es", { folders: 0, products: 1, activeProducts: 0 }, null],
   ["es", { folders: 0, products: 2, activeProducts: 0 }, null],
@@ -2522,7 +2522,7 @@ it("words the whole English delete choice when every product to delete is active
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(
     el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
-  ).toBe("Also: deletes 1 category and disables 2 products. They move to No category.");
+  ).toBe("Also: deletes 1 category and archives 2 products. They move to No category.");
 });
 it("words the whole Spanish delete choice when one of the products to delete is disabled", async () => {
   setLocale("es");
@@ -2535,7 +2535,7 @@ it("words the whole Spanish delete choice when one of the products to delete is 
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(
     el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
-  ).toBe("También: deshabilita 2 productos. Pasan a Sin categoría.");
+  ).toBe("También: archiva 2 productos. Pasan a Sin categoría.");
 });
 it("sums every selected category's active products, leaving out the disabled ones, when only one of them holds disabled products", async () => {
   const el = await mountBrowser();
@@ -2548,7 +2548,7 @@ it("sums every selected category's active products, leaving out the disabled one
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(contentsLabels(el)).toEqual([
     "1 category and 3 products move to No category",
-    "Also: deletes 1 category and disables 3 products. They move to No category.",
+    "Also: deletes 1 category and archives 3 products. They move to No category.",
   ]);
 });
 it("reads the contents again at Delete and, when they changed, shows the new counts instead of deleting", async () => {
@@ -2910,7 +2910,7 @@ it("when the server refuses an empty category's delete because it is no longer e
   expect(dialog(el)).not.toBeNull();
   expect(contentsLabels(el)).toEqual([
     "1 product moves to No category",
-    "Also: disables 1 product. It moves to No category.",
+    "Also: archives 1 product. It moves to No category.",
   ]);
   expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: [], categoryIds: ["f"] },
@@ -3063,25 +3063,23 @@ it("deleting an empty category from its menu acts on that category alone, and le
   expect(menu.isConnected).toBe(false);
 });
 it.each([1, 2])(
-  "confirms disabling %i products with disabled and sales wording",
+  "confirms archiving %i products with permanent and sales wording",
   async (number) => {
     const el = await mountBrowser();
     await toggleCategory(el, "d");
     await selectKeys(el, number === 1 ? ["bread"] : ["bread", "cola"]);
     expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe(
-      "Disable",
+      "Archive",
     );
     await press(el, "delete");
-    expect(dialog(el)!.heading).toBe(number === 1 ? "Disable 1 product?" : "Disable 2 products?");
+    expect(dialog(el)!.heading).toBe(number === 1 ? "Archive 1 product?" : "Archive 2 products?");
     expect(el.shadowRoot!.textContent).toContain("past sales");
     expect(el.shadowRoot!.textContent).toContain(
-      number === 1
-        ? "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept."
-        : "This disables the products: the till stops selling them and they leave this list until you choose to show disabled products. You can enable them again, and their past sales are kept.",
+      "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.",
     );
     expect(el.shadowRoot!.textContent).not.toContain("inactive");
     expect(el.shadowRoot!.querySelector('[data-test="confirm"]')!.textContent!.trim()).toBe(
-      "Disable",
+      "Archive",
     );
     await press(el, "confirm");
     await vi.waitFor(() =>
@@ -3093,11 +3091,11 @@ it.each([1, 2])(
     );
   },
 );
-const DISABLE_PRODUCTS =
-  "This disables the products: the till stops selling them and they leave this list until you choose to show disabled products. You can enable them again, and their past sales are kept.";
-const disableBody = (el: CatalogueBrowser) =>
+const ARCHIVE_PRODUCTS =
+  "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.";
+const archiveBody = (el: CatalogueBrowser) =>
   dialog(el)!.querySelector("form > p")!.textContent!.replace(/\s+/g, " ").trim();
-async function openDisableProducts(keys: string[], menus: () => Promise<number>) {
+async function openArchiveProducts(keys: string[], menus: () => Promise<number>) {
   const el = await mountBrowser();
   vi.mocked(el.api.countProductMenus).mockImplementation(menus);
   await toggleCategory(el, "d");
@@ -3108,35 +3106,35 @@ async function openDisableProducts(keys: string[], menus: () => Promise<number>)
   return el;
 }
 it.each([
-  [3, `${DISABLE_PRODUCTS} They come off the 3 menus they are on.`],
-  [1, `${DISABLE_PRODUCTS} They come off the one menu they are on.`],
-  [0, DISABLE_PRODUCTS],
+  [3, `${ARCHIVE_PRODUCTS} They come off the 3 menus they are on.`],
+  [1, `${ARCHIVE_PRODUCTS} They come off the one menu they are on.`],
+  [0, ARCHIVE_PRODUCTS],
 ] as const)(
   "says how many menus the products come off when they are on %i",
   async (menus, body) => {
-    const el = await openDisableProducts(["bread", "cola"], () => Promise.resolve(menus));
+    const el = await openArchiveProducts(["bread", "cola"], () => Promise.resolve(menus));
     expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["bread", "cola"]);
-    expect(disableBody(el)).toBe(body);
+    expect(archiveBody(el)).toBe(body);
   },
 );
 it("says the menus one selected product comes off with the product as the subject", async () => {
-  const el = await openDisableProducts(["bread"], () => Promise.resolve(2));
-  expect(disableBody(el)).toBe(
-    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on.",
+  const el = await openArchiveProducts(["bread"], () => Promise.resolve(2));
+  expect(archiveBody(el)).toBe(
+    "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept. It comes off the 2 menus it is on.",
   );
 });
-it("says every menu while the products' count loads and when it cannot be read, and Disable still works", async () => {
+it("says every menu while the products' count loads and when it cannot be read, and Archive still works", async () => {
   let fail!: (reason: unknown) => void;
-  const el = await openDisableProducts(
+  const el = await openArchiveProducts(
     ["bread", "cola"],
     () => new Promise<number>((_, reject) => (fail = reject)),
   );
-  const unknown = `${DISABLE_PRODUCTS} They come off every menu they are on.`;
-  expect(disableBody(el)).toBe(unknown);
+  const unknown = `${ARCHIVE_PRODUCTS} They come off every menu they are on.`;
+  expect(archiveBody(el)).toBe(unknown);
   fail({ code: "server.internal" });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(disableBody(el)).toBe(unknown);
+  expect(archiveBody(el)).toBe(unknown);
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   await press(el, "confirm");
   await vi.waitFor(() =>
@@ -3147,9 +3145,9 @@ it("says every menu while the products' count loads and when it cannot be read, 
     ),
   );
 });
-it("never shows an earlier Disable dialog's late count in the next one", async () => {
+it("never shows an earlier Archive dialog's late count in the next one", async () => {
   const answers: Array<(menus: number) => void> = [];
-  const el = await openDisableProducts(
+  const el = await openArchiveProducts(
     ["bread", "cola"],
     () => new Promise<number>((resolve) => answers.push(resolve)),
   );
@@ -3161,18 +3159,18 @@ it("never shows an earlier Disable dialog's late count in the next one", async (
   answers[0]!(4);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(disableBody(el)).toBe(DISABLE_PRODUCTS);
+  expect(archiveBody(el)).toBe(ARCHIVE_PRODUCTS);
 });
-it("forgets the last Disable dialog's count while the next one's is still being read", async () => {
+it("forgets the last Archive dialog's count while the next one's is still being read", async () => {
   const answers: Array<(menus: number) => void> = [];
-  const el = await openDisableProducts(
+  const el = await openArchiveProducts(
     ["bread", "cola"],
     () => new Promise<number>((resolve) => answers.push(resolve)),
   );
   answers[0]!(4);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(disableBody(el)).toContain("the 4 menus");
+  expect(archiveBody(el)).toContain("the 4 menus");
   dialog(el)!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await vi.waitFor(() => expect(dialog(el)).toBeNull());
   (await tableOf(el))
@@ -3181,30 +3179,34 @@ it("forgets the last Disable dialog's count while the next one's is still being 
   await el.updateComplete;
   await press(el, "delete");
   expect(el.api.countProductMenus).toHaveBeenLastCalledWith(["bread"]);
-  expect(disableBody(el)).toBe(`${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`);
+  expect(archiveBody(el)).toBe(`${ARCHIVE_ONE_PRODUCT} It comes off every menu it is on.`);
 });
 it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
-  const el = await openDisableProducts(["bread", "cola"], () => Promise.resolve(2));
-  expect(disableBody(el)).toBe(
-    "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan. Salen de las 2 cartas en las que están.",
+  const el = await openArchiveProducts(["bread", "cola"], () => Promise.resolve(2));
+  expect(archiveBody(el)).toBe(
+    "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan. Salen de las 2 cartas en las que están.",
   );
 });
-it("says products a category's deletion disables come off every menu, only once its contents are to be deleted", async () => {
+it("says products a category's deletion archives come off every menu, only once its contents are to be deleted", async () => {
   const el = await mountBrowser();
-  const sentence = "Products disabled by this deletion come off every menu they are on.";
+  const sentence = "Products archived by this deletion come off every menu they are on.";
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
   );
   expect(dialog(el)!.textContent).not.toContain(sentence);
+  expect(dialog(el)!.textContent).not.toContain("This can't be undone.");
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
   await el.updateComplete;
   expect(dialog(el)!.textContent).toContain(sentence);
+  expect(dialog(el)!.textContent).toContain("This can't be undone.");
+  expect(dialog(el)!.textContent).toContain("they come off the extras lists that offer them");
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
   await el.updateComplete;
   expect(dialog(el)!.textContent).not.toContain(sentence);
+  expect(dialog(el)!.textContent).not.toContain("This can't be undone.");
   expect(el.api.countProductMenus).not.toHaveBeenCalled();
 });
 it("says nothing about menus when a deleted category's contents disable no product", async () => {
@@ -3221,18 +3223,18 @@ it("says nothing about menus when a deleted category's contents disable no produ
   await el.updateComplete;
   expect(dialog(el)!.textContent).not.toContain("come off every menu");
 });
-const DISABLE_ONE_PRODUCT =
-  "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.";
+const ARCHIVE_ONE_PRODUCT =
+  "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.";
 it.each([
   [
     ["bread"],
-    `${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`,
-    `${DISABLE_ONE_PRODUCT} It comes off the 2 menus it is on.`,
+    `${ARCHIVE_ONE_PRODUCT} It comes off every menu it is on.`,
+    `${ARCHIVE_ONE_PRODUCT} It comes off the 2 menus it is on.`,
   ],
   [
     ["bread", "burger"],
-    `${DISABLE_PRODUCTS} They come off every menu they are on.`,
-    `${DISABLE_PRODUCTS} They come off the 2 menus they are on.`,
+    `${ARCHIVE_PRODUCTS} They come off every menu they are on.`,
+    `${ARCHIVE_PRODUCTS} They come off the 2 menus they are on.`,
   ],
 ] as const)(
   "counts the menus products %j picked beside a category come off, whichever way its contents go",
@@ -3249,15 +3251,15 @@ it.each([
       expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
     );
     expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith([...productIds]);
-    expect(disableBody(el)).toBe(unknown);
+    expect(archiveBody(el)).toBe(unknown);
     answer(2);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(disableBody(el)).toBe(counted);
+    expect(archiveBody(el)).toBe(counted);
     for (const contents of ["delete", "move_up"]) {
       el.shadowRoot!.querySelector<HTMLInputElement>(`input[value=${contents}]`)!.click();
       await el.updateComplete;
-      expect(disableBody(el)).toBe(counted);
+      expect(archiveBody(el)).toBe(counted);
     }
   },
 );
@@ -3271,23 +3273,23 @@ it("says products picked beside a category come off every menu when their count 
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(disableBody(el)).toBe(`${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`);
+  expect(archiveBody(el)).toBe(`${ARCHIVE_ONE_PRODUCT} It comes off every menu it is on.`);
 });
-it("says Disable for products alone in Spanish, and Delete once a category is selected", async () => {
+it("says Archive for products alone in Spanish, and Delete once a category is selected", async () => {
   setLocale("es");
   const el = await mountBrowser();
   await toggleCategory(el, "d");
   await selectKeys(el, ["bread", "cola"]);
   expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe(
-    "Deshabilitar",
+    "Archivar",
   );
   await press(el, "delete");
-  expect(dialog(el)!.heading).toBe("¿Deshabilitar 2 productos?");
+  expect(dialog(el)!.heading).toBe("¿Archivar 2 productos?");
   expect(el.shadowRoot!.textContent).toContain(
-    "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan.",
+    "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan.",
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm"]')!.textContent!.trim()).toBe(
-    "Deshabilitar",
+    "Archivar",
   );
   cleanupWidgets();
   const mixed = await mountBrowser();
@@ -3297,13 +3299,13 @@ it("says Disable for products alone in Spanish, and Delete once a category is se
     "Eliminar",
   );
 });
-it("offers no Disable for a selection of products that are all disabled already, keeping Move and Done", async () => {
-  const withDisabled = [
+it("offers no Archive for a selection of products that are all disabled already, keeping Move and Done", async () => {
+  const withArchived = [
     product("bread", "Bread", null),
     product("old", "Old", null, false),
     product("gone", "Gone", null, false),
   ];
-  const el = await mountBrowser({ products: withDisabled });
+  const el = await mountBrowser({ products: withArchived });
   await chooseFilter(el, "active", "");
   await selectKeys(el, ["old", "gone"]);
   expect(el.shadowRoot!.querySelector('[data-test="selected-count"]')).not.toBeNull();
@@ -3311,16 +3313,16 @@ it("offers no Disable for a selection of products that are all disabled already,
   expect(el.shadowRoot!.querySelector('[data-test="move"]')).not.toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="cancel-selection"]')).not.toBeNull();
 });
-it("keeps Disable for a selection mixing active and disabled products, and sends both", async () => {
-  const withDisabled = [
+it("keeps Archive for a selection mixing active and disabled products, and sends both", async () => {
+  const withArchived = [
     product("bread", "Bread", null),
     product("old", "Old", null, false),
     product("gone", "Gone", null, false),
   ];
-  const el = await mountBrowser({ products: withDisabled });
+  const el = await mountBrowser({ products: withArchived });
   await chooseFilter(el, "active", "");
   await selectKeys(el, ["bread", "old"]);
-  expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Disable");
+  expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Archive");
   await press(el, "delete");
   await press(el, "confirm");
   await vi.waitFor(() =>
@@ -3331,7 +3333,7 @@ it("keeps Disable for a selection mixing active and disabled products, and sends
     ),
   );
 });
-it("offers Disable again once a refresh of the products makes one of a held all-disabled selection active", async () => {
+it("offers Archive again once a refresh of the products makes one of a held all-disabled selection active", async () => {
   const el = await mountBrowser({
     products: [product("old", "Old", null, false), product("gone", "Gone", null, false)],
   });
@@ -3341,7 +3343,7 @@ it("offers Disable again once a refresh of the products makes one of a held all-
   el.products = [product("old", "Old", null), product("gone", "Gone", null, false)];
   await tableOf(el);
   expect(count(el)).toBe("2 selected");
-  expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Disable");
+  expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Archive");
 });
 it.each(["move", "delete"])(
   "keeps %s refusal open at bottom of body and blocks Escape while busy",
@@ -3870,7 +3872,7 @@ it("clears the selection when a filter is chosen in the panel beside the rows", 
     const filter = panel.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!;
     await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     const option = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (row) => row.textContent!.trim() === en["product.disabled_badge"],
+      (row) => row.textContent!.trim() === en["product.archived_badge"],
     )!;
     await userEvent.click(option);
     await el.updateComplete;
@@ -4253,4 +4255,190 @@ it.each(
     expect(focused).toBe(control);
   }
   before.remove();
+});
+
+it.each(["products", "category"])(
+  "names products and menus after a %s archive refusal",
+  async (selection) => {
+    const el = await mountBrowser();
+    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValue({
+      code: "product.on_live_menu",
+      params: {
+        products: [
+          { id: "bread", name: "Bread" },
+          { id: "cola", name: "Cola" },
+        ],
+        menus: [
+          { id: "dinner", name: "Dinner" },
+          { id: "scheduled", name: "Weekend" },
+        ],
+      },
+    });
+    await toggleCategory(el, "d");
+    await selectKeys(el, selection === "products" ? ["bread", "cola"] : ["folder:d"]);
+    await press(el, "delete");
+    if (selection === "category") {
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+      );
+      el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+      await el.updateComplete;
+    }
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(dialog(el)!.querySelector("[role=alert]")!.textContent).toBe(
+        `${codeMessage("product.on_live_menu")} Products: Bread, Cola. Menus: Dinner, Weekend.`,
+      ),
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
+    ).toBeNull();
+  },
+);
+
+it.each([
+  ["en", "Products", "Menus"],
+  ["es", "Productos", "Menús"],
+])(
+  "names the single product blocking a category archive (%s)",
+  async (locale, productsLabel, menusLabel) => {
+    setLocale(locale!);
+    const el = await mountBrowser();
+    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValue({
+      code: "product.on_live_menu",
+      params: {
+        products: [{ id: "cola", name: "Cola" }],
+        menus: [{ id: "dinner", name: "Dinner" }],
+      },
+    });
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+    );
+    el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+    await el.updateComplete;
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(dialog(el)!.querySelector("[role=alert]")!.textContent).toBe(
+        `${codeMessage("product.on_live_menu")} ${productsLabel}: Cola. ${menusLabel}: Dinner.`,
+      ),
+    );
+  },
+);
+
+it.each(["products", "folder"] as const)(
+  "names affected extras lists for %s Archive warnings",
+  async (entry) => {
+    const lists = [
+      ["affected", "Archive affected sauces", entry === "products" ? "bread" : "cola"],
+      ["unrelated", "Archive unrelated extras", "burger"],
+      ["archived", "Archive already archived extras", "lager"],
+    ].map(([id, name, productId]) => ({
+      id: id!,
+      name: name!,
+      customerName: null,
+      kitchenName: null,
+      active: true,
+      minPicks: 0,
+      maxPicks: null,
+      usage: { products: 1 },
+      items: [
+        {
+          id: `${id}-item`,
+          productId: productId!,
+          maxQuantity: null,
+          preselected: false,
+          price: null,
+        },
+      ],
+    }));
+    const el = await mountBrowser({ extraLists: lists });
+    await selectKeys(el, entry === "products" ? ["bread"] : ["folder:d"]);
+    await press(el, "delete");
+    if (entry === "folder") {
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+      );
+      expect(dialog(el)!.textContent).not.toContain("Archive affected sauces");
+      el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+      await el.updateComplete;
+    }
+    expect(dialog(el)!.textContent).toContain("Archive affected sauces");
+    expect(dialog(el)!.textContent).not.toContain("Archive unrelated extras");
+    expect(dialog(el)!.textContent).not.toContain("Archive already archived extras");
+  },
+);
+
+it("names active descendant and variant extras only when deleting folder contents, and clears them on Move up", async () => {
+  const child = product("child", "Child", "b");
+  child.variants = [
+    {
+      id: "size",
+      name: "Size",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      active: true,
+      available: true,
+      effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "b" },
+    },
+    {
+      id: "old-size",
+      name: "Old size",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      active: false,
+      available: true,
+      effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "b" },
+    },
+  ];
+  const lists = [
+    ["child", "Descendant extras"],
+    ["size", "Variant extras"],
+    ["old-size", "Archived variant extras"],
+    ["bread", "Selected product extras"],
+  ].map(([productId, name]) => ({
+    id: productId!,
+    name: name!,
+    customerName: null,
+    kitchenName: null,
+    minPicks: 0,
+    maxPicks: null,
+    active: false,
+    items: [
+      {
+        id: `${productId}-item`,
+        productId: productId!,
+        maxQuantity: null,
+        preselected: false,
+        price: null,
+      },
+    ],
+  }));
+  const el = await mountBrowser({ products: [...PRODUCTS, child], extraLists: lists });
+  await selectKeys(el, ["bread", "folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+  );
+  const warning = () => dialog(el)!.querySelector("[data-test=archive-extra-lists]")!.textContent;
+  expect(warning()).toContain("Selected product extras");
+  expect(warning()).not.toContain("Descendant extras");
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  expect(warning()).toContain("Descendant extras");
+  expect(warning()).toContain("Variant extras");
+  expect(warning()).not.toContain("Archived variant extras");
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
+  await el.updateComplete;
+  expect(warning()).toContain("Selected product extras");
+  expect(warning()).not.toContain("Descendant extras");
+  expect(warning()).not.toContain("Variant extras");
+  el.extraLists = [];
+  await el.updateComplete;
+  expect(dialog(el)!.querySelector("[data-test=archive-extra-lists]")).toBeNull();
 });

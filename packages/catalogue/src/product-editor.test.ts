@@ -280,7 +280,7 @@ describe("a removed variant in the parent's editor", () => {
     ]);
   });
 
-  it("is made Inactive when sent active false, and Active again when sent active true", async () => {
+  it("is archived when sent active false, and refuses becoming Active again", async () => {
     const saved = await save(null, input);
     const [small, large] = saved.variants;
     await save(saved.id, { ...saved, variants: [small!, { ...large!, active: false }] });
@@ -288,10 +288,15 @@ describe("a removed variant in the parent's editor", () => {
       { name: "Small", active: true },
       { name: "Large", active: false },
     ]);
-    await save(saved.id, { ...saved, variants: [small!, { ...large!, active: true }] });
+    await expect(
+      save(saved.id, { ...saved, variants: [small!, { ...large!, active: true }] }),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: large!.id, field: "variants.1.active" },
+    });
     expect(flags(await read(saved.id))).toEqual([
       { name: "Small", active: true },
-      { name: "Large", active: true },
+      { name: "Large", active: false },
     ]);
   });
 
@@ -314,17 +319,27 @@ describe("a removed variant in the parent's editor", () => {
     });
     expect(inactive.variants[1]).toMatchObject({ ...spanishOnly, active: false });
     await expect(
-      save(saved.id, { ...saved, variants: [small!, { ...large!, ...spanishOnly, active: true }] }),
+      save(saved.id, {
+        ...saved,
+        variants: [{ ...small!, ...spanishOnly }, inactive.variants[1]!],
+      }),
+    ).rejects.toMatchObject({ code: "content.translation_required", params: { language: "en" } });
+    await expect(
+      save(saved.id, {
+        ...saved,
+        variants: [
+          small!,
+          { ...large!, customerName: { en: "Large", es: "Grande" }, active: true },
+        ],
+      }),
     ).rejects.toMatchObject({
-      code: "content.translation_required",
-      params: { language: "en" },
+      code: "product.archived",
+      params: { productId: large!.id, field: "variants.1.active" },
     });
+    expect(await read(saved.id)).toEqual(inactive);
   });
 
-  // Removing a variant through its OWN page (the products list's Remove) is never refused for a
-  // customer name lacking the default language, exactly as its product's save allows; making it
-  // Active again is still checked.
-  it("saves a variant's own page Inactive without the default language, and refuses it Active", async () => {
+  it("refuses either active state on an archived variant's own page, retaining its untranslated name", async () => {
     const spanishOnly = { customerName: { es: "Grande" } };
     const saved = await save(null, input);
     const [small, large] = saved.variants;
@@ -333,11 +348,14 @@ describe("a removed variant in the parent's editor", () => {
       variants: [small!, { ...large!, ...spanishOnly, active: false }],
     });
     const own = await read(large!.id!);
-    const removed = await save(large!.id!, { ...own, active: false });
-    expect(removed).toMatchObject({ ...spanishOnly, active: false });
+    await expect(save(large!.id!, { ...own, active: false })).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: large!.id },
+    });
+    expect(await read(large!.id!)).toMatchObject({ ...spanishOnly, active: false });
     await expect(save(large!.id!, { ...own, active: true })).rejects.toMatchObject({
-      code: "content.translation_required",
-      params: { language: "en" },
+      code: "product.archived",
+      params: { productId: large!.id },
     });
     expect(await read(large!.id!)).toMatchObject({ active: false });
   });
@@ -585,7 +603,7 @@ describe("a variant's own page", () => {
           ...input,
           customerName: { en: "A cup of coffee" },
           image: "coffee.webp",
-          active: false,
+          active: true,
           unitId: kg.id,
           primaryCategoryId: parentCategory.id,
           allergens: { milk: { presence: "contains" } },
@@ -963,8 +981,8 @@ describe("a product an extras list offers", () => {
         variants: [{ ...withInactive.variants[0]!, active: true }],
       }),
     ).rejects.toMatchObject({
-      code: "product.offered_as_extra",
-      params: { field: "variants.0.active", extraLists: offering },
+      code: "product.archived",
+      params: { productId: withInactive.variants[0]!.id, field: "variants.0.active" },
     });
     expect((await read(coffeeId)).variants.map((variant) => variant.active)).toEqual([false]);
   });
@@ -975,13 +993,13 @@ describe("a product an extras list offers", () => {
     const own = await read(variantId);
 
     await expect(save(variantId, { ...own, active: true })).rejects.toMatchObject({
-      code: "product.offered_as_extra",
-      params: { field: "active", extraLists: offering },
+      code: "product.archived",
+      params: { productId: variantId },
     });
     expect(await read(variantId)).toMatchObject({ active: false });
   });
 
-  it("saves variants that all stay Inactive, from the parent and from the variant's own page", async () => {
+  it("keeps archived variants in the parent save and refuses changing their own page", async () => {
     const saved = await save(coffeeId, {
       ...(await read(coffeeId)),
       variants: [small(), { ...large(), active: false }],
@@ -990,31 +1008,42 @@ describe("a product an extras list offers", () => {
 
     const variantId = saved.variants[0]!.id;
     const own = await read(variantId);
-    expect(await save(variantId, { ...own, name: "Small cup", active: false })).toMatchObject({
-      name: "Small cup",
-      active: false,
+    await expect(
+      save(variantId, { ...own, name: "Small cup", active: false }),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: variantId },
     });
+    expect(await read(variantId)).toEqual(own);
     // The offered product itself is saved Active: only a VARIANT's own save is checked.
     expect(await save(coffeeId, { ...(await read(coffeeId)), active: true })).toMatchObject({
       active: true,
     });
   });
 
-  it("adds, re-activates and restores variants of a product no list offers", async () => {
+  it("adds variants and refuses restoring an archived one even when no list offers its parent", async () => {
     const juice = await save(null, { ...input, name: "Juice", customerName: null, variants: [] });
 
     const added = await save(juice.id, { ...juice, variants: [small(), large()] });
     expect(added.variants.map((variant) => variant.active)).toEqual([false, true]);
-    const reactivated = await save(juice.id, {
-      ...added,
-      variants: [{ ...added.variants[0]!, active: true }, added.variants[1]!],
+    await expect(
+      save(juice.id, {
+        ...added,
+        variants: [{ ...added.variants[0]!, active: true }, added.variants[1]!],
+      }),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: added.variants[0]!.id, field: "variants.0.active" },
     });
-    expect(reactivated.variants.map((variant) => variant.active)).toEqual([true, true]);
+    expect((await read(juice.id)).variants.map((variant) => variant.active)).toEqual([false, true]);
 
-    const variantId = reactivated.variants[0]!.id;
-    await save(variantId, { ...(await read(variantId)), active: false });
-    expect(await save(variantId, { ...(await read(variantId)), active: true })).toMatchObject({
-      active: true,
-    });
+    const variantId = added.variants[0]!.id;
+    await expect(
+      save(variantId, { ...(await read(variantId)), active: false }),
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: variantId } });
+    await expect(
+      save(variantId, { ...(await read(variantId)), active: true }),
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: variantId } });
+    expect(await read(variantId)).toMatchObject({ active: false });
   });
 });

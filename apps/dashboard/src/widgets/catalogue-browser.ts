@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import type {
+  ExtraList,
   CategorySummary,
   CatalogueSelection,
   FolderContents,
@@ -29,6 +30,8 @@ import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
+import { refusalText } from "./archive-refusal.js";
+import { archiveExtraListWarning } from "./archive-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 
 interface OperationDraft {
@@ -79,6 +82,9 @@ export class CatalogueBrowser extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
+      .archive-extra-lists {
+        overflow-wrap: anywhere;
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -106,7 +112,7 @@ export class CatalogueBrowser extends LitElement {
   /** Whether the routing read failed, as against not having answered yet. */
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) extraLists: ExtraList[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property() unitLanguage = "en";
   /** The category the address names; the browser opens it, and every category above it, once. */
@@ -137,9 +143,8 @@ export class CatalogueBrowser extends LitElement {
   @state() private summaries: FolderSummary[] = [];
   @state() private summaryLoading = false;
   @state() private summaryFailed = false;
-  /** How many Active menus the directly picked products being disabled are on; null while unread or unreadable. */
-  @state() private disablingMenus: number | null = null;
-  #disablingRead = 0;
+  @state() private archivingMenus: number | null = null;
+  #archivingRead = 0;
   @state() private operationBusy = false;
   @state() private operationError = "";
   @state() private dropError = "";
@@ -317,7 +322,7 @@ export class CatalogueBrowser extends LitElement {
     this.summaryFailed = false;
     this.operationError = "";
     this.operation = selection.productIds.length ? "delete" : null;
-    if (selection.productIds.length) void this.#readDisablingMenus(selection.productIds);
+    if (selection.productIds.length) void this.#readArchivingMenus(selection.productIds);
     if (!selection.categoryIds.length) return;
     this.summaryLoading = true;
     try {
@@ -344,16 +349,16 @@ export class CatalogueBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
-  async #readDisablingMenus(productIds: string[]): Promise<void> {
-    const read = ++this.#disablingRead;
-    this.disablingMenus = null;
+  async #readArchivingMenus(productIds: string[]): Promise<void> {
+    const read = ++this.#archivingRead;
+    this.archivingMenus = null;
     let menus: number | null = null;
     try {
       menus = await (this.api.background ?? this.api).countProductMenus(productIds);
     } catch {
-      // The sentence for an unknown count stays; the read never blocks Disable.
+      // An unavailable count must not prevent an archive attempt.
     }
-    if (read === this.#disablingRead) this.disablingMenus = menus;
+    if (read === this.#archivingRead) this.archivingMenus = menus;
   }
   get #deleteWaiting(): boolean {
     return !this.selected.length || this.summaryLoading;
@@ -411,7 +416,11 @@ export class CatalogueBrowser extends LitElement {
       this.selected = [];
     } catch (error) {
       this.operation = operation;
-      this.operationError = codeMessage(codeOf(error));
+      this.operationError = refusalText(
+        codeOf(error),
+        (error as { params?: unknown } | null)?.params,
+        { includeSingleProduct: this.operationSelection.categoryIds.length > 0 },
+      );
     } finally {
       this.operationBusy = false;
     }
@@ -569,7 +578,7 @@ export class CatalogueBrowser extends LitElement {
       ...(deleted.length
         ? [this.#fill("folders.also_deletes", { items: conjunctionList(deleted) })]
         : []),
-      ...(totals.active ? [this.#fill("folders.also_disables", { products: productCount })] : []),
+      ...(totals.active ? [this.#fill("folders.also_archives", { products: productCount })] : []),
     ];
     const deleteLabel = [
       this.#fill("folders.contents_also", { actions: conjunctionList(actions) }),
@@ -587,7 +596,7 @@ export class CatalogueBrowser extends LitElement {
         ? "folders.move_heading"
         : selection.categoryIds.length
           ? "folders.delete_heading"
-          : "folders.disable_products_heading",
+          : "folders.archive_products_heading",
       count,
     );
     const blocked =
@@ -642,12 +651,12 @@ export class CatalogueBrowser extends LitElement {
                 ${
                   selection.productIds.length
                     ? html`<p>
-                        ${selection.productIds.length === 1 ? t("product.disable_warning") : t("folders.disable_products_body")}
+                        ${t("folders.archive_products_body")}
                         ${offMenusSentence(
                           selection.productIds.length === 1
                             ? "product.off_menus"
                             : "folders.off_menus",
-                          this.disablingMenus,
+                          this.archivingMenus,
                         )}
                       </p>`
                     : nothing
@@ -708,7 +717,8 @@ export class CatalogueBrowser extends LitElement {
                               </fieldset>
                               ${
                                 this.contents === "delete" && totals.active
-                                  ? html`<p>${t("folders.delete_off_menus")}</p>`
+                                  ? html`${!selection.productIds.length ? html`<p>${t("folders.archive_products_body")}</p>` : nothing}
+                                      <p>${t("folders.delete_off_menus")}</p>`
                                   : nothing
                               }`
                           : nothing
@@ -717,6 +727,30 @@ export class CatalogueBrowser extends LitElement {
                     : nothing
                 }
               `
+        }
+        ${
+          this.operation === "delete"
+            ? archiveExtraListWarning(
+                this.products,
+                [
+                  ...selection.productIds,
+                  ...(this.contents === "delete"
+                    ? this.products
+                        .filter(
+                          (product) =>
+                            product.primaryCategoryId !== null &&
+                            selection.categoryIds.some((id) =>
+                              categoryWithDescendants(id, this.categories).has(
+                                product.primaryCategoryId!,
+                              ),
+                            ),
+                        )
+                        .map((product) => product.id)
+                    : []),
+                ],
+                this.extraLists,
+              )
+            : nothing
         }
         ${this.operationError ? html`<p role="alert" class="error">${this.operationError}</p>` : nothing}
       </form>
@@ -746,11 +780,10 @@ export class CatalogueBrowser extends LitElement {
     </wt-modal>`;
   }
 
-  /** Products alone are only switched off; a category in the selection is really deleted. */
   #deleteLabel(selection: CatalogueSelection): string {
     return t(
       selection.productIds.length && !selection.categoryIds.length
-        ? "product.disable"
+        ? "product.archive"
         : "action.delete",
     );
   }

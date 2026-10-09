@@ -218,7 +218,7 @@ describe("inline translation targets", () => {
           row.target.unavailableReason,
         ]),
       ).toEqual([
-        ["present", false, "inactive"],
+        ["present", true, null],
         ["present", false, "inactive"],
         ["present", false, "role"],
         ["missing", false, "missing"],

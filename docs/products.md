@@ -91,8 +91,7 @@ or the VAT needs fixing, and on a product that has never been saved.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
-offers **Open**, **Edit** and **Disable** (**Remove** for a variant not yet saved, **Enable** for a
-disabled one). **Edit**, or a click on the variant's row, reopens the small window. Changes you make
+offers **Open**, **Edit** and **Archive** (**Remove** for a variant not yet saved). **Edit**, or a click on the variant's row, reopens the small window. Changes you make
 in the table, including the Available switch, are saved when you save the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT, allergens and the
@@ -111,17 +110,16 @@ or Variants section, because a variant always uses its product's extras and opti
 **Open** appears once the variant has been saved, and it waits while the product has unsaved
 changes, because leaving the product would lose them: save the product first.
 
-**Disable** makes a saved variant disabled once you save the product: the till stops offering it,
-the prices any menu set for it are deleted, and its past sales are kept. Enabled again, it is back
-on every menu its product is on, with no menu price of its own until you set one. **Remove**, on a variant you added and have not saved yet, simply drops
-it. The table shows only Active variants at first. While some variant is disabled, a link beside
-**Add variant** says how many, such as **Show 1 disabled**: choose it to see them in the table, and
-choose **Hide disabled** to hide them again. Choose **Enable** from a disabled row's menu to make it
-Active again.
+**Archive** on a saved variant stages a permanent archive. The row stays visible with
+**Archived when saved** and **Keep** until you save the product. Choose Keep to cancel that
+staged change. Once saved, the till stops offering the variant, its menu prices are deleted,
+and its past sales stay. You cannot bring it back. A variant already archived is hidden from the
+editor; there is no Show disabled link. **Remove** drops a variant you have not saved yet.
 
-You cannot add or enable an Active variant on a product that an extras list offers, because a
-product with Active variants cannot be an extra. The save is refused, and the dashboard names the
-extras lists to take the product off first.
+If a live or scheduled menu includes the variant, the save is refused and names the menus.
+Take the variant out of those menus and publish before archiving it. You cannot add an Active
+variant to a product that an extras list offers, because a product with Active variants cannot
+be an extra. That refusal names the extras lists to take the product off first.
 
 The products list keeps each product's variants folded away under it. A product with Active
 variants says how many under its name, such as **2 variants**, and the small arrow before its name
@@ -133,8 +131,9 @@ row menu. A variant with no photo of its own shows its product's or, when neithe
 same square as its product's row. Choose the photo or square to open the variant's own page at its
 photo. On a phone the photo is hidden. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers
-**Disable** or **Enable** there too, as a product's own row does: **Enable** once it is disabled.
-A disabled variant is listed once you change the **Status** filter from **Active**.
+**Archive** there too, as a product's own row does. Change the **Status** filter to **Archived**
+to find an archived product or variant, then choose **View** for its plain-text details. View has
+no Save or availability switch; it keeps the retained record available without allowing edits.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
 On the menu you can give it a price of its own, or let it follow the menus it comes from. A price

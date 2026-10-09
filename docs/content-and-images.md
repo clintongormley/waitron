@@ -61,7 +61,7 @@ and links to each existing editor; direct text entry in this dialog is planned s
 filled in for some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its
 staff name is shown instead; an extras list is the exception, because its own name never reaches a
-receipt. Disabled products, disabled lists and switched-off menus are not listed.
+receipt. Archived products, disabled lists and switched-off menus are not listed.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.
@@ -133,8 +133,10 @@ stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,
-including disabled products, and to those sections, a section shown by its internal name. Remove
-the photograph from each of them before trying deletion again. A section's link opens its menu's
+including archived products, and to those sections, a section shown by its internal name. Remove
+the photograph from each editable record before trying deletion again. An archived product opens
+read-only details and cannot have its picture removed through the product editor, so a picture
+that it still uses remains blocked from deletion. A section's link opens its menu's
 **Structure** tab, in **Products and menus**, **Menus**, where **Remove image** in the section's
 editor clears it when you save the section. A menu's own photograph is removed the same way
 through **Rename** on the menu's row in **Products and menus**, **Menus**. A menu included in

@@ -901,7 +901,7 @@ export class ExtraListForm extends LitElement {
     // A list holds each product once (`extra_list_items_list_product_uq`), so one it holds already
     // is not offered again.
     const listed = new Set(this.items.map((item) => item.productId));
-    const offered = this.products.filter((product) => !listed.has(product.id));
+    const offered = this.products.filter((product) => product.active && !listed.has(product.id));
     return html`${this.#reorder.liveRegion()}
       <div data-test="added-status" role="status" aria-live="polite" class="visually-hidden">
         ${this.addedMessage}

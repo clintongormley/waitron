@@ -27,6 +27,32 @@ describe("recipe composition and allergen derivation", () => {
     productId = await seedProduct(fx.db);
   });
 
+  it("refuses changing an archived product's recipe, retaining its ingredients and derivations", async () => {
+    const egg = await withTransaction(fx.db, async (tx) => {
+      const egg = await createIngredient(tx, {
+        name: "egg",
+        allergens: { eggs: { presence: "contains" } },
+        dietaryOrigin: "egg",
+      });
+      await setProductRecipe(tx, productId, [egg.id]);
+      await tx.update(products).set({ active: false }).where(eq(products.id, productId));
+      return egg;
+    });
+    const before = await fx.db.select().from(products).where(eq(products.id, productId));
+    await expect(
+      withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [])),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId },
+    });
+    expect(
+      (await withTransaction(fx.db, (tx) => getProductRecipe(tx, productId))).map(
+        (line) => line.id,
+      ),
+    ).toEqual([egg.id]);
+    expect(await fx.db.select().from(products).where(eq(products.id, productId))).toEqual(before);
+  });
+
   it("derives a product's allergens from its ingredients (the alioli scenario)", async () => {
     const published = await withTransaction(fx.db, async (tx) => {
       const alioli = await createIngredient(tx, {

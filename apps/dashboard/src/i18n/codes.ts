@@ -703,6 +703,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This product has active variants, so it can't be offered as an extra.",
     es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra.",
   },
+  "product.archived": {
+    en: "This product is archived and can no longer be changed.",
+    es: "Este producto está archivado y ya no se puede modificar.",
+  },
+  "product.on_live_menu": {
+    en: "It is on a live or scheduled menu. Take it off the menu and publish, then archive it.",
+    es: "Está en un menú publicado o programado. Quítalo del menú y publica; después archívalo.",
+  },
   "product.name_taken": {
     en: "Another active product or variant already has this name.",
     es: "Ya hay otro producto o variante activo con este nombre.",

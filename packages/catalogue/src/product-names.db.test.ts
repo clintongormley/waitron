@@ -138,16 +138,23 @@ describe("update", () => {
   it("refuses reactivating a product whose name became taken while it was Inactive", async () => {
     await app((tx) => updateProduct(tx, cola, { active: false }));
     await make("Cola");
-    await expect(app((tx) => updateProduct(tx, cola, { active: true }))).rejects.toMatchObject(
-      taken("name", "Cola"),
-    );
+    await expect(app((tx) => updateProduct(tx, cola, { active: true }))).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: cola },
+    });
+    expect((await app((tx) => readProductEditor(tx, cola))).active).toBe(false);
   });
-  it("refuses reactivating a product whose active variants share a name", async () => {
+  it("refuses new duplicate-named variants and restoration of an archived product", async () => {
     const lemonade = await make("Lemonade", { active: false });
-    await variants(lemonade, [variant("Small"), variant(" small ")]);
-    await expect(app((tx) => updateProduct(tx, lemonade, { active: true }))).rejects.toMatchObject(
-      taken("variants.1.name", "small"),
-    );
+    await expect(variants(lemonade, [variant("Small"), variant(" small ")])).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: lemonade },
+    });
+    expect(await app((tx) => listProductVariants(tx, lemonade))).toEqual([]);
+    await expect(app((tx) => updateProduct(tx, lemonade, { active: true }))).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: lemonade },
+    });
   });
   it("refuses reactivating a variant whose sibling took its name while it was inactive", async () => {
     const lemonade = await make("Lemonade");
@@ -156,7 +163,7 @@ describe("update", () => {
       variant("small"),
     ]);
     await expect(app((tx) => updateProduct(tx, small!.id, { active: true }))).rejects.toMatchObject(
-      taken("name", "Small"),
+      { code: "product.archived", params: { productId: small!.id } },
     );
   });
   it("allows a variant renamed onto its own parent's name", async () => {
@@ -168,11 +175,14 @@ describe("update", () => {
 });
 
 describe("rows the rule leaves to the write", () => {
-  it("lets a variant of an Inactive product be renamed onto a taken name", async () => {
+  it("refuses renaming a variant of an archived product even onto a taken name", async () => {
     const lemonade = await make("Lemonade");
     const [small] = await variants(lemonade, [variant("Small")]);
     await app((tx) => updateProduct(tx, lemonade, { active: false }));
-    await app((tx) => updateProduct(tx, small!.id, { name: "Cola" }));
+    await expect(app((tx) => updateProduct(tx, small!.id, { name: "Cola" }))).rejects.toMatchObject(
+      { code: "product.archived", params: { productId: small!.id } },
+    );
+    expect((await app((tx) => readProductEditor(tx, small!.id))).name).toBe("Small");
   });
   it("leaves an id that names no row to the write", async () => {
     await app((tx) => updateProduct(tx, crypto.randomUUID(), { name: "Cola" }));
@@ -219,10 +229,15 @@ describe("variant save", () => {
     const lemonade = await make("Lemonade");
     await variants(lemonade, [variant("Cola", { active: false })]);
   });
-  it("lets the variants of an Inactive product hold names freely, and never block one", async () => {
+  it("refuses new variants of an archived product without reserving their names", async () => {
     const lemonade = await make("Lemonade", { active: false });
-    await variants(lemonade, [variant("Cola"), variant("Half")]);
-    await make("Half");
+    await expect(variants(lemonade, [variant("Cola"), variant("Half")])).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: lemonade },
+    });
+    expect(await app((tx) => listProductVariants(tx, lemonade))).toEqual([]);
+    const half = await make("Half");
+    expect((await app((tx) => readProductEditor(tx, half))).active).toBe(true);
   });
   it("allows two variants to swap names", async () => {
     const lemonade = await make("Lemonade");

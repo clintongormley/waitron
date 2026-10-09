@@ -42,28 +42,14 @@ import {
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
+import "../widgets/product-details.js";
 import "../widgets/catalogue-browser.js";
 import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
 import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
-
-/** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
-function extraListNames(error: unknown): string[] {
-  const lists = (error as { params?: { extraLists?: unknown } }).params?.extraLists;
-  if (!Array.isArray(lists)) return [];
-  return lists.flatMap((list: { name?: unknown }) =>
-    typeof list.name === "string" ? [list.name] : [],
-  );
-}
-
-/** A refusal's sentence, followed by the lists `product.offered_as_extra` names: the sentence
- * cannot say which lists the manager has to change. */
-function refusalText(code: string, extraLists: readonly string[]): string {
-  return code === "product.offered_as_extra" && extraLists.length
-    ? `${codeMessage(code)} ${extraLists.join(", ")}`
-    : codeMessage(code);
-}
+import { archiveExtraListWarning } from "../widgets/archive-extra-lists.js";
+import { refusalText } from "../widgets/archive-refusal.js";
 
 @customElement("dashboard-catalogue-screen")
 export class CatalogueScreen extends LitElement {
@@ -91,6 +77,9 @@ export class CatalogueScreen extends LitElement {
         color: var(--wt-color-text);
         font-size: var(--wt-font-size-lg);
       }
+      .archive-extra-lists {
+        overflow-wrap: anywhere;
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -115,15 +104,17 @@ export class CatalogueScreen extends LitElement {
   @state() private courses: Course[] = [];
   @state() private selectedCatalogueId = "";
   @state() private editorOpen = false;
+  @state() private detailsOpen = false;
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private refusedLists: string[] = [];
+  @state() private refusalParams: unknown = null;
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
-  /** How many Active menus the product in the Disable dialog is on; null while unread or unreadable. */
+  @state() private deleteErrorParams: unknown = null;
+  /** Null while the archive dialog's menu count is unread or unreadable. */
   @state() private deletingMenus: number | null = null;
   #deletingRead = 0;
   /** The list the nested form is EDITING, or null while it is creating one: this decides which write
@@ -275,6 +266,7 @@ export class CatalogueScreen extends LitElement {
 
   #showError(code: string | null, fromRead = false): void {
     this.errorKey = code;
+    this.refusalParams = null;
     this.#readErrorShown = fromRead;
   }
 
@@ -329,6 +321,7 @@ export class CatalogueScreen extends LitElement {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
+    this.detailsOpen = false;
     this.#showError(null);
     this.editorOpen = true;
   }
@@ -346,15 +339,17 @@ export class CatalogueScreen extends LitElement {
     if (!this.#knows(productId)) return;
     this.#resetEditorState();
     this.editorOpen = false;
+    this.detailsOpen = false;
     this.editorValue = null;
     this.editorInitialField = field === "image" ? "image" : "";
     this.#showError(null);
     const generation = ++this.#editorGeneration;
     try {
-      const value = await this.api.getProductEditor(productId);
+      const value = await (this.api.background ?? this.api).getProductEditor(productId);
       if (generation !== this.#editorGeneration) return;
       this.editorValue = value;
-      this.editorOpen = true;
+      this.detailsOpen = !value.active;
+      this.editorOpen = value.active;
       this.#url.write({ product: productId }, true);
     } catch (error) {
       if (generation === this.#editorGeneration) this.#showReadError(error);
@@ -378,6 +373,7 @@ export class CatalogueScreen extends LitElement {
       ? { id: found.id, name: found.name, isVariant: product === undefined }
       : null;
     this.deleteErrorKey = null;
+    this.deleteErrorParams = null;
     this.#showError(null);
     if (found) void this.#readDeletingMenus(found.id);
   }
@@ -389,7 +385,7 @@ export class CatalogueScreen extends LitElement {
     try {
       menus = await (this.api.background ?? this.api).countProductMenus([productId]);
     } catch {
-      // The sentence for an unknown count stays; the read never blocks Disable.
+      // An unread count uses the unknown-count sentence.
     }
     if (read === this.#deletingRead) this.deletingMenus = menus;
   }
@@ -397,6 +393,7 @@ export class CatalogueScreen extends LitElement {
   #closeDelete(): void {
     this.deletingProduct = null;
     this.deleteErrorKey = null;
+    this.deleteErrorParams = null;
   }
 
   async #deleteProduct(): Promise<void> {
@@ -405,11 +402,13 @@ export class CatalogueScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     this.deleteErrorKey = null;
+    this.deleteErrorParams = null;
     try {
       const value = await this.api.getProductEditor(product.id);
       await this.api.updateProductEditor(product.id, { ...value, active: false });
     } catch (error) {
       this.deleteErrorKey = codeOf(error);
+      this.deleteErrorParams = (error as { params?: unknown }).params;
       this.busy = false;
       return;
     }
@@ -423,39 +422,11 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
-  async #restoreProduct(productId: string): Promise<void> {
-    if (this.busy || !this.#knows(productId)) return;
-    this.busy = true;
-    this.#showError(null);
-    let value: ProductEditorValue;
-    try {
-      value = await this.api.getProductEditor(productId);
-    } catch (error) {
-      this.#showReadError(error);
-      this.busy = false;
-      return;
-    }
-    try {
-      await this.api.updateProductEditor(productId, { ...value, active: true });
-    } catch (error) {
-      this.#showError(codeOf(error));
-      this.refusedLists = extraListNames(error);
-      this.busy = false;
-      return;
-    }
-    try {
-      await this.#reloadProducts();
-    } catch (error) {
-      this.#showReadError(error);
-    } finally {
-      this.busy = false;
-    }
-  }
-
   #closeEditor(writeUrl = true): void {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorOpen = false;
+    this.detailsOpen = false;
     this.editorValue = null;
     this.#linkedProduct = null;
     if (writeUrl) {
@@ -493,7 +464,7 @@ export class CatalogueScreen extends LitElement {
       // problem is never said twice.
       if (written) this.#showReadError(error);
       else this.#showError(Object.keys(fieldErrors).length ? null : codeOf(error));
-      this.refusedLists = extraListNames(error);
+      this.refusalParams = (error as { params?: unknown }).params;
     } finally {
       this.busy = false;
     }
@@ -576,7 +547,7 @@ export class CatalogueScreen extends LitElement {
       return {
         [name]:
           code === "product.offered_as_extra" || code === "product.name_taken"
-            ? refusalText(code, extraListNames(error))
+            ? refusalText(code, params)
             : t("editor.field_rejected"),
       };
     }
@@ -712,6 +683,7 @@ export class CatalogueScreen extends LitElement {
   override render() {
     const locales = this.contentLanguages?.languages ?? [];
     const refusals = this.#childRefusalErrors();
+    const errorText = this.errorKey ? refusalText(this.errorKey, this.refusalParams) : "";
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
@@ -751,22 +723,30 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId, event.detail.field);
               }}
+              @view-product=${(event: CustomEvent<{ productId: string }>) => {
+                event.stopPropagation();
+                void this.#openProduct(event.detail.productId);
+              }}
               @delete-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 this.#openDelete(event.detail.productId);
               }}
-              @restore-product=${(event: CustomEvent<{ productId: string }>) => {
-                event.stopPropagation();
-                void this.#restoreProduct(event.detail.productId);
-              }}
             ></dashboard-catalogue-browser>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${refusalText(this.errorKey, this.refusedLists)}</p>`
-          : nothing
-      }
+      ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
+      <dashboard-product-details
+        .open=${this.detailsOpen}
+        .value=${this.detailsOpen ? this.editorValue : null}
+        .categories=${this.categories}
+        .units=${this.units}
+        .extraLists=${this.extraLists}
+        .optionLists=${this.optionLists}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#closeEditor();
+        }}
+      ></dashboard-product-details>
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();
@@ -822,8 +802,8 @@ export class CatalogueScreen extends LitElement {
         .open=${this.deletingProduct !== null}
         heading=${t(
           this.deletingProduct?.isVariant
-            ? "product.disable_variant_named"
-            : "product.disable_named",
+            ? "product.archive_variant_named"
+            : "product.archive_named",
         ).replace("{name}", this.deletingProduct?.name ?? "")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
@@ -833,14 +813,15 @@ export class CatalogueScreen extends LitElement {
         <p>
           ${t(
             this.deletingProduct?.isVariant
-              ? "product.disable_variant_warning"
-              : "product.disable_warning",
+              ? "product.archive_variant_warning"
+              : "product.archive_warning",
           )}
           ${offMenusSentence("product.off_menus", this.deletingMenus)}
         </p>
+        ${archiveExtraListWarning(this.products, this.deletingProduct ? [this.deletingProduct.id] : [], this.extraLists)}
         <wt-form-actions
           slot="footer"
-          .error=${this.deleteErrorKey ? codeMessage(this.deleteErrorKey) : ""}
+          .error=${this.deleteErrorKey ? refusalText(this.deleteErrorKey, this.deleteErrorParams) : ""}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -852,7 +833,7 @@ export class CatalogueScreen extends LitElement {
             variant="danger"
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
-            >${t("product.disable")}</wt-button
+            >${t("product.archive")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

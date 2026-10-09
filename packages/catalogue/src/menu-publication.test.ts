@@ -1,3 +1,5 @@
+import { products } from "@waitron/db";
+import { takeOffMenus } from "./menu-removal.js";
 import type { MenuChange, MenuChangeBody } from "./menu-document-types.js";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -35,7 +37,6 @@ import {
 import {
   createCatalogue,
   createProduct,
-  deactivateProduct,
   updateMenuDetails,
   updateMenuItem,
   updateProduct,
@@ -1427,7 +1428,7 @@ describe("menuStatus", () => {
 
     it("flags both for Extra lemon deleted, naming the product and each dish's extras", async () => {
       const f = await published();
-      await app((tx) => deactivateProduct(tx, f.extraLemon));
+      await app((tx) => storedArchive(tx, f.extraLemon));
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
       expect(changeBodies((await app((tx) => previewMenu(tx, f.dinner))).changes)).toEqual([
         {
@@ -1453,7 +1454,7 @@ describe("menuStatus", () => {
       await app((tx) => addMember(tx, f.dinnerRoot, product(f.extraLemon)));
       await publish(f.lunch);
       await publish(f.dinner);
-      await app((tx) => deactivateProduct(tx, f.extraLemon));
+      await app((tx) => storedArchive(tx, f.extraLemon));
 
       const changes = (await app((tx) => previewMenu(tx, f.dinner))).changes.filter(
         (change) => "productId" in change && change.productId === f.extraLemon,
@@ -1499,8 +1500,8 @@ describe("menuStatus", () => {
       );
       await publish(f.dinner);
       await app(async (tx) => {
-        await deactivateProduct(tx, f.soup);
-        await deactivateProduct(tx, f.extraLemon);
+        await storedArchive(tx, f.soup);
+        await storedArchive(tx, f.extraLemon);
       });
 
       for (const [menuId, productId, name] of [
@@ -1879,7 +1880,7 @@ describe("previewMenu", () => {
     const soupMember = await memberOf(f.lunchRoot, f.soup);
     await app(async (tx) => {
       await removeMember(tx, f.lunchRoot, soupMember);
-      await updateProduct(tx, f.lager, { active: false });
+      await storedArchive(tx, f.lager);
     });
     expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
       {
@@ -2211,7 +2212,7 @@ describe("the management prices read", () => {
       await addMember(tx, f.dinnerRoot, product(f.lager));
     });
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.clashes).toBe(1);
-    await app((tx) => deactivateProduct(tx, f.lager));
+    await app((tx) => storedArchive(tx, f.lager));
     for (const menuId of [f.dinner, f.drinksMenu])
       expect(
         (await app((tx) => operations.menuPrices(tx, menuId))).map(({ productId }) => productId),
@@ -2429,7 +2430,7 @@ it("enriches preview changes after source refinement with exact live parent-extr
     ),
   );
   expect(parents.length).toBeGreaterThan(0);
-  await app((tx) => deactivateProduct(tx, f.extraLemon));
+  await app((tx) => storedArchive(tx, f.extraLemon));
   const preview = await app((tx) => previewMenu(tx, f.dinner));
   const deletion = preview.changes.find(
     (c) => c.kind === "product_deleted" && c.productId === f.extraLemon,
@@ -2466,4 +2467,9 @@ function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
     delete body.targets;
     return body;
   });
+}
+
+async function storedArchive(tx: Transaction, productId: string): Promise<void> {
+  await tx.update(products).set({ active: false }).where(eq(products.id, productId));
+  await takeOffMenus(tx, [productId]);
 }

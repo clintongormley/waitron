@@ -297,8 +297,8 @@ Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.
 `menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
 `field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
 order. `menu.shortcut_unreachable` (409, `ref`) refuses a target outside the working structure,
-including the menu's own root, and a Disabled product, which no list holds. A shortcut to a product
-disabled later becomes a missing tile in its place, which publishes as an empty slot with a
+including the menu's own root, and a Archived product, which no list holds. A shortcut to a product
+archived later becomes a missing tile in its place, which publishes as an empty slot with a
 `shortcut_missing` warning. `menu_section.wrong_role` (409, `sectionId`, `role`) refuses a Device Home Page section,
 this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
 member the menu's Device Home Page does not hold; a product target must be a stored top-level
@@ -357,32 +357,40 @@ toolbar and returns focus to **Select**, and so does pressing **Select** again. 
 drag made in the mode is saved as soon as it is dropped. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
-With only products selected, the toolbar's action reads **Disable**: it switches them off (the
-product's `active` flag), and its dialog asks "Disable N products?". Their rows and previous sales
-remain, and you can enable the products again later, each from its row menu's **Enable**. The
-dialog adds how many menus the products come off, read from `GET /management-api/products/menus`
-(below): "They come off the 2 menus they are on.", nothing when
-they are on none, and "They come off every menu they are on." while the count is being read or when
-it cannot be read. With a category in the selection, the count covers only the products selected
-directly. When
-every selected product is disabled already, the toolbar offers no **Disable**; a selection that
-mixes active and disabled products still offers it, and the disabled ones stay disabled. Once a category is in the selection the action
-reads **Delete**, because the category itself is deleted. Products you selected directly are still
-only disabled. The products inside the category, its subcategories included, are disabled only if
-you choose the dialog's "Also: …" answer; with the other answer they stay active. Once that answer
-is chosen and the categories hold active products, the dialog adds "Products disabled by this deletion
-come off every menu they are on.", with no count.
+With only products selected, the toolbar's action reads **Archive**, and its dialog asks
+"Archive N products?". This cannot be undone. The rows and past sales remain, but the products
+cannot be brought back. The warning names the extras lists they come off. The dialog also reads
+how many menus hold them from `GET /management-api/products/menus` (below); if that read fails,
+it says "They come off every menu they are on."
 
-A disabled product is on no menu. Disabling one, whichever way (this toolbar, a category deleted
-with its contents, the product's row menu or its editor), takes it off every list that holds it in
-the same transaction and clears its prices on every menu; each menu's next publish leaves it out. A Device Home Page
-shortcut to it becomes a missing tile in its place. Enabling it again does not put it back on any
-menu. A disabled size holds no menu price: disabling one deletes its
-price on every menu, and enabling it again brings it back wherever its product is listed, with no
-menu price of its own until one is set. A configuration import refuses a bundle that puts a
-disabled product in a list or a shortcut (`setup.request_invalid`,
-`field: "section_members.product_id"`) or gives a disabled size a menu price
-(`field: "menu_item_variant_overrides.variant_id"`).
+A product or variant cannot be archived while a live or scheduled menu includes it, whether as a
+dish, variant, extras item or home-screen shortcut. Take it out of the menu and publish, then
+archive. The refusal `product.on_live_menu` names the products and menus, and the whole bulk
+archive or category deletion is refused before writing any of it. Already archived products are
+not archived again and do not block a category deletion.
+
+When every selected product is archived already, the toolbar offers no Archive. A mixed selection
+archives only its active products. With a category selected the action reads **Delete**, because
+the category itself is deleted. Products selected directly are archived in either case. Products
+inside the category, including its subcategories, are archived only with the dialog's "Also: …"
+answer; the other answer moves them without changing their active state. The archive answer adds
+"Products archived by this deletion come off every menu they are on."
+
+Archiving a product archives its variants, removes its places in menu drafts and extras lists,
+and clears its variants' menu prices in the same transaction (`archiveProducts`,
+`packages/catalogue/src/archive.ts`). A Device Home Page shortcut in a draft becomes a missing
+tile. View opens retained details instead of the editor. Archiving a variant on its own clears its
+menu prices and removes it from extras lists, without archiving its parent. Neither archive has
+an Enable action.
+
+The confirmation names each extras list losing an active product or variant. Choosing to move a
+category's contents up shows no such list for those products, because that choice archives none
+of them. An archived product can still move through the selection toolbar, on its own or with
+other products; that move changes its main reporting category.
+
+A configuration import refuses a bundle that puts an archived product in a list or shortcut
+(`setup.request_invalid`, `field: "section_members.product_id"`) or gives an archived size a menu
+price (`field: "menu_item_variant_overrides.variant_id"`).
 
 Before deleting a category that holds active products or subcategories, the compact dialog asks
 "What happens to what is inside?". Each answer names what it does, counting only active products
@@ -394,18 +402,18 @@ sit under different parents.
   direct products and subcategories to its parent. The counts include what sits inside those
   subcategories, which moves with them. Its subcategories that are not selected keep
   their routing rules.
-- "Also: deletes 1 category and 2 kitchen routing rules and disables 3 products. They move to
-  Drinks." removes the subtree and disables its products. A routing rule here is a cell on a
+- "Also: deletes 1 category and 2 kitchen routing rules and archives 3 products. They move to
+  Drinks." removes the subtree and archives its products. A routing rule here is a cell on a
   category's row in the routing grid, and the rules it lists are the cells on the rows of
   subcategories that are not themselves selected. Every product in the subtree,
-  disabled ones included, is moved to the parent of the outermost selected category that holds it.
+  archived ones included, is moved to the parent of the outermost selected category that holds it.
 
 When there are any, a paragraph below the question counts the routing rules on a selected
 category's own row, which go whichever answer is chosen.
 
-A category is deleted without confirmation only when it holds no products (disabled ones
+A category is deleted without confirmation only when it holds no products (archived ones
 included), no subcategories and no routing rules. When no selected category holds active products
-or subcategories, the confirmation asks nothing about contents, because any disabled products
+or subcategories, the confirmation asks nothing about contents, because any archived products
 inside move up whichever answer is chosen; it says nothing about those products, and says how many
 routing rules go with the categories, if any. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
@@ -413,21 +421,21 @@ to approve unknown contents. The dialog lists each category being deleted by its
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
 on the category's own row) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again. A change in disabled products alone never stops that check, whether or not the dialog
+confirm again. A change in archived products alone never stops that check, whether or not the dialog
 asked about contents: the dialog neither counts those products nor asks about them. The delete
 request carries the counts
-the dashboard read before deleting, the number of all products, disabled ones included, among them,
+the dashboard read before deleting, the number of all products, archived ones included, among them,
 and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog reads the counts again. When a count it
 shows (subcategories, active products or routing rules) has changed, it shows the new counts with
-the refusal's own message; when none has (only disabled products changed, or the change was undone
+the refusal's own message; when none has (only archived products changed, or the change was undone
 before the dialog read again), it says the contents changed, that what it shows is up to date, and
 asks you to choose **Delete** again. If a category with nothing in it at all, which is deleted
 without confirmation, has gained anything by then, the server refuses and the dialog opens,
 choosing its message the same way: when it now holds subcategories, active products or routing
-rules, it shows their counts with the refusal's message; when all it gained is disabled products,
+rules, it shows their counts with the refusal's message; when all it gained is archived products,
 or the gain was undone before the dialog read again, it opens with that second message instead,
-shows no counts of contents, asks nothing about contents, and its **Delete** moves any disabled
+shows no counts of contents, asks nothing about contents, and its **Delete** moves any archived
 products up.
 A refused action
 keeps its dialog open with a message at the bottom.
@@ -459,7 +467,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
 | `GET /management-api/products/menus?id=<id>&id=<id>` | 200, `{ menus }`: how many Active menus' structures reach any of the products, each menu once, a menu that reaches them only through an included menu too; a size counts by its product, and a Device Home Page shortcut alone counts nothing; no id gives `{ menus: 0 }`, and a malformed id is `shared.invalid_id` (400) |
-| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
+| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes archived products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. `shown` is the counts the client read before deleting: one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,

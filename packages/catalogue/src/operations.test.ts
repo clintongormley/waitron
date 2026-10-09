@@ -648,8 +648,8 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("toggles a product's active flag through updateProduct", async () => {
-    await asTenant(async (tx) => {
+  it("archives a product through updateProduct and refuses switching it back on", async () => {
+    const { cat, p } = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
@@ -660,15 +660,16 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       expect(p.active).toBe(true);
-      // `{ active: false }` deactivates through the edit route…
       await updateProduct(tx, p.id, { active: false });
-      const deactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
-      expect(deactivated.active).toBe(false);
-      // …and `{ active: true }` reactivates it.
-      await updateProduct(tx, p.id, { active: true });
-      const reactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
-      expect(reactivated.active).toBe(true);
+      expect((await listProducts(tx, cat.id)).find((x) => x.id === p.id)!.active).toBe(false);
+      return { cat, p };
     });
+    await expect(asTenant((tx) => updateProduct(tx, p.id, { active: true }))).rejects.toMatchObject(
+      { code: "product.archived", params: { productId: p.id } },
+    );
+    expect(
+      (await asTenant((tx) => listProducts(tx, cat.id))).find((x) => x.id === p.id)!.active,
+    ).toBe(false);
   });
 
   it("creates a product inactive when active:false, active by default when omitted", async () => {

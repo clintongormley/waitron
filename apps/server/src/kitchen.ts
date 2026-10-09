@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { productWithId, type ProductScope } from "@waitron/catalogue";
+import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 import { assertDemotedStationHours } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import type { TillConfig } from "./till-config.js";
@@ -513,11 +513,6 @@ export async function removeCourse(
   }
 }
 
-/**
- * Set (or clear, with `null`) a product's default kitchen course, used when a line carries no
- * override. A non-null `courseId` must be a LIVE course of this venue. An absent `productId`, or a
- * variant's unless `scope` is `"any"`, throws `product.not_found`, before the course is checked.
- */
 export async function setProductCourse(
   tx: Transaction,
   cfg: TillConfig,
@@ -525,6 +520,7 @@ export async function setProductCourse(
   courseId: string | null,
   scope: ProductScope = "top-level",
 ): Promise<void> {
+  await assertProductWritable(tx, productId);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)

@@ -3,6 +3,7 @@ import { ingredients, products, recipeLines } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import {
+  assertProductWritable,
   applyDietDerivation,
   applyRecipeDerivation,
   mergeAllergenMaps,
@@ -86,6 +87,7 @@ export async function setProductRecipe(
   productId: string,
   ingredientIds: string[],
 ): Promise<void> {
+  await assertProductWritable(tx, productId);
   // A variant's recipe would write derived allergens and diet onto its own row, breaking its
   // inheritance from its parent.
   const [product] = await tx

@@ -68,13 +68,11 @@ describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("is accessible showing an Inactive variant and a price hint, every status at once", async () => {
+  it("is accessible showing a draft archive and a price hint, every status at once", async () => {
     const { el, host } = await mount(false, theme, [
       { ...variants[0]!, active: false },
       { ...variants[1]!, unitPrice: null },
     ]);
-    el.showInactive = true;
-    await el.updateComplete;
     // Without these the scan could pass on a table that drew neither state.
     expect(el.shadowRoot!.querySelector("[data-test=inactive-0]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(2);

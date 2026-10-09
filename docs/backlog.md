@@ -982,11 +982,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
   product back to a menu revives those prices** (found in A347's review, believed to predate it).
   Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
-  reaches. Left open by A347 (a disabled product or size is on no menu, #1392).
+  reaches. Left open by A347 (#1392); A435-1 (2026-10-09) replaces the former Disable action with Archive.
 
 - **A bulk Disable of 500 products could not read the count in A347's review** (HTTP 431, because
   the ids go in the URL), so the dialog says "every menu"; the smallest count that fails was not
-  measured. Left open by A347 (#1392).
+  measured. Left open by A347 (#1392). A435-1 (2026-10-09) renames the action Archive; the request still carries ids in the URL.
+  The earlier 500-product failure has not been remeasured.
 
 - **Deleting a category with its contents says its products come off every menu, with no count.**
   Left open by A347 (#1392).
@@ -1114,13 +1115,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **In the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px** — left open
   by W70 (#1222): (978px of content in a 974px box), with or without the size attribute.
-
-- **Complete `catalogue-screen.a11y.test.ts`'s accessibility fixture and assert the native dialog
-  is open before its scan** — left open by W70a (#1265). W70a's visual probe copied
-  `catalogue-screen.a11y.test.ts`'s fixture and found that its product confirmation stayed closed:
-  the fixture supplies no `listMadeAt`, which `#reloadProducts` awaits before loading products.
-  Adding that method to the temporary probe and waiting for the product read opens the
-  confirmation. The existing suite was not changed by W70a.
 
 - **At phone width the "All products" default colour cannot be set** — left open by A332 (#1430):
   at phone width every swatch slot is hidden except a category's name box while it is being named,
@@ -2473,10 +2467,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   saves only through `#syncIfDirty` (`apps/till/src/till-app.ts`), and a label change does not count
   as a line edit. **Next action:** a way to save a label without re-sending the lines.
 
-- **The two `till-sale.test.ts` cases named "…gained an Active variant" pass with the variant left
-  Inactive.** **Next action:** give each an assertion that fails when the variant is Inactive, or
-  rename them to what they prove.
-
 - **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
   path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
   stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. **Next
@@ -3024,10 +3014,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   silently — or whether a guard over the write sites is enough.
   [Detail](backlog/dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
 
-- **Two owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
-  all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
-  hidden** — left open by W110c (#1271), part of W110 (#1255), "One word for 'switched off, kept for
-  the record' across the dashboard".
+- **Should an all-archived product selection show Archive greyed out rather than hidden?**
+  Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
 
 - The dashboard's `es-ES` module default still needs the flip the till got in #170; check the
   dashboard money formatter for the same "doesn't follow the UI locale" bug.
@@ -4592,12 +4580,18 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — delete hardware and venue setup, archive products for good (owner, 2026-10-08; spec
-  written; plans not written).** A permanent deleted state rather than row removal: printers, card
-  readers and devices keep Disable beside a new Delete; kitchen stations, courses, tables, zones and
-  departments get Delete only; products get a permanent Archive, refused while a live or scheduled
-  menu includes them. History is left as it is. Six steps, products first, then printers.
-  [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md)
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 2–6 open).**
+  Printers are next. Each point below is a separate remaining step.
+  [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
+  [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
+- **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
+  deleted-state uniqueness rules and shared confirmation dialog.
+- **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete.
+- **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
+  Disable with Delete. Each remaining step follows the linked spec and preserves recorded history.
+
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is

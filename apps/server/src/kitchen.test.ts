@@ -587,6 +587,43 @@ describe("product-course config", () => {
     expect(await productCourse(variantId)).toBe(courseId);
   });
 
+  it.each(["variant", "parent"] as const)(
+    'setProductCourse under scope "any" refuses an archived %s without changing the variant course',
+    async (archived) => {
+      const cfg = await setupVenue();
+      const productId = await seedProduct();
+      const variantId = await seedVariant(productId);
+      const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+      await asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId, "any"));
+      await db
+        .update(products)
+        .set({ active: false })
+        .where(eq(products.id, archived === "parent" ? productId : variantId));
+      await expect(
+        asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, null, "any")),
+      ).rejects.toMatchObject({
+        code: "product.archived",
+        params: { productId: variantId },
+      });
+      expect(await productCourse(variantId)).toBe(courseId);
+    },
+  );
+
+  it("the top-level course path refuses an archived family before its variant scope", async () => {
+    const cfg = await setupVenue();
+    const productId = await seedProduct();
+    const variantId = await seedVariant(productId);
+    await db.update(products).set({ active: false }).where(eq(products.id, productId));
+    const before = await db.select().from(products).where(eq(products.id, variantId));
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, null)),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: variantId },
+    });
+    expect(await db.select().from(products).where(eq(products.id, variantId))).toEqual(before);
+  });
+
   it("setProductCourse names the product before an unknown course", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();

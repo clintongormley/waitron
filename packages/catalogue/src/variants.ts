@@ -6,6 +6,7 @@ import { assertContentTranslations, readContentLanguages } from "./content-langu
 import { reachableMenuItem } from "./menu-structure.js";
 import { batches } from "./batches.js";
 import { dropMenuPrices } from "./menu-removal.js";
+import { assertOffPublishedMenus, removeFromExtraLists } from "./archive.js";
 import { menuItems } from "./schema/menu.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -144,11 +145,8 @@ export async function assertNotOfferedAsExtra(
 }
 
 /**
- * Save a product's variants: each one in the input is written Active or Inactive as its `active`
- * says — with `active` absent, a new variant is created Active and one sent by `id` keeps its
- * current state — in the input's order; each current variant the input leaves out is made Inactive and kept,
- * ordered after the ones sent. A variant made Inactive loses its price on every menu. The caller owns the transaction, including product
- * fields and supporting associations.
+ * Archived variants sent inactive or omitted remain untouched. Active rows keep the input's
+ * positions so the editor's field paths still identify the same rows. The caller owns the transaction.
  */
 export async function setProductVariants(
   tx: Transaction,
@@ -199,17 +197,14 @@ async function writeProductVariants(
     checked.push({ ...input, cents: price === null ? null : decimalToCents(price) });
   }
   const parent = await assertProductForWrite(tx, productId);
+  if (!parent.active) throw new AppError("product.archived", { productId });
   const current = await listProductVariants(tx, productId);
   const currentActive = new Map(current.map((variant) => [variant.id, variant.active]));
   const normalized: (VariantWrite & { active: boolean; cents: number | null })[] = [];
   for (const input of checked) {
     const active =
       input.active ?? (input.id === undefined ? true : (currentActive.get(input.id) ?? true));
-    // The staff `name` is plain text and needs no translation check; the customer-facing map is what
-    // must satisfy the venue's default content language. A null customer name is legal — it falls
-    // back to `name`. An Inactive variant is on no menu offer and in no translation-gap report, so
-    // it is checked when next saved Active; checking it here would let a change of default content
-    // language after its removal block every save of its parent.
+    // Archived variants may retain customer names missing the venue's current default language.
     if (active && input.customerName != null)
       assertContentTranslations([input.customerName], config);
     normalized.push({ ...input, active });
@@ -218,6 +213,22 @@ async function writeProductVariants(
   for (const id of seen) {
     if (!currentIds.has(id)) throw new AppError("product.variant_not_found", { variantId: id });
   }
+  const archivedOn = normalized.findIndex(
+    (input) => input.id !== undefined && currentActive.get(input.id) === false && input.active,
+  );
+  if (archivedOn !== -1)
+    throw new AppError("product.archived", {
+      productId: normalized[archivedOn]!.id!,
+      field: `variants.${archivedOn}.active`,
+    });
+  const left = current.filter((variant) => !seen.has(variant.id));
+  const madeInactive = [
+    ...normalized.flatMap((input) =>
+      input.id !== undefined && !input.active && currentActive.get(input.id) ? [input.id] : [],
+    ),
+    ...left.filter((variant) => variant.active).map((variant) => variant.id),
+  ];
+  if (madeInactive.length > 0) await assertOffPublishedMenus(tx, madeInactive);
   const firstActive = normalized.findIndex((input) => input.active);
   if (firstActive !== -1)
     await assertNotOfferedAsExtra(tx, productId, `variants.${firstActive}.active`);
@@ -229,6 +240,7 @@ async function writeProductVariants(
       normalized,
     );
   for (const [index, input] of normalized.entries()) {
+    if (input.id !== undefined && currentActive.get(input.id) === false) continue;
     const values = {
       ...nameColumns(input.name),
       customerName: input.customerName,
@@ -255,24 +267,21 @@ async function writeProductVariants(
         .where(and(eq(products.parentId, productId), eq(products.id, input.id)));
     }
   }
-  const left = current.filter((variant) => !seen.has(variant.id));
-  const madeInactive = [
-    ...normalized.flatMap((input) =>
-      input.id !== undefined && !input.active && currentActive.get(input.id) ? [input.id] : [],
-    ),
-    ...left.filter((variant) => variant.active).map((variant) => variant.id),
-  ];
   for (const [index, variant] of left.entries()) {
+    if (!variant.active) continue;
     await tx
       .update(products)
       .set({
         active: false,
         variantOrder: normalized.length + index,
-        ...(variant.active ? { updatedAt: now() } : {}),
+        updatedAt: now(),
       })
       .where(and(eq(products.parentId, productId), eq(products.id, variant.id)));
   }
-  if (madeInactive.length > 0) await dropMenuPrices(tx, madeInactive);
+  if (madeInactive.length > 0) {
+    await dropMenuPrices(tx, madeInactive);
+    await removeFromExtraLists(tx, madeInactive);
+  }
   return listProductVariants(tx, productId);
 }
 

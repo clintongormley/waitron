@@ -1,3 +1,4 @@
+import { products } from "@waitron/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
@@ -171,13 +172,31 @@ async function expectStillOnEveryMenu(r: Removal, productId: string) {
 }
 
 describe("a product made Inactive comes off every menu", () => {
-  it("through updateProduct: no list names it, each menu's price row is cleared, both published menus read changed, and the product beside it keeps its place and prices", async () => {
+  it("updateProduct refuses a published product; historical removal clears every list and price while preserving its neighbour", async () => {
     const r = await removalFixture();
     await publish(r.tapas);
     await publish(r.terrace);
     expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
 
-    await app((tx) => updateProduct(tx, r.tortilla, { active: false }));
+    await expect(
+      app((tx) => updateProduct(tx, r.tortilla, { active: false })),
+    ).rejects.toMatchObject({
+      code: "product.on_live_menu",
+      params: {
+        products: [
+          { id: r.tortilla, name: "Tortilla" },
+          { id: r.tortillaHalf, name: "Half" },
+        ],
+        menus: expect.arrayContaining([
+          { id: r.tapas, name: "Tapas" },
+          { id: r.terrace, name: "Terrace" },
+        ]),
+      },
+    });
+    await app(async (tx) => {
+      await tx.update(products).set({ active: false }).where(eq(products.id, r.tortilla));
+      await takeOffMenus(tx, [r.tortilla]);
+    });
 
     await expectOffEveryMenu(r, r.tortilla);
     expect(await states([r.tapas, r.terrace])).toEqual(["changed", "changed"]);
@@ -190,10 +209,12 @@ describe("a product made Inactive comes off every menu", () => {
     expect(await listProducts(r.cold)).toEqual([{ position: 0, productId: r.croquetas }]);
   });
 
-  it("is not put back on any menu when made Active again", async () => {
+  it("refuses restoration and remains off every menu", async () => {
     const r = await removalFixture();
     await app((tx) => updateProduct(tx, r.tortilla, { active: false }));
-    await app((tx) => updateProduct(tx, r.tortilla, { active: true }));
+    await expect(
+      app((tx) => updateProduct(tx, r.tortilla, { active: true })),
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.tortilla } });
     await expectOffEveryMenu(r, r.tortilla);
   });
 
@@ -250,11 +271,25 @@ describe("a product made Inactive comes off every menu", () => {
     await expectOffEveryMenu(r, r.croquetas);
   });
 
-  it("from a menu that includes the list holding it, which then reads changed", async () => {
+  it("refuses a published inclusion; historical removal clears its settings and changes both previews", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
-    await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
+    await expect(
+      app((tx) => updateProduct(tx, f.lemonade, { active: false })),
+    ).rejects.toMatchObject({
+      code: "product.on_live_menu",
+      params: {
+        products: [
+          { id: f.lemonade, name: "Lemonade" },
+          { id: f.large, name: "Large" },
+        ],
+      },
+    });
+    await app(async (tx) => {
+      await tx.update(products).set({ active: false }).where(eq(products.id, f.lemonade));
+      await takeOffMenus(tx, [f.lemonade]);
+    });
     expect(await memberRowsNaming(f.lemonade)).toEqual([]);
     const [lunchRow] = await fx.db
       .select({ grossPrice: menuItems.grossPrice })
@@ -458,7 +493,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
   ];
 
   it.each(ways)(
-    "%s: both its rows go, every other variant keeps its own, and both published menus read changed",
+    "%s refuses a published variant; historical removal clears its prices and preserves every sibling",
     async (_, makeInactive) => {
       const r = await variantFixture();
       expect(await menusPricing(r.tortillaHalf)).toEqual(bothMenus(r));
@@ -466,7 +501,15 @@ describe("a variant made Inactive loses its price on every menu", () => {
       await publish(r.terrace);
       expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
 
-      await makeInactive(r);
+      await expect(makeInactive(r)).rejects.toMatchObject({
+        code: "product.on_live_menu",
+        params: { products: [{ id: r.tortillaHalf, name: "Half" }] },
+      });
+      expect(await menusPricing(r.tortillaHalf)).toEqual(bothMenus(r));
+      await app(async (tx) => {
+        await tx.update(products).set({ active: false }).where(eq(products.id, r.tortillaHalf));
+        await menuRemoval.dropMenuPrices(tx, [r.tortillaHalf]);
+      });
 
       expect(await menusPricing(r.tortillaHalf)).toEqual([]);
       expect(await menusPricing(r.tortillaWhole)).toEqual(bothMenus(r));
@@ -476,7 +519,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
     },
   );
 
-  it("is left out of each menu's prices, and comes back to both, with no price of its own, when made Active again", async () => {
+  it("is left out of each menu's prices and refuses restoration without changing its siblings", async () => {
     const r = await variantFixture();
     const variantsPriced = async (menuId: string) =>
       (await app((tx) => menuPrices(tx, menuId)))
@@ -499,25 +542,23 @@ describe("a variant made Inactive loses its price on every menu", () => {
       expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
     }
 
-    await app(async (tx) => {
-      const variants = await listProductVariants(tx, r.tortilla);
-      await setProductVariants(
-        tx,
-        r.tortilla,
-        variants.map((variant) => ({ ...variant, active: true })),
-        "en",
-      );
-    });
+    await expect(
+      app(async (tx) => {
+        const variants = await listProductVariants(tx, r.tortilla);
+        await setProductVariants(
+          tx,
+          r.tortilla,
+          variants.map((variant) => ({ ...variant, active: true })),
+          "en",
+        );
+      }),
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.tortillaHalf } });
 
     for (const menuId of [r.tapas, r.terrace]) {
       expect(await variantsPriced(menuId)).toEqual([
         { variantId: r.tortillaWhole, price: "6.00", active: true },
-        { variantId: r.tortillaHalf, price: null, active: true },
       ]);
-      expect(await variantsOffered(menuId)).toEqual([
-        { id: r.tortillaWhole, menuPrice: "6.00" },
-        { id: r.tortillaHalf, menuPrice: null },
-      ]);
+      expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
     }
   });
 
@@ -554,7 +595,10 @@ describe("saving a product or variant that was Inactive already", () => {
         });
 
       await editorSave(r.croquetas);
-      await editorSave(r.croquetasHalf);
+      await expect(editorSave(r.croquetasHalf)).rejects.toMatchObject({
+        code: "product.archived",
+        params: { productId: r.croquetasHalf },
+      });
       await keepOnlyWhole();
       expect(lists.mock.calls.map(([, ids]) => ids)).toEqual([[r.croquetas]]);
       expect(prices.mock.calls.map(([, ids]) => ids)).toEqual([
@@ -564,10 +608,20 @@ describe("saving a product or variant that was Inactive already", () => {
 
       lists.mockClear();
       prices.mockClear();
-      await editorSave(r.croquetas);
-      await app((tx) => updateProduct(tx, r.croquetas, { active: false }));
-      await editorSave(r.croquetasHalf);
-      await app((tx) => updateProduct(tx, r.croquetasHalf, { active: false }));
+      await expect(editorSave(r.croquetas)).rejects.toMatchObject({
+        code: "product.archived",
+        params: { productId: r.croquetas },
+      });
+      await expect(
+        app((tx) => updateProduct(tx, r.croquetas, { active: false })),
+      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquetas } });
+      await expect(editorSave(r.croquetasHalf)).rejects.toMatchObject({
+        code: "product.archived",
+        params: { productId: r.croquetasHalf },
+      });
+      await expect(
+        app((tx) => updateProduct(tx, r.croquetasHalf, { active: false })),
+      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquetasHalf } });
       await keepOnlyWhole();
       expect(lists).not.toHaveBeenCalled();
       expect(prices).not.toHaveBeenCalled();

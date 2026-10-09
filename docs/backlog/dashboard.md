@@ -576,6 +576,12 @@ text and takes the dark values from the `@media (prefers-color-scheme: dark)` bl
 **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
 there is no copy to keep in step.
 
+**Separate observation, 2026-10-09:** the final live A435-1 catalogue captures at
+`a68dc2188`, with the dashboard forced to the dark theme, showed a nearly black wordmark.
+The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIFIED**.
+**Next action:** measure the browser's media preference and the selected `<picture>` source
+against `data-wt-theme` in the live dashboard before deciding a fix.
+
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
@@ -594,8 +600,8 @@ how a screen adopts it: [design-system.md](../developers/design-system.md) → F
 request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
 
 - **Batch 1 — the shared mechanism, the product editor and the variant form.** `draftScopeFor` and
-  `saveActionState` in `@waitron/ui`. Enable on a disabled product still saves at once: pressing
-  it is the change. No batch-1 form opens already savable. Looked at on 2026-10-08 in 35
+  `saveActionState` in `@waitron/ui`. Enable on a disabled product saved at once: pressing
+  it was the change. (2026-10-09, A435-1: products archive permanently and Enable is removed.) No batch-1 form opens already savable. Looked at on 2026-10-08 in 35
   screenshots of the two forms mounted with test data (English and Spanish, light and dark,
   1280px and 390px wide, unchanged and after one edit, plus a changed form refused by its own
   checks and a disabled product), kept outside the repository in `~/waitron-campaign-b/a331-shots/`:

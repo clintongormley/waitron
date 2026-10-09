@@ -615,3 +615,41 @@ describe("inline translation routes", () => {
     );
   });
 });
+
+it("an archived product and variant accept explicit translation fixes through HTTP without unrelated writes", async () => {
+  const ids = await fixture();
+  await app(async (tx) => {
+    await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
+    await tx.update(products).set({ active: false }).where(eq(products.id, ids.variant));
+  });
+  const before = await suite.db.select().from(products).orderBy(products.id);
+  const refs = [
+    { kind: "product" as const, id: ids.product },
+    { kind: "variant" as const, id: ids.variant },
+  ];
+  const named = await page(
+    "?" + new URLSearchParams(refs.map((ref) => ["target", `${ref.kind}:${ref.id}`])),
+  );
+  expect(named.rows.map((row) => [row.kind, row.id, row.eligible, row.unavailableReason])).toEqual([
+    ["product", ids.product, true, null],
+    ["variant", ids.variant, true, null],
+  ]);
+  const response = await send("PUT", await batch(refs));
+  expect(response.status).toBe(200);
+  const output = (await response.json()) as { saved: TranslationTarget[] };
+  expect(output.saved.map((row) => [row.kind, row.id, row.selectedText])).toEqual([
+    ["product", ids.product, "CLIENT English product"],
+    ["variant", ids.variant, "CLIENT English variant"],
+  ]);
+  const after = await suite.db.select().from(products).orderBy(products.id);
+  expect(after).toEqual(
+    before.map((row) => {
+      const kind = refs.find((ref) => ref.id === row.id)?.kind;
+      return kind
+        ? { ...row, customerName: { ...row.customerName, en: `CLIENT English ${kind}` } }
+        : row;
+    }),
+  );
+  expect((await page()).rows.map((row) => row.id)).not.toContain(ids.product);
+  expect((await page()).rows.map((row) => row.id)).not.toContain(ids.variant);
+});
