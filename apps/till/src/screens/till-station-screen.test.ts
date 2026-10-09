@@ -886,7 +886,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     }
   });
 
-  it("a whole-ticket bump expands to a deviceAdvance for each advanceable item at the bound station", async () => {
+  it("a whole-ticket bump expands to a deviceAdvance for each advanceable item at the station", async () => {
     // `bump_mode = ticket` fires `advance-ticket`; the device API has only a per-line advance, so the
     // screen advances every fired item whose legitimate next step is `to` — never the session verb.
     const twoLine: StationQueueGroup[] = [
@@ -2220,7 +2220,7 @@ describe("till-station-screen kitchen notices", () => {
       } as unknown as TillApi;
     }
 
-    it("shows the bound station's notices from the device read", async () => {
+    it("shows its station's notices from the device read", async () => {
       const api = deviceApi();
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
@@ -2765,7 +2765,7 @@ describe("till-station-screen 15-second refresh", () => {
     expect(queueWidget(el)!.notices).toEqual(later.notices);
   });
 
-  it("device mode re-reads its bound station on the same timer", async () => {
+  it("device mode re-reads its station screen on the same timer", async () => {
     const api = {
       getDeviceStationScreen: vi
         .fn()

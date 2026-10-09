@@ -2811,9 +2811,9 @@ export class TillApi {
   }
 
   /**
-   * Advance ONE of the bound station's ticket items → `POST /api/device/ticket-items/:id/advance`, the
-   * device-scoped {@link advanceTicketItem}: the cookie's own station is the only one it may touch. An
-   * item at ANOTHER station rejects `device.forbidden_station` (403); an illegal transition or unknown
+   * Advance ONE ticket item at a station the device's station screen works →
+   * `POST /api/device/ticket-items/:id/advance`, the device-scoped {@link advanceTicketItem}. An
+   * item at any other station rejects `device.forbidden_station` (403); an illegal transition or unknown
    * item `ticket.invalid_transition`.
    */
   async deviceAdvance(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {

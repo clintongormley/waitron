@@ -164,7 +164,7 @@ const NO_SCOPE: ProfileServiceScope = {
 /**
  * Replaces the profile's department, zones and starting zone, checked as
  * {@link setProfileServiceAccess} checks them, except that a profile other than a shared display
- * must name a department; its station and watcher lists stay as stored. A field `input` leaves out
+ * must name a department. A field `input` leaves out
  * keeps its stored value, as {@link readProfileServiceScopes} reads it, and an `input` naming none
  * of them leaves a stored department's scope untouched. A shared display starts from no scope, so
  * one stored before the profile became one is cleared.

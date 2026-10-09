@@ -12,11 +12,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { ProfileChoice } from "../api/client.js";
 
 /** Refusals about the profile chosen, shown under it rather than at the bottom. */
-const ABOUT_CHOICE = new Set([
-  "device_profile.not_approved",
-  "device_profile.not_admitted",
-  "station.not_allowed",
-]);
+const ABOUT_CHOICE = new Set(["device_profile.not_approved", "device_profile.not_admitted"]);
 
 const ORDER_NOTICES = {
   order_open: "profile.order_open",

@@ -162,8 +162,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
  * reads; the kitchen's `/api/device/station-screen`, notice and ticket-item routes, scoped by the
  * device's station screen ("a kitchen display" below); `/api/device/pass-screen`, its `/done` and
- * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; the expo, watcher
- * and `/api/orders/:id/stations/:sid/advance` routes, scoped by the device's watcher or station;
+ * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
+ * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * and the drawer, the authorizer and reason lists, `/api/statuses` and
  * `GET/PUT /api/device/equipment`, which name no zone.
  */

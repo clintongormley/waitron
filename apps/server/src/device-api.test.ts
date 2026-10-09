@@ -834,7 +834,7 @@ describe("Device API — the device-guarded routes", () => {
     });
   });
 
-  it("the bound station's read carries its kitchen notices, and the display acknowledges its own only", async () => {
+  it("the station screen's read carries its kitchen notices, and the display acknowledges its own only", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const fria = await withTransaction(suite.db, (tx) =>

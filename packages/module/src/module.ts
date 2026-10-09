@@ -827,7 +827,7 @@ export interface VenueServiceContribution {
       startingZoneId: string | null;
     }[]
   >;
-  /** Replaces a profile's department, zones and starting zone; its station and watcher lists stay.
+  /** Replaces a profile's department, zones and starting zone.
    *  A field not named keeps its stored value, and naming none leaves a stored department's scope
    *  untouched; a kitchen display starts from no scope. Refused `device_profile.access_invalid`,
    *  naming the field, for no department on a profile that is not a kitchen display, any of the

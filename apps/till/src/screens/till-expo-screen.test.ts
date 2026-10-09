@@ -2665,7 +2665,7 @@ describe("till-expo-screen — a till whose device chose a pass monitor", () => 
 
   it.each([
     ["en-GB", "This screen is no longer available: Pass monitor"],
-    ["es-ES", "Esta pantalla ya no está disponible: Monitor del pase"],
+    ["es-ES", "Esta pantalla ya no está disponible: Monitor de pase"],
   ])("shows only its line when a narrowing took the monitor itself (%s)", async (locale, line) => {
     const previousLocale = currentLocale();
     setLocale(locale);

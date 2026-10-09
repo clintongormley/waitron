@@ -1417,8 +1417,8 @@ export const es: Record<StringKey, string> = {
   "action.place": "Enviar pedido",
   "action.send_to_prep": "Enviar a cocina",
   "kitchen_screen.station": "Pantalla de estación",
-  "kitchen_screen.pass": "Pantalla del pase",
-  "kitchen_screen.pass_monitor": "Monitor del pase",
+  "kitchen_screen.pass": "Pantalla de pase",
+  "kitchen_screen.pass_monitor": "Monitor de pase",
   "kitchen_screen.none":
     "Esta pantalla aún no tiene nada que mostrar. Pide a un responsable que le elija una pantalla en Dispositivos.",
   "kitchen_screen.unavailable": "Esta pantalla ya no está disponible: {screen}",

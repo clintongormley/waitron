@@ -485,10 +485,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You can't sign in on that profile. Choose another",
     es: "No puedes iniciar sesión con ese perfil. Elige otro",
   },
-  "station.not_allowed": {
-    en: "That profile does not list the station this device shows. Choose another, or ask a manager to change the device's station",
-    es: "Ese perfil no incluye la estación que muestra este dispositivo. Elige otro, o pide a un responsable que cambie la estación del dispositivo",
-  },
   "device.payment_in_progress": {
     en: "A card payment on this device is still in progress. Switch once it finishes or is cancelled",
     es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia cuando termine o se cancele",

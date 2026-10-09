@@ -751,7 +751,7 @@ describe("till-app session activity", () => {
       name: "a kitchen display whose kind a narrowing removed names it",
       kitchenScreens: [kitchenScreen("pass", false)],
       en: "This screen is no longer available: Pass screen",
-      es: "Esta pantalla ya no está disponible: Pantalla del pase",
+      es: "Esta pantalla ya no está disponible: Pantalla de pase",
       guidance: {
         en: "Ask a manager to choose its screens again in Devices.",
         es: "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",

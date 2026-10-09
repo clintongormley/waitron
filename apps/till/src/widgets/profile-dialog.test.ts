@@ -71,7 +71,7 @@ describe("till-profile-dialog", () => {
     expect(seen).toEqual([]);
   });
 
-  it.each(["device_profile.not_admitted", "device_profile.not_approved", "station.not_allowed"])(
+  it.each(["device_profile.not_admitted", "device_profile.not_approved"])(
     "a %s refusal shows under the profile, and choosing another clears it",
     async (code) => {
       const el = await mountDialog();

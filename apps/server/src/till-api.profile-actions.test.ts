@@ -112,8 +112,7 @@ import {
  * - the "done" marks: each is a record of what a pass has seen, not preparing or handing over.
  *   `/api/device/pass-screen/done` is the device's own mark, made on its pass screen: by a kitchen
  *   display on its cookie alone, and on any other device by the person signed in on it, which the
- *   route requires; `/api/watchers/:id/done` by a person signed in on a till that shows the
- *   watcher, so the session is its only check;
+ *   route requires;
  * - the table status and cleared marks, and `/api/sales/:id/receipt/handover` (a printed receipt
  *   handed over): none is an ordering, payment or drawer write;
  * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.

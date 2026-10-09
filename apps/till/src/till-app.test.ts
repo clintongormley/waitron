@@ -1821,7 +1821,7 @@ describe("till-app", () => {
     },
   );
 
-  // Device mode: an enrolled kds display boots straight into its bound station in
+  // Device mode: an enrolled kds display boots straight into its station screen in
   // the kiosk shell (past the login screen); the fuller boot decision (chooser/enrol/login) is exercised
   // by the "Device front door" suite below.
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {

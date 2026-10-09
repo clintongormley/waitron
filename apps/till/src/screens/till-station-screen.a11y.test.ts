@@ -339,7 +339,7 @@ describe.each(["light", "dark"] as const)(
       await flush(el);
       await expectNoA11yViolations(host);
     });
-    it("has no violations with the bound station's notices above its queue", async () => {
+    it("has no violations with its station's notices above its queue", async () => {
       const api = deviceStubApi({
         getDeviceStationScreen: vi.fn().mockResolvedValue({
           stations: [

@@ -6710,7 +6710,7 @@ export async function listExpoQueue(
   );
 }
 
-/** Build every section of the selected pass orders before a watcher narrows their items. */
+/** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
 export async function readPassBoard(
   tx: Transaction,
   locationId: string,
