@@ -1271,7 +1271,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
   APPROVED 2026-10-07; remaining work is slice 3 Part B and slices 4–7.** Keeping a
-  zone open later remains in slice 3 Part B: its writer, server route and till controls.
+  zone open later remains in slice 3 Part B: its till controls. The storage, resolver and
+  server route are implemented on the unlanded Lane D branch.
   Station-hours and fallback retirement, period routing, combined tickets, monitors, department
   pages and department receipts remain in slices 4–7. Slice 7's plan/spec apply the owner's
   2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).

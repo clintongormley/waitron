@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
+  floorZones,
   locations,
   withTransaction,
   workingOrderLines,
@@ -22,10 +23,14 @@ import {
 import {
   createDepartment,
   createServiceZone,
+  configureZone,
+  deviceProfileServiceAccess,
   replaceMenuWeek,
   saveMenuPeriod,
   setProfileServiceAccess,
   periodExtensions,
+  zoneExtensions,
+  replaceZoneClosedWeek,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -366,5 +371,196 @@ describe("the till keeps a running period open today", () => {
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({ code: "time_zone.unreadable" });
     expect(await rows()).toEqual([]);
+  });
+});
+
+describe("the till keeps a zone open today", () => {
+  it("lists a floor zone with no service policy with a null closing time", async () => {
+    await suite.db.delete(deviceProfileServiceAccess);
+    const [plain] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: v.cfg.locationId, name: "Unassigned" })
+      .returning({ id: floorZones.id });
+    const answer = await call("GET", "/api/zones");
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: plain!.id, closed: false, closesAt: null }),
+      ]),
+    );
+  });
+  const writeZone = () => `/api/service-zones/${zone}/zone-extension`;
+  const zoneRows = () =>
+    suite.db.select().from(zoneExtensions).where(eq(zoneExtensions.zoneId, zone));
+  const nextDay = (time: string) => vi.setSystemTime(new Date(`2026-10-06T${time}:00+02:00`));
+  const zoneState = async () => {
+    const answer = await call("GET", "/api/zones");
+    expect(answer.status).toBe(200);
+    return (
+      answer.json as unknown as { id: string; closed: boolean; closesAt: string | null }[]
+    ).find((row) => row.id === zone);
+  };
+  beforeEach(async () => {
+    at("23:00");
+    await run(async (tx) => {
+      await configureZone(tx, v.cfg, {
+        zoneId: zone,
+        departmentId: department,
+        serviceMode: "table_tab",
+      });
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        department,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "03:00" }],
+        })),
+        new Date(),
+      );
+      await replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        zone,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: [{ startsAt: "23:30", endsAt: "05:00" }],
+        })),
+      );
+    });
+  });
+  it("seats a table during the overnight extension and refuses at its exact end", async () => {
+    expect(await zoneState()).toMatchObject({ closed: false, closesAt: "23:30" });
+    expect((await call("PUT", writeZone(), { until: "01:30" })).status).toBe(204);
+    expect(await zoneRows()).toEqual([
+      expect.objectContaining({
+        zoneId: zone,
+        businessDay: "2026-10-05",
+        startsAt: "23:30:00",
+        endsAt: "01:30:00",
+      }),
+    ]);
+    nextDay("01:00");
+    expect(await zoneState()).toMatchObject({ closed: false, closesAt: "01:30" });
+    const table = await v.table("Terrace 1", zone);
+    const seated = await call("POST", `/api/tables/${table}/seat`, { guestCount: 2 });
+    expect(seated.status, JSON.stringify(seated.json)).toBe(200);
+    nextDay("01:30");
+    expect(await zoneState()).toMatchObject({ closed: true, closesAt: "01:30" });
+    const late = await v.table("Terrace 2", zone);
+    const answer = await call("POST", `/api/tables/${late}/seat`, { guestCount: 2 });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "service_zone.closed" });
+  });
+  it("refuses an extension beyond the department closing time without writing", async () => {
+    await run((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        department,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "01:00" }],
+        })),
+        new Date(),
+      ),
+    );
+    const answer = await call("PUT", writeZone(), { until: "01:30" });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "zone_extension.not_allowed",
+      params: { reason: "department_closed" },
+    });
+    expect(await zoneRows()).toEqual([]);
+  });
+  it("refuses staff, then accepts a manager PIN on a profile with no order action", async () => {
+    await suite.db.update(deviceProfiles).set({ capabilities: [] });
+    const refused = await call("PUT", writeZone(), { until: "01:30" }, staffCookie);
+    expect(refused.status).toBe(403);
+    expect(refused.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await zoneRows()).toEqual([]);
+    expect(
+      (
+        await call(
+          "PUT",
+          writeZone(),
+          { until: "01:30", override: { personId: manager, pin: "1234" } },
+          staffCookie,
+        )
+      ).status,
+    ).toBe(204);
+    expect(await zoneRows()).toHaveLength(1);
+  });
+  it("removes an extension with explicit null and restores the scheduled close", async () => {
+    expect((await call("PUT", writeZone(), { until: "01:30" })).status).toBe(204);
+    expect((await call("PUT", writeZone(), { until: null })).status).toBe(204);
+    expect(await zoneRows()).toEqual([]);
+    nextDay("01:00");
+    expect(await zoneState()).toMatchObject({ closed: true, closesAt: "23:30" });
+  });
+  it("requires a session for the zone extension", async () => {
+    const answer = await call("PUT", writeZone(), { until: "01:30" }, "");
+    expect(answer.status).toBe(401);
+    expect(answer.json).toMatchObject({ code: "session.required" });
+    expect(await zoneRows()).toEqual([]);
+  });
+  it("refuses a zone outside the profile department", async () => {
+    const answer = await call("PUT", writeZone(), { until: "01:30" }, deliCookie);
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({ code: "service_zone.not_allowed" });
+    expect(await zoneRows()).toEqual([]);
+  });
+  it.each([
+    [{}, "management.request_invalid", 400],
+    [{ until: 42 }, "management.request_invalid", 400],
+    [{ until: [] }, "management.request_invalid", 400],
+    [{ until: "" }, "zone_extension.invalid", 400],
+    [{ until: "01:10" }, "zone_extension.invalid", 400],
+    [{ until: "23:15" }, "zone_extension.invalid", 400],
+    [{ until: "01:30", override: [] }, "management.request_invalid", 400],
+  ] as const)("refuses invalid zone input %j without writing", async (input, code, status) => {
+    const answer = await call("PUT", writeZone(), input);
+    expect(answer.status).toBe(status);
+    expect(answer.json).toMatchObject({ code });
+    expect(await zoneRows()).toEqual([]);
+  });
+  it("throttles wrong manager PINs for zone extensions", async () => {
+    for (let i = 0; i < 4; i++) {
+      const answer = await call(
+        "PUT",
+        writeZone(),
+        { until: "01:30", override: { personId: manager, pin: "9999" } },
+        staffCookie,
+      );
+      expect(answer.status).toBe(401);
+      expect(answer.json).toMatchObject({ code: "pin.invalid" });
+    }
+    const answer = await call(
+      "PUT",
+      writeZone(),
+      { until: "01:30", override: { personId: manager, pin: "1234" } },
+      staffCookie,
+    );
+    expect(answer.status).toBe(429);
+    expect(answer.json).toMatchObject({ code: "pin.throttled" });
+    expect(await zoneRows()).toEqual([]);
+  });
+  it("returns null for a zone with no scheduled closing time", async () => {
+    await run((tx) =>
+      replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        zone,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+      ),
+    );
+    expect(await zoneState()).toMatchObject({ closed: false, closesAt: null });
+    const answer = await call("PUT", writeZone(), { until: "01:30" });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "zone_extension.not_allowed",
+      params: { reason: "not_closing" },
+    });
+    expect(await zoneRows()).toEqual([]);
   });
 });
