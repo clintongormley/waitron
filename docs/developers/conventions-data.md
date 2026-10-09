@@ -421,6 +421,14 @@ shipped public facts. The transitional `colour` column is gone from `schema/hour
 `packages/venue-service/drizzle/0038_clammy_klaw.sql` drops it and `local_holidays`; this change
 requires a venue reset. The earlier A261 storage account below is historical.
 
+The upgrade guard's reset list describes losses in its synthetic rows, rather than every table
+that can lose venue data. A 2026-10-09 probe on Node v26.7.0 / SQLite 3.53.4 applied the actual
+`0028_menu_timetables.sql` and `0038_clammy_klaw.sql` to a small schema, running the rebuild inside
+one transaction with foreign keys on: its dated `menu_day_timetables` row and `menu_slots` row
+were deleted, while the weekday timetable and its slot remained. The `local_holidays` table was
+absent afterwards. These losses are part of the reset requirement too.
+
+
 ### Earlier A261 hours storage
 
 **2026-10-08, A366 slice 1:** department opening hours now come from service periods.

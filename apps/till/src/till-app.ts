@@ -1516,6 +1516,7 @@ export class TillApp extends LitElement {
    * `zones.length > 0`, because a venue with no floor zones leaves that 0. Reset at login and logout.
    */
   #floorLoaded = false;
+  #floorZonesRead = 0;
 
   constructor() {
     super();
@@ -1744,6 +1745,16 @@ export class TillApp extends LitElement {
   /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
+    onTick: () => {
+      const tab = this.#activeTab();
+      if (
+        this.#inShell() &&
+        this.drill === undefined &&
+        tab !== undefined &&
+        this.#tabNeedsFloorData(tab)
+      )
+        void this.#refreshFloorZones();
+    },
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
     zones: () =>
@@ -4847,6 +4858,7 @@ export class TillApp extends LitElement {
    * with no table to tap. A failed load leaves the last-known floor.
    */
   async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
+    const zonesRead = ++this.#floorZonesRead;
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
@@ -4855,7 +4867,7 @@ export class TillApp extends LitElement {
       ]);
       if (replaced()) return;
       this.tables = tables;
-      this.zones = zones;
+      if (zonesRead === this.#floorZonesRead) this.zones = zones;
       this.statuses = statuses;
       this.#floorLoaded = true;
     } catch {
@@ -4892,7 +4904,7 @@ export class TillApp extends LitElement {
 
   /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
    * overlay; history restores a permitted regular destination over the tab. The first floor visit
-   * loads zones and statuses too, while later visits refresh only live occupancy. `replace` puts the
+   * loads zones and statuses too; later visits refresh occupancy and zone closures. `replace` puts the
    * tab in the current history entry rather than a new one. */
   #onTabSelect(key: string, fromHistory = false, replace = fromHistory): void {
     if (!this.#inShell()) return;
@@ -4913,8 +4925,19 @@ export class TillApp extends LitElement {
       void flushed.then(async () => {
         if (session !== this.#operatorSession) return;
         if (!this.#floorLoaded) return this.#loadFloorData();
-        await this.#refreshFloor();
+        await Promise.all([this.#refreshFloor(), this.#refreshFloorZones()]);
       });
+    }
+  }
+
+  async #refreshFloorZones(): Promise<void> {
+    const session = this.#operatorSession;
+    const read = ++this.#floorZonesRead;
+    try {
+      const zones = await this.api.listZones();
+      if (session === this.#operatorSession && read === this.#floorZonesRead) this.zones = zones;
+    } catch {
+      // A failed read must not erase the last known closure.
     }
   }
 

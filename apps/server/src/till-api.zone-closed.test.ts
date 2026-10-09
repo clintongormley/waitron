@@ -421,14 +421,14 @@ describe("moving into closed zones", () => {
       expect(await moveRows()).toEqual(before);
     },
   );
-  it.each(["free table", "held table", "no bill"])(
+  it.each(["free table", "held table", "no bill", "held table without a bill"])(
     "refuses guests entering a closed zone with %s and keeps both parties unchanged",
     async (target) => {
       const { v, dining } = await moveVenue();
       const source = await seated(v, dining);
-      const holder = target === "held table" ? await seated(v, v.zoneId) : null;
+      const holder = target.startsWith("held table") ? await seated(v, v.zoneId) : null;
       const destination = holder ?? (await freeTable(v, v.zoneId));
-      if (target === "no bill")
+      if (target === "no bill" || target === "held table without a bill")
         await withTransaction(suite.db, async (tx) => {
           await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, source.partyId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, source.tabId));
