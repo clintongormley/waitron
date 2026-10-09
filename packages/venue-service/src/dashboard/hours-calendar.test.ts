@@ -937,7 +937,7 @@ describe("Hours calendar: public holidays", () => {
       ["2026: the venue's province is not recognised, so official holidays are not shown."],
       [
         "2026: the venue's province is not recognised, so official holidays are not shown.",
-        "2026: local holidays need the venue's city and a recognised province; set them in Venue details.",
+        "2026: no local holidays entered. You can add your town’s holidays as own named days without completing the holiday address.",
       ],
     ],
     [
@@ -957,7 +957,7 @@ describe("Hours calendar: public holidays", () => {
       ["2026: official holidays are not available for this country."],
       [
         "2026: official holidays are not available for this country.",
-        "2026: local holidays cannot be entered for a venue in this country.",
+        "2026: no local holidays entered. Add your town’s holidays as own named days.",
       ],
     ],
   ] as const)(
@@ -979,6 +979,25 @@ describe("Hours calendar: public holidays", () => {
         );
         expect(panel(el).querySelectorAll("wt-button").length).toBeGreaterThan(0);
       }
+    },
+  );
+
+  it.each(["en", "es"] as const)(
+    "%s keeps owner-entered local coverage without official country data",
+    async (locale) => {
+      setLocale(locale);
+      const { api } = server({
+        edit: (model) => {
+          model.holidayCoverage = [coverage(2026, "unsupported_country", "owner_entered")];
+        },
+      });
+      const el = await mount(api);
+      await open(el, "2026-10-15");
+      expect(text(panel(el).querySelector('[data-test="coverage"]'))).toContain(
+        locale === "en"
+          ? "2026: local holidays are the ones you entered."
+          : "2026: los festivos locales son los que introdujiste.",
+      );
     },
   );
 
@@ -1008,7 +1027,7 @@ describe("Hours calendar: public holidays", () => {
     ]);
   });
 
-  it("says local holidays are unavailable, not that the address needs fixing, in a country with no holidays", async () => {
+  it("reports the supplied local address state independently of unsupported official holidays", async () => {
     const { api } = server({
       edit: (model) => {
         model.holidayCoverage = [
@@ -1025,7 +1044,7 @@ describe("Hours calendar: public holidays", () => {
     await open(el, "2026-10-15");
     expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)).toEqual([
       "2026: official holidays are not available for this country.",
-      "2026: local holidays cannot be entered for a venue in this country.",
+      "2026: no local holidays entered. You can add your town’s holidays as own named days without completing the holiday address.",
     ]);
   });
 
@@ -1182,6 +1201,68 @@ describe("Opening hours named month", () => {
     await el.updateComplete;
     return el;
   }
+  it.each(["en", "es"] as const)(
+    "%s keeps independent local coverage and repeating own-day actions without official country data",
+    async (locale) => {
+      setLocale(locale);
+      for (const local of [
+        "owner_entered",
+        "none_entered",
+        "unsupported_country",
+        "address_unresolved",
+      ] as const) {
+        const el = await namedMount((async () => {
+          const model = namedModel();
+          model.holidayCoverage = [
+            {
+              year: 2026,
+              country: "GB",
+              provinceCode: null,
+              regionCode: null,
+              nationalRegional: "unsupported_country",
+              local,
+              dataVersion: null,
+              sourceIds: [],
+            },
+          ];
+          return model;
+        }) as DashboardRequest);
+        const wanted =
+          locale === "en"
+            ? {
+                address_unresolved:
+                  "2026: no local holidays entered. You can add your town’s holidays as own named days without completing the holiday address.",
+                owner_entered: "2026: local holidays are the ones you entered.",
+                none_entered: "2026: no local holidays entered.",
+                unsupported_country:
+                  "2026: no local holidays entered. Add your town’s holidays as own named days.",
+              }
+            : {
+                address_unresolved:
+                  "2026: no hay festivos locales introducidos. Puedes añadir los de tu municipio como días festivos propios sin completar la dirección de festivos.",
+                owner_entered: "2026: los festivos locales son los que introdujiste.",
+                none_entered: "2026: no hay festivos locales introducidos.",
+                unsupported_country:
+                  "2026: no hay festivos locales introducidos. Añade los de tu municipio como días festivos propios.",
+              };
+        expect(text(el.shadowRoot!.querySelector('[data-test="month-coverage"]'))).toContain(
+          wanted[local],
+        );
+        el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
+        await el.updateComplete;
+        const events: unknown[] = [];
+        el.addEventListener("named-calendar-action", (event) =>
+          events.push((event as CustomEvent).detail),
+        );
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=named-edit]")!.click();
+        expect(events).toMatchObject([
+          { kind: "edit", day: { id: "own", kind: "holiday", repeats: true } },
+        ]);
+        el.remove();
+      }
+    },
+  );
+
   it("named date actions carry the stored repeating record and plain dates offer Add", async () => {
     const el = await namedMount();
     const events: unknown[] = [];
