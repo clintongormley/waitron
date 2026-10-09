@@ -38,6 +38,7 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal } from "@waitron/shared";
 import {
@@ -1171,6 +1172,33 @@ describe("Device API — the device-guarded routes", () => {
       const [, done] = await read(app, jar);
       expect(done).toMatchObject({ id: fria, available: false, switchedOff: true, notices: [] });
       expect(queued(done!)).toEqual([]);
+    });
+
+    it("reads every station's notices together, each station its own", async () => {
+      const { venue, app, fria, orderId, notice } = await seed();
+      const [grillNotice] = await suite.db
+        .insert(kitchenNotices)
+        .values({
+          stationId: venue.defaultStationId,
+          workingOrderId: orderId,
+          orderLabel: "#1",
+          kind: "void",
+          lineName: "Burger",
+          quantity: 1000,
+        })
+        .returning({ id: kitchenNotices.id });
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const perStation = vi.spyOn(VENUE_SERVICE, "listStationNotices");
+      try {
+        const stations = await read(app, jar);
+        expect(stations.map((entry) => [entry.id, entry.notices?.map((n) => n.id)])).toEqual([
+          [venue.defaultStationId, [grillNotice!.id]],
+          [fria, [notice]],
+        ]);
+        expect(perStation).not.toHaveBeenCalled();
+      } finally {
+        perStation.mockRestore();
+      }
     });
 
     it("keeps its printers-down line with its waiting dishes", async () => {

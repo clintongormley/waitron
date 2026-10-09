@@ -73,6 +73,7 @@ import {
 import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@waitron/module";
+import { listStationsNotices } from "./station-notices.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
@@ -456,6 +457,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live, {
           withSwitchedOff: true,
         });
+        const notices = await listStationsNotices(tx, cfg, live);
         const shown = [];
         for (const { id, name, available, switchedOff } of slots) {
           if (!available && !switchedOff) {
@@ -479,7 +481,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               why: state.why,
             },
             queue: queues.get(id)!,
-            notices: await VENUE_SERVICE.listStationNotices(tx, cfg, id),
+            notices: notices.get(id)!,
             printersDown: down
               .filter((printer) => printer.stationId === id)
               .map(({ printerId, printerName, since }) => ({ printerId, printerName, since })),
