@@ -1525,6 +1525,39 @@ export class MenusScreen extends LitElement {
     );
   }
 
+  /** Moves one member into another list of the menu, as the bulk Move does, and opens that list so
+   * the moved row is drawn; the table restores focus once `busy` falls after the menu is read. */
+  #moveInto(from: string[], memberId: string, to: string[], position: number | undefined): void {
+    const source = this.#targetAt(from);
+    const destination = this.#targetAt(to);
+    // `#targetAt` falls back to an ancestor for a path that no longer leads anywhere.
+    const resolves = (path: string[]) => trailOf(this.structure, path).length === path.length;
+    this.memberError = null;
+    if (!resolves(from) || !resolves(to)) {
+      void this.#refresh(false);
+      return;
+    }
+    this.busy = true;
+    this.#writes.run(destination.listId, async () => {
+      try {
+        await this.api.moveSectionMembersInto(
+          destination.listId,
+          [{ listId: source.listId, memberId }],
+          position,
+        );
+      } catch (error) {
+        if (!this.#reportRefusedElsewhere(destination, error))
+          this.memberError = codeMessage(codeOf(error));
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      await this.#refresh();
+      this.#edit(to);
+      this.busy = false;
+    });
+  }
+
   #edit(path: string[]): void {
     this.path = path;
     this.memberError = null;
@@ -2386,6 +2419,18 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           const { path, memberId, to } = event.detail;
           this.#move(path, memberId, to);
+        }}
+        @wt-member-move-into=${(
+          event: CustomEvent<{
+            from: string[];
+            memberId: string;
+            to: string[];
+            position?: number;
+          }>,
+        ) => {
+          event.stopPropagation();
+          const { from, memberId, to, position } = event.detail;
+          this.#moveInto(from, memberId, to, position);
         }}
         @wt-member-edit=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
           event.stopPropagation();
