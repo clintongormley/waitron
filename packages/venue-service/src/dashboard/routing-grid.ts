@@ -85,7 +85,9 @@ export class RoutingGrid extends LitElement {
       }
       @container (max-width: 40rem) {
         .scroll {
-          --routing-first: var(--wt-cell-name-max-width);
+          --routing-first: calc(var(--wt-space-6) * 3);
+          --routing-zone: calc(var(--wt-space-6) * 3.25);
+          --routing-pad: var(--wt-space-1);
         }
       }
       .toolbar {
@@ -111,7 +113,7 @@ export class RoutingGrid extends LitElement {
       }
       th,
       td {
-        padding: var(--wt-space-2);
+        padding: var(--routing-pad, var(--wt-space-2));
         border-block-end: 1px solid var(--wt-color-border);
         text-align: start;
         vertical-align: top;
@@ -134,7 +136,9 @@ export class RoutingGrid extends LitElement {
       }
       tbody th {
         font-weight: var(--wt-font-weight-normal);
-        padding-inline-start: calc(var(--wt-space-2) + var(--wt-space-4) * var(--routing-depth, 0));
+        padding-inline-start: calc(
+          var(--routing-pad, var(--wt-space-2)) + var(--wt-space-4) * var(--routing-depth, 0)
+        );
       }
       tbody tr.heading th {
         font-weight: var(--wt-font-weight-medium);

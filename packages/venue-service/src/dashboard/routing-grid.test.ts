@@ -896,6 +896,33 @@ describe("venue-routing-grid", () => {
     expect(label.getBoundingClientRect().width).toBeLessThanOrEqual(96);
   });
 
+  it("at phone width the Every zone column and the first zone column fit without scrolling", async () => {
+    await page.viewport(390, 800);
+    const { el } = await mount();
+    const scroller = root(el).querySelector<HTMLElement>('[data-test="grid-scroll"]')!;
+    expect(scroller.scrollLeft).toBe(0);
+    const visibleEnd =
+      scroller.getBoundingClientRect().left + scroller.clientLeft + scroller.clientWidth;
+    const [label, every, first] = [...root(el).querySelectorAll("thead th")];
+    expect(every!.textContent).toContain("Every zone");
+    expect(first!.textContent).toContain("Terrace");
+    expect(every!.getBoundingClientRect().right).toBeLessThanOrEqual(visibleEnd);
+    expect(first!.getBoundingClientRect().right).toBeLessThanOrEqual(visibleEnd);
+    expect(cell(el, "c:drinks", "terrace").getBoundingClientRect().right).toBeLessThanOrEqual(
+      visibleEnd,
+    );
+    expect(label!.getBoundingClientRect().width).toBeLessThanOrEqual(96);
+    // The narrower cell still holds a station's longer word whole.
+    const station = combo(el, "all", "terrace")!.querySelector(".station")!;
+    expect(station.textContent!.trim()).toBe("No preparation");
+    const text = [...station.childNodes].find((node) => node.textContent!.includes("preparation"))!;
+    const word = document.createRange();
+    const start = text.textContent!.indexOf("preparation");
+    word.setStart(text, start);
+    word.setEnd(text, start + "preparation".length);
+    expect(word.getClientRects()).toHaveLength(1);
+  });
+
   it("scrolls sideways at phone width with the row labels kept in view", async () => {
     await page.viewport(390, 800);
     const { el } = await mount();
