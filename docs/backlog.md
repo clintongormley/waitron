@@ -1299,6 +1299,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Fresh sign-in reads changed settings; the open till keeps its loaded flow.
   [Detail](backlog/service-periods.md#refresh-service-settings-on-an-open-till)
 
+- **Service-policy import completeness** — run a real import with department or zone policy
+  rows omitted. If it commits, reject or repair that incomplete shape before service begins.
+  The review's import probes stopped before these tables; reachability remains unverified.
+- **Concurrent department settings edits** — decide whether two managers editing the same
+  department need stale-write protection. The form sends its whole draft; a runtime overlap
+  probe remains to be run before choosing a conflict policy.
+
 - **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
   Served at a table or counter; payment due before the kitchen, at collection or at the end of
   the tab. Slice 6 keeps the three-value order record and its behaviour.
