@@ -1,5 +1,4 @@
-// The Hours page's special-dates list, drawn in the page's own shadow root.
-import { css, html, nothing } from "lit";
+import { css, html } from "lit";
 import { visuallyHiddenStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -22,16 +21,16 @@ export interface DatesListHost {
   readOnly: boolean;
   /** The columns shown, inactive ones only when asked for. */
   subjects: HoursModelSubject[];
-  /** The shadow root the list is drawn in, where its buttons are found to return focus to. */
-  root: ParentNode;
   menuTrigger(event: Event): ReturnTo;
-  add(returnTo: ReturnTo, closeWholeVenue: boolean): void;
   edit(special: SpecialDate, returnTo: ReturnTo): void;
-  duplicate(special: SpecialDate, returnTo: ReturnTo): void;
-  remove(special: SpecialDate, returnTo: ReturnTo): void;
 }
 
 export const datesListStyles = css`
+  a,
+  wt-data-table::part(calendar-link) {
+    color: var(--wt-color-primary-text);
+  }
+
   wt-data-table::part(inherited),
   wt-data-table::part(colour-name) {
     color: var(--wt-color-text-muted);
@@ -95,8 +94,12 @@ function rowActions(host: DatesListHost, { special }: ListRow) {
     >`;
   return html`<wt-row-actions label=${format("hours.row_actions", { name: special.name })}>
     ${action("edit-date", "hours.edit", (returnTo) => host.edit(special, returnTo))}
-    ${action("duplicate-date", "hours.duplicate", (returnTo) => host.duplicate(special, returnTo))}
-    ${action("delete-date", "hours.delete", (returnTo) => host.remove(special, returnTo))}
+    <a part="calendar-link" data-test="duplicate-date" href="/manage/opening-hours/view/calendar"
+      >${t("hours.duplicate")}</a
+    >
+    <a part="calendar-link" data-test="delete-date" href="/manage/opening-hours/view/calendar"
+      >${t("hours.delete")}</a
+    >
   </wt-row-actions>`;
 }
 
@@ -129,31 +132,14 @@ export function renderDatesList(host: DatesListHost) {
     special,
     cells: storedCells(host.model, special.id),
   }));
-  const trigger = (test: string) => () =>
-    host.root.querySelector<HTMLElement>(`[data-test="${test}"]`);
-  return html`${
-      host.readOnly
-        ? nothing
-        : html`<div class="toolbar">
-            <div>
-              <wt-button
-                variant="primary"
-                data-test="add-date"
-                @click=${() => host.add(trigger("add-date"), false)}
-                >${t("hours.add_date")}</wt-button
-              >
-              <wt-button
-                variant="secondary"
-                data-test="close-venue"
-                @click=${() => host.add(trigger("close-venue"), true)}
-                >${t("hours.close_venue")}</wt-button
-              >
-            </div>
-          </div>`
-    }
+  return html`<p class="toolbar">
+      <a data-test="calendar-link" href="/manage/opening-hours/view/calendar"
+        >${t("hours.named_days_calendar")}</a
+      >
+    </p>
     <wt-data-table
       data-test="special-dates"
-      aria-label=${t("hours.tab.dates")}
+      aria-label=${t("hours.tab.named_days")}
       .columns=${columns}
       .rows=${rows}
       .rowKey=${(row: ListRow) => row.special.id}

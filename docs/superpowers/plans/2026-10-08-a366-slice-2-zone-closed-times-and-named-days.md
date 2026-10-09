@@ -1141,6 +1141,12 @@ hours → Calendar. The local-holiday editor stays on this screen until Task 26 
 
 ---
 
+2026-10-09 Task 24 implementation checkpoint: Station hours now offers Week and Named days.
+The Named days list links creation, copying and deletion to Opening hours → Calendar; existing
+station-date Edit and the local-holiday section remain. Retired entry-point assertions and migrated
+station behavior are inventoried in the separate changed-checks commit and Task 24 report. This
+checkpoint awaits controller review and does not complete Tasks 25–29.
+
 ### Task 25: Station hours edits only station cells on a named day
 
 **Files:** modify `dashboard/hours-screen.ts` (the `date` editor `:101-120`, `#dateForm`),

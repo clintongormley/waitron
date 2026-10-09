@@ -2987,6 +2987,12 @@ Composition, held keys, and Enter with Shift, Control, Alt, or Meta do not submi
 filters and controls that persist each edit immediately unbound. If a field edits a draft that you
 commit with Save, bind it to that Save even when its preview updates as you type.
 
+### Station hours named days
+
+Station hours offers Week and Named days. Create, copy or delete a named day through the links
+in Named days to Opening hours → Calendar. Station-date Edit and the local-holiday editor remain
+on Station hours at the A366 slice 2 Task 24 checkpoint; their remaining changes are Tasks 25 and 26.
+
 ### Tabbed management pages
 
 When a management page separates concerns into selectable panels, use `wt-tabs`.

@@ -432,6 +432,9 @@ const en = {
   "hours.title": "Station hours",
   "hours.tab.week": "Standard week",
   "hours.tab.dates": "Special dates",
+  "hours.tab.station_week": "Week",
+  "hours.tab.named_days": "Named days",
+  "hours.named_days_calendar": "Add, copy or delete named days in Opening hours → Calendar.",
   "hours.show_inactive": "Show inactive",
   "hours.clock_note": "Times are the venue's local time ({timeZone}).",
   "hours.clock_unreadable":
@@ -1155,6 +1158,10 @@ const es: Record<keyof typeof en, string> = {
   "hours.title": "Horario de estaciones",
   "hours.tab.week": "Semana habitual",
   "hours.tab.dates": "Fechas especiales",
+  "hours.tab.station_week": "Semana",
+  "hours.tab.named_days": "Días con nombre",
+  "hours.named_days_calendar":
+    "Añade, copia o elimina días con nombre en Horario de apertura → Calendario.",
   "hours.show_inactive": "Mostrar inactivos",
   "hours.clock_note": "Las horas son las del establecimiento ({timeZone}).",
   "hours.clock_unreadable":
