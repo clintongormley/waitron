@@ -243,15 +243,13 @@ it("a replaced copy's retained controls and completion cannot change the new tar
   el.day = { id: "replacement", name: "Replacement" };
   await el.updateComplete;
   await change("2026-11-20");
-  old
-    .querySelector("wt-input")!
-    .dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "2026-12-20" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+  old.querySelector("wt-input")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "2026-12-20" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   for (const selector of [
     "[data-test=add-target]",
     "[data-test=remove-target-1]",
