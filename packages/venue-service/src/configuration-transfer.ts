@@ -546,6 +546,45 @@ export function validateRoutingConfiguration(tables: Tables): void {
           : { row: noCategory ? ("no_category" as const) : ("all" as const) }),
     });
   }
+  validateRoutingCellPeriods(tables, stations, zoneDepartment);
+}
+
+/**
+ * Refuses a period choice a save could not have written: a cell or period the bundle does not
+ * hold, a department that is not the period's, a zone cell's period of another department, a
+ * second choice for one cell and period, and a bad target. It does not ask whether the period's
+ * menus hold any of the cell's products (A366 slice 4, decision 31).
+ */
+function validateRoutingCellPeriods(
+  tables: Tables,
+  stations: Set<unknown>,
+  zoneDepartment: Map<unknown, unknown>,
+): void {
+  const cellZone = new Map(
+    (tables.routing_cells ?? []).map((row) => [row.id, row.zone_id ?? null]),
+  );
+  const periodDepartment = new Map(
+    (tables.menu_periods ?? []).map((row) => [row.id, row.department_id]),
+  );
+  const taken = new Set<string>();
+  for (const row of tables.routing_cell_periods ?? []) {
+    if (!cellZone.has(row.cell_id)) refuse("routing_cell_periods.cell_id");
+    if (!periodDepartment.has(row.period_id)) refuse("routing_cell_periods.period_id");
+    const department = periodDepartment.get(row.period_id);
+    if (row.department_id !== department) refuse("routing_cell_periods.department_id");
+    const zone = cellZone.get(row.cell_id);
+    if (zone !== null && zoneDepartment.get(zone) !== department)
+      refuse("routing_cell_periods.period_id");
+    const key = JSON.stringify([row.cell_id, row.period_id]);
+    if (taken.has(key)) refuse("routing_cell_periods.period_id");
+    taken.add(key);
+    if (row.no_preparation !== 0 && row.no_preparation !== 1)
+      refuse("routing_cell_periods.no_preparation");
+    const station = row.station_id ?? null;
+    if ((station === null) !== (row.no_preparation === 1))
+      refuse("routing_cell_periods.station_id");
+    if (station !== null && !stations.has(station)) refuse("routing_cell_periods.station_id");
+  }
 }
 
 /**
@@ -670,6 +709,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "menu_period_staff_menus" },
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
+    { name: "routing_cell_periods" },
     { name: "special_date_hours" },
     { name: "zone_closed_times" },
     { name: "special_date_hours_periods" },

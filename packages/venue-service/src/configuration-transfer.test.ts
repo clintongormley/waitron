@@ -1511,6 +1511,102 @@ describe("validateRoutingConfiguration", () => {
     );
   });
 
+  describe("a cell's period choices", () => {
+    const LUNCH = "mp-lunch"; // the restaurant's
+    const BREAKFAST = "mp-breakfast"; // the deli's
+
+    type ChoiceSpec = {
+      cell?: string;
+      period?: string;
+      department?: string;
+      station?: string | null;
+      noPrep?: unknown;
+    };
+    /** The routing tables plus a Terrace cell and an Every zone cell, and one period each side. */
+    function periodTables() {
+      const tables = routingTables();
+      tables.menu_periods = [
+        { id: LUNCH, department_id: RESTAURANT, name: "Lunch", menu_id: "m-empty" },
+        { id: BREAKFAST, department_id: DELI, name: "Breakfast", menu_id: "m-empty" },
+      ];
+      const terrace = tables.routing_cells!.find(
+        (row) => row.category_id === DRINKS && row.zone_id === TERRACE,
+      )!.id as string;
+      const everyZone = tables.routing_cells!.find(
+        (row) => row.product_id === MOJITO && row.zone_id === null,
+      )!.id as string;
+      const choice = (spec: ChoiceSpec = {}) => {
+        const station = "station" in spec ? spec.station : BAR;
+        return {
+          id: randomUUID(),
+          cell_id: spec.cell ?? terrace,
+          period_id: spec.period ?? LUNCH,
+          department_id: spec.department ?? RESTAURANT,
+          station_id: station,
+          no_preparation: "noPrep" in spec ? spec.noPrep : station === null ? 1 : 0,
+        };
+      };
+      tables.routing_cell_periods = [];
+      return { tables, terrace, everyZone, choice };
+    }
+
+    function choiceRefused(spec: ChoiceSpec, field: string) {
+      const { tables, choice } = periodTables();
+      tables.routing_cell_periods!.push(choice(spec));
+      expect(() => validateRoutingConfiguration(tables)).toThrowError(refusal(field));
+    }
+
+    it("accepts a zone cell's own-department period, any department's on an Every zone cell, No preparation and a disabled station", () => {
+      const { tables, everyZone, choice } = periodTables();
+      tables.routing_cell_periods!.push(
+        choice(),
+        choice({ cell: everyZone, station: null }),
+        choice({ cell: everyZone, period: BREAKFAST, department: DELI, station: OFF }),
+      );
+      expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+    });
+
+    it("accepts a choice whose period's menus hold none of the cell's products", () => {
+      const { tables, everyZone, choice } = periodTables();
+      tables.catalogues = [{ id: "m-empty", name: "Empty" }];
+      tables.menu_items = [];
+      tables.routing_cell_periods!.push(choice({ cell: everyZone }));
+      expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+    });
+
+    it("refuses a choice whose cell the bundle does not hold", () => {
+      choiceRefused({ cell: randomUUID() }, "routing_cell_periods.cell_id");
+    });
+
+    it("refuses a zone cell's choice naming another department's period", () => {
+      choiceRefused({ period: BREAKFAST, department: DELI }, "routing_cell_periods.period_id");
+    });
+
+    it("refuses a period the bundle does not hold, and a department that is not the period's", () => {
+      choiceRefused({ period: "mp-missing" }, "routing_cell_periods.period_id");
+      choiceRefused({ department: DELI }, "routing_cell_periods.department_id");
+    });
+
+    it("refuses a second choice for one cell and period", () => {
+      const { tables, choice } = periodTables();
+      tables.routing_cell_periods!.push(choice(), choice({ station: null }));
+      expect(() => validateRoutingConfiguration(tables)).toThrowError(
+        refusal("routing_cell_periods.period_id"),
+      );
+    });
+
+    it("refuses a station the bundle does not hold", () => {
+      choiceRefused({ station: "k-missing" }, "routing_cell_periods.station_id");
+    });
+
+    it("refuses a choice with no target, both targets, or a No preparation value that is not 0 or 1", () => {
+      choiceRefused({ station: null, noPrep: 0 }, "routing_cell_periods.station_id");
+      choiceRefused({ station: BAR, noPrep: 1 }, "routing_cell_periods.station_id");
+      choiceRefused({ noPrep: true }, "routing_cell_periods.no_preparation");
+      choiceRefused({ noPrep: null }, "routing_cell_periods.no_preparation");
+    });
+  });
+
   it("is run by the venue-service transfer's validate callback", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
     const tables = routingTables();

@@ -11,6 +11,7 @@ import {
   products,
   table,
 } from "@waitron/db";
+import { menuPeriods } from "./menus.js";
 
 /** A missing row is an unset cell; All categories × Every zone is the default station, never a row. */
 export const routingCells = table(
@@ -90,5 +91,40 @@ export const routingCells = table(
     uniqueIndex("routing_cells_no_category_zone_key")
       .on(t.locationId, t.noCategory, t.zoneId)
       .where(sql`${t.noCategory} = 1 and ${t.zoneId} is not null`),
+  ],
+);
+
+/** A cell's station, or No preparation, for one of a department's service periods. */
+export const routingCellPeriods = table(
+  "routing_cell_periods",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    cellId: id("cell_id").notNull(),
+    periodId: id("period_id").notNull(),
+    departmentId: id("department_id").notNull(),
+    stationId: id("station_id"),
+    noPreparation: flag("no_preparation").notNull().default(false),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.cellId],
+      foreignColumns: [routingCells.id],
+      name: "routing_cell_periods_cell_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.periodId, t.departmentId],
+      foreignColumns: [menuPeriods.id, menuPeriods.departmentId],
+      name: "routing_cell_periods_period_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.stationId],
+      foreignColumns: [kitchenStations.id],
+      name: "routing_cell_periods_station_fk",
+    }),
+    check(
+      "routing_cell_periods_target_ck",
+      sql`(${t.stationId} is not null and ${t.noPreparation} = 0) or (${t.stationId} is null and ${t.noPreparation} = 1)`,
+    ),
+    uniqueIndex("routing_cell_periods_cell_period_key").on(t.cellId, t.periodId),
   ],
 );
