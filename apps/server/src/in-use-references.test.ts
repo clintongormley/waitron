@@ -30,6 +30,7 @@ function named(references: readonly Reference[]): string[] {
 describe("what can refer to a watcher or a course", () => {
   it("lists every foreign key into watchers as a reference or one of its own settings", async () => {
     expect(await keysInto("watchers")).toEqual(named([...WATCHER_REFERENCES, ...WATCHER_SETTINGS]));
+    expect(WATCHER_REFERENCES).toEqual([]);
   });
 
   it("lists every foreign key into kitchen_courses as a reference", async () => {

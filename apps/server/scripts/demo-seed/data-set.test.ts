@@ -195,7 +195,7 @@ describe("demo data sets", () => {
     expect(set.staff).toBe(DEMO_STAFF);
     expect(set.adjustmentReasons).toBe(DEMO_ADJUSTMENT_REASONS);
     expect(set.menus.drinksName).toEqual({ en: "Drinks", es: "Bebidas" });
-    expect(set.watcherName).toEqual({ en: "Pass", es: "Pase" });
+    expect(set).not.toHaveProperty("watcherName");
     expect(set.floor.departmentNames).toEqual({
       restaurant: { en: "Restaurant and bar", es: "Restaurante y bar" },
       deli: { en: "Deli", es: "Charcutería" },

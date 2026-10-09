@@ -18,13 +18,13 @@ import { readNamedDaysModel } from "./named-days.js";
 import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
-import {
-  readProfileKitchenLists,
-  readProfileServiceAccess,
-  setProfileServiceAccess,
-} from "./profile-access.js";
+import { readProfileKitchenScreens } from "./kitchen-screens.js";
+import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
-import { deviceProfileStations } from "./schema/service.js";
+import {
+  deviceProfileKitchenScreenStations,
+  deviceProfileKitchenScreens,
+} from "./schema/kitchen-screens.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -483,15 +483,13 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           departmentId: department_id,
           allowedZoneIds: [zone_id],
           startingZoneId: zone_id,
-          stationIds: [],
-          watcherIds: [],
         });
       }
       expect((await access(profiles.kitchen)).departmentId).toBeNull();
       expect((await access(profiles.pass)).departmentId).toBeNull();
     });
 
-    it("keeps the kitchen lists of a profile it gives a scope, switched-off entries included", async () => {
+    it("keeps the kitchen screens of a profile it gives a scope, switched-off stations included", async () => {
       const { locationId, profiles, runSeed } = await venue();
       const [grill] = await db
         .insert(kitchenStations)
@@ -501,17 +499,22 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         .insert(kitchenStations)
         .values({ locationId, name: `Bar ${randomUUID()}` })
         .returning({ id: kitchenStations.id });
-      await db.insert(deviceProfileStations).values([
-        { deviceProfileId: profiles.till, stationId: grill!.id },
-        { deviceProfileId: profiles.till, stationId: bar!.id },
+      await db
+        .insert(deviceProfileKitchenScreens)
+        .values({ deviceProfileId: profiles.till, screen: "pass", everyZone: true });
+      await db.insert(deviceProfileKitchenScreenStations).values([
+        { deviceProfileId: profiles.till, screen: "pass", stationId: grill!.id },
+        { deviceProfileId: profiles.till, screen: "pass", stationId: bar!.id },
       ]);
 
       await runSeed();
 
-      const lists = await db.transaction((tx) => readProfileKitchenLists(tx, { locationId }));
-      expect(lists.find((entry) => entry.profileId === profiles.till)?.stationIds.sort()).toEqual(
-        [grill!.id, bar!.id].sort(),
-      );
+      const screens = await db.transaction((tx) => readProfileKitchenScreens(tx, { locationId }));
+      const till = screens.find((entry) => entry.profileId === profiles.till)?.screens;
+      expect({ ...till?.pass, stationIds: [...(till?.pass?.stationIds ?? [])].sort() }).toEqual({
+        stationIds: [grill!.id, bar!.id].sort(),
+        zoneIds: null,
+      });
     });
 
     it("leaves a profile's scope alone on a re-run", async () => {
@@ -526,8 +529,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           departmentId: department_id,
           allowedZoneIds: [terrace.id],
           startingZoneId: terrace.id,
-          stationIds: [],
-          watcherIds: [],
         }),
       );
       const before = await access(profiles.till);

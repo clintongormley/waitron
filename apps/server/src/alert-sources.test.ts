@@ -1,5 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   CORE_MIGRATIONS,
   locations,
@@ -403,7 +405,9 @@ describe("awaitingCertAlertSource", () => {
   });
 });
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+});
 
 function minsAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();

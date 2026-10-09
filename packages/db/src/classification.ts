@@ -105,9 +105,9 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("watcher_zones", "state", STATE),
   classify("watcher_printers", "state", STATE),
   classify(
-    "watcher_item_marks",
+    "pass_item_marks",
     "state",
-    "each watcher's own Done marks, live service in flight; copied to a standby, never drained back",
+    "each device's own Done marks, live service in flight; copied to a standby, never drained back",
   ),
   classify("printers", "state", STATE),
   classify("page_printers", "state", STATE),
@@ -162,7 +162,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly(
     "order_group_events",
     "state",
-    "who submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
+    "who (a person or a kitchen display) submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
   ),
   classify(
     "order_drafts",

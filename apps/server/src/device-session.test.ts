@@ -11,14 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
-import {
-  canvases,
-  deviceProfiles,
-  devices,
-  kitchenStations,
-  locations,
-  withTransaction,
-} from "@waitron/db";
+import { canvases, deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -138,9 +131,8 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
 
-/** The bindings a station screen enrolled without a watcher or hardware target carries. */
+/** What a station screen enrolled without a hardware target carries beyond its identity. */
 const NO_BINDINGS = {
-  watcherId: null,
   // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
   capabilities: [],
 } as const;
@@ -422,7 +414,7 @@ describe("device cookie helpers", () => {
 
 describe("requireDevice (venue database)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
-    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(`${deviceId}.${token}`);
@@ -433,7 +425,6 @@ describe("requireDevice (venue database)", () => {
         formFactor: "kds",
         label: "Pantalla",
         locationId: cfg.locationId,
-        stationId,
         deviceProfileId,
         ...NO_BINDINGS,
       },
@@ -452,8 +443,6 @@ describe("requireDevice (venue database)", () => {
         formFactor: "till",
         label: "Counter till",
         locationId: cfg.locationId,
-        stationId: null,
-        watcherId: null,
         deviceProfileId,
         // The `till` profile declares both fenced flags — carried on the binding by the profile join.
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
@@ -502,14 +491,13 @@ describe("requireDevice (venue database)", () => {
 
 describe("tryReadDevice (venue database)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
-    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
     expect(await probeTry(`${deviceId}.${token}`)).toEqual({
       deviceId,
       formFactor: "kds",
       label: "Pantalla",
       locationId: cfg.locationId,
-      stationId,
       deviceProfileId,
       ...NO_BINDINGS,
     });
@@ -584,7 +572,7 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
     const tillProfileId = await seedDeviceProfile("Bar tills", "till", ["take-cash"]);
     await suite.db
       .update(devices)
-      .set({ deviceProfileId: tillProfileId, stationId: null, label: "Bar till" })
+      .set({ deviceProfileId: tillProfileId, label: "Bar till" })
       .where(eq(devices.id, deviceId));
 
     const current = await withTransaction(suite.db, (tx) => assertDeviceStillProven(tx, proof));
@@ -593,9 +581,7 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
       formFactor: "till",
       label: "Bar till",
       locationId: cfg.locationId,
-      stationId: null,
       deviceProfileId: tillProfileId,
-      watcherId: null,
       capabilities: ["take-cash"],
     });
   });
@@ -735,8 +721,6 @@ describe("assertTakesCash on a resolved device", () => {
     formFactor,
     label: "Waiter phone",
     locationId: randomUUID(),
-    stationId: null,
-    watcherId: null,
     deviceProfileId: randomUUID(),
     capabilities,
   });
@@ -807,11 +791,6 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
       })
       .returning({ id: locations.id });
     const locationId = loc!.id;
-    const [st] = await admin
-      .insert(kitchenStations)
-      .values({ locationId, name: "Cocina", isDefault: true })
-      .returning({ id: kitchenStations.id });
-    // A kds profile → the binding rule requires a station and no register.
     const [prof] = await admin
       .insert(deviceProfiles)
       .values({ name: "Pantalla", formFactor: "kds" })
@@ -821,7 +800,6 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
       .values({
         locationId,
         deviceProfileId: prof!.id,
-        stationId: st!.id,
         label: "Pantalla Cocina",
         tokenHash: "scrypt$00$00",
         active: true,
@@ -1123,7 +1101,7 @@ describe("a token already verified for its device", () => {
   });
 
   it("is forgotten, oldest first, once more devices than the limit have verified", async () => {
-    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, deviceProfileId } = await enrolDeviceFixture();
     expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
     // A full memo of other devices sharing its token, each verified after it.
     const [first] = await suite.db
@@ -1135,7 +1113,6 @@ describe("a token already verified for its device", () => {
       .values(
         Array.from({ length: VERIFIED_TOKENS_LIMIT }, (_, i) => ({
           locationId: cfg.locationId,
-          stationId,
           deviceProfileId,
           label: `Pantalla ${i}`,
           tokenHash: first!.tokenHash,

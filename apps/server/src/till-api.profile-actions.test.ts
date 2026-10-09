@@ -38,8 +38,9 @@ import {
  * Route-to-action map. Each row is the profile action a till or kitchen-display route needs, besides
  * whatever person permission it already checked; a refusal is `device.forbidden_action` naming the
  * `action` shown (cash is `device.cash_not_allowed`). The case that fails without each gate is the
- * row's own `refuses <METHOD> <path> ...` case in ROUTES below, or for refunds in "a refund checks
- * the action its payment was taken with".
+ * row's own `refuses <METHOD> <path> ...` case in ROUTES below, for a display's pass levers its
+ * `refuses the display's <path> ...` case, or for refunds in "a refund checks the action its
+ * payment was taken with".
  *
  * | Route                                                     | Action                     | `action` param        |
  * | --------------------------------------------------------- | -------------------------- | --------------------- |
@@ -86,6 +87,12 @@ import {
  * | GET, PUT /api/device/stations/:stationId/today            | prepare-orders             | prepare-orders        |
  * | POST /api/device/ticket-items/:id/advance (display)       | prepare-orders             | prepare-orders        |
  * | POST /api/device/kitchen-notices/:id/acknowledge (display)| prepare-orders             | prepare-orders        |
+ * | POST /api/device/orders/:id/courses/:courseId/fire (display) | take-orders            | take-orders           |
+ * | POST /api/device/orders/:id/courses/:courseId/ready (display) | prepare-orders        | prepare-orders        |
+ * | POST /api/device/orders/:id/courses/:courseId/away (display) | hand-over-orders       | hand-over-orders      |
+ * | POST /api/device/parties/:id/groups/:gid/fire (display)   | take-orders                | take-orders           |
+ * | POST /api/device/parties/:id/groups/:gid/ready (display)  | prepare-orders             | prepare-orders        |
+ * | POST /api/device/parties/:id/groups/:gid/away (display)   | hand-over-orders           | hand-over-orders      |
  *
  * A management reprint (`POST /management-api/orders/:id/reprint`) checks `print-receipt` on the
  * device cookie it carries, if any (`orders-reprint.test.ts`).
@@ -102,16 +109,18 @@ import {
  *   `PUT /api/service-zones/:zoneId/period-extension` and
  *   `PUT /api/service-zones/:zoneId/zone-extension`: the venue's day, session reads and
  *   `venue_service.manage` or a permitted PIN for writes;
- * - the watcher "done" marks: each is the watcher's own record of what it has seen, not preparing
- *   or handing over. `/api/device/watcher/done` is made by the watcher's own display, which is
- *   allowed only `prepare-orders`; `/api/watchers/:id/done` by a person signed in on a till that
- *   shows the watcher, so the session is its only check;
+ * - the "done" marks: each is a record of what a pass has seen, not preparing or handing over.
+ *   `/api/device/pass-screen/done` is the device's own mark, made on its pass screen: by a kitchen
+ *   display on its cookie alone, and on any other device by the person signed in on it, which the
+ *   route requires; `/api/watchers/:id/done` by a person signed in on a till that shows the
+ *   watcher, so the session is its only check;
  * - the table status and cleared marks, and `/api/sales/:id/receipt/handover` (a printed receipt
  *   handed over): none is an ordering, payment or drawer write;
  * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.
  *
- * A shared display (`kds`) may only prepare, whatever its stored list says (`profileAllows`); on its
- * own cookie, with nobody signed in, every till route answers `session.required`.
+ * A shared display (`kds`) may only prepare, take orders and hand them over, whatever its stored
+ * list says (`profileAllows`); on its own cookie, with nobody signed in, every till route answers
+ * `session.required`.
  */
 
 const suite = useVenueDb({
@@ -181,6 +190,16 @@ async function display(capabilities: readonly string[]): Promise<string> {
     name: `Display ${randomUUID()}`,
     profileId: await profile(capabilities, "kds"),
     stationId,
+  });
+  return `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+}
+
+/** A kitchen display running a pass on every station and zone, whose profile lists `capabilities`. */
+async function passDisplay(capabilities: readonly string[]): Promise<string> {
+  const device = await enrolDeviceForTest(suite.db, v.cfg, {
+    name: `Pass ${randomUUID()}`,
+    profileId: await profile(capabilities, "kds"),
+    kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
   });
   return `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
 }
@@ -487,8 +506,6 @@ describe("the order of a sale's refusals", () => {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
         startingZoneId: v.counter.zoneId,
-        stationIds: [],
-        watcherIds: [],
       });
     });
     const { cookie } = await signInOn(restaurantOnly);
@@ -534,15 +551,12 @@ describe("the person's permission and the profile's action are both needed", () 
 });
 
 describe("a shared kitchen display", () => {
-  it("is refused ordering, payment and the drawer even when its stored list names them", async () => {
+  it("may take orders when its stored list names them, and is refused payment and the drawer even when named", async () => {
     const { cookie, deviceId } = await signIn(CAPABILITY_FLAGS);
     const kds = await profile(CAPABILITY_FLAGS, "kds");
-    await suite.db
-      .update(devices)
-      .set({ deviceProfileId: kds, stationId })
-      .where(eq(devices.id, deviceId));
+    await suite.db.update(devices).set({ deviceProfileId: kds }).where(eq(devices.id, deviceId));
     const park = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
-    expect(park.body.error).toEqual(forbidden("take-orders").error);
+    expect(park.body.error?.code).toBe("sale.empty_basket");
     const order = await counterOrder(v, "Caña");
     const collect = await send(cookie, "POST", `/api/working-orders/${order}/collect`, {
       tender: cash,
@@ -556,6 +570,17 @@ describe("a shared kitchen display", () => {
       to: "ready",
     });
     expect(advance.status).toBe(200);
+  });
+
+  it("is refused taking orders when its stored list lacks them", async () => {
+    const { cookie, deviceId } = await signIn(CAPABILITY_FLAGS);
+    const kds = await profile(
+      CAPABILITY_FLAGS.filter((flag) => flag !== "take-orders"),
+      "kds",
+    );
+    await suite.db.update(devices).set({ deviceProfileId: kds }).where(eq(devices.id, deviceId));
+    const park = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
+    expect(park.body.error).toEqual(forbidden("take-orders").error);
   });
 
   it("reaches no ordering, payment or drawer route on its own cookie, with nobody signed in", async () => {
@@ -591,6 +616,26 @@ describe("a shared kitchen display", () => {
       });
     }
   });
+
+  for (const [path, lacking] of [
+    [`/api/device/orders/${id}/courses/${id}/fire`, "take-orders"],
+    [`/api/device/orders/${id}/courses/${id}/ready`, "prepare-orders"],
+    [`/api/device/orders/${id}/courses/${id}/away`, "hand-over-orders"],
+    [`/api/device/parties/${id}/groups/${id}/fire`, "take-orders"],
+    [`/api/device/parties/${id}/groups/${id}/ready`, "prepare-orders"],
+    [`/api/device/parties/${id}/groups/${id}/away`, "hand-over-orders"],
+  ] as const) {
+    it(`refuses the display's ${path.replaceAll(id, ":id")} without ${lacking}`, async () => {
+      const cookie = await passDisplay(
+        ["take-orders", "prepare-orders", "hand-over-orders"].filter((flag) => flag !== lacking),
+      );
+      const answer = await send(cookie, "POST", path, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: 0,
+      });
+      expect({ status: answer.status, error: answer.body.error }).toEqual(forbidden(lacking));
+    });
+  }
 
   it("lets a display that prepares reach the station's own refusal for an unknown item", async () => {
     const cookie = await display(["act-as-kds", "prepare-orders"]);

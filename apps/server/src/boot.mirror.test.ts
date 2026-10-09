@@ -215,7 +215,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       // gate, so a 404 means the route is absent, not gated; the primary control answers 200.
       const printStatus = await fetch(`${base}/print-api/agent/join/status`);
       expect(printStatus.status).toBe(404);
-      const deviceStation = await fetch(`${base}/api/device/station`);
+      const deviceStation = await fetch(`${base}/api/device/station-screen`);
       expect(deviceStation.status).toBe(404);
 
       // Till reads ARE mounted on a mirror, but no till can log in: `POST /api/session` is a
@@ -347,7 +347,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       expect(printStatus.status).toBe(200);
       const printJobs = await fetch(`${base}/print-api/agent/jobs`, { method: "POST" });
       expect(printJobs.status).not.toBe(404);
-      const deviceStation = await fetch(`${base}/api/device/station`);
+      const deviceStation = await fetch(`${base}/api/device/station-screen`);
       expect(deviceStation.status).not.toBe(404);
 
       // Both boots are unfenced, so `mode` is the only axis that differs.

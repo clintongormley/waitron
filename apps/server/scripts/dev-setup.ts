@@ -10,8 +10,8 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { and, eq, sql } from "drizzle-orm";
-import { openVenueDatabase, watchers, withTransaction, type Database } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -31,7 +31,7 @@ import { listStations } from "../src/kitchen.js";
 import { enrolDeviceForTest } from "../src/testing/enrol.js";
 import type { TillConfig } from "../src/till-config.js";
 import { parseEnvFile } from "../src/env-file.js";
-import { seedDemoRestaurant } from "./demo-seed/seed.js";
+import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
 import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
@@ -244,7 +244,7 @@ async function provisionVenue(
     locationId: venue.locationId,
   };
 
-  await seedDemoRestaurant(db, {
+  const seeded = await seedDemoRestaurant(db, {
     venue: ids,
     locale: seedLocale,
     salesDays,
@@ -252,24 +252,29 @@ async function provisionVenue(
     dataSet: demoDataSetFor(DEMO_IDENTITY),
   });
 
-  // The displays bind the station and watcher created by the seed.
-  await seedDemoDevices(db, ids, seedLocale);
+  await seedDemoDevices(db, ids, seedLocale, seeded);
 
   return ids;
 }
 
+/** What `pnpm dev:setup` prints under "Pick a pre-enrolled device"; one entry per enrolled device. */
+export const DEMO_DEVICE_LINES: readonly string[] = [
+  "Mostrador (till) · Camarero 1 (handheld)",
+  "Pantalla Cocina (station screen) · Pantalla Pase (pass screen) · Monitor Pase (pass monitor)",
+];
+
 /**
- * Enrol a till, a handheld and two kitchen displays through `enrolDeviceForTest`, which bypasses the
- * pairing window and number match, so `?dev`'s chooser lists them on first run. Each device is its own
- * transaction: a failure partway leaves the earlier devices enrolled.
+ * Enrol a till, a handheld and three kitchen displays through `enrolDeviceForTest`, which bypasses
+ * the pairing window and number match, so `?dev`'s chooser lists them on first run. Each device is
+ * its own transaction: a failure partway leaves the earlier devices enrolled.
  *
- * The kitchen display binds the default station by `isDefault`, since the demo may rename it. The
- * pass display binds the demo's one active watcher.
+ * The station screen shows the default station, found by `isDefault` since the demo may rename it.
  */
 async function seedDemoDevices(
   db: Database,
   ids: DevVenueIds,
   seedLocale: SeedLocale,
+  seeded: SeedDemoResult,
 ): Promise<void> {
   const cfg: TillConfig = {
     nodeId: brandNodeId(ids.nodeId),
@@ -281,16 +286,10 @@ async function seedDemoDevices(
     simplifiedInvoiceLimit: null,
   };
 
-  const { profiles, stations, activeWatchers } = await withTransaction(db, async (tx) => {
-    return {
-      profiles: await listDeviceProfiles(tx),
-      stations: await listStations(tx, cfg),
-      activeWatchers: await tx
-        .select({ id: watchers.id })
-        .from(watchers)
-        .where(and(eq(watchers.locationId, cfg.locationId), eq(watchers.active, true))),
-    };
-  });
+  const { profiles, stations } = await withTransaction(db, async (tx) => ({
+    profiles: await listDeviceProfiles(tx),
+    stations: await listStations(tx, cfg),
+  }));
   const profileFor = (formFactor: "till" | "kds" | "phone-portrait"): string => {
     const profile = profiles.find((p) => p.formFactor === formFactor);
     if (profile === undefined) {
@@ -300,11 +299,7 @@ async function seedDemoDevices(
   };
   const kitchen = stations.find((station) => station.isDefault);
   if (kitchen === undefined) {
-    throw new Error("dev-setup: no default preparation station to bind the kitchen display to");
-  }
-  const pass = activeWatchers[0];
-  if (pass === undefined || activeWatchers.length !== 1) {
-    throw new Error("dev-setup: expected one active demo watcher for the pass display");
+    throw new Error("dev-setup: no default preparation station for the station screen");
   }
 
   await enrolDeviceForTest(db, cfg, { name: "Mostrador", profileId: profileFor("till") });
@@ -318,10 +313,16 @@ async function seedDemoDevices(
     profileId: profileFor("kds"),
     stationId: kitchen.id,
   });
+  const { kitchen: passKitchen, deli } = seeded.passStationIds;
   await enrolDeviceForTest(db, cfg, {
     name: "Pantalla Pase",
     profileId: profileFor("kds"),
-    watcherId: pass.id,
+    kitchenScreen: { kind: "pass", stationIds: [passKitchen, deli], zoneIds: null },
+  });
+  await enrolDeviceForTest(db, cfg, {
+    name: "Monitor Pase",
+    profileId: profileFor("kds"),
+    kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
   });
 }
 
@@ -459,8 +460,7 @@ async function main(): Promise<void> {
   console.log(`  locale:                        ${result.env.WAITRON_TILL_LOCALE}`);
   console.log("");
   console.log(`  Pick a pre-enrolled device at http://localhost:${tillPort}/?dev`);
-  console.log("    Mostrador (till) · Camarero 1 (handheld) · Pantalla Cocina (kitchen display)");
-  console.log("    Pantalla Pase (watcher display)");
+  for (const line of DEMO_DEVICE_LINES) console.log(`    ${line}`);
   console.log("");
   console.log(
     `  Or knock from a FRESH browser at http://localhost:${tillPort} — dev mode accepts it at once`,

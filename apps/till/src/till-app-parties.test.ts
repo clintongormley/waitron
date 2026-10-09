@@ -241,9 +241,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
     }),
-    getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
       ...offers,
@@ -1291,7 +1290,7 @@ describe("till-app: the party on a handheld", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -1339,7 +1338,7 @@ describe("till-app: the party on a handheld", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
         getDeviceIdentity: vi
           .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: reads.getTablesState,
         [method]: command,
       });
@@ -1382,7 +1381,7 @@ describe("till-app: the party on a handheld", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
     const withCounter: CanvasDef = {
       ...phone,
@@ -3320,9 +3319,7 @@ const tablet: CanvasDef = {
 };
 const onTablet = () => ({
   getTill: vi.fn().mockResolvedValue({ ...till, canvas: tablet }),
-  getDeviceIdentity: vi
-    .fn()
-    .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
+  getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape" }),
 });
 const tabletOrderCard = (el: TillApp) =>
   tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
@@ -4903,7 +4900,7 @@ describe("till-app: the order's groups", () => {
           getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
           getDeviceIdentity: vi
             .fn()
-            .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+            .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         },
         async (el: TillApp) => {
           await flush(el);
@@ -5692,7 +5689,7 @@ describe("till-app: submitting the draft", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses, canvas: phone }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });

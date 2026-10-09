@@ -166,24 +166,18 @@ const KITCHEN_LISTS = [
     test: "profile-stations",
     item: "profile-station",
     heading: "device_profiles.stations",
-    inUse: "device_profile.station_in_use",
-    inUseSentence: "device_profiles.station_in_use",
   },
   {
     key: "watcherIds",
     test: "profile-watchers",
     item: "profile-watcher",
     heading: "device_profiles.watchers",
-    inUse: "device_profile.watcher_in_use",
-    inUseSentence: "device_profiles.watcher_in_use",
   },
 ] as const satisfies readonly {
   key: KitchenListKey;
   test: string;
   item: string;
   heading: StringKey;
-  inUse: string;
-  inUseSentence: StringKey;
 }[];
 
 /** The same ids, in any order. */
@@ -664,12 +658,6 @@ export class DeviceProfilesScreen extends LitElement {
   #refusedField(error: unknown): { field: EditorField; sentence: string } | null {
     const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
-    const list = KITCHEN_LISTS.find((entry) => entry.inUse === code);
-    if (list !== undefined && typeof params.deviceName === "string")
-      return {
-        field: list.key,
-        sentence: t(list.inUseSentence).replace("{device}", params.deviceName),
-      };
     let field: EditorField | undefined;
     if (code === "device_profile.name_taken") field = "name";
     else if (code === "device_profile.invalid")

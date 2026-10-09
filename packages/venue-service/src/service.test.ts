@@ -22,10 +22,14 @@ describe("VENUE_SERVICE", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
       "acceptDepartmentTransfer",
       "acknowledgeKitchenNotice",
+      "addProfileKitchenScreen",
+      "assertDeviceKitchenScreens",
+      "assertKitchenDisplayHasScreen",
+      "assertPassScreenZone",
       "assertPeriodEndOffsets",
-      "assertProfileBinding",
       "assertProfileZone",
       "assertZoneTakesNewOrders",
+      "checkProfileKitchenScreens",
       "closeStationForToday",
       "closedZoneIdsAt",
       "copyLineContext",
@@ -47,22 +51,26 @@ describe("VENUE_SERVICE", () => {
       "listStationNotices",
       "listZoneOffers",
       "menuState",
+      "narrowDeviceKitchenScreens",
       "openStationForToday",
       "orderInZones",
       "readClearingWorkflow",
       "readDepartmentTransfer",
+      "readDeviceKitchenScreens",
+      "readDevicesKitchenScreens",
       "readEditSentLines",
       "readIncomingDepartmentTransfer",
       "readKeepOpen",
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
       "readPrintHeldWork",
-      "readProfileKitchenLists",
+      "readProfileKitchenScreens",
       "readProfileServiceAccess",
       "readProfileServiceScopes",
       "readProfileZones",
       "readReleaseReminderMinutes",
       "readSaleReceiptHeader",
+      "readStationScreens",
       "readZoneKeepOpenState",
       "recordKitchenNotices",
       "recordLineContexts",
@@ -78,7 +86,8 @@ describe("VENUE_SERVICE", () => {
       "resolveZoneContext",
       "retargetOrderContext",
       "routingAt",
-      "setProfileKitchenLists",
+      "setDeviceKitchenScreens",
+      "setProfileKitchenScreens",
       "setProfileServiceScope",
       "stationDestinations",
       "stationStates",
@@ -93,12 +102,15 @@ describe("VENUE_SERVICE", () => {
     expect(names).not.toContain("kitchen_notices");
   });
 
-  it("transfers a profile's department, zones and kitchen lists, which travel with profiles", () => {
+  it("transfers a profile's department, zones and kitchen screens, which travel with profiles", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     expect(names).toContain("device_profile_service_access");
     expect(names).toContain("device_profile_zones");
-    expect(names).toContain("device_profile_stations");
-    expect(names).toContain("device_profile_watchers");
+    expect(names).toContain("device_profile_kitchen_screens");
+    expect(names).toContain("device_profile_kitchen_screen_stations");
+    expect(names).toContain("device_profile_kitchen_screen_zones");
+    expect(names).not.toContain("device_profile_stations");
+    expect(names).not.toContain("device_profile_watchers");
     expect(names.indexOf("device_profile_service_access")).toBeLessThan(
       names.indexOf("device_profile_zones"),
     );

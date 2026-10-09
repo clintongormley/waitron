@@ -61,15 +61,26 @@ import {
   recordKitchenNotices,
 } from "./kitchen-notices.js";
 import {
-  assertProfileBinding,
   assertProfileZone,
-  readProfileKitchenLists,
   readProfileServiceAccess,
   readProfileServiceScopes,
   readProfileZones,
-  setProfileKitchenLists,
   setProfileServiceScope,
 } from "./profile-access.js";
+import {
+  addProfileKitchenScreen,
+  assertDeviceKitchenScreens,
+  assertKitchenDisplayHasScreen,
+  assertPassScreenZone,
+  checkProfileKitchenScreens,
+  narrowDeviceKitchenScreens,
+  readDeviceKitchenScreens,
+  readDevicesKitchenScreens,
+  readProfileKitchenScreens,
+  readStationScreens,
+  setDeviceKitchenScreens,
+  setProfileKitchenScreens,
+} from "./kitchen-screens.js";
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
@@ -119,11 +130,20 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readProfileServiceAccess,
   readProfileZones,
   assertProfileZone,
-  readProfileKitchenLists,
-  setProfileKitchenLists,
   readProfileServiceScopes,
   setProfileServiceScope,
-  assertProfileBinding,
+  readProfileKitchenScreens,
+  setProfileKitchenScreens,
+  checkProfileKitchenScreens,
+  narrowDeviceKitchenScreens,
+  addProfileKitchenScreen,
+  readDeviceKitchenScreens,
+  readDevicesKitchenScreens,
+  setDeviceKitchenScreens,
+  assertDeviceKitchenScreens,
+  assertKitchenDisplayHasScreen,
+  assertPassScreenZone,
+  readStationScreens,
   orderInZones,
   recordOrderContext: recordOrderServiceContext,
   retargetOrderContext: retargetOrderServiceContext,

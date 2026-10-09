@@ -18,8 +18,8 @@ import type {
 
 afterEach(cleanupWidgets);
 
-it("renders a bound watcher in the kitchen display card", async () => {
-  const board = { watcher: { id: "pass", name: "Pass", runsPass: true, active: true }, orders: [] };
+it("renders a kitchen display's pass screen in the kitchen display card", async () => {
+  const board = { orders: [], stations: [], zones: null };
   const tab: TabDef = {
     key: "kitchen",
     title: "Kitchen",
@@ -29,16 +29,58 @@ it("renders a bound watcher in the kitchen display card", async () => {
   const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
     tab,
     store: new WorkingOrderStore(),
-    capabilities: ["act-as-kds"],
+    capabilities: ["act-as-kds", "run-the-pass"],
     deviceMode: true,
-    initialDeviceWatcher: board,
+    deviceName: "Pantalla Pase",
+    fireControl: "expo",
+    initialDevicePass: board,
   });
   const screen = el.shadowRoot!.querySelector<
-    HTMLElement & { deviceMode: boolean; initialDeviceWatcher: unknown }
+    HTMLElement & {
+      deviceMode: boolean;
+      initialDevicePass: unknown;
+      runsPass: boolean;
+      deviceName?: string;
+      fireControl: string;
+    }
   >("till-expo-screen");
   expect(screen).not.toBeNull();
   expect(screen!.deviceMode).toBe(true);
-  expect(screen!.initialDeviceWatcher).toBe(board);
+  expect(screen!.initialDevicePass).toBe(board);
+  expect(screen!.runsPass).toBe(true);
+  expect(screen!.deviceName).toBe("Pantalla Pase");
+  expect(screen!.fireControl).toBe("expo");
+});
+
+it("renders a kitchen display's pass monitor in the kitchen display card", async () => {
+  const board = { orders: [], stations: [], zones: null };
+  const tab: TabDef = {
+    key: "kitchen",
+    title: "Kitchen",
+    columns: 24,
+    cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+  };
+  const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+    tab,
+    store: new WorkingOrderStore(),
+    capabilities: ["act-as-kds", "run-the-pass"],
+    deviceMode: true,
+    deviceName: "Pared del pase",
+    initialDevicePassMonitor: board,
+  });
+  const screen = el.shadowRoot!.querySelector<
+    HTMLElement & {
+      monitor: boolean;
+      embedded: boolean;
+      initialDevicePassMonitor: unknown;
+      deviceName?: string;
+    }
+  >("till-expo-screen");
+  expect(screen).not.toBeNull();
+  expect(screen!.monitor).toBe(true);
+  expect(screen!.embedded).toBe(true);
+  expect(screen!.initialDevicePassMonitor).toBe(board);
+  expect(screen!.deviceName).toBe("Pared del pase");
 });
 
 const counterTab: TabDef = {
@@ -415,6 +457,21 @@ describe("till-card-grid", () => {
       "till-expo-screen",
     )!;
     expect(expo?.embedded).toBe(true);
+  });
+
+  it.each([
+    [["show-expo"], false],
+    [["show-expo", "run-the-pass"], true],
+  ] as const)("gives the expo card Run the pass from %j", async (capabilities, runsPass) => {
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: expoTab,
+      store: new WorkingOrderStore(),
+      capabilities: [...capabilities],
+    });
+    const expo = el.shadowRoot!.querySelector<HTMLElement & { runsPass?: boolean }>(
+      "till-expo-screen",
+    )!;
+    expect(expo.runsPass).toBe(runsPass);
   });
 
   it("renders an embedded table-order screen for a table-order card", async () => {

@@ -1,7 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import {
-  devices,
   diningTables,
   assertKitchenTimingPresent,
   kitchenStations,
@@ -21,6 +20,7 @@ import {
   type DownPrinter,
 } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
+import { VENUE_SERVICE } from "./modules.js";
 
 export interface StationHealthItem {
   id: string;
@@ -109,11 +109,11 @@ export async function readStationHealth(
     )
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
-  const screens = await tx
-    .select({ stationId: devices.stationId })
-    .from(devices)
-    .where(and(eq(devices.locationId, cfg.locationId), eq(devices.active, true)));
-  const selected = new Set(screens.map((s) => s.stationId));
+  const selected = new Set(
+    (await VENUE_SERVICE.readStationScreens(tx, cfg, { withSwitchedOff: true })).flatMap(
+      (screen) => screen.stationIds,
+    ),
+  );
   const rows = await stationHealthItemsQuery(tx, cfg.locationId);
   const partyIds = [...new Set(rows.flatMap((r) => (r.partyId === null ? [] : [r.partyId])))];
   const tables =

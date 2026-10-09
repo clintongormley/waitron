@@ -3,7 +3,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   JOIN_TTL_MS,
   PENDING_CAP,
@@ -45,16 +45,28 @@ import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import { setupVenue } from "./testing/venue-fixtures.js";
+import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
-import { createWatcher, removeWatcher } from "./watchers.js";
 import type { TillConfig } from "./till-config.js";
-import { listOnProfile } from "./testing/enrol.js";
+import { offerOnProfile } from "./testing/enrol.js";
+import type { DeviceKitchenScreen } from "@waitron/module";
+
+const stationScreen = (stationId: string): DeviceKitchenScreen => ({
+  kind: "station",
+  stationIds: [stationId],
+  zoneIds: null,
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
+
+const shownOn = (venue: Venue, deviceId: string) =>
+  withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+  );
 
 let profileCounter = 0;
 async function seedProfile(
@@ -717,11 +729,11 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("two concurrent accepts of ONE request: exactly one wins, the loser gets join_request.not_found, and one devices row is written", async () => {
     const venue = await setupVenue(suite.db);
-    // A `kds` profile bound to an EXISTING station, so resolveDeviceBinding writes nothing and the
-    // one write both racers contend for is the `devices` INSERT that reuses the request's id.
+    // A `kds` profile offering an EXISTING station, so the one write both racers contend for is the
+    // `devices` INSERT that reuses the request's id.
     const profileId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+      offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue.defaultStationId)),
     );
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
@@ -733,7 +745,7 @@ describe("acceptDeviceJoinRequest", () => {
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
           label: "Racer",
           profileId,
-          stationId: venue.defaultStationId,
+          kitchenScreens: [stationScreen(venue.defaultStationId)],
         });
       });
 
@@ -897,18 +909,18 @@ describe("a returning disabled device", () => {
     expect(await printersOf()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: null });
   });
 
-  it("binds the kitchen screen it comes back as to the station the accept names", async () => {
+  it("gives the kitchen display it comes back as the station screen the accept names", async () => {
     const venue = await setupVenue(suite.db);
     const till = await seedProfile("till");
     const kds = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, kds, { stationId: venue.defaultStationId }),
+      offerOnProfile(tx, venue.cfg, kds, stationScreen(venue.defaultStationId)),
     );
     const deviceId = await disabledDevice(venue, till);
     const accepted = await comeBack(venue, deviceId, { label: "Pase", profileId: kds }).catch(
       (e: unknown) => e,
     );
-    expect(accepted).toMatchObject({ code: "device.station_required" });
+    expect(accepted).toMatchObject({ code: "kitchen_screen.required" });
 
     const tokenHash = await storedHash(deviceId);
     await withTransaction(suite.db, async (tx) => {
@@ -920,14 +932,17 @@ describe("a returning disabled device", () => {
       await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
         label: "Pase",
         profileId: kds,
-        stationId: venue.defaultStationId,
+        kitchenScreens: [stationScreen(venue.defaultStationId)],
       });
     });
     const [row] = await suite.db
-      .select({ active: devices.active, stationId: devices.stationId, label: devices.label })
+      .select({ active: devices.active, label: devices.label })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ active: true, stationId: venue.defaultStationId, label: "Pase" });
+    expect(row).toEqual({ active: true, label: "Pase" });
+    expect(await shownOn(venue, deviceId)).toMatchObject([
+      { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
+    ]);
   });
 
   it("refuses to enable a kitchen screen on the station it held once that station is switched off", async () => {
@@ -936,13 +951,15 @@ describe("a returning disabled device", () => {
     const station = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Horno" }),
     );
-    await withTransaction(suite.db, (tx) => listOnProfile(tx, kds, { stationId: station.id }));
+    await withTransaction(suite.db, (tx) =>
+      offerOnProfile(tx, venue.cfg, kds, stationScreen(station.id)),
+    );
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Horno" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
         label: "Horno",
         profileId: kds,
-        stationId: station.id,
+        kitchenScreens: [stationScreen(station.id)],
       });
       return made.joinId;
     });
@@ -963,65 +980,19 @@ describe("a returning disabled device", () => {
         await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
           label: "Horno",
           profileId: kds,
-          stationId: station.id,
+          kitchenScreens: [stationScreen(station.id)],
         });
       }),
     );
-    expect(code).toBe("station.not_found");
+    expect(code).toBe("kitchen_screen.invalid");
     const [row] = await suite.db
-      .select({ active: devices.active, stationId: devices.stationId })
+      .select({ active: devices.active })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ active: false, stationId: station.id });
-  });
-
-  it("refuses to enable a kitchen screen on the watcher it held once that watcher is disabled", async () => {
-    const venue = await setupVenue(suite.db);
-    const kds = await seedProfile("kds");
-    const watcher = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, venue.cfg, {
-        name: "Pase",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
-    );
-    await withTransaction(suite.db, (tx) => listOnProfile(tx, kds, { watcherId: watcher.id }));
-    const deviceId = await withTransaction(suite.db, async (tx) => {
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" });
-      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        label: "Pase",
-        profileId: kds,
-        watcherId: watcher.id,
-      });
-      return made.joinId;
-    });
-    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
-    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcher.id));
-
-    const tokenHash = await storedHash(deviceId);
-    const code = await codeOf(() =>
-      withTransaction(suite.db, async (tx) => {
-        await createJoinRequest(tx, venue.cfg, {
-          kind: "device",
-          label: "Pase",
-          returning: { deviceId, tokenHash },
-        });
-        await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
-          label: "Pase",
-          profileId: kds,
-          watcherId: watcher.id,
-        });
-      }),
-    );
-    expect(code).toBe("watcher.not_found");
-    const [row] = await suite.db
-      .select({ active: devices.active, watcherId: devices.watcherId })
-      .from(devices)
-      .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ active: false, watcherId: watcher.id });
+    expect(row).toEqual({ active: false });
+    expect(await shownOn(venue, deviceId)).toMatchObject([
+      { kind: "station", stations: [{ id: station.id, available: false }] },
+    ]);
   });
 
   it("refuses device.join_stale when the hash it was proven against has changed since", async () => {
@@ -1127,13 +1098,119 @@ describe("a returning disabled device", () => {
       active: true,
     });
     const returning = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, [made.joinId]),
+      returningDevicesOf(tx, venue.cfg, [made.joinId]),
     );
     expect([...returning.keys()]).toEqual([]);
     // The other direction: the same row disabled is marked.
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, made.joinId));
-    const disabled = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [made.joinId]));
+    const disabled = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, venue.cfg, [made.joinId]),
+    );
     expect([...disabled.keys()]).toEqual([made.joinId]);
+  });
+
+  it("carries the returning device's kitchen screens, and an accept re-choosing them stores the new choice", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("kds");
+    const grill = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Plancha" }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        pass: { stationIds: null, zoneIds: null },
+      }),
+    );
+    const deviceId = await withTransaction(suite.db, async (tx) => {
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" });
+      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+        label: "Pase",
+        profileId,
+        kitchenScreens: [{ kind: "pass", stationIds: [venue.defaultStationId], zoneIds: null }],
+      });
+      return made.joinId;
+    });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    await withTransaction(suite.db, async (tx) =>
+      createJoinRequest(tx, venue.cfg, {
+        kind: "device",
+        label: "Tablet",
+        returning: { deviceId, tokenHash: await storedHash(deviceId) },
+      }),
+    );
+    const returning = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, venue.cfg, [deviceId]),
+    );
+    expect(returning.get(deviceId)?.kitchenScreens).toMatchObject([
+      {
+        kind: "pass",
+        available: true,
+        stations: [{ id: venue.defaultStationId, available: true }],
+        zones: null,
+      },
+    ]);
+
+    await withTransaction(suite.db, (tx) =>
+      acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
+        label: "Pase",
+        profileId,
+        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
+      }),
+    );
+    const shown = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+    );
+    expect(shown[0]?.stations.map((slot) => slot.id)).toContain(grill.id);
+  });
+
+  it("reads several returning devices' kitchen screens in one batch, each its own", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("kds");
+    const grill = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Plancha" }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        pass: { stationIds: null, zoneIds: null },
+      }),
+    );
+    const returningWith = async (label: string, stationIds: string[]) => {
+      const deviceId = await withTransaction(suite.db, async (tx) => {
+        const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label });
+        await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+          label,
+          profileId,
+          kitchenScreens: [{ kind: "pass", stationIds, zoneIds: null }],
+        });
+        return made.joinId;
+      });
+      await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+      await withTransaction(suite.db, async (tx) =>
+        createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label,
+          returning: { deviceId, tokenHash: await storedHash(deviceId) },
+        }),
+      );
+      return deviceId;
+    };
+    const cocina = await returningWith("Pase cocina", [venue.defaultStationId]);
+    const plancha = await returningWith("Pase plancha", [grill.id]);
+    const batch = vi.spyOn(VENUE_SERVICE, "readDevicesKitchenScreens");
+    const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
+    try {
+      const returning = await withTransaction(suite.db, (tx) =>
+        returningDevicesOf(tx, venue.cfg, [cocina, plancha]),
+      );
+      const stationsOf = (id: string) =>
+        returning.get(id)?.kitchenScreens.map((screen) => screen.stations.map((slot) => slot.id));
+      expect(stationsOf(cocina)).toEqual([[venue.defaultStationId]]);
+      expect(stationsOf(plancha)).toEqual([[grill.id]]);
+      expect(batch).toHaveBeenCalledTimes(1);
+      expect(single).not.toHaveBeenCalled();
+    } finally {
+      batch.mockRestore();
+      single.mockRestore();
+    }
   });
 
   it("says whether the returning device's profile was retired", async () => {
@@ -1147,7 +1224,9 @@ describe("a returning disabled device", () => {
         returning: { deviceId, tokenHash: await storedHash(deviceId) },
       }),
     );
-    const live = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
+    const live = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, venue.cfg, [deviceId]),
+    );
     expect(live.get(deviceId)?.profileRetired).toBe(false);
 
     // Only a disabled device holds the profile, so deleting it retires the row.
@@ -1157,7 +1236,9 @@ describe("a returning disabled device", () => {
         id: profileId,
       }),
     );
-    const retired = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
+    const retired = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, venue.cfg, [deviceId]),
+    );
     expect(retired.get(deviceId)?.profileRetired).toBe(true);
   });
 

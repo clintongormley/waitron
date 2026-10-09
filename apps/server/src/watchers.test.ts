@@ -9,7 +9,6 @@ import {
   locations,
   printers,
   stationPrinters,
-  ticketItems,
   watcherPrinters,
   watchers,
   watcherStations,
@@ -17,17 +16,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { deviceProfileWatchers } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
-import {
-  inTx,
-  OPERATOR,
-  orderForParty,
-  seat,
-  setupPartyVenue,
-  type PartyVenue,
-} from "./testing/party-venue.js";
-import { markWatcherItems } from "./watcher-board.js";
+import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import {
   createWatcher,
   listWatchers,
@@ -42,24 +32,6 @@ import {
 } from "./watchers.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-
-/** A switched-off kitchen screen still naming the watcher, so the watcher is in use. */
-async function bindDevice(v: PartyVenue, watcherId: string) {
-  await inTx(v, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: `Watcher ${randomUUID()}`, formFactor: "kds" })
-      .returning({ id: deviceProfiles.id });
-    await tx.insert(devices).values({
-      locationId: v.cfg.locationId,
-      watcherId,
-      deviceProfileId: profile!.id,
-      label: `Pass screen ${randomUUID()}`,
-      tokenHash: randomUUID(),
-      active: false,
-    });
-  });
-}
 
 describe("watcher configuration", () => {
   it("attaches, moves and detaches a printer without a station mapping", async () => {
@@ -242,8 +214,7 @@ describe("watcher configuration", () => {
     expect(await inTx(v, (tx) => readWatcher(tx, v.cfg, id))).toMatchObject({
       printerIds: [printerId],
     });
-    await bindDevice(v, id);
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id, true));
     expect((await inTx(v, (tx) => listWatchers(tx, v.cfg))).some((w) => w.id === id)).toBe(false);
     expect(await inTx(v, (tx) => readWatcher(tx, v.cfg, id))).toMatchObject({
       active: false,
@@ -389,7 +360,7 @@ describe("removing a watcher, and enabling it again", () => {
     });
   });
 
-  it("deletes a watcher a profile lists, taking it off the profile's list", async () => {
+  it("deletes a watcher while a switched-off kitchen display exists, since no device names one", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id } = await followingWatcher(v);
     await inTx(v, async (tx) => {
@@ -397,33 +368,22 @@ describe("removing a watcher, and enabling it again", () => {
         .insert(deviceProfiles)
         .values({ name: `Pass ${randomUUID()}`, formFactor: "kds" })
         .returning({ id: deviceProfiles.id });
-      await tx
-        .insert(deviceProfileWatchers)
-        .values({ deviceProfileId: profile!.id, watcherId: id });
+      await tx.insert(devices).values({
+        locationId: v.cfg.locationId,
+        deviceProfileId: profile!.id,
+        label: `Pass screen ${randomUUID()}`,
+        tokenHash: randomUUID(),
+        active: false,
+      });
     });
     expect(await inTx(v, (tx) => watchersInUse(tx, [id]))).toEqual(new Set());
     await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
-    expect((await settingsRows(v, id)).watcher).toEqual([]);
-    expect(
-      await inTx(v, (tx) =>
-        tx.select().from(deviceProfileWatchers).where(eq(deviceProfileWatchers.watcherId, id)),
-      ),
-    ).toEqual([]);
-  });
-
-  it("disables a watcher a switched-off device still names, dropping only its printers", async () => {
-    const v = await setupPartyVenue(suite.db);
-    const { id, stationId } = await followingWatcher(v);
-    await bindDevice(v, id);
-    expect(await inTx(v, (tx) => watchersInUse(tx, [id]))).toEqual(new Set([id]));
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
-    const rows = await settingsRows(v, id);
-    expect(rows.watcher).toMatchObject([{ id, name: "Pass", active: false }]);
-    expect(rows.stations).toEqual([{ watcherId: id, stationId }]);
-    expect(rows.zones).toEqual([{ watcherId: id, zoneId: v.tables.zoneId }]);
-    expect(rows.printers).toEqual([]);
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
-    expect((await settingsRows(v, id)).watcher).toMatchObject([{ id, active: false }]);
+    expect(await settingsRows(v, id)).toEqual({
+      watcher: [],
+      stations: [],
+      zones: [],
+      printers: [],
+    });
   });
 
   it("only disables a watcher nothing refers to when the request asks to disable it, dropping its printers", async () => {
@@ -440,42 +400,19 @@ describe("removing a watcher, and enabling it again", () => {
     expect((await settingsRows(v, id)).watcher).toMatchObject([{ id, active: false }]);
   });
 
-  it("disables a watcher whose only reference is its own Done mark on a dish", async () => {
-    const v = await setupPartyVenue(suite.db);
-    const { id } = await followingWatcher(v);
-    const party = await seat(v, await v.table("Marked table"));
-    await orderForParty(v, party.partyId, ["Burger"], party.tabId);
-    const [item] = await inTx(v, (tx) =>
-      tx
-        .select({ id: ticketItems.id })
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, party.tabId)),
-    );
-    await inTx(v, (tx) =>
-      markWatcherItems(tx, v.cfg, id, [item!.id], true, { personId: OPERATOR }, new Date()),
-    );
-    expect(await inTx(v, (tx) => watchersInUse(tx, [id]))).toEqual(new Set([id]));
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
-    expect((await settingsRows(v, id)).watcher).toMatchObject([{ id, active: false }]);
-  });
-
-  it("reads which of many watchers are in use in one call", async () => {
+  it("reads that none of many watchers is in use in one call", async () => {
     const v = await setupPartyVenue(suite.db);
     const used = await followingWatcher(v, "Used");
     const free = await followingWatcher(v, "Free");
-    await bindDevice(v, used.id);
-    expect(await inTx(v, (tx) => watchersInUse(tx, [used.id, free.id]))).toEqual(
-      new Set([used.id]),
-    );
+    expect(await inTx(v, (tx) => watchersInUse(tx, [used.id, free.id]))).toEqual(new Set());
     expect(await inTx(v, (tx) => watchersInUse(tx, []))).toEqual(new Set());
   });
 
   it("enables a disabled watcher as itself, without its dropped printers", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id, stationId } = await followingWatcher(v);
-    await bindDevice(v, id);
     const before = await inTx(v, (tx) => readWatcher(tx, v.cfg, id));
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id, true));
     await inTx(v, (tx) => reactivateWatcher(tx, v.cfg, id));
     expect(await inTx(v, (tx) => readWatcher(tx, v.cfg, id))).toEqual({
       ...before,
@@ -492,8 +429,7 @@ describe("removing a watcher, and enabling it again", () => {
   it("refuses to enable a watcher whose name an active watcher now holds, changing nothing", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id } = await followingWatcher(v);
-    await bindDevice(v, id);
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id));
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, id, true));
     await followingWatcher(v, "Pass");
     await expect(inTx(v, (tx) => reactivateWatcher(tx, v.cfg, id))).rejects.toMatchObject({
       code: "watcher.name_taken",
@@ -528,8 +464,7 @@ describe("removing a watcher, and enabling it again", () => {
     const v = await setupPartyVenue(suite.db);
     const live = await followingWatcher(v, "Live");
     const off = await followingWatcher(v, "Off");
-    await bindDevice(v, off.id);
-    await inTx(v, (tx) => removeWatcher(tx, v.cfg, off.id));
+    await inTx(v, (tx) => removeWatcher(tx, v.cfg, off.id, true));
     expect((await inTx(v, (tx) => listWatchers(tx, v.cfg))).map((w) => w.id)).toEqual([live.id]);
     expect(
       (await inTx(v, (tx) => listWatchers(tx, v.cfg, true))).map((w) => [w.id, w.active]),

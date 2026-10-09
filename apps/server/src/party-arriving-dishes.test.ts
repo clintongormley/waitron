@@ -387,7 +387,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       ]);
     }
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, tarta!.id].sort(),
@@ -425,13 +425,13 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [tarta!.id, heldPrincipales!.id],
     ]);
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id].sort(),
     );
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id, loose!.id, tarta!.id].sort(),
@@ -504,7 +504,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [loose!.id, heldPostres!.id],
     ]);
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, OPERATOR));
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, { personId: OPERATOR }));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id, loose!.id].sort(),

@@ -1,17 +1,10 @@
 // Side-effect only: keeps the codes this file throws reachable from it. See the note atop `errors.ts`.
 import "./errors.js";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import {
-  deviceProfiles,
-  devices,
-  kitchenStations,
-  ticketItems,
-  watchers,
-  withTransaction,
-} from "@waitron/db";
+import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorizeManager,
@@ -20,6 +13,7 @@ import {
   type Permission,
 } from "@waitron/identity";
 import { kindOfFormFactor, listDeviceProfiles, type ProfilePrinterRole } from "@waitron/layouts";
+import { kitchenNotices } from "@waitron/venue-service";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -30,16 +24,19 @@ import {
   requireDevice,
   setDeviceCookie,
   sightingDue,
+  type DeviceBinding,
 } from "./device-session.js";
 import {
   approveDeviceProfiles,
   assertNoPaymentInProgress,
   endSessionsNotAdmitted,
   keepApprovedAfterSwitch,
+  parseKitchenScreens,
   readApprovedAlternatives,
   readApprovedProfiles,
   requireDeviceName,
-  resolveDeviceBinding,
+  requireDeviceProfile,
+  resolveDeviceKitchenScreens,
   switchActiveProfile,
   updateDeviceSettings,
 } from "./device.js";
@@ -61,15 +58,18 @@ import {
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
-import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
+import { advanceTicketItem, listStationQueues, type TicketState } from "./working-order.js";
 import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
+import type { KitchenScreenKind, ResolvedKitchenScreen } from "@waitron/module";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
-import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
-import { parseWatcherDoneBody } from "./watcher-done-body.js";
+import { listPassMonitor, listPassScreen, markPassItems, passScopeOf } from "./pass-board.js";
+import { parsePassDoneBody } from "./pass-done-body.js";
+import { mountDeviceLevers } from "./device-levers.js";
+import { STATUS as TILL_STATUS } from "./till-api.js";
 
 /**
  * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
@@ -128,7 +128,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A wrong number denies the request (the row is already gone), so this is a plain request fault.
   "device.join_mismatch": 400,
   "join_request.not_found": 404,
-  "device.station_required": 400,
+  "kitchen_screen.required": 400,
+  "kitchen_screen.invalid": 400,
+  "kitchen_screen.not_allowed": 403,
+  "kitchen_screen.zone_not_allowed": 403,
   // A conflict the operator resolves by renaming the device.
   "device.name_taken": 409,
   "device.binding_invalid": 400,
@@ -137,9 +140,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_found": 404,
   "device.not_found": 404,
   "station.not_found": 404,
-  "watcher.not_found": 404,
   "station.not_allowed": 400,
-  "watcher.not_allowed": 400,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -149,6 +150,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "ticket.item_held": 409,
   "kitchen_notice.not_found": 404,
 };
+
+/** The pass levers run the till's Fire, Ready and Away, so they answer its codes as the till does. */
+export const LEVER_STATUS: Record<string, ContentfulStatusCode> = { ...TILL_STATUS, ...STATUS };
 
 const run = createErrorBoundary(STATUS, "device.failed");
 
@@ -261,17 +265,29 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const approvedProfiles = await withTransaction(deps.db, async (tx) => {
+      const { approvedProfiles, kitchenScreens } = await withTransaction(deps.db, async (tx) => {
+        const kitchenScreens = await VENUE_SERVICE.readDeviceKitchenScreens(
+          tx,
+          deps.cfg,
+          device.deviceId,
+        );
         const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
-        if (active === undefined) return [];
+        if (active === undefined) return { approvedProfiles: [], kitchenScreens };
         const personId = await signedInPersonOn(tx, c, device.deviceId);
-        if (personId === null) return [active, ...alternatives];
+        if (personId === null)
+          return { approvedProfiles: [active, ...alternatives], kitchenScreens };
         const admitted = await profilesAdmitting(
           tx,
           personId,
           alternatives.map((profile) => profile.id),
         );
-        return [active, ...alternatives.filter((profile) => admitted.includes(profile.id))];
+        return {
+          approvedProfiles: [
+            active,
+            ...alternatives.filter((profile) => admitted.includes(profile.id)),
+          ],
+          kitchenScreens,
+        };
       });
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({
@@ -279,12 +295,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         // The name has no other source on the till, so it rides this payload.
         formFactor: device.formFactor,
         name: device.label,
-        stationId: device.stationId,
-        watcherId: device.watcherId,
         profileId: device.deviceProfileId,
         // Its active profile first, then the approved ones the person signed in on it may use; every
         // approved one with nobody signed in. Display only: the switch checks both again.
         approvedProfiles,
+        kitchenScreens,
       });
     }),
   );
@@ -360,96 +375,132 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
-  app.get("/api/device/watcher", (c) =>
+  mountDeviceLevers(app, deps, log, createErrorBoundary(LEVER_STATUS, "device.failed"));
+
+  // ── The device's pass screen and pass monitor (DEVICE-GUARDED) ─────────────────────────────────────
+  app.get("/api/device/pass-screen", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      if (device.watcherId === null) throw new AppError("device.unauthorized", {});
-      const watcherId = device.watcherId;
       return c.json(
-        await withTransaction(deps.db, (tx) => listWatcherQueue(tx, deps.cfg, watcherId)),
+        await withTransaction(deps.db, async (tx) => {
+          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
+          const { orders } = await listPassScreen(
+            tx,
+            deps.cfg,
+            device.deviceId,
+            passScopeOf(screen),
+          );
+          return { orders, stations: screen.stations, zones: screen.zones };
+        }),
       );
     }),
   );
 
-  app.post("/api/device/watcher/done", (c) =>
+  app.post("/api/device/pass-screen/done", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      if (device.watcherId === null) throw new AppError("device.unauthorized", {});
-      const watcherId = device.watcherId;
       const cfg = requestCfg(deps.cfg, device);
-      const body = parseWatcherDoneBody(await readJsonBody(c));
+      const body = parsePassDoneBody(await readJsonBody(c));
       const at = new Date();
-      await withTransaction(deps.db, (tx) =>
-        markWatcherItems(
+      await withTransaction(deps.db, async (tx) => {
+        const { screen, personId } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
+        await markPassItems(
           tx,
           cfg,
-          watcherId,
+          { deviceId: device.deviceId, personId },
+          passScopeOf(screen),
           body.ticketItemIds,
           body.done,
-          { deviceId: device.deviceId },
           at,
-        ),
-      );
+        );
+      });
       return c.body(null, 204);
     }),
   );
 
-  // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
-  app.get("/api/device/station", (c) =>
+  app.get("/api/device/pass-monitor", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      // `requireDevice` authenticates ANY active device, and a `handheld` binds to NO station, so a
-      // handheld reaches this: the same 401 a missing cookie folds to, confirming neither the device's
-      // existence nor its kind.
-      if (device.stationId === null) throw new AppError("device.unauthorized", {});
-      const stationId = device.stationId;
-      const cfg = requestCfg(deps.cfg, device);
-      const station = await withTransaction(deps.db, async (tx) => {
-        const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date());
-        const state = states.get(stationId);
-        if (state === undefined) throw new AppError("station.not_found", { stationId });
-        const destination = state.sendsTo === null ? undefined : states.get(state.sendsTo);
-        return {
-          id: stationId,
-          name: state.name,
-          today: {
-            open: state.open,
-            isDefault: state.isDefault,
-            byHand: state.byHand,
-            sendsTo:
-              destination === undefined ? null : { id: state.sendsTo, name: destination.name },
-            why: state.why,
-          },
-          queue: await listStationQueue(tx, stationId),
-          notices: await VENUE_SERVICE.listStationNotices(tx, cfg, stationId),
-          printersDown: (await stationPrintersDown(tx, cfg.locationId, new Date(), stationId)).map(
-            ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
-          ),
-        };
-      });
-      return c.json({ station });
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
+          const { orders } = await listPassMonitor(tx, deps.cfg, passScopeOf(screen));
+          return { orders, stations: screen.stations, zones: screen.zones };
+        }),
+      );
     }),
   );
 
-  // ── Acknowledge one of the bound station's kitchen notices (DEVICE-GUARDED) ──────────────────────────
+  // ── The device's station screen (DEVICE-GUARDED) ──────────────────────────────────────────────────
+  app.get("/api/device/station-screen", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const cfg = requestCfg(deps.cfg, device);
+      const stations = await withTransaction(deps.db, async (tx) => {
+        const screen = await stationScreenOf(tx, c, deps.cfg, device);
+        const live = [...availableStations(screen)];
+        const now = new Date();
+        const states = await VENUE_SERVICE.stationStates(tx, cfg, now);
+        const queues = await listStationQueues(tx, live);
+        const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live);
+        const shown = [];
+        for (const { id, name, available } of screen.stations) {
+          if (!available) {
+            shown.push({ id, name, available });
+            continue;
+          }
+          const state = states.get(id);
+          if (state === undefined) throw new AppError("station.not_found", { stationId: id });
+          const destination = state.sendsTo === null ? undefined : states.get(state.sendsTo);
+          shown.push({
+            id,
+            name,
+            available,
+            today: {
+              open: state.open,
+              isDefault: state.isDefault,
+              byHand: state.byHand,
+              sendsTo:
+                destination === undefined ? null : { id: state.sendsTo!, name: destination.name },
+              why: state.why,
+            },
+            queue: queues.get(id)!,
+            notices: await VENUE_SERVICE.listStationNotices(tx, cfg, id),
+            printersDown: down
+              .filter((printer) => printer.stationId === id)
+              .map(({ printerId, printerName, since }) => ({ printerId, printerName, since })),
+          });
+        }
+        return shown;
+      });
+      return c.json({ stations });
+    }),
+  );
+
+  // ── Acknowledge a kitchen notice at one of the screen's stations (DEVICE-GUARDED) ────────────────────
   // A notice at another station answers as an unknown one does: the display names only its own.
   app.post("/api/device/kitchen-notices/:id/acknowledge", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      if (device.stationId === null) throw new AppError("device.unauthorized", {});
-      assertProfileAction(device, "prepare-orders");
-      const stationId = device.stationId;
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
       await withTransaction(deps.db, async (tx) => {
-        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId });
+        const shown = availableStations(await stationScreenOf(tx, c, deps.cfg, device));
+        assertProfileAction(device, "prepare-orders");
+        if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
+        const [notice] = await tx
+          .select({ stationId: kitchenNotices.stationId })
+          .from(kitchenNotices)
+          .where(eq(kitchenNotices.id, id));
+        if (notice === undefined || !shown.has(notice.stationId))
+          throw new AppError("kitchen_notice.not_found", { noticeId: id });
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId: notice.stationId });
       });
       return c.body(null, 204);
     }),
   );
 
-  // ── Bump one of the bound station's items (DEVICE-GUARDED) ────────────────────────────────────────────
+  // ── Bump an item at one of the screen's stations (DEVICE-GUARDED) ─────────────────────────────────────
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
@@ -465,15 +516,14 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
-        // `advanceTicketItem` NEVER checks the station, so the station-ownership guard is
-        // the route's job: fetch the item's own station and refuse a foreign one BEFORE the bump.
-        // An item that reads back undefined (unknown) is left to the verb →
-        // `ticket.invalid_transition`.
+        const shown = availableStations(await stationScreenOf(tx, c, deps.cfg, device));
+        // `advanceTicketItem` NEVER checks the station, so the station guard is the route's job.
+        // An unknown item is left to the verb → `ticket.invalid_transition`.
         const [item] = await tx
           .select({ stationId: ticketItems.stationId })
           .from(ticketItems)
           .where(eq(ticketItems.id, id));
-        if (item !== undefined && item.stationId !== device.stationId) {
+        if (item !== undefined && !shown.has(item.stationId)) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
         await advanceTicketItem(tx, cfg, id, to);
@@ -487,73 +537,58 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
-      const { rows, madeHere, alternatives, equipment } = await gated(sessionId, async (tx) => {
-        const rows = await tx
-          .select({
-            id: devices.id,
-            formFactor: deviceProfiles.formFactor,
-            profileRetiredAt: deviceProfiles.retiredAt,
-            stationId: devices.stationId,
-            watcherId: devices.watcherId,
-            deviceProfileId: devices.deviceProfileId,
-            receiptPrinterId: devices.receiptPrinterId,
-            paymentSlipPrinterId: devices.paymentSlipPrinterId,
-            cashDrawerPrinterId: devices.cashDrawerPrinterId,
-            label: devices.label,
-            active: devices.active,
-            lastSeenAt: devices.lastSeenAt,
-            batteryLevel: devices.batteryLevel,
-            batteryCharging: devices.batteryCharging,
-            batteryReportedAt: devices.batteryReportedAt,
-            enrolledAt: devices.enrolledAt,
-            stationName: kitchenStations.name,
-            stationActive: kitchenStations.active,
-            watcherName: watchers.name,
-            watcherActive: watchers.active,
-          })
-          .from(devices)
-          .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-          .leftJoin(kitchenStations, eq(kitchenStations.id, devices.stationId))
-          .leftJoin(watchers, eq(watchers.id, devices.watcherId))
-          .orderBy(desc(devices.enrolledAt));
-        return {
-          rows,
-          madeHere: await listMadeHereStations(tx),
-          alternatives: await readApprovedAlternatives(tx),
-          equipment: await readDevicesEquipment(
-            tx,
-            rows.map((row) => row.id),
-          ),
-        };
-      });
+      const { rows, madeHere, alternatives, equipment, kitchenScreens } = await gated(
+        sessionId,
+        async (tx) => {
+          const rows = await tx
+            .select({
+              id: devices.id,
+              formFactor: deviceProfiles.formFactor,
+              profileRetiredAt: deviceProfiles.retiredAt,
+              deviceProfileId: devices.deviceProfileId,
+              receiptPrinterId: devices.receiptPrinterId,
+              paymentSlipPrinterId: devices.paymentSlipPrinterId,
+              cashDrawerPrinterId: devices.cashDrawerPrinterId,
+              label: devices.label,
+              active: devices.active,
+              lastSeenAt: devices.lastSeenAt,
+              batteryLevel: devices.batteryLevel,
+              batteryCharging: devices.batteryCharging,
+              batteryReportedAt: devices.batteryReportedAt,
+              enrolledAt: devices.enrolledAt,
+            })
+            .from(devices)
+            .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+            .orderBy(desc(devices.enrolledAt));
+          return {
+            rows,
+            madeHere: await listMadeHereStations(tx),
+            alternatives: await readApprovedAlternatives(tx),
+            equipment: await readDevicesEquipment(
+              tx,
+              rows.map((row) => row.id),
+            ),
+            kitchenScreens: await VENUE_SERVICE.readDevicesKitchenScreens(
+              tx,
+              deps.cfg,
+              rows.map((row) => row.id),
+            ),
+          };
+        },
+      );
       return c.json(
-        rows.map(
-          ({
-            formFactor,
-            profileRetiredAt,
-            stationName,
-            stationActive,
-            watcherName,
-            watcherActive,
-            ...row
-          }) => ({
-            ...row,
-            binding:
-              stationName !== null
-                ? { name: stationName, active: stationActive === true }
-                : watcherName !== null
-                  ? { name: watcherName, active: watcherActive === true }
-                  : null,
-            profileRetired: profileRetiredAt !== null,
-            kind: kindOfFormFactor(formFactor),
-            madeHereStationIds: madeHere.get(row.id) ?? [],
-            approvedProfileIds: [
-              row.deviceProfileId,
-              ...(alternatives.get(row.id) ?? []).map((profile) => profile.id),
-            ],
-            equipment: equipment.get(row.id) ?? [],
-          }),
-        ),
+        rows.map(({ formFactor, profileRetiredAt, ...row }) => ({
+          ...row,
+          profileRetired: profileRetiredAt !== null,
+          kind: kindOfFormFactor(formFactor),
+          madeHereStationIds: madeHere.get(row.id) ?? [],
+          approvedProfileIds: [
+            row.deviceProfileId,
+            ...(alternatives.get(row.id) ?? []).map((profile) => profile.id),
+          ],
+          equipment: equipment.get(row.id) ?? [],
+          kitchenScreens: kitchenScreens.get(row.id) ?? [],
+        })),
       );
     }),
   );
@@ -590,8 +625,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const body = await readJsonBody<{
         name?: unknown;
         profileId?: unknown;
-        stationId?: unknown;
-        watcherId?: unknown;
+        kitchenScreens?: unknown;
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         cashDrawerPrinterId?: unknown;
@@ -603,12 +637,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const [device] = await tx
           .select({
             active: devices.active,
-            locationId: devices.locationId,
             deviceProfileId: devices.deviceProfileId,
             receiptPrinterId: devices.receiptPrinterId,
             paymentSlipPrinterId: devices.paymentSlipPrinterId,
-            stationId: devices.stationId,
-            watcherId: devices.watcherId,
           })
           .from(devices)
           .where(ownDeviceById(id));
@@ -617,10 +648,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         }
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
-        const stationId =
-          body.stationId == null ? null : requireBodyUuid(body.stationId, "stationId");
-        const watcherId =
-          body.watcherId == null ? null : requireBodyUuid(body.watcherId, "watcherId");
+        const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
         const chosen: Partial<Record<ProfilePrinterRole, string | null>> = {
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
@@ -647,22 +675,27 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         }
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
-        const binding = await resolveDeviceBinding(tx, deps.cfg, {
-          profileId,
-          stationId,
-          watcherId,
-          kept: { stationId: device.stationId, watcherId: device.watcherId },
-        });
-        const held = await updateDeviceSettings(
-          tx,
-          { id, ...device },
-          {
-            label,
+        if (kitchenScreens !== undefined) {
+          await resolveDeviceKitchenScreens(tx, deps.cfg, {
             profileId,
-            stationId: binding.stationId,
-            watcherId: binding.watcherId,
-          },
-        );
+            kitchenScreens,
+            deviceId: id,
+          });
+        } else {
+          await requireDeviceProfile(tx, profileId);
+          if (switching) {
+            await VENUE_SERVICE.narrowDeviceKitchenScreens(tx, deps.cfg, id, profileId);
+            await VENUE_SERVICE.assertKitchenDisplayHasScreen(tx, deps.cfg, id, profileId);
+          }
+        }
+        const held = await updateDeviceSettings(tx, { id, ...device }, { label, profileId });
+        if (kitchenScreens !== undefined) {
+          await VENUE_SERVICE.setDeviceKitchenScreens(tx, deps.cfg, {
+            deviceId: id,
+            profileId,
+            screens: kitchenScreens,
+          });
+        }
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.
         const current: Record<ProfilePrinterRole, string | null> = {
@@ -705,7 +738,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
                 id: devices.id,
                 formFactor: deviceProfiles.formFactor,
                 label: devices.label,
-                stationId: devices.stationId,
                 active: devices.active,
               })
               .from(devices)
@@ -754,4 +786,43 @@ function parseEquipmentChoice(body: Record<string, unknown>): {
     throw new AppError("management.request_invalid", { field: "takeOver" });
   }
   return { role, selection: chosen, via: body.via, takeOver: body.takeOver === true };
+}
+
+/**
+ * The device's station screen, which a narrowing may have emptied. Refuses as
+ * {@link kitchenScreenOf} does.
+ */
+async function stationScreenOf(
+  tx: Transaction,
+  c: Context,
+  cfg: Pick<TillConfig, "locationId">,
+  device: DeviceBinding,
+): Promise<ResolvedKitchenScreen> {
+  return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
+}
+
+/**
+ * The device's kitchen screen of `kind`, and the person signed in on it. Refuses
+ * `device.unauthorized` when the device has no screen of that kind, or a narrowing took it, so a
+ * kitchen display re-boots to what its identity now says; and, on any device but a kitchen display,
+ * where nobody can sign in yet, `session.required` when nobody is signed in on it.
+ */
+async function kitchenScreenOf(
+  tx: Transaction,
+  c: Context,
+  cfg: Pick<TillConfig, "locationId">,
+  device: DeviceBinding,
+  kind: KitchenScreenKind,
+): Promise<{ screen: ResolvedKitchenScreen; personId: string | null }> {
+  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, device.deviceId)).find(
+    (candidate) => candidate.kind === kind,
+  );
+  if (screen?.available !== true) throw new AppError("device.unauthorized", {});
+  const personId = await signedInPersonOn(tx, c, device.deviceId);
+  if (device.formFactor !== "kds" && personId === null) throw new AppError("session.required", {});
+  return { screen, personId };
+}
+
+function availableStations(screen: ResolvedKitchenScreen): ReadonlySet<string> {
+  return new Set(screen.stations.filter((slot) => slot.available).map((slot) => slot.id));
 }

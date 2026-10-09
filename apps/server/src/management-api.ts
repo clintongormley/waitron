@@ -126,6 +126,8 @@ import {
   type BumpMode,
   type FireControl,
 } from "./kitchen.js";
+import { parseProfileKitchenScreens } from "./device.js";
+import type { NarrowedDevice } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import {
   createWatcher,
@@ -312,8 +314,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.invalid": 400,
   "device_profile.access_invalid": 400,
   "device_profile.admission_invalid": 400,
-  "device_profile.station_in_use": 409,
-  "device_profile.watcher_in_use": 409,
   "printer.not_found": 404,
   "catalogue.not_found": 404,
   "product.not_found": 404,
@@ -521,18 +521,6 @@ function parsePrinterLists(body: ProfileBody): Partial<ProfilePrinterLists> {
   return lists;
 }
 
-/** Writes the lists `lists` names; the venue-service keeps the one it omits. Call after the save
- * authorized. */
-async function saveKitchenLists(
-  tx: Transaction,
-  deps: ManagementApiDeps,
-  profileId: string,
-  lists: { stationIds?: string[]; watcherIds?: string[] },
-): Promise<void> {
-  if (lists.stationIds === undefined && lists.watcherIds === undefined) return;
-  await VENUE_SERVICE.setProfileKitchenLists(tx, requireVenueCfg(deps), profileId, lists);
-}
-
 /** The settings every profile POST and PUT must carry, checked for shape. */
 function parseProfileSettings(body: ProfileBody) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -569,8 +557,7 @@ type ProfileBody = {
   receiptPrinterDefaultId?: unknown;
   paymentSlipPrinterDefaultId?: unknown;
   cashDrawerPrinterDefaultId?: unknown;
-  stationIds?: unknown;
-  watcherIds?: unknown;
+  kitchenScreens?: unknown;
   departmentId?: unknown;
   allowedZoneIds?: unknown;
   startingZoneId?: unknown;
@@ -1433,17 +1420,17 @@ export function mountManagementApi(
     }),
   );
 
-  app.get("/management-api/device-profile-kitchen-lists", (c) =>
+  app.get("/management-api/device-profile-kitchen-screens", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const lists = await withTransaction(deps.db, async (tx) => {
+      const profiles = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return VENUE_SERVICE.readProfileKitchenLists(tx, requireVenueCfg(deps));
+        return VENUE_SERVICE.readProfileKitchenScreens(tx, requireVenueCfg(deps));
       });
-      return c.json({ lists });
+      return c.json({ profiles });
     }),
   );
 
@@ -1471,7 +1458,7 @@ export function mountManagementApi(
       const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
         parseProfileSettings(body);
       const lists = parsePrinterLists(body);
-      const kitchenLists = parseIdLists(body, ["stationIds", "watcherIds"]);
+      const kitchenScreens = parseProfileKitchenScreens(body.kitchenScreens);
       const scope = parseProfileScope(body);
       const admission = parseProfileAdmission(body);
       const result = await withTransaction(deps.db, async (tx) => {
@@ -1487,7 +1474,13 @@ export function mountManagementApi(
           printerLists: { ...emptyPrinterLists(), ...lists },
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), created.id, scope);
-        await saveKitchenLists(tx, deps, created.id, kitchenLists);
+        if (kitchenScreens !== undefined)
+          await VENUE_SERVICE.setProfileKitchenScreens(
+            tx,
+            requireVenueCfg(deps),
+            created.id,
+            kitchenScreens,
+          );
         await setProfileAdmission(tx, created.id, admission);
         return (await withProfileAccess(tx, [created]))[0];
       });
@@ -1496,8 +1489,8 @@ export function mountManagementApi(
   );
 
   // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. These stay as
-  // they were when omitted: the starting screen, a printer, station or watcher list, the role set,
-  // the person exceptions, and each of the department, the zones and the starting zone.
+  // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
+  // set, the person exceptions, and each of the department, the zones and the starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1506,7 +1499,7 @@ export function mountManagementApi(
       const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
         parseProfileSettings(body);
       const lists = parsePrinterLists(body);
-      const kitchenLists = parseIdLists(body, ["stationIds", "watcherIds"]);
+      const kitchenScreens = parseProfileKitchenScreens(body.kitchenScreens);
       const scope = parseProfileScope(body);
       const admission = parseProfileAdmission(body);
       const result = await withTransaction(deps.db, async (tx) => {
@@ -1527,9 +1520,19 @@ export function mountManagementApi(
           printerLists,
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), id, scope);
-        await saveKitchenLists(tx, deps, id, kitchenLists);
+        // After the form factor is written: both read it to judge a pass monitor.
+        let narrowedDevices: NarrowedDevice[] = [];
+        if (kitchenScreens === undefined)
+          await VENUE_SERVICE.checkProfileKitchenScreens(tx, requireVenueCfg(deps), id);
+        else
+          narrowedDevices = await VENUE_SERVICE.setProfileKitchenScreens(
+            tx,
+            requireVenueCfg(deps),
+            id,
+            kitchenScreens,
+          );
         await setProfileAdmission(tx, id, admission);
-        return (await withProfileAccess(tx, [updated]))[0];
+        return { ...(await withProfileAccess(tx, [updated]))[0]!, narrowedDevices };
       });
       return c.json(result);
     }),

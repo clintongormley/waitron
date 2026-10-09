@@ -1858,6 +1858,10 @@ rebuild of `working_orders`),
 `packages/db/drizzle/0089_devices_drop_triggers.sql` and
 `packages/db/drizzle/0091_devices_recreate_triggers.sql` (the triggers around `0090`'s rebuild of
 `devices`),
+`packages/db/drizzle/0119_drop_device_binding_triggers.sql` (drops the device binding trigger),
+`packages/db/drizzle/0122_devices_drop_form_factor_trigger.sql` and
+`packages/db/drizzle/0124_devices_recreate_form_factor_trigger.sql` (the trigger around `0123`'s
+rebuild of `devices`),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql`,
 `packages/media/drizzle/0003_published_image_references.sql`,
@@ -1882,7 +1886,7 @@ rebuild of `working_orders`),
 catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
 `0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0080`, `0082`, `0083`,
 `0086`, `0089` and `0091`, and 2026-10-07 for media `0008_queued_edition_image_references.sql` and
-`0009_include_folder_image_references.sql`)
+`0009_include_folder_image_references.sql`, and 2026-10-09 for core `0119`, `0122` and `0124`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript

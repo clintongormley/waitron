@@ -280,15 +280,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_admission_roles",
     "device_profile_admission_persons",
   ],
-  // `readProfileKitchenLists` (packages/venue-service/src/profile-access.ts) also filters and orders
-  // by the station and watcher rows.
-  listProfileKitchenLists: [
-    "device_profiles",
-    "device_profile_stations",
-    "device_profile_watchers",
-    "kitchen_stations",
-    "watchers",
-  ],
+  listProfileKitchenLists: ["device_profiles", "kitchen_stations", "watchers"],
   listDevices: [
     "devices",
     "watchers",

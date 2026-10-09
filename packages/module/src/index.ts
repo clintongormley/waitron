@@ -33,6 +33,14 @@ export type {
   DepartmentTransfer,
   DepartmentTransferActor,
   DepartmentTransferReceiver,
+  KitchenScreenKind,
+  KitchenScreenScope,
+  ProfileKitchenScreens,
+  DeviceKitchenScreen,
+  ScreenSlot,
+  ResolvedKitchenScreen,
+  Named,
+  NarrowedDevice,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";
 export type {

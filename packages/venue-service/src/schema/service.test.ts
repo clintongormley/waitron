@@ -5,8 +5,6 @@ import {
   departmentSalePolicies,
   departments,
   deviceProfileServiceAccess,
-  deviceProfileStations,
-  deviceProfileWatchers,
   deviceProfileZones,
   orderServiceContexts,
   saleReceiptHeaders,
@@ -106,22 +104,6 @@ const EXPECTED: Record<
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: ["device_profile_zones_pk"],
-  },
-  device_profile_stations: {
-    table: deviceProfileStations,
-    foreignKeys: ["device_profile_stations_profile_fk", "device_profile_stations_station_fk"],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["device_profile_stations_pk"],
-  },
-  device_profile_watchers: {
-    table: deviceProfileWatchers,
-    foreignKeys: ["device_profile_watchers_profile_fk", "device_profile_watchers_watcher_fk"],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["device_profile_watchers_pk"],
   },
   station_fallbacks: {
     table: stationFallbacks,
@@ -223,7 +205,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(16);
+    expect(Object.keys(EXPECTED)).toHaveLength(14);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

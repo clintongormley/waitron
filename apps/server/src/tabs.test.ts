@@ -1247,7 +1247,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     );
     expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
 
-    await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, OPERATOR));
+    await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, { personId: OPERATOR }));
 
     const fired = await sentState(tabId);
     expect(fired.map((line) => line.sentAt !== null)).toEqual([true, true]);
@@ -1751,7 +1751,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
 
     await expect(
-      asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, OPERATOR)),
+      asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id, { personId: OPERATOR })),
     ).rejects.toMatchObject({
       code: "product.unavailable",
       params: { productId: aguaId },
@@ -2337,7 +2337,7 @@ async function tabWithFiredMains() {
     [1, true],
     [2, false],
   ]);
-  await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, mains.id, OPERATOR));
+  await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, mains.id, { personId: OPERATOR }));
   const [water, cafe] = await db
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
@@ -2530,7 +2530,11 @@ describe("every write to an open order's lines counts on its revision, a served 
     ["a void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
+    [
+      "a course fired",
+      (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, { personId: OPERATOR }),
+      ["tab"],
+    ],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     [
       "a transfer",
@@ -2693,7 +2697,11 @@ describe("a line write on an order whose card payment is in flight is refused, a
     ["a part void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
+    [
+      "a course fired",
+      (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, { personId: OPERATOR }),
+      ["tab"],
+    ],
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     [
       "a transfer",

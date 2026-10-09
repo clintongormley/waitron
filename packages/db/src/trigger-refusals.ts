@@ -43,22 +43,6 @@ export const FORM_FACTOR_REFUSAL =
   "cannot change form factor of a profile in use by an active device";
 
 /**
- * `device_binding_rule_*`: the device's `device_profile_id` names no profile.
- *
- * Unreachable through the product — the column is NOT NULL behind an `ON DELETE RESTRICT` foreign
- * key and the store turns foreign keys on — and kept because the rule must not rest on that: with
- * the profile row missing, `form_factor` is NULL and neither arm below fires, so the device would
- * be ACCEPTED rather than refused.
- */
-export const MISSING_PROFILE_REFUSAL = "device has no profile";
-
-/** `device_binding_rule_*`: a `kds` device must bind exactly one station or watcher. */
-export const KDS_BINDING_REFUSAL = "a kds device binds a station or a watcher";
-
-/** `device_binding_rule_*`: another form factor binds no station and no watcher. */
-export const NON_KDS_BINDING_REFUSAL = "a non-kds device binds no station or watcher";
-
-/**
  * `products_variant_one_level_insert`: the named parent is itself a variant, or is the row itself,
  * or the row already has a variant of its own.
  */

@@ -42,7 +42,6 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
     upstairsBarZone: { en: "Upstairs bar", es: "Bar de arriba" },
     deliCounterZone: { en: "Deli counter", es: "Mostrador de charcutería" },
   },
-  watcherName: { en: "Pass", es: "Pase" },
   staff: DEMO_STAFF,
   adjustmentReasons: DEMO_ADJUSTMENT_REASONS,
 };

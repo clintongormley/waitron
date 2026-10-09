@@ -11,6 +11,8 @@ import {
   type BillPaymentView,
   type BillRefundRequest,
   type BillRefundResult,
+  type DeviceIdentity,
+  type DeviceStationScreen,
   type FloorZone,
   type MyAbsence,
   type MyShift,
@@ -1039,13 +1041,13 @@ describe("TillApi", () => {
     ]);
   });
 
-  it("getStationQueue and getDeviceStation hand a caller's abort signal to fetch", async () => {
+  it("getStationQueue and getDeviceStationScreen hand a caller's abort signal to fetch", async () => {
     const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse({ items: [], notices: [] }));
     const api = new TillApi("", fetchStub);
     const signal = new AbortController().signal;
 
     await api.getStationQueue("st-1", { signal });
-    await api.getDeviceStation({ signal });
+    await api.getDeviceStationScreen({ signal });
 
     expect(fetchStub.mock.calls.map(([, init]) => init?.signal)).toEqual([signal, signal]);
   });
@@ -1422,27 +1424,51 @@ describe("TillApi", () => {
     expect(r).toEqual(queue);
   });
 
-  it("reads watcher summaries and a watcher board, then sends a Done mark", async () => {
-    const watchers = [{ id: "pass", name: "Pass", runsPass: true }];
-    const board = { watcher: { ...watchers[0], active: true }, orders: [] };
+  it("reads the device's pass screen, then sends a Done mark and takes it back", async () => {
+    const screen = {
+      orders: [],
+      stations: [{ id: "st-1", name: "Parrilla", available: false }],
+      zones: null,
+    };
     const fetchStub = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse(watchers))
-      .mockResolvedValueOnce(jsonResponse(board))
-      .mockResolvedValueOnce(jsonResponse({}));
+      .mockResolvedValueOnce(jsonResponse(screen))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
     const api = new TillApi("", fetchStub);
-    expect(await api.listWatchers()).toEqual(watchers);
-    expect(await api.getWatcherQueue("pass")).toEqual(board);
-    await api.markWatcherDone("pass", ["ti-1"], true);
+    const signal = new AbortController().signal;
+    expect(await api.getDevicePassScreen({ signal })).toEqual(screen);
+    await api.markDevicePassDone(["ti-1"], true);
+    await api.markDevicePassDone(["ti-1"], false);
     expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
-      ["/api/watchers", "GET"],
-      ["/api/watchers/pass/queue", "GET"],
-      ["/api/watchers/pass/done", "POST"],
+      ["/api/device/pass-screen", "GET"],
+      ["/api/device/pass-screen/done", "POST"],
+      ["/api/device/pass-screen/done", "POST"],
     ]);
-    expect(JSON.parse(fetchStub.mock.calls[2]![1].body)).toEqual({
+    expect(fetchStub.mock.calls[0]![1].signal).toBe(signal);
+    expect(JSON.parse(fetchStub.mock.calls[1]![1].body)).toEqual({
       ticketItemIds: ["ti-1"],
       done: true,
     });
+    expect(JSON.parse(fetchStub.mock.calls[2]![1].body)).toEqual({
+      ticketItemIds: ["ti-1"],
+      done: false,
+    });
+  });
+
+  it("reads the device's pass monitor with the caller's signal", async () => {
+    const monitor = {
+      orders: [],
+      stations: [{ id: "st-1", name: "Parrilla", available: true }],
+      zones: [{ id: "z-1", name: "Terraza", available: false }],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(monitor));
+    const signal = new AbortController().signal;
+    expect(await new TillApi("", fetchStub).getDevicePassMonitor({ signal })).toEqual(monitor);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/pass-monitor",
+      expect.objectContaining({ method: "GET", credentials: "include", signal }),
+    );
   });
 
   it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
@@ -2603,61 +2629,91 @@ describe("TillApi", () => {
     expect(r).toEqual({ status: "approved" });
   });
 
-  it("getDeviceStation GETs /api/device/station and returns the bound station + its queue", async () => {
-    const station = {
-      id: "st-1",
-      name: "Pass",
-      today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "default" as const },
-      queue: [
+  it("getDeviceStationScreen GETs /api/device/station-screen and returns each station in order", async () => {
+    // Typed so `tsc` checks the client mirror declares every field the server sends.
+    const screen: DeviceStationScreen = {
+      stations: [
         {
-          orderId: "wo-1",
-          orderNumber: 7,
-          label: "Mesa 4",
-          queuedAt: "2026-08-17T10:00:00.000Z",
-          status: "settled",
-          items: [
+          id: "st-1",
+          name: "Cocina",
+          available: true,
+          today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "default" },
+          queue: [
             {
-              id: "ti-1",
-              workingOrderLineId: "wol-1",
-              state: "queued",
-              descriptions: { "es-ES": "Paella" },
-              quantity: "2.000",
-              course: null,
-              firedAt: "2026-08-17T10:00:00.000Z",
+              orderId: "wo-1",
+              orderNumber: 7,
+              label: "Mesa 4",
+              queuedAt: "2026-08-17T10:00:00.000Z",
+              status: "settled",
+              thresholds: {
+                warmAfterMinutes: 5,
+                overdueAfterMinutes: 10,
+                forgottenAfterMinutes: 15,
+              },
+              items: [
+                {
+                  id: "ti-1",
+                  workingOrderLineId: "wol-1",
+                  state: "queued",
+                  name: "Paella",
+                  quantity: "2.000",
+                  course: null,
+                  firedAt: "2026-08-17T10:00:00.000Z",
+                },
+              ],
             },
           ],
+          notices: [],
+          printersDown: [
+            { printerId: "pr-1", printerName: "Cocina", since: "2026-08-17T10:00:00.000Z" },
+          ],
         },
+        { id: "st-2", name: "Deli", available: false },
       ],
     };
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ station }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(screen));
 
-    const r = await new TillApi("", fetchStub).getDeviceStation();
+    const r = await new TillApi("", fetchStub).getDeviceStationScreen();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/device/station",
+      "/api/device/station-screen",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(r).toEqual({ station });
+    expect(r).toEqual(screen);
   });
 
-  it("getDeviceStation surfaces { code: 'device.unauthorized' } when the cookie is missing/rejected", async () => {
+  it("getDeviceStationScreen surfaces { code: 'device.unauthorized' } when the cookie is missing/rejected", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { code: "device.unauthorized" } }), {
         status: 401,
       }),
     );
 
-    await expect(new TillApi("", fetchStub).getDeviceStation()).rejects.toMatchObject({
+    await expect(new TillApi("", fetchStub).getDeviceStationScreen()).rejects.toMatchObject({
       code: "device.unauthorized",
     });
   });
 
   it("getDeviceIdentity GETs /api/device/me and returns the device's non-secret identity", async () => {
-    const identity = {
+    // Typed so `tsc` checks the client mirror declares every field the server sends.
+    const identity: DeviceIdentity = {
       deviceId: "dev-1",
-      formFactor: "phone-portrait",
-      name: "Camarero 1",
-      stationId: null,
+      formFactor: "kds",
+      name: "Pase",
+      profileId: "pr-pass",
+      approvedProfiles: [{ id: "pr-pass", name: "Pase" }],
+      kitchenScreens: [
+        {
+          kind: "pass",
+          available: true,
+          stations: [
+            { id: "st-1", name: "Plancha", available: true },
+            { id: "st-2", name: "Deli", available: false },
+          ],
+          zones: [{ id: "z-1", name: "Terraza", available: true }],
+        },
+        { kind: "station", available: false, stations: [], zones: null },
+      ],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(identity));
 
@@ -3350,6 +3406,47 @@ describe("TillApi: a seated party", () => {
 
       expect(fetchStub).toHaveBeenCalledWith(
         `/api/parties/v1/groups/g2/${step}`,
+        post({ submissionId: "sub-9", expectedPartyRevision: 10 }),
+      );
+    },
+  );
+
+  it.each([
+    ["fireDeviceCourse", "fire"],
+    ["bumpDeviceCourseReady", "ready"],
+    ["markDeviceCourseAway", "away"],
+  ] as const)(
+    "%s POSTs to the kitchen display's course /%s route (empty 200 body)",
+    async (method, step) => {
+      const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+      await expect(new TillApi("", fetchStub)[method]("wo1", "co2")).resolves.toBeUndefined();
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        `/api/device/orders/wo1/courses/co2/${step}`,
+        post({}),
+      );
+    },
+  );
+
+  it.each([
+    ["fireDeviceGroup", "fire"],
+    ["bumpDeviceGroupReady", "ready"],
+    ["markDeviceGroupAway", "away"],
+  ] as const)(
+    "%s POSTs the submission and revision to the kitchen display's group /%s route",
+    async (method, step) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 11 }));
+
+      await expect(
+        new TillApi("", fetchStub)[method]("v1", "g2", {
+          submissionId: "sub-9",
+          expectedPartyRevision: 10,
+        }),
+      ).resolves.toEqual({ revision: 11 });
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        `/api/device/parties/v1/groups/g2/${step}`,
         post({ submissionId: "sub-9", expectedPartyRevision: 10 }),
       );
     },

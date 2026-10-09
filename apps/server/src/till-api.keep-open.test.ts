@@ -141,8 +141,6 @@ beforeEach(async () => {
         departmentId: allowedDepartment,
         allowedZoneIds: null,
         startingZoneId: startingZone,
-        stationIds: [],
-        watcherIds: [],
       }),
     );
     const device = await enrolDeviceForTest(suite.db, v.cfg, {

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, json, newId, nowIso, table, tsString } from "./columns.js";
+import { devices } from "./devices.js";
 import { parties } from "./parties.js";
 
 export const orderGroupState = enumType(["held", "fired", "removed"]);
@@ -11,7 +12,8 @@ export const orderGroupState = enumType(["held", "fired", "removed"]);
  * on. A group emptied while held is `removed`, never deleted, because its events point at it.
  *
  * `fired_by` and `submitted_by` are plain person ids with no key: `persons` is in
- * @waitron/identity's migration set, not the core one.
+ * @waitron/identity's migration set, not the core one. A group fired by a kitchen display names
+ * the device in `fired_by_device_id` instead; a held group names neither.
  */
 export const orderGroups = table(
   "order_groups",
@@ -24,6 +26,7 @@ export const orderGroups = table(
     state: orderGroupState("state").notNull(),
     firedAt: tsString("fired_at"),
     firedBy: id("fired_by"),
+    firedByDeviceId: id("fired_by_device_id"),
     submittedBy: id("submitted_by").notNull(),
     remindAt: tsString("remind_at"),
     // When this group's advance HOLD ticket was queued for a printer; null if none was.
@@ -36,9 +39,15 @@ export const orderGroups = table(
       foreignColumns: [parties.id],
       name: "order_groups_party_fk",
     }),
+    foreignKey({
+      columns: [t.firedByDeviceId],
+      foreignColumns: [devices.id],
+      name: "order_groups_fired_by_device_fk",
+    }),
     index("order_groups_party_idx").on(t.partyId),
     check("order_groups_state_ck", enumCheck(t.state)),
     check("order_groups_fired_at_ck", sql`(${t.state} = 'fired') = (${t.firedAt} is not null)`),
+    check("order_groups_firer_ck", sql`${t.firedBy} is null or ${t.firedByDeviceId} is null`),
   ],
 );
 
@@ -56,8 +65,8 @@ export const orderGroupEventKind = enumType([
  * `../classification.ts`. A retried command is answered from `service_commands` and writes no
  * second event.
  *
- * `group_id` is null on a reorder, which names every held group in its `detail`. `actor_id` is a
- * plain person id, as `order_groups.submitted_by` is.
+ * `group_id` is null on a reorder, which names every held group in its `detail`. Exactly one of
+ * `actor_id` (a plain person id, as `order_groups.submitted_by` is) and `actor_device_id` is set.
  */
 export const orderGroupEvents = table(
   "order_group_events",
@@ -66,7 +75,8 @@ export const orderGroupEvents = table(
     partyId: id("party_id").notNull(),
     groupId: id("group_id"),
     kind: orderGroupEventKind("kind").notNull(),
-    actorId: id("actor_id").notNull(),
+    actorId: id("actor_id"),
+    actorDeviceId: id("actor_device_id"),
     detail: json<Record<string, unknown>>("detail").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
@@ -81,8 +91,17 @@ export const orderGroupEvents = table(
       foreignColumns: [orderGroups.id],
       name: "order_group_events_group_fk",
     }),
+    foreignKey({
+      columns: [t.actorDeviceId],
+      foreignColumns: [devices.id],
+      name: "order_group_events_actor_device_fk",
+    }),
     index("order_group_events_party_idx").on(t.partyId),
     index("order_group_events_group_idx").on(t.groupId),
     check("order_group_events_kind_ck", enumCheck(t.kind)),
+    check(
+      "order_group_events_actor_ck",
+      sql`(${t.actorId} is null) <> (${t.actorDeviceId} is null)`,
+    ),
   ],
 );

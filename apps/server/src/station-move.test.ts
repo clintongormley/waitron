@@ -592,7 +592,9 @@ describe("release", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     try {
-      await inTx(venue, (tx) => fireCourse(tx, venue.cfg, group.tabId, courseId, OPERATOR));
+      await inTx(venue, (tx) =>
+        fireCourse(tx, venue.cfg, group.tabId, courseId, { personId: OPERATOR }),
+      );
       const [item] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
       );

@@ -1,15 +1,14 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { personRole, roleHasPermission } from "@waitron/identity";
-import { deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { deviceProfiles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mountJoinApi } from "./join-api.js";
 import { createJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
-import { createWatcher } from "./watchers.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
-import { listOnProfile } from "./testing/enrol.js";
+import { VENUE_SERVICE } from "./modules.js";
 
 /**
  * The role-map fact `join-api.ts` is built on, pinned where it is consumed. Two things there break
@@ -38,7 +37,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-it("join approval binds a kitchen screen to its watcher and rejects a second target", async () => {
+it("join approval gives a kitchen display its pass screen and rejects a second screen", async () => {
   const venue = await setupVenue(suite.db);
   const app = new Hono();
   // Opened before the request is made, so the gate keeps it.
@@ -53,18 +52,11 @@ it("join approval binds a kitchen screen to its watcher and rejects a second tar
     .insert(deviceProfiles)
     .values({ name: "Watcher KDS", formFactor: "kds", capabilities: [] })
     .returning({ id: deviceProfiles.id });
-  const watcher = await withTransaction(suite.db, (tx) =>
-    createWatcher(tx, venue.cfg, {
-      name: "Pass",
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: false,
-    }),
-  );
   await withTransaction(suite.db, (tx) =>
-    listOnProfile(tx, profile!.id, { watcherId: watcher.id }),
+    VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+      station: { stationIds: null, zoneIds: null },
+      pass: { stationIds: null, zoneIds: null },
+    }),
   );
   const made = await withTransaction(suite.db, (tx) =>
     createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pass screen" }),
@@ -79,24 +71,92 @@ it("join approval binds a kitchen screen to its watcher and rejects a second tar
     (await send("check", { choice: made.verificationNumber, holdId, createdAt: made.createdAt }))
       .status,
   ).toBe(204);
+  const pass = { kind: "pass", stationIds: null, zoneIds: null };
   const both = await send("accept", {
     name: "Pass screen",
     profileId: profile!.id,
-    stationId: venue.defaultStationId,
-    watcherId: watcher.id,
+    kitchenScreens: [
+      { kind: "station", stationIds: [venue.defaultStationId], zoneIds: null },
+      pass,
+    ],
   });
   expect(both.status).toBe(400);
   expect(await both.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "watcherId" } },
+    error: { code: "kitchen_screen.invalid", params: { field: "screens", reason: "one_only" } },
   });
   const accepted = await send("accept", {
     name: "Pass screen",
     profileId: profile!.id,
-    watcherId: watcher.id,
+    kitchenScreens: [pass],
   });
   expect(accepted.status).toBe(200);
-  const [device] = await suite.db
-    .select({ stationId: devices.stationId, watcherId: devices.watcherId })
-    .from(devices);
-  expect(device).toEqual({ stationId: null, watcherId: watcher.id });
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+    ),
+  ).toMatchObject([{ kind: "pass", available: true, zones: null }]);
+});
+
+it("join approval gives a device the kitchen screens the accept names, refusing a malformed list", async () => {
+  const venue = await setupVenue(suite.db);
+  const app = new Hono();
+  const pairingMode = createPairingMode();
+  const { holdId } = pairingMode.open();
+  mountJoinApi(
+    app,
+    { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
+    () => {},
+  );
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: "Pass KDS", formFactor: "kds", capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+      station: { stationIds: null, zoneIds: null },
+    }),
+  );
+  const made = await withTransaction(suite.db, (tx) =>
+    createJoinRequest(tx, venue.cfg, { kind: "device", label: "Cocina" }),
+  );
+  const send = (verb: "check" | "accept", body: unknown) =>
+    app.request(`/management-api/device-join-requests/${made.joinId}/${verb}`, {
+      method: "POST",
+      headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  expect(
+    (await send("check", { choice: made.verificationNumber, holdId, createdAt: made.createdAt }))
+      .status,
+  ).toBe(204);
+  const malformed = await send("accept", {
+    name: "Cocina",
+    profileId: profile!.id,
+    kitchenScreens: [{ kind: "station", stationIds: "all", zoneIds: null }],
+  });
+  expect(malformed.status).toBe(400);
+  expect(await malformed.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "kitchenScreens" } },
+  });
+  const notOffered = await send("accept", {
+    name: "Cocina",
+    profileId: profile!.id,
+    kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
+  });
+  expect(notOffered.status).toBe(403);
+  expect(await notOffered.json()).toMatchObject({
+    error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
+  });
+  const accepted = await send("accept", {
+    name: "Cocina",
+    profileId: profile!.id,
+    kitchenScreens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
+  });
+  expect(accepted.status).toBe(200);
+  const shown = await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+  );
+  expect(shown).toMatchObject([
+    { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
+  ]);
 });

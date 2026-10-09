@@ -26,10 +26,19 @@ import {
 import { createPairingMode, PAIRING_HOLD_MS, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
-import { enrolDeviceForTest, listOnProfile } from "./testing/enrol.js";
+import { enrolDeviceForTest, offerOnProfile } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
-import { createWatcher, removeWatcher } from "./watchers.js";
+import { createStation } from "./kitchen.js";
+import { VENUE_SERVICE } from "./modules.js";
+import type { DeviceKitchenScreen } from "@waitron/module";
+
+/** A station screen on the venue's default station. */
+const stationScreen = (venue: Venue): DeviceKitchenScreen => ({
+  kind: "station",
+  stationIds: [venue.defaultStationId],
+  zoneIds: null,
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -599,32 +608,23 @@ describe("POST /management-api/join-requests/:id/deny", () => {
 });
 
 describe("POST /management-api/device-join-requests/:id/accept", () => {
-  it("accepts a watcher-bound kitchen screen and validates its watcher field", async () => {
+  it("accepts a kitchen display's pass screen and validates its kitchenScreens field", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    const { id: watcherId } = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, venue.cfg, {
-        name: "Pass",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
-    );
-    await withTransaction(suite.db, (tx) => listOnProfile(tx, profileId, { watcherId }));
+    const pass: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
+    await withTransaction(suite.db, (tx) => offerOnProfile(tx, venue.cfg, profileId, pass));
     const made = await knock(venue, { kind: "device", label: "Pass screen" });
     await claimFor(app, venue, made, holdId);
     const path = `/management-api/device-join-requests/${made.joinId}/accept`;
-    const body = { name: "Pass screen", profileId, watcherId };
+    const body = { name: "Pass screen", profileId, kitchenScreens: [pass] };
     const accepted = await send(app, "POST", path, { cookie: venue.managerCookie, body });
     expect(accepted.status).toBe(200);
-    const [binding] = await suite.db
-      .select({ stationId: devices.stationId, watcherId: devices.watcherId })
-      .from(devices)
-      .where(eq(devices.id, made.joinId));
-    expect(binding).toEqual({ stationId: null, watcherId });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+      ),
+    ).toMatchObject([{ kind: "pass", available: true }]);
     const malformed = await knock(venue, { kind: "device", label: "Bad screen" });
     await claimFor(app, venue, malformed, holdId);
     const invalid = await send(
@@ -633,35 +633,45 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       `/management-api/device-join-requests/${malformed.joinId}/accept`,
       {
         cookie: venue.managerCookie,
-        body: { name: "Bad screen", profileId, watcherId: "bad" },
+        body: {
+          name: "Bad screen",
+          profileId,
+          kitchenScreens: [{ kind: "pass", stationIds: ["bad"], zoneIds: null }],
+        },
       },
     );
     expect(invalid.status).toBe(400);
     expect(await errorOf(invalid)).toMatchObject({
       code: "management.request_invalid",
-      params: { field: "watcherId" },
+      params: { field: "kitchenScreens" },
     });
-    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcherId));
-    const removed = await knock(venue, { kind: "device", label: "Removed screen" });
-    await claimFor(app, venue, removed, holdId);
+    const unknown = await knock(venue, { kind: "device", label: "Unknown screen" });
+    await claimFor(app, venue, unknown, holdId);
     const refused = await send(
       app,
       "POST",
-      `/management-api/device-join-requests/${removed.joinId}/accept`,
+      `/management-api/device-join-requests/${unknown.joinId}/accept`,
       {
         cookie: venue.managerCookie,
-        body: { name: "Removed screen", profileId, watcherId },
+        body: {
+          name: "Unknown screen",
+          profileId,
+          kitchenScreens: [{ kind: "pass", stationIds: [randomUUID()], zoneIds: null }],
+        },
       },
     );
-    expect(refused.status).toBe(404);
-    expect(await errorOf(refused)).toMatchObject({ code: "watcher.not_found" });
+    expect(refused.status).toBe(400);
+    expect(await errorOf(refused)).toMatchObject({
+      code: "kitchen_screen.invalid",
+      params: { field: "stationIds", reason: "not_found" },
+    });
   });
   it("enrols the device once its number is matched, and the request is consumed", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+      offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue)),
     );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
@@ -674,7 +684,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         body: {
           name: "Pantalla Cocina",
           profileId,
-          stationId: venue.defaultStationId,
+          kitchenScreens: [stationScreen(venue)],
         },
       },
     );
@@ -687,14 +697,20 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount()).toBe(0);
     // Through the table definition: a raw read hands the boolean column back as 0/1.
     const rows = await suite.db
-      .select({ label: devices.label, stationId: devices.stationId, active: devices.active })
+      .select({ label: devices.label, active: devices.active })
       .from(devices)
       .where(eq(devices.id, made.joinId));
     expect(rows[0]).toMatchObject({
       label: "Pantalla Cocina",
-      stationId: venue.defaultStationId,
       active: true,
     });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+      ),
+    ).toMatchObject([
+      { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
+    ]);
   });
 
   it("a wrong number on the check is 400 device.join_mismatch AND the request is gone on a FRESH request", async () => {
@@ -740,7 +756,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         body: {
           name: "Cocina agent",
           profileId,
-          stationId: venue.defaultStationId,
+          kitchenScreens: [stationScreen(venue)],
         },
       },
     );
@@ -759,7 +775,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
+      offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue)),
     );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
@@ -772,7 +788,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         body: {
           name: "Pantalla Cocina",
           profileId,
-          stationId: venue.defaultStationId,
+          kitchenScreens: [stationScreen(venue)],
         },
       },
     );
@@ -802,13 +818,10 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount()).toBe(1);
   });
 
-  it("a kds profile with no station is 400, and the request survives for a genuine retry", async () => {
+  it("a kds profile with no kitchen screen is 400, and the request survives for a genuine retry", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    await withTransaction(suite.db, (tx) =>
-      listOnProfile(tx, profileId, { stationId: venue.defaultStationId }),
-    );
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -821,47 +834,44 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       },
     );
     expect(res.status).toBe(400);
-    expect((await errorOf(res)).code).toBe("device.station_required");
+    expect((await errorOf(res)).code).toBe("kitchen_screen.required");
     // The consuming delete rolled back with the throw: only a success consumes the request here.
     expect(await pendingCount()).toBe(1);
   });
 
-  it("a station or watcher the kds profile does not list is 400, and the request survives", async () => {
+  it("a station the kds profile does not list is 400, and the request survives", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    const { id: watcherId } = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, venue.cfg, {
-        name: "Unlisted pass",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
+    const grill = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Grill" }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      offerOnProfile(tx, venue.cfg, profileId, {
+        kind: "station",
+        stationIds: [grill.id],
+        zoneIds: null,
       }),
     );
-    const cases = [
-      [{ stationId: venue.defaultStationId }, "station.not_allowed"],
-      [{ watcherId }, "watcher.not_allowed"],
-    ] as const;
-    for (const [index, [binding, code]] of cases.entries()) {
-      const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
-      await claimFor(app, venue, made, holdId);
-      const res = await send(
-        app,
-        "POST",
-        `/management-api/device-join-requests/${made.joinId}/accept`,
-        { cookie: venue.managerCookie, body: { name: "Pantalla Cocina", profileId, ...binding } },
-      );
-      expect({ code, status: res.status }).toEqual({ code, status: 400 });
-      expect((await errorOf(res)).code).toBe(code);
-      expect(await pendingCount()).toBe(index + 1);
-      const [enrolled] = await suite.db
-        .select({ id: devices.id })
-        .from(devices)
-        .where(eq(devices.id, made.joinId));
-      expect(enrolled).toBeUndefined();
-    }
+    const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+    await claimFor(app, venue, made, holdId);
+    const res = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${made.joinId}/accept`,
+      {
+        cookie: venue.managerCookie,
+        body: { name: "Pantalla Cocina", profileId, kitchenScreens: [stationScreen(venue)] },
+      },
+    );
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("station.not_allowed");
+    expect(await pendingCount()).toBe(1);
+    const [enrolled] = await suite.db
+      .select({ id: devices.id })
+      .from(devices)
+      .where(eq(devices.id, made.joinId));
+    expect(enrolled).toBeUndefined();
   });
 
   it("screens the body, and refuses the request before any of it is acted on", async () => {
@@ -890,9 +900,13 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
 
     const badStation = await send(app, "POST", path, {
       cookie,
-      body: { name: "Bar till", profileId: randomUUID(), stationId: "nope" },
+      body: {
+        name: "Bar till",
+        profileId: randomUUID(),
+        kitchenScreens: [{ kind: "station", stationIds: ["nope"], zoneIds: null }],
+      },
     });
-    expect((await errorOf(badStation)).params).toEqual({ field: "stationId" });
+    expect((await errorOf(badStation)).params).toEqual({ field: "kitchenScreens" });
 
     expect(await pendingCount()).toBe(1);
   });

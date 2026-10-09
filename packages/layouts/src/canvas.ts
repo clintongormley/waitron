@@ -47,6 +47,7 @@ export const CAPABILITY_FLAGS = [
   "hand-keyed-card-payment",
   "prepare-orders",
   "hand-over-orders",
+  "run-the-pass",
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 
@@ -63,12 +64,15 @@ export const PROFILE_ACTIONS = [
 ] as const satisfies readonly CapabilityFlag[];
 export type ProfileAction = (typeof PROFILE_ACTIONS)[number];
 
-/** What a profile's till offers to look at. `act-as-kds` shows the kitchen board card. */
+/** What a profile's till offers to look at. `act-as-kds` shows the kitchen board card;
+ * `run-the-pass` decides whether a pass screen draws Fire, Ready and Away, whose routes check the
+ * action each one takes. */
 export const PROFILE_SCREENS = [
   "act-as-kds",
   "show-station",
   "show-expo",
   "show-schedule",
+  "run-the-pass",
 ] as const satisfies readonly CapabilityFlag[];
 export type ProfileScreen = (typeof PROFILE_SCREENS)[number];
 

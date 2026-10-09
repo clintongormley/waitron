@@ -1,6 +1,6 @@
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   assignCatalogueToLocation,
@@ -13,7 +13,6 @@ import {
 import {
   billPaymentRefunds,
   billPayments,
-  devices,
   saleLines,
   sales,
   serviceCommands,
@@ -580,9 +579,8 @@ describe("served by quantity (§12 item 5)", () => {
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, s.croq.id));
     expect(ticket!.firedAt).not.toBeNull();
-    expect(
-      await suite.db.select().from(devices).where(eq(devices.stationId, ticket!.stationId)),
-    ).toEqual([]);
+    expect(ticket!.stationId).not.toBeNull();
+    expect(suite.db.all(sql`select device_id from device_kitchen_screens`)).toEqual([]);
 
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "4" }]);
 

@@ -233,7 +233,6 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       deviceId: "till-dev",
       name: "Till 1",
       formFactor: "till",
-      stationId: null,
     }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue(V1),
@@ -1453,7 +1452,6 @@ describe("a round at phone width", () => {
           deviceId: "h1",
           name: "H",
           formFactor: "phone-portrait",
-          stationId: null,
         }),
       });
       const { el } = await mountWidget<TillApp>("till-app", { api: api as unknown as TillApi });

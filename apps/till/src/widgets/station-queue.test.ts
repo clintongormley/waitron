@@ -1907,3 +1907,89 @@ describe("Spanish split extra wording", () => {
     }
   });
 });
+
+describe("till-station-queue — a merged queue's station labels", () => {
+  const stationNames = new Map([
+    ["st-1", "Cocina"],
+    ["st-2", "Barra"],
+  ]);
+  const merged = [
+    { ...groupA, stationId: "st-1" },
+    { ...groupB, stationId: "st-2" },
+  ];
+  const label = (el: TillStationQueue, itemId: string) =>
+    el
+      .shadowRoot!.querySelector(`[data-item="${itemId}"] [data-line-station]`)
+      ?.textContent?.trim();
+
+  it.each(["kanban", "rail"] as const)(
+    "%s: each dish names its own group's station",
+    async (view) => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: merged,
+        stationNames,
+        view,
+      });
+      expect(label(el, "ti-1")).toBe("Cocina");
+      expect(label(el, "ti-2")).toBe("Cocina");
+      expect(label(el, "ti-3")).toBe("Barra");
+    },
+  );
+
+  it("shows no station label without station names", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: merged,
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-line-station]")).toBeNull();
+  });
+
+  it("a whole-ticket bump carries the group's own station, not the widget's", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: merged,
+      stationNames,
+      stationId: "st-2",
+      bumpMode: "ticket",
+    });
+    const ticket = vi.fn();
+    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
+    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+  });
+
+  it("each notice names its station", async () => {
+    const base: KitchenNotice = {
+      id: "kn-1",
+      stationId: "st-2",
+      workingOrderId: "wo-2",
+      orderLabel: "#6",
+      kind: "void",
+      lineName: "Café",
+      unitName: null,
+      soldInEach: false,
+      quantity: "1.000",
+      note: null,
+      wasStarted: false,
+      movedTo: null,
+      reroutedTo: null,
+      direction: null,
+      cancelledExtra: null,
+      createdAt: "2026-08-17T10:10:00.000Z",
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: merged,
+      stationNames,
+      notices: [base],
+    });
+    const notice = el.shadowRoot!.querySelector('[data-notice="kn-1"]')!;
+    const station = notice.querySelector<HTMLElement>("[data-notice-station]")!;
+    expect(station.textContent!.trim()).toBe("Barra");
+    // As a dish carries it: under the content, never between the kind and the dish.
+    const line = notice.querySelector<HTMLElement>(".notice-line")!;
+    const order = notice.querySelector<HTMLElement>(".notice-order")!;
+    expect(order.compareDocumentPosition(station) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(station.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      line.getBoundingClientRect().bottom,
+    );
+  });
+});

@@ -50,9 +50,8 @@ describe("validateCapabilities", () => {
 });
 
 describe("validateCapabilities on a shared display", () => {
-  it("refuses a kitchen display an ordering, payment or drawer action", () => {
+  it("refuses a kitchen display a payment or drawer action", () => {
     for (const flag of [
-      "take-orders",
       "take-cash",
       "integrated-card-payment",
       "hand-keyed-card-payment",
@@ -67,6 +66,12 @@ describe("validateCapabilities on a shared display", () => {
         expect((e as AppError).params).toEqual({ reason: "shared_display_action" });
       }
     }
+  });
+
+  it("accepts a kitchen display taking and handing over orders, and running the pass", () => {
+    expect(
+      validateCapabilities(["run-the-pass", "take-orders", "hand-over-orders"], "kds"),
+    ).toEqual(["run-the-pass", "take-orders", "hand-over-orders"]);
   });
 
   it("accepts a kitchen display's prepare action and screens", () => {
@@ -102,15 +107,21 @@ describe("profileAllows", () => {
     expect(profileAllows(viewOnly, "hand-over-orders")).toBe(false);
   });
 
-  it("refuses a shared display ordering, payment and drawer actions even when listed", () => {
+  it("refuses a shared display payment and drawer actions even when listed", () => {
     const stored = {
       formFactor: "kds",
       capabilities: ["take-orders", "take-cash", "open-cash-drawer", "prepare-orders"],
     } as const;
-    expect(profileAllows(stored, "take-orders")).toBe(false);
+    expect(profileAllows(stored, "take-orders")).toBe(true);
     expect(profileAllows(stored, "take-cash")).toBe(false);
     expect(profileAllows(stored, "open-cash-drawer")).toBe(false);
     expect(profileAllows(stored, "prepare-orders")).toBe(true);
+  });
+
+  it("allows a shared display to take orders and hand them over when listed", () => {
+    const kds = { formFactor: "kds", capabilities: ["take-orders", "hand-over-orders"] } as const;
+    expect(profileAllows(kds, "take-orders")).toBe(true);
+    expect(profileAllows(kds, "hand-over-orders")).toBe(true);
   });
 
   it("derives the shared display from the kds form factor alone", () => {
@@ -207,6 +218,7 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       "hand-keyed-card-payment",
       "prepare-orders",
       "hand-over-orders",
+      "run-the-pass",
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds", "prepare-orders"]);
     expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([
@@ -217,6 +229,13 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES["tablet-landscape"]).toEqual([]);
     expect(validateCapabilities(["take-cash"])).toEqual(["take-cash"]);
+  });
+});
+
+describe("DEFAULT_PROFILE_CAPABILITIES and running the pass", () => {
+  it("lets the default till run the pass, and leaves the default kitchen display as it was", () => {
+    expect(DEFAULT_PROFILE_CAPABILITIES.till).toContain("run-the-pass");
+    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds", "prepare-orders"]);
   });
 });
 

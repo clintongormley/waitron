@@ -16,7 +16,6 @@ const ABOUT_CHOICE = new Set([
   "device_profile.not_approved",
   "device_profile.not_admitted",
   "station.not_allowed",
-  "watcher.not_allowed",
 ]);
 
 const ORDER_NOTICES = {

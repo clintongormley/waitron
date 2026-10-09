@@ -1464,7 +1464,7 @@ describe("the Edit dialog", () => {
     await rename(el, "Pantalla 3");
     await save(el);
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
-    expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
+    expect(field(el, "edit-binding").error).toBe(codeMessage("kitchen_screen.required"));
   });
 
   it("a held station switched back on while the dialog is open is listed once, unmarked", async () => {
@@ -2164,7 +2164,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-made-here]")).toBeNull();
     await save(el);
     expect(api.updateDevice).not.toHaveBeenCalled();
-    expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
+    expect(field(el, "edit-binding").error).toBe(codeMessage("kitchen_screen.required"));
   });
 
   it("a name clash shows under Name, and editing the name clears it", async () => {
@@ -2212,7 +2212,7 @@ describe("the Edit dialog", () => {
 
   it.each([
     { code: "device_profile.not_found", params: {}, under: "edit-profile" },
-    { code: "device.station_required", params: {}, under: "edit-binding" },
+    { code: "kitchen_screen.required", params: {}, under: "edit-binding" },
     { code: "station.not_found", params: { stationId: "s1" }, under: "edit-binding" },
     { code: "watcher.not_found", params: { watcherId: "w1" }, under: "edit-binding" },
     {
@@ -3946,7 +3946,7 @@ describe("add a device", () => {
     await el.updateComplete;
     expect((q(el, "[data-test=pair-profile]") as Field).error).toBe("");
     expect((q(el, "[data-test=pair-binding]") as Field).error).toBe(
-      codeMessage("device.station_required"),
+      codeMessage("kitchen_screen.required"),
     );
     expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
     expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();

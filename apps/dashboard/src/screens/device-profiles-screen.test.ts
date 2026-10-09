@@ -1314,45 +1314,6 @@ describe("device-profiles-screen station and watcher lists", () => {
       watcherIds: ["w1"],
     });
   });
-
-  it("names the screen that still shows a station the save took off, under the stations, and keeps the draft", async () => {
-    const { el } = await editKitchen({
-      updateDeviceProfile: vi.fn().mockRejectedValue({
-        code: "device_profile.station_in_use",
-        params: { stationId: "s1", deviceId: "d1", deviceName: "Grill screen" },
-      }),
-    });
-    toggle(el, "profile-station-s1", false);
-    await el.updateComplete;
-    await save(el);
-    expect(
-      el.shadowRoot!.querySelector("[data-test=profile-stations-error]")?.textContent?.trim(),
-    ).toBe(t("device_profiles.station_in_use").replace("{device}", "Grill screen"));
-    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
-      t("form.fix_fields"),
-    );
-    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeTruthy();
-    expect(shown(el, "profile-stations")).toContainEqual(["Grill", false]);
-
-    toggle(el, "profile-station-s1", true);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=profile-stations-error]")).toBeNull();
-  });
-
-  it("names the screen that still shows a watcher the save took off, under the watchers", async () => {
-    const { el } = await editKitchen({
-      updateDeviceProfile: vi.fn().mockRejectedValue({
-        code: "device_profile.watcher_in_use",
-        params: { watcherId: "w1", deviceId: "d2", deviceName: "Pass screen" },
-      }),
-    });
-    toggle(el, "profile-watcher-w1", false);
-    await el.updateComplete;
-    await save(el);
-    expect(
-      el.shadowRoot!.querySelector("[data-test=profile-watchers-error]")?.textContent?.trim(),
-    ).toBe(t("device_profiles.watcher_in_use").replace("{device}", "Pass screen"));
-  });
 });
 
 describe("device-profiles-screen where a profile serves and who signs in (W97)", () => {
@@ -1628,7 +1589,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(bottom(el)).toBeNull();
   });
 
-  it("draws actions and screens as separate groups, and offers a kitchen display only Prepares orders", async () => {
+  it("draws actions and screens as separate groups, and offers a kitchen display taking, preparing and handing over", async () => {
     const { api, el } = await openEdit({
       ...profiles[0]!,
       capabilities: ["take-orders", "open-cash-drawer", "act-as-kds", "prepare-orders"],
@@ -1650,11 +1611,17 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       "cap-show-station",
       "cap-show-expo",
       "cap-show-schedule",
+      "cap-run-the-pass",
     ]);
     expect(text(el, "actions-hint")).toBe(t("device_profiles.actions_hint"));
     selectFormFactor(el, "kds");
     await flush(el);
-    expect(flags("profile-actions")).toEqual(["cap-prepare-orders"]);
+    expect(flags("profile-actions")).toEqual([
+      "cap-take-orders",
+      "cap-prepare-orders",
+      "cap-hand-over-orders",
+    ]);
+    expect(flags("profile-screens")).toContain("cap-run-the-pass");
     expect(text(el, "actions-hint")).toBe(t("device_profiles.shared_display_actions_hint"));
     expect(q(el, "profile-department")).toBeNull();
     expect(q(el, "profile-roles")).toBeNull();
@@ -1662,8 +1629,18 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![3]).toEqual([
       "act-as-kds",
+      "take-orders",
       "prepare-orders",
     ]);
+  });
+
+  it("labels the Runs the pass switch", async () => {
+    const { el } = await openEdit({ ...profiles[0]!, capabilities: ["run-the-pass"] });
+    const sw = q(el, "cap-run-the-pass") as Field;
+    expect(sw.getAttribute("label")).toBe(t("device_profiles.capability.run-the-pass"));
+    expect(t("device_profiles.capability.run-the-pass")).not.toBe(
+      "device_profiles.capability.run-the-pass",
+    );
   });
 
   it("starts on a ticked screen or the first tab, and clears a starting screen whose switch goes off", async () => {

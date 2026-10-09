@@ -21,7 +21,7 @@ import {
   requireManagementSession,
   requireString,
 } from "@waitron/server-kit";
-import { requireDeviceName } from "./device.js";
+import { parseKitchenScreens, requireDeviceName } from "./device.js";
 import {
   acceptDeviceJoinRequest,
   acceptPrintAgentJoinRequest,
@@ -48,8 +48,8 @@ export interface JoinApiDeps {
 }
 
 /**
- * The accept-time binding faults are `resolveDeviceBinding`'s; they carry the SAME statuses
- * `device-api.ts` gives them, so a code answered by both surfaces has one status everywhere.
+ * The accept-time faults of a device's kitchen screens carry the SAME statuses `device-api.ts`
+ * gives them, so a code answered by both surfaces has one status everywhere.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   // Unknown, already decided, or (on a per-surface route) the other kind's ask. On the device accept
@@ -57,14 +57,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // whether or not the request still exists.
   "join_request.not_found": 404,
   "device.join_mismatch": 400,
-  "device.station_required": 400,
+  "kitchen_screen.required": 400,
+  "kitchen_screen.invalid": 400,
+  "kitchen_screen.not_allowed": 403,
+  "kitchen_screen.zone_not_allowed": 403,
   "device.name_taken": 409,
   "device.binding_invalid": 400,
   "device_profile.not_found": 404,
   "station.not_found": 404,
-  "watcher.not_found": 404,
   "station.not_allowed": 400,
-  "watcher.not_allowed": 400,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -90,14 +91,6 @@ const MISSING_ROW_PERMISSION: Permission = "device.manage";
 function requireKind(value: string | undefined): JoinRequestKind {
   if (value === "device" || value === "print_agent") return value;
   throw new AppError("management.request_invalid", { field: "kind" });
-}
-
-/**
- * Absent or explicit `null` → `null`; a present value must be UUID-shaped, because the id columns are
- * plain `text` and refuse nothing. `resolveDeviceBinding` decides whether the field is required.
- */
-function optionalBodyUuid(v: unknown, field: string): string | null {
-  return v === undefined || v === null ? null : requireBodyUuid(v, field);
 }
 
 /**
@@ -224,7 +217,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const rows = await listPendingJoinRequests(tx, deps.cfg, kind);
         if (kind === "print_agent") return { rows, returning: null };
         const ids = rows.map((row) => row.id);
-        return { rows, returning: await returningDevicesOf(tx, ids) };
+        return { rows, returning: await returningDevicesOf(tx, deps.cfg, ids) };
       });
       if (returning === null) return c.json(rows);
       const sessionKey = hashSessionToken(sessionId);
@@ -337,14 +330,12 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         name?: unknown;
         profileId?: unknown;
-        stationId?: unknown;
-        watcherId?: unknown;
+        kitchenScreens?: unknown;
       }>(c);
       const accepted = await gated(sessionId, "device.manage", async (tx) => {
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
-        const stationId = optionalBodyUuid(body.stationId, "stationId");
-        const watcherId = optionalBodyUuid(body.watcherId, "watcherId");
+        const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         // Before the claim, so a print agent's ask answers 404, as on the check route.
         if ((await findJoinRequest(tx, deps.cfg, id))?.kind === "print_agent")
@@ -357,8 +348,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {
           label,
           profileId,
-          stationId,
-          watcherId,
+          kitchenScreens,
         });
       });
       deps.pairingMode.dropClaim(id);

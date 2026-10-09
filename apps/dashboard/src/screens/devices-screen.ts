@@ -107,10 +107,9 @@ function equipmentSentence(error: unknown, field: EditField): string | undefined
 /** Refusals of a Pair or Edit save about one field, by code alone; others read their params first. */
 const FIELD_BY_CODE: Record<string, EditField> = {
   "device.name_taken": "name",
-  "device.station_required": "binding",
+  "kitchen_screen.required": "binding",
   "watcher.not_found": "binding",
   "station.not_allowed": "binding",
-  "watcher.not_allowed": "binding",
   "device_profile.not_found": "profile",
   "device_profile.incompatible": "approved",
 };
@@ -892,7 +891,7 @@ export class DevicesScreen extends LitElement {
       profile: values.profileId === "" ? t("devices.join_pick_profile") : "",
       binding:
         this.#bindingShownFor(values.profileId) && values.binding === ""
-          ? codeMessage("device.station_required")
+          ? codeMessage("kitchen_screen.required")
           : "",
     };
   }

@@ -173,8 +173,9 @@ import type {
   BillRefundResult,
   CounterWaitingOrder,
   UnpaidDepartureRequest,
-  DeviceStation,
-  WatcherBoard,
+  DeviceStationScreen,
+  DevicePassMonitor,
+  DevicePassScreen,
   DeadEndAnswer,
   DraftSubmission,
   FloorZone,
@@ -219,6 +220,7 @@ import type {
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
+import { type KitchenScreenNotice, kitchenDisplayScreen } from "./kitchen-screen-notice.js";
 import type {
   CanvasDef,
   CapabilityFlag,
@@ -252,6 +254,7 @@ import type {
   EquipmentHolder,
   ProfileChoice,
   ReadOptions,
+  ResolvedKitchenScreen,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -1686,8 +1689,10 @@ export class TillApp extends LitElement {
     this.#saveMakeNow();
   }
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
-  @state() private initialDeviceStation?: DeviceStation;
-  @state() private initialDeviceWatcher?: WatcherBoard;
+  @state() private initialDeviceStation?: DeviceStationScreen;
+  @state() private initialDevicePass?: DevicePassScreen;
+  @state() private initialDevicePassMonitor?: DevicePassMonitor;
+  @state() private kitchenScreenNotice?: KitchenScreenNotice;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,
@@ -2193,9 +2198,7 @@ export class TillApp extends LitElement {
       this.#writeUrl(
         {
           "till-tab": key,
-          ...(retainDestination
-            ? {}
-            : { "till-view": null, "till-station": null, "till-watcher": null }),
+          ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
         },
         replace,
       );
@@ -2234,7 +2237,6 @@ export class TillApp extends LitElement {
       {
         "till-view": destination,
         "till-station": destination === "station" ? this.#url.read("till-station") : null,
-        "till-watcher": destination === "expo" ? this.#url.read("till-watcher") : null,
       },
       true,
     );
@@ -2362,7 +2364,9 @@ export class TillApp extends LitElement {
     this.handheldMode = false;
     this.deviceMode = false;
     this.initialDeviceStation = undefined;
-    this.initialDeviceWatcher = undefined;
+    this.initialDevicePass = undefined;
+    this.initialDevicePassMonitor = undefined;
+    this.kitchenScreenNotice = undefined;
     this.#deviceKind = "till";
     this.deviceName = undefined;
     const previousDeviceId = this.deviceId;
@@ -2399,8 +2403,15 @@ export class TillApp extends LitElement {
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
-        if (identity.watcherId) this.initialDeviceWatcher = await this.api.getDeviceWatcher();
-        else this.initialDeviceStation = await this.api.getDeviceStation();
+        try {
+          await this.#readKitchenScreen(identity.kitchenScreens);
+        } catch (error) {
+          if ((error as { code?: string }).code !== "device.unauthorized") throw error;
+          // A narrowing that lands between the two reads refuses the screen it took, from a device
+          // still enrolled: the identity, read again, says what it shows now.
+          const again = await this.api.getDeviceIdentity();
+          await this.#readKitchenScreen(again.kitchenScreens);
+        }
         if (!this.isConnected) return;
         this.deviceMode = true;
         if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
@@ -2423,6 +2434,16 @@ export class TillApp extends LitElement {
       }
     }
     this.#configureSessionActivity();
+  }
+
+  async #readKitchenScreen(screens: readonly ResolvedKitchenScreen[]): Promise<void> {
+    const screen = kitchenDisplayScreen(screens);
+    if (screen.kind === "station")
+      this.initialDeviceStation = await this.api.getDeviceStationScreen();
+    else if (screen.kind === "pass") this.initialDevicePass = await this.api.getDevicePassScreen();
+    else if (screen.kind === "pass_monitor")
+      this.initialDevicePassMonitor = await this.api.getDevicePassMonitor();
+    else this.kitchenScreenNotice = screen.notice;
   }
 
   /** True when dev mode answered, so the boot stops here. */
@@ -2542,8 +2563,7 @@ export class TillApp extends LitElement {
     // profile starts on its own canvas's first tab, whatever tab the address names.
     this.#setActiveTab(switched ? this.canvas?.tabs[0]?.key : this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
-    if (switched)
-      this.#writeUrl({ "till-view": null, "till-station": null, "till-watcher": null }, true);
+    if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
@@ -8510,7 +8530,7 @@ export class TillApp extends LitElement {
   #pushDrill(drill: Drill): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#writeUrl({ "till-view": drill.kind, "till-station": null, "till-watcher": null });
+      this.#writeUrl({ "till-view": drill.kind, "till-station": null });
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
@@ -8521,7 +8541,7 @@ export class TillApp extends LitElement {
   #popDrill(): void {
     this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
-      this.#writeUrl({ "till-view": null, "till-station": null, "till-watcher": null });
+      this.#writeUrl({ "till-view": null, "till-station": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
     this.drill = undefined;
   }
@@ -8740,7 +8760,11 @@ export class TillApp extends LitElement {
       .bumpMode=${this.bumpMode}
       .deviceMode=${this.deviceMode}
       .initialDeviceStation=${this.initialDeviceStation}
-      .initialDeviceWatcher=${this.initialDeviceWatcher}
+      .deviceId=${this.deviceId}
+      .deviceName=${this.deviceName}
+      .initialDevicePass=${this.initialDevicePass}
+      .initialDevicePassMonitor=${this.initialDevicePassMonitor}
+      .kitchenScreenNotice=${this.kitchenScreenNotice}
       .menus=${tableTab ? this.tableMenus : this.menus}
       .zoneId=${tableTab ? (this.#tableZoneId ?? "") : this.counterServiceZoneId}
       .service=${tableTab ? this.tableService : this.counterService}
@@ -8851,26 +8875,21 @@ export class TillApp extends LitElement {
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
       case "station":
-        return this.initialDeviceWatcher
-          ? html`<till-expo-screen
-              slot="drill"
-              .api=${this.api}
-              .deviceMode=${this.deviceMode}
-              .initialDeviceWatcher=${this.initialDeviceWatcher}
-            ></till-expo-screen>`
-          : html`<till-station-screen
-              slot="drill"
-              .api=${this.api}
-              .bumpMode=${this.bumpMode}
-              .fireControl=${this.fireControl}
-              .deviceMode=${this.deviceMode}
-              .initialDeviceStation=${this.initialDeviceStation}
-            ></till-station-screen>`;
+        return html`<till-station-screen
+          slot="drill"
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+          .deviceId=${this.deviceId}
+        ></till-station-screen>`;
       case "expo":
         return html`<till-expo-screen
           slot="drill"
           .api=${this.api}
           .fireControl=${this.fireControl}
+          .runsPass=${this.capabilities.includes("run-the-pass")}
         ></till-expo-screen>`;
       case "allergens":
         return html`<till-allergen-screen

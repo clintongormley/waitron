@@ -293,8 +293,6 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
       departmentId: seeded.restaurant,
       allowedZoneIds: null,
       startingZoneId: seeded.barra,
-      stationIds: [],
-      watcherIds: [],
     }),
   );
   const device = await enrolDeviceForTest(suite.db, cfg, {

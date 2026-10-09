@@ -106,8 +106,12 @@ declare module "@waitron/shared" {
         | "departmentId"
         | "allowedZoneIds"
         | "startingZoneId"
-        | "stationIds"
-        | "watcherIds";
+        | "kitchenScreens"
+        | "stationScreenStations"
+        | "passScreenStations"
+        | "passScreenZones"
+        | "passMonitorStations"
+        | "passMonitorZones";
       reason:
         | "not_found"
         | "unavailable"
@@ -116,14 +120,20 @@ declare module "@waitron/shared" {
         | "empty"
         | "required"
         | "department_required"
-        | "shared_display";
+        | "shared_display"
+        | "not_shared_display"
+        | "not_for_screen";
     };
-    /** A device was given a station or watcher its profile's list does not name. */
+    /** A device was given a station its profile does not offer. */
     "station.not_allowed": { stationId: string };
-    "watcher.not_allowed": { watcherId: string };
-    /** A profile's list lost a station or watcher an active device on the profile still shows. */
-    "device_profile.station_in_use": { stationId: string; deviceId: string; deviceName: string };
-    "device_profile.watcher_in_use": { watcherId: string; deviceId: string; deviceName: string };
+    "kitchen_screen.required": Record<string, never>;
+    "kitchen_screen.not_allowed": { screen: "station" | "pass" | "pass_monitor" };
+    /** null: an order in no zone. */
+    "kitchen_screen.zone_not_allowed": { zoneId: string | null };
+    "kitchen_screen.invalid": {
+      field: "screens" | "stationIds" | "zoneIds";
+      reason: "empty" | "not_found" | "not_for_screen" | "one_only";
+    };
     /** The profile has a department but none of its zones can be used now, so it cannot order. */
     "device_profile.no_service_zone": { profileId: string };
     // `route.dish_not_sent` is declared in apps/server's errors.ts, which raises it.

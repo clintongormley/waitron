@@ -71,23 +71,21 @@ describe("till-profile-dialog", () => {
     expect(seen).toEqual([]);
   });
 
-  it.each([
-    "device_profile.not_admitted",
-    "device_profile.not_approved",
-    "station.not_allowed",
-    "watcher.not_allowed",
-  ])("a %s refusal shows under the profile, and choosing another clears it", async (code) => {
-    const el = await mountDialog();
-    await chooseOption(picker(el), "pr-bar");
-    el.notice = { code };
-    await el.updateComplete;
-    expect(picker(el).error).toBe(codeMessage(code));
-    expect(await bottom(el)).toBe(t("form.fix_fields"));
-    expect(button(el, "profile-switch").disabled).toBe(false);
-    await chooseOption(picker(el), "pr-counter");
-    await el.updateComplete;
-    expect(picker(el).error).toBe("");
-  });
+  it.each(["device_profile.not_admitted", "device_profile.not_approved", "station.not_allowed"])(
+    "a %s refusal shows under the profile, and choosing another clears it",
+    async (code) => {
+      const el = await mountDialog();
+      await chooseOption(picker(el), "pr-bar");
+      el.notice = { code };
+      await el.updateComplete;
+      expect(picker(el).error).toBe(codeMessage(code));
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+      expect(button(el, "profile-switch").disabled).toBe(false);
+      await chooseOption(picker(el), "pr-counter");
+      await el.updateComplete;
+      expect(picker(el).error).toBe("");
+    },
+  );
 
   it("a refusal naming no field is said at the bottom", async () => {
     const el = await mountDialog({ notice: { code: "device.payment_in_progress" } });

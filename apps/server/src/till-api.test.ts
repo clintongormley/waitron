@@ -911,8 +911,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
         formFactor: "till",
         label: rows[0]!.label,
         locationId: cfg.locationId,
-        stationId: null,
-        watcherId: null,
         deviceProfileId: rows[0]!.device_profile_id,
         capabilities: [...CAPABILITY_FLAGS],
       },
@@ -1885,8 +1883,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
         startingZoneId: second!.id,
-        stationIds: [],
-        watcherIds: [],
       });
     });
 

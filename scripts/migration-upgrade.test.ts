@@ -388,6 +388,11 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0090_devices_lose_till": {
     refused: ["DROP TABLE `tills`", "FOREIGN KEY constraint failed"],
   },
+  // Drops `watcher_item_marks`, then rebuilds `devices` without `station_id` and `watcher_id`,
+  // refused while a `restrict` or `no action` child names a device.
+  "core/0123_devices_lose_binding": {
+    refused: ["DROP TABLE `devices`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `menu_item_variant_overrides` with a price required; a copied row's price is null.
   "catalogue/0024_drop_menu_offered": {
     refused: [

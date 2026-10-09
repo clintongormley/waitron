@@ -11,6 +11,8 @@ import {
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble } from "./print-job-trouble.js";
+import type { LocationId } from "@waitron/shared";
+import { VENUE_SERVICE } from "./modules.js";
 
 export interface DownPrinter {
   stationId: string;
@@ -35,7 +37,7 @@ export function stationPrintersDownQuery(
   tx: Transaction,
   locationId: string,
   now: Date,
-  stationId?: string,
+  stationIds?: readonly string[],
 ) {
   return tx
     .select({
@@ -53,7 +55,7 @@ export function stationPrintersDownQuery(
       and(
         eq(kitchenStations.locationId, locationId),
         eq(kitchenStations.active, true),
-        stationId === undefined ? undefined : eq(kitchenStations.id, stationId),
+        stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),
         eq(printers.active, true),
         inArray(printJobs.status, ["queued", "printing", "failed"]),
         printJobInTrouble(now),
@@ -72,9 +74,10 @@ export async function stationPrintersDown(
   tx: Transaction,
   locationId: string,
   now: Date,
-  stationId?: string,
+  stationIds?: readonly string[],
 ): Promise<DownPrinter[]> {
-  const rows = await stationPrintersDownQuery(tx, locationId, now, stationId);
+  if (stationIds?.length === 0) return [];
+  const rows = await stationPrintersDownQuery(tx, locationId, now, stationIds);
   return rows.map((r) => ({ ...r, since: r.since! }));
 }
 
@@ -113,28 +116,62 @@ export async function stationsWithWaitingDishes(
 
 export async function stationScreensDark(
   tx: Transaction,
-  locationId: string,
+  venueLocationId: string,
   now: Date,
 ): Promise<DarkScreen[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
-  const rows = await tx
-    .select({
-      stationId: kitchenStations.id,
-      stationName: kitchenStations.name,
-      lastSeenAt: sql<string | null>`max(${devices.lastSeenAt})`,
-    })
-    .from(kitchenStations)
-    .innerJoin(devices, eq(devices.stationId, kitchenStations.id))
-    .where(and(eq(kitchenStations.locationId, locationId), eq(devices.active, true)))
-    .groupBy(kitchenStations.id, kitchenStations.name)
-    .having(
-      or(sql`max(${devices.lastSeenAt}) is null`, sql`max(${devices.lastSeenAt}) < ${darkBefore}`),
-    );
+  const screens = await VENUE_SERVICE.readStationScreens(
+    tx,
+    {
+      locationId: venueLocationId as LocationId,
+    },
+    { withSwitchedOff: true },
+  );
+  if (screens.length === 0) return [];
+  const seen = new Map(
+    (
+      await tx
+        .select({ id: devices.id, lastSeenAt: devices.lastSeenAt })
+        .from(devices)
+        .where(
+          inArray(
+            devices.id,
+            screens.map((screen) => screen.deviceId),
+          ),
+        )
+    ).map((row) => [row.id, row.lastSeenAt]),
+  );
+  // A station's screens are dark when the most recent sighting among them is: one live screen
+  // keeps the station lit.
+  const lastSeen = new Map<string, string | null>();
+  for (const screen of screens) {
+    const at = seen.get(screen.deviceId) ?? null;
+    for (const stationId of screen.stationIds) {
+      const before = lastSeen.get(stationId);
+      lastSeen.set(
+        stationId,
+        before === undefined ? at : before === null || (at !== null && at > before) ? at : before,
+      );
+    }
+  }
+  const dark = [...lastSeen].filter(([, at]) => at === null || at < darkBefore);
+  if (dark.length === 0) return [];
   const waiting = await stationsWithWaitingDishes(
     tx,
-    locationId,
+    venueLocationId,
     now,
-    rows.map((r) => r.stationId),
+    dark.map(([stationId]) => stationId),
   );
-  return rows.filter((r) => waiting.has(r.stationId));
+  if (waiting.size === 0) return [];
+  const darkSince = new Map(dark);
+  const stations = await tx
+    .select({ id: kitchenStations.id, name: kitchenStations.name })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.id, [...waiting]))
+    .orderBy(kitchenStations.displayOrder, kitchenStations.name);
+  return stations.map((station) => ({
+    stationId: station.id,
+    stationName: station.name,
+    lastSeenAt: darkSince.get(station.id)!,
+  }));
 }

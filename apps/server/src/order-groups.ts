@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from
 import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
+  devices,
   kitchenCourses,
   nowIso,
   orderGroupEvents,
@@ -66,6 +67,9 @@ export interface PartyCommandArgs {
   expectedPartyRevision: number;
   operatorId: string;
 }
+
+/** Who fires a group: a person, or a kitchen display nobody is signed in on. */
+export type Firer = { personId: string } | { deviceId: string };
 
 export interface OrderGroup {
   id: string;
@@ -255,6 +259,7 @@ export async function fireGroup(
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
+  firer: Firer = { personId: args.operatorId },
 ): Promise<{ revision: number }> {
   const routing = routingOnce(tx, cfg, new Date());
   return runServiceCommand(
@@ -266,7 +271,7 @@ export async function fireGroup(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
-      await releaseGroup(tx, cfg, partyId, groupId, args.operatorId, {}, routing);
+      await releaseGroup(tx, cfg, partyId, groupId, firer, {}, routing);
       return { revision };
     },
     cfg.madeHereSink,
@@ -364,7 +369,7 @@ export async function fireHeldGroupsOfCourse(
   cfg: OriginConfig,
   orderId: string,
   courseId: string,
-  operatorId: string,
+  firer: Firer,
   routing?: RoutingOnce,
 ): Promise<void> {
   const party = await partyRevisionOfOrder(tx, orderId);
@@ -396,7 +401,7 @@ export async function fireHeldGroupsOfCourse(
       cfg,
       partyId,
       group.id,
-      operatorId,
+      firer,
       {
         courseId,
         workingOrderId: orderId,
@@ -439,7 +444,7 @@ async function releaseGroup(
   cfg: OriginConfig,
   partyId: string,
   groupId: string,
-  operatorId: string,
+  firer: Firer,
   detail: Record<string, unknown>,
   routing = routingOnce(tx, cfg, new Date()),
 ): Promise<void> {
@@ -466,9 +471,22 @@ async function releaseGroup(
   }
   await tx
     .update(orderGroups)
-    .set({ state: "fired", firedAt: routing.at.toISOString(), firedBy: operatorId, remindAt: null })
+    .set({
+      state: "fired",
+      firedAt: routing.at.toISOString(),
+      remindAt: null,
+      ...("deviceId" in firer
+        ? { firedBy: null, firedByDeviceId: firer.deviceId }
+        : { firedBy: firer.personId, firedByDeviceId: null }),
+    })
     .where(eq(orderGroups.id, groupId));
-  await recordGroupEvent(tx, { partyId, groupId, kind: "fired", actorId: operatorId, detail });
+  await recordGroupEvent(tx, {
+    partyId,
+    groupId,
+    kind: "fired",
+    detail,
+    ...("deviceId" in firer ? { actorDeviceId: firer.deviceId } : { actorId: firer.personId }),
+  });
 }
 
 /**
@@ -1100,7 +1118,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       firedAt: orderGroups.firedAt,
       remindAt: orderGroups.remindAt,
       createdAt: orderGroups.createdAt,
-      sentBy: persons.displayName,
+      sentBy: sql<string | null>`coalesce(${persons.displayName}, ${devices.label})`,
     })
     .from(orderGroups)
     .leftJoin(
@@ -1109,6 +1127,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         persons.id,
         sql`case when ${orderGroups.state} = 'fired' then ${orderGroups.firedBy} else ${orderGroups.submittedBy} end`,
       ),
+    )
+    .leftJoin(
+      devices,
+      and(eq(orderGroups.state, "fired"), eq(devices.id, orderGroups.firedByDeviceId)),
     )
     .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));

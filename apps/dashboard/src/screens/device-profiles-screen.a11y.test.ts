@@ -372,8 +372,8 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
           .fn()
           .mockResolvedValue([{ profileId: "p2", stationIds: ["s1", "s-off"], watcherIds: [] }]),
         updateDeviceProfile: vi.fn().mockRejectedValue({
-          code: "device_profile.station_in_use",
-          params: { stationId: "s1", deviceId: "d1", deviceName: "Grill screen" },
+          code: "device_profile.access_invalid",
+          params: { field: "stationIds", reason: "not_found" },
         }),
       });
       const { el, host } = await mountWidget<DeviceProfilesScreen>(

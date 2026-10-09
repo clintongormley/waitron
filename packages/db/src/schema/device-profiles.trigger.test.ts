@@ -9,7 +9,7 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FORM_FACTOR_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedKitchenStation, seedTenant } from "../testing/seed.js";
+import { seedTenant } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
@@ -22,7 +22,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
   let locationId: LocationId;
-  let stationId: string;
   let profileSeq = 0;
 
   beforeAll(async () => {
@@ -37,7 +36,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
       })
       .returning({ id: locations.id });
     locationId = location!.id as LocationId;
-    stationId = await seedKitchenStation(db, { locationId });
   });
 
   async function freshKdsProfile(): Promise<string> {
@@ -53,7 +51,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
     await db.insert(devices).values({
       locationId,
       deviceProfileId: profileId,
-      stationId,
       label,
       tokenHash: TOKEN_HASH,
       active,

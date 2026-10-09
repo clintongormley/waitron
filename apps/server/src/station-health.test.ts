@@ -22,6 +22,8 @@ import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { inTx, order, seat, setupPartyVenue } from "./testing/party-venue.js";
 import { routeProductTo } from "./testing/zone-offers.js";
+import { VENUE_SERVICE } from "./modules.js";
+import type { DeviceKitchenScreen } from "@waitron/module";
 import {
   readStationHealth,
   stationHealthItemsQuery,
@@ -71,12 +73,16 @@ async function setup() {
     return response.json();
   };
   const [station] = await suite.db.select().from(kitchenStations);
-  const screen = async (stationId = station!.id, active = true) => {
+  const kitchenScreen = async (
+    screen: DeviceKitchenScreen,
+    formFactor: "kds" | "till" = "kds",
+    active = true,
+  ) => {
     const [profile] = await suite.db
       .insert(deviceProfiles)
       .values({
         name: randomUUID(),
-        formFactor: "kds",
+        formFactor,
         capabilities: [],
       })
       .returning();
@@ -84,7 +90,6 @@ async function setup() {
       .insert(devices)
       .values({
         locationId: v.cfg.locationId,
-        stationId,
         deviceProfileId: profile!.id,
         label: randomUUID(),
         tokenHash: randomUUID(),
@@ -92,9 +97,19 @@ async function setup() {
         lastSeenAt: "2026-10-05T17:50:00.000Z",
       })
       .returning();
+    await inTx(v, async (tx) => {
+      await VENUE_SERVICE.addProfileKitchenScreen(tx, v.cfg, profile!.id, screen);
+      await VENUE_SERVICE.setDeviceKitchenScreens(tx, v.cfg, {
+        deviceId: device!.id,
+        profileId: profile!.id,
+        screens: [screen],
+      });
+    });
     return device!.id;
   };
-  return { v, app, login, read, station: station!, screen };
+  const screen = (stationId = station!.id, active = true) =>
+    kitchenScreen({ kind: "station", stationIds: [stationId], zoneIds: null }, "kds", active);
+  return { v, app, login, read, station: station!, screen, kitchenScreen };
 }
 
 describe("station health", () => {
@@ -221,6 +236,25 @@ describe("station health", () => {
       oldestMinutes: null,
       items: [],
     });
+  });
+
+  it("counts only a kitchen display's station screen as a station's screen, an every-station one included", async () => {
+    const f = await setup();
+    const bar = await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Bar" }));
+    const every = { stationIds: null, zoneIds: null };
+    await f.kitchenScreen({ kind: "pass", ...every });
+    await f.kitchenScreen({ kind: "pass_monitor", ...every });
+    await f.kitchenScreen(
+      { kind: "station", stationIds: [f.station.id, bar.id], zoneIds: null },
+      "till",
+    );
+    const hasScreen = async () =>
+      (await f.read()).stations
+        .filter((s) => s.id === f.station.id || s.id === bar.id)
+        .map((s) => s.hasScreen);
+    expect(await hasScreen()).toEqual([false, false]);
+    await f.kitchenScreen({ kind: "station", ...every });
+    expect(await hasScreen()).toEqual([true, true]);
   });
 
   it("excludes held, made-here, fully served, abandoned and collected dishes while an undelivered ticket keeps ageing", async () => {

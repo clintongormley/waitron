@@ -30,6 +30,7 @@ export const CAPABILITY_FLAGS = [
   "hand-keyed-card-payment",
   "prepare-orders",
   "hand-over-orders",
+  "run-the-pass",
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 
@@ -49,6 +50,7 @@ export const PROFILE_SCREENS = [
   "show-station",
   "show-expo",
   "show-schedule",
+  "run-the-pass",
 ] as const satisfies readonly CapabilityFlag[];
 
 /** The screens a profile may start on. */
@@ -66,8 +68,12 @@ export function isSharedDisplay(formFactor: FormFactor): boolean {
   return formFactor === "kds";
 }
 
-/** The only action a shared display can be given: every other one needs a named person signed in. */
-const SHARED_DISPLAY_ACTIONS: readonly CapabilityFlag[] = ["prepare-orders"];
+/** The actions a shared display can be given: every other one needs a named person signed in. */
+const SHARED_DISPLAY_ACTIONS: readonly CapabilityFlag[] = [
+  "prepare-orders",
+  "take-orders",
+  "hand-over-orders",
+];
 
 /** Whether a shared display may hold `flag`: any screen, and only its own actions. */
 export function sharedDisplayMay(flag: CapabilityFlag): boolean {

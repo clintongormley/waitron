@@ -5,6 +5,8 @@ import {
   captureError,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  deviceProfiles,
+  devices,
   engineErrorMessage,
   floorZones,
   FOREIGN_KEY_VIOLATION,
@@ -40,8 +42,6 @@ const TABLES = [
   "menu_period_staff_menus",
   "device_profile_service_access",
   "device_profile_zones",
-  "device_profile_stations",
-  "device_profile_watchers",
   "station_fallbacks",
   "station_day_states",
   "period_extensions",
@@ -50,6 +50,13 @@ const TABLES = [
   "working_line_contexts",
   "service_settings",
   "kitchen_notices",
+  "device_profile_kitchen_screens",
+  "device_profile_kitchen_screen_stations",
+  "device_profile_kitchen_screen_zones",
+  "device_kitchen_screens",
+  "device_kitchen_screen_stations",
+  "device_kitchen_screen_zones",
+  "device_kitchen_screen_removals",
 ];
 
 /** One row of `pragma table_info`. `pk` is 0 for a non-key column and the 1-based position in the
@@ -152,6 +159,14 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect((await columnsOf("hours_week_cells")).length).toBeGreaterThan(0);
   });
 
+  it("leaves no profile station or watcher list behind", async () => {
+    const left = await db.execute<{ name: string }>(
+      sql`select name from sqlite_master where name in ('device_profile_stations',
+        'device_profile_watchers')`,
+    );
+    expect(left.rows).toEqual([]);
+  });
+
   it("keys and links every table on its own columns and each parent's primary key", async () => {
     const shape: Record<string, { primaryKey: string[]; foreignKeys: string[] }> = {};
     for (const table of TABLES) {
@@ -204,20 +219,6 @@ describe("the venue-service migration set carries no tenant column", () => {
         foreignKeys: [
           "(device_profile_id) -> device_profile_service_access(device_profile_id) on delete cascade",
           "(zone_id) -> floor_zones(id)",
-        ],
-      },
-      device_profile_stations: {
-        primaryKey: ["device_profile_id", "station_id"],
-        foreignKeys: [
-          "(device_profile_id) -> device_profiles(id) on delete cascade",
-          "(station_id) -> kitchen_stations(id)",
-        ],
-      },
-      device_profile_watchers: {
-        primaryKey: ["device_profile_id", "watcher_id"],
-        foreignKeys: [
-          "(device_profile_id) -> device_profiles(id) on delete cascade",
-          "(watcher_id) -> watchers(id)",
         ],
       },
       station_fallbacks: {
@@ -275,6 +276,50 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(working_order_id) -> working_orders(id) on delete cascade",
         ],
       },
+      device_profile_kitchen_screens: {
+        primaryKey: ["device_profile_id", "screen"],
+        foreignKeys: ["(device_profile_id) -> device_profiles(id) on delete cascade"],
+      },
+      device_profile_kitchen_screen_stations: {
+        primaryKey: ["device_profile_id", "screen", "station_id"],
+        foreignKeys: [
+          "(device_profile_id, screen) -> device_profile_kitchen_screens(device_profile_id, screen) on delete cascade",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      device_profile_kitchen_screen_zones: {
+        primaryKey: ["device_profile_id", "screen", "zone_id"],
+        foreignKeys: [
+          "(device_profile_id, screen) -> device_profile_kitchen_screens(device_profile_id, screen) on delete cascade",
+          "(zone_id) -> floor_zones(id)",
+        ],
+      },
+      device_kitchen_screens: {
+        primaryKey: ["device_id", "screen"],
+        foreignKeys: ["(device_id) -> devices(id)"],
+      },
+      device_kitchen_screen_stations: {
+        primaryKey: ["device_id", "screen", "station_id"],
+        foreignKeys: [
+          "(device_id, screen) -> device_kitchen_screens(device_id, screen) on delete cascade",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      device_kitchen_screen_zones: {
+        primaryKey: ["device_id", "screen", "zone_id"],
+        foreignKeys: [
+          "(device_id, screen) -> device_kitchen_screens(device_id, screen) on delete cascade",
+          "(zone_id) -> floor_zones(id)",
+        ],
+      },
+      device_kitchen_screen_removals: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(device_id) -> devices(id)",
+          "(station_id) -> kitchen_stations(id)",
+          "(zone_id) -> floor_zones(id)",
+        ],
+      },
     });
   });
 
@@ -292,6 +337,7 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect(predicate("kitchen_notices_open_idx")).toBe(
       `"kitchen_notices"."acknowledged_at" is null`,
     );
+    expect(columns("device_kitchen_screen_removals_device_idx")).toEqual(["device_id"]);
     expect(columns("departments_location_name_key")).toEqual(["location_id", "name"]);
     expect(columns("departments_one_default_per_location_key")).toEqual(["location_id"]);
     expect(predicate("departments_one_default_per_location_key")).toBe(
@@ -1021,5 +1067,187 @@ describe("the service settings and kitchen notices tables refuse what their rule
       expect(isRefusal(onOther, CHECK_VIOLATION)).toBe(true);
       expect(engineErrorMessage(onOther)).toContain("kitchen_notices_cancelled_extra_kind_ck");
     }
+  });
+});
+
+describe("the kitchen screen tables refuse what their rules forbid", () => {
+  async function venue() {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
+      .returning({ id: locations.id });
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId: location!.id, name: "Grill" })
+      .returning({ id: kitchenStations.id });
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId: brandLocationId(location!.id), name: "Terrace" })
+      .returning({ id: floorZones.id });
+    const [profile] = await db
+      .insert(deviceProfiles)
+      .values({ name: "Front till", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    const [device] = await db
+      .insert(devices)
+      .values({
+        locationId: location!.id,
+        deviceProfileId: profile!.id,
+        label: "Till 1",
+        tokenHash: "hash",
+      })
+      .returning({ id: devices.id });
+    return {
+      stationId: station!.id,
+      zoneId: zone!.id,
+      profileId: profile!.id,
+      deviceId: device!.id,
+    };
+  }
+
+  async function checkRefusal(statement: ReturnType<typeof sql>, constraint: string) {
+    const error = await captureError(() => db.execute(statement));
+    expect(isRefusal(error, CHECK_VIOLATION), constraint).toBe(true);
+    expect(engineErrorMessage(error), constraint).toContain(constraint);
+  }
+
+  async function count(table: string): Promise<number> {
+    const rows = await db.execute<{ n: number }>(
+      sql`select count(*) as n from ${sql.identifier(table)}`,
+    );
+    return rows.rows[0]!.n;
+  }
+
+  it("deletes a profile's kitchen screen rows with the profile", async () => {
+    const { stationId, zoneId, profileId } = await venue();
+    await db.execute(sql`insert into device_profile_kitchen_screens
+      (device_profile_id, screen, every_station, every_zone) values
+      (${profileId}, 'station', 0, 0), (${profileId}, 'pass', 0, 0)`);
+    await db.execute(sql`insert into device_profile_kitchen_screen_stations
+      (device_profile_id, screen, station_id) values (${profileId}, 'station', ${stationId})`);
+    await db.execute(sql`insert into device_profile_kitchen_screen_zones
+      (device_profile_id, screen, zone_id) values (${profileId}, 'pass', ${zoneId})`);
+
+    await db.execute(sql`delete from devices where device_profile_id = ${profileId}`);
+    await db.execute(sql`delete from device_profiles where id = ${profileId}`);
+
+    expect(await count("device_profile_kitchen_screens")).toBe(0);
+    expect(await count("device_profile_kitchen_screen_stations")).toBe(0);
+    expect(await count("device_profile_kitchen_screen_zones")).toBe(0);
+  });
+
+  it("refuses an unknown screen, every zone on a station screen and a zone on a station screen", async () => {
+    const { zoneId, profileId, deviceId } = await venue();
+    // The controls: every kind is accepted, and a pass screen may cover every zone.
+    await db.execute(sql`insert into device_profile_kitchen_screens
+      (device_profile_id, screen, every_station, every_zone) values
+      (${profileId}, 'station', 1, 0), (${profileId}, 'pass', 1, 1),
+      (${profileId}, 'pass_monitor', 1, 1)`);
+    await db.execute(sql`insert into device_kitchen_screens
+      (device_id, screen, every_station, every_zone) values
+      (${deviceId}, 'station', 1, 0), (${deviceId}, 'pass', 1, 1)`);
+    await db.execute(sql`insert into device_profile_kitchen_screen_zones
+      (device_profile_id, screen, zone_id) values (${profileId}, 'pass', ${zoneId})`);
+    await db.execute(sql`insert into device_kitchen_screen_zones
+      (device_id, screen, zone_id) values (${deviceId}, 'pass', ${zoneId})`);
+
+    await db.execute(sql`delete from device_profile_kitchen_screens`);
+    await db.execute(sql`delete from device_kitchen_screens`);
+
+    await checkRefusal(
+      sql`insert into device_profile_kitchen_screens (device_profile_id, screen, every_station, every_zone)
+          values (${profileId}, 'floor', 1, 1)`,
+      "device_profile_kitchen_screens_screen_ck",
+    );
+    await checkRefusal(
+      sql`insert into device_kitchen_screens (device_id, screen, every_station, every_zone)
+          values (${deviceId}, 'floor', 1, 1)`,
+      "device_kitchen_screens_screen_ck",
+    );
+    await checkRefusal(
+      sql`insert into device_profile_kitchen_screens (device_profile_id, screen, every_station, every_zone)
+          values (${profileId}, 'station', 1, 1)`,
+      "device_profile_kitchen_screens_station_zones_ck",
+    );
+    await checkRefusal(
+      sql`insert into device_kitchen_screens (device_id, screen, every_station, every_zone)
+          values (${deviceId}, 'station', 1, 1)`,
+      "device_kitchen_screens_station_zones_ck",
+    );
+
+    await db.execute(sql`insert into device_profile_kitchen_screens
+      (device_profile_id, screen, every_station, every_zone) values (${profileId}, 'station', 1, 0)`);
+    await db.execute(sql`insert into device_kitchen_screens
+      (device_id, screen, every_station, every_zone) values (${deviceId}, 'station', 1, 0)`);
+    await checkRefusal(
+      sql`insert into device_profile_kitchen_screen_zones (device_profile_id, screen, zone_id)
+          values (${profileId}, 'station', ${zoneId})`,
+      "device_profile_kitchen_screen_zones_not_station_ck",
+    );
+    await checkRefusal(
+      sql`insert into device_kitchen_screen_zones (device_id, screen, zone_id)
+          values (${deviceId}, 'station', ${zoneId})`,
+      "device_kitchen_screen_zones_not_station_ck",
+    );
+  });
+
+  it("refuses a removal naming both a station and a zone", async () => {
+    const { stationId, zoneId, deviceId } = await venue();
+    const removal = (station: string | null, zone: string | null) =>
+      sql`insert into device_kitchen_screen_removals (id, device_id, screen, station_id, zone_id, removed_at)
+          values (${randomUUID()}, ${deviceId}, 'pass', ${station}, ${zone}, ${new Date().toISOString()})`;
+    // The controls: a station, a zone, or neither (the kind itself).
+    await db.execute(removal(stationId, null));
+    await db.execute(removal(null, zoneId));
+    await db.execute(removal(null, null));
+
+    await checkRefusal(removal(stationId, zoneId), "device_kitchen_screen_removals_one_target_ck");
+    await checkRefusal(
+      sql`insert into device_kitchen_screen_removals (id, device_id, screen, removed_at)
+          values (${randomUUID()}, ${deviceId}, 'floor', ${new Date().toISOString()})`,
+      "device_kitchen_screen_removals_screen_ck",
+    );
+  });
+
+  it("deletes a device's chosen stations and zones with its kitchen screen row and keeps its removals", async () => {
+    const { stationId, zoneId, deviceId } = await venue();
+    await db.execute(sql`insert into device_kitchen_screens
+      (device_id, screen, every_station, every_zone) values
+      (${deviceId}, 'station', 0, 0), (${deviceId}, 'pass', 0, 0)`);
+    await db.execute(sql`insert into device_kitchen_screen_stations
+      (device_id, screen, station_id) values (${deviceId}, 'station', ${stationId}),
+      (${deviceId}, 'pass', ${stationId})`);
+    await db.execute(sql`insert into device_kitchen_screen_zones
+      (device_id, screen, zone_id) values (${deviceId}, 'pass', ${zoneId})`);
+    await db.execute(sql`insert into device_kitchen_screen_removals
+      (id, device_id, screen, station_id, removed_at)
+      values (${randomUUID()}, ${deviceId}, 'pass', ${stationId}, ${new Date().toISOString()})`);
+
+    await db.execute(sql`delete from device_kitchen_screens where screen = 'pass'`);
+
+    expect((await db.execute(sql`select screen from device_kitchen_screen_stations`)).rows).toEqual(
+      [{ screen: "station" }],
+    );
+    expect(await count("device_kitchen_screen_zones")).toBe(0);
+    expect(await count("device_kitchen_screen_removals")).toBe(1);
+  });
+
+  it("refuses to delete a device that still holds a kitchen screen or a removal", async () => {
+    const { deviceId } = await venue();
+    await db.execute(sql`insert into device_kitchen_screens
+      (device_id, screen, every_station, every_zone) values (${deviceId}, 'station', 1, 0)`);
+    const held = await captureError(() =>
+      db.transaction((tx) => tx.execute(sql`delete from devices where id = ${deviceId}`)),
+    );
+    expect(isRefusal(held, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+    await db.execute(sql`delete from device_kitchen_screens`);
+    await db.execute(sql`insert into device_kitchen_screen_removals (id, device_id, screen, removed_at)
+      values (${randomUUID()}, ${deviceId}, 'pass', ${new Date().toISOString()})`);
+    const removed = await captureError(() =>
+      db.transaction((tx) => tx.execute(sql`delete from devices where id = ${deviceId}`)),
+    );
+    expect(isRefusal(removed, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

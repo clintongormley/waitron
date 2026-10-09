@@ -60,7 +60,7 @@ describe("profile actions and screens", () => {
 
   it("keeps the show-* switches and the kitchen board as screens, and only the show-* ones are navigation screens", () => {
     expect([...PROFILE_SCREENS].sort()).toEqual(
-      ["act-as-kds", "show-station", "show-expo", "show-schedule"].sort(),
+      ["act-as-kds", "show-station", "show-expo", "show-schedule", "run-the-pass"].sort(),
     );
     expect([...NAVIGATION_SCREENS]).toEqual(["show-station", "show-expo", "show-schedule"]);
   });
@@ -76,6 +76,15 @@ describe("profile actions and screens", () => {
       "show-schedule",
       "take-cash",
     ]);
+  });
+});
+
+describe("run-the-pass", () => {
+  it("is a screen setting, not an action the server checks", () => {
+    expect(CAPABILITY_FLAGS).toContain("run-the-pass");
+    expect(PROFILE_SCREENS).toContain("run-the-pass");
+    expect(PROFILE_ACTIONS).not.toContain("run-the-pass");
+    expect(NAVIGATION_SCREENS).not.toContain("run-the-pass");
   });
 });
 

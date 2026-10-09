@@ -71,9 +71,6 @@ import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
-import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
-import { listWatchers } from "./watchers.js";
-import { parseWatcherDoneBody } from "./watcher-done-body.js";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -172,7 +169,7 @@ import {
   submitGroups,
   unsnoozeReminder,
 } from "./order-groups.js";
-import type { GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
+import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
@@ -369,7 +366,7 @@ export async function resolveCardCollector(
 }
 
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
-const STATUS: Record<string, ContentfulStatusCode> = {
+export const STATUS: Record<string, ContentfulStatusCode> = {
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
   "receipt.not_printed": 409,
@@ -420,7 +417,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department_transfer.destination_invalid": 400,
   "department_transfer.reason_required": 400,
   "working_order.not_found": 404,
-  "watcher.not_found": 404,
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
   "order.payment_in_flight": 409,
@@ -963,7 +959,7 @@ function mountCourseVerb(
     cfg: OriginConfig,
     orderId: string,
     courseId: string,
-    operatorId: string,
+    firer: Firer,
   ) => Promise<void>,
 ): void {
   app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
@@ -976,7 +972,7 @@ function mountCourseVerb(
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId }]);
-        await verb(tx, cfg, orderId, courseId, personId);
+        await verb(tx, cfg, orderId, courseId, { personId });
       });
       return c.body(null, 200);
     }),
@@ -1840,7 +1836,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
         notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
-        printersDown: (await stationPrintersDown(tx, deps.cfg.locationId, new Date(), id)).map(
+        printersDown: (await stationPrintersDown(tx, deps.cfg.locationId, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
       }));
@@ -1908,46 +1904,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return listExpoQueue(tx, deps.cfg);
       });
       return c.json(queue);
-    }),
-  );
-
-  app.get("/api/watchers", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const watchers = await withTransaction(deps.db, (tx) => listWatchers(tx, deps.cfg));
-      return c.json(watchers.map(({ id, name, runsPass }) => ({ id, name, runsPass })));
-    }),
-  );
-
-  app.get("/api/watchers/:id/queue", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("watcher.not_found", { watcherId: id });
-      return c.json(await withTransaction(deps.db, (tx) => listWatcherQueue(tx, deps.cfg, id)));
-    }),
-  );
-
-  app.post("/api/watchers/:id/done", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const cfg = requestCfg(deps.cfg, session);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("watcher.not_found", { watcherId: id });
-      const body = parseWatcherDoneBody(await readJsonBody(c));
-      const at = new Date();
-      await withTransaction(deps.db, (tx) =>
-        markWatcherItems(
-          tx,
-          cfg,
-          id,
-          body.ticketItemIds,
-          body.done,
-          { personId: session.personId },
-          at,
-        ),
-      );
-      return c.body(null, 204);
     }),
   );
 

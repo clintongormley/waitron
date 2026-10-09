@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -9,18 +9,14 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
-import { kitchenStations } from "./kitchen-stations.js";
 import { locations, tenants } from "./tenants.js";
 
-// What this suite proves is the column mapping and the two foreign keys.
+// What this suite proves is the column mapping and the location foreign key.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-const STATION_A = "cccccccc-0000-4000-8000-000000000001";
-const STATION_B = "cccccccc-0000-4000-8000-000000000002";
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
 const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
-const GHOST_STATION = "cccccccc-0000-4000-8000-000000000099";
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices schema (columns, FKs, unique)", () => {
@@ -47,10 +43,6 @@ describe("devices schema (columns, FKs, unique)", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await db.insert(kitchenStations).values([
-      { id: STATION_A, locationId: LOCATION_A, name: "Kitchen A" },
-      { id: STATION_B, locationId: LOCATION_B, name: "Kitchen B" },
-    ]);
     await db.insert(deviceProfiles).values([
       { id: KDS_PROFILE_A, name: "KDS A", formFactor: "kds" },
       { id: KDS_PROFILE_B, name: "KDS B", formFactor: "kds" },
@@ -62,7 +54,6 @@ describe("devices schema (columns, FKs, unique)", () => {
   }
 
   async function seedDevice(
-    station: string | null,
     label: string,
     location: string = LOCATION_A,
     profile: string = KDS_PROFILE_A,
@@ -73,7 +64,6 @@ describe("devices schema (columns, FKs, unique)", () => {
         .values({
           locationId: location,
           deviceProfileId: profile,
-          stationId: station,
           label,
           tokenHash: TOKEN_HASH,
         })
@@ -83,29 +73,31 @@ describe("devices schema (columns, FKs, unique)", () => {
   }
 
   it("devices: exposes every column through the Drizzle export, with the active default", async () => {
-    const id = await seedDevice(STATION_A, "Kitchen screen");
+    const id = await seedDevice("Kitchen screen");
     await inTx((tx) =>
       tx.update(devices).set({ lastSeenAt: new Date().toISOString() }).where(eq(devices.id, id)),
     );
     const [row] = await inTx((tx) => tx.select().from(devices).where(eq(devices.id, id)));
     expect(row!.deviceProfileId).toBe(KDS_PROFILE_A);
     expect(row!.locationId).toBe(LOCATION_A);
-    expect(row!.stationId).toBe(STATION_A);
     expect(row!.label).toBe("Kitchen screen");
     expect(row!.active).toBe(true);
     expect(row!.lastSeenAt).not.toBeNull();
   });
 
-  it("devices: the station FK rejects a station_id that names no kitchen_stations row", async () => {
-    // Positive control first, so the rejection below is the station FK and not a malformed row.
-    await seedDevice(STATION_B, "Real station");
-    const e = await captureError(() => seedDevice(GHOST_STATION, "Ghost station"));
-    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+  it("devices: carries no station_id or watcher_id column", () => {
+    const columns = suite.db
+      .all<{ name: string }>(sql`select name from pragma_table_info('devices')`)
+      .map((row) => row.name);
+    expect(columns).toContain("device_profile_id");
+    expect(columns).not.toContain("station_id");
+    expect(columns).not.toContain("watcher_id");
   });
 
   it("devices: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
-    // A valid station, so the location FK is the only constraint that can fire.
-    const e = await captureError(() => seedDevice(STATION_A, "Ghost location", GHOST_LOCATION));
+    // Positive control first, so the rejection below is the location FK and not a malformed row.
+    await seedDevice("Real location", LOCATION_B);
+    const e = await captureError(() => seedDevice("Ghost location", GHOST_LOCATION));
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

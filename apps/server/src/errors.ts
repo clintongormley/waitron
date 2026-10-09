@@ -738,10 +738,6 @@ declare module "@waitron/shared" {
      */
     "device.not_found": { deviceId: string };
     /**
-     * A join request was accepted under a kitchen-screen profile with no station and no watcher.
-     */
-    "device.station_required": Record<string, never>;
-    /**
      * Accepting a device under a name an active device at its location already has
      * (`devices_location_label_active_key`). The admin renames the device.
      */

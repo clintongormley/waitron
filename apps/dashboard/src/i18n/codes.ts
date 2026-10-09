@@ -573,9 +573,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This request is no longer waiting for your approval. If the device is not in the list, ask it to try again",
     es: "Esta solicitud ya no espera tu aprobación. Si el dispositivo no está en la lista, pídele que lo vuelva a intentar",
   },
-  "device.station_required": {
-    en: "This profile needs a station — choose one",
-    es: "Este perfil necesita una estación. Elige una",
+  "kitchen_screen.required": {
+    en: "Choose what this kitchen display shows",
+    es: "Elige qué muestra esta pantalla de cocina",
   },
   "device.name_taken": {
     en: "An active device here already has that name — choose another",
@@ -592,18 +592,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "station.not_allowed": {
     en: "This device's profile does not list that station. Choose one it lists",
     es: "El perfil de este dispositivo no incluye esa estación. Elige una de las que incluye",
-  },
-  "watcher.not_allowed": {
-    en: "This device's profile does not list that watcher. Choose one it lists",
-    es: "El perfil de este dispositivo no incluye ese punto de seguimiento. Elige uno de los que incluye",
-  },
-  "device_profile.station_in_use": {
-    en: "A kitchen screen on this profile still shows that station. Choose another station for it on Devices first",
-    es: "Una pantalla de cocina con este perfil todavía muestra esa estación. Elige otra para ella en Dispositivos primero",
-  },
-  "device_profile.watcher_in_use": {
-    en: "A kitchen screen on this profile still shows that watcher. Choose another for it on Devices first",
-    es: "Una pantalla de cocina con este perfil todavía muestra ese punto de seguimiento. Elige otro para ella en Dispositivos primero",
   },
   "device_profile.access_invalid": {
     en: "Something this profile names is no longer available. Check its choices and save again",

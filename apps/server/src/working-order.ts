@@ -88,12 +88,12 @@ import {
   ticketItems,
   partyTables,
   parties,
+  passItemMarks,
   partyTableLabels,
   withTransaction,
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
-  watcherItemMarks,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -168,6 +168,7 @@ import {
   requireGroup,
   requireOperator,
   startGroup,
+  type Firer,
   type HeldChange,
   type ReleaseReminder,
   type PartyCommandArgs,
@@ -181,8 +182,8 @@ import {
   enqueueWatcherCopies,
   firedQuantity,
   isStarted,
-  ordersWithPrintProblem,
   readCancelledExtra,
+  stationOrdersWithPrintProblem,
 } from "./kitchen-print.js";
 import type { CancelledExtra, CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
@@ -1881,7 +1882,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
  * Already-fired items retain their timestamps; an empty held set is a no-op.
  *
  * On a party's order, the held groups holding the course's dishes fire whole first
- * ({@link fireHeldGroupsOfCourse}); `operatorId` is who fired them. The course's lines still held
+ * ({@link fireHeldGroupsOfCourse}); `firer` is who fired them. The course's lines still held
  * outside a held group, such as one recalled from a fired group, are then released.
  */
 export async function fireCourse(
@@ -1889,11 +1890,11 @@ export async function fireCourse(
   cfg: OriginConfig,
   orderId: string,
   courseId: string,
-  operatorId: string,
+  firer: Firer,
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await requireCourse(tx, cfg, courseId);
-  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId, routing);
+  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, firer, routing);
   await releaseHeld(
     tx,
     cfg,
@@ -3905,12 +3906,12 @@ async function splitTicketItem(
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
   });
-  const marks = await tx
+  const passMarks = await tx
     .select()
-    .from(watcherItemMarks)
-    .where(eq(watcherItemMarks.ticketItemId, ticketItemId));
-  if (marks.length) {
-    await tx.insert(watcherItemMarks).values(marks.map((mark) => ({ ...mark, ticketItemId: id })));
+    .from(passItemMarks)
+    .where(eq(passItemMarks.ticketItemId, ticketItemId));
+  if (passMarks.length) {
+    await tx.insert(passItemMarks).values(passMarks.map((mark) => ({ ...mark, ticketItemId: id })));
   }
   return id;
 }
@@ -6440,9 +6441,20 @@ export async function listStationQueue(
   tx: Transaction,
   stationId: string,
 ): Promise<StationQueueGroup[]> {
+  return (await listStationQueues(tx, [stationId])).get(stationId)!;
+}
+
+/** Each of `stationIds`' {@link listStationQueue}, read together. */
+export async function listStationQueues(
+  tx: Transaction,
+  stationIds: readonly string[],
+): Promise<Map<string, StationQueueGroup[]>> {
   await assertKitchenTimingPresent(tx);
+  const queues = new Map(stationIds.map((id) => [id, [] as StationQueueGroup[]]));
+  if (stationIds.length === 0) return queues;
   const rows = await tx
     .select({
+      stationId: ticketItems.stationId,
       itemId: ticketItems.id,
       workingOrderLineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
@@ -6488,7 +6500,7 @@ export async function listStationQueue(
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
-        eq(ticketItems.stationId, stationId),
+        inArray(ticketItems.stationId, [...stationIds]),
         eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
@@ -6507,22 +6519,30 @@ export async function listStationQueue(
   );
 
   const orderIds = [...new Set(rows.map((row) => row.orderId))];
-  const showsRestOfOrder = rows[0]?.showsRestOfOrder ?? false;
-  const rest: Map<string, RestOfOrderItem[]> = showsRestOfOrder
-    ? await readRestOfOrder(tx, orderIds)
-    : new Map();
-  const restSoldInEach = showsRestOfOrder
-    ? await VENUE_SERVICE.readLinesSoldInEach(
-        tx,
-        [...rest.values()].flatMap((items) => items.map((item) => item.workingOrderLineId)),
-      )
-    : new Set<string>();
+  const restOrderIds = [
+    ...new Set(rows.filter((row) => row.showsRestOfOrder).map((row) => row.orderId)),
+  ];
+  const rest: Map<string, RestOfOrderItem[]> = await readRestOfOrder(tx, restOrderIds);
+  const restSoldInEach =
+    restOrderIds.length > 0
+      ? await VENUE_SERVICE.readLinesSoldInEach(
+          tx,
+          [...rest.values()].flatMap((items) => items.map((item) => item.workingOrderLineId)),
+        )
+      : new Set<string>();
 
   const nowMs = Date.now();
-  const printProblems = await ordersWithPrintProblem(tx, stationId, orderIds, new Date(nowMs));
-  // The Map keeps insertion order, so groups come out oldest-first.
-  const groups = new Map<string, StationQueueGroup>();
+  const printProblems = await stationOrdersWithPrintProblem(
+    tx,
+    stationIds,
+    orderIds,
+    new Date(nowMs),
+  );
+  // Each Map keeps insertion order, so groups come out oldest-first.
+  const groupsAt = new Map(stationIds.map((id) => [id, new Map<string, StationQueueGroup>()]));
   for (const row of rows) {
+    const { stationId, showsRestOfOrder } = row;
+    const groups = groupsAt.get(stationId)!;
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
       overdueAfterMinutes: row.overdueAfterMinutes,
@@ -6537,7 +6557,10 @@ export async function listStationQueue(
         queuedAt: row.queuedAt,
         status: row.status,
         ...optional("party", queueParty(row)),
-        ...optional("printProblem", printProblems.has(row.orderId) ? true : undefined),
+        ...optional(
+          "printProblem",
+          printProblems.get(stationId)!.has(row.orderId) ? true : undefined,
+        ),
         items: [],
         ...optional(
           "elsewhere",
@@ -6595,7 +6618,8 @@ export async function listStationQueue(
       band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
     });
   }
-  return [...groups.values()];
+  for (const [stationId, groups] of groupsAt) queues.set(stationId, [...groups.values()]);
+  return queues;
 }
 
 /** One item on the cross-station expo board. */

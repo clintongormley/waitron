@@ -264,9 +264,7 @@ the server checks each at the route, never trusting the till's copy:
   A profile with no department row keeps the venue's counter-default zone.
 - **A kitchen display's station and watcher lists are its manager's choices, not its routing.** The
   manager gives each device on the profile one station or watcher from those lists (Devices →
-  edit); what reaches that station still comes from the venue's routing. Taking an entry off a list
-  while a device shows it is refused, naming the device (`device_profile.station_in_use`,
-  `device_profile.watcher_in_use`).
+  edit); what reaches that station still comes from the venue's routing.
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks

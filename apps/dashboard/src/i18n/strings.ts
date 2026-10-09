@@ -1843,6 +1843,7 @@ export const en = {
   "device_profiles.capability.hand-keyed-card-payment": "Takes cards on a separate card terminal",
   "device_profiles.capability.prepare-orders": "Prepares orders",
   "device_profiles.capability.hand-over-orders": "Hands orders over",
+  "device_profiles.capability.run-the-pass": "Runs the pass",
   "device_profiles.receipt_printers": "Receipt printers",
   "device_profiles.payment_slip_printers": "Payment slip printers",
   "device_profiles.no_printers": "Add a printer first.",
@@ -1850,10 +1851,6 @@ export const en = {
   "device_profiles.stations": "Stations its screens can show",
   "device_profiles.watchers": "Watchers its screens can show",
   "device_profiles.no_kitchen_choices": "Add a prep station or a watcher first.",
-  "device_profiles.station_in_use":
-    "{device} shows this station. Choose another station for it on Devices first.",
-  "device_profiles.watcher_in_use":
-    "{device} shows this watcher. Choose another for it on Devices first.",
   "device_profiles.move_up": "Move up",
   "device_profiles.move_down": "Move down",
   // The `till` form factor is the cash register, the owner's chosen word.
@@ -1887,7 +1884,7 @@ export const en = {
   "device_profiles.actions_hint":
     "A device on this profile can do only what is switched on here. A new profile starts with nothing switched on.",
   "device_profiles.shared_display_actions_hint":
-    "A kitchen display has nobody signed in, so it can only prepare orders.",
+    "A kitchen display has nobody signed in, so it can only prepare orders, and take and hand them over from a pass screen.",
   "device_profiles.screens": "Screens it shows",
   "device_profiles.starting_screen": "Opens on",
   "device_profiles.starting_screen_first_tab": "The layout's first tab",
@@ -1912,7 +1909,7 @@ export const en = {
   "device_profiles.err_people":
     "Check the rules for one person: someone on the list no longer exists.",
   "device_profiles.err_shared_display_action":
-    "A kitchen display can only prepare orders. Switch the other actions off.",
+    "A kitchen display can only take, prepare and hand over orders. Switch the other actions off.",
   "device_profiles.err_starting_screen":
     "Choose a screen this profile shows, or the layout's first tab.",
   "payments.title": "Card payments",
@@ -4367,6 +4364,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.capability.hand-keyed-card-payment": "Cobra con tarjeta en un datáfono aparte",
   "device_profiles.capability.prepare-orders": "Prepara pedidos",
   "device_profiles.capability.hand-over-orders": "Entrega pedidos",
+  "device_profiles.capability.run-the-pass": "Lleva el pase",
   "device_profiles.receipt_printers": "Impresoras de tickets",
   "device_profiles.payment_slip_printers": "Impresoras de justificantes de pago",
   "device_profiles.no_printers": "Añade primero una impresora.",
@@ -4374,10 +4372,6 @@ export const es: Record<StringKey, string> = {
   "device_profiles.stations": "Estaciones que pueden mostrar sus pantallas",
   "device_profiles.watchers": "Puntos de seguimiento que pueden mostrar sus pantallas",
   "device_profiles.no_kitchen_choices": "Añade primero una estación o un punto de seguimiento.",
-  "device_profiles.station_in_use":
-    "{device} muestra esta estación. Primero elige otra para ese dispositivo en Dispositivos.",
-  "device_profiles.watcher_in_use":
-    "{device} muestra este punto de seguimiento. Primero elige otro para ese dispositivo en Dispositivos.",
   "device_profiles.move_up": "Subir",
   "device_profiles.move_down": "Bajar",
   "device_profiles.form_factor": "Formato",
@@ -4410,7 +4404,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.actions_hint":
     "Un dispositivo con este perfil solo puede hacer lo que esté activado aquí. Un perfil nuevo empieza sin nada activado.",
   "device_profiles.shared_display_actions_hint":
-    "En una pantalla de cocina no inicia sesión nadie, así que solo puede preparar pedidos.",
+    "En una pantalla de cocina no inicia sesión nadie, así que solo puede preparar pedidos, y tomarlos y entregarlos desde una pantalla de pase.",
   "device_profiles.screens": "Pantallas que muestra",
   "device_profiles.starting_screen": "Se abre en",
   "device_profiles.starting_screen_first_tab": "La primera pestaña del diseño",
@@ -4436,7 +4430,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.err_people":
     "Revisa las reglas para una persona: alguien de la lista ya no existe.",
   "device_profiles.err_shared_display_action":
-    "Una pantalla de cocina solo puede preparar pedidos. Desactiva las demás acciones.",
+    "Una pantalla de cocina solo puede tomar, preparar y entregar pedidos. Desactiva las demás acciones.",
   "device_profiles.err_starting_screen":
     "Elige una pantalla que muestre este perfil, o la primera pestaña del diseño.",
   "payments.title": "Pagos con tarjeta",
