@@ -66,6 +66,8 @@ let ticketThenPayZone: string;
 let terrazaZone: string;
 /** Caña at 3.50, offered in the counter zone only; everywhere else it sells at 3.00. */
 let counterCaña: string;
+/** The tables zone's own department. */
+let comedorDepartment: string;
 
 async function zoneNamed(
   tx: Transaction,
@@ -94,6 +96,7 @@ useVenueDb({
       });
       await configureZone(tx, v.cfg, { zoneId: v.tables.zoneId, departmentId: department.id });
       await offerProducts(tx, v.cfg, { zone: "tables" });
+      comedorDepartment = department.id;
     });
     ticketThenPayZone = await inTx(v, (tx) => zoneNamed(tx, "Barra factura", "ticket_then_pay"));
     terrazaZone = await inTx(v, (tx) => zoneNamed(tx, "Terraza", "table_tab"));
@@ -941,12 +944,15 @@ describe("the service area of a moved bill", () => {
     expect(await linesOf(v, orderId)).toHaveLength(2);
   });
 
-  it("keeps a presented bill's own zone, status and lines, and it takes no order", async () => {
+  it("gives a presented bill the table's zone, keeps its status and lines, and it takes no order", async () => {
     const mesa = await v.table("Mesa presentada");
     const ana = await seat(v, mesa);
     await order(v, ana.tabId, "Burger");
     const placed = await placedCounterOrder("Tarta");
     const linesBefore = await lineRows(placed);
+    const before = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, placed));
+    expect(before!.serviceMode).toBe("prepay");
+    expect(before!.departmentId).not.toBe(comedorDepartment);
 
     const result = await move(placed, { tableId: mesa });
 
@@ -956,7 +962,11 @@ describe("the service area of a moved bill", () => {
       partyId: ana.partyId,
       status: "placed",
     });
-    expect(await zoneOf(v, placed)).toBe(ticketThenPayZone);
+    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, placed))).toEqual({
+      zoneId: v.tables.zoneId,
+      departmentId: comedorDepartment,
+      serviceMode: "table_tab",
+    });
     expect(await lineRows(placed)).toEqual(
       linesBefore.map((line) => ({ ...line, groupId: lastGroupOf(ana.partyId) })),
     );
@@ -1191,7 +1201,7 @@ describe("a presented party bill leaves its party", () => {
     return { ana, second, lines, tickets: await ticketsOf(second) };
   }
 
-  it("keeps it presented, with every line's contents and its zone, at another party", async () => {
+  it("keeps it presented, with every line's contents, at another party, taking that party's zone", async () => {
     const { second, lines, tickets } = await presentedSplit("Mesa presentada 2");
     const luisTable = await v.table("Terraza presentada 2", terrazaZone);
     const luis = await seat(v, luisTable);
@@ -1203,7 +1213,7 @@ describe("a presented party bill leaves its party", () => {
     const groupId = lastGroupOf(luis.partyId);
     expect(await lineRows(second)).toEqual(lines.map((line) => ({ ...line, groupId })));
     expect(await ticketsOf(second)).toEqual(tickets);
-    expect(await zoneOf(v, second)).toBe(v.tables.zoneId);
+    expect(await zoneOf(v, second)).toBe(terrazaZone);
     expect((await partyRow(v, luis.partyId)).mainBillId).toBe(luis.tabId);
   });
 

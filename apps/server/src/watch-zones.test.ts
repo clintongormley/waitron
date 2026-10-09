@@ -49,7 +49,7 @@ const counterBill = (id: string, deliveryTableId: string | null = null) => ({
 });
 
 describe("orderWatchZones", () => {
-  it("follows a party's current table for both open and presented bills after a move", async () => {
+  it("gives a moved party's open and presented bills the new table's zone, and records it on the presented bill", async () => {
     const outside = await v.table("Watch outside", terrace);
     const inside = await v.table("Watch inside");
     const { partyId, tabId } = await seat(v, outside);
@@ -75,7 +75,7 @@ describe("orderWatchZones", () => {
       }),
     );
     expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, v.cfg, [presented]))).toEqual(
-      new Map([[presented, terrace]]),
+      new Map([[presented, v.tables.zoneId]]),
     );
     expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, orders))).toEqual(
       new Map([

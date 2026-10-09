@@ -5,6 +5,11 @@
 > `ticket_then_pay` policy; placement files no invoice. References below to
 > invoice-first placement or preserving that legacy style describe the earlier design.
 
+> **2026-10-09, A440:** a presented bill now takes the receiving zone, its department and service
+> mode when it moves with its party, into another party or to a free table; moved to the counter it
+> still keeps its recorded zone. Statements below that a presented bill keeps its own service area
+> on those other moves describe the earlier design.
+
 
 **Status:** draft for review, revision 4 (2026-09-28). Section 4 holds the owner's decisions, made in
 design sessions on 2026-09-28; everything else is this document's proposal and is open to review.

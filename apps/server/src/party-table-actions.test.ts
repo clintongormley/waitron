@@ -383,7 +383,7 @@ describe("move guests", () => {
     expect(await activeTablesOf(v, ana.partyId)).toEqual([m9]);
   });
 
-  it("gives the party's open bills a free table's zone when it is in another zone", async () => {
+  it("gives the party's open and presented bills a free table's zone when it is in another zone", async () => {
     const [m4] = await tables("Zona", 4);
     const terraza = await v.table("Zona T1", terrazaZone);
     const ana = await seat(v, m4);
@@ -395,7 +395,7 @@ describe("move guests", () => {
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terraza, moving));
 
     expect(await zoneOf(v, ana.tabId)).toBe(terrazaZone);
-    expect(await zoneOf(v, second)).toBe(v.tables.zoneId);
+    expect(await zoneOf(v, second)).toBe(terrazaZone);
     expect((await billRow(v, second)).status).toBe("placed");
   });
 
@@ -486,12 +486,14 @@ describe("move guests", () => {
     expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
   });
 
-  it("gives the moving party's open bills the receiving party's zone when it sits in another", async () => {
+  it("gives the moving party's open and presented bills the receiving party's zone when it sits in another", async () => {
     const [m4] = await tables("Area", 4);
     const terraza = await v.table("Area T7", terrazaZone);
     const ana = await seat(v, m4);
     const luis = await seat(v, terraza);
-    await order(v, ana.tabId, "Burger");
+    await order(v, ana.tabId, "Burger", "Agua");
+    const presented = await splitOff(ana.partyId, ana.tabId, [2]);
+    await placeByHand(v, presented);
 
     const moving = await opts(ana.partyId, luis.partyId, "separate");
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terraza, moving));
@@ -500,6 +502,8 @@ describe("move guests", () => {
     expect(await linesOf(v, ana.tabId)).toMatchObject([
       { name: "Burger", unitPriceGross: 1200, vatClass: "general" },
     ]);
+    expect(await zoneOf(v, presented)).toBe(terrazaZone);
+    expect(await billRow(v, presented)).toMatchObject({ status: "placed", partyId: luis.partyId });
   });
 
   it("moves to one of the party's own tables while it holds two: the other leaves and needs clearing", async () => {

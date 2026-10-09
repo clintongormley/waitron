@@ -485,7 +485,7 @@ describe("moving into closed zones", () => {
       destination.id,
     ]);
   });
-  it("lets a presented bill move to a closed zone while keeping its recorded zone", async () => {
+  it("lets a presented bill move to a closed zone, taking that zone", async () => {
     const { v, dining } = await moveVenue();
     const source = await seated(v, dining);
     const destination = await freeTable(v, v.zoneId);
@@ -504,7 +504,7 @@ describe("moving into closed zones", () => {
       .select()
       .from(orderServiceContexts)
       .where(eq(orderServiceContexts.workingOrderId, source.tabId));
-    expect(context!.zoneId).toBe(dining);
+    expect(context!.zoneId).toBe(v.zoneId);
     const links = await suite.db
       .select()
       .from(partyTables)
