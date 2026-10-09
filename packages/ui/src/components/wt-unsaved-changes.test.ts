@@ -75,7 +75,11 @@ test("Escape chooses Keep editing and a later opening can choose Discard", async
   el.addEventListener("wt-unsaved-choice", (event) =>
     choices.push((event as CustomEvent).detail.decision),
   );
+  const closed = new Promise((resolve) =>
+    el.shadowRoot!.querySelector("wt-modal")!.addEventListener("wt-close", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
+  await closed;
   await vi.waitFor(() => expect(choices).toEqual(["keep"]));
   el.open = true;
   await el.updateComplete;
