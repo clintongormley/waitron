@@ -186,7 +186,8 @@ export class OpeningHoursDay extends LitElement {
             ...slot,
           })),
         }));
-        const own = special && department.dates.find((row) => row.specialDateId === special.id);
+        const own =
+          special?.ownHours && department.dates.find((row) => row.specialDateId === special.id);
         if (own) days[weekday]!.slots = own.slots.map((slot) => ({ ...slot }));
         return [department.id, days];
       }),
@@ -308,7 +309,7 @@ export class OpeningHoursDay extends LitElement {
         const days = submitted[department.id];
         if (!days || same(days, this.baseline[department.id] ?? [])) continue;
         try {
-          if (special)
+          if (special?.ownHours)
             await this.api.saveDateMenus(special.id, department.id, days[weekday]!.slots);
           else await this.api.saveWeek(department.id, days);
         } catch (error) {
@@ -318,7 +319,7 @@ export class OpeningHoursDay extends LitElement {
           if (
             codeOf(error) === "menu_timetable.invalid" &&
             typeof field === "string" &&
-            (special
+            (special?.ownHours
               ? /^(?:slots(?:\.|$)|date$)/.test(field)
               : new RegExp(`^days\\.${weekday}(?:\\.|$)`).test(field))
           ) {
@@ -425,7 +426,7 @@ export class OpeningHoursDay extends LitElement {
           >›</wt-button
         >
       </div>
-      ${special ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]) })}</p>`}
+      ${special?.ownHours ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]) })}</p>`}
       ${
         this.departments().length
           ? html`<service-grid
@@ -449,7 +450,7 @@ export class OpeningHoursDay extends LitElement {
                 .range=${opening.input}
                 .periods=${this.periods(opening.department)}
                 .dayCutover=${this.model.dayCutover}
-                .businessDate=${special?.date}
+                .businessDate=${special?.ownHours ? this.date : undefined}
                 .timeZone=${this.model.clockReadable ? this.model.timeZone : undefined}
                 .occupied=${this.slots(opening.department.id).filter((_, index) => index !== opening.index)}
                 .deletable=${opening.index !== undefined}

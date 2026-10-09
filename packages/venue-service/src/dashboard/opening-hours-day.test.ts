@@ -767,3 +767,104 @@ it("applies an old repeating named day's own hours on the later occurrence", asy
       ],
     ]);
 });
+
+it.each([true, false])(
+  "saves the normal week for a named day without own hours (repeats: %s)",
+  async (repeats) => {
+    vi.setSystemTime(new Date("2026-10-13T10:00:00Z"));
+    const model = dayFixture();
+    model.namedDays = [
+      {
+        ...model.namedDays[0]!,
+        date: repeats ? "2025-10-13" : "2026-10-13",
+        repeats,
+        ownHours: false,
+      },
+    ];
+    model.departments[0]!.dates = [];
+    const writes: unknown[] = [];
+    const day = await mount(async (...args) => {
+      writes.push(args);
+    }, model);
+    expect(day.shadowRoot!.querySelector("[data-test=day-date]")!.textContent).toContain("Party");
+    expect(grid(day).columns[0]!.slots).toEqual([
+      { periodId: "p1", startsAt: "11:00", endsAt: "15:00" },
+    ]);
+    emit(grid(day), "grid-block-change", {
+      columnKey: "d1",
+      index: 0,
+      startsAt: "11:00",
+      endsAt: "17:00",
+    });
+    await day.updateComplete;
+    save(day).click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/departments/d1/menu-week",
+          "PUT",
+          {
+            days: [
+              { weekday: 0, slots: [] },
+              { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+              { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "17:00" }] },
+              { weekday: 3, slots: [] },
+              { weekday: 4, slots: [] },
+              { weekday: 5, slots: [] },
+              { weekday: 6, slots: [] },
+            ],
+          },
+        ],
+      ]);
+    expect(day.shadowRoot!.textContent).toContain("Changes every Tuesday");
+  },
+);
+
+it("ignores retained dated rows when the named day follows the normal week", async () => {
+  vi.setSystemTime(new Date("2026-10-13T10:00:00Z"));
+  const model = dayFixture();
+  model.namedDays = [{ ...model.namedDays[0]!, ownHours: false }];
+  const day = await mount(undefined, model);
+  expect(grid(day).columns[0]!.slots).toEqual([
+    { periodId: "p1", startsAt: "11:00", endsAt: "15:00" },
+  ]);
+});
+
+it("shows a normal-week field refusal beside the department on a repeating named day", async () => {
+  vi.setSystemTime(new Date("2026-10-13T10:00:00Z"));
+  const model = dayFixture();
+  model.namedDays = [
+    { ...model.namedDays[0]!, date: "2025-10-13", repeats: true, ownHours: false },
+  ];
+  model.departments[0]!.dates = [];
+  const day = await mount(async () => {
+    throw { code: "menu_timetable.invalid", params: { field: "days.2.slots.0.endsAt" } };
+  }, model);
+  emit(grid(day), "grid-block-change", {
+    columnKey: "d1",
+    index: 0,
+    startsAt: "11:00",
+    endsAt: "17:00",
+  });
+  await day.updateComplete;
+  save(day).click();
+  await expect
+    .poll(() => day.shadowRoot!.querySelector("[data-department-error=d1]")?.textContent)
+    .toContain("Check this day");
+});
+
+it("uses the later occurrence's date for a repeating named day's clock warning", async () => {
+  vi.setSystemTime(new Date("2027-10-30T10:00:00Z"));
+  const model = dayFixture();
+  model.namedDays = [{ ...model.namedDays[0]!, date: "2026-10-30", repeats: true, ownHours: true }];
+  const day = await mount(undefined, model);
+  const range = await open(day);
+  emit(range.shadowRoot!.querySelector("[name=startsAt]")!, "wt-change", { value: "02:00" });
+  emit(range.shadowRoot!.querySelector("[name=endsAt]")!, "wt-change", { value: "03:00" });
+  await range.updateComplete;
+  expect(range.shadowRoot!.querySelector("[data-test=repeat-note]")?.textContent).toContain(
+    "02:00",
+  );
+  expect(range.businessDate).toBe("2027-10-30");
+});
