@@ -890,13 +890,13 @@ describe("till-menu-browser", () => {
 
       await search(el, "a");
       expect(names(entries(el, "results"))).toEqual([
-        "Lemonade",
+        "Agua",
         "Café",
-        "Cola",
         "Caña",
         "Jamón",
+        "Cola",
         "Tostada",
-        "Agua",
+        "Lemonade",
       ]);
 
       await search(el, "");
@@ -1090,7 +1090,7 @@ describe("till-menu-browser", () => {
         {
           menu: "menu-drinks",
           heading: "Drinks",
-          names: ["Cola", "Coconut water", "Cortado"],
+          names: ["Cola", "Cortado", "Coconut water"],
           empty: null,
         },
       ]);
@@ -1964,7 +1964,7 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Drinks (EN)"));
       expect(names(entries(el, "section"))).toEqual(["Lemonade"]);
       await search(el, "a");
-      expect(names(entries(el, "results"))).toEqual(["Lemonade", "Jamón", "Tostada", "Agua"]);
+      expect(names(entries(el, "results"))).toEqual(["Agua", "Jamón", "Tostada", "Lemonade"]);
     });
 
     it("shows a staff-only product as it shows a public one, and rings it up", async () => {

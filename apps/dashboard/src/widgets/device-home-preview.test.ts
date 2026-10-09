@@ -531,6 +531,12 @@ describe("dashboard-device-home-preview", () => {
     expect(tiles(el, "results")).toEqual([]);
   });
 
+  it("lists the closest matches first: the earlier match, then the shorter name", async () => {
+    const { el } = await mount();
+    await search(el, "a");
+    expect(names(tiles(el, "results"))).toEqual(["Ham", "Water", "Lemonade"]);
+  });
+
   it("keeps an empty slot's place", async () => {
     const { el } = await mount();
     const cells = [

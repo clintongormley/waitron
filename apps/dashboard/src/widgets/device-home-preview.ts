@@ -33,7 +33,7 @@ import {
   foldForSearch,
   indexDocument,
   openedSection,
-  searchMatcher,
+  searchFor,
   sectionTrail,
   shownMembers,
   tileFill,
@@ -859,8 +859,7 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #results(names: [FrozenOffer, string][], display: HomeDisplay): TemplateResult {
-    const matches = searchMatcher(this.query);
-    const found = names.filter(([, name]) => matches(name)).map(([offer]) => offer);
+    const found = searchFor(this.query)(names);
     return html`<section data-region="results" aria-labelledby="results-heading">
       <h2 id="results-heading">${t("home.results")}</h2>
       ${
