@@ -203,7 +203,7 @@ const storedChoice = async (
     today?.moment ?? null,
   );
 
-describe("route explanation", () => {
+describe("maker descriptions and the deciding cell", () => {
   it("loads a frozen cell list, so routing a whole catalogue indexes it once", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -1743,6 +1743,43 @@ describe("routing previews", () => {
         ]);
       }));
 
+    it("lists an extra's move during a period its own cell has a line for", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const [downstairs] = await tx
+          .insert(kitchenStations)
+          .values({ ...f.cfg, name: "Downstairs bar" })
+          .returning();
+        const lunch = (
+          await saveMenuPeriod(tx, f.cfg, f.department, {
+            name: "Lunch",
+            menuId: f.menu,
+            staffMenuIds: [],
+          })
+        ).id;
+        const address: CellAddress = { row: productRow(f.cheese), zoneId: null };
+        await setRoutingCell(tx, f.cfg, address, station(f.bar));
+        const [cheeseCell] = await tx
+          .select({ id: routingCells.id })
+          .from(routingCells)
+          .where(eq(routingCells.productId, f.cheese));
+        await tx.insert(routingCellPeriods).values({
+          cellId: cheeseCell!.id,
+          periodId: lunch,
+          departmentId: f.department,
+          stationId: downstairs!.id,
+        });
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address,
+          target: station(f.bar),
+          periods: [],
+        });
+        expect(
+          extraMoves(moves).map((move) => [move.productId, move.from, move.to, move.periodIds]),
+        ).toEqual([[f.cheese, station(downstairs!.id), station(f.bar), [lunch]]]);
+      }));
+
     it("lists an extra that goes back to following its dish when its cell is cleared", async () =>
       scoped(async (tx) => {
         const f = await withExtras(tx);
@@ -2253,6 +2290,15 @@ describe("routing previews", () => {
     }));
 });
 
+/** Where the mojito is made with no zone at `at`, and the Terrace Bar's state then. */
+async function routedAt(tx: Transaction, f: Awaited<ReturnType<typeof fixture>>, at: Date) {
+  const resolver = await routingAt(tx, f.cfg, at);
+  return {
+    mojito: (await resolver.makers(null, [f.mojito])).get(f.mojito),
+    terraceBar: (await resolver.stations()).get(f.terraceBar),
+  };
+}
+
 describe("timed routing", () => {
   /** Friday 2 October 2026 at 22:00 in a venue on UTC, before its 06:00 cutover moves the day. */
   const fridayLate = {
@@ -2260,14 +2306,6 @@ describe("timed routing", () => {
     businessDay: "2026-10-02",
     moment: { weekday: 5, timeOfDay: "22:00" },
   };
-  const routedAt = async (tx: Transaction, f: Awaited<ReturnType<typeof fixture>>, at: Date) => {
-    const resolver = await routingAt(tx, f.cfg, at);
-    return {
-      mojito: (await resolver.makers(null, [f.mojito])).get(f.mojito),
-      terraceBar: (await resolver.stations()).get(f.terraceBar),
-    };
-  };
-
   it("uses Friday hours and names the fallback, while now honors today's open", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -2916,18 +2954,11 @@ describe("hours from special dates", () => {
       ]);
       await closedOn(tx, f.cfg, "2026-10-09", f.terraceBar);
       // 18:00 UTC is 20:00 in Madrid on both Fridays.
-      const routed = async (instant: string) => {
-        const resolver = await routingAt(tx, f.cfg, new Date(instant));
-        return {
-          mojito: (await resolver.makers(null, [f.mojito])).get(f.mojito),
-          terraceBar: (await resolver.stations()).get(f.terraceBar),
-        };
-      };
-      expect(await routed("2026-10-09T18:00:00Z")).toMatchObject({
+      expect(await routedAt(tx, f, new Date("2026-10-09T18:00:00Z"))).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "out_of_hours" },
       });
-      expect(await routed("2026-10-16T18:00:00Z")).toMatchObject({
+      expect(await routedAt(tx, f, new Date("2026-10-16T18:00:00Z"))).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
         terraceBar: { open: true, why: "open" },
       });
@@ -3597,6 +3628,22 @@ describe("saving a cell's period choices", () => {
           [f.lunch],
         ]),
       );
+    }));
+
+  it("lists an all-day move once, not again under a period another product's cell names", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await setRoutingCell(tx, f.cfg, everyZone(f), station(f.upstairs), [
+        line(f.lunch, station(f.downstairs)),
+      ]);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: { row: { kind: "all" }, zoneId: f.terrace },
+        target: station(f.downstairs),
+      });
+      expect(
+        moves.map((move) => [move.productId, move.zoneId, move.from, move.to, move.periodIds]),
+      ).toEqual([[f.bread, f.terrace, station(f.bar), station(f.downstairs), null]]);
     }));
 
   it("lists a merged move's periods in the routing model's period order", async () =>

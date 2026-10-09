@@ -591,17 +591,21 @@ export async function previewRoutingChange(
     zoneList,
     reach,
   });
+  const sameKey = (move: Omit<RoutingMove, "periodIds">) =>
+    JSON.stringify([
+      move.productId,
+      move.dish?.productId ?? null,
+      move.zoneId,
+      targetKey(move.from),
+      targetKey(move.to),
+      move.toNoReplacement,
+    ]);
+  const allDay = new Set(moves.map(sameKey));
   const timed = new Map<string, RoutingMove>();
   for (const { id: periodId, inZones } of timedPeriods)
     for (const move of compare(during(rules, periodId), during(after, periodId), inZones)) {
-      const same = JSON.stringify([
-        move.productId,
-        move.dish?.productId ?? null,
-        move.zoneId,
-        targetKey(move.from),
-        targetKey(move.to),
-        move.toNoReplacement,
-      ]);
+      const same = sameKey(move);
+      if (allDay.has(same)) continue;
       const merged = timed.get(same);
       if (merged === undefined) timed.set(same, { ...move, periodIds: [periodId] });
       else merged.periodIds!.push(periodId);
