@@ -323,7 +323,7 @@ describe("venue operations screen", () => {
     expect(add!.textContent!.trim()).toBe("Add zone");
     add!.click();
     await settle(el);
-    expect(modal(el)?.getAttribute("heading")).toBe("New zone");
+    expect(modal(el)?.getAttribute("heading")).toBe("Add zone");
     expect(field(el, "new-zone-name").getAttribute("label")).toBe("Zone name");
     await type(el, "new-zone-name", "Garden");
     const department = field(el, "new-zone-department") as HTMLElement & { value: string };

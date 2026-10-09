@@ -203,7 +203,12 @@ describe("units-screen", () => {
     expect(button.textContent!.trim()).toBe("Añadir unidad");
     button.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("dashboard-unit-form")!.open).toBe(true);
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    expect(form.open).toBe(true);
+    await form.updateComplete;
+    expect(form.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
+      "Añadir unidad",
+    );
   });
 
   it("draws no create button in the table once units exist", async () => {

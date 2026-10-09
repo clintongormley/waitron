@@ -3084,6 +3084,9 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-split-confirm]")!.hasAttribute("disabled")).toBe(
         true,
       );
+      expect(el.shadowRoot!.querySelector("[data-split-confirm]")!.textContent!.trim()).toBe(
+        "Add bill",
+      );
 
       let captured: CustomEvent | undefined;
       el.addEventListener("split-lines", (event) => (captured = event as CustomEvent));

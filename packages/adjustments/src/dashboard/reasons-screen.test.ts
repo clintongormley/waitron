@@ -259,7 +259,7 @@ describe("the reasons list", () => {
     expect(button.textContent!.trim()).toBe("Add reason");
     button.click();
     await settle(el);
-    expect(modal(el)!.getAttribute("heading")).toBe("New reason");
+    expect(modal(el)!.getAttribute("heading")).toBe("Add reason");
   });
 
   it("draws no Add reason in the table once reasons exist", async () => {
@@ -768,7 +768,7 @@ describe("the editor", () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "add-reason");
-    expect(modal(el)!.getAttribute("heading")).toBe("New reason");
+    expect(modal(el)!.getAttribute("heading")).toBe("Add reason");
     await type(el, "name", "Birthday");
     await toggleAction(el, "comp");
     await press(el, "save-editor");
