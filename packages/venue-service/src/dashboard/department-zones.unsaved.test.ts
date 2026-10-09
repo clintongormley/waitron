@@ -136,3 +136,61 @@ it("a write from a disconnected editor cannot commit a later zone", async () => 
   expect(events).toEqual([]);
   expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Terrace");
 });
+
+it.each(["move-zone", "disable-zone"])(
+  "%s asks before discarding the selected zone's service settings",
+  async (action) => {
+    const el = await mount();
+    const events: unknown[] = [];
+    el.addEventListener(action, (event) => events.push((event as CustomEvent).detail));
+    await edit(el);
+    const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!;
+    button.click();
+    await answer("keep");
+    expect(events).toEqual([]);
+    expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value).toEqual({
+      orderStart: "counter",
+      paidWhen: null,
+      collectionNumber: null,
+      receiptPrintMode: "on_request",
+    });
+    expect(unload()).toBe(true);
+    button.click();
+    await answer("discard");
+    expect(events).toEqual([{ zoneId: "z2" }]);
+    expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value).toEqual({
+      orderStart: null,
+      paidWhen: null,
+      collectionNumber: null,
+      receiptPrintMode: "on_request",
+    });
+    expect(unload()).toBe(false);
+  },
+);
+
+it.each(["move-zone", "disable-zone"])(
+  "clean %s opens without a leave question",
+  async (action) => {
+    const el = await mount();
+    const events: unknown[] = [];
+    el.addEventListener(action, (event) => events.push((event as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
+    await expect.poll(() => events).toEqual([{ zoneId: "z2" }]);
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(unload()).toBe(false);
+  },
+);
+
+it("Rename retains the zone service draft without asking to discard it", async () => {
+  const el = await mount();
+  const events: unknown[] = [];
+  el.addEventListener("rename-zone", (event) => events.push((event as CustomEvent).detail));
+  await edit(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-zone]")!.click();
+  await expect.poll(() => events).toEqual([{ zoneId: "z2" }]);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(
+    el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value.receiptPrintMode,
+  ).toBe("on_request");
+  expect(unload()).toBe(true);
+});

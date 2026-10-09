@@ -42,8 +42,8 @@ their full text.
   auto/on_request (Always/On request). All footers put Cancel before Save. Part A, Tasks A1–A15,
   remains one Lane E PR from landed slices 1/3A. Its storage, policy writers, order flow, shared service settings fields, standalone department list
   and department/zone dialogs are built, as is the standalone department page with Settings.
-  The Zones tab, shell integration and remaining tasks are not built. Task A10 still carries
-  actual navigation, Back and Enable checks, and retirement of the legacy transfer modal tests. Parts B/C remain Lane D work after
+  The standalone Zones tab and staged routing/actions shell are built. Move and Disable ask before discarding the selected zone's service settings draft.
+  Task A10 still carries the public wrapper switch, live-query integration, mounted-dashboard checks and the kept-assertion audit before retiring the legacy tests. Parts B/C remain Lane D work after
   slice 2/A429. Lane E's slice 7 follows 6A, with no current branch. The explicit overlap waiver
   permits independent slice 2/5 checkouts; whoever lands second reconciles source and regenerates
   migration clashes. No conversion of obsolete receipt data, only pre-live reset. The 6A branch has not landed.

@@ -1413,3 +1413,28 @@ lint pass. Thirty-two staged dialog/error screenshots cover EN/ES, both themes a
 or mounted-dashboard rendering claim. Package coverage and whole-branch review remain
 later gates. No existing assertion, fiscal source, migration, guard or coverage setting
 changed in this checkpoint.
+
+### Implementation checkpoint — Task A10 zone action draft guard (2026-10-09)
+
+Ruling: Move and Disable request the selected zone's draft scope before opening their
+dialogs, because their refresh can remove that editor or make it read-only. Rename and
+Add keep their immediate action events. If this interpretation is wrong, the cost is an
+extra discard question before Move or Disable; the public wrapper remains staged.
+
+The component's two new dirty-action cases first failed because the shared question stayed
+closed. Keep retains the exact draft and emits no action; Discard restores the baseline
+before emitting the selected zone id. Clean actions and Rename have positive controls.
+Two staged-shell cases use the real menu buttons and shared leave controller, then inspect
+the dialog's kind and row. The mounted DashboardApp is still outside this checkpoint.
+
+Focused Chromium verification: six files, 91 passing cases, including zone accessibility.
+In an installed disposable clone, replacing only the new action leave request with its
+continuation produced four failures; restoring it produced four passes. Raw logs and
+cleanup receipts are local under Lane E's `receipts/a366-6a/a10-draft-guards/`.
+Sixteen viewport captures cover Move/Disable questions in EN/ES, light/dark and CSS
+1280/390 widths; all four scaled contact sheets were inspected. Existing test files gained
+assertions without deleting or changing their previous lines.
+
+Task A10 remains in progress. Next: the exact kept-assertion audit and public wrapper switch,
+live-query/snapshot ownership and mounted-dashboard history/permission/receipt/parent checks.
+A11–A15, final visual checks and the authorised branch workflow remain.

@@ -160,3 +160,58 @@ it("an accepted external department route recreates the form and its baseline", 
   );
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+
+it.each(["move-zone", "disable-zone"])(
+  "the real %s menu waits for the zone draft decision before opening its dialog",
+  async (action) => {
+    const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
+    const snapshot = structuredClone(model);
+    snapshot.departments.push({
+      id: "d2",
+      name: "Deli",
+      tradingName: "Shop",
+      defaultServiceMode: "prepay",
+      active: true,
+    });
+    shell.model = snapshot;
+    vi.spyOn(shell.api, "zoneRemovalImpact").mockResolvedValue({
+      zones: [],
+    });
+    await shell.updateComplete;
+    const zones = shell.shadowRoot!.querySelector("department-zones")!;
+    await zones.updateComplete;
+    const fields = zones.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+    const draft = {
+      orderStart: "counter" as const,
+      paidWhen: null,
+      collectionNumber: null,
+      receiptPrintMode: "on_request" as const,
+    };
+    fields.dispatchEvent(
+      new CustomEvent("service-settings-change", {
+        detail: { value: draft },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await zones.updateComplete;
+    const button = zones.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!;
+    const dialogs = shell.shadowRoot!.querySelector("department-dialogs")!;
+    button.click();
+    await choose("keep");
+    expect(dialogs.dialog).toBeUndefined();
+    expect(fields.value).toEqual(draft);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    button.click();
+    await choose("discard");
+    await expect.poll(() => dialogs.dialog?.kind).toBe(action);
+    expect(dialogs.dialog && "row" in dialogs.dialog && dialogs.dialog.row.id).toBe("z1");
+    expect(fields.value).toEqual({
+      orderStart: null,
+      paidWhen: null,
+      collectionNumber: null,
+      receiptPrintMode: null,
+    });
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+  },
+);

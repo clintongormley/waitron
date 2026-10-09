@@ -159,8 +159,18 @@ export class DepartmentZones extends LitElement {
   private emit(name: string, detail: object) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  private action(name: string, detail: object) {
-    if (!this.busy) this.emit(name, detail);
+  private async action(name: string, detail: object) {
+    if (this.busy) return;
+    if ((name !== "move-zone" && name !== "disable-zone") || !this.leave || !this.scope) {
+      this.emit(name, detail);
+      return;
+    }
+    const id = this.selected!.id,
+      generation = this.generation;
+    const proceed = () => {
+      if (this.current(id, generation) && !this.busy) this.emit(name, detail);
+    };
+    await this.leave.request({ scopes: [this.scope.id], reason: "navigation", proceed });
   }
   private current(id: string, generation: object) {
     return this.isConnected && this.selected?.id === id && this.generation === generation;
