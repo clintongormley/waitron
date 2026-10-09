@@ -106,6 +106,7 @@ async function mount(
   theme: "light" | "dark",
   options: {
     readOnly?: boolean;
+    closeWholeVenue?: boolean;
     clockReadable?: boolean;
     refuse?: unknown;
     failRead?: boolean;
@@ -118,7 +119,12 @@ async function mount(
     if (method === "GET") {
       if (options.pendingRead) return new Promise(() => {});
       if (options.failRead) throw { code: "connection.failed" };
-      return path.endsWith("/local-holidays") ? localModel() : model(options.clockReadable);
+      const hours = model(options.clockReadable);
+      hours.specialDates = hours.specialDates.map((day) => ({
+        ...day,
+        closeWholeVenue: options.closeWholeVenue ?? day.closeWholeVenue,
+      }));
+      return path.endsWith("/local-holidays") ? localModel() : hours;
     }
     if (options.refuse !== undefined) throw options.refuse;
     return undefined;
@@ -251,24 +257,28 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
     });
     await showTab(el, "dates");
     await press(el, '[data-test="edit-date"]');
-    await set(el, "date", "2026-10-13");
+    await chooseOption(deep(el, '[name="station.deli.mode"]')!, "all_day");
+    await settle(el);
     await press(el, '[data-test="save-editor"]');
-    expect((deep(el, '[name="date"]') as HTMLElement & { error: string }).error).not.toBe("");
+    expect(deep(el, '[role="alert"]')!.textContent).toContain("already has special hours");
     return el;
   },
-  "an edited whole-venue closure with locked station cells": async (theme) => {
+  "a named-day editor with no metadata fields": async (theme) => {
     const el = await mount(theme);
     await showTab(el, "dates");
     await press(el, '[data-test="edit-date"]');
-    deep(el, '[name="closeWholeVenue"]')!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { checked: true },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await settle(el);
+    expect(deep(el, '[name="closeWholeVenue"]')).toBeNull();
+    expect(deep(el, '[data-test="named-day-date"]')).not.toBeNull();
+    expect(deep(el, '[data-test="named-day-name"]')).not.toBeNull();
+    return el;
+  },
+  "a stored whole-venue closure with locked station cells": async (theme) => {
+    const el = await mount(theme, { closeWholeVenue: true });
+    await showTab(el, "dates");
+    await press(el, '[data-test="edit-date"]');
+    expect(deep(el, '[name="closeWholeVenue"]')).toBeNull();
     expect(deep(el, '[data-test="whole-venue-note"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("hours-cell-editor")!.disabled).toBe(true);
     return el;
   },
 };

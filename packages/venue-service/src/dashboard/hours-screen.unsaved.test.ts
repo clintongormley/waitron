@@ -623,7 +623,15 @@ const specialModel: HoursModel = {
   specialCells: [
     {
       specialDateId: "fiesta",
-      cells: [{ subject: { kind: "station", id: "d1" }, cell: { mode: "closed", periods: [] } }],
+      cells: [
+        {
+          subject: { kind: "station", id: "d1" },
+          cell: {
+            mode: "periods",
+            periods: [{ id: "date-period", opensAt: "09:00", closesAt: "18:00" }],
+          },
+        },
+      ],
     },
   ],
 };
@@ -652,7 +660,9 @@ async function dateEditor(_kind: "edit", write?: () => Promise<void>, refreshFai
   return { ...mounted, modal };
 }
 async function dateField(screen: HoursScreen, name: string, value: string) {
-  const input = screen.shadowRoot!.querySelector<WtInput>(`[name="${name}"]`)!;
+  const input = screen
+    .shadowRoot!.querySelector("hours-cell-editor")!
+    .shadowRoot!.querySelector<WtInput>(`[name="${name}"]`)!;
   input.value = value;
   input.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -660,22 +670,24 @@ async function dateField(screen: HoursScreen, name: string, value: string) {
   await screen.updateComplete;
   await input.updateComplete;
 }
-function dateValue(screen: HoursScreen, name: string) {
-  return screen
-    .shadowRoot!.querySelector<WtInput>(`[name="${name}"]`)!
-    .shadowRoot!.querySelector<HTMLInputElement>("input")!.value;
+async function dateValue(screen: HoursScreen, name: string) {
+  const cell = screen.shadowRoot!.querySelector("hours-cell-editor")!;
+  await cell.updateComplete;
+  const control = cell.shadowRoot!.querySelector<WtInput>(`[name="${name}"]`)!;
+  await control.updateComplete;
+  return control.shadowRoot!.querySelector<HTMLInputElement>("input")!.value;
 }
 it.each(["edit"] as const)(
   "special-date %s keeps actual values through Cancel/native Escape then discards without writing",
   async (kind) => {
     const { screen, modal, writes } = await dateEditor(kind);
-    const name = "name";
-    const value = "Changed fiesta";
+    const name = "station.d1.periods.0.opensAt";
+    const value = "10:00";
     await dateField(screen, name, value);
     expect(unload()).toBe(true);
     action(modal, "cancel");
     await choose("keep");
-    expect(dateValue(screen, name)).toBe(value);
+    expect(await dateValue(screen, name)).toBe(value);
     await userEvent.keyboard("{Escape}");
     expect((await question()).open).toBe(true);
     expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -687,9 +699,9 @@ it.each(["edit"] as const)(
 );
 it.each(["edit"] as const)("special-date %s reverts to a clean opening", async (kind) => {
   const { screen, modal, writes } = await dateEditor(kind);
-  const name = "name";
-  await dateField(screen, name, "Changed");
-  await dateField(screen, name, kind === "edit" ? "  Fiesta  " : "");
+  const name = "station.d1.periods.0.opensAt";
+  await dateField(screen, name, "10:00");
+  await dateField(screen, name, kind === "edit" ? "09:00" : "");
   expect(unload()).toBe(false);
   action(modal, "cancel");
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
@@ -700,15 +712,26 @@ const editedDateBody = [
   "/management-api/venue-service/special-dates/fiesta",
   {
     date: "2026-10-12",
-    name: "Changed fiesta",
+    name: "Fiesta",
+    kind: "working_day",
+    repeats: false,
+    ownHours: false,
     colour: "red",
     closeWholeVenue: false,
-    cells: [{ subject: { kind: "station", id: "d1" }, cell: { mode: "closed", periods: [] } }],
+    cells: [
+      {
+        subject: { kind: "station", id: "d1" },
+        cell: {
+          mode: "periods",
+          periods: [{ id: "date-period", opensAt: "10:00", closesAt: "18:00" }],
+        },
+      },
+    ],
   },
 ];
 it("special-date Edit commits the exact accepted body before a failed refresh", async () => {
   const { screen, modal, writes } = await dateEditor("edit", undefined, true);
-  await dateField(screen, "name", "  Changed fiesta  ");
+  await dateField(screen, "station.d1.periods.0.opensAt", "10:00");
   action(modal, "save");
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(writes).toEqual([editedDateBody]);
@@ -719,7 +742,7 @@ it("special-date Edit refused save retains input and its warning", async () => {
   const { screen, modal, writes } = await dateEditor("edit", async () => {
     throw { code: "connection.failed" };
   });
-  await dateField(screen, "name", "Changed fiesta");
+  await dateField(screen, "station.d1.periods.0.opensAt", "10:00");
   action(modal, "save");
   await expect
     .poll(
@@ -730,13 +753,13 @@ it("special-date Edit refused save retains input and its warning", async () => {
     .toBe(false);
   action(modal, "cancel");
   await choose("keep");
-  expect(dateValue(screen, "name")).toBe("Changed fiesta");
+  expect(await dateValue(screen, "station.d1.periods.0.opensAt")).toBe("10:00");
   expect(unload()).toBe(true);
   expect(writes).toEqual([editedDateBody]);
 });
 it("special-date Edit reconnect protects retained values against the original opening", async () => {
   const { screen, modal } = await dateEditor("edit");
-  await dateField(screen, "name", "Changed fiesta");
+  await dateField(screen, "station.d1.periods.0.opensAt", "10:00");
   action(modal, "cancel");
   expect((await question()).open).toBe(true);
   screen.remove();
@@ -744,64 +767,32 @@ it("special-date Edit reconnect protects retained values against the original op
   expect(unload()).toBe(false);
   app.shadowRoot!.append(screen);
   await screen.updateComplete;
-  expect(dateValue(screen, "name")).toBe("Changed fiesta");
+  expect(await dateValue(screen, "station.d1.periods.0.opensAt")).toBe("10:00");
   expect(unload()).toBe(true);
-  await dateField(screen, "name", "Fiesta");
+  await dateField(screen, "station.d1.periods.0.opensAt", "09:00");
   expect(unload()).toBe(false);
 });
 
-it.each(["date", "name", "colour", "closeWholeVenue", "cell"])(
-  "special-date Edit tracks and reverts %s independently",
-  async (field) => {
-    const { screen, modal } = await dateEditor("edit");
-    const set = async (changed: boolean) => {
-      if (field === "closeWholeVenue") {
-        const control = modal.querySelector("wt-switch")!;
-        control.dispatchEvent(
-          new CustomEvent("wt-change", {
-            detail: { checked: changed },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-      } else if (field === "cell") await mode(screen, "station.d1", changed ? "all_day" : "closed");
-      else
-        await dateField(
-          screen,
-          field,
-          changed
-            ? field === "date"
-              ? "2026-10-20"
-              : field === "colour"
-                ? "blue"
-                : "Changed"
-            : field === "date"
-              ? "2026-10-12"
-              : field === "colour"
-                ? "red"
-                : "Fiesta",
-        );
-      await screen.updateComplete;
-    };
-    await set(true);
-    expect(unload()).toBe(true);
-    action(modal, "cancel");
-    await choose("keep");
-    await set(false);
-    expect(unload()).toBe(false);
-  },
-);
+it("special-date Edit tracks and reverts a station cell independently", async () => {
+  const { screen, modal } = await dateEditor("edit");
+  await dateField(screen, "station.d1.periods.0.opensAt", "10:00");
+  expect(unload()).toBe(true);
+  action(modal, "cancel");
+  await choose("keep");
+  await dateField(screen, "station.d1.periods.0.opensAt", "09:00");
+  expect(unload()).toBe(false);
+});
 it.each(["edit"] as const)(
   "special-date %s accepted write preserves newer input against the submitted snapshot",
   async (kind) => {
     const write = heldWrite();
     const { screen, modal, writes } = await dateEditor(kind, () => write.promise);
-    const name = kind === "edit" ? "name" : "dates.0";
-    const submitted = kind === "edit" ? "Changed fiesta" : "2026-10-20";
+    const name = "station.d1.periods.0.opensAt";
+    const submitted = kind === "edit" ? "10:00" : "2026-10-20";
     await dateField(screen, name, submitted);
     action(modal, "save");
     await expect.poll(() => writes.length).toBe(1);
-    await dateField(screen, name, kind === "edit" ? "Newer" : "2026-10-21");
+    await dateField(screen, name, kind === "edit" ? "11:00" : "2026-10-21");
     write.resolve();
     await expect
       .poll(
@@ -827,14 +818,14 @@ it.each(["edit"] as const)(
 
 it("special-date Edit asks before replacement and ancestor leave", async () => {
   const { screen, modal, writes } = await dateEditor("edit");
-  await dateField(screen, "name", "Changed fiesta");
+  await dateField(screen, "station.d1.periods.0.opensAt", "10:00");
   const add = screen
     .shadowRoot!.querySelector("wt-data-table")!
     .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date]")!;
   add.click();
   await choose("keep");
   expect(modal.isConnected).toBe(true);
-  expect(dateValue(screen, "name")).toBe("Changed fiesta");
+  expect(await dateValue(screen, "station.d1.periods.0.opensAt")).toBe("10:00");
   let left = false;
   void app.leave.coordinator.request({
     scopes: [screen],
@@ -849,13 +840,15 @@ it("special-date Edit asks before replacement and ancestor leave", async () => {
   await choose("discard");
   await screen.updateComplete;
   expect(modal.isConnected).toBe(false);
-  expect(dateValue(screen, "name")).toBe("Fiesta");
+  expect(await dateValue(screen, "station.d1.periods.0.opensAt")).toBe("09:00");
   expect(unload()).toBe(false);
   expect(writes).toEqual([]);
 });
 it("special-date departed fields cannot mutate a replacement draft", async () => {
   const { screen, modal } = await dateEditor("edit");
-  const old = modal.querySelector<WtInput>('[name="name"]')!;
+  const old = modal
+    .querySelector("hours-cell-editor")!
+    .shadowRoot!.querySelector<WtInput>('[name="station.d1.periods.0.opensAt"]')!;
   action(modal, "cancel");
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
   screen
@@ -867,7 +860,7 @@ it("special-date departed fields cannot mutate a replacement draft", async () =>
     new CustomEvent("wt-change", { detail: { value: "Departed" }, bubbles: true, composed: true }),
   );
   await screen.updateComplete;
-  expect(dateValue(screen, "name")).toBe("Fiesta");
+  expect(await dateValue(screen, "station.d1.periods.0.opensAt")).toBe("09:00");
   expect(unload()).toBe(false);
 });
 
@@ -878,8 +871,8 @@ it.each(["edit"] as const)(
     const { screen, modal, writes } = await dateEditor(kind, () => write.promise);
     await dateField(
       screen,
-      kind === "edit" ? "name" : "dates.0",
-      kind === "edit" ? "Changed fiesta" : "2026-10-20",
+      "station.d1.periods.0.opensAt",
+      kind === "edit" ? "10:00" : "2026-10-20",
     );
     action(modal, "cancel");
     expect((await question()).open).toBe(true);
@@ -901,8 +894,8 @@ it.each(["edit"] as const)(
     const { screen, modal, writes } = await dateEditor(kind, () => write.promise);
     await dateField(
       screen,
-      kind === "edit" ? "name" : "dates.0",
-      kind === "edit" ? "Changed fiesta" : "2026-10-20",
+      "station.d1.periods.0.opensAt",
+      kind === "edit" ? "10:00" : "2026-10-20",
     );
     action(modal, "save");
     await expect.poll(() => writes.length).toBe(1);
@@ -917,11 +910,11 @@ it.each(["edit"] as const)(
       .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-date]")!
       .click();
     await screen.updateComplete;
-    await dateField(screen, "name", "New opening");
+    await dateField(screen, "station.d1.periods.0.opensAt", "11:00");
     write.resolve();
     await new Promise((done) => setTimeout(done, 0));
     await screen.updateComplete;
-    expect(dateValue(screen, "name")).toBe("New opening");
+    expect(await dateValue(screen, "station.d1.periods.0.opensAt")).toBe("11:00");
     expect(unload()).toBe(true);
   },
 );
@@ -1011,20 +1004,20 @@ it.each(["edit"] as const)(
     await screen.updateComplete;
     expect(writes).toEqual([]);
     expect(modal.querySelector("[invalid]")).toBeNull();
-    const name = "name";
-    const changed = "Changed fiesta";
+    const name = "station.d1.periods.0.opensAt";
+    const changed = "10:00";
     await dateField(screen, name, changed);
     await expectSave(screen, true);
     screen.remove();
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
-    expect(dateValue(screen, name)).toBe(changed);
+    expect(await dateValue(screen, name)).toBe(changed);
     await expectSave(screen, true);
     expect(unload()).toBe(true);
     action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
     await choose("keep");
-    expect(dateValue(screen, name)).toBe(changed);
-    await dateField(screen, name, kind === "edit" ? "  Fiesta  " : "");
+    expect(await dateValue(screen, name)).toBe(changed);
+    await dateField(screen, name, kind === "edit" ? "09:00" : "");
     await expectSave(screen, false);
     expect(unload()).toBe(false);
   },
@@ -1054,12 +1047,12 @@ it.each(["edit"] as const)(
     app.shadowRoot!.append(screen);
     await screen.updateComplete;
     await expectSave(screen, false);
-    const name = "name";
-    const changed = "Changed fiesta";
+    const name = "station.d1.periods.0.opensAt";
+    const changed = "10:00";
     await dateField(screen, name, changed);
     action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
     await choose("keep");
-    expect(dateValue(screen, name)).toBe(changed);
+    expect(await dateValue(screen, name)).toBe(changed);
     expect(writes).toEqual([]);
   },
 );
