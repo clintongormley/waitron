@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import {
   PACKAGES_WITHOUT_TESTS,
+  GLOBAL_ROOT_FILES,
   ROOT_SCOPE_CONSUMERS,
   classify,
   isImageInputPath,
@@ -106,10 +107,12 @@ function owningPackage(path, packages) {
  *
  *   "documentation"  every changed path is inert (see `isInertPath`).
  *   "root"           every changed CODE path is the repository's own machinery (`isRootScopePath`)
- *                    and none is a file `ROOT_SCOPE_CONSUMERS` lists. The repo-level Vitest
- *                    project is the only suite that runs; no package is typechecked or tested.
- *   "global"         run everything: a path outside every package that is not root scope, an
- *                    unreadable workspace, or a push whose contents could not be determined at all.
+ *                    and none is a file `ROOT_SCOPE_CONSUMERS` or `GLOBAL_ROOT_FILES` lists. The
+ *                    repo-level Vitest project is the only suite that runs; no package is
+ *                    typechecked or tested.
+ *   "global"         run everything: a path outside every package that is not root scope, a file
+ *                    `GLOBAL_ROOT_FILES` lists, an unreadable workspace, or a push whose contents
+ *                    could not be determined at all.
  *   "packages"       `packages` names the members to narrow to. Non-empty exactly here.
  *
  * `root` and `deploy` are orthogonal to `kind`. `root` is true whenever ANY changed path is root
@@ -140,6 +143,17 @@ export function scopeForPaths(changedPaths, loadPackages) {
   const root = rootPaths.length > 0;
   const attributable = codePaths.filter((path) => !isRootScopePath(path));
   const consumed = rootPaths.filter((path) => ROOT_SCOPE_CONSUMERS.has(path));
+
+  const everyPackage = rootPaths.find((path) => GLOBAL_ROOT_FILES.includes(path));
+  if (everyPackage !== undefined) {
+    return {
+      kind: "global",
+      packages: [],
+      root: true,
+      deploy,
+      reason: `${everyPackage} is loaded by every package's tests — running everything`,
+    };
+  }
 
   if (attributable.length === 0 && consumed.length === 0) {
     return {

@@ -73,7 +73,8 @@ jobs:
   #             machinery (`scripts/`, `.husky/`, `.github/`, `scope=root`), which gives no package
   #             any CI work — except a file members read or their test job runs, which
   #             ROOT_SCOPE_CONSUMERS in `scripts/changed-scope.mjs` attributes to those members, so
-  #             it is `code=true`.
+  #             it is `code=true`, and a reporter every test command loads (GLOBAL_ROOT_FILES there),
+  #             which runs everything.
   #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
   #             packages that depend on them. On main, run everything, because that unfiltered run
   #             is what verifies the narrowing was right.
