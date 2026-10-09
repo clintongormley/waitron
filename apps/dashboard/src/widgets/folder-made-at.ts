@@ -1,4 +1,5 @@
 import {
+  cellKey,
   chooseMaker,
   folderAncestors,
   followFallbacks,
@@ -63,7 +64,7 @@ function categoryChoice(
 /** Each category's baseline route, worked out with the shared routing rules the way the server
  * works out a product row's (`describeMakers`): Every zone, and the time of day not applied, though
  * a switched-off station's fallback is followed. The baseline varies when an active zone's outcome,
- * or an active product's inside, differs from it. */
+ * or an active product's inside, differs from it, and when its deciding cell has period lines. */
 export function folderMadeAt(
   routing: RoutingModel,
   categories: readonly CategorySummary[],
@@ -124,6 +125,10 @@ export function folderMadeAt(
     );
   };
 
+  const linesAt = new Set(
+    routing.cells.filter(({ periods }) => (periods ?? []).length > 0).map(cellKey),
+  );
+
   const result = new Map<string, FolderMadeAt>();
   for (const [id, choice] of baselines) {
     const { route, decidedBy } = choice;
@@ -154,7 +159,10 @@ export function folderMadeAt(
     result.set(id, {
       maker,
       source,
-      someElsewhere: elsewhere.has(id) || (route?.kind === "station" && timed(route.stationId)),
+      someElsewhere:
+        elsewhere.has(id) ||
+        (route?.kind === "station" && timed(route.stationId)) ||
+        (decidedBy?.kind === "cell" && linesAt.has(cellKey(decidedBy.address))),
     });
   }
   return result;

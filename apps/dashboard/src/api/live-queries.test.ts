@@ -233,6 +233,11 @@ it("reads the course list again when a course or a product changes, never on an 
   expect(query.dependencies).toEqual([{ type: "kitchen_courses" }, { type: "products" }]);
 });
 
+it("reads the folders' Made at again when a routing cell's period lines change", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
+  expect(query.dependencies).toContainEqual({ type: "routing_cell_periods" });
+});
+
 it("subscribes no read to the product label tables, which products no longer carry", () => {
   const named = Object.values(QUERY_DEPENDENCIES).flat();
   expect(named).not.toContain("labels");

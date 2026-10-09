@@ -18,6 +18,7 @@ export type {
   RoutingChange,
   RoutingDecision,
   RoutingModel,
+  RoutingPeriod,
   RoutingRow,
   RoutingSelectionRules,
   RoutingView,

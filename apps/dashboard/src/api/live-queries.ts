@@ -241,6 +241,7 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "category_details",
     "routing_cells",
+    "routing_cell_periods",
     "kitchen_stations",
     "products",
     "floor_zones",

@@ -427,6 +427,26 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(false);
     expect(result.get("food")?.someElsewhere).toBe(false);
   });
+
+  it("qualifies a category whose deciding cell sends its dishes elsewhere during a period", () => {
+    const lunch = [{ periodId: "lunch", target: station("kitchen") }];
+    const result = madeAt(
+      routing({ cells: [{ ...onCategory("drinks", station("bar")), periods: lunch }] }),
+    );
+    expect(result.get("drinks")).toEqual({
+      maker: { kind: "station", stationName: "Bar" },
+      source: { kind: "own" },
+      someElsewhere: true,
+    });
+    expect(result.get("craft")?.someElsewhere).toBe(true);
+    expect(result.get("food")?.someElsewhere).toBe(false);
+    const noPreparation = madeAt(
+      routing({
+        cells: [{ ...onCategory("drinks", { kind: "no_preparation" }), periods: lunch }],
+      }),
+    );
+    expect(noPreparation.get("drinks")?.someElsewhere).toBe(true);
+  });
 });
 
 describe("folderMadeAt — names it cannot find", () => {
