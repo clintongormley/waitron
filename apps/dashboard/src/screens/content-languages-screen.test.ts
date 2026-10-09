@@ -1174,15 +1174,51 @@ describe("Valencian names on the content languages screen", () => {
     setLocale(locale);
     const el = await mount(
       api({
-        getContentLanguages: vi
-          .fn()
-          .mockResolvedValue({
-            defaultLanguage: "ca-ES-valencia",
-            languages: ["ca-ES-valencia", "ca", "es"],
-          }),
+        getContentLanguages: vi.fn().mockResolvedValue({
+          defaultLanguage: "ca-ES-valencia",
+          languages: ["ca-ES-valencia", "ca", "es"],
+        }),
       }),
     );
     expect(shown(el)).toContain(label);
     expect(shown(el)).toContain(locale === "es-ES" ? "Catalán" : "Catalan");
   });
+});
+
+it.each([
+  ["en-GB", "Valencian"],
+  ["es-ES", "valenciano"],
+])("names Valencian in its required-translation warning in %s", async (locale, name) => {
+  setLocale(locale);
+  const language = "ca-ES-valencia";
+  const el = await mount(
+    api({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: language, languages: [language, "es"] }),
+      getContentLanguageRules: vi
+        .fn()
+        .mockResolvedValue({ required: [language], official: [language, "es"] }),
+      getContentTranslationGaps: vi
+        .fn()
+        .mockResolvedValue([
+          {
+            language,
+            gaps: [
+              {
+                kind: "product",
+                id: "p",
+                staffName: "STAFF",
+                defaultName: "DEFAULT",
+                reason: "absent",
+              },
+            ],
+          },
+        ]),
+    }),
+  );
+  await vi.waitFor(() => expect(q(el, `[data-test="required-gaps-${language}"]`)).not.toBeNull());
+  expect(q(el, `[data-test="required-gaps-${language}"]`)!.textContent!.trim()).toBe(
+    t("content_gaps.required_warning_one").replace("{language}", name),
+  );
 });

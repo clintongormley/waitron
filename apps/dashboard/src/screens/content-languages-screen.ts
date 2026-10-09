@@ -317,7 +317,7 @@ export class ContentLanguagesScreen extends LitElement {
             : report.gaps.length === 0
               ? t("content_gaps.none")
               : html`${t("content_gaps.count").replace("{count}", String(report.gaps.length))}
-                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${(report.gaps.length === 1 ? t("content_gaps.required_warning_one") : t("content_gaps.required_warning").replace("{count}", String(report.gaps.length))).replace("{language}", new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!)}</span>` : nothing}`;
+                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${(report.gaps.length === 1 ? t("content_gaps.required_warning_one") : t("content_gaps.required_warning").replace("{count}", String(report.gaps.length))).replace("{language}", languageDisplayName(code, currentLocale(), false))}</span>` : nothing}`;
         },
       },
       {

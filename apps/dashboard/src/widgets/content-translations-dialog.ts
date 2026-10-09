@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { capitaliseFirst } from "@waitron/shared";
+import { languageDisplayName } from "@waitron/shared";
 import { tableNoMatches, QueryController } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import {
@@ -505,10 +505,7 @@ export class ContentTranslationsDialog extends LitElement {
     else proceed();
   }
   #name(language: string): string {
-    return capitaliseFirst(
-      new Intl.DisplayNames([currentLocale()], { type: "language" }).of(language)!,
-      currentLocale(),
-    );
+    return languageDisplayName(language, currentLocale());
   }
   #heldColumns?: { key: string; value: DataTableColumn<TranslationTarget>[] };
   #columns(): DataTableColumn<TranslationTarget>[] {
@@ -699,7 +696,7 @@ export class ContentTranslationsDialog extends LitElement {
                 >
               </div>
               ${count >= 100 ? html`<p role="status">${t("translations.capacity")}</p>` : nothing}
-              ${this.model.rows.length === 0 ? html`<p data-test="complete">${t("content_gaps.complete").replace("{language}", new Intl.DisplayNames([currentLocale()], { type: "language" }).of(this.language)!)}</p>` : html`<wt-data-table aria-label=${t("content_gaps.table").replace("{language}", this.#name(this.language))} emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${shown} .columns=${this.#columns()} .rowKey=${translationKey}></wt-data-table>`}
+              ${this.model.rows.length === 0 ? html`<p data-test="complete">${t("content_gaps.complete").replace("{language}", languageDisplayName(this.language, currentLocale(), false))}</p>` : html`<wt-data-table aria-label=${t("content_gaps.table").replace("{language}", this.#name(this.language))} emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${shown} .columns=${this.#columns()} .rowKey=${translationKey}></wt-data-table>`}
               ${
                 visible.length > 50
                   ? html`<div class="pages">
