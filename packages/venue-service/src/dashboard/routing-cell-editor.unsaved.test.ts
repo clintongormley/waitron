@@ -118,9 +118,13 @@ it("asks before closing a changed cell; Keep keeps the edit and Discard closes",
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
   expect(target(el).value).toBe("station:down");
+  const closed = new Promise((resolve) =>
+    modal(el).addEventListener("wt-close", resolve, { once: true }),
+  );
   const discard = modal(el).requestClose("escape");
   await choose("discard");
   expect(await discard).toBe(true);
+  await closed;
   await expect.poll(() => el.open).toBe(false);
   expect(unload()).toBe(false);
 });

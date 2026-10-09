@@ -102,9 +102,13 @@ it("asks before closing a changed station; Keep keeps the edit and Discard close
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
   expect(nameField(el).value).toBe("Hot grill");
+  const closed = new Promise((resolve) =>
+    modal(el).addEventListener("wt-close", resolve, { once: true }),
+  );
   const discard = modal(el).requestClose("escape");
   await choose("discard");
   expect(await discard).toBe(true);
+  await closed;
   await expect.poll(() => el.open).toBe(false);
   expect(unload()).toBe(false);
 });

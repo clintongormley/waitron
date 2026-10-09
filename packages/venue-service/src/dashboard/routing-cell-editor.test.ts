@@ -375,7 +375,12 @@ it("puts a refusal naming no shown line at the bottom", async () => {
 it("Cancel closes and tells the screen", async () => {
   const el = await mount();
   const cancels = events(el, "routing-cell-cancel");
+  const modal = one<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!;
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
   await click(el, "cancel-cell");
+  await closed;
   await expect.poll(() => cancels.length).toBe(1);
   await expect.poll(() => el.open).toBe(false);
 });

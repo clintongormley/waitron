@@ -241,7 +241,12 @@ it("tells its host when it is cancelled", async () => {
   const el = await mount();
   let cancelled = 0;
   el.addEventListener("station-editor-cancel", () => cancelled++);
+  const modal = $<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!;
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
   $(el, "[data-test=cancel-station-edit]")!.click();
+  await closed;
   await expect.poll(() => cancelled).toBe(1);
   expect(el.open).toBe(false);
 });
