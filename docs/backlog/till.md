@@ -117,6 +117,14 @@ their full text.
   `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
   commit message; `docs/developers/testing-guide.md` has no paragraph holding it.
 
+## The booking state refusal describes a state move even when editing
+
+- **OPEN, carried from A394-18's run-it review.**
+  `packages/bookings/src/dashboard/strings.ts`'s `booking.invalid_transition` says
+  "can't move to that state now". An edit of a seated, completed, cancelled or no-show booking
+  now uses this code too. Choose wording that covers both edits and lifecycle actions, then
+  update English and Spanish and pin both messages in the bookings wording tests.
+
 ## The bookings seat picker keeps a table it no longer offers
 
 **The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
