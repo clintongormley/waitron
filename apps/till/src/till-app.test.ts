@@ -11945,12 +11945,10 @@ describe("persistent till destinations", () => {
     "the till Station view offers moves only with Take orders (%s)",
     async (allowed) => {
       const { el } = await mountApp({
-        getTill: vi
-          .fn()
-          .mockResolvedValue({
-            ...till,
-            capabilities: ["show-station", ...(allowed ? ["take-orders"] : [])],
-          }),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: ["show-station", ...(allowed ? ["take-orders"] : [])],
+        }),
       });
       await toCounter(el);
       emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-station");
