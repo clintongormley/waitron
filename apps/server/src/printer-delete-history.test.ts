@@ -124,14 +124,12 @@ async function seedDeletedAndReplaced() {
     .insert(workingOrders)
     .values({ source: "dashboard", locationId, orderNumber: 1 })
     .returning({ id: workingOrders.id });
-  await suite.db
-    .insert(kitchenPrintJobs)
-    .values({
-      printJobId: ticket,
-      workingOrderId: order!.id,
-      stationId: station!.id,
-      reprint: false,
-    });
+  await suite.db.insert(kitchenPrintJobs).values({
+    printJobId: ticket,
+    workingOrderId: order!.id,
+    stationId: station!.id,
+    reprint: false,
+  });
 
   await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, old!.id, DELETED_AT));
   const [replacement] = await suite.db
