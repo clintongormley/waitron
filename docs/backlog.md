@@ -654,12 +654,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   as on Products. Every table's Select all checkbox lines up with the rows' checkboxes.
   [Detail](backlog/catalogue.md#a462--dashboard-table-toolbars-column-chooser-at-the-end-no-expand-all-closing-a-branch-closes-everything-in-it)
 
-- **A464 — a menu's Price overrides tab: a "Section" column, and Main category without the
-  department (owner, 2026-10-10; open).** Rename "Appears under" to "Section". Main category reads
-  "ALL DAY MENU", not "Santet Deli Co › ALL DAY MENU", and is blank for a product placed straight in
-  the department.
-  [Detail](backlog/catalogue.md#a464--a-menus-price-overrides-tab-a-section-column-and-main-category-without-the-department)
-
 - **The Products list builds a new list of rows on every redraw, so its table prepares every
   product's search text again on each keystroke.** Found by A454's review (#1491); I believe it
   predates that branch (not checked with `git blame`). **Next action:** keep the rows array stable

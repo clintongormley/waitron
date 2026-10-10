@@ -100,15 +100,6 @@ header's checkbox sits further right, over the gap between them. The header and 
 by `wt-data-table` (the select-all cell and the row-controls cell), so fix it there, with and
 without drag handles, and pin the alignment in a test that measures both boxes.
 
-## A464 — a menu's Price overrides tab: a "Section" column, and Main category without the department
-
-Owner, 2026-10-10. A menu's Price overrides tab (`apps/dashboard/src/widgets/menu-prices-table.ts`).
-
-- Rename the "Appears under" column "Section".
-- Main category leaves out the department: "Santet Deli Co › ALL DAY MENU" reads "ALL DAY MENU",
-  and a product placed straight in the department shows nothing.
-- Its Customise columns button moves to the end of the toolbar with every other table's (A462).
-
 ## `mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently from run to run
 
 - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a

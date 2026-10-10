@@ -334,6 +334,45 @@ it.each([
   },
 );
 
+it.each([
+  { locale: "en-GB", heading: "Section" },
+  { locale: "es-ES", heading: "Sección" },
+])("names the placements column $heading in $locale", async ({ locale, heading }) => {
+  setLocale(locale);
+  try {
+    const el = await mount();
+    expect(text(table(el).shadowRoot.querySelector('th:has([data-sort="placements"])'))).toBe(
+      heading,
+    );
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("leaves the department out of main category cells while keeping nested folders and filter paths", async () => {
+  const el = await mount({
+    categories: [
+      { id: "dept", name: "Santet Deli Co", parentId: null, color: null },
+      { id: "all-day", name: "ALL DAY MENU", parentId: "dept", color: null },
+      { id: "hot", name: "Hot dishes", parentId: "all-day", color: null },
+    ],
+    rows: [
+      { ...burger, categoryId: "all-day" },
+      { ...lemonade, categoryId: "dept" },
+      { ...lager, categoryId: "hot" },
+    ],
+  });
+  expect(column(el, "category")).toEqual(["ALL DAY MENU", "", "ALL DAY MENU › Hot dishes"]);
+  expect(options(el, "category")).toEqual([
+    t("menu_prices.all_categories"),
+    "Santet Deli Co",
+    "Santet Deli Co › ALL DAY MENU",
+    "Santet Deli Co › ALL DAY MENU › Hot dishes",
+  ]);
+  await choose(el, "category", ["all-day"]);
+  expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+});
+
 it("lists each product once with its price override, and where it appears by the sections' internal names", async () => {
   const el = await mount();
   expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lager"]);
@@ -349,7 +388,7 @@ it("lists each product once with its price override, and where it appears by the
   ]);
   const placements = [...row(el, "mi-lemonade")!.querySelectorAll("[part~=placement]")].map(text);
   expect(placements).toEqual(["Favourites", "Drinks"]);
-  expect(column(el, "category")).toEqual(["Principales", "Bebidas", "Bebidas › Cerveza"]);
+  expect(column(el, "category")).toEqual(["", "", "Cerveza"]);
   const keys = ["mi-burger", "mi-lemonade", "mi-lager"];
   expect(keys.map((key) => override(el, key).value)).toEqual(["", "2.50", ""]);
   // Lemonade left blank would charge its variants' prices: 3.00 for the small, following the
