@@ -1211,13 +1211,16 @@ Each is the default this slice builds; the owner may override any at review.
    `liveTableId` only for an adoptable one (the server also accepts a master entry carrying its own
    live table, `floor-plan.ts:313-317`, but nothing needs it), and each join's `tableKeys` through
    the same keys.
-4. **A successful save marks what was sent as saved at once.** The editor re-keys the sent draft
-   from the answer's `ids` (key → master id; an adopted table keeps its `liveTableId`), takes the
-   answer's `revision`, makes that the opened state (Save quiet) and empties Undo and Redo, because
-   the old keys are gone. Only then does it read the plan again, to refresh; the read replaces the
-   draft only while nothing has changed since the save. A failed read is shown as a load failure,
-   not a failed save (CLAUDE.md §3), and a later Save sends master ids, never `new:` or `live:`
-   keys again.
+4. **A successful save marks what was sent as saved at once, and keeps what was edited since.** The
+   editor re-keys the sent draft from the answer's `ids` (key → master id; an adopted table keeps its
+   `liveTableId`) and commits it as the saved state; it re-keys the current draft the same way,
+   which keeps an edit made while the save was pending, and resets Undo and Redo to it, because the
+   old keys are gone; Save stays active when the current draft differs from what was sent. The
+   selection and a field's refusal are re-keyed too, and the answer's `revision` is taken. Only then
+   does it read the plan again, to refresh; the read replaces the draft only while nothing has
+   changed since the save. A failed read is shown as a read's failure, not a failed save (CLAUDE.md
+   §3): the next change or Save clears it, and it never replaces an action's message. A later Save
+   sends master ids, never `new:` or `live:` keys again.
 5. **On `floor_plan.out_of_date`** the code's sentence shows with a "Load newer plan" button;
    pressing it replaces the draft with a fresh read and empties Undo and Redo, writing nothing. The
    press is the person's choice to drop their draft, so it does not ask again. Save stays enabled.
@@ -1844,7 +1847,7 @@ it("put back after a detached update, the editor still asks before Close discard
 - [ ] **Step 5: Commit** — e.g. "Floor plan editor: a dashboard screen for managers that asks before
   leaving unsaved changes (A429 slice 2)".
 
-### Task 2.4d: Saving, and placing a refusal
+### Task 2.4d: Saving, and the newer plan
 
 **Files:**
 - Modify: `apps/dashboard/src/screens/floor-plan-editor.ts`, `apps/dashboard/src/i18n/strings.ts`
@@ -1855,33 +1858,33 @@ it("put back after a detached update, the editor still asks before Close discard
 - Create: `apps/dashboard/src/screens/floor-plan-editor.save.test.ts`
 
 **Interfaces:**
-- Consumes: `saveFloorPlan` (`client.ts:2795-2803`); `saveFromDraft`, `rekeyDraft`, `checkDraft`
-  (Task 2.4a).
-- Produces, for Task 2.6a's panel: the page's `fieldError: { key: string; field: "label" | "seats" |
-  "fixed" | "width" | "height" | "shape" | "rotation"; message: string } | null` (a server field
-  `tables.<i>.placement.width` becomes `width`, and so on).
+- Consumes: `saveFloorPlan` (`client.ts:2795-2803`); `saveFromDraft`, `rekeyDraft` (Task 2.4a).
+- Produces, for Task 2.4e: the body last sent (`sent: FloorPlanSave | null`) and the page's one
+  message slot, which remembers whether a read or an action set it.
 
-Behaviour: Save returns at once while `saveActionState(scope).unchanged`, while saving, or while an
-earlier press found `checkDraft` failing and it still fails. Otherwise, if `checkDraft` fails, the
-page selects the table, sets `fieldError` on `label` ("Enter a name." / "Escribe un nombre." for
-`label_missing`; `table.label_taken`'s sentence for `label_repeated`) and the generic sentence above
-the buttons, and sends nothing. Else it keeps the body it sends, `saveFromDraft(revision, draft)`,
-and sends it. On success: decision 4 — `rekeyDraft` of the sent draft becomes the opened state and
-the history's one state, `revision` becomes the answer's, then a re-read whose answer replaces the
-draft only while the scope is not dirty, and whose failure shows its sentence above the buttons as
-a read's failure (Save stays quiet). On a refusal: decisions 5, 6 and 7, `tables.<i>` read through
-the sent body; a `table.label_taken` whose label no draft table carries, and any other refusal,
-shows its own sentence above the buttons. A save's answer that arrives after the page has left, or
-after another load began, is ignored (a request counter, as `canvas-editor-screen.ts:832-871`
-keeps). New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más
-reciente"; `floor_plan_editor.name_missing` "Enter a name." / "Escribe un nombre.";
-`floor_plan_editor.booked` "{name}: {message}" (both languages).
+Behaviour: Save returns at once while `saveActionState(scope).unchanged` or while saving (Task 2.4e
+adds the editor's own checks before sending). Otherwise it keeps the draft and the body it sends,
+`saveFromDraft(revision, draft)`, and sends it. Editing stays open while the save is pending. On
+success (decision 4): the saved state is `rekeyDraft(sentDraft, ids)` and is committed as the
+scope's baseline; the current draft becomes `rekeyDraft(currentDraft, ids)` and the history is reset
+to it, so an edit made while the save was pending is kept and Save stays active when the current
+draft differs from what was sent; the selection, and Task 2.4e's `fieldError.key`, are mapped
+through `ids` too (a selected `new:1` becomes its master id); `revision` becomes the answer's. Then a
+re-read, whose answer replaces the draft only while the scope is not dirty. On
+`floor_plan.out_of_date`: decision 5. Any other refusal is Task 2.4e's. A save's answer that arrives
+after the page has left, or after another load began, is ignored (a request counter, as
+`canvas-editor-screen.ts:832-871` keeps).
+
+The header's message slot (decision 18) carries both a read's failure and an action's, and
+remembers which one set it (CLAUDE.md §3; `docs/developers/dashboard-live-updates.md`): a failed
+re-read shows its sentence as a read's message, which the next change or the next Save clears; a
+read's failure never replaces an action's message; and a read's success clears only a read's
+message. Save stays quiet after a failed re-read, since the write succeeded.
+
+New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente".
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.save.test.ts` (Task 2.4a's fixture
-  plan; a change is made by dispatching `floor-plan-change` from inside the page, so deletes and
-  renames need no panel yet). The file imports `@waitron/dashboard-modules`, as
-  `apps/dashboard/src/dashboard-app.test.ts` does, so that bookings' code sentences, `table.booked`'s
-  among them, are registered (`packages/bookings/src/dashboard/strings.ts:104-105`):
+  plan; a change is made by dispatching `floor-plan-change` from inside the page):
 
 ```ts
 it("a press that reaches an untouched Save's handler sends nothing and shows nothing", async () => { /* host .click() on Save, as canvas-editor-screen.save-state.test.ts:172-180 */ });
@@ -1892,10 +1895,20 @@ it("a save marks the sent draft saved at once and reads the plan again", async (
   /* answer { revision: 4, ids: { m1: "m1", m2: "m2", "live:l9": "m9" } }; the re-read deferred: Save "secondary", disabled; Undo disabled;
      then the re-read answers: getFloorPlan called twice */
 });
-it("a failed re-read after a save shows as a load failure, and the next Save sends master ids", async () => {
+it("an edit made while the save is pending is kept, and Save stays active", async () => {
+  /* move m1 to (5, 4); Save (deferred); move m1 to (7, 4); the save answers: m1 at x 7; Save "primary" and enabled; Undo disabled;
+     Close asks (the scope is dirty against the sent draft) */
+});
+it("a selected new table keeps its selection under its master id", async () => {
+  /* add "T5" (new:1), select it; Save answers ids { …, "new:1": "m5" } → canvas.selected "m5" */
+});
+it("a failed re-read after a save shows as a read's failure, and the next Save sends master ids", async () => {
   /* add "T5" (new:1); save answers { revision: 4, ids: { …, "live:l9": "m9", "new:1": "m5" } }; the re-read rejects { code: "server.internal" }:
-     message "Something went wrong, try again"; Save quiet. Move m5; Save → body revision 4, tables include { id: "m5", key: "m5", … } and { id: "m9", key: "m9", … };
-     no key starts with "new:" or "live:" */
+     message "Something went wrong, try again"; Save quiet. Move m5 → the message goes; Save → body revision 4, tables include
+     { id: "m5", key: "m5", … } and { id: "m9", key: "m9", … }; no key starts with "new:" or "live:" */
+});
+it("a read's failure does not replace an action's message", async () => {
+  /* a save refused { code: "server.internal" } shows its sentence; a later Load newer plan read that fails leaves the action's sentence in place */
 });
 it("a re-read answer does not replace a draft changed since the save", async () => { /* re-read deferred; move m1 to x 7; re-read answers x 5: m1 stays at 7, Save loud */ });
 it("a save in progress keeps a second press from sending", async () => { /* deferred save; two presses; one call */ });
@@ -1904,28 +1917,6 @@ it("an older copy offers the newer plan, keeping Save available", async () => {
      Load newer plan shown; Save enabled */
 });
 it("Load newer plan replaces the draft and writes nothing", async () => { /* second read has m1 at x 7 → canvas m1 x 7; Save quiet; Undo disabled; saveFloorPlan called once */ });
-it("a taken name selects its table and shows the generic sentence", async () => {
-  /* rename m2 to "Patio 1"; reject { code: "table.label_taken", params: { label: "Patio 1" } } → canvas.selected "m2";
-     page fieldError { key: "m2", field: "label", message: "A table with that name already exists" }; message "Correct the highlighted fields to continue."; Save enabled */
-});
-it("an invalid field selects the table that was sent at its index", async () => {
-  /* save deferred (sent tables: m1, m2, live:l9); meanwhile a floor-plan-change deletes m1, so the draft's index 1 is now live:l9;
-     reject { code: "floor_plan.invalid", params: { field: "tables.1.seats" } } → selected "m2" (sent tables[1]), fieldError.field "seats" */
-});
-it("an invalid field of a table deleted since sending selects nothing", async () => {
-  /* add "T5" (new:1, sent at index 3); save deferred; delete new:1; reject field "tables.3.label" → no selection; message "Check the floor plan's tables and try again" */
-});
-it("a refusal about a join selects nothing and shows its own sentence", async () => { /* field "joins.0.tableKeys" → selection unchanged; message "Check the floor plan's tables and try again" */ });
-it("a booked table the draft deleted is named, and Undo brings it back", async () => {
-  /* delete m2; reject { code: "table.booked", params: { tableId: "l2" } } → message "T2: This table has an upcoming booking. Move the booking first"; Undo → m2 back */
-});
-it("a failure with no field shows the server's sentence and leaves Save enabled", async () => { /* reject { code: "server.internal" } */ });
-it("an empty name stops the save, selects its table and keeps Save disabled until fixed", async () => {
-  /* m2 label "  "; Save → no call; selected "m2"; fieldError { field: "label", message: "Enter a name." }; Save disabled;
-     label "T2b" → Save enabled; fieldError null */
-});
-it("a repeated name stops the save the same way", async () => { /* l9 renamed "T1" → selected "live:l9"; message under label "A table with that name already exists" */ });
-it("the next change to the refused field clears its sentence", async () => { /* after the taken-name refusal, rename m2 → fieldError null; the generic sentence goes */ });
 // floor-plan-editor.unsaved.test.ts (whole app):
 it("a departed save's answer cannot change a reconnected editor", async () => {
   /* as recipe-screen.unsaved.test.ts:408 on: deferred save; remove and re-add the editor; resolve; Save still "primary"; the question still opens on Close */
@@ -1940,9 +1931,72 @@ it("an accepted save leaves without asking", async () => { /* move, Save, Close 
 - [ ] **Step 3: Implement**, and add the editor to design-system.md's Forms list.
 - [ ] **Step 4: Run** the same command plus `src/screens/floor-plan-editor.test.ts`, the dashboard's
   typecheck and lint, and `prettier --check` on the changed files. Expected: pass.
-- [ ] **Step 5: Commit** — e.g. "Floor plan editor: Save sends the plan, marks it saved at once,
-  offers the newer plan when someone else saved first, and points each refusal at its table (A429
-  slice 2)".
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: Save sends the plan, keeps edits made while it
+  was sending, and offers the newer plan when someone else saved first (A429 slice 2)".
+
+### Task 2.4e: Placing a refusal, and the editor's own name checks
+
+**Files:**
+- Modify: `apps/dashboard/src/screens/floor-plan-editor.ts`, `apps/dashboard/src/i18n/strings.ts`
+  (EN and ES)
+- Create: `apps/dashboard/src/screens/floor-plan-editor.refusals.test.ts`
+
+**Interfaces:**
+- Consumes: Task 2.4d's `sent` body and message slot; `checkDraft` (Task 2.4a).
+- Produces, for Task 2.6a's panel: the page's `fieldError: { key: string; field: "label" | "seats" |
+  "fixed" | "width" | "height" | "shape" | "rotation"; message: string } | null` (a server field
+  `tables.<i>.placement.width` becomes `width`, and so on).
+
+Behaviour: before sending, if `checkDraft` fails, the page selects the table, sets `fieldError` on
+`label` ("Enter a name." / "Escribe un nombre." for `label_missing`; `table.label_taken`'s sentence
+for `label_repeated`) and the generic sentence above the buttons, and sends nothing; Save then stays
+disabled while `checkDraft` still fails. On a refusal from the server: decisions 6 and 7,
+`tables.<i>` read through Task 2.4d's `sent` body; a `table.label_taken` whose label no draft table
+carries, and any refusal not named there, shows its own sentence above the buttons. These are
+action messages (Task 2.4d's slot). New strings: `floor_plan_editor.name_missing` "Enter a name." /
+"Escribe un nombre."; `floor_plan_editor.booked` "{name}: {message}" (both languages).
+
+- [ ] **Step 1: Write the failing tests** in `floor-plan-editor.refusals.test.ts` (Task 2.4a's
+  fixture plan; changes by dispatching `floor-plan-change`). The file imports
+  `@waitron/dashboard-modules`, as `apps/dashboard/src/dashboard-app.test.ts` does, so that bookings'
+  code sentences, `table.booked`'s among them, are registered
+  (`packages/bookings/src/dashboard/strings.ts:104-105`):
+
+```ts
+it("a taken name selects its table and shows the generic sentence", async () => {
+  /* rename m2 to "Patio 1"; reject { code: "table.label_taken", params: { label: "Patio 1" } } → canvas.selected "m2";
+     page fieldError { key: "m2", field: "label", message: "A table with that name already exists" }; message "Correct the highlighted fields to continue."; Save enabled */
+});
+it("an invalid field selects the table that was sent at its index", async () => {
+  /* save deferred (sent tables: m1, m2, live:l9); meanwhile a floor-plan-change deletes m1, so the draft's index 1 is now live:l9;
+     reject { code: "floor_plan.invalid", params: { field: "tables.1.seats" } } → selected "m2" (sent tables[1]), fieldError.field "seats" */
+});
+it("an invalid field of a table deleted since sending selects nothing", async () => {
+  /* add "T5" (new:1, sent at index 3); save deferred; delete new:1; reject field "tables.3.label" → no selection; message "Check the floor plan's tables and try again" */
+});
+it("an invalid field the panel does not show selects the table and shows the refusal's own sentence", async () => { /* field "tables.0.placement.x" → selected "m1"; fieldError null; message "Check the floor plan's tables and try again" */ });
+it("a refusal about a join selects nothing and shows its own sentence", async () => { /* field "joins.0.tableKeys" → selection unchanged; message "Check the floor plan's tables and try again" */ });
+it("a booked table the draft deleted is named, and Undo brings it back", async () => {
+  /* delete m2; reject { code: "table.booked", params: { tableId: "l2" } } → message "T2: This table has an upcoming booking. Move the booking first"; Undo → m2 back */
+});
+it("a failure with no field shows the server's sentence and leaves Save enabled", async () => { /* reject { code: "server.internal" } */ });
+it("an empty name stops the save, selects its table and keeps Save disabled until fixed", async () => {
+  /* m2 label "  "; Save → no call; selected "m2"; fieldError { field: "label", message: "Enter a name." }; Save disabled;
+     label "T2b" → Save enabled; fieldError null */
+});
+it("a repeated name stops the save the same way", async () => { /* l9 renamed "T1" → selected "live:l9"; message under label "A table with that name already exists" */ });
+it("the next change to the refused field clears its sentence", async () => { /* after the taken-name refusal, rename m2 → fieldError null; the generic sentence goes */ });
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-editor.refusals.test.ts`.
+  Expected: the file's cases fail (a refusal selects nothing and marks no field).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command plus `src/screens/floor-plan-editor.save.test.ts` and
+  `src/screens/floor-plan-editor.test.ts`, the dashboard's typecheck and lint, and `prettier --check`
+  on the changed files. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: each refusal points at its table, and a missing
+  or repeated name stops Save (A429 slice 2)".
 
 ### Task 2.5a: `wt-sheet`
 
@@ -2005,7 +2059,7 @@ it("paints from tokens", async () => { /* host sets --wt-color-surface rgb(1, 2,
   `apps/dashboard/src/screens/floor-plan-tables-panel.test.ts`
 - Modify: `apps/dashboard/src/screens/floor-plan-editor.ts` (the panel beside the canvas at 600 px
   and over, inside a `wt-sheet` below, decided from the page's own width with a `ResizeObserver`),
-  `floor-plan-editor.test.ts`, `floor-plan-editor.save.test.ts`, `floor-plan-editor.a11y.test.ts`,
+  `floor-plan-editor.test.ts`, `floor-plan-editor.refusals.test.ts`, `floor-plan-editor.a11y.test.ts`,
   `apps/dashboard/src/i18n/strings.ts`
 
 **Interfaces:**
@@ -2028,7 +2082,7 @@ Behaviour: a heading "Tables", then each draft table as a row button, sorted wit
 (`Intl.Collator(locale, { numeric: true })`), a placed table's row drawn muted and marked
 `data-placed`. Pressing an unplaced table sends `placeTable` and selects it; pressing a placed one
 selects it. Below 600 px the page puts the panel in a `wt-sheet` whose heading is the selected
-table's name, else "Tables"; a refusal that selects a table (Task 2.4d) also expands the sheet.
+table's name, else "Tables"; a refusal that selects a table (Task 2.4e) also expands the sheet.
 Strings (EN / ES): `floor_plan_editor.tables` "Tables" / "Mesas".
 
 - [ ] **Step 1: Write the failing tests:**
@@ -2046,13 +2100,13 @@ it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 
   /* page.viewport(1280, 800): aside holds floor-plan-tables-panel, no wt-sheet; page.viewport(390, 844): wt-sheet holds it, expanded false, heading "Tables"; restore the viewport */
 });
 it("the sheet's heading names the selected table", async () => { /* select m1 → heading "T1" */ });
-// floor-plan-editor.save.test.ts
+// floor-plan-editor.refusals.test.ts
 it("at 390 px a refusal that selects a table opens the sheet", async () => { /* table.label_taken for m2 → wt-sheet expanded true */ });
 // floor-plan-editor.a11y.test.ts: add "the tables list" and "the sheet collapsed and expanded at 390 px", in both themes
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-tables-panel.test.ts src/screens/floor-plan-editor.test.ts src/screens/floor-plan-editor.save.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-tables-panel.test.ts src/screens/floor-plan-editor.test.ts src/screens/floor-plan-editor.refusals.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
   Expected: the new file fails to load; the page's new cases fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same command, the dashboard's typecheck and lint, `prettier --check`.
@@ -2137,10 +2191,10 @@ it("a changed count asks before Cancel, and Discard closes without adding", asyn
 - Create: `apps/dashboard/src/screens/floor-plan-table-panel.ts` (`floor-plan-table-panel`),
   `apps/dashboard/src/screens/floor-plan-table-panel.test.ts`
 - Modify: `floor-plan-editor.ts` (the panel above the tables list while a table is selected, given
-  `fieldError`), `floor-plan-editor.save.test.ts`, `floor-plan-editor.a11y.test.ts`, `strings.ts`
+  `fieldError`), `floor-plan-editor.refusals.test.ts`, `floor-plan-editor.test.ts`, `floor-plan-editor.a11y.test.ts`, `strings.ts`
 
 **Interfaces:**
-- Consumes: Task 2.4a's `patchTable`, `placeTable`, `deleteTable`, `isAdoptable`; Task 2.4d's
+- Consumes: Task 2.4a's `patchTable`, `placeTable`, `deleteTable`, `isAdoptable`; Task 2.4e's
   `fieldError`.
 - Produces:
 
@@ -2182,14 +2236,15 @@ it("a table offered for adoption has Remove from plan but no Delete", async () =
   /* live:l9 placed by a change: Remove from plan shown, no [data-test=delete]; unplaced: Place shown, still no Delete */
 });
 it("shows a refusal under the field it names", async () => { /* fieldError { field: "seats", message: "…" } → seats stepper error; name field none */ });
-// floor-plan-editor.save.test.ts
-it("a taken name from Save shows under the table's name field", async () => { /* completes Task 2.4d's case: the panel's name field shows "A table with that name already exists" */ });
+// floor-plan-editor.refusals.test.ts
+it("a taken name from Save shows under the table's name field", async () => { /* completes Task 2.4e's case: the panel's name field shows "A table with that name already exists" */ });
+// floor-plan-editor.test.ts
 it("Undo of a Delete brings back the table and its join", async () => { /* … */ });
 // floor-plan-editor.a11y.test.ts: add "a placed table's panel", "an unplaced table's panel", "a refusal under a field", in both themes
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-table-panel.test.ts src/screens/floor-plan-editor.save.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-table-panel.test.ts src/screens/floor-plan-editor.refusals.test.ts src/screens/floor-plan-editor.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
   Expected: the new file fails to load; the new page cases fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same command plus `src/screens/floor-plan-editor.test.ts`,
@@ -2234,7 +2289,7 @@ it("Add join offers the zone's other tables only", async () => { /* options T2, 
   Expected: the new file fails to load; the join cases fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same command plus `src/screens/floor-plan-editor.test.ts` and
-  `src/screens/floor-plan-editor.save.test.ts`, `scripts/native-form-fields.test.ts`, the
+  `src/screens/floor-plan-editor.refusals.test.ts`, `scripts/native-form-fields.test.ts`, the
   dashboard's typecheck and lint, `prettier --check`. Expected: pass.
 - [ ] **Step 5: Commit** — e.g. "Floor plan editor: a table's saved joins, with Add join and Remove
   (A429 slice 2)".

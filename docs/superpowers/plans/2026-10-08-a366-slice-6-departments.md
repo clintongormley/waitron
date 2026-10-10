@@ -1287,7 +1287,8 @@ or panel, keep its test and its permission rule (hidden without `venue.configure
 (Amended 2026-10-10 by A429 slice 2's expansion: the address form; the link itself lands in A429
 slice 2 on the zone panel. A429 slice 2 shows that link without a permission check of its own,
 because only a manager or an admin can open the department page: `venue_service.manage` is granted
-from manager up, and the role map gives both roles `venue.configure`; role map read 2026-10-10.)
+from manager up, and the role map gives both roles `venue.configure`; role map read 2026-10-10. So
+drop the hidden-without-`venue.configure` test; the link is shown wherever the page opens.)
 
 - [ ] Steps: failing tests (preview present with tables, absent without; the link; hidden without
   `venue.configure`); watch them fail; implement; the browser files; LOOK in EN and ES, both themes,
