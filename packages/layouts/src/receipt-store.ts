@@ -7,37 +7,61 @@ import {
   type MonoRaster,
   type PaperWidth,
 } from "@waitron/printing";
+import type { VenueReceiptSettings } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { DEFAULT_RECEIPT } from "./defaults.js";
 import type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
-import { isPlainObject, RECEIPT_STRING_FIELDS, validateReceiptConfig } from "./validate.js";
+import {
+  isPlainObject,
+  RECEIPT_STRING_FIELDS,
+  validateReceiptConfig,
+  validateVenueReceiptSettings,
+} from "./validate.js";
 
 const PAPER_WIDTHS: readonly PaperWidth[] = ["58mm", "80mm"];
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-/** The row without its pictures, which are most of its size, so reading the trim parses none. */
-const TRIM = sql<string>`json_remove(${tenantReceipts.receipt}, '$.logoRasters')`;
+const DOCUMENT = sql`case when json_valid(${tenantReceipts.receipt}) then ${tenantReceipts.receipt} else '{}' end`;
 
-/** One stored picture as JSON text, `null` when absent. */
-function storedPicture(path: string) {
-  return sql<string | null>`${tenantReceipts.receipt} -> ${path}`;
+function boundedString(field: string, max: number) {
+  const value = sql`json_extract(${DOCUMENT}, ${`$.${field}`})`;
+  return sql<
+    string | null
+  >`case when typeof(${value}) = 'text' and length(${value}) <= ${max} and length(cast(${value} as blob)) <= ${max * 4} then ${value} else null end`;
 }
 
-/**
- * A configuration import copies the row unchecked, and a sale prints this trim inside its own
- * transaction, so a field of the wrong type is dropped rather than printed or thrown on; a
- * `printAddress` that is not a boolean is absent, which prints the address. A row that is not an
- * object reads as no trim at all.
- */
+const TRIM = sql<string>`json_object(
+  'headerSubtitle', ${boundedString("headerSubtitle", 200)},
+  'footerMessage', ${boundedString("footerMessage", 200)},
+  'phone', ${boundedString("phone", 30)},
+  'email', ${boundedString("email", 254)},
+  'logo', ${boundedString("logo", 255)},
+  'printAddress', case when json_type(${DOCUMENT}, '$.printAddress') in ('true', 'false') then json_extract(${DOCUMENT}, '$.printAddress') else null end
+)`;
+
+function storedPicture(paper: PaperWidth) {
+  const value = sql`json_extract(${DOCUMENT}, ${`$.logoRasters."${paper}"`})`;
+  const maxBytes =
+    Math.ceil((Math.ceil(safeWidthDots(paper) / 8) * LOGO_MAX_HEIGHT_DOTS) / 3) * 4 + 128;
+  return sql<
+    string | null
+  >`case when typeof(${value}) = 'text' and length(cast(${value} as blob)) <= ${maxBytes} then ${value} else null end`;
+}
+
 function parseTrim(trim: string): ReceiptConfig {
-  const value: unknown = JSON.parse(trim);
-  if (!isPlainObject(value)) return DEFAULT_RECEIPT;
+  const value = JSON.parse(trim) as Record<string, unknown>;
   const receipt: ReceiptConfig = {};
   for (const field of RECEIPT_STRING_FIELDS) {
     const text = value[field];
-    if (typeof text === "string") receipt[field] = text;
+    if (typeof text !== "string") continue;
+    try {
+      Object.assign(receipt, validateReceiptConfig({ [field]: text }));
+    } catch {
+      // Imported fields are independent; one invalid field does not hide valid siblings.
+    }
   }
-  if (typeof value.printAddress === "boolean") receipt.printAddress = value.printAddress;
+  if (value.printAddress === 0) receipt.printAddress = false;
+  if (value.printAddress === 1) receipt.printAddress = true;
   return receipt;
 }
 
@@ -69,10 +93,6 @@ function decodeLogoRaster(value: unknown, paperWidth: PaperWidth): MonoRaster | 
   return { widthDots, heightDots, bits };
 }
 
-/**
- * The stored picture as a raster, or `null`. It runs inside a sale's transaction, where a throw
- * would roll the sale back, so nothing about the stored text may throw past it.
- */
 function readLogoRaster(json: string | null, paperWidth: PaperWidth): MonoRaster | null {
   if (json === null) return null;
   try {
@@ -90,21 +110,31 @@ export function encodeLogoRaster(raster: MonoRaster): StoredLogoRaster {
   };
 }
 
-/**
- * The trim and the logo `paperWidth` prints, from one read that parses that paper's picture alone.
- * The logo is `null` for a stored picture of any wrong shape; a failed read still throws.
- */
 export async function getPrintedReceipt(
   tx: Transaction,
   paperWidth: PaperWidth,
+  diagnostic?: (event: {
+    operation: "getPrintedReceipt";
+    receiptId: 1;
+    code: "receipt.read_failed";
+  }) => void,
 ): Promise<{ receipt: ReceiptConfig; logo: MonoRaster | null }> {
-  const [row] = await tx
-    .select({ trim: TRIM, picture: storedPicture(`$.logoRasters."${paperWidth}"`) })
-    .from(tenantReceipts);
-  if (row === undefined) return { receipt: DEFAULT_RECEIPT, logo: null };
-  const receipt = parseTrim(row.trim);
-  const logo = receipt.logo === undefined ? null : readLogoRaster(row.picture, paperWidth);
-  return { receipt, logo };
+  try {
+    const [row] = await tx
+      .select({ trim: TRIM, picture: storedPicture(paperWidth) })
+      .from(tenantReceipts);
+    if (row === undefined) return { receipt: DEFAULT_RECEIPT, logo: null };
+    const receipt = parseTrim(row.trim);
+    const logo = receipt.logo === undefined ? null : readLogoRaster(row.picture, paperWidth);
+    return { receipt, logo };
+  } catch {
+    try {
+      diagnostic?.({ operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" });
+    } catch {
+      // Diagnostics cannot replace an omitted optional source with another failure.
+    }
+    return { receipt: DEFAULT_RECEIPT, logo: null };
+  }
 }
 
 /**
@@ -117,13 +147,14 @@ export async function getStoredLogoRasters(
 ): Promise<ReceiptLogoRasters | null> {
   const [row] = await tx
     .select({
-      logo: sql<unknown>`${tenantReceipts.receipt} ->> '$.logo'`,
-      pictures: storedPicture("$.logoRasters"),
+      logo: boundedString("logo", 255),
+      narrow: storedPicture("58mm"),
+      wide: storedPicture("80mm"),
     })
     .from(tenantReceipts);
-  if (row?.logo !== logo || row.pictures === null) return null;
+  if (row?.logo !== logo || row.narrow === null || row.wide === null) return null;
   try {
-    const pictures: unknown = JSON.parse(row.pictures);
+    const pictures: unknown = { "58mm": JSON.parse(row.narrow), "80mm": JSON.parse(row.wide) };
     return printable(pictures) ? pictures : null;
   } catch {
     return null;
@@ -161,4 +192,35 @@ function printable(rasters: unknown): rasters is ReceiptLogoRasters {
     isPlainObject(rasters) &&
     PAPER_WIDTHS.every((paperWidth) => decodeLogoRaster(rasters[paperWidth], paperWidth) !== null)
   );
+}
+
+export async function getVenueReceiptSettings(tx: Transaction): Promise<VenueReceiptSettings> {
+  const { logo, headerSubtitle, footerMessage, printAddress } = await getReceipt(tx);
+  return {
+    ...(logo === undefined ? {} : { logo }),
+    ...(headerSubtitle === undefined ? {} : { headerSubtitle }),
+    ...(footerMessage === undefined ? {} : { footerMessage }),
+    ...(printAddress === undefined ? {} : { printAddress }),
+  };
+}
+
+export async function putVenueReceiptSettings(
+  tx: Transaction,
+  input: { managementSessionId: string; settings: unknown; logoRasters?: ReceiptLogoRasters },
+): Promise<void> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "layout.configure",
+  });
+  const settings = validateVenueReceiptSettings(input.settings);
+  const { phone, email } = await getReceipt(tx);
+  await putReceipt(tx, {
+    managementSessionId: input.managementSessionId,
+    receipt: {
+      ...settings,
+      ...(phone === undefined ? {} : { phone }),
+      ...(email === undefined ? {} : { email }),
+    },
+    ...(input.logoRasters === undefined ? {} : { logoRasters: input.logoRasters }),
+  });
 }

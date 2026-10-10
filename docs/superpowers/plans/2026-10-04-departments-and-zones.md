@@ -1,5 +1,11 @@
 # Departments and zones: implementation plan (A261 step 2)
 
+> **2026-10-10, A366 slice 7 Part A:** Receipt previews now send authored department and
+> venue drafts through POST. The GET preview and its query parameters below describe
+> the earlier implementation. Follow
+> [the slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for the current
+> preview and independent editing scopes.
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

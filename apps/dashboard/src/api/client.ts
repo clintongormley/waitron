@@ -1,3 +1,4 @@
+import type { DepartmentReceiptConfig, VenueReceiptSettings } from "@waitron/shared";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
 import type {
@@ -30,6 +31,14 @@ import type {
 } from "@waitron/catalogue/src/product-types.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
+export interface DepartmentReceiptSettings {
+  receipt: DepartmentReceiptConfig;
+  venueDefaults: VenueReceiptSettings;
+  languages: string[];
+  warningLanguages: string[];
+  venueAddress: string[];
+}
+
 export interface VenueDetailValues {
   name: string;
   addressLine1: string | null;
@@ -2694,15 +2703,35 @@ export class DashboardApi {
     };
   }
 
-  async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {
+  async getVenueDepartments(): Promise<
+    { id: string; name: string; active: boolean; isDefault: boolean }[]
+  > {
     const venue = await this.#request<{
-      departments: { id: string; name: string; active: boolean }[];
+      departments: { id: string; name: string; active: boolean; isDefault: boolean }[];
     }>("/management-api/venue-service/departments-and-zones", "GET");
     return venue.departments;
   }
 
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
+  }
+
+  getDepartmentReceipt(id: string): Promise<DepartmentReceiptSettings> {
+    return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "GET");
+  }
+
+  putDepartmentReceipt(id: string, receipt: DepartmentReceiptConfig): Promise<void> {
+    return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "PUT", {
+      receipt,
+    });
+  }
+
+  getVenueReceiptSettings(): Promise<{ settings: VenueReceiptSettings }> {
+    return this.#request("/management-api/receipt-settings", "GET");
+  }
+
+  putVenueReceiptSettings(settings: VenueReceiptSettings): Promise<void> {
+    return this.#request("/management-api/receipt-settings", "PUT", { settings });
   }
 
   getReceiptLanguage(): Promise<ReceiptLanguage> {
@@ -2713,21 +2742,20 @@ export class DashboardApi {
     return this.#request<void>("/management-api/receipt-language", "PUT", { language });
   }
 
-  /** Draws a sample receipt with this trim, at the given paper width and in the given receipt
-   * language if any; saves and prints nothing. */
-  previewReceipt(
-    receipt: ReceiptConfig,
-    paperWidth?: PrintPaperWidth,
-    language?: string,
-    departmentId?: string,
+  previewReceiptDraft(
+    draft: {
+      departmentId: string | null;
+      receipt: DepartmentReceiptConfig;
+      settings: VenueReceiptSettings;
+      language?: string;
+      paperWidth?: PrintPaperWidth;
+    },
+    options: { passive?: boolean } = {},
   ): Promise<ReceiptPreview> {
-    const width = paperWidth === undefined ? "" : `&paperWidth=${encodeURIComponent(paperWidth)}`;
-    const drawnIn = language === undefined ? "" : `&language=${encodeURIComponent(language)}`;
-    const department =
-      departmentId === undefined ? "" : `&departmentId=${encodeURIComponent(departmentId)}`;
-    return this.#request<ReceiptPreview>(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}${department}`,
-      "GET",
+    return this.#request(
+      "/management-api/receipt-preview",
+      "POST",
+      options.passive === true ? { ...draft, passive: true } : draft,
     );
   }
 

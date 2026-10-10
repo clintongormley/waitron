@@ -71,6 +71,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["menu_slots", ["timetable_id", "department_id"], "menu_day_timetables"],
   ["menu_slots", ["period_id", "department_id"], "menu_periods"],
   ["departments", ["location_id"], "locations"],
+  ["department_receipts", ["department_id"], "departments"],
   ["device_approved_profiles", ["device_id"], "devices"],
   ["device_approved_profiles", ["device_profile_id"], "device_profiles"],
   ["device_card_readers", ["device_id"], "devices"],

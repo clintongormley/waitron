@@ -2012,8 +2012,9 @@ and downloads keep browser handling. Fragment-only form links keep their target'
 which owns any leave request. The dashboard catches a link click before the link's own handler
 sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
 place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
-there and goes nowhere. Preview department changes and same-page receipt Back retain
-staged inputs; a tab or management-link departure asks before leaving them.
+there and goes nowhere. Changing the receipt department asks about that department’s draft
+and retains the venue defaults, receipt language and description drafts. Same-page receipt Back
+uses the same department scope; a tab or management-link departure asks about all outstanding drafts.
 
 Each form owns its comparison and successful-write boundary. Compare membership for selected
 ID sets and preserve order for submitted positions. Nested image forms retain File identity;

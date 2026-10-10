@@ -28,13 +28,12 @@ their full text.
   nothing until a manager lists it on every station (decision P5; pre-live, no data migration). Revised 2026-10-08 to the owner's answers (any device may run a station or pass
   screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
   revision added listed at its end.
-  Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
-  revised 2026-10-10 to the owner's later receipt overrides, in two pull requests: each department's
-  receipt with translated subtitle and footer, then the department page's Receipt tab after
-  slice 6. Parts 3A and 6A have landed (#1469/#1488); Lane E's slice 7 build is open.
-  This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
-  A4 omits optional current address, and slice 7 adds no consent step. The separate core
-  delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
+  Slice 7 Part A is built: department receipt storage, translated subtitle/footer, live venue
+  defaults, independent saves and draft previews, thermal/A4 composition, till presentation
+  and department/default email contacts. Part B remains: host the reusable editor on the
+  department page's Receipt tab. [Slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
+  revised 2026-10-10 to the owner's later receipt overrides. The separate core delivery
+  rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
   requests. Part A is built: combined tickets on shared printers, period choices in routing cells,

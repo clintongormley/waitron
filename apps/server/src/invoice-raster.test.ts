@@ -80,3 +80,28 @@ describe("invoice glyph-outline raster", () => {
     }
   });
 });
+
+describe("department A4 office raster", () => {
+  it.each([300, 600] as const)(
+    "draws the same centered proportional logo at %s dpi",
+    async (resolution) => {
+      const { renderInvoiceRaster } = await import("./invoice-raster.js");
+      const [page] = await renderInvoiceRaster(
+        {
+          ...fixture,
+          logo: { widthDots: 80, heightDots: 40, bits: new Uint8Array(400).fill(255) },
+          result: { ...fixture.result, qr: "" },
+        },
+        resolution,
+      );
+      const scale = resolution / 300;
+      let ink = 0;
+      for (let y = 215 * scale; y < 260 * scale; y++)
+        for (let x = 1190 * scale; x < 1290 * scale; x++)
+          if (page!.pixels[y * page!.width + x]! < 128) ink++;
+      expect(ink).toBe(4500 * scale * scale);
+      expect(page!.pixels[215 * scale * page!.width + 1150 * scale]).toBe(255);
+      expect(page!.pixels[215 * scale * page!.width + 1330 * scale]).toBe(255);
+    },
+  );
+});

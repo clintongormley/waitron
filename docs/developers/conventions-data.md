@@ -1193,6 +1193,10 @@ the case where such an edge is NOT declared. Core's own triggers, in its migrati
 The live-update triggers are installed at boot and sit outside this migration-text guard; their
 behaviour is exercised by `packages/db/src/change-feed.test.ts`.
 
+2026-10-10 receipt-slice update: the media descriptor also requires venue-service for its
+department-logo usage reads. Composition and the migration manifest now put venue-service
+before media. The earlier trigger measurements above still describe the core/catalogue edges.
+
 **A core rebuild of a table that another set's trigger BODY names applies fresh and fails on an
 upgrade; a trigger ON the rebuilt table is dropped with it, silently.** Core's
 `0003_variant_inherited_nullable.sql` rebuilds `products`. On a fresh database core migrates before

@@ -221,6 +221,9 @@ const cash = (applied: string, change: string, tip = "0.00"): AllocationPreview 
 });
 
 const invoiceOf = (total: string): TillSaleResult => ({
+  receiptTrim: {},
+  venueAddress: [],
+  venueReceiptSettings: {},
   orderLabel: "4",
   orderNumber: 7,
   invoiceNumber: "F-0007",

@@ -7,6 +7,8 @@ import {
   perDishOptionQuantity,
   resolveSnapshotText,
   subtractDecimal,
+  type ReceiptLogoRaster,
+  type ReceiptPresentation,
 } from "@waitron/shared";
 import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
 import { formatMoney } from "./receipt-money.js";
@@ -26,7 +28,9 @@ export interface ReceiptTrim {
 }
 
 export interface ReceiptDocumentInput {
-  result: TillSaleResult;
+  surface?: "thermal" | "a4";
+  logo?: ReceiptLogoRaster | null;
+  result: Omit<TillSaleResult, keyof ReceiptPresentation>;
   issuer: ReceiptIssuer;
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   receipt: ReceiptTrim;
@@ -91,6 +95,7 @@ export function buildReceiptDocument({
   receiptHeader,
   receipt,
   venueAddress = [],
+  surface = "thermal",
   invoiceLocale,
   namesLocale = invoiceLocale,
   simulated = false,
@@ -151,9 +156,9 @@ export function buildReceiptDocument({
   if (receiptHeader?.printTradingName && tradingName && tradingName !== issuer.venueName.trim()) {
     text(tradingName);
   }
-  text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  if (result.invoiceType !== "F1" || !issuer.domicile) {
+  text(issuer.venueName);
+  if (surface === "thermal") {
     for (const line of venueAddress) text(line);
   }
   if (receipt.phone) text(`${label.phone} ${receipt.phone}`);

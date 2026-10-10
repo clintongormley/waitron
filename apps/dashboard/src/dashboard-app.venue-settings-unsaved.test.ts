@@ -48,6 +48,14 @@ async function mount(
         getBumpMode: async () => ({ mode: "line" }),
         getFireControl: async () => ({ mode: "waiter" }),
         getReceipt: async () => ({ receipt: {}, venueAddress: [] }),
+        getVenueReceiptSettings: async () => ({ settings: {} }),
+        getDepartmentReceipt: async () => ({
+          receipt: {},
+          venueDefaults: {},
+          languages: ["es-ES"],
+          warningLanguages: [],
+          venueAddress: [],
+        }),
         getLocationSettings: async () => ({ name: "Venue", operationDescription: "Sale" }),
         getReceiptLanguage: async () => ({ language: "es-ES", choices: ["es-ES"], fixed: null }),
         getVenueDepartments: async () => [],
@@ -411,11 +419,14 @@ for (const locale of ["en-GB", "es-ES"]) {
         const previews: { heading: string | undefined; department: string | undefined }[] = [];
         const { app } = await mount("/manage/venue-settings/view/receipts", locale, theme, {
           getVenueDepartments: async () => [
-            { id: "bar", name: "Bar", active: true },
-            { id: "deli", name: "Deli", active: true },
+            { id: "bar", name: "Bar", active: true, isDefault: true },
+            { id: "deli", name: "Deli", active: true, isDefault: false },
           ],
-          previewReceipt: async (config, _width, _language, department) => {
-            previews.push({ heading: config.headerSubtitle, department });
+          previewReceiptDraft: async (draft) => {
+            previews.push({
+              heading: draft.settings.headerSubtitle,
+              department: draft.departmentId ?? undefined,
+            });
             return {
               preview: {
                 widthDots: 512,
@@ -444,10 +455,12 @@ for (const locale of ["en-GB", "es-ES"]) {
         await expect
           .poll(() => new URL(location.href).searchParams.get("departmentId"))
           .toBe("bar");
-        const input = receipt.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
+        const input = receipt
+          .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+          .shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
         await input.updateComplete;
         await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
-        const preview = receipt.shadowRoot!.querySelector("[name=previewDepartment]")!;
+        const preview = receipt.shadowRoot!.querySelector("[name=departmentId]")!;
         preview.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "deli" } }));
         await expect
           .poll(() => new URL(location.href).searchParams.get("departmentId"))
@@ -498,12 +511,14 @@ for (const locale of ["en-GB", "es-ES"]) {
 it("the real Receipts department-management link protects the appearance before leaving", async () => {
   const { app } = await mount("/manage/venue-settings/view/receipts");
   const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
-  const input = receipt.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
+  const input = receipt
+    .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+    .shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
   await input.updateComplete;
   await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
-  const link = receipt.shadowRoot!.querySelector<HTMLAnchorElement>(
-    'a[href="/manage/venue-operations"]',
-  )!;
+  const link = receipt
+    .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+    .shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/venue-operations"]')!;
   await userEvent.click(link);
   await choose(app, "keep");
   expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
@@ -513,4 +528,60 @@ it("the real Receipts department-management link protects the appearance before 
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(input.value).toBe("");
   expect(receipt.isConnected).toBe(false);
+});
+
+it("A10 URL department navigation asks once for its own draft and cross-panel leave asks for all", async () => {
+  const { app } = await mount(
+    "/manage/venue-settings/view/receipts?departmentId=bar",
+    "en-GB",
+    "light",
+    {
+      getVenueDepartments: async () => [
+        { id: "bar", name: "Bar", active: true, isDefault: true },
+        { id: "deli", name: "Deli", active: true, isDefault: false },
+      ],
+      getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Venue" } }),
+    },
+  );
+  const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
+  const editor = receipt.shadowRoot!.querySelector("dashboard-department-receipt-editor")!;
+  await expect.poll(() => editor.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
+  const email = editor.shadowRoot!.querySelector<WtInput>("[name=email]")!;
+  await email.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(email.shadowRoot!.querySelector("input")!),
+    "bar@example.com",
+  );
+  const defaults = receipt.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!;
+  await expect.poll(() => defaults.shadowRoot?.querySelector("[name=headerSubtitle]")).toBeTruthy();
+  const subtitle = defaults.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
+  await subtitle.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
+    "Draft venue",
+  );
+  const { navigationGuardFor } = await import("@waitron/ui");
+  const guard = navigationGuardFor(window)!;
+  const next = new URL(guard.href);
+  next.searchParams.set("departmentId", "deli");
+  const kept = guard.write(next);
+  await choose(app, "keep");
+  expect(await kept).toBe("kept");
+  expect(editor.departmentId).toBe("bar");
+  expect(email.value).toBe("bar@example.com");
+  expect(subtitle.value).toBe("Draft venue");
+  const discarded = guard.write(next);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await expect.poll(() => editor.departmentId).toBe("deli");
+  expect(subtitle.value).toBe("Draft venue");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  await select(app, "tables");
+  await choose(app, "keep");
+  expect(selected(app)).toBe("receipts");
+  expect(subtitle.value).toBe("Draft venue");
+  await select(app, "tables");
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  expect(subtitle.value).toBe("Venue");
 });

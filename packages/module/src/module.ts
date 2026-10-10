@@ -1,7 +1,15 @@
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import type { Decimal, LocationId } from "@waitron/shared";
+import type {
+  DepartmentReceiptConfig,
+  DepartmentReceiptScope,
+  ReceiptLogoRaster,
+  ReceiptLogoRasters,
+  ReceiptPaperWidth,
+  Decimal,
+  LocationId,
+} from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
@@ -644,6 +652,43 @@ export interface VenueServiceContribution {
     saleId: string,
     zoneId: string | null,
   ): Promise<void>;
+  readDepartmentReceipt(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+  ): Promise<DepartmentReceiptConfig>;
+  readPrintedDepartmentReceipt(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+    paperWidth: ReceiptPaperWidth,
+  ): Promise<{ receipt: DepartmentReceiptConfig; logo: ReceiptLogoRaster | null }>;
+  readDepartmentLogoRasters(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+  ): Promise<ReceiptLogoRasters | null>;
+  writeDepartmentReceipt(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+    receipt: DepartmentReceiptConfig,
+    rasters?: ReceiptLogoRasters,
+  ): Promise<void>;
+  receiptDepartmentForSale(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    saleId: string,
+  ): Promise<string | null>;
+  receiptDepartmentForOrder(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    orderId: string,
+  ): Promise<string | null>;
+  receiptDefaultDepartment(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+  ): Promise<string | null>;
   readSaleReceiptHeader(
     tx: Transaction,
     saleId: string,

@@ -6,6 +6,8 @@ export {
   MAX_RECEIPT_FIELD_LENGTH,
   MAX_RECEIPT_PHONE_LENGTH,
   validateReceiptConfig,
+  validateDepartmentReceipt,
+  validateVenueReceiptSettings,
 } from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
@@ -96,6 +98,8 @@ export {
   getPrintedReceipt,
   getReceipt,
   getStoredLogoRasters,
+  getVenueReceiptSettings,
+  putVenueReceiptSettings,
   putReceipt,
 } from "./receipt-store.js";
 

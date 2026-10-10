@@ -61,10 +61,14 @@ export interface Department {
   active: boolean;
 }
 
-export async function listDepartments(tx: Transaction, cfg: VenueScope): Promise<Department[]> {
+export async function listDepartments(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<(Department & { isDefault: boolean })[]> {
   const rows = await tx
     .select({
       id: departments.id,
+      isDefault: departments.isDefault,
       name: departments.name,
       tradingName: departments.tradingName,
       active: departments.active,

@@ -25,7 +25,7 @@ export interface FormatReceiptInput extends ReceiptDocumentInput {
 }
 
 export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptInput): Uint8Array {
-  const document = buildReceiptDocument(input);
+  const document = buildReceiptDocument({ ...input, surface: "thermal" });
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
   b.init().printArea(widthDots);

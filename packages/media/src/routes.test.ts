@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { Hono } from "hono";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
@@ -21,7 +22,13 @@ import { sampleImage } from "./testing/sample-image.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    CATALOGUE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    VENUE_SERVICE_MIGRATIONS,
+    MEDIA_MIGRATIONS,
+  ],
 });
 const photo = await sampleImage({ width: 8, height: 6, format: "jpeg" });
 /** `maxUploadBytes: null` names no limit, and `contentDefaultLanguage: null` no default language,

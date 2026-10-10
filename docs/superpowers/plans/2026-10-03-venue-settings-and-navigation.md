@@ -1,5 +1,11 @@
 # Venue settings and the new sidebar: implementation plan (A261 step 1)
 
+> **2026-10-10, A366 slice 7 Part A:** Receipt previews now send authored department and
+> venue drafts through POST. The GET preview, its query parameters and the client
+> `previewReceipt` method below describe the earlier implementation. Follow
+> [the slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for the current
+> preview and independent editing scopes.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move the dashboard sidebar to the spec's layout and gather the set-once settings (receipts, tables, adjustment reasons, kitchen) onto one new **Venue settings** page with a tab per subject, changing no behaviour except two small fixes and one missing switch, and renaming the demo seed's three hand-set table statuses.

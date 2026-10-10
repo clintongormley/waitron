@@ -3,6 +3,21 @@
 The open entries are listed in [the backlog](../backlog.md), under "Printers, the print agent and receipts". This file holds
 their full text.
 
+## Show a failed automatic invoice copy to staff
+
+Found in A366 slice 7 Part A's two run-it reviews. The plan keeps optional document failures
+from undoing a sale. `reserveStagedInvoiceDelivery` returns `undefined` after its failed
+reservation is rolled back; `enqueueSaleReceipt` then skips the paper original. The case
+“omits a refused staged delivery reservation inside an invoice transaction” in
+`apps/server/src/receipt-print.test.ts` exercises a refused email reservation and
+asserts one fiscal record/sale, no delivery rows and no print jobs. The branch's complete
+receipt-print suite passed this case; it does not exercise a staff-visible warning.
+
+Trace the working-order issuance and bill-payment answers before choosing a till message,
+retry or alternate-copy action. Keep the saved delivery choice, original/duplicate rules,
+operator permissions and sale facts. Do not silently select paper as a substitute for the
+chosen destination. This is separate from the consent-removal work below.
+
 ## Remove the consent step from emailed receipts
 
 **Open, owner answer 2026-10-09; source audit 2026-10-10 on main
@@ -60,6 +75,12 @@ getReceipt/withdrawal-contact audit, Tasks 2/4/6, staged issuance and retry chec
 `docs/backlog.md` A448; and A366 §11/slice 7 plan. Add dated supersession pointers for product
 flow in historical docs, preserving their research and independent questions. Unrelated card
 offline consent, remembered-login consent and workforce research are outside this inventory.
+
+2026-10-10 receipt-branch re-audit: reservation replay and history in
+`apps/server/src/invoice-delivery.ts` also read whole delivery rows. Include those paths when
+retiring the consent payload, alongside the claim/report/retry readers above. The independent
+`resolveInvoiceEmailContact` selector has no production caller on this branch; it does not
+replace the current global-contact checker.
 
 ### Future failing cases before the rewrite
 
@@ -244,15 +265,6 @@ just a green typecheck.
   language needing Cyrillic or Greek needs the table regenerated with a wider range, if the font has
   those letters (not checked).
 
-## Building the QR raster runs inside the sale-recording transaction
-
-- **Building the QR raster runs inside the sale-recording transaction** (via `formatReceipt` in
-  `enqueueSaleReceipt`). The JavaScript QR encoder can throw on an oversized link, which would roll
-  the sale back — but every link `validate.ts` accepts is within QR capacity
-  (`qr-link-range.test.ts`), so this is unreachable for a real sale. If we ever want belt-and-braces
-  against §5, wrap the raster in a `try/catch` that falls back to the printer's built-in QR command
-  — at the cost of a QR whose size we no longer control. Left as an owner decision, not applied.
-
 ## Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)
 
 - **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
@@ -435,13 +447,11 @@ just a green typecheck.
     that test for `/manage/sections`.
   - The paper-width dropdown names widths only, not printers, so two printers of one width at
     different resolutions cannot be told apart (owner's call).
-  - The list of widths comes from the last preview, which the page asks for again only when the
-    receipt text changes or a width is chosen: a printer or till changed elsewhere does not update
-    it while the page is open (probed 2026-10-01 with a temporary browser test: invalidating
-    `printers` and `tills` sent no new preview and no new read, while invalidating
-    `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238). _(2026-10-05,
-    W111: it also asks again when the location's address changes, read through `locations`; not
-    re-probed for printers.)_
+  - Re-check whether printer and device changes refresh the offered widths while the page stays
+    open. The 2026-10-01 probe found no refresh after `printers` or `tills` invalidation, with
+    `tenant_receipts` as its positive control. That receipt describes the earlier page: A238
+    retired `tills`, W111 added location-address refreshes, and A366 slice 7 replaces the editor
+    and its preview triggers. The printer/device case has not been re-probed on that branch.
 
 ## The Receipts preview redraws the whole receipt once per highlighted part
 
@@ -459,10 +469,13 @@ just a green typecheck.
   the logo image (the approved design adds no migration; the app-level `receipt` usage refuses a
   library delete); (2) a configuration import does not validate the `tenant_receipts` JSON (the
   print path reads it defensively instead); (3) the phone and email length limits (30 and 254)
-  are copied into the dashboard's Receipts screen and nothing keeps the copies in step with
-  `packages/layouts/src/validate.ts`; (4) a reviewer, reading only, believed that a
-  `tenant_receipts.receipt` value that is not valid JSON would make every sale fail when its
-  receipt is built — untested, and I believe it predates W111.
+  are copied into the dashboard’s `receipts-screen.ts` and `department-receipt-editor.ts`;
+  those copies are separate from `packages/layouts/src/validate.ts`.
+
+The earlier malformed-JSON speculation is retired by the bounded-reader case in
+`packages/layouts/src/receipt-store.test.ts`: after inserting `{broken`, `getReceipt` returns
+`{}`, `getPrintedReceipt` returns `{ receipt: {}, logo: null }`, and `getStoredLogoRasters`
+returns `null`. This checks those readers, not every sale path.
 
 ## A change is refused while an open order at the location holds a line
 
@@ -498,6 +511,15 @@ just a green typecheck.
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
 ## Decisions and deliberate limits
+
+- **Optional receipt formatting (A366 slice 7).** The `receipt-print.test.ts` case that throws
+  from `formatReceipt` retains one sale, tender, header and drawer, then replays without another
+  fiscal record or drawer. Explicit copy failure remains a refusal. This retires the earlier
+  proposal to contain automatic QR-formatting failures; no native-QR fallback was added.
+
+- **Receipt contact (A366 slice 7, owner 2026-10-09).** Department/default contact selection
+  is separate from venue logo/text inheritance. The current delivery checker still reads global
+  phone/email until [the core consent rewrite](#remove-the-consent-step-from-emailed-receipts).
 
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
   no drawer sensor; the audit row is the request.

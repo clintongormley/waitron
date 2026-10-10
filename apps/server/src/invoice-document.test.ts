@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   invoiceSeries,
+  locations,
   sales,
   tenants,
   tenantReceipts,
@@ -28,6 +29,7 @@ import { readInvoiceDocument } from "./invoice-document.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { setOrderInvoiceChoice } from "./working-order.js";
 import { completeBillPayment } from "./bill-payments.js";
+import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
 
 let venue: AdjustmentVenue;
@@ -58,7 +60,7 @@ function none() {
     null,
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
 }
-async function issue(backend: FiscalBackend, full = true) {
+async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
   return withTransaction(suite.db, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
     const [series] = await tx
@@ -69,8 +71,8 @@ async function issue(backend: FiscalBackend, full = true) {
       origin: jobOrigin("operator_script"),
       nodeId: venue.cfg.nodeId,
       seriesId: seriesId(series!.id),
-      locale: "es-ES",
-      invoiceLocales: ["es-ES"],
+      locale,
+      invoiceLocales: [locale],
       clock,
       total: "7.58",
       vatBreakdown: [
@@ -449,5 +451,330 @@ describe("stored invoice document projection", () => {
     await expect(read(backend, randomUUID())).rejects.toMatchObject({
       code: "invoice_delivery.not_found",
     });
+  });
+});
+
+describe("current department A4 document", () => {
+  it("composes a disabled recorded department with live defaults and skips the current address read", async () => {
+    const backend = none();
+    const issued = await issue(backend);
+    const [department] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: "A4 dining",
+        tradingName: "Now renamed",
+        active: false,
+      })
+      .returning();
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: department!.id,
+      tradingName: "Recorded dining",
+      printTradingName: true,
+    });
+    const logo = `${"a".repeat(64)}.png`;
+    const pair = {
+      "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
+      "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
+    };
+    const [original] = await suite.db.select().from(tenantReceipts);
+    try {
+      await suite.db
+        .insert(tenantReceipts)
+        .values({
+          receipt: {
+            logo,
+            headerSubtitle: "Venue subtitle",
+            footerMessage: "Venue footer",
+            email: "venue@example.com",
+            logoRasters: pair,
+          },
+        })
+        .onConflictDoUpdate({
+          target: tenantReceipts.id,
+          set: {
+            receipt: {
+              logo,
+              headerSubtitle: "Venue subtitle",
+              footerMessage: "Venue footer",
+              email: "venue@example.com",
+              logoRasters: pair,
+            },
+          },
+        });
+      await suite.db.insert(departmentReceipts).values({
+        departmentId: department!.id,
+        receipt: {
+          headerSubtitle: { "es-ES": "Department subtitle" },
+          phone: "+34911234567",
+          email: "dining@example.com",
+        },
+      });
+      await suite.db
+        .update(locations)
+        .set({ addressLine1: "Current street differs from filed domicile" })
+        .where(eq(locations.id, venue.cfg.locationId));
+      const session = (
+        suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+      ).session;
+      const originalPrepare = session.prepareQuery.bind(session);
+      const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+        const query = args[0] as { sql: string };
+        if (query.sql.startsWith("select") && query.sql.includes('"address_line1"'))
+          throw new Error("A4 current address read");
+        return originalPrepare(...args);
+      });
+      let document;
+      try {
+        document = await read(backend, issued.saleId);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(document.venueAddress).toEqual([]);
+      expect(document.issuer.domicile).toBe("Saved domicile");
+      expect(document.receiptHeader).toMatchObject({
+        tradingName: "Recorded dining",
+        printTradingName: true,
+      });
+      expect(document.receipt).toEqual({
+        headerSubtitle: "Department subtitle",
+        footerMessage: "Venue footer",
+        phone: "+34911234567",
+        email: "dining@example.com",
+        logo,
+      });
+      expect(document).toMatchObject({
+        logo: { widthDots: 8, heightDots: 1, bits: new Uint8Array([64]) },
+      });
+      await suite.db
+        .update(departmentReceipts)
+        .set({ receipt: { footerMessage: { "es-ES": "Changed footer" } } })
+        .where(eq(departmentReceipts.departmentId, department!.id));
+      const reprint = await read(backend, issued.saleId);
+      expect(reprint.receipt).toMatchObject({
+        headerSubtitle: "Venue subtitle",
+        footerMessage: "Changed footer",
+      });
+      expect(reprint.receipt.phone).toBeUndefined();
+      expect(reprint.receipt.email).toBeUndefined();
+    } finally {
+      if (original) await suite.db.update(tenantReceipts).set({ receipt: original.receipt });
+      else await suite.db.delete(tenantReceipts);
+    }
+  });
+});
+
+describe("A4 current optional source matrix", () => {
+  it.each([true, false, undefined])(
+    "keeps venue-only defaults and filed domicile with printAddress %s",
+    async (printAddress) => {
+      const backend = none();
+      const issued = await issue(backend);
+      const [previous] = await suite.db.select().from(tenantReceipts);
+      try {
+        const receipt = {
+          headerSubtitle: "Venue only subtitle",
+          footerMessage: "Venue only footer",
+          email: "venue@example.com",
+          printAddress,
+        };
+        await suite.db
+          .insert(tenantReceipts)
+          .values({ receipt })
+          .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
+        const document = await read(backend, issued.saleId);
+        expect(document.venueAddress).toEqual([]);
+        expect(document.receiptHeader).toBeUndefined();
+        expect(document.receipt).toEqual({
+          headerSubtitle: "Venue only subtitle",
+          footerMessage: "Venue only footer",
+          email: "venue@example.com",
+        });
+        const text = buildReceiptDocument(document)
+          .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
+          .join("\n");
+        expect(text).toContain("Saved domicile");
+        expect(text).not.toContain("Current street differs");
+      } finally {
+        if (previous) await suite.db.update(tenantReceipts).set({ receipt: previous.receipt });
+        else await suite.db.delete(tenantReceipts);
+      }
+    },
+  );
+  it("selects an explicit department picture and never substitutes a global picture for a corrupt explicit one", async () => {
+    const backend = none();
+    const issued = await issue(backend);
+    const [department] = await suite.db
+      .insert(departments)
+      .values({ locationId: venue.cfg.locationId, name: "A4 explicit", tradingName: "A4 explicit" })
+      .returning();
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: department!.id,
+      tradingName: "Saved explicit",
+      printTradingName: true,
+    });
+    const [previous] = await suite.db.select().from(tenantReceipts);
+    const global = {
+      logo: `${"b".repeat(64)}.png`,
+      logoRasters: { "80mm": { widthDots: 8, heightDots: 1, data: "gA==" } },
+    };
+    const own = { logo: `${"c".repeat(64)}.png` };
+    try {
+      await suite.db
+        .insert(tenantReceipts)
+        .values({ receipt: global })
+        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
+      await suite.db.insert(departmentReceipts).values({
+        departmentId: department!.id,
+        receipt: own,
+        logoRasters: {
+          "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
+          "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
+        },
+      });
+      expect(await read(backend, issued.saleId)).toMatchObject({
+        logo: { bits: new Uint8Array([64]) },
+      });
+      await suite.db
+        .update(departmentReceipts)
+        .set({
+          logoRasters: {
+            "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
+            "80mm": { widthDots: 8, heightDots: 1, data: "broken" },
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, department!.id));
+      expect((await read(backend, issued.saleId)).logo).toBeNull();
+      await suite.db
+        .update(departmentReceipts)
+        .set({ receipt: {}, logoRasters: null })
+        .where(eq(departmentReceipts.departmentId, department!.id));
+      expect(await read(backend, issued.saleId)).toMatchObject({
+        logo: { bits: new Uint8Array([128]) },
+      });
+    } finally {
+      if (previous) await suite.db.update(tenantReceipts).set({ receipt: previous.receipt });
+      else await suite.db.delete(tenantReceipts);
+    }
+  });
+  it("resolves each department language candidate before a live venue default", async () => {
+    const backend = none();
+    const issued = await issue(backend, true, "ca-ES");
+    const [department] = await suite.db
+      .insert(departments)
+      .values({ locationId: venue.cfg.locationId, name: "A4 language", tradingName: "A4 language" })
+      .returning();
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: department!.id,
+      tradingName: "Saved language",
+      printTradingName: true,
+    });
+    const [previous] = await suite.db.select().from(tenantReceipts);
+    try {
+      const receipt = { headerSubtitle: "Global subtitle", footerMessage: "Global footer" };
+      await suite.db
+        .insert(tenantReceipts)
+        .values({ receipt })
+        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
+      await suite.db.insert(departmentReceipts).values({
+        departmentId: department!.id,
+        receipt: {
+          headerSubtitle: { "ca-ES": "Bon dia", "es-ES": "Buenos días" },
+          footerMessage: { "es-ES": "Gracias", "gl-ES": "Never third language" },
+        },
+      });
+      const document = await read(backend, issued.saleId);
+      expect(document.invoiceLocale).toBe("ca-ES");
+      expect(document.receipt).toEqual({ headerSubtitle: "Bon dia", footerMessage: "Gracias" });
+      await suite.db
+        .update(departmentReceipts)
+        .set({
+          receipt: {
+            headerSubtitle: { "es-ES": "Buenos días" },
+            footerMessage: { "gl-ES": "Never third language" },
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, department!.id));
+      expect((await read(backend, issued.saleId)).receipt).toEqual({
+        headerSubtitle: "Buenos días",
+        footerMessage: "Global footer",
+      });
+    } finally {
+      if (previous) await suite.db.update(tenantReceipts).set({ receipt: previous.receipt });
+      else await suite.db.delete(tenantReceipts);
+    }
+  });
+});
+
+describe("A4 recorded null department", () => {
+  it("prints venue-only fields without a stray trading name in an explicit null header", async () => {
+    const backend = none();
+    const issued = await issue(backend);
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: null,
+      tradingName: "Stray department name",
+      printTradingName: true,
+    });
+    const document = await read(backend, issued.saleId);
+    expect(document.receiptHeader).toBeUndefined();
+    expect(document.venueAddress).toEqual([]);
+    const text = buildReceiptDocument(document)
+      .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
+      .join("\n");
+    expect(text).not.toContain("Stray department name");
+    expect(text).toContain("Saved domicile");
+  });
+});
+
+describe("A4 filed language outside the current pack choices", () => {
+  it.each(["en-GB", "fr-FR"])("retains filed %s department text", async (printed) => {
+    const backend = none();
+    const issued = await issue(backend, true, printed);
+    const [department] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: `Filed ${printed}`,
+        tradingName: "Filed language",
+      })
+      .returning();
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: department!.id,
+      tradingName: "Saved language",
+      printTradingName: true,
+    });
+    await suite.db.insert(departmentReceipts).values({
+      departmentId: department!.id,
+      receipt: {
+        headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
+        footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
+      },
+    });
+    const [location] = await suite.db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, venue.cfg.locationId));
+    try {
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: ["es-ES"] })
+        .where(eq(locations.id, venue.cfg.locationId));
+      const document = await read(backend, issued.saleId);
+      expect(document.receipt).toEqual({
+        headerSubtitle: "Printed subtitle",
+        footerMessage: "Printed footer",
+      });
+      expect(document.invoiceLocale).toBe(printed);
+    } finally {
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: location!.invoiceLocales })
+        .where(eq(locations.id, venue.cfg.locationId));
+    }
   });
 });

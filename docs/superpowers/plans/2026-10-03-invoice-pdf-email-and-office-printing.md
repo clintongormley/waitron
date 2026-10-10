@@ -1,5 +1,14 @@
 # A231d implementation plan: full invoices by email as a PDF, and on an office printer
 
+> **2026-10-10, A366 slice 7 and the owner's 2026-10-09 answer:** the planned consent box,
+> statement and withdrawal actions below are superseded by the
+> [single core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).
+> Current consent checks, stored payloads, reservation and retry remain until that work lands;
+> do not build the historical consent UI or fabricate acceptance data. The
+> [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) supplies the independent
+> department/default contact selector and receipt presentation. Part A remains unlanded.
+> Public F1 gates and A448's separate compliance question remain open.
+
 **Status, amended 2026-10-07:** A231p is authorised for autonomous execution. Decisions 1–10 are approved, including drawing pages on the server rather than adding CUPS. A231 landed as #1256, merge `2d972685530676fbe7c182760f0d96f461214e47`. Public F1 issuance remains disabled. Finish this build at `needs-owner-review`.
 
 **Dated owner override.** Read the [historical A231d design](../specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md), but apply the 2026-10-07 answers in [backlog A231d](../../backlog.md) and [asesor Q44](../../compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07) wherever they differ. These are interim product decisions awaiting the tax adviser's confirmation, not a claim of legal compliance. Preserve the historical spec. Refer to the existing [Q45 receipts and questions](../../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07) for the structured business regime; do not infer an enablement date or add legal conclusions here.

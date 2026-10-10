@@ -28,16 +28,16 @@
     "appendOnlyTables": ["menu_versions", "menu_version_images"]
   },
   {
-    "name": "media",
-    "table": "__drizzle_migrations_media",
-    "from": "../media/drizzle",
-    "appendOnlyTables": []
-  },
-  {
     "name": "venue-service",
     "table": "__drizzle_migrations_venue_service",
     "from": "../venue-service/drizzle",
     "appendOnlyTables": ["sale_receipt_headers"]
+  },
+  {
+    "name": "media",
+    "table": "__drizzle_migrations_media",
+    "from": "../media/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "identity",

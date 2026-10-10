@@ -5233,3 +5233,107 @@ it("transfers order start policies under new department and zone ids", async () 
     expect(row.zone_id).not.toBe(sourceIds.inheritedId);
   }
 });
+
+it("transfers department receipt maps and pictures with remapped ids and unchanged venue defaults", async () => {
+  const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const {
+    readDepartmentReceipt,
+    readPrintedDepartmentReceipt,
+    writeDepartmentReceipt,
+    departmentReceipts,
+  } = await import("@waitron/venue-service");
+  const { getStoredLogoRasters } = await import("@waitron/layouts");
+  const { resolveReceiptTrim } = await import("@waitron/shared");
+  const cfg = {
+    locationId: brandLocationId(source.locationId),
+    receiptLanguages: ["es-ES", "ca-ES"],
+  };
+  const logo = `${"a".repeat(64)}.png`;
+  const pictures = {
+    "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
+    "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
+  };
+  const defaults = {
+    logo,
+    phone: "+34911234567",
+    email: "venue@example.com",
+    headerSubtitle: "Venue default",
+    footerMessage: "Thanks from venue",
+    printAddress: false,
+  };
+  const authored = {
+    logo,
+    email: "dining@example.com",
+    headerSubtitle: { "es-ES": "Hola", "ca-ES": "Bon dia" },
+    footerMessage: { "ca-ES": "Gràcies" },
+  };
+  const ids = await withTransaction(suite.db, async (tx) => {
+    await tx.insert(tenantReceipts).values({ receipt: { ...defaults, logoRasters: pictures } });
+    const own = await createDepartment(tx, cfg, { name: "Own receipt" });
+    const empty = await createDepartment(tx, cfg, { name: "Inherited receipt" });
+    const imported = await createDepartment(tx, cfg, { name: "Bad optional receipt" });
+    await writeDepartmentReceipt(tx, cfg, own.id, authored, pictures);
+    await tx.insert(departmentReceipts).values({
+      departmentId: imported.id,
+      receipt: {
+        email: "good@example.com",
+        headerSubtitle: { "es-ES": "x".repeat(100_000), "ca-ES": "Good" },
+      },
+    });
+    return [own.id, empty.id, imported.id];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const exported = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-10T00:00:00Z"),
+    versions,
+  );
+  expect(exported.tables.department_receipts).toHaveLength(2);
+  const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, exported, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => {
+    const rows = await tx
+      .select()
+      .from(departments)
+      .where(eq(departments.locationId, target.locationId));
+    const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
+    const targetCfg = { ...cfg, locationId: brandLocationId(target.locationId) };
+    const global = await getReceipt(tx);
+    const empty = await readDepartmentReceipt(tx, targetCfg, idFor("Inherited receipt"));
+    return {
+      ids: [idFor("Own receipt"), idFor("Inherited receipt"), idFor("Bad optional receipt")],
+      own: await readDepartmentReceipt(tx, targetCfg, idFor("Own receipt")),
+      printed: await readPrintedDepartmentReceipt(tx, targetCfg, idFor("Own receipt"), "58mm"),
+      empty,
+      inherited: resolveReceiptTrim(empty, global, "es-ES", "es-ES"),
+      bad: await readDepartmentReceipt(tx, targetCfg, idFor("Bad optional receipt")),
+      global,
+      pictures: await getStoredLogoRasters(tx, logo),
+    };
+  });
+  for (const id of imported.ids) expect(ids).not.toContain(id);
+  expect(imported.own).toEqual(authored);
+  expect(imported.printed.logo).toEqual({
+    widthDots: 8,
+    heightDots: 1,
+    bits: new Uint8Array([128]),
+  });
+  expect(imported.empty).toEqual({});
+  expect(imported.inherited).toEqual({
+    logo,
+    headerSubtitle: "Venue default",
+    footerMessage: "Thanks from venue",
+  });
+  expect(imported.bad).toEqual({ email: "good@example.com", headerSubtitle: { "ca-ES": "Good" } });
+  expect(imported.global).toEqual(defaults);
+  expect(imported.pictures).toEqual(pictures);
+});

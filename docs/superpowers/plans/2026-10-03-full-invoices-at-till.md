@@ -1,5 +1,13 @@
 # A231 implementation plan: full invoices at the till
 
+> **2026-10-10, A366 slice 7:** the W111 top-block and current-address checkpoints below
+> describe their dated implementation. Follow the
+> [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for current department
+> translations, live venue defaults and thermal/till versus A4 presentation. Part A is still
+> unlanded. The owner's removal of the separate email consent step belongs to the
+> [core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts);
+> current consent paths and public F1 gates remain. Filed invoice facts are outside this change.
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

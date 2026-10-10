@@ -42,7 +42,7 @@ import {
   permissionsForRole,
   persons,
 } from "@waitron/identity";
-import { CAPABILITY_FLAGS, DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
+import { CAPABILITY_FLAGS, DEFAULT_CANVASES } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
   addCatalogueToLocation,
@@ -1235,9 +1235,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       cardProvider: "none",
       activeReaders: [],
       tipsEnabled: false,
-      receipt: DEFAULT_RECEIPT,
       // The seeded location has no address.
-      venueAddress: [],
       // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
       // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
       canvas: DEFAULT_CANVASES.till,
@@ -1524,9 +1522,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till returns the AUTHORED receipt (tenant_receipts), not the default, and no `layout` field", async () => {
-    // An authored RECEIPT in `tenant_receipts` must come back via `getReceipt`, not the default.
-    // Cleaned up in `finally` so the shared-tenant default case above stays order-independent.
+  it("GET /api/till omits authored receipt state and the retired layout field", async () => {
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
     await suite.db.insert(tenantReceipts).values({ receipt: authoredReceipt });
     try {
@@ -1535,15 +1531,16 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 
       const res = await app.request("/api/till");
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { receipt: ReceiptConfig };
-      expect(body.receipt).toEqual(authoredReceipt); // from tenant_receipts
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("receipt");
+      expect(body).not.toHaveProperty("venueAddress");
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(sql`delete from tenant_receipts `);
     }
   });
 
-  it("GET /api/till carries the location's address lines, none when the receipt switches them off, and never the logo's pictures", async () => {
+  it("GET /api/till keeps current address, authored trim and raster changes out of boot", async () => {
     const raster = { widthDots: 8, heightDots: 1, data: "/w==" };
     const logo = `${"a".repeat(64)}.png`;
     await suite.db
@@ -1561,14 +1558,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       await suite.db
         .insert(tenantReceipts)
         .values({ receipt: { logo, logoRasters: { "58mm": raster, "80mm": raster } } });
-      expect(await boot()).toMatchObject({
-        receipt: { logo },
-        venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-      });
-      expect((await boot()).receipt).toEqual({ logo });
+      expect(await boot()).not.toHaveProperty("receipt");
+      expect(await boot()).not.toHaveProperty("venueAddress");
 
       await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
-      expect(await boot()).toMatchObject({ receipt: { printAddress: false }, venueAddress: [] });
+      expect(await boot()).not.toHaveProperty("receipt");
+      expect(await boot()).not.toHaveProperty("venueAddress");
     } finally {
       await suite.db.execute(sql`delete from tenant_receipts`);
       await suite.db
@@ -1605,7 +1600,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const body = (await res.json()) as {
         canvas: unknown;
         capabilities: unknown;
-        receipt: ReceiptConfig;
         inactivityTimeoutSeconds: unknown;
       };
       // The resolved CanvasDef, verbatim (the `getCanvas` definition) — through the profile.
@@ -1614,8 +1608,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
       // The profile's auto-logout timeout, mirrored onto the boot payload like `capabilities`.
       expect(body.inactivityTimeoutSeconds).toBe(300);
-      // The tenant authored no receipt, so it stays the built-in default.
-      expect(body.receipt).toEqual(DEFAULT_RECEIPT);
+      expect(body).not.toHaveProperty("receipt");
+      expect(body).not.toHaveProperty("venueAddress");
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(
@@ -1675,7 +1669,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const body = (await res.json()) as {
         canvas: unknown;
         capabilities: unknown;
-        receipt: ReceiptConfig;
         inactivityTimeoutSeconds: unknown;
       };
       // No profile → the built-in default canvas for a till device, and an empty capability set.
@@ -1683,7 +1676,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.capabilities).toEqual([]);
       // No profile → no timeout resolved, so the boot payload carries null (the app default).
       expect(body.inactivityTimeoutSeconds).toBeNull();
-      expect(body.receipt).toEqual(DEFAULT_RECEIPT);
+      expect(body).not.toHaveProperty("receipt");
+      expect(body).not.toHaveProperty("venueAddress");
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(

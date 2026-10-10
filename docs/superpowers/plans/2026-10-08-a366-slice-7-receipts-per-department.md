@@ -548,28 +548,28 @@ dashboard API methods/types/tests.
 **Files:** server receipt-print/document/ticket tests, address/sample helpers and the chosen
 optional document enqueue boundary. Keep drawer and fiscal paths separately intact.
 
-- [ ] Reproduce changed behavior with failing tests: two departments on one printer; null id and
+- [x] Reproduce changed behavior with failing tests: two departments on one printer; null id and
   absent header with distinct venue/default-department fields show only venue fields; disabled recorded
   department/current edited fields; current address changed after issuance with global true/false;
   each language candidate and no-third-language control. Preserve the snapshot trading-name cases.
   Include a null-id header containing an inconsistent trading name: omit it but keep venue
   logo/subtitle/footer. Empty department fields inherit live; phone/email do not inherit.
-- [ ] Change the exact top-order pin at `receipt-ticket.test.ts:2630` to subtitle before legal
+- [x] Change the exact top-order pin at `receipt-ticket.test.ts:2630` to subtitle before legal
   name for both widths; preserve every other ordered line/centering/QR assertion. Record this
   changed check with earlier owner answer 7 (top order); record the later answer 4 for
   A4 suppression and the thermal/till F1 address-check changes separately. Test absent trading name
   and duplicate optional elements.
-- [ ] Resolve using saved department only; read current receipt language separately from filed
+- [x] Resolve using saved department only; read current receipt language separately from filed
   language; apply global address setting independently. Use existing bounded bitmap decoder.
   Route automatic, explicit original, reprint and translated copy through that presentation.
   Pass surface `thermal`; even thermal F1 with a filed domicile follows the optional address
   switch. Keep filed domicile unchanged and separately pin A4 suppression in A5.
-- [ ] Implement decision 19's recoverable optional failure boundary after investigating the real
+- [x] Implement decision 19's recoverable optional failure boundary after investigating the real
   transaction/savepoint API. First observe injected read/format/partial-job failures in focused
   tests; then contain them. Run an actual refusal/savepoint probe: optional partial rows roll
   back, sale/tender/header/numbering commit once, replay adds no sale. Do not catch fiscal or
   drawer writes. A failure invalidating the whole engine transaction is a stated limit.
-- [ ] Preserve original-versus-copy status and explicit delivery enrolment. Test failed enqueue
+- [x] Preserve original-versus-copy status and explicit delivery enrolment. Test failed enqueue
   never records successful delivery and later retry remains possible; already-issued manual
   print failure does not rewrite fiscal facts. Run focused thermal/print/sale integration cases
   and affected types. LOOK once at task end for thermal 58/80 and retain bytes/screens/evidence.
@@ -637,21 +637,21 @@ suites are boundary controls, not a consent rewrite.
 **Files:** server till-sale/bill-payments/till-api and relevant receipt/source tests;
 till layout/API/client/app/ticket-view/tests.
 
-- [ ] Failing wire/view cases for every ticket constructor and `readSettledTicket`, direct bill
+- [x] Failing wire/view cases for every ticket constructor and `readSettledTicket`, direct bill
   ticket plus `resultOf`'s replay branch. Distinct departments, a later text/address/global-switch
   edit, null/absent header and cleared global defaults after a rich previous receipt expose wrong
   caching. Pin inherited
   current defaults and no department phone/email inheritance on each constructor.
   Keep original transaction values, drawer side-effect gating, recorded names and replays.
-- [ ] Add `ReceiptPresentation` to each invoice answer: `receiptTrim`, current `venueAddress`
+- [x] Add `ReceiptPresentation` to each invoice answer: `receiptTrim`, current `venueAddress`
   and separate `venueReceiptSettings`. Reuse one assembly helper at all constructors so
   settlement/invoice-first/card/bill branches cannot silently omit it. Optional source failures
   compose surviving fields under decision 19; required facts are not replaced with defaults.
-- [ ] Remove authored `receipt` from boot and the till's boot-owned authored state; retain global
+- [x] Remove authored `receipt` from boot and the till's boot-owned authored state; retain global
   boot settings only where used for venue UI. Render each answer's presentation in ticket-view;
   apply global switch, current address, subtitle-before-legal order and existing filed F1 domicile
   rules. Do not take department trim from device profile, current zone, another answer or boot.
-- [ ] Assert a receipt-only replay resolves current authored text but returns original fiscal,
+- [x] Assert a receipt-only replay resolves current authored text but returns original fiscal,
   tender/change and trading facts and performs no repeat drawer/filing action. Run focused
   server wire + till client/view/app cases and types; LOOK once at task end on phone/desktop,
   both themes, with two departments and a null-sale venue-only receipt.
@@ -678,28 +678,28 @@ queries/strings/tests; lockfile only if normal installation changes it.
 **Files:** dashboard receipts-screen, API/live queries/types, strings/codes and focused sibling
 screen/client/a11y/save-state tests.
 
-- [ ] Failing user-action tests: picker edits and previews the same department; active default
+- [x] Failing user-action tests: picker edits and previews the same department; active default
   selection/first-active alternative, explicit disabled maintenance URL, no active department,
   department load refusal while global fields remain usable; department address key never sent.
-- [ ] Load department config through scoped query, global defaults/switch via their own query, and receipt
+- [x] Load department config through scoped query, global defaults/switch via their own query, and receipt
   language/description via their existing venue APIs. Department heading replaces “Every
   location”; “Subtitle” names the field. Empty department fields show ONLY their effective inherited value;
   empty logo shows the inherited logo thumbnail without adding it to the draft. Global logo,
   one-string subtitle/footer, Print the address, receipt language and description stay below.
   Global phone/email remain stored/API-readable for current delivery and venue-only rendering;
   the new defaults form does not edit, delete or inherit them into departments.
-- [ ] Carry A331 immediately, not as a later polish step: separate `draftScopeFor` identities for
+- [x] Carry A331 immediately, not as a later polish step: separate `draftScopeFor` identities for
   selected department and global defaults/switch plus existing language/description scopes;
   `saveActionState` makes each Save quiet/disabled until changed, then active, and each save
   handler returns early when that scope cannot submit. Submit only that scope's changed body.
   Clearing/adding an explicit logo changes the department draft; live inherited hints/thumbnails,
   preview/picker language and global-default refresh do not. A global save changes effective
   preview/hints without creating a department override or adopting a dirty draft as its baseline.
-- [ ] Include `*.unsaved.test.ts` and save-state tests using real controls: pristine disabled,
+- [x] Include `*.unsaved.test.ts` and save-state tests using real controls: pristine disabled,
   changed enabled, reverted disabled, double/unchanged action sends no request, rejected save
   keeps the draft, field refusal inline plus localized bottom summary, successful write closes/
   commits before separately reporting refresh failure. A refusal alone never disables the action.
-- [ ] Passive subscription callbacks assign snapshots and never reset dirty drafts or rerun a
+- [x] Passive subscription callbacks assign snapshots and never reset dirty drafts or rerun a
   loader. Track read/action errors separately and retain a newer subscription snapshot over
   an older reload. Run focused client/screen/a11y/save tests and types; inspect changed fields
   once at task end at 390 px/desktop in EN/ES and both themes.
@@ -757,6 +757,9 @@ only if new findings require them.
 - [ ] Preview POST sends selected department's authored draft maps and global defaults/switch draft,
   not a resolved string masquerading as validated maps. Handle stale response generations and passive reads.
   Preview selection uses decision 6's languages; it is separate from the stacked editor fields.
+  Automatic preview POSTs send the preview-specific Boolean `passive: true`; the route authenticates
+  without touching session activity. Explicit previews omit it. The generic background client
+  continues to mark only GETs passive.
 - [ ] Focused preview/API/types. Once at task end, do the complete LOOK: EN/ES UI, all receipt
   choices, both themes, desktop/390 px, short/long/empty fields, logo/no logo, two departments,
   null-sale venue-only sample, 58/80 thermal, A4, independent language and inline refusal scroll.

@@ -27,7 +27,7 @@ export const MEDIA_MODULE: WaitronModule = {
   name: "media",
   version: "0.0.0",
   tier: "mandatory",
-  requires: { core: "*", modules: { catalogue: "*" } },
+  requires: { core: "*", modules: { catalogue: "*", "venue-service": "*" } },
   migrations: { name: "media", table: "__drizzle_migrations_media", from: "../media/drizzle" },
   classification: MEDIA_CLASSIFICATION,
   changes: MEDIA_CHANGE_SOURCES,

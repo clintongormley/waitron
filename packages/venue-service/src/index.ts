@@ -68,3 +68,5 @@ export {
   type StationServiceDay,
   type StationServiceTimes,
 } from "./station-service-times.js";
+
+export * from "./department-receipts.js";

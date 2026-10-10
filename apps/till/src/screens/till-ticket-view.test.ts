@@ -14,6 +14,9 @@ const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
 // A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg → 6,40 (10 %).
 // Total 9,40; €10 cash tendered → 0,60 change.
 const result: TillSaleResult = {
+  receiptTrim: {},
+  venueAddress: [],
+  venueReceiptSettings: {},
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "A/1",
@@ -42,11 +45,10 @@ const issuer: TicketIssuer = { venueName: "Deli Delicioso SL", nif: "B12345678" 
 
 const mount = (over: Partial<TillSaleResult> = {}, receipt?: ReceiptConfig) =>
   mountWidget<TillTicketView>("till-ticket-view", {
-    result: { ...result, ...over },
+    result: { ...result, ...over, ...(receipt ? { receiptTrim: receipt } : {}) },
     issuer,
     // Pinned so the "operator UI is English, ticket stays Spanish" test is unambiguous.
     invoiceLocale: "es-ES",
-    ...(receipt ? { receipt } : {}),
   });
 
 const text = (el: TillTicketView): string => norm(el.shadowRoot!.textContent ?? "");
@@ -535,12 +537,12 @@ describe("till-ticket-view", () => {
   );
 
   it.each([
-    { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: false },
+    { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: true },
     { invoiceType: "F1", domicile: undefined, showLocation: true },
     { invoiceType: "F2", domicile: "Calle Fiscal 27", showLocation: true },
     { invoiceType: "F2", domicile: undefined, showLocation: true },
   ] as const)(
-    "uses the taxpayer domicile instead of the location address on $invoiceType with domicile=$domicile",
+    "keeps filed F1 domicile separate from the current location address on $invoiceType with domicile=$domicile",
     async ({ invoiceType, domicile, showLocation }) => {
       for (const locale of ["es-ES", "en-GB"]) {
         const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
@@ -549,11 +551,11 @@ describe("till-ticket-view", () => {
             locale,
             invoiceType,
             issuer: { ...issuer, ...(domicile === undefined ? {} : { domicile }) },
+            venueAddress: ["Location Street 45", "28001 Madrid"],
+            receiptTrim: { phone: "910000000", email: "venue@example.com" },
           },
           issuer,
           invoiceLocale: locale,
-          venueAddress: ["Location Street 45", "28001 Madrid"],
-          receipt: { phone: "910000000", email: "venue@example.com" },
         });
         const header = norm(el.shadowRoot!.querySelector(".issuer")!.textContent ?? "");
         expect(header.includes("Location Street 45")).toBe(showLocation);
@@ -1224,11 +1226,12 @@ describe("till-ticket-view", () => {
           ...result,
           locale,
           receiptHeader: { tradingName: "La Tienda", printTradingName: true },
+          receiptTrim: receipt,
+          venueAddress,
+          venueReceiptSettings: { printAddress: receipt.printAddress },
         },
         issuer,
         invoiceLocale: locale,
-        receipt,
-        venueAddress,
       });
     const headerLines = (el: TillTicketView) =>
       [...el.shadowRoot!.querySelector(".issuer")!.children].map((child) =>
@@ -1242,8 +1245,8 @@ describe("till-ticket-view", () => {
       expect(headerLines(el)).toEqual([
         `img /media/${LOGO}`,
         "La Tienda",
-        "Deli Delicioso SL",
         "El mejor jamón",
+        "Deli Delicioso SL",
         "Calle Mayor 1",
         "28013 Madrid",
         "Tel. +34 912 345 678",
@@ -1279,7 +1282,7 @@ describe("till-ticket-view", () => {
     const following = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-    it("renders headerSubtitle under the venue name and footerMessage after the payment lines", async () => {
+    it("renders headerSubtitle before the legal name and footerMessage after the payment lines", async () => {
       const { el } = await mount(
         {},
         { headerSubtitle: "Calle Mayor 1, Madrid", footerMessage: "Gracias por su visita" },
@@ -1288,16 +1291,15 @@ describe("till-ticket-view", () => {
       const foot = el.shadowRoot!.querySelector(".footer-message");
       expect(sub!.textContent).toContain("Calle Mayor 1, Madrid");
       expect(foot!.textContent).toContain("Gracias por su visita");
-      // header-subtitle sits inside the issuer header, immediately after the venue name.
       const venue = el.shadowRoot!.querySelector(".issuer .venue")!;
       expect(el.shadowRoot!.querySelector(".issuer .header-subtitle")).not.toBeNull();
-      expect(following(venue, sub!)).toBe(true);
+      expect(following(sub!, venue)).toBe(true);
       const tender = el.shadowRoot!.querySelector(".tender")!;
       expect(following(tender, foot!)).toBe(true);
     });
 
     it("renders neither slot (no empty node) when the receipt config is absent", async () => {
-      const { el } = await mount(); // no receipt prop
+      const { el } = await mount();
       expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
       expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
     });

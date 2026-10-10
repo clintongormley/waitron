@@ -3394,3 +3394,55 @@ describe("inline translation transport", () => {
     });
   });
 });
+
+describe("department receipt client contracts", () => {
+  it("reads authored department fields separately from global defaults", async () => {
+    const payload = {
+      receipt: { headerSubtitle: { "es-ES": "Sala" } },
+      venueDefaults: { footerMessage: "Venue", printAddress: false },
+      languages: ["es-ES"],
+      warningLanguages: [],
+      venueAddress: ["Street"],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getDepartmentReceipt("dept")).toEqual(payload);
+    expect(fetchImpl.mock.calls[0]).toEqual([
+      "/management-api/venue-service/departments/dept/receipt",
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
+    ]);
+  });
+  it("sends translations only to the selected department", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.putDepartmentReceipt("dept", { footerMessage: { "ca-ES": "Gràcies" } });
+    expect(fetchImpl.mock.calls[0]).toEqual([
+      "/management-api/venue-service/departments/dept/receipt",
+      {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ receipt: { footerMessage: { "ca-ES": "Gràcies" } } }),
+      },
+    ]);
+  });
+  it("reads and writes the independent global settings envelope", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ settings: { printAddress: false } }))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getVenueReceiptSettings()).toEqual({ settings: { printAddress: false } });
+    await api.putVenueReceiptSettings({ printAddress: false });
+    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/receipt-settings");
+    expect(fetchImpl.mock.calls[1]).toEqual([
+      "/management-api/receipt-settings",
+      {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ settings: { printAddress: false } }),
+      },
+    ]);
+  });
+});

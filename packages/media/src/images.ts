@@ -12,6 +12,7 @@ import {
   validateContentTranslations,
 } from "@waitron/catalogue";
 import { catalogues, products, tenantReceipts, type Transaction } from "@waitron/db";
+import { departmentReceipts, departments } from "@waitron/venue-service";
 import {
   AppError,
   compareSearchRanks,
@@ -91,9 +92,15 @@ export type ImageUsage =
       number: number;
       activatesAt: string;
     }
-  /** The receipt prints it as its logo. */
-  | { kind: "receipt" };
+  | { kind: "receipt" }
+  | { kind: "department_receipt"; id: string; name: string; active: boolean };
+function storedLogo(receipt: typeof departmentReceipts.receipt) {
+  return sql<string | null>`case when json_valid(${receipt}) then
+    case when json_type(${receipt}) = 'object' and json_type(${receipt}, '$.logo') = 'text'
+    then json_extract(${receipt}, '$.logo') else null end else null end`;
+}
 const receiptLogo = sql<string | null>`json_extract(${tenantReceipts.receipt}, '$.logo')`;
+const departmentLogo = storedLogo(departmentReceipts.receipt);
 // The expression `section_members_folder_image_idx` indexes.
 const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
 const includedRoots = alias(sections, "included_roots");
@@ -235,6 +242,12 @@ async function listImageUsagesForFilename(
     .select({ id: tenantReceipts.id })
     .from(tenantReceipts)
     .where(eq(receiptLogo, filename));
+  const departmentRows = await tx
+    .select({ id: departments.id, name: departments.name, active: departments.active })
+    .from(departmentReceipts)
+    .innerJoin(departments, eq(departments.id, departmentReceipts.departmentId))
+    .where(eq(departmentLogo, filename))
+    .orderBy(departments.name, departments.id);
   const usage = ({
     parentId,
     parentName,
@@ -269,6 +282,7 @@ async function listImageUsagesForFilename(
           ]),
     ]),
     ...receiptRows.map((): ImageUsage => ({ kind: "receipt" })),
+    ...departmentRows.map((row): ImageUsage => ({ kind: "department_receipt", ...row })),
   ];
 }
 
@@ -372,11 +386,6 @@ export async function deleteImage(
   // No attach can slip between the usage check and the delete: one write transaction runs on the
   // venue file at a time (the pattern is on `assertExtraListForWrite`,
   // `packages/catalogue/src/extras.ts`).
-  //
-  // The triggers in `packages/media/drizzle/` refuse the delete at the database as well for a
-  // product, section, include folder or live or queued menu version, but not for the receipt's
-  // logo, so for that use this check is the only refusal. It returns the uses, which is what the
-  // library screen shows.
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
@@ -566,6 +575,13 @@ async function countUsages(
     .select({ image: receiptLogo })
     .from(tenantReceipts)
     .where(inArray(receiptLogo, wanted))) {
+    tally(row.image);
+  }
+  for (const row of await tx
+    .select({ image: departmentLogo })
+    .from(departmentReceipts)
+    .innerJoin(departments, eq(departments.id, departmentReceipts.departmentId))
+    .where(inArray(departmentLogo, wanted))) {
     tally(row.image);
   }
   return counts;

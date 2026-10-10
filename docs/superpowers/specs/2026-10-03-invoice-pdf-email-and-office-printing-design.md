@@ -1,5 +1,14 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
+> **2026-10-10, A366 slice 7 and the owner's 2026-10-09 answer:** the consent controls and
+> venue-contact proposal below are historical product plans. The owner removed the separate
+> consent step; its [core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts)
+> is still open, and today's staging, reservation and retry paths still require consent data.
+> [Slice 7](../plans/2026-10-08-a366-slice-7-receipts-per-department.md) owns department/default
+> contact selection and receipt presentation, retaining live venue logo and text defaults and
+> omitting the optional current venue address on A4. Its Part A remains unlanded. These product
+> decisions do not settle the legal research below or the independent A448 question.
+
 > **Owner overrides, 2026-10-07:** Build from the [reconciled plan](../plans/2026-10-03-invoice-pdf-email-and-office-printing.md) and the [recorded answers](../../backlog.md). The owner now requires invoice records without stored PDF copies, staff-recorded consent, and original retries after failed or uncertain sends. A later delivery after a completed original is marked «duplicado». These replace the corresponding proposals below; the dated research remains historical. Public F1 issuance stays disabled pending A231’s enablement gates.
 
 > **Update, 2026-10-05 (A261 step 2):** The receipt-printing setting described under

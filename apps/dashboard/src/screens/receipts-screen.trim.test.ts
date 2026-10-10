@@ -3,8 +3,16 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, ReceiptConfig } from "../api/client.js";
+import type { DashboardApi as ProductionApi, ReceiptConfig } from "../api/client.js";
 import { ReceiptsScreen } from "./receipts-screen.js";
+
+type DashboardApi = ProductionApi & {
+  drawReceipt(
+    config: ReceiptConfig,
+    width?: import("../api/client.js").PrintPaperWidth,
+    language?: string,
+  ): Promise<import("../api/client.js").ReceiptPreview>;
+};
 
 const PREVIEW = {
   preview: {
@@ -30,9 +38,13 @@ const PREVIEW = {
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
-  return {
-    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt }, venueAddress: [] }),
-    putReceipt: vi.fn().mockResolvedValue(undefined),
+  const api = {
+    getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
+    getVenueDepartments: vi.fn().mockResolvedValue([]),
+    getVenueReceiptSettings: vi
+      .fn()
+      .mockResolvedValue({ settings: { ...receipt }, venueAddress: [] }),
+    putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
@@ -44,9 +56,18 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
     }),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
+    drawReceipt: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;
+  api.previewReceiptDraft = vi.fn(async (draft) => {
+    const config = draft.settings;
+    return draft.language !== undefined
+      ? api.drawReceipt(config, draft.paperWidth, draft.language)
+      : draft.paperWidth !== undefined
+        ? api.drawReceipt(config, draft.paperWidth)
+        : api.drawReceipt(config);
+  });
+  return api;
 }
 
 async function flush(el: ReceiptsScreen): Promise<void> {
@@ -54,28 +75,26 @@ async function flush(el: ReceiptsScreen): Promise<void> {
   await el.updateComplete;
 }
 
-const q = (el: ReceiptsScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+const root = (el: ReceiptsScreen) =>
+  el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
+const q = (el: ReceiptsScreen, sel: string) => root(el).querySelector<HTMLElement>(sel);
+
 const qa = (el: ReceiptsScreen, sel: string) => Array.from(el.shadowRoot!.querySelectorAll(sel));
 const errorKey = (el: ReceiptsScreen): string | null =>
-  (el as unknown as { errorKey: string | null }).errorKey;
+  (root(el).querySelector("wt-form-actions") as HTMLElement & { error: string }).error;
 const lastPut = (api: DashboardApi): ReceiptConfig =>
-  (api.putReceipt as unknown as { mock: { calls: [ReceiptConfig][] } }).mock.calls.at(-1)![0];
+  (api.putVenueReceiptSettings as unknown as { mock: { calls: [ReceiptConfig][] } }).mock.calls.at(
+    -1,
+  )![0];
 
 function typeHeader(el: ReceiptsScreen, value: string): void {
-  q(el, "[data-test=header-subtitle]")!.dispatchEvent(
+  q(el, "[name=headerSubtitle]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
 
 function typeFooter(el: ReceiptsScreen, value: string): void {
-  q(el, "[data-test=footer-message]")!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
-}
-
-/** An edit outside the receipt texts, so Save can be pressed while both texts stay as loaded. */
-function typeDescription(el: ReceiptsScreen, value: string): void {
-  q(el, "wt-input[name=operationDescription]")!.dispatchEvent(
+  q(el, "[name=footerMessage]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
@@ -83,7 +102,7 @@ function typeDescription(el: ReceiptsScreen, value: string): void {
 afterEach(cleanupWidgets);
 
 describe("receipts page: the receipt header and footer", () => {
-  it("loads the two fields from getReceipt().receipt on connect", async () => {
+  it("loads the two fields from getVenueReceiptSettings().settings on connect", async () => {
     const api = stubApi(
       {},
       { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
@@ -91,9 +110,9 @@ describe("receipts page: the receipt header and footer", () => {
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    expect(api.getReceipt).toHaveBeenCalledTimes(1);
-    const header = q(el, "[data-test=header-subtitle]") as HTMLElement & { value: string };
-    const footer = q(el, "[data-test=footer-message]") as HTMLTextAreaElement;
+    expect(api.getVenueReceiptSettings).toHaveBeenCalledTimes(1);
+    const header = q(el, "[name=headerSubtitle]") as HTMLElement & { value: string };
+    const footer = q(el, "[name=footerMessage]") as HTMLTextAreaElement;
     expect(header.value).toBe("Calle Mayor 1");
     expect(footer.value).toBe("Gracias por su visita");
   });
@@ -108,17 +127,17 @@ describe("receipts page: the receipt header and footer", () => {
   });
 
   it("leaves both fields empty when the receipt config is empty", async () => {
-    const api = stubApi(); // receipt: {}
+    const api = stubApi(); // settings: {}
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    const header = q(el, "[data-test=header-subtitle]") as HTMLElement & { value: string };
-    const footer = q(el, "[data-test=footer-message]") as HTMLTextAreaElement;
+    const header = q(el, "[name=headerSubtitle]") as HTMLElement & { value: string };
+    const footer = q(el, "[name=footerMessage]") as HTMLTextAreaElement;
     expect(header.value).toBe("");
     expect(footer.value).toBe("");
   });
 
-  it("Guardar composes the edited fields and calls putReceipt with them", async () => {
+  it("Guardar composes the edited fields and calls putVenueReceiptSettings with them", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
@@ -126,39 +145,39 @@ describe("receipts page: the receipt header and footer", () => {
     typeHeader(el, "Av. de la Constitución 3");
     typeFooter(el, "Gracias por su visita");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
 
-    expect(api.putReceipt).toHaveBeenCalledTimes(1);
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledTimes(1);
     expect(lastPut(api)).toEqual({
       headerSubtitle: "Av. de la Constitución 3",
       footerMessage: "Gracias por su visita",
     });
   });
 
-  it("saves a loaded receipt round-trip verbatim (no edit)", async () => {
+  it("saves only the changed default and retains the other loaded field", async () => {
     const api = stubApi({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Hasta pronto" });
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    typeDescription(el, "Servicio de mesa");
+    typeHeader(el, "Changed then saved");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
     expect(lastPut(api)).toEqual({
-      headerSubtitle: "Calle Mayor 1",
+      headerSubtitle: "Changed then saved",
       footerMessage: "Hasta pronto",
     });
   });
 
-  it("omits a blank field so it reaches putReceipt as an ABSENT key, not an empty string", async () => {
+  it("omits a blank field so it reaches putVenueReceiptSettings as an ABSENT key, not an empty string", async () => {
     const api = stubApi({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     typeHeader(el, "   "); // whitespace-only is blank
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
 
     const sent = lastPut(api);
@@ -167,13 +186,13 @@ describe("receipts page: the receipt header and footer", () => {
   });
 
   it("sends an empty {} when both fields are blank (matches DEFAULT_RECEIPT)", async () => {
-    const api = stubApi(); // both empty from the start
+    const api = stubApi({}, { headerSubtitle: "Before" });
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    typeDescription(el, "Servicio de mesa");
+    typeHeader(el, "");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
     expect(lastPut(api)).toEqual({});
   });
@@ -185,41 +204,45 @@ describe("receipts page: the receipt header and footer", () => {
 
     typeFooter(el, "  Gracias por su visita  ");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
     expect(lastPut(api)).toEqual({ footerMessage: "Gracias por su visita" });
   });
 
-  it("surfaces a rejected putReceipt in the form's bottom message, without the raw code", async () => {
-    const api = stubApi({ putReceipt: vi.fn().mockRejectedValue({ code: "receipt.invalid" }) });
+  it("surfaces a rejected putVenueReceiptSettings in the form's bottom message, without the raw code", async () => {
+    const api = stubApi({
+      putVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "receipt.invalid" }),
+    });
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     typeHeader(el, "Calle Mayor 1");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
 
-    expect(errorKey(el)).toBe("receipt.invalid");
+    expect(errorKey(el)).toBe(codeMessage("receipt.invalid"));
     const message = (q(el, "wt-form-actions") as HTMLElement & { error: string }).error;
     expect(message).toContain(codeMessage("receipt.invalid", "es-ES"));
     expect(message).not.toContain("receipt.invalid");
   });
 
-  it("falls back to server.internal when a rejected putReceipt carries no code", async () => {
-    const api = stubApi({ putReceipt: vi.fn().mockRejectedValue({}) });
+  it("falls back to server.internal when a rejected putVenueReceiptSettings carries no code", async () => {
+    const api = stubApi({ putVenueReceiptSettings: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
     typeHeader(el, "Calle Mayor 1");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
-    expect(errorKey(el)).toBe("server.internal");
+    expect(errorKey(el)).toBe(codeMessage("server.internal"));
   });
 
   it("shows an error key when the initial load is rejected (and never rejects)", async () => {
-    const api = stubApi({ getReceipt: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const api = stubApi({
+      getVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
@@ -247,9 +270,9 @@ describe("receipts page: the receipt header and footer", () => {
 
 it.each([
   {
-    method: "putReceipt",
-    field: "[data-test=header-subtitle]",
-    button: "[data-test=save]",
+    method: "putVenueReceiptSettings",
+    field: "[name=headerSubtitle]",
+    button: "[data-test=defaults-save]",
     result: null,
   },
 ])(
@@ -264,7 +287,7 @@ it.each([
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(field)!;
+    const control = root(el).querySelector<import("@waitron/ui").WtInput>(field)!;
     await control.updateComplete;
     const input = control.shadowRoot!.querySelector("input")!;
     input.value = "Updated";
@@ -273,11 +296,9 @@ it.each([
     input.focus();
     await userEvent.keyboard("{Enter}");
     await userEvent.keyboard("{Enter}");
-    el.shadowRoot!.querySelector<HTMLElement>(button)!.click();
+    root(el).querySelector<HTMLElement>(button)!.click();
     expect(request).toHaveBeenCalledTimes(1);
-    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
-      true,
-    );
+    expect((root(el).querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(true);
     reject({ code: "management.request_invalid" });
     await flush(el);
     input.focus();
@@ -285,7 +306,7 @@ it.each([
     await flush(el);
     expect(request).toHaveBeenCalledTimes(2);
     // The retry saved the draft, so Save is quiet until the next edit, which it then follows.
-    const action = el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton;
+    const action = root(el).querySelector(button) as import("@waitron/ui").WtButton;
     expect([action.variant, action.disabled]).toEqual(["secondary", true]);
     input.value = "Updated again";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -301,20 +322,19 @@ it("refreshes clean receipt fields while preserving an unsaved header", async ()
   });
   const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
   await flush(el);
-  el.shadowRoot!.querySelector("[data-test=header-subtitle]")!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "Unsaved" } }),
-  );
-  vi.mocked(api.getReceipt).mockResolvedValue({
-    receipt: { headerSubtitle: "Elsewhere", footerMessage: "Updated" },
-    venueAddress: [],
+  root(el)
+    .querySelector("[name=headerSubtitle]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Unsaved" } }));
+  vi.mocked(api.getVenueReceiptSettings).mockResolvedValue({
+    settings: { headerSubtitle: "Elsewhere", footerMessage: "Updated" },
   });
   liveData.invalidate([{ type: "tenant_receipts" }]);
   await vi.waitFor(() =>
-    expect(
-      (el.shadowRoot!.querySelector("[data-test=footer-message]") as HTMLTextAreaElement).value,
-    ).toBe("Updated"),
+    expect((root(el).querySelector("[name=footerMessage]") as HTMLTextAreaElement).value).toBe(
+      "Updated",
+    ),
   );
-  expect(
-    (el.shadowRoot!.querySelector("[data-test=header-subtitle]") as HTMLInputElement).value,
-  ).toBe("Unsaved");
+  expect((root(el).querySelector("[name=headerSubtitle]") as HTMLInputElement).value).toBe(
+    "Unsaved",
+  );
 });

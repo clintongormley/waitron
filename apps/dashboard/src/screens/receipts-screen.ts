@@ -1,9 +1,15 @@
-import { DraftRows, QueryController } from "@waitron/dashboard-kit";
+import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { isValidTelephone, resolveContentText, type ContentLanguages } from "@waitron/shared";
+import {
+  isValidTelephone,
+  resolveContentText,
+  type ContentLanguages,
+  type DepartmentReceiptConfig,
+  type VenueReceiptSettings,
+} from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, navigationGuardFor } from "@waitron/ui";
-import { draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
+import { draftScopeFor, leaveCoordinatorFor, saveActionState, type DraftScope } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { observeNavigation } from "@waitron/ui/src/navigation-guard.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -13,7 +19,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import "../widgets/image-upload.js";
+import "./department-receipt-editor.js";
+import "./venue-receipt-defaults-editor.js";
 import type {
   DashboardApi,
   PrintPaperWidth,
@@ -34,8 +41,6 @@ export const RECEIPT_PREVIEW_QUIET_MS = 300;
 
 type TextField = "headerSubtitle" | "footerMessage" | "phone" | "email";
 const TEXT_FIELDS: readonly TextField[] = ["headerSubtitle", "footerMessage", "phone", "email"];
-type TrimField = TextField | "printAddress" | "logo";
-const TRIM_FIELDS: readonly TrimField[] = [...TEXT_FIELDS, "printAddress", "logo"];
 const MARK_NAMES: readonly ReceiptMarkName[] = [
   "logo",
   "headerSubtitle",
@@ -44,8 +49,6 @@ const MARK_NAMES: readonly ReceiptMarkName[] = [
   "email",
   "footerMessage",
 ];
-
-type Trim = Record<TextField, string> & { printAddress: boolean; logo: string | null };
 
 const MAX_LENGTH = { phone: 30, email: 254 } as const;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -60,37 +63,6 @@ function contactProblem(field: "phone" | "email", value: string): string {
   return EMAIL.test(value) ? "" : t("receipts.invalid_email");
 }
 
-/** The field a `receipt.invalid` names, if it is one this page shows. */
-function refusedField(error: unknown): TrimField | undefined {
-  if (codeOf(error) !== "receipt.invalid") return undefined;
-  const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-  return TRIM_FIELDS.find((each) => each === field);
-}
-
-/** The sentence under the field a refused save names. */
-function refusalSentence(error: unknown): string {
-  const params = (error as { params?: { reason?: unknown; maxLength?: unknown } } | null)?.params;
-  if (typeof params?.maxLength === "number") {
-    return t("receipts.trim_too_long").replace("{max}", String(params.maxLength));
-  }
-  switch (params?.reason) {
-    case "invalid_phone":
-      return t("receipts.invalid_phone");
-    case "invalid_email":
-      return t("receipts.invalid_email");
-    case "invalid_logo":
-      return t("receipts.invalid_logo");
-    case "image_not_found":
-      return t("receipts.logo_not_found");
-    default:
-      return codeMessage(codeOf(error));
-  }
-}
-
-/**
- * The venue-wide receipt trim and this location's receipt language and invoice operation
- * description, saved by one Save, beside a live preview the server draws as the receipt will print.
- */
 @customElement("dashboard-receipts-screen")
 export class ReceiptsScreen extends LitElement {
   static override styles = [
@@ -105,6 +77,18 @@ export class ReceiptsScreen extends LitElement {
         flex-wrap: wrap;
         align-items: flex-start;
         gap: var(--wt-space-6);
+      }
+      .form-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-6);
+        flex: 1 1 calc(var(--wt-tap-min) * 7);
+        max-width: var(--wt-form-max-width);
+      }
+      .department-settings {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-4);
       }
       .form {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
@@ -206,10 +190,11 @@ export class ReceiptsScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
 
-  #trimScope?: DraftScope<{ shown: Trim; body: ReceiptConfig }>;
-  #trimConnection = 0;
+  #connection = 0;
   #languageScope?: DraftScope<string>;
   #descriptionScope?: DraftScope<string>;
+  #savedDescription = "";
+  #savedLanguage = "";
 
   #shownLanguage(): string {
     return this.pickedLanguage ?? this.receiptLanguage!.language;
@@ -230,6 +215,7 @@ export class ReceiptsScreen extends LitElement {
         this.#redrawInSavedLanguage();
       },
     }).scope;
+    this.#languageScope.commit(this.#savedLanguage);
   }
 
   #registerDescription(): void {
@@ -246,40 +232,9 @@ export class ReceiptsScreen extends LitElement {
         this.refusal = "";
       },
     }).scope;
+    this.#descriptionScope.commit(this.#savedDescription);
   }
 
-  #trimSnapshot(): { shown: Trim; body: ReceiptConfig } {
-    return { shown: this.#shown(), body: this.#trim() };
-  }
-
-  #registerTrim(): void {
-    if (this.#trimScope) return;
-    this.#trimScope = draftScopeFor<{ shown: Trim; body: ReceiptConfig }>(this, {
-      id: {},
-      parent: this,
-      current: () => this.#trimSnapshot(),
-      snapshot: (value) => ({ shown: { ...value.shown }, body: { ...value.body } }),
-      equal: (a, b) => sameValue(a.body, b.body),
-      restore: (value) => {
-        for (const field of TEXT_FIELDS) this[field] = value.shown[field];
-        this.printAddress = value.shown.printAddress;
-        this.logo = value.shown.logo;
-        this.#schedulePreview();
-      },
-    }).scope;
-  }
-
-  /** Only called once the form is drawn, which waits for all three reads and so all three scopes. */
-  #saveState() {
-    return saveActionState({
-      isDirty: () =>
-        this.#trimScope!.isDirty() ||
-        this.#languageScope!.isDirty() ||
-        this.#descriptionScope!.isDirty(),
-    });
-  }
-
-  #draft = new DraftRows<Trim & { id: string }>();
   readonly #receiptQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -321,11 +276,6 @@ export class ReceiptsScreen extends LitElement {
   @state() private venueAddress: string[] = [];
   @state() private receiptLoaded = false;
   @state() private receiptLoadError: string | null = null;
-  /** The receipt trim's refusal that names no field shown, until the next Save. */
-  @state() private errorKey: string | null = null;
-  /** The receipt trim's refusals naming a field, each shown until that field changes. */
-  @state() private trimRefusals: Partial<Record<TrimField, string>> = {};
-
   @state() private name = "";
   @state() private description = "";
   @state() private locationLoaded = false;
@@ -348,18 +298,30 @@ export class ReceiptsScreen extends LitElement {
   /** The same, for this page's receipt-language writes. */
   #languageSaves = 0;
 
-  @state() private attempted = false;
-  @state() private saving = false;
-  @state() private saved = false;
+  @state() private languageSaving = false;
+  @state() private descriptionSaving = false;
+  @state() private languageSaved = false;
+  @state() private descriptionSaved = false;
+  @state() private descriptionAttempted = false;
 
   @state() private preview: ReceiptPreview | null = null;
-  @state() private departments: { id: string; name: string }[] = [];
+  @state() private departments: {
+    id: string;
+    name: string;
+    active: boolean;
+    isDefault: boolean;
+  }[] = [];
+  @state() private departmentLoadError = "";
+  @state() private departmentDraft: DepartmentReceiptConfig | null = null;
+  @state() private venueDefaultsDraft: VenueReceiptSettings | null = null;
+  #departmentGeneration = 0;
   @state() private previewDepartmentId: string | null = null;
   #departmentsLoaded = false;
   @state() private previewFailed = false;
   @state() private focusedTrim: ReceiptMarkName | null = null;
   /** The paper width the person chose, kept for every later preview; never saved. */
   @state() private chosenWidth: PrintPaperWidth | null = null;
+  @state() private chosenPreviewLanguage: string | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
   #previewAgain = false;
@@ -370,6 +332,8 @@ export class ReceiptsScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    if (this.receiptLanguage !== null) this.#registerLanguage();
+    if (this.locationLoaded) this.#registerDescription();
     void this.#load();
     void this.#loadDepartments();
     void this.#loadContentLanguages();
@@ -377,21 +341,18 @@ export class ReceiptsScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.#trimConnection++;
-    this.#trimScope?.dispose();
-    this.#trimScope = undefined;
+    this.#connection++;
+    this.#departmentGeneration++;
+    this.#departmentsLoaded = false;
     this.#languageScope?.dispose();
     this.#languageScope = undefined;
     this.#descriptionScope?.dispose();
     this.#descriptionScope = undefined;
-    this.pickedLanguage = null;
-    this.receiptLanguage = null;
-    this.description = "";
-    this.locationLoaded = false;
-    this.#dirty = false;
-    this.#draft = new DraftRows<Trim & { id: string }>();
-    this.receiptLoaded = false;
-    this.saving = false;
+    this.languageSaving = false;
+    this.descriptionSaving = false;
+    this.languageSaved = false;
+    this.descriptionSaved = false;
+    this.descriptionAttempted = false;
     super.disconnectedCallback();
     clearTimeout(this.#previewTimer);
     this.#previewAgain = false;
@@ -404,45 +365,110 @@ export class ReceiptsScreen extends LitElement {
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     if (url.pathname !== "/manage/venue-settings/view/receipts") return;
-    const requested = url.searchParams.get("departmentId");
+    this.#selectDepartment(url.searchParams.get("departmentId"), url);
+  };
+
+  #selectDepartment(requested: string | null, url?: URL): void {
     const selected =
-      this.departments.length > 1
-        ? (this.departments.find((department) => department.id === requested)?.id ??
-          this.departments[0]?.id ??
-          null)
-        : null;
-    if (selected !== null && selected !== requested) {
-      url.searchParams.set("departmentId", selected);
+      this.departments.find((department) => department.id === requested) ??
+      this.departments.find((department) => department.active && department.isDefault) ??
+      this.departments.find((department) => department.active);
+    const id = selected?.id ?? null;
+    if (url && id !== requested) {
+      if (id === null) url.searchParams.delete("departmentId");
+      else url.searchParams.set("departmentId", id);
+      const guard = navigationGuardFor(window);
       if (guard) void guard.write(url, true);
       else history.replaceState(history.state, "", url);
     }
-    if (selected !== this.previewDepartmentId) {
-      this.previewDepartmentId = selected;
-      if (this.receiptLoaded) void this.#sendPreview();
+    if (id !== this.previewDepartmentId) {
+      this.previewDepartmentId = id;
+      this.departmentDraft = null;
+      this.preview = null;
+      this.#previewRequested = null;
+      this.#departmentGeneration++;
     }
-  };
+    if (this.receiptLoaded) void this.#sendPreview();
+  }
 
   async #loadDepartments(): Promise<void> {
+    const connection = this.#connection;
     try {
-      this.departments = (await this.api.getVenueDepartments()).filter(
-        (department) => department.active,
-      );
-    } catch {
+      const departments = await (this.api.background ?? this.api).getVenueDepartments();
+      if (connection !== this.#connection) return;
+      this.departments = departments;
+      this.departmentLoadError = "";
+    } catch (error) {
+      if (connection !== this.#connection) return;
       this.departments = [];
+      this.departmentLoadError = codeOf(error);
     }
     this.#departmentsLoaded = true;
-    this.#restorePreviewDepartment();
+    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+    this.#selectDepartment(
+      url.searchParams.get("departmentId"),
+      url.pathname === "/manage/venue-settings/view/receipts" ? url : undefined,
+    );
+  }
+
+  #departmentChanged(
+    event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig }>,
+  ): void {
+    event.stopPropagation();
+    if (event.detail.departmentId !== this.previewDepartmentId) return;
+    if (sameValue(this.departmentDraft, event.detail.receipt)) return;
+    this.departmentDraft = structuredClone(event.detail.receipt);
+    this.#departmentGeneration++;
+    this.#schedulePreview();
+  }
+
+  #venueDefaults(): VenueReceiptSettings {
+    if (this.venueDefaultsDraft !== null) return this.venueDefaultsDraft;
+    const settings = this.#trim();
+    delete settings.phone;
+    delete settings.email;
+    return settings;
+  }
+
+  #defaultsChanged(event: CustomEvent<{ settings: VenueReceiptSettings; active?: boolean }>): void {
+    event.stopPropagation();
+    const changed = !sameValue(this.#venueDefaults(), event.detail.settings);
+    this.venueDefaultsDraft = structuredClone(event.detail.settings);
+    if (changed) this.#departmentGeneration++;
+    this.#previewActive ||= event.detail.active === true;
+    this.#schedulePreview();
+  }
+
+  requestDepartmentNavigation(proceed: () => void, signal?: AbortSignal) {
+    const editor = this.shadowRoot?.querySelector("dashboard-department-receipt-editor");
+    const coordinator = leaveCoordinatorFor(this);
+    if (coordinator) {
+      return coordinator.request({
+        scopes: editor ? [editor.draftOwner] : [],
+        reason: "navigation",
+        proceed,
+        signal,
+      });
+    }
+    proceed();
+    return Promise.resolve("proceeded" as const);
   }
 
   #choosePreviewDepartment(departmentId: string): void {
+    const picker = this.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=departmentId]",
+    );
+    if (picker) picker.value = this.previewDepartmentId ?? "";
     if (!this.departments.some((department) => department.id === departmentId)) return;
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     url.searchParams.set("departmentId", departmentId);
     if (guard) void guard.write(url);
     else {
-      history.pushState(history.state, "", url);
-      this.#restorePreviewDepartment();
+      void this.requestDepartmentNavigation(() => {
+        history.pushState(history.state, "", url);
+        this.#restorePreviewDepartment();
+      });
     }
   }
 
@@ -472,6 +498,8 @@ export class ReceiptsScreen extends LitElement {
           const previousLanguage = this.receiptLanguage === null ? null : this.#shownLanguage();
           const savedElsewhere =
             this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
+          if (this.receiptLanguage === null || wasClean || value.fixed !== null)
+            this.#savedLanguage = value.language;
           this.receiptLanguage = value;
           this.languageLoadFailed = false;
           // A fixed language has no dropdown left to take back a pick or show its refusal.
@@ -486,7 +514,7 @@ export class ReceiptsScreen extends LitElement {
             (value.fixed !== null && this.#languageScope?.isDirty())
           )
             this.#languageScope?.commit(this.#shownLanguage());
-          if ((savedElsewhere || droppedPick) && this.receiptLoaded && this.pickedLanguage === null)
+          if ((savedElsewhere || droppedPick) && this.pickedLanguage === null)
             this.#redrawInSavedLanguage();
         },
       );
@@ -505,41 +533,22 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
-  /** The picked language when it differs from the saved one, which a preview and a save then send. */
-  #changedLanguage(): string | null {
-    const picked = this.pickedLanguage;
-    return picked !== null && picked !== this.receiptLanguage?.language ? picked : null;
-  }
-
   async #loadReceipt(): Promise<void> {
     try {
       await this.#receiptQueries.watch("getReceipt", [], ({ receipt, venueAddress }) => {
-        const wasClean = this.#trimScope !== undefined && !this.#trimScope.isDirty();
-        const [merged] = this.#draft.merge(
-          [{ id: "receipt", ...this.#shown() }],
-          [
-            {
-              id: "receipt",
-              headerSubtitle: receipt.headerSubtitle ?? "",
-              footerMessage: receipt.footerMessage ?? "",
-              phone: receipt.phone ?? "",
-              email: receipt.email ?? "",
-              printAddress: receipt.printAddress !== false,
-              logo: receipt.logo ?? null,
-            },
-          ],
-        );
-        const shown = this.#shown();
-        const changed = TRIM_FIELDS.some((field) => merged![field] !== shown[field]);
+        const changed =
+          this.phone !== (receipt.phone ?? "") || this.email !== (receipt.email ?? "");
         const moved = venueAddress.join("\n") !== this.venueAddress.join("\n");
-        for (const field of TEXT_FIELDS) this[field] = merged![field];
-        this.printAddress = merged!.printAddress;
-        this.logo = merged!.logo;
+        this.headerSubtitle = receipt.headerSubtitle ?? "";
+        this.footerMessage = receipt.footerMessage ?? "";
+        this.phone = receipt.phone ?? "";
+        this.email = receipt.email ?? "";
+        this.printAddress = receipt.printAddress !== false;
+        this.logo = receipt.logo ?? null;
         this.venueAddress = venueAddress;
         this.receiptLoadError = null;
         if (!this.receiptLoaded) {
           this.receiptLoaded = true;
-          this.#registerTrim();
           this.#previewActive = true;
           void this.#sendPreview();
         } else if (moved) {
@@ -547,8 +556,6 @@ export class ReceiptsScreen extends LitElement {
           this.#previewRequested = null;
           this.#schedulePreview();
         } else if (changed) this.#schedulePreview();
-        this.#registerTrim();
-        if (wasClean && changed) this.#trimScope?.commit(this.#trimSnapshot());
       });
     } catch (error) {
       this.receiptLoadError = codeOf(error);
@@ -573,8 +580,11 @@ export class ReceiptsScreen extends LitElement {
           const wasClean =
             this.#descriptionScope !== undefined && !this.#descriptionScope.isDirty();
           const previousDescription = this.description;
-          const adopt = !this.#dirty && !this.saving && saves === this.#saves;
-          if (adopt) this.description = value.operationDescription;
+          const adopt = !this.#dirty && !this.descriptionSaving && saves === this.#saves;
+          if (adopt) {
+            this.description = value.operationDescription;
+            this.#savedDescription = this.description;
+          }
           this.#registerDescription();
           if (adopt && wasClean && previousDescription !== this.description)
             this.#descriptionScope?.commit(this.description);
@@ -585,17 +595,6 @@ export class ReceiptsScreen extends LitElement {
     } catch {
       this.locationLoadFailed = true;
     }
-  }
-
-  #shown(): Trim {
-    return {
-      headerSubtitle: this.headerSubtitle,
-      footerMessage: this.footerMessage,
-      phone: this.phone,
-      email: this.email,
-      printAddress: this.printAddress,
-      logo: this.logo,
-    };
   }
 
   /** What a save sends: each text trimmed, a blank one left out, and the switch only when off. */
@@ -616,34 +615,63 @@ export class ReceiptsScreen extends LitElement {
   }
 
   async #sendPreview(): Promise<void> {
+    if (
+      (this.previewDepartmentId === null &&
+        (!this.receiptLoaded || this.venueDefaultsDraft === null)) ||
+      !this.#departmentsLoaded ||
+      (this.previewDepartmentId !== null && this.departmentDraft === null)
+    )
+      return;
     if (this.#previewInFlight) {
       this.#previewAgain = true;
       return;
     }
-    const client = this.#previewActive ? this.api : (this.api.background ?? this.api);
+    const passive = !this.#previewActive;
+    const client = passive ? (this.api.background ?? this.api) : this.api;
     this.#previewActive = false;
-    const config = this.#trim();
+    const config: ReceiptConfig = {
+      ...this.#venueDefaults(),
+      ...(this.phone.trim() ? { phone: this.phone.trim() } : {}),
+      ...(this.email.trim() ? { email: this.email.trim() } : {}),
+    };
     for (const field of ["phone", "email"] as const) {
       if (contactProblem(field, config[field] ?? "") !== "") delete config[field];
     }
     const width = this.chosenWidth;
-    const language = this.#changedLanguage();
-    const requested = JSON.stringify([config, width, language, this.previewDepartmentId]);
+    const language = this.chosenPreviewLanguage;
+    const requested = JSON.stringify([
+      config,
+      width,
+      language,
+      this.previewDepartmentId,
+      this.departmentDraft,
+    ]);
     if (requested === this.#previewRequested) return;
     this.#previewRequested = requested;
     this.#previewInFlight = true;
     const departmentId = this.previewDepartmentId;
+    const receipt = structuredClone(this.departmentDraft ?? {});
+    for (const field of ["phone", "email"] as const) {
+      if (contactProblem(field, receipt[field]?.trim() ?? "") !== "") delete receipt[field];
+    }
+    const generation = this.#departmentGeneration;
     try {
-      this.preview = await (departmentId !== null
-        ? client.previewReceipt(config, width ?? undefined, language ?? undefined, departmentId)
-        : language !== null
-          ? client.previewReceipt(config, width ?? undefined, language)
-          : width === null
-            ? client.previewReceipt(config)
-            : client.previewReceipt(config, width));
-      this.previewFailed = false;
+      const preview = await client.previewReceiptDraft(
+        {
+          departmentId,
+          receipt,
+          settings: this.#venueDefaults(),
+          ...(width === null ? {} : { paperWidth: width }),
+          ...(language === null ? {} : { language }),
+        },
+        ...(passive ? [{ passive: true }] : []),
+      );
+      if (generation === this.#departmentGeneration) {
+        this.preview = preview;
+        this.previewFailed = false;
+      }
     } catch {
-      this.previewFailed = true;
+      if (generation === this.#departmentGeneration) this.previewFailed = true;
       this.#previewRequested = null;
     } finally {
       this.#previewInFlight = false;
@@ -654,31 +682,11 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
-  #changeTrim(field: TextField, value: string): void {
-    this[field] = value;
-    this.#changed(field);
-    this.#schedulePreview();
-  }
-
-  #changeAddress(checked: boolean): void {
-    this.printAddress = checked;
-    this.#changed("printAddress");
-    void this.#sendPreview();
-  }
-
-  #changeLogo(image: string | null): void {
-    this.logo = image;
-    this.#changed("logo");
-    void this.#sendPreview();
-  }
-
-  #changed(field: TrimField): void {
-    const refusals = { ...this.trimRefusals };
-    delete refusals[field];
-    this.trimRefusals = refusals;
-    this.saved = false;
-    this.#trimScope?.changed();
+  #choosePreviewLanguage(language: string): void {
+    this.chosenPreviewLanguage = language === this.receiptLanguage?.language ? null : language;
+    this.#departmentGeneration++;
     this.#previewActive = true;
+    void this.#sendPreview();
   }
 
   #chooseWidth(width: PrintPaperWidth): void {
@@ -687,8 +695,8 @@ export class ReceiptsScreen extends LitElement {
     void this.#sendPreview();
   }
 
-  /** The saved language is not part of the preview's key, because no parameter is sent for it. */
   #redrawInSavedLanguage(): void {
+    if (this.chosenPreviewLanguage === null) this.#departmentGeneration++;
     this.#previewRequested = null;
     void this.#sendPreview();
   }
@@ -696,7 +704,8 @@ export class ReceiptsScreen extends LitElement {
   #pickLanguage(language: string): void {
     this.pickedLanguage = language === this.receiptLanguage!.language ? null : language;
     this.languageRefusal = "";
-    this.saved = false;
+    this.languageError = null;
+    this.languageSaved = false;
     this.#languageScope?.changed();
     this.#previewActive = true;
     void this.#sendPreview();
@@ -718,72 +727,116 @@ export class ReceiptsScreen extends LitElement {
 
   /** Whether the language was saved; a refusal is shown where it belongs. */
   async #sendLanguage(language: string): Promise<boolean> {
-    const connection = this.#trimConnection;
+    const connection = this.#connection;
     const scope = this.#languageScope;
     try {
       await this.api.putReceiptLanguage(language);
     } catch (error) {
-      if (connection !== this.#trimConnection) return false;
+      if (connection !== this.#connection) return false;
       this.#languageRefused(error);
       return false;
     }
-    if (connection !== this.#trimConnection) return false;
+    if (connection !== this.#connection) return false;
     const picked = this.pickedLanguage;
     this.receiptLanguage = { ...this.receiptLanguage!, language };
     this.#languageSaves += 1;
-    // A picked language was already drawn; one saved without a pick (Use Catalan) was not.
-    if (this.pickedLanguage === null) {
+    if (this.chosenPreviewLanguage === null) {
       this.#previewActive = true;
       this.#redrawInSavedLanguage();
     }
     if (picked === language) this.pickedLanguage = null;
+    this.#savedLanguage = language;
     if (scope === this.#languageScope) scope?.commit(language);
     return true;
   }
 
+  async #saveLanguage(): Promise<void> {
+    if (
+      this.languageSaving ||
+      !this.#languageScope ||
+      saveActionState(this.#languageScope).unchanged
+    )
+      return;
+    const connection = this.#connection;
+    const language = this.#shownLanguage();
+    this.languageSaving = true;
+    this.languageSaved = false;
+    this.languageRefusal = "";
+    this.languageError = null;
+    const accepted = await this.#sendLanguage(language);
+    if (connection !== this.#connection) return;
+    this.languageSaving = false;
+    this.languageSaved = accepted;
+    if (!accepted && this.languageRefusal) {
+      await this.updateComplete;
+      await focusFirstInvalid(
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=language-section]")!,
+      );
+    }
+  }
+
+  async #saveDescription(): Promise<void> {
+    if (
+      this.descriptionSaving ||
+      !this.#descriptionScope ||
+      saveActionState(this.#descriptionScope).unchanged
+    )
+      return;
+    this.descriptionAttempted = true;
+    this.descriptionSaved = false;
+    this.refusal = "";
+    this.saveFailed = false;
+    if (this.#validate()) {
+      await this.updateComplete;
+      await focusFirstInvalid(
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=description-section]")!,
+      );
+      return;
+    }
+    const connection = this.#connection;
+    const scope = this.#descriptionScope;
+    const submitted = this.description;
+    this.descriptionSaving = true;
+    try {
+      await this.api.putLocationSettings(submitted);
+    } catch (error) {
+      if (connection !== this.#connection || scope !== this.#descriptionScope) return;
+      this.#locationRefused(error);
+      this.descriptionSaving = false;
+      if (this.refusal) {
+        await this.updateComplete;
+        await focusFirstInvalid(
+          this.shadowRoot!.querySelector<HTMLElement>("[data-test=description-section]")!,
+        );
+      }
+      return;
+    }
+    if (connection !== this.#connection || scope !== this.#descriptionScope) return;
+    this.#savedDescription = submitted;
+    scope.commit(submitted);
+    this.#dirty = scope.isDirty();
+    this.#saves++;
+    this.descriptionSaving = false;
+    this.descriptionSaved = true;
+    this.descriptionAttempted = false;
+  }
+
   async #useFixedLanguage(locale: string): Promise<void> {
-    if (this.saving) return;
-    const connection = this.#trimConnection;
-    this.saving = true;
-    this.saved = false;
+    if (this.languageSaving) return;
+    const connection = this.#connection;
+    this.languageSaving = true;
     this.languageRefusal = "";
     this.languageError = null;
     await this.#sendLanguage(locale);
-    if (connection === this.#trimConnection) this.saving = false;
+    if (connection === this.#connection) this.languageSaving = false;
   }
 
   #validate(): string {
     return this.description.trim() === "" ? t("location_settings.required") : "";
   }
 
-  #failsOwnChecks(): boolean {
-    return (
-      this.#validate() !== "" ||
-      contactProblem("phone", this.phone.trim()) !== "" ||
-      contactProblem("email", this.email.trim()) !== ""
-    );
-  }
-
-  #contactError(field: "phone" | "email"): string {
-    return (
-      (this.attempted ? contactProblem(field, this[field].trim()) : "") ||
-      (this.trimRefusals[field] ?? "")
-    );
-  }
-
   #descriptionError(): string {
-    return (this.attempted ? this.#validate() : "") || this.refusal;
-  }
-
-  #form(): HTMLElement {
-    return this.shadowRoot!.querySelector<HTMLElement>(".form")!;
-  }
-
-  #receiptRefused(error: unknown): void {
-    // A logo the save could not draw is refused with media's own code.
-    const field = codeOf(error) === "image.invalid_file" ? ("logo" as const) : refusedField(error);
-    if (field === undefined) this.errorKey = codeOf(error);
-    else this.trimRefusals = { ...this.trimRefusals, [field]: refusalSentence(error) };
+    return (this.descriptionAttempted ? this.#validate() : "") || this.refusal;
   }
 
   #locationRefused(error: unknown): void {
@@ -793,163 +846,15 @@ export class ReceiptsScreen extends LitElement {
     else this.saveFailed = true;
   }
 
-  async #save(): Promise<void> {
-    if (this.saving || this.#saveState().unchanged) return;
-    const trimConnection = this.#trimConnection;
-    this.saved = false;
-    this.saveFailed = false;
-    this.errorKey = null;
-    this.trimRefusals = {};
-    this.attempted = true;
-    this.refusal = "";
-    this.languageRefusal = "";
-    this.languageError = null;
-    if (this.#failsOwnChecks()) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.#form());
-      return;
-    }
-    this.saving = true;
-    // Sent alone and first, so a refused language never leaves the other settings saved without it.
-    const language = this.#changedLanguage();
-    if (language !== null && !(await this.#sendLanguage(language))) {
-      if (trimConnection !== this.#trimConnection) return;
-      this.saving = false;
-      await this.updateComplete;
-      await focusFirstInvalid(this.#form());
-      return;
-    }
-    if (trimConnection !== this.#trimConnection) return;
-    const submittedTrim = this.#trimSnapshot();
-    const trimScope = this.#trimScope;
-    const description = this.description;
-    const descriptionScope = this.#descriptionScope;
-    const [trim, location] = await Promise.allSettled([
-      this.api.putReceipt(submittedTrim.body).then(() => {
-        if (trimConnection === this.#trimConnection && trimScope === this.#trimScope)
-          trimScope?.commit(submittedTrim);
-      }),
-      this.api.putLocationSettings(description).then(() => {
-        if (trimConnection !== this.#trimConnection || descriptionScope !== this.#descriptionScope)
-          return;
-        descriptionScope?.commit(description);
-        this.#dirty = this.description !== description;
-        this.#saves += 1;
-      }),
-    ]);
-    if (trimConnection !== this.#trimConnection) return;
-    this.saving = false;
-    if (trim.status === "rejected") this.#receiptRefused(trim.reason);
-    if (location.status === "rejected") this.#locationRefused(location.reason);
-    if (trim.status === "fulfilled" && location.status === "fulfilled") {
-      this.saved = true;
-      this.attempted = false;
-    }
-    if (this.refusal !== "" || Object.keys(this.trimRefusals).length > 0) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.#form());
-    }
-  }
-
-  #enter(event: KeyboardEvent): void {
-    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"));
-  }
-
-  #focusTrim(field: ReceiptMarkName): void {
-    this.focusedTrim = field;
-  }
-
-  #blurTrim(): void {
-    this.focusedTrim = null;
-  }
-
-  #renderFooter(): TemplateResult {
-    const error = this.trimRefusals.footerMessage ?? "";
-    return html`<wt-textarea
-      name="footerMessage"
-      data-test="footer-message"
-      rows="3"
-      label=${t("receipt.footer_message")}
-      hint=${t("receipts.footer_message_hint")}
-      .value=${this.footerMessage}
-      error=${error}
-      ?disabled=${this.saving}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        this.#changeTrim("footerMessage", event.detail.value);
-      }}
-      @focusin=${() => this.#focusTrim("footerMessage")}
-      @focusout=${() => this.#blurTrim()}
-    ></wt-textarea>`;
-  }
-
-  #renderLogo(): TemplateResult {
-    const error = this.trimRefusals.logo;
-    return html`<dashboard-image-upload
-        .api=${this.api}
-        label=${t("receipts.logo")}
-        .image=${this.logo}
-        .invalid=${error !== undefined}
-        .disabled=${this.saving}
-        @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-          event.stopPropagation();
-          this.#changeLogo(event.detail.image);
-        }}
-        @image-picker-state=${(event: Event) => event.stopPropagation()}
-        @focusin=${() => this.#focusTrim("logo")}
-        @focusout=${() => this.#blurTrim()}
-      ></dashboard-image-upload>
-      ${error === undefined ? nothing : html`<p class="error" data-test="logo-error">${error}</p>`}`;
-  }
-
-  #renderAddress(): TemplateResult {
-    const error = this.trimRefusals.printAddress;
-    return html`<div class="address">
-      <wt-switch
-        name="printAddress"
-        label=${t("receipts.print_address")}
-        .checked=${this.printAddress}
-        ?disabled=${this.saving}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          this.#changeAddress(event.detail.checked);
-        }}
-        @focusin=${() => this.#focusTrim("address")}
-        @focusout=${() => this.#blurTrim()}
-      ></wt-switch>
-      ${
-        this.venueAddress.length > 0
-          ? html`<p class="reason" data-test="venue-address">
-              ${this.venueAddress.map((line, index) => html`${index > 0 ? html`<br />` : nothing}${line}`)}
-            </p>`
-          : html`<p class="reason" data-test="no-address">${t("receipts.no_address")}</p>`
-      }
-      ${
-        error === undefined
-          ? nothing
-          : html`<p class="error" data-test="print-address-error">${error}</p>`
-      }
-    </div>`;
-  }
-
-  #renderContact(field: "phone" | "email", type: "tel" | "email"): TemplateResult {
-    return html`<wt-input
-      name=${field}
-      type=${type}
-      autocomplete="off"
-      label=${t(`receipts.${field}`)}
-      hint=${t(`receipts.${field}_hint`)}
-      .value=${this[field]}
-      error=${this.#contactError(field)}
-      ?disabled=${this.saving}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        this.#changeTrim(field, event.detail.value);
-      }}
-      @focusin=${() => this.#focusTrim(field)}
-      @focusout=${() => this.#blurTrim()}
-      @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-    ></wt-input>`;
+  #focusField(event: CustomEvent<{ field: string | null }>): void {
+    const name = event.detail.field;
+    this.focusedTrim =
+      MARK_NAMES.find(
+        (mark) =>
+          name === mark ||
+          name?.startsWith(`${mark}-`) ||
+          (mark === "address" && name === "printAddress"),
+      ) ?? null;
   }
 
   #renderWarning(language: string): TemplateResult | typeof nothing {
@@ -983,7 +888,7 @@ export class ReceiptsScreen extends LitElement {
                   class="use-fixed"
                   data-test="use-fixed-language"
                   variant="secondary"
-                  ?disabled=${this.saving}
+                  ?disabled=${this.languageSaving}
                   @click=${() => void this.#useFixedLanguage(fixed.locale)}
                   >${t("receipts.language_use").replace("{fixed}", fixedName)}</wt-button
                 >`
@@ -1007,7 +912,7 @@ export class ReceiptsScreen extends LitElement {
         }))}
         .value=${chosen}
         error=${error}
-        ?disabled=${this.saving}
+        ?disabled=${this.languageSaving}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
           this.#pickLanguage(event.detail.value)}
       ></wt-combobox>
@@ -1015,93 +920,126 @@ export class ReceiptsScreen extends LitElement {
     </div>`;
   }
 
-  #renderForm(): TemplateResult {
+  #renderLocation(): TemplateResult | typeof nothing {
+    if (!this.locationLoaded && this.receiptLanguage === null) return nothing;
+    const heading = this.locationLoaded ? this.name : t("receipts.language");
     const descriptionError = this.#descriptionError();
-    const marked =
-      descriptionError !== "" ||
-      this.languageRefusal !== "" ||
-      Object.keys(this.trimRefusals).length > 0 ||
-      this.#contactError("phone") !== "" ||
-      this.#contactError("email") !== "";
-    const saveAction = this.#saveState();
-    const bottom = [
-      this.languageError ?? "",
-      this.errorKey === null
-        ? ""
-        : `${t("receipts.trim_save_error")} ${codeMessage(this.errorKey)}`,
-      this.saveFailed ? t("location_settings.save_error") : "",
-      marked ? t("form.fix_fields") : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return html`<div class="form">
-      <section class="settings" aria-labelledby="venue-wide-heading">
-        <h2 id="venue-wide-heading">${t("receipts.venue_wide")}</h2>
-        ${this.#renderLogo()}
-        <wt-input
-          name="headerSubtitle"
-          data-test="header-subtitle"
-          autocomplete="off"
-          label=${t("receipt.header_subtitle")}
-          hint=${t("receipts.header_subtitle_hint")}
-          .value=${this.headerSubtitle}
-          error=${this.trimRefusals.headerSubtitle ?? ""}
-          ?disabled=${this.saving}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#changeTrim("headerSubtitle", event.detail.value);
-          }}
-          @focusin=${() => this.#focusTrim("headerSubtitle")}
-          @focusout=${() => this.#blurTrim()}
-          @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-        ></wt-input>
-        <p class="reason">
-          ${t("receipts.trading_name_location")}
-          <a href="/manage/venue-operations">${t("receipts.departments_zones")}</a>.
-        </p>
-        ${this.#renderAddress()} ${this.#renderContact("phone", "tel")}
-        ${this.#renderContact("email", "email")} ${this.#renderFooter()}
-      </section>
+    return html`
       <section class="settings" aria-labelledby="location-heading">
-        <h2 id="location-heading" data-test="location-name">${this.name}</h2>
-        ${this.#renderLanguage(this.receiptLanguage!)}
-        <wt-input
-          name="operationDescription"
-          autocomplete="off"
-          required
-          label=${t("location_settings.description")}
-          hint=${t("receipts.operation_description_hint")}
-          .value=${this.description}
-          error=${descriptionError}
-          ?invalid=${descriptionError !== ""}
-          ?disabled=${this.saving}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.description = event.detail.value;
-            this.#descriptionScope?.changed();
-            this.#dirty = this.#descriptionScope!.isDirty();
-            this.refusal = "";
-            this.saved = false;
-          }}
-          @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-        >
-          <wt-help-tooltip slot="help" aria-label=${t("location_settings.help_label")}
-            >${t("location_settings.help")}</wt-help-tooltip
-          >
-        </wt-input>
+        <h2 id="location-heading" data-test="location-name">${heading}</h2>
+        ${
+          this.receiptLanguage !== null
+            ? html`
+                <div data-test="language-section">
+                  ${this.#renderLanguage(this.receiptLanguage!)}
+                  ${this.languageSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
+                  <wt-form-actions
+                    data-test="language-actions"
+                    .error=${[this.languageError ?? "", this.languageRefusal ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+                  >
+                    <wt-button
+                      data-test="language-save"
+                      variant=${saveActionState(this.#languageScope).variant}
+                      ?loading=${this.languageSaving}
+                      ?disabled=${this.languageSaving || saveActionState(this.#languageScope).unchanged}
+                      @click=${() => void this.#saveLanguage()}
+                      >${t("action.save")}</wt-button
+                    >
+                  </wt-form-actions>
+                </div>
+              `
+            : nothing
+        }
+        ${
+          this.locationLoaded
+            ? html`
+                <div data-test="description-section">
+                  <wt-input
+                    name="operationDescription"
+                    autocomplete="off"
+                    required
+                    label=${t("location_settings.description")}
+                    hint=${t("receipts.operation_description_hint")}
+                    .value=${this.description}
+                    error=${descriptionError}
+                    ?invalid=${descriptionError !== ""}
+                    ?disabled=${this.descriptionSaving}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.description = event.detail.value;
+                      this.#descriptionScope?.changed();
+                      this.#dirty = this.#descriptionScope!.isDirty();
+                      this.refusal = "";
+                      this.descriptionSaved = false;
+                    }}
+                    @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=description-save]"))}
+                  >
+                    <wt-help-tooltip slot="help" aria-label=${t("location_settings.help_label")}
+                      >${t("location_settings.help")}</wt-help-tooltip
+                    >
+                  </wt-input>
+                  ${this.descriptionSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
+                  <wt-form-actions
+                    data-test="description-actions"
+                    .error=${[this.saveFailed ? t("location_settings.save_error") : "", descriptionError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+                  >
+                    <wt-button
+                      data-test="description-save"
+                      variant=${saveActionState(this.#descriptionScope).variant}
+                      ?loading=${this.descriptionSaving}
+                      ?disabled=${this.descriptionSaving || saveActionState(this.#descriptionScope).unchanged || (this.descriptionAttempted && this.#validate() !== "")}
+                      @click=${() => void this.#saveDescription()}
+                      >${t("action.save")}</wt-button
+                    >
+                  </wt-form-actions>
+                </div>
+              `
+            : nothing
+        }
       </section>
-      ${this.saved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
-      <wt-form-actions .error=${bottom}
-        ><wt-button
-          data-test="save"
-          variant=${saveAction.variant}
-          ?loading=${this.saving}
-          ?disabled=${saveAction.unchanged || this.saving || (this.attempted && this.#failsOwnChecks())}
-          @click=${() => void this.#save()}
-          >${t("action.save")}</wt-button
-        ></wt-form-actions
-      >
-    </div>`;
+    `;
+  }
+
+  #renderDepartment(): TemplateResult {
+    const selected = this.departments.find(
+      (department) => department.id === this.previewDepartmentId,
+    );
+    const offered = this.departments.filter(
+      (department) => department.active || department.id === this.previewDepartmentId,
+    );
+    return html`
+      ${
+        this.departmentLoadError
+          ? html`<p role="alert">${codeMessage(this.departmentLoadError)}</p>
+              <wt-button variant="secondary" @click=${() => void this.#loadDepartments()}
+                >${t("location_settings.retry")}</wt-button
+              >`
+          : nothing
+      }
+      ${
+        selected
+          ? html` <wt-combobox
+                name="departmentId"
+                label=${t("receipts.department")}
+                .options=${offered.map((department) => ({ value: department.id, label: department.name }))}
+                .value=${selected.id}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choosePreviewDepartment(event.detail.value)}
+              ></wt-combobox>
+              <dashboard-department-receipt-editor
+                .api=${this.api}
+                .departmentId=${selected.id}
+                .departmentName=${selected.name}
+                .receiptLanguage=${this.receiptLanguage?.language ?? ""}
+                .venueDefaults=${this.#venueDefaults()}
+                .draftParent=${this}
+                @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
+                @receipt-draft-changed=${(event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig }>) => this.#departmentChanged(event)}
+              ></dashboard-department-receipt-editor>`
+          : this.#departmentsLoaded && !this.departmentLoadError
+            ? html`<p data-test="no-department">${t("receipts.no_department")}</p>`
+            : nothing
+      }
+    `;
   }
 
   #renderWidth(preview: ReceiptPreview): TemplateResult {
@@ -1131,13 +1069,18 @@ export class ReceiptsScreen extends LitElement {
     return html`<div class="preview">
       <h2>${t("receipts.preview")}</h2>
       ${
-        this.departments.length > 1
+        this.receiptLanguage
           ? html`<wt-combobox
-              name="previewDepartment"
-              label=${t("receipts.preview_for")}
-              .options=${this.departments.map((department) => ({ value: department.id, label: department.name }))}
-              .value=${this.previewDepartmentId ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choosePreviewDepartment(event.detail.value)}
+              name="previewLanguage"
+              label=${t("receipts.preview_language")}
+              .value=${this.chosenPreviewLanguage ?? this.receiptLanguage.language}
+              .options=${[
+                ...new Set([this.receiptLanguage.language, ...this.receiptLanguage.choices]),
+              ].map((language) => ({ value: language, label: receiptLanguageName(language) }))}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.#choosePreviewLanguage(event.detail.value);
+              }}
             ></wt-combobox>`
           : nothing
       }
@@ -1169,28 +1112,39 @@ export class ReceiptsScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const locationReady =
+      this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null;
     return html` ${
-      this.receiptLoadError !== null
-        ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
-        : nothing
-    }
-    ${
-      this.locationLoadFailed || this.languageLoadFailed
-        ? html`<p role="alert">${t("location_settings.load_error")}</p>`
-        : nothing
-    }
-    ${
-      this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
-        ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
-            >${t("location_settings.retry")}</wt-button
-          >`
-        : nothing
-    }
-    ${
-      this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null
-        ? html`<div class="layout">${this.#renderForm()} ${this.#renderPreview()}</div>`
-        : nothing
-    }`;
+        this.receiptLoadError !== null
+          ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
+          : nothing
+      }
+      ${
+        this.locationLoadFailed || this.languageLoadFailed
+          ? html`<p role="alert">${t("location_settings.load_error")}</p>`
+          : nothing
+      }
+      ${
+        this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
+          ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
+              >${t("location_settings.retry")}</wt-button
+            >`
+          : nothing
+      }
+      <div class="layout">
+        <div class="form-column">
+          <section class="department-settings">${this.#renderDepartment()}</section>
+          <dashboard-venue-receipt-defaults-editor
+            .api=${this.api}
+            .draftParent=${this}
+            .venueAddress=${this.venueAddress}
+            @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
+            @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
+          ></dashboard-venue-receipt-defaults-editor>
+          ${this.#renderLocation()}
+        </div>
+        ${locationReady || this.departmentDraft !== null ? this.#renderPreview() : nothing}
+      </div>`;
   }
 }
 

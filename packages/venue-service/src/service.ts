@@ -1,3 +1,12 @@
+import {
+  readDepartmentReceipt,
+  readPrintedDepartmentReceipt,
+  readDepartmentLogoRasters,
+  writeDepartmentReceipt,
+  receiptDepartmentForSale,
+  receiptDepartmentForOrder,
+  receiptDefaultDepartment,
+} from "./department-receipts.js";
 import { readKeepOpen, keepPeriodOpen, keepZoneOpen } from "./keep-open.js";
 import { assertZoneTakesNewOrders, closedZoneIdsAt } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
@@ -114,6 +123,13 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveSalePolicy,
   recordSaleReceiptHeader,
   readSaleReceiptHeader,
+  readDepartmentReceipt,
+  readPrintedDepartmentReceipt,
+  readDepartmentLogoRasters,
+  writeDepartmentReceipt,
+  receiptDepartmentForSale,
+  receiptDepartmentForOrder,
+  receiptDefaultDepartment,
   resolveMakers,
   resolveExtraMakers,
   routingAt,

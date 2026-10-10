@@ -587,3 +587,62 @@ it.each(["getFolderRouting", "listMadeAt"] as const)(
     }
   },
 );
+
+it("scopes department receipt subscriptions by department and refreshes passively", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          receipt: {},
+          venueDefaults: {},
+          languages: ["es-ES"],
+          warningLanguages: [],
+          venueAddress: [],
+        }),
+      ),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  // The runtime boundary also makes a missing registry entry fail on its undefined dependencies.
+  const query = dashboardQuery(api, "getDepartmentReceipt", ["bar"]);
+  expect(query.dependencies).toEqual([
+    { type: "department_receipts" },
+    { type: "tenant_receipts" },
+    { type: "departments" },
+    { type: "locations" },
+  ]);
+  const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
+  expect(other.key).not.toBe(query.key);
+  await query.read();
+  await query.read();
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+    "/management-api/venue-service/departments/bar/receipt",
+    "/management-api/venue-service/departments/bar/receipt",
+  ]);
+  expect(active).toHaveBeenCalledOnce();
+});
+
+it("venue-default refresh reads only its settings route and becomes passive", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ settings: { headerSubtitle: "Restaurant" } })),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const observed = api.liveData.observe(
+    dashboardQuery(api, "getVenueReceiptSettings", []),
+    () => {},
+  );
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    api.liveData.invalidate([{ type: "tenant_receipts" }]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+      "/management-api/receipt-settings",
+      "/management-api/receipt-settings",
+    ]);
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+  } finally {
+    observed.unsubscribe();
+  }
+});

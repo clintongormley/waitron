@@ -1,4 +1,5 @@
 import { openDishCount, disableWithDishes } from "./station-closing.js";
+import { mountDepartmentReceiptApi } from "./department-receipt-api.js";
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
@@ -745,6 +746,7 @@ export function mountManagementApi(
   deps: ManagementApiDeps,
   log: Logger,
 ): MountedManagementApi {
+  mountDepartmentReceiptApi(app, { db: deps.db, venueCfg: () => requireVenueCfg(deps) }, log);
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
@@ -1262,8 +1264,6 @@ export function mountManagementApi(
     }),
   );
 
-  // `getReceipt` does not authorize (the till's unauthenticated boot read shares it), so this route
-  // carries its own gate.
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

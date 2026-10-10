@@ -28,6 +28,7 @@ import {
   parties,
   printJobs,
   sales,
+  tenantReceipts,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -2712,4 +2713,181 @@ describe("a party's bill request goes when a card or collect settles its last ow
       ]);
     });
   });
+});
+
+describe("integrated answer receipt presentation", () => {
+  it("includes current inherited fields on connected capture and refreshes them on replay", async () => {
+    const { cfg, cafe } = await setupVenue();
+    await suite.db.insert(tenantReceipts).values({
+      receipt: {
+        headerSubtitle: "Connected subtitle",
+        phone: "910000000",
+        email: "venue@example.test",
+        printAddress: false,
+      },
+    });
+    const provider = new SimulatorPaymentProvider(suite.db);
+    const req = {
+      id: randomUUID(),
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      simulationOutcome: "captured" as const,
+    };
+    const deps = { db: suite.db, backend, clock, provider };
+    const first = await payWorkingOrderIntegrated(deps, cfg, req);
+    expect(first.outcome).toBe("captured");
+    if (first.outcome !== "captured") throw new Error("Expected capture");
+    expect(first.ticket.receiptTrim).toEqual({ headerSubtitle: "Connected subtitle" });
+    expect(first.ticket.venueReceiptSettings).toEqual({
+      headerSubtitle: "Connected subtitle",
+      printAddress: false,
+    });
+    await suite.db.update(tenantReceipts).set({ receipt: {} });
+    const replay = await payWorkingOrderIntegrated(deps, cfg, req);
+    expect(replay.outcome).toBe("captured");
+    if (replay.outcome !== "captured") throw new Error("Expected replay");
+    expect(replay.ticket.receiptTrim).toEqual({});
+    expect(replay.ticket.venueReceiptSettings).toEqual({});
+    expect(replay.ticket.invoiceNumber).toBe(first.ticket.invoiceNumber);
+    expect(replay.ticket.tender).toEqual(first.ticket.tender);
+    expect(await saleCount(req.id)).toBe(1);
+    expect(await paymentCount(req.id)).toBe(1);
+  });
+});
+
+describe("receipt presentation across invoice-first and recovery paths", () => {
+  it.each([
+    ["fresh capture", false, false],
+    ["unfiled capture recovery", false, true],
+    ["issued invoice capture", true, false],
+    ["issued invoice recovery", true, true],
+  ] as const)(
+    "refreshes the saved department on %s without repeating payment or filing",
+    async (_, issued, recovered) => {
+      const { cfg: original, cafe } = await setupVenue(issued ? "ticket_then_pay" : "prepay");
+      const cfg = { ...original, invoiceLocales: ["ca-ES", "es-ES"] };
+      suite.db.run(
+        sql`update locations set invoice_locales = '["ca-ES","es-ES"]' where id = ${cfg.locationId}`,
+      );
+      const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
+        sql`select department_id from zone_service_policies where zone_id = ${cafe.zoneId}`,
+      );
+      const otherId = randomUUID();
+      suite.db
+        .run(sql`insert into departments (id, location_id, name, trading_name, is_default, active, created_at)
+      values (${otherId}, ${cfg.locationId}, 'Other dining', 'Other brand', 0, 1, '2026-10-10T00:00:00Z')`);
+      suite.db.run(
+        sql`update departments set trading_name = 'Recorded counter' where id = ${departmentId}`,
+      );
+      suite.db.run(sql`insert into department_receipts (department_id, receipt, updated_at)
+      values (${departmentId}, '{"headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test"}', '2026-10-10T00:00:00Z')`);
+      suite.db.run(sql`insert into department_receipts (department_id, receipt, updated_at)
+      values (${otherId}, '{"headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', '2026-10-10T00:00:00Z')`);
+      await suite.db.insert(tenantReceipts).values({
+        receipt: {
+          footerMessage: "Venue footer",
+          phone: "910000000",
+          email: "venue@example.test",
+          printAddress: true,
+        },
+      });
+      await makeReceiptPrinter(cfg);
+      const id = randomUUID();
+      if (issued) {
+        await parkOrder({ db: suite.db }, cfg, {
+          id,
+          zoneId: cafe.zoneId,
+          lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        });
+        await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+        await issueOrderInvoice({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+      } else if (recovered) {
+        await withTransaction(suite.db, (tx) =>
+          createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
+            zoneId: cafe.zoneId,
+          }),
+        );
+      }
+      if (recovered) {
+        await withTransaction(suite.db, (tx) =>
+          insertCapturedPayment(tx, {
+            origin: cfg.origin,
+            workingOrderId: id,
+            provider: "stripe",
+            paymentRef: randomUUID(),
+            amount: decimal("1.50"),
+            settledAt: new Date(),
+            externalRef: `pi_lost_${randomUUID()}`,
+          }),
+        );
+      }
+      const { deps, client } = integratedDeps(cfg, suite.db);
+      const req = {
+        id,
+        zoneId: cafe.zoneId,
+        lines: issued || recovered ? [] : [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      };
+      const first = await payWorkingOrderIntegrated(deps, cfg, req);
+      expect(first.outcome).toBe("captured");
+      if (first.outcome !== "captured") throw new Error("Expected capture");
+      expect(first.ticket.locale).toBe("ca-ES");
+      expect(first.ticket.receiptHeader).toEqual({
+        departmentId,
+        tradingName: "Recorded counter",
+        printTradingName: true,
+      });
+      expect(first.ticket.receiptTrim).toEqual({
+        headerSubtitle: "Bon dia",
+        footerMessage: "Venue footer",
+        email: "counter@example.test",
+      });
+      expect(first.ticket.venueAddress).toEqual(["Calle Mayor 1", "28013 Madrid"]);
+      expect(first.ticket.venueReceiptSettings).toEqual({
+        footerMessage: "Venue footer",
+        printAddress: true,
+      });
+      if (recovered) expect(client.lastCreateIntent).toBeUndefined();
+      const before = {
+        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+        payments: suite.db.all(sql`select * from payments order by id`),
+        drawer: suite.db.all(sql`select * from drawer_opens order by id`),
+        jobs: suite.db.all(sql`select * from print_jobs order by id`),
+      };
+      suite.db.run(
+        sql`update zone_service_policies set department_id = ${otherId} where zone_id = ${cafe.zoneId}`,
+      );
+      suite.db.run(
+        sql`update departments set trading_name = 'Changed brand' where id = ${departmentId}`,
+      );
+      suite.db.run(
+        sql`update department_receipts set receipt = '{"headerSubtitle":{"es-ES":"Texto actual"}}' where department_id = ${departmentId}`,
+      );
+      suite.db.run(sql`update tenant_receipts set receipt = '{"printAddress":false}'`);
+      suite.db.run(
+        sql`update locations set invoice_locales = '["es-ES"]', address_line1 = 'Current street' where id = ${cfg.locationId}`,
+      );
+      const replay = await payWorkingOrderIntegrated(deps, cfg, req);
+      expect(replay.outcome).toBe("captured");
+      if (replay.outcome !== "captured") throw new Error("Expected replay");
+      expect(replay.ticket.receiptTrim).toEqual({ headerSubtitle: "Texto actual" });
+      expect(replay.ticket.venueAddress).toEqual(["Current street", "28013 Madrid"]);
+      expect(replay.ticket.venueReceiptSettings).toEqual({ printAddress: false });
+      expect({
+        ...replay.ticket,
+        receiptTrim: first.ticket.receiptTrim,
+        venueAddress: first.ticket.venueAddress,
+        venueReceiptSettings: first.ticket.venueReceiptSettings,
+      }).toEqual(first.ticket);
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await paymentCount(id)).toBe(1);
+      expect(before.drawer).toEqual([]);
+      expect({
+        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+        payments: suite.db.all(sql`select * from payments order by id`),
+        drawer: suite.db.all(sql`select * from drawer_opens order by id`),
+        jobs: suite.db.all(sql`select * from print_jobs order by id`),
+      }).toEqual(before);
+    },
+  );
 });

@@ -648,12 +648,21 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     await mutation.text();
     expect(await seen()).not.toBe(beforeMutation);
     const beforePreview = await age();
-    const previewUrl = `http://127.0.0.1:${port}/management-api/receipt-preview?receipt=%7B%7D`;
-    const passivePreview = await fetch(previewUrl, { headers: { cookie, "x-waitron-live": "1" } });
+    const previewUrl = `http://127.0.0.1:${port}/management-api/receipt-preview`;
+    const previewBody = { departmentId: null, receipt: {}, settings: {} };
+    const passivePreview = await fetch(previewUrl, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ ...previewBody, passive: true }),
+    });
     expect(passivePreview.status).toBe(200);
     await passivePreview.text();
     expect(await seen()).toBe(beforePreview);
-    const activePreview = await fetch(previewUrl, { headers: { cookie } });
+    const activePreview = await fetch(previewUrl, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(previewBody),
+    });
     expect(activePreview.status).toBe(200);
     const drawn = (await activePreview.json()) as { preview: { text: string } };
     expect(drawn.preview.text).toContain("VERI*FACTU");

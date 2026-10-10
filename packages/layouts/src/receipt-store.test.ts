@@ -1,3 +1,4 @@
+import * as receiptStore from "./receipt-store.js";
 import { CORE_MIGRATIONS, captureError, tenantReceipts, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -445,5 +446,188 @@ describe("the receipt logo", () => {
       heightDots: 1,
       data: "gAE=",
     });
+  });
+});
+
+describe("bounded imported global receipt fields", () => {
+  it("drops an oversized string and picture while retaining good text and false", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({
+      logo: LOGO,
+      headerSubtitle: "x".repeat(200_000),
+      footerMessage: "Gracias",
+      printAddress: false,
+      logoRasters: { "80mm": { widthDots: 8, heightDots: 1, data: "A".repeat(200_000) } },
+    });
+    const parsed = vi.spyOn(JSON, "parse");
+    try {
+      expect(await inTx((tx) => getPrintedReceipt(tx, "80mm"))).toEqual({
+        receipt: { logo: LOGO, footerMessage: "Gracias", printAddress: false },
+        logo: null,
+      });
+      expect(parsed.mock.calls.every(([text]) => text.length < 65_536)).toBe(true);
+      expect(await inTx((tx) => getStoredLogoRasters(tx, LOGO))).toBeNull();
+      expect(parsed.mock.calls.every(([text]) => text.length < 65_536)).toBe(true);
+    } finally {
+      parsed.mockRestore();
+    }
+  });
+
+  it("drops malformed JSON through the engine projection", async () => {
+    await seedTenant(suite.db);
+    await suite.db.execute(
+      sql`insert into tenant_receipts (receipt, updated_at) values ('{broken', '2026-10-10T00:00:00Z')`,
+    );
+    expect(await inTx((tx) => getPrintedReceipt(tx, "58mm"))).toEqual({ receipt: {}, logo: null });
+    expect(await inTx((tx) => getReceipt(tx))).toEqual({});
+    expect(await inTx((tx) => getStoredLogoRasters(tx, LOGO))).toBeNull();
+  });
+
+  it("drops invalid filename and contact strings independently", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({
+      logo: "../outside.png",
+      phone: "bad",
+      email: "bad",
+      footerMessage: "",
+      printAddress: false,
+    });
+    expect(await inTx((tx) => getPrintedReceipt(tx, "80mm"))).toEqual({
+      receipt: { footerMessage: "", printAddress: false },
+      logo: null,
+    });
+  });
+
+  it("contains an optional print SELECT refusal while management reads still refuse", async () => {
+    await seedTenant(suite.db);
+    const select = vi.spyOn(suite.db, "select").mockImplementation(() => {
+      throw new Error("select refused");
+    });
+    try {
+      expect(await inTx((tx) => getPrintedReceipt(tx, "80mm"))).toEqual({
+        receipt: {},
+        logo: null,
+      });
+      await expect(inTx((tx) => getReceipt(tx))).rejects.toThrow("select refused");
+    } finally {
+      select.mockRestore();
+    }
+  });
+});
+
+describe("independent venue receipt defaults", () => {
+  it("replaces only defaults, preserving the latest legacy contact and false", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    await inTx((tx) =>
+      putReceipt(tx, {
+        managementSessionId: session,
+        receipt: { phone: "+34 910 000 000", email: "live@venue.test", headerSubtitle: "Old" },
+      }),
+    );
+    await inTx((tx) =>
+      receiptStore.putVenueReceiptSettings(tx, {
+        managementSessionId: session,
+        settings: { footerMessage: "New", printAddress: false },
+      }),
+    );
+    expect(await inTx((tx) => getReceipt(tx))).toEqual({
+      phone: "+34 910 000 000",
+      email: "live@venue.test",
+      footerMessage: "New",
+      printAddress: false,
+    });
+    expect(await inTx((tx) => receiptStore.getVenueReceiptSettings(tx))).toEqual({
+      footerMessage: "New",
+      printAddress: false,
+    });
+  });
+
+  it("clearing defaults clears the global pair, preserving contact", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    await inTx((tx) =>
+      putReceipt(tx, {
+        managementSessionId: session,
+        receipt: { logo: LOGO, phone: "+34 910 000 000" },
+        logoRasters: RASTERS,
+      }),
+    );
+    await inTx((tx) =>
+      receiptStore.putVenueReceiptSettings(tx, { managementSessionId: session, settings: {} }),
+    );
+    expect(await storedJson()).toEqual({ phone: "+34 910 000 000" });
+  });
+
+  it.each([
+    null,
+    { phone: "+34 910 000 000" },
+    { printAddress: null },
+    { headerSubtitle: { es: "Hola" } },
+  ])("refuses invalid defaults without replacing contact (%j)", async (settings) => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    await storeRaw({ email: "live@venue.test" });
+    expect(
+      await codeOf(() =>
+        inTx((tx) =>
+          receiptStore.putVenueReceiptSettings(tx, { managementSessionId: session, settings }),
+        ),
+      ),
+    ).toBe("receipt.invalid");
+    expect(await storedJson()).toEqual({ email: "live@venue.test" });
+  });
+
+  it("refuses a defaults write without layout permission", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("staff");
+    expect(
+      await codeOf(() =>
+        inTx((tx) =>
+          receiptStore.putVenueReceiptSettings(tx, { managementSessionId: session, settings: {} }),
+        ),
+      ),
+    ).toBe("authorization.not_permitted");
+    expect(await rowCount()).toBe(0);
+  });
+});
+
+describe("optional global receipt read diagnostics", () => {
+  it("reports only operation/id/code and contains a throwing diagnostic", async () => {
+    await seedTenant(suite.db);
+    const select = vi.spyOn(suite.db, "select").mockImplementation(() => {
+      throw new Error("private imported content");
+    });
+    const events: unknown[] = [];
+    try {
+      expect(
+        await inTx((tx) =>
+          getPrintedReceipt(tx, "80mm", (event) => {
+            events.push(event);
+            throw new Error("logger failure");
+          }),
+        ),
+      ).toEqual({ receipt: {}, logo: null });
+      expect(events).toEqual([
+        { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" },
+      ]);
+    } finally {
+      select.mockRestore();
+    }
+  });
+
+  it("reads only one bounded projection for printing and no pictures for trim", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({ logo: LOGO, logoRasters: RASTERS, printAddress: false });
+    const select = vi.spyOn(suite.db, "select");
+    try {
+      expect((await inTx((tx) => getPrintedReceipt(tx, "58mm"))).logo).not.toBeNull();
+      expect(select).toHaveBeenCalledTimes(1);
+      select.mockClear();
+      expect(await inTx((tx) => getReceipt(tx))).toEqual({ logo: LOGO, printAddress: false });
+      expect(select).toHaveBeenCalledTimes(1);
+    } finally {
+      select.mockRestore();
+    }
   });
 });

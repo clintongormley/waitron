@@ -3,9 +3,11 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
+import type { DepartmentReceiptConfig } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./receipts-screen.js";
+import { codeMessage } from "../i18n/codes.js";
 
 class ReceiptLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -21,11 +23,96 @@ class ReceiptLeaveApp extends LitElement {
   }
 }
 customElements.define("receipt-leave-test-app", ReceiptLeaveApp);
+const originalUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
   setLocale("en-GB");
 });
 type Screen = HTMLElementTagNameMap["dashboard-receipts-screen"];
+it("protects the mounted venue-default draft after an independent language save", async () => {
+  let stored = { headerSubtitle: "Venue default" };
+  const { screen } = await mount({
+    getVenueReceiptSettings: async () => ({ settings: { ...stored } }),
+    putVenueReceiptSettings: async (value) => {
+      stored = { headerSubtitle: value.headerSubtitle ?? "" };
+    },
+  });
+  const defaults = screen.shadowRoot!.querySelector<
+    HTMLElementTagNameMap["dashboard-venue-receipt-defaults-editor"]
+  >("dashboard-venue-receipt-defaults-editor")!;
+  await expect
+    .poll(() => defaults.shadowRoot?.querySelector("wt-input[name=headerSubtitle]"))
+    .toBeTruthy();
+  expect(unload()).toBe(false);
+  const subtitle = defaults.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "wt-input[name=headerSubtitle]",
+  )!;
+  await subtitle.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  await userEvent.fill(
+    page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
+    "Typed default",
+  );
+  expect(unload()).toBe(true);
+  await change(screen, "receiptLanguage", "ca-ES");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-test=language-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(unload()).toBe(true);
+  defaults.shadowRoot!.querySelector<HTMLElement>("[data-test=defaults-save]")!.click();
+  await expect.poll(() => stored.headerSubtitle).toBe("Typed default");
+  await expect.poll(() => unload()).toBe(false);
+});
+
+it("Keep preserves mounted defaults and Discard restores their own baseline before leaving", async () => {
+  const { app, screen } = await mount({
+    getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Venue default" } }),
+  });
+  const defaults = screen.shadowRoot!.querySelector<
+    HTMLElementTagNameMap["dashboard-venue-receipt-defaults-editor"]
+  >("dashboard-venue-receipt-defaults-editor")!;
+  await expect
+    .poll(() => defaults.shadowRoot?.querySelector("wt-input[name=headerSubtitle]"))
+    .toBeTruthy();
+  const subtitle = defaults.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "wt-input[name=headerSubtitle]",
+  )!;
+  await subtitle.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  await userEvent.fill(
+    page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
+    "Typed default",
+  );
+  let left = 0;
+  const request = () =>
+    app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {
+        left++;
+      },
+    });
+  const kept = request();
+  await choose(app, "keep");
+  expect(await kept).toBe("kept");
+  expect(left).toBe(0);
+  expect(subtitle.value).toBe("Typed default");
+  expect(unload()).toBe(true);
+  const discarded = request();
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  expect(left).toBe(1);
+  expect(subtitle.value).toBe("Venue default");
+  expect(unload()).toBe(false);
+});
+
 const preview = {
   preview: {
     widthDots: 512,
@@ -52,7 +139,18 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   const liveData = new LiveData();
   const api = {
     liveData,
-    getReceipt: async () => ({ receipt: { headerSubtitle: "Welcome" }, venueAddress: [] }),
+    getReceipt: async () => ({ receipt: {}, venueAddress: [] }),
+    getVenueDepartments: async () => [{ id: "bar", name: "Bar", active: true, isDefault: true }],
+    getDepartmentReceipt: async () => ({
+      receipt: {},
+      venueDefaults: {},
+      venueAddress: [],
+      languages: ["es-ES"],
+      warningLanguages: [],
+    }),
+    putDepartmentReceipt: async () => {},
+    previewReceiptDraft: async () => preview,
+    getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Welcome" } }),
     getLocationSettings: async () => ({
       name: "Restaurant",
       operationDescription: "Restaurant service",
@@ -64,15 +162,16 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listDepartments: async () => [],
-    previewReceipt: async () => preview,
-    putReceipt: async () => {},
+    putVenueReceiptSettings: async () => {},
     putLocationSettings: async () => {},
     putReceiptLanguage: async () => {},
     ...overrides,
   } as unknown as DashboardApi;
   const { el: app } = await mountWidget<ReceiptLeaveApp>("receipt-leave-test-app", { api });
   const screen = app.shadowRoot!.querySelector("dashboard-receipts-screen")!;
-  await expect.poll(() => screen.shadowRoot?.querySelector("[data-test=save]")).toBeTruthy();
+  await expect
+    .poll(() => screen.shadowRoot?.querySelector("[data-test=description-save]"))
+    .toBeTruthy();
   return { app, screen, liveData };
 }
 function unload() {
@@ -80,15 +179,31 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+function defaultsRoot(screen: Screen) {
+  return screen.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
+}
+function departmentRoot(screen: Screen) {
+  return screen.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.shadowRoot!;
+}
 function field(screen: Screen, name: string) {
-  return screen.shadowRoot!.querySelector<
-    HTMLElement & { value: string; checked: boolean; image: string | null }
+  const root = ["phone", "email"].includes(name)
+    ? departmentRoot(screen)
+    : ["headerSubtitle", "footerMessage", "printAddress", "logo"].includes(name)
+      ? defaultsRoot(screen)
+      : screen.shadowRoot!;
+  return root.querySelector<
+    HTMLElement & {
+      value: string;
+      checked: boolean;
+      image: string | null;
+      updateComplete?: Promise<boolean>;
+    }
   >(`[name=${name}], [data-test=${name}]`)!;
 }
 async function change(screen: Screen, name: string, value: string | boolean | null) {
   const logo = name === "logo";
   const el = logo
-    ? screen.shadowRoot!.querySelector("dashboard-image-upload")!
+    ? defaultsRoot(screen).querySelector("dashboard-image-upload")!
     : field(screen, name);
   el.dispatchEvent(
     new CustomEvent(logo ? "image-changed" : "wt-change", {
@@ -99,8 +214,14 @@ async function change(screen: Screen, name: string, value: string | boolean | nu
   );
   await screen.updateComplete;
 }
-function save(screen: Screen) {
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+function saveEachChangedPart(screen: Screen) {
+  for (const root of [defaultsRoot(screen), departmentRoot(screen), screen.shadowRoot!]) {
+    for (const button of root.querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test$=-save]",
+    )) {
+      if (!button.disabled) button.click();
+    }
+  }
 }
 async function choose(app: ReceiptLeaveApp, decision: "keep" | "discard") {
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
@@ -180,35 +301,43 @@ it("commits an accepted appearance write while the independent location write is
   const location = deferred<void>();
   let body: ReceiptConfig | undefined;
   const { screen } = await mount({
-    putReceipt: async (input) => {
+    putVenueReceiptSettings: async (input) => {
       body = input;
     },
     putLocationSettings: () => location.promise,
   });
   await change(screen, "headerSubtitle", " New ");
   await change(screen, "printAddress", false);
-  save(screen);
+  await change(screen, "operationDescription", "Dinner");
+  saveEachChangedPart(screen);
   await expect.poll(() => body).toEqual({ headerSubtitle: "New", printAddress: false });
-  expect(unload()).toBe(false);
+  expect(unload()).toBe(true);
   location.reject({ code: "connection.failed" });
-  await expect.poll(() => field(screen, "headerSubtitle").hasAttribute("disabled")).toBe(false);
+  await expect
+    .poll(() => field(screen, "operationDescription").hasAttribute("disabled"))
+    .toBe(false);
+  expect(unload()).toBe(true);
+  await change(screen, "operationDescription", "Restaurant service");
   expect(unload()).toBe(false);
 });
 it("a refused appearance write retains protection when the independent location write succeeds", async () => {
   const { screen } = await mount({
-    putReceipt: async () => {
+    putVenueReceiptSettings: async () => {
       throw { code: "connection.failed" };
     },
   });
   await change(screen, "footerMessage", "Thank you");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect
     .poll(
       () =>
-        (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
-          .error,
+        (
+          defaultsRoot(screen).querySelector("wt-form-actions") as HTMLElement & {
+            error: string;
+          }
+        ).error,
     )
-    .toContain(t("receipts.trim_save_error"));
+    .toBe(codeMessage("connection.failed"));
   expect(unload()).toBe(true);
   expect(field(screen, "footerMessage").value).toBe("Thank you");
 });
@@ -216,13 +345,13 @@ it("commits the submitted snapshot and keeps later input dirty", async () => {
   const receipt = deferred<void>();
   let body: ReceiptConfig | undefined;
   const { screen } = await mount({
-    putReceipt: (input) => {
+    putVenueReceiptSettings: (input) => {
       body = input;
       return receipt.promise;
     },
   });
   await change(screen, "headerSubtitle", "First");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => body).toEqual({ headerSubtitle: "First" });
   await change(screen, "headerSubtitle", "Later");
   receipt.resolve();
@@ -267,7 +396,7 @@ it("saving aborts an outstanding appearance question before the other write fini
     },
   });
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
-  save(screen);
+  saveEachChangedPart(screen);
   expect(await request).toBe("stale");
   expect(left).toBe(0);
   expect(unload()).toBe(false);
@@ -276,7 +405,7 @@ it("saving aborts an outstanding appearance question before the other write fini
 it("live receipt reads do not replace an edited appearance baseline", async () => {
   let receipt: ReceiptConfig = { headerSubtitle: "Welcome" };
   const { app, screen, liveData } = await mount({
-    getReceipt: async () => ({ receipt, venueAddress: [] }),
+    getVenueReceiptSettings: async () => ({ settings: receipt }),
   });
   await change(screen, "headerSubtitle", "Draft");
   receipt = { headerSubtitle: "Elsewhere" };
@@ -299,20 +428,18 @@ it("an older accepted appearance write cannot commit a reconnected form's draft"
   const receipt = deferred<void>();
   let writes = 0;
   const { app, screen } = await mount({
-    putReceipt: () => {
+    putVenueReceiptSettings: () => {
       writes++;
       return receipt.promise;
     },
   });
   await change(screen, "headerSubtitle", "First");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => writes).toBe(1);
   screen.remove();
   app.shadowRoot!.prepend(screen);
-  await expect
-    .poll(() => screen.shadowRoot?.querySelector("[name=headerSubtitle]")?.getAttribute("disabled"))
-    .toBe(null);
-  await expect.poll(() => field(screen, "headerSubtitle").value).toBe("Welcome");
+  await expect.poll(() => field(screen, "headerSubtitle").getAttribute("disabled")).toBe(null);
+  await expect.poll(() => field(screen, "headerSubtitle").value).toBe("First");
   await change(screen, "headerSubtitle", "New connection");
   receipt.resolve();
   await expect.poll(() => field(screen, "headerSubtitle").hasAttribute("disabled")).toBe(false);
@@ -324,7 +451,7 @@ it("an older accepted appearance write cannot commit a reconnected form's draft"
 it("a clean live receipt refresh remains exempt from leave protection", async () => {
   let receipt: ReceiptConfig = { headerSubtitle: "Welcome" };
   const { app, screen, liveData } = await mount({
-    getReceipt: async () => ({ receipt, venueAddress: [] }),
+    getVenueReceiptSettings: async () => ({ settings: receipt }),
   });
   receipt = { headerSubtitle: "Elsewhere" };
   liveData.invalidate([{ type: "tenant_receipts" }]);
@@ -347,14 +474,25 @@ it("a clean live receipt refresh remains exempt from leave protection", async ()
 it("saves every appearance field in its existing normalized body and stays clean after a failed live refresh", async () => {
   let body: ReceiptConfig | undefined;
   let written = false;
+  let contact: DepartmentReceiptConfig = {};
   const { app, screen, liveData } = await mount({
-    putReceipt: async (input) => {
+    putVenueReceiptSettings: async (input) => {
       body = input;
       written = true;
     },
-    getReceipt: async () => {
+    getDepartmentReceipt: async () => ({
+      receipt: contact,
+      venueDefaults: {},
+      venueAddress: [],
+      languages: ["es-ES"],
+      warningLanguages: [],
+    }),
+    putDepartmentReceipt: async (_id, input) => {
+      contact = input;
+    },
+    getVenueReceiptSettings: async () => {
       if (written) throw { code: "connection.failed" };
-      return { receipt: { headerSubtitle: "Welcome" }, venueAddress: [] };
+      return { settings: { headerSubtitle: "Welcome" }, venueAddress: [] };
     },
   });
   await change(screen, "headerSubtitle", " Welcome ");
@@ -363,22 +501,23 @@ it("saves every appearance field in its existing normalized body and stays clean
   await change(screen, "email", " hello@example.com ");
   await change(screen, "logo", "image-1");
   await change(screen, "printAddress", false);
-  save(screen);
+  saveEachChangedPart(screen);
   await expect
     .poll(() => body)
     .toEqual({
       headerSubtitle: "Welcome",
       footerMessage: "Thank you",
-      phone: "+34 912345678",
-      email: "hello@example.com",
       logo: "image-1",
       printAddress: false,
     });
+  await expect.poll(() => contact).toEqual({ phone: "+34 912345678", email: "hello@example.com" });
   await expect.poll(() => field(screen, "headerSubtitle").hasAttribute("disabled")).toBe(false);
   expect(unload()).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
   liveData.invalidate([{ type: "tenant_receipts" }]);
-  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=retry]")).toBeTruthy();
+  await expect
+    .poll(() => defaultsRoot(screen).querySelector("[data-test=defaults-load-error]"))
+    .toBeTruthy();
   expect(unload()).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
@@ -424,19 +563,25 @@ it("commits the accepted description before a pending appearance refusal and kee
   const receipt = deferred<void>();
   let body: string | undefined;
   const { screen } = await mount({
-    putReceipt: () => receipt.promise,
+    putVenueReceiptSettings: () => receipt.promise,
     putLocationSettings: async (value) => {
       body = value;
     },
   });
+  await change(screen, "headerSubtitle", "New");
   await change(screen, "operationDescription", "  Dinner service  ");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => body).toBe("  Dinner service  ");
-  await expect.poll(() => unload()).toBe(false);
+  await expect
+    .poll(() => field(screen, "operationDescription").hasAttribute("disabled"))
+    .toBe(false);
+  expect(unload()).toBe(true);
   receipt.reject({ code: "connection.failed" });
   await expect
     .poll(() => field(screen, "operationDescription").hasAttribute("disabled"))
     .toBe(false);
+  expect(unload()).toBe(true);
+  await change(screen, "headerSubtitle", "Welcome");
   expect(unload()).toBe(false);
 });
 it("an accepted language commits independently while description refusal retains its draft", async () => {
@@ -455,11 +600,10 @@ it("an accepted language commits independently while description refusal retains
   });
   await change(screen, "receiptLanguage", "ca-ES");
   await change(screen, "operationDescription", "Dinner");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => sentLanguage).toBe("ca-ES");
-  expect(description).toBeUndefined();
-  language.resolve();
   await expect.poll(() => description).toBe("Dinner");
+  language.resolve();
   await expect
     .poll(() => field(screen, "operationDescription").hasAttribute("disabled"))
     .toBe(false);
@@ -477,7 +621,7 @@ it("a refused language keeps both drafts without sending the other parts", async
     putReceiptLanguage: async () => {
       throw { code: "connection.failed" };
     },
-    putReceipt: async () => {
+    putVenueReceiptSettings: async () => {
       writes++;
     },
     putLocationSettings: async () => {
@@ -486,7 +630,7 @@ it("a refused language keeps both drafts without sending the other parts", async
   });
   await change(screen, "receiptLanguage", "ca-ES");
   await change(screen, "operationDescription", "Dinner");
-  save(screen);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
   await expect.poll(() => field(screen, "receiptLanguage").hasAttribute("disabled")).toBe(false);
   expect(writes).toBe(0);
   expect(unload()).toBe(true);
@@ -500,14 +644,14 @@ it("a later description stays dirty against the submitted snapshot while appeara
   const receipt = deferred<void>();
   let sent: string | undefined;
   const { screen } = await mount({
-    putReceipt: () => receipt.promise,
+    putVenueReceiptSettings: () => receipt.promise,
     putLocationSettings: (value) => {
       sent = value;
       return location.promise;
     },
   });
   await change(screen, "operationDescription", "First");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => sent).toBe("First");
   await change(screen, "operationDescription", "Later");
   location.resolve();
@@ -532,7 +676,7 @@ it("a later language selection stays dirty against the accepted submitted langua
     },
   });
   await change(screen, "receiptLanguage", "ca-ES");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => sent).toBe("ca-ES");
   await change(screen, "receiptLanguage", "gl-ES");
   language.resolve();
@@ -555,12 +699,12 @@ it("successful language and description writes abort a pending leave question", 
     },
   });
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
-  save(screen);
+  saveEachChangedPart(screen);
   expect(await request).toBe("stale");
   expect(left).toBe(0);
   await expect.poll(() => unload()).toBe(false);
 });
-it("disconnect releases language and description protection and reconnect loads their baselines again", async () => {
+it("disconnect releases language and description protection and reconnect preserves their guarded drafts", async () => {
   const { app, screen } = await mount();
   await change(screen, "receiptLanguage", "ca-ES");
   await change(screen, "operationDescription", "Dinner");
@@ -568,8 +712,11 @@ it("disconnect releases language and description protection and reconnect loads 
   screen.remove();
   expect(unload()).toBe(false);
   app.shadowRoot!.prepend(screen);
-  await expect.poll(() => field(screen, "operationDescription").value).toBe("Restaurant service");
-  await expect.poll(() => field(screen, "receiptLanguage").value).toBe("es-ES");
+  await expect.poll(() => field(screen, "operationDescription").value).toBe("Dinner");
+  await expect.poll(() => field(screen, "receiptLanguage").value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+  await change(screen, "operationDescription", "Restaurant service");
+  await change(screen, "receiptLanguage", "es-ES");
   expect(unload()).toBe(false);
 });
 for (const part of ["language", "description"] as const) {
@@ -595,11 +742,11 @@ for (const part of ["language", "description"] as const) {
     const original = part === "language" ? "es-ES" : "Restaurant service";
     const edited = part === "language" ? "ca-ES" : "Dinner";
     await change(screen, name, edited);
-    save(screen);
+    saveEachChangedPart(screen);
     await expect.poll(() => writes).toBe(1);
     screen.remove();
     app.shadowRoot!.prepend(screen);
-    await expect.poll(() => field(screen, name).value).toBe(original);
+    await expect.poll(() => field(screen, name).value).toBe(edited);
     await change(screen, name, edited);
     write.resolve();
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -723,7 +870,7 @@ it("a successful description and language save stays clean after a subsequent fa
   });
   await change(screen, "receiptLanguage", "ca-ES");
   await change(screen, "operationDescription", " Dinner ");
-  save(screen);
+  saveEachChangedPart(screen);
   await expect.poll(() => body).toBe(" Dinner ");
   expect(language).toBe("ca-ES");
   await expect.poll(() => unload()).toBe(false);
@@ -733,7 +880,7 @@ it("a successful description and language save stays clean after a subsequent fa
 });
 
 for (const accepted of [true, false]) {
-  it(`an older ${accepted ? "accepted" : "refused"} language write leaves the clean reconnected values and status alone`, async () => {
+  it(`an older ${accepted ? "accepted" : "refused"} language write leaves the dirty reconnected values and status alone`, async () => {
     const language = deferred<void>();
     let writes = 0;
     const { app, screen } = await mount({
@@ -743,19 +890,24 @@ for (const accepted of [true, false]) {
       },
     });
     await change(screen, "receiptLanguage", "ca-ES");
-    save(screen);
+    saveEachChangedPart(screen);
     await expect.poll(() => writes).toBe(1);
     screen.remove();
     app.shadowRoot!.prepend(screen);
-    await expect.poll(() => field(screen, "receiptLanguage").value).toBe("es-ES");
+    await expect.poll(() => field(screen, "receiptLanguage").value).toBe("ca-ES");
     if (accepted) language.resolve();
     else language.reject({ code: "connection.failed" });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(field(screen, "receiptLanguage").value).toBe("es-ES");
+    expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
     expect(
-      (screen.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & { error: string })
-        .error,
+      (
+        screen.shadowRoot!.querySelector("[data-test=language-actions]")! as HTMLElement & {
+          error: string;
+        }
+      ).error,
     ).toBe("");
+    expect(unload()).toBe(true);
+    await change(screen, "receiptLanguage", "es-ES");
     expect(unload()).toBe(false);
   });
 }
@@ -777,4 +929,197 @@ it("a region fixing an edited language makes that read-only choice exempt withou
   expect(unload()).toBe(false);
   await change(screen, "operationDescription", "Dinner");
   expect(unload()).toBe(true);
+});
+
+it("the independent language action commits only language protection", async () => {
+  const writes: string[] = [];
+  const { screen } = await mount({
+    putReceiptLanguage: async (value) => {
+      writes.push(value);
+    },
+  });
+  await change(screen, "receiptLanguage", "ca-ES");
+  await change(screen, "operationDescription", "Dinner");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
+  await expect.poll(() => writes).toEqual(["ca-ES"]);
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<import("@waitron/ui").WtButton>(
+          "[data-test=language-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(unload()).toBe(true);
+  await change(screen, "operationDescription", "Restaurant service");
+  expect(unload()).toBe(false);
+});
+it("the independent description action commits only description protection", async () => {
+  const writes: string[] = [];
+  const { screen } = await mount({
+    putLocationSettings: async (value) => {
+      writes.push(value);
+    },
+  });
+  await change(screen, "receiptLanguage", "ca-ES");
+  await change(screen, "operationDescription", "Dinner");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=description-save]")!.click();
+  await expect.poll(() => writes).toEqual(["Dinner"]);
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<import("@waitron/ui").WtButton>(
+          "[data-test=description-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(unload()).toBe(true);
+  await change(screen, "receiptLanguage", "es-ES");
+  expect(unload()).toBe(false);
+});
+
+async function pickA10(control: HTMLElementTagNameMap["wt-combobox"], value: string) {
+  const { page, userEvent } = await import("vitest/browser");
+  await control.updateComplete;
+  await userEvent.click(page.elementLocator(control.shadowRoot!.querySelector("button.trigger")!));
+  const label = control.options.find((option) => option.value === value)!.label;
+  await expect
+    .poll(() => control.shadowRoot!.querySelector("#panel")!.matches(":popover-open"))
+    .toBe(true);
+  const row = [...control.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+    (option) => option.textContent!.trim() === label,
+  )!;
+  await userEvent.click(page.elementLocator(row));
+}
+async function chooseA10(app: ReceiptLeaveApp, decision: "keep" | "discard") {
+  const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => warning.open).toBe(true);
+  await warning.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  const modal = warning.shadowRoot!.querySelector("wt-modal")!;
+  const closed = new Promise<void>((resolve) =>
+    modal.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(
+    page.elementLocator(warning.shadowRoot!.querySelector(`[data-choice=${decision}]`)!),
+  );
+  await closed;
+  await expect.poll(() => warning.open).toBe(false);
+}
+async function typeReceiptField(screen: Screen, name: string, value: string) {
+  const control = field(screen, name);
+  await control.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  await userEvent.fill(
+    page.elementLocator(control.shadowRoot!.querySelector("input,textarea")!),
+    value,
+  );
+}
+for (const [name, typed, saved] of [
+  ["receiptLanguage", "ca-ES", "es-ES"],
+  ["operationDescription", "Dinner service", "Restaurant service"],
+] as const) {
+  it(`A10 reconnect keeps ${name} visibly dirty against its saved baseline`, async () => {
+    const { app, screen } = await mount();
+    if (name === "receiptLanguage") {
+      await pickA10(
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "[name=receiptLanguage]",
+        )!,
+        typed,
+      );
+    } else await typeReceiptField(screen, name, typed);
+    const { reattachAfterDetachedUpdate } = await import("../widgets/test-helpers.js");
+    await reattachAfterDetachedUpdate(screen);
+    await expect.poll(() => field(screen, name)?.value).toBe(typed);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(unload()).toBe(true);
+    const request = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await chooseA10(app, "discard");
+    expect(await request).toBe("proceeded");
+    await expect.poll(() => field(screen, name)?.value).toBe(saved);
+    expect(unload()).toBe(false);
+  });
+}
+it("A10 department Keep retains every draft and Discard switches only the department", async () => {
+  history.replaceState(null, "", "/manage/venue-settings/view/receipts?departmentId=bar");
+  const { app, screen } = await mount({
+    getVenueDepartments: async () => [
+      { id: "bar", name: "Bar", active: true, isDefault: true },
+      { id: "deli", name: "Deli", active: true, isDefault: false },
+    ],
+  });
+  await expect.poll(() => departmentRoot(screen)?.querySelector("[name=email]")).toBeTruthy();
+  await typeReceiptField(screen, "email", "bar@example.com");
+  await typeReceiptField(screen, "headerSubtitle", "Unsaved venue");
+  await typeReceiptField(screen, "operationDescription", "Dinner service");
+  await pickA10(
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=receiptLanguage]",
+    )!,
+    "ca-ES",
+  );
+  const picker =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+  await pickA10(picker, "deli");
+  await chooseA10(app, "keep");
+  expect(picker.value).toBe("bar");
+  expect(field(screen, "email").value).toBe("bar@example.com");
+  expect(field(screen, "headerSubtitle").value).toBe("Unsaved venue");
+  expect(field(screen, "operationDescription").value).toBe("Dinner service");
+  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
+  await pickA10(picker, "deli");
+  await chooseA10(app, "discard");
+  await expect
+    .poll(
+      () => screen.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.departmentId,
+    )
+    .toBe("deli");
+  await expect.poll(() => field(screen, "email")?.value).toBe("");
+  expect(field(screen, "headerSubtitle").value).toBe("Unsaved venue");
+  expect(field(screen, "operationDescription").value).toBe("Dinner service");
+  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+});
+
+it("A10 reconnect keeps department and defaults alongside independent location drafts", async () => {
+  const { app, screen } = await mount();
+  await expect.poll(() => departmentRoot(screen)?.querySelector("[name=email]")).toBeTruthy();
+  await typeReceiptField(screen, "email", "bar@example.com");
+  await typeReceiptField(screen, "headerSubtitle", "Draft venue");
+  await typeReceiptField(screen, "operationDescription", "Dinner service");
+  await pickA10(
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=receiptLanguage]",
+    )!,
+    "ca-ES",
+  );
+  const { reattachAfterDetachedUpdate } = await import("../widgets/test-helpers.js");
+  await reattachAfterDetachedUpdate(screen);
+  await expect.poll(() => field(screen, "email")?.value).toBe("bar@example.com");
+  expect(field(screen, "headerSubtitle").value).toBe("Draft venue");
+  expect(field(screen, "operationDescription").value).toBe("Dinner service");
+  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+  const kept = app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
+  await chooseA10(app, "keep");
+  expect(await kept).toBe("kept");
+  expect(field(screen, "email").value).toBe("bar@example.com");
+  expect(field(screen, "headerSubtitle").value).toBe("Draft venue");
+  const discarded = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  await chooseA10(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await expect.poll(() => field(screen, "email")?.value).toBe("");
+  expect(field(screen, "headerSubtitle").value).toBe("Welcome");
+  expect(field(screen, "operationDescription").value).toBe("Restaurant service");
+  expect(field(screen, "receiptLanguage").value).toBe("es-ES");
+  expect(unload()).toBe(false);
 });

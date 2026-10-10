@@ -37,7 +37,8 @@ export type ImageUsage =
       number: number;
       activatesAt: string;
     }
-  | { kind: "receipt" };
+  | { kind: "receipt" }
+  | { kind: "department_receipt"; id: string; name: string; active: boolean };
 export interface ImageQuery {
   search: string;
   language: string;

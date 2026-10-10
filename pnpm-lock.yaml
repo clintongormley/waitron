@@ -1219,6 +1219,9 @@ importers:
       '@waitron/ui':
         specifier: workspace:*
         version: link:../ui
+      '@waitron/venue-service':
+        specifier: workspace:*
+        version: link:../venue-service
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
@@ -1936,6 +1939,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/printing':
+        specifier: workspace:*
+        version: link:../printing
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../reporting

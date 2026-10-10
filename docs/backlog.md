@@ -402,11 +402,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   action:** whoever next works the compliance track widens those two sentences.
   [Detail](backlog/fiscal.md#the-fiscal-record-is-built-from-total--vat_breakdown-is-a-false-narrow-enumeration-and-it-reproduces-itself)
 
-- **Overlap with A231d (invoices by email)** — left open by W111 (#1261, the receipt's top block —
-  logo, address, phone, email and slogan): its approved design adds a contact email and optional
-  phone to the location's settings; the venue-wide `phone` and `email` above already exist, so
-  whoever builds A231d decides whether to reuse them rather than add a second contact email.
-
 - **One original per invoice, structurally.** F2 requests to `POST /api/sales/:id/receipt` still
   have no limit or idempotency; two calls produced three unmarked originals, and art. 14.1 says
   exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
@@ -1361,16 +1356,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
   working assumption, to confirm before go-live. Hours moved to A254.
 
-- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 7 and slice 6 Part C.**
-  Slice 4 Part A is built: combined tickets on shared printers, period choices in routing cells and
-  the station editor. Station-hours and fallback retirement and the read-only station Week view are
-  built. Slice 5 is built: kitchen screens and monitors (Part A, #1479) and watchers retired
-  (Part B, #1502), so a pass printer is a printer listed on every station. Department receipts (slice 7)
-  remain. Slice 6's
-  remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
-  revision is complete; its build remains open after landed 3A/6A.
-  Keep live venue defaults, omit optional current address on A4, and add no consent step.
+- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) —
+  remaining work is slice 7 Part B and slice 6 Part C.**
+  Add the department page's Receipt tab and the floor-plan entry. Department receipt
+  storage, translated text, live venue defaults, independent saves and previews,
+  thermal/A4 composition, till presentation and email contacts are built.
+  Core email consent removal stays separate.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
@@ -2714,6 +2705,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
+- **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
+  reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
+  is in the server log. Decide how the till should show that outcome and offer another copy.
+  [Receipt-branch observation](backlog/printers.md#show-a-failed-automatic-invoice-copy-to-staff)
+
 - **Remove the consent step from emailed receipts** (owner, 2026-10-09). Giving the email
   address is enough. Slice 7 supplies department/default contact selection; removing current
   consent schema/checks/staging/reservation/client and future F1 consent flow is separate work.
@@ -2811,13 +2807,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   A possible fix is to carry the link alongside the print job so the preview can still show it as
   text.
 
-- **Deferred (ruling H): the receipt logs no warning when no legal QR dot size exists.** No logger is
-  reachable from `receipt-print.ts`, and in practice the fallback is unreachable today for any link
-  `validate.ts` accepts (`apps/server/src/qr-link-range.test.ts`).
-
-- **Building the QR raster runs inside the sale-recording transaction** (via `formatReceipt` in
-  `enqueueSaleReceipt`). Left as an owner decision, not applied.
-  [Detail](backlog/printers.md#building-the-qr-raster-runs-inside-the-sale-recording-transaction)
+- **Deferred (ruling H): decide whether to warn when no legal QR dot size exists.** Re-check
+  the valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
 
 - **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
   throwaway cases and not pinned.
@@ -2869,8 +2860,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   open:** No test pins what the two removed addresses, `/manage/receipt` and
   `/manage/location-settings`, open now. The paper-width dropdown names widths only, not printers,
   so two printers of one width at different resolutions cannot be told apart (owner's call). The
-  list of widths comes from the last preview, which the page asks for again only when the receipt
-  text changes or a width is chosen. [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
+  offered widths need a fresh check when printers or devices change while the page stays open.
+  [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
 
 - **The Receipts preview redraws the whole receipt once per highlighted part** — left open by W111
   (#1261, the receipt's top block). W111 took the marks from 2 to 6, so one preview can draw the
