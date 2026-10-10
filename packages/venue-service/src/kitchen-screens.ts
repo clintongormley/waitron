@@ -42,7 +42,6 @@ function refuse(field: Field, reason: Reason): never {
 
 type MutableScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
 
-/** Each live profile's stored kitchen screens, switched-off stations and zones included. */
 export async function readProfileKitchenScreens(
   tx: Transaction,
   cfg: VenueScope,
@@ -83,6 +82,7 @@ async function readStored(
     .where(
       and(
         eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.active, true),
         profileIds === undefined
           ? undefined
           : inArray(deviceProfileKitchenScreenStations.deviceProfileId, [...profileIds]),
@@ -132,10 +132,7 @@ async function liveFormFactor(tx: Transaction, profileId: string): Promise<strin
   return profile.formFactor;
 }
 
-/**
- * Replaces all of the profile's kitchen screens. Each station and zone must be switched on here,
- * unless the profile already stores it for the same screen.
- */
+/** A stored switched-off zone may stay; an emptied station bound needs an explicit replacement. */
 export async function setProfileKitchenScreens(
   tx: Transaction,
   cfg: VenueScope,
@@ -144,13 +141,17 @@ export async function setProfileKitchenScreens(
 ): Promise<NarrowedDevice[]> {
   const formFactor = await liveFormFactor(tx, profileId);
   const stored = (await readStored(tx, cfg, [profileId])).get(profileId) ?? {};
+  for (const kind of KITCHEN_SCREEN_KINDS) {
+    if (stored[kind]?.stationIds?.length === 0 && screens[kind] === undefined)
+      refuse(LIST_FIELDS[kind].stations, "empty");
+  }
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
   const checked: { kind: KitchenScreenKind; scope: KitchenScreenScope }[] = [];
   for (const kind of kinds) {
     const scope = screens[kind]!;
     const fields = LIST_FIELDS[kind];
     if (fields.zones === null && scope.zoneIds !== null) refuse("kitchenScreens", "not_for_screen");
-    const stationIds = await checkedStations(tx, cfg, scope.stationIds, stored[kind], fields);
+    const stationIds = await checkedStations(tx, cfg, scope.stationIds, fields);
     const zoneIds = await checkedZones(tx, cfg, scope.zoneIds, stored[kind], fields);
     checked.push({ kind, scope: { stationIds, zoneIds } });
   }
@@ -196,7 +197,6 @@ async function checkedStations(
   tx: Transaction,
   cfg: VenueScope,
   ids: readonly string[] | null,
-  stored: KitchenScreenScope | undefined,
   fields: { stations: Field },
 ): Promise<string[] | null> {
   if (ids === null) return null;
@@ -208,7 +208,7 @@ async function checkedStations(
     .where(
       and(inArray(kitchenStations.id, unique), eq(kitchenStations.locationId, cfg.locationId)),
     );
-  const usable = found.filter((row) => row.active || stored?.stationIds?.includes(row.id));
+  const usable = found.filter((row) => row.active);
   if (usable.length !== unique.length) refuse(fields.stations, "not_found");
   return unique;
 }
@@ -339,7 +339,6 @@ interface Place {
   readonly active: boolean;
 }
 
-/** The location's stations and zones, switched-off ones included, each in display order. */
 async function placesHere(
   tx: Transaction,
   cfg: VenueScope,
@@ -347,7 +346,7 @@ async function placesHere(
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, cfg.locationId))
+    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
@@ -445,10 +444,7 @@ function lessRemovals(
   return choices;
 }
 
-/**
- * Checks a device's choice against its profile. `stored` is the device's current choice, whose
- * switched-off stations and zones it may keep.
- */
+/** A stored switched-off zone may stay on the same screen. */
 async function checkChoice(
   tx: Transaction,
   cfg: VenueScope,
@@ -934,9 +930,6 @@ export async function assertPassScreenZone(
   }
 }
 
-/** Each active kitchen display running a station screen, with the stations it shows now; with
- *  `withSwitchedOff`, also the switched-off ones its explicit list names. A station a narrowing
- *  took never counts. */
 export async function readStationScreens(
   tx: Transaction,
   cfg: VenueScope,

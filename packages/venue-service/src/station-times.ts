@@ -23,7 +23,13 @@ async function requireStation(tx: Transaction, cfg: VenueScope, stationId: strin
       isDefault: kitchenStations.isDefault,
     })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(kitchenStations.id, stationId),
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.active, true),
+      ),
+    );
   if (station === undefined) throw new AppError("station.not_found", { stationId });
   return station;
 }
@@ -115,7 +121,6 @@ export async function closeStationForToday(
   at: Date,
 ): Promise<void> {
   const station = await requireStation(tx, cfg, stationId);
-  if (!station.active) throw new AppError("route.station_inactive", { stationId });
   if (station.isDefault) throw new AppError("station.always_open", { stationId });
   if (sendsToStationId === stationId)
     throw new AppError("station.destination_invalid", {
@@ -158,7 +163,6 @@ export async function openStationForToday(
   stationId: string,
   at: Date,
 ): Promise<void> {
-  const station = await requireStation(tx, cfg, stationId);
-  if (!station.active) throw new AppError("route.station_inactive", { stationId });
+  await requireStation(tx, cfg, stationId);
   await setStationToday(tx, cfg, stationId, null, at);
 }

@@ -69,9 +69,14 @@ export async function stationServiceTimes(
   const [station] = await tx
     .select({ active: kitchenStations.active, isDefault: kitchenStations.isDefault })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(kitchenStations.id, stationId),
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.active, true),
+      ),
+    );
   if (!station) throw new AppError("station.not_found", { stationId });
-  if (!station.active) return { always: "switched_off", days: [] };
   if (station.isDefault) return { always: "default", days: [] };
 
   // Planning excludes daily station overrides and kept-open extensions.

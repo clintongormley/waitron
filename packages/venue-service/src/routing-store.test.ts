@@ -529,7 +529,7 @@ describe("maker descriptions and the deciding cell", () => {
 });
 
 describe("stored preparation rules", () => {
-  it("routingModel returns active-zone columns in display order, the category tree, active top-level products by main category, explicit cells and referenced inactive station names", async () =>
+  it("routingModel returns active-zone columns in display order, the category tree, active top-level products by main category, explicit cells and active station names", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
@@ -576,20 +576,12 @@ describe("stored preparation rules", () => {
         cells: sortCells(written),
         periods: [],
         defaultStationId: f.bar,
-        stations: [
-          { id: f.bar, name: "Bar", active: true },
-          { id: f.switchedOff, name: "Off", active: false },
-          { id: f.terraceBar, name: "Terrace Bar", active: false },
-        ],
+        stations: [{ id: f.bar, name: "Bar", active: true }],
         stationTimes: model.stationTimes,
         todayEnds: model.todayEnds,
         clockReadable: true,
       });
-      expect(model.stationTimes.map((times) => times.stationId)).toEqual([
-        f.bar,
-        f.switchedOff,
-        f.terraceBar,
-      ]);
+      expect(model.stationTimes.map((times) => times.stationId)).toEqual([f.bar]);
     }));
 
   it("routingModel lists stored No category cells, and keeps one when no product is uncategorised", async () =>
@@ -683,7 +675,7 @@ describe("stored preparation rules", () => {
       expect(sortCells(shown.cells)).toEqual(sortCells(cells));
     }));
 
-  it("names an inactive station still referenced by a cell", async () =>
+  it("omits inactive offerings while keeping stored routing cells", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setCategoryCell(tx, f.cfg, f.beer, { kind: "station", stationId: f.bar });
@@ -700,14 +692,14 @@ describe("stored preparation rules", () => {
         zoneId: null,
         target: { kind: "station", stationId: f.bar },
       });
-      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
-      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
-      expect(model.stationTimes).toContainEqual(
-        expect.objectContaining({
-          stationId: f.switchedOff,
-          status: { open: false, why: "switched_off" },
-        }),
-      );
+      expect(model.stations.some((row) => row.id === f.bar)).toBe(false);
+      expect(model.stations.some((row) => row.id === f.switchedOff)).toBe(false);
+      expect(model.stationTimes.some((row) => row.stationId === f.switchedOff)).toBe(false);
+      expect(
+        (await (await routingAt(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).stations()).get(
+          f.switchedOff,
+        ),
+      ).toMatchObject({ active: false, open: false, why: "switched_off" });
       expect(model.stations).toContainEqual({
         id: f.terraceBar,
         name: "Terrace Bar",
@@ -722,14 +714,14 @@ describe("stored preparation rules", () => {
     });
   });
 
-  it("names the default even when switched off without a cell", async () =>
+  it("omits a deleted default and leaves no default choice", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
       const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       expect(model.defaultStationId).toBeNull();
-      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
-      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
+      expect(model.stations.some((row) => row.id === f.bar)).toBe(false);
+      expect(model.stations.some((row) => row.id === f.switchedOff)).toBe(false);
     }));
 });
 
@@ -962,7 +954,8 @@ describe("resolveMakers", () => {
         byHand: null,
         sendsTo: null,
       });
-      expect((await stationStates(tx, f.cfg, at)).get(f.switchedOff)).toMatchObject({
+      expect((await stationStates(tx, f.cfg, at)).get(f.switchedOff)).toBeUndefined();
+      expect((await (await routingAt(tx, f.cfg, at)).stations()).get(f.switchedOff)).toMatchObject({
         open: false,
         why: "switched_off",
         byHand: null,
@@ -1080,7 +1073,12 @@ describe("resolveMakers", () => {
         sendsTo: null,
         why: "open",
       });
-      expect(states.get(f.switchedOff)).toEqual({
+      expect(states.get(f.switchedOff)).toBeUndefined();
+      expect(
+        (await (await routingAt(tx, f.cfg, new Date("2026-10-02T20:00:00Z"))).stations()).get(
+          f.switchedOff,
+        ),
+      ).toEqual({
         open: false,
         isDefault: false,
         active: false,

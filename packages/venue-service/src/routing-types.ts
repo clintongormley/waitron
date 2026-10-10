@@ -102,7 +102,6 @@ export interface RoutingModel {
   /** Each department's periods in the order its week first runs them; one never placed last. */
   periods: RoutingPeriod[];
   defaultStationId: string | null;
-  /** Includes referenced inactive stations, which the active-station management list omits. */
   stations: { id: string; name: string; active: boolean }[];
 }
 

@@ -981,15 +981,17 @@ export async function stationStates(
   const { moment } = await clockAt(tx, cfg, at);
   const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
   return new Map(
-    stations.map((station) => [
-      station.id,
-      {
-        ...stationTodayState(rules, station.id, moment),
-        isDefault: station.isDefault,
-        active: station.active,
-        name: station.name,
-      },
-    ]),
+    stations
+      .filter((station) => station.active)
+      .map((station) => [
+        station.id,
+        {
+          ...stationTodayState(rules, station.id, moment),
+          isDefault: station.isDefault,
+          active: station.active,
+          name: station.name,
+        },
+      ]),
   );
 }
 
@@ -1107,13 +1109,17 @@ export async function routingModel(
       }),
     periods,
     defaultStationId: rules.defaultStationId,
-    stations: stations.map(({ id, name, active }) => ({ id, name, active })),
-    stationTimes: stations.map(({ id }) => ({
-      stationId: id,
-      status: stationStatus(rules, id, moment),
-      today: rules.timing.get(id)?.today ?? null,
-      closedSendsTo: closedSendsTo(rules, id, moment),
-    })),
+    stations: stations
+      .filter((station) => station.active)
+      .map(({ id, name, active }) => ({ id, name, active })),
+    stationTimes: stations
+      .filter((station) => station.active)
+      .map(({ id }) => ({
+        stationId: id,
+        status: stationStatus(rules, id, moment),
+        today: rules.timing.get(id)?.today ?? null,
+        closedSendsTo: closedSendsTo(rules, id, moment),
+      })),
     todayEnds:
       moment === null ? null : { timeOfDay: cutover, tomorrow: moment.timeOfDay >= cutover },
     clockReadable: moment !== null,

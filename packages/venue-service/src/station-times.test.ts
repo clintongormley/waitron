@@ -112,7 +112,7 @@ describe("station times", () => {
     });
   });
 
-  it("sends active and switched-off stations to the default when closed", async () => {
+  it("offers active stations with a default destination and omits deleted stations", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       const view = async () =>
@@ -126,7 +126,7 @@ describe("station times", () => {
       await ignored(f.upstairs, true);
       await ignored(f.upstairs, true);
       await ignored(f.downstairs, true);
-      await ignored(f.retired, false);
+      expect((await view()).find((s) => s.stationId === f.retired)).toBeUndefined();
     });
   });
 
@@ -335,10 +335,7 @@ describe("station status on named dates and calendar boundaries", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.downstairs));
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
-        open: false,
-        why: "switched_off",
-      });
+      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toBeUndefined();
     });
   });
 
@@ -544,7 +541,7 @@ describe("station today controls", () => {
   it.each([
     ["missing", "station.not_found"],
     ["otherStation", "station.not_found"],
-    ["retired", "route.station_inactive"],
+    ["retired", "station.not_found"],
     ["kitchen", "station.always_open"],
   ] as const)(
     "refuses to close the %s source before validating the destination",
@@ -693,7 +690,7 @@ describe("station today controls", () => {
   it.each([
     ["missing", "station.not_found"],
     ["otherStation", "station.not_found"],
-    ["retired", "route.station_inactive"],
+    ["retired", "station.not_found"],
   ] as const)("refuses to open the %s source", async (key, code) => {
     const f = await db.transaction(fixture);
     const source = key === "missing" ? randomUUID() : f[key];
