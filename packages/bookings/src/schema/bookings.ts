@@ -43,6 +43,8 @@ export const bookings = table(
     contactPhone: label("contact_phone"),
     notes: label("notes"),
     tableId: id("table_id"),
+    // The removed table's name, kept once `table_id` lets go of it.
+    tableLabel: label("table_label"),
     // Set on seat.
     tabId: id("tab_id"),
     status: bookingStatus("status").notNull().default("booked"),

@@ -1,13 +1,14 @@
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { deactivateServiceZone, departments, zoneServicePolicies } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
 import {
   diningTables,
   floorTableShape,
+  floorTodayTables,
   floorZones,
   isStatusColor,
   isUniqueViolation,
@@ -148,20 +149,18 @@ export async function updateTable(
     capacity?: number | null;
     active?: boolean;
   } = {};
+  if (input.zoneId !== undefined) await requireZone(tx, input.zoneId);
+  const current =
+    input.label !== undefined || input.zoneId !== undefined || input.active !== undefined
+      ? await refuseFloorPlanChange(tx, id, input)
+      : undefined;
   if (input.label !== undefined) patch.label = input.label;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.active !== undefined) patch.active = input.active;
-  if (input.zoneId !== undefined) {
-    patch.zoneId = input.zoneId;
-    await requireZone(tx, input.zoneId);
-  }
+  if (input.zoneId !== undefined) patch.zoneId = input.zoneId;
   if (input.active === true || (input.zoneId !== undefined && input.active !== false)) {
-    const [table] = await tx
-      .select({ zoneId: diningTables.zoneId, active: diningTables.active })
-      .from(diningTables)
-      .where(eq(diningTables.id, id));
-    const zoneId = input.zoneId ?? table?.zoneId ?? null;
-    if (table !== undefined && (input.active ?? table.active) && zoneId !== null) {
+    const zoneId = input.zoneId ?? current?.zoneId ?? null;
+    if (current !== undefined && (input.active ?? current.active) && zoneId !== null) {
       await requireZoneInService(tx, id, zoneId);
     }
   }
@@ -185,12 +184,43 @@ export async function updateTable(
   }
 }
 
-/** Deactivate, never hard-delete, because the table has order history. */
+/**
+ * A planned table's name, zone and on/off state belong to its zone's floor plan: a reset would
+ * revert a change made here. Compared by value, because the old floor screen resends the
+ * unchanged name with every capacity edit and the current zone with every placement. Returns the
+ * row it read, so `updateTable` need not read it again.
+ */
+async function refuseFloorPlanChange(
+  tx: Transaction,
+  id: string,
+  input: { label?: string; zoneId?: string; active?: boolean },
+): Promise<{ zoneId: string | null; active: boolean } | undefined> {
+  const [table] = await tx
+    .select({
+      label: diningTables.label,
+      zoneId: diningTables.zoneId,
+      active: diningTables.active,
+      planned: diningTables.planned,
+    })
+    .from(diningTables)
+    .where(eq(diningTables.id, id));
+  if (table === undefined || !table.planned) return table;
+  if (
+    (input.label !== undefined && input.label !== table.label) ||
+    (input.zoneId !== undefined && input.zoneId !== table.zoneId) ||
+    (input.active !== undefined && input.active !== table.active)
+  ) {
+    throw new AppError("table.in_floor_plan", { tableId: id });
+  }
+  return table;
+}
+
 export async function deactivateTable(
   tx: Transaction,
   _cfg: TillConfig,
   id: string,
 ): Promise<void> {
+  await refuseFloorPlanChange(tx, id, { active: false });
   const updated = await tx
     .update(diningTables)
     .set({ active: false })
@@ -227,6 +257,7 @@ export async function setTablePlacement(
     throw new AppError("zone.not_found", { zoneId: p.zoneId });
   }
 
+  await refuseFloorPlanChange(tx, tableId, { zoneId: p.zoneId });
   await requireZoneInService(tx, tableId, p.zoneId);
 
   requirePlacementInt(p.posX, COORD_MAX, "posX");
@@ -301,9 +332,10 @@ export async function updateZone(
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
   if (patch.active !== undefined) set.active = patch.active;
 
+  let reopening = false;
   if (patch.active === true) {
     const [zone] = await tx
-      .select({ departmentActive: departments.active })
+      .select({ active: floorZones.active, departmentActive: departments.active })
       .from(floorZones)
       .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
       .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
@@ -312,6 +344,7 @@ export async function updateZone(
     if (zone.departmentActive !== true) {
       throw new AppError("zone.department_inactive", { zoneId: id });
     }
+    reopening = !zone.active;
   }
 
   if (patch.active === false) {
@@ -351,6 +384,30 @@ export async function updateZone(
   if (updated.length === 0) {
     throw new AppError("zone.not_found", { zoneId: id });
   }
+  if (reopening) await reopenTodaysTables(tx, id);
+}
+
+/**
+ * Disabling a zone switched all its tables off, and staff cannot switch a planned one back on by
+ * hand, while today's reset has already run. So the tables still on today's plan come back as
+ * today's plan has them; one with no today's row is waiting for its removal and stays off.
+ */
+async function reopenTodaysTables(tx: Transaction, zoneId: string): Promise<void> {
+  await tx
+    .update(diningTables)
+    .set({ active: true })
+    .where(
+      and(
+        eq(diningTables.zoneId, zoneId),
+        eq(diningTables.planned, true),
+        exists(
+          tx
+            .select({ id: floorTodayTables.id })
+            .from(floorTodayTables)
+            .where(eq(floorTodayTables.tableId, diningTables.id)),
+        ),
+      ),
+    );
 }
 
 /** Never a hard delete: a `dining_tables.zone_id` may reference it. */

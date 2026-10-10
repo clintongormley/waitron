@@ -49,7 +49,9 @@ import {
  * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
  * `working_orders_enforce_transition` is re-created again by
  * `packages/db/drizzle/0056_placed_order_handover.sql`, which lets a sent, unpaid counter order take
- * its handover stamp.
+ * its handover stamp, and again by `packages/db/drizzle/0128_delivery_table_release.sql`, with
+ * `delivery_table_label` in the presented-bill and handover unchanged-column lists and an exception
+ * letting an order past `open` drop its delivery table and keep its name.
  * `working_order_lines_require_open_parent_update` is re-created again by
  * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
  * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
@@ -856,6 +858,55 @@ describe("working_orders_enforce_transition's handover exception for a placed or
       ),
     ).toBeUndefined();
   });
+});
+
+/** The two columns a finished delivery order's table release changes. */
+const RELEASE_COLUMNS = new Set(["delivery_table_id", "delivery_table_label"]);
+/** Every column of `working_orders` a delivery table's release must leave as it is. */
+const FROZEN_RELEASE_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_orders') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => !RELEASE_COLUMNS.has(name));
+
+/** A settled order delivered to a table, written for one case alone. */
+function finishedDeliveryOrder(id) {
+  connection.exec(workingOrder(id, "open"));
+  connection.exec(
+    `update working_orders set status = 'settled', settled_at = '${STAMP}', ` +
+      `delivery_table_id = 'dt-bystander' where id = '${id}'`,
+  );
+}
+
+const RELEASE = `delivery_table_id = null, delivery_table_label = 'Terrace 5'`;
+
+describe("working_orders_enforce_transition's exception for a released delivery table", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_RELEASE_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "status", "label", "party_id", "revision", "collected_at"]),
+    );
+  });
+
+  it("accepts a finished order letting go of its table and keeping its name", () => {
+    finishedDeliveryOrder("wo-release-alone");
+    expect(
+      refusalFor(connection, `update working_orders set ${RELEASE} where id = 'wo-release-alone'`),
+    ).toBeUndefined();
+  });
+
+  it.each(FROZEN_RELEASE_COLUMNS)(
+    "refuses the release on a finished order when %s changes with it",
+    (column) => {
+      const id = `wo-release-with-${column}`;
+      finishedDeliveryOrder(id);
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set ${RELEASE}, ${column} = 'changed' where id = '${id}'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
 });
 
 describe("working_order_lines_require_open_parent", () => {

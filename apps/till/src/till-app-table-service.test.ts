@@ -75,6 +75,7 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  today: null,
   signals: [],
   party: {
     id: "v-2",

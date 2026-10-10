@@ -1287,7 +1287,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
   way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
-  disabled, and its routing exceptions and watcher zones stay gone (a profile's starting zone is
+  disabled (except a floor-plan zone's tables on today's plan, which come back since A429 slice 1),
+  and its routing exceptions and watcher zones stay gone (a profile's starting zone is
   kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
   it is disabled).
 
@@ -1807,11 +1808,38 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Unassigned Profile cells stay blank; the None profile filter selects them.** No cell-wording
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
-  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
-  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
-  and rearranging.
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slice
+  1 landed, #1493; slices 2–5 open).** Slice 1 is the
+  storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
+  the till works from), kept table names, the till's table-state answer, the dashboard's read and
+  save routes, and the demo seed. Left: the editor, the till's map, today's changes on the till,
+  and removing the old pieces.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
+
+- **The bookings list shows no table for any booking, and a past booking's kept table name
+  (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
+
+- **Should switching a planned zone back on rebuild today's plan from the master?** Today it
+  switches back on the tables still on today's plan, as today's plan has them (`updateZone`,
+  `apps/server/src/tables.ts`); a table waiting for its removal stays off, and master edits wait
+  for the next day's reset. Left open by A429 slice 1 (#1493).
+
+- **A stray row that blocks a table's final delete keeps that table's reset row waiting forever**,
+  and each catch-up quietly re-runs the release (reasoned, not run). Left open by A429 slice 1 (#1493).
+
+- **A walk-up counter sale delivered to a table in a table-service zone may become a table tab whose
+  payment sends nothing to the kitchen** (unverified, read only): `createOpenOrder`
+  (`apps/server/src/working-order.ts`, from #297) replaces the order's zone with the delivery
+  table's. Whether the till can offer such a table was not checked. Left open by A429 slice 1 (#1493).
+
+- **Nothing at boot level tests that the till API receives the table-removal seats** (each enabled
+  module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
+  API's wiring. Left open by A429 slice 1 (#1493).
+
+- **Small floor-plan refusals still missing.** `dining_tables.plan_table_id` has no unique index;
+  a saved join's seats have no upper bound and duplicate joins are accepted; the delivery-release
+  trigger accepts an empty label. Left open by A429 slice 1 (#1493).
+  [Detail](backlog/till.md#small-floor-plan-refusals-still-missing)
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1
   lands).** [Detail](backlog/till.md#a414--device-screens-on-a-phone)
@@ -4665,6 +4693,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   the rule file.
   [Detail](backlog/ci.md#update-the-root-null-exception-rule-after-w54)
 
+- **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES`
+  on this engine, while its snapshot kept it**, and no guard compares a key's delete rule with the
+  migrated database. Observed once by an implementer (five store tests failed with a foreign-key
+  refusal), not independently re-run. Left open by A429 slice 1 (#1493).
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -4987,7 +5020,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
   `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
-  together with the four paths in item 1, which are the same problem in the same file.
+  together with the four paths in item 1, which are the same problem in the same file. Floor plans
+  slice 1 (A429) added more read and written by id alone: `refuseFloorPlanChange`
+  (`apps/server/src/tables.ts`); in `apps/server/src/table-removal.ts`, `tablesTied` and
+  `removeLiveTables`' label read and the deletes after it; `releaseDeliveries`
+  (`apps/server/src/delivery-release.ts`); `followersOf` (`apps/server/src/floor-plan.ts`); and
+  bookings' `release` (`packages/bookings/src/table-removal.ts`), unscoped on purpose so a stray
+  booking under another location cannot block a table's final delete (`25ecf900b`) — scoping it
+  needs that case answered first.
 
 - **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
   are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BOOKINGS_TABLE_REMOVAL } from "@waitron/bookings";
 import type { AlertSource, WaitronModule } from "@waitron/module";
 import {
   ALL_ALERT_CLAIMS,
@@ -6,6 +7,7 @@ import {
   ALL_MODULES,
   VENUE_SERVICE,
   enabledAlertSources,
+  enabledTableRemovals,
 } from "./modules.js";
 
 describe("venue-service assembly", () => {
@@ -18,6 +20,14 @@ describe("classification assembly", () => {
   it("classifies each table exactly once", () => {
     const names = ALL_CLASSIFICATIONS.map((c) => c.table);
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe("table-removal assembly", () => {
+  it("collects the bookings module's seat, and nothing from a module without one", () => {
+    const bookings = ALL_MODULES.find((m) => m.name === "bookings")!;
+    expect(enabledTableRemovals([bookings])).toEqual([BOOKINGS_TABLE_REMOVAL]);
+    expect(enabledTableRemovals([{ ...bookings, tableRemoval: undefined }])).toEqual([]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   id,
   json,
   label,
+  labelList,
   newId,
   nowIso,
   table,
@@ -48,6 +49,7 @@ export const parties = table(
     // or leaves the party (to another party or to the counter) (`0038_main_bill_release.sql`).
     mainBillId: id("main_bill_id").references((): AnySQLiteColumn => workingOrders.id),
     revision: count("revision").notNull().default(0),
+    tableNames: labelList("table_names"),
   },
   (t) => [
     foreignKey({

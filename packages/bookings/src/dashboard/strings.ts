@@ -66,7 +66,10 @@ const es: Record<keyof typeof en, string> = {
 
 export const BOOKINGS_STRINGS = { en, es };
 
-/** Only the `booking.*` codes; `table.*`, `tab.*` and `server.internal` are the app's. */
+/**
+ * The `booking.*` codes and `table.booked`; the other `table.*` codes, `tab.*` and `server.internal`
+ * are the app's.
+ */
 export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "booking.not_found": {
     en: "That booking could not be found",
@@ -91,6 +94,10 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
   "booking.party_invalid": {
     en: "Party size must be a whole number of 1 or more",
     es: "Los comensales deben ser un número entero de 1 o más",
+  },
+  "table.booked": {
+    en: "This table has an upcoming booking. Move the booking first",
+    es: "Esta mesa tiene una reserva próxima. Mueve primero la reserva",
   },
 };
 

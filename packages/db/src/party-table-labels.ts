@@ -70,6 +70,7 @@ interface LabelledOrder {
   id: string;
   partyId: string | null;
   deliveryTableId: string | null;
+  deliveryTableLabel: string | null;
   label: string | null;
 }
 
@@ -77,7 +78,7 @@ interface LabelledOrder {
  * The table each order belongs to, keyed by order. A party bill names the tables
  * {@link billPartyTableLabels} gives its party, together ({@link partyTablesName}), or its own label
  * when that list is empty. Any other order names the table of `locationId` it is delivered to, else
- * its own label; null for an unlabelled walk-up.
+ * the name kept when that table was let go, else its own label; null for an unlabelled walk-up.
  */
 export async function orderTableLabels(
   tx: Transaction,
@@ -109,7 +110,7 @@ export async function orderTableLabels(
       continue;
     }
     const table = order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId);
-    labels.set(order.id, table?.label ?? order.label);
+    labels.set(order.id, table?.label ?? order.deliveryTableLabel ?? order.label);
   }
   return labels;
 }

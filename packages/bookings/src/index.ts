@@ -7,4 +7,5 @@ export { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 export { BOOKINGS_MIGRATIONS } from "./migrations.js";
 export { BOOKINGS_PERMISSIONS } from "./permissions.js";
 export { BOOKINGS_ROUTES } from "./routes.js";
+export { BOOKINGS_TABLE_REMOVAL } from "./table-removal.js";
 export { BOOKINGS_CHANGE_SOURCES } from "./classification.js";

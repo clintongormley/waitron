@@ -284,6 +284,7 @@ it("acceptance sends a selected table in its chosen zone", async () => {
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     party: null,
     signals: [],
   };

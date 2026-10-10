@@ -23,6 +23,7 @@ import {
 } from "./order-groups.js";
 import {
   checkAndBumpParty,
+  closePartyTables,
   leaveForClearing,
   leaveTables,
   memberTables,
@@ -239,6 +240,7 @@ export async function combineParties(
     .update(parties)
     .set({ state: "closed", closedAt: at, closedBy: args.operatorId, mergedIntoPartyId: into })
     .where(eq(parties.id, from));
+  await closePartyTables(tx, from);
 
   return { merged: mergedInto.size > 0, mainBillId: await readMainBill(tx, into), mergedInto };
 }

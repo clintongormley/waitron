@@ -25,6 +25,13 @@ describe("the booking error codes carry their declared params", () => {
     expect(error.params).toEqual({ bookingId });
   });
 
+  it("constructs table.booked with the refused table's id", () => {
+    const tableId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    const error = new AppError("table.booked", { tableId });
+    expect(error.code).toBe("table.booked");
+    expect(error.params).toEqual({ tableId });
+  });
+
   it("constructs booking.table_required with no params (the seat request identifies the booking)", () => {
     const error = new AppError("booking.table_required", {});
     expect(error.code).toBe("booking.table_required");

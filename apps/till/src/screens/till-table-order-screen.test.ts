@@ -3030,6 +3030,7 @@ describe("till-table-order-screen", () => {
       posY: null,
       shape: null,
       rotation: null,
+      today: null,
       signals: [],
       party: null,
       ...over,

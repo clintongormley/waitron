@@ -24,6 +24,7 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     contactPhone: null,
     notes: null,
     tableId: null,
+    tableLabel: null,
     tabId: null,
     status: "booked",
     createdBy: "p1",

@@ -14,6 +14,7 @@ const booking: Booking = {
   contactPhone: "600100200",
   notes: "Ventana",
   tableId: null,
+  tableLabel: null,
   tabId: null,
   status: "booked",
   createdBy: "manager",

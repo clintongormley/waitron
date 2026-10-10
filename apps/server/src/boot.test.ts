@@ -7,6 +7,7 @@ import {
   persons,
   startManagementSession,
 } from "@waitron/identity";
+import { bookings } from "@waitron/bookings";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Hono } from "hono";
 import { randomUUID, X509Certificate } from "node:crypto";
@@ -2306,6 +2307,94 @@ describe("startServer, against a migrated venue directory", () => {
       });
     } finally {
       await server.close();
+    }
+  }, 60_000);
+
+  it("passes the enabled modules' table-removal seats to the management API: a booked table's master cannot be deleted", async () => {
+    const [person] = await sharedDb
+      .insert(persons)
+      .values({ displayName: "Floor plan probe", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const session = await withTransaction(sharedDb, (tx) =>
+      startManagementSession(tx, { personId: person!.id }),
+    );
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: sharedVenueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+    let bookingId: string | undefined;
+    try {
+      const send = async (method: string, path: string, body?: unknown) =>
+        fetch(`http://127.0.0.1:${port}/management-api${path}`, {
+          method,
+          headers: {
+            cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+            "content-type": "application/json",
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+      const department = await send("POST", "/venue-service/departments", {
+        name: "Floor plan boot",
+      });
+      expect(department.status).toBe(201);
+      const departmentId = ((await department.json()) as { id: string }).id;
+      const zone = await send("POST", "/venue-service/zones", {
+        name: "Floor plan boot",
+        departmentId,
+      });
+      expect(zone.status).toBe(201);
+      const zoneId = ((await zone.json()) as { id: string }).id;
+      const table = { key: "a", label: "Boot plan 1", seats: 4, fixed: false, placement: null };
+      expect(
+        (
+          await send("PUT", `/zones/${zoneId}/floor-plan`, {
+            revision: 0,
+            tables: [table],
+            joins: [],
+          })
+        ).status,
+      ).toBe(200);
+      const plan = (await (await send("GET", `/zones/${zoneId}/floor-plan`)).json()) as {
+        tables: { liveTableId: string }[];
+      };
+      const liveTableId = plan.tables[0]!.liveTableId;
+      [{ id: bookingId }] = await sharedDb
+        .insert(bookings)
+        .values({
+          locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+          tableId: liveTableId,
+          bookingDate: "2099-01-01",
+          bookingTime: "20:00",
+          partySize: 2,
+          contactName: "Ana",
+          createdBy: person!.id,
+          status: "booked",
+        })
+        .returning({ id: bookings.id });
+
+      const removal = await send("PUT", `/zones/${zoneId}/floor-plan`, {
+        revision: 1,
+        tables: [],
+        joins: [],
+      });
+      expect(removal.status).toBe(409);
+      expect(await removal.json()).toMatchObject({
+        error: { code: "table.booked", params: { tableId: liveTableId } },
+      });
+    } finally {
+      await server.close();
+      if (bookingId !== undefined) {
+        await sharedDb.delete(bookings).where(eq(bookings.id, bookingId));
+      }
+      await sharedDb.execute(sql`delete from management_sessions where person_id = ${person!.id}`);
+      await sharedDb.execute(sql`delete from persons where id = ${person!.id}`);
     }
   }, 60_000);
 

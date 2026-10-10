@@ -61,6 +61,7 @@ import {
   ALL_MODULE_PERMISSIONS,
   enabledAlertSources,
   enabledFloorAnnotators,
+  enabledTableRemovals,
   VENUE_SERVICE,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
@@ -1421,6 +1422,7 @@ async function bootServer(
       cfg: till,
       // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
+      tableRemovals: enabledTableRemovals(setsToMigrate),
       secureCookies,
       cardProvider,
       pool: cardPool,
@@ -1554,6 +1556,7 @@ async function bootServer(
       venueLocale,
       privacyNoticeUrl: config.privacyNoticeUrl,
       credentialKeyRing: totpKeyRing,
+      tableRemovals: enabledTableRemovals(setsToMigrate),
       // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
       sendAccountEmail: async (message) => {
         // Queue both reads before an answered reset can reach shutdown's drain.

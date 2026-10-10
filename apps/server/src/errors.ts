@@ -316,6 +316,11 @@ declare module "@waitron/shared" {
     "table.inactive": { tableId: string };
     "table.zone_inactive": { tableId: string; zoneId: string };
     /**
+     * A floor-screen or layout write tried to rename, rezone or switch on or off a table its
+     * zone's floor plan owns (`dining_tables.planned`).
+     */
+    "table.in_floor_plan": { tableId: string };
+    /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
@@ -620,6 +625,13 @@ declare module "@waitron/shared" {
     "status.label_taken": { label: string };
     /** No floor-plan zone with this id. */
     "zone.not_found": { zoneId: string };
+    /**
+     * The zone's master plan was saved since the editor's copy was read. `revision` is the plan's
+     * current one; the caller reloads the plan and saves again.
+     */
+    "floor_plan.out_of_date": { zoneId: string; revision: number };
+    /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
+    "floor_plan.invalid": { field: string };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */

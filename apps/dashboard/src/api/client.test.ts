@@ -1536,6 +1536,35 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     });
   });
 
+  it("getFloorPlan GETs the zone's master plan", async () => {
+    const plan = { zoneId: "z1", revision: 0, savedAt: null, tables: [], joins: [] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(plan));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getFloorPlan("z1")).toEqual(plan);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1/floor-plan", {
+      method: "GET",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("saveFloorPlan PUTs the draft and returns the new revision and ids", async () => {
+    const body = {
+      revision: 0,
+      tables: [{ key: "a", label: "1", seats: 4, fixed: false, placement: null }],
+      joins: [],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ revision: 1, ids: { a: "t1" } }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.saveFloorPlan("z1", body)).toEqual({ revision: 1, ids: { a: "t1" } });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1/floor-plan", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  });
+
   it("listTables GETs /management-api/tables with credentials", async () => {
     const rows = [
       {

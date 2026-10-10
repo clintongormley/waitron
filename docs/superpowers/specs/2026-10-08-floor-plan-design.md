@@ -102,7 +102,7 @@ the details one tap away.
 - **New table defaults:** a square of 8 × 8 grid squares, not rotated, movable.
 - **Saving** writes the whole plan, its tables, their positions and its saved joins in one
   transaction. A save made from a copy older than the plan's last save is refused
-  (`floor_plan.changed`) and offers to reload the newer plan; it never overwrites it silently.
+  (`floor_plan.out_of_date`) and offers to reload the newer plan; it never overwrites it silently.
 
 ## 5. The till's map
 

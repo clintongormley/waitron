@@ -76,6 +76,7 @@ const tables: TableState[] = ["t1", "t2"].map((id) => ({
   posY: null,
   shape: null,
   rotation: null,
+  today: null,
 }));
 class ActionsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);

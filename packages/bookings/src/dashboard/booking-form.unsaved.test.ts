@@ -16,6 +16,7 @@ const booked: Booking = {
   contactPhone: null,
   notes: null,
   tableId: null,
+  tableLabel: null,
   tabId: null,
   status: "booked",
   createdBy: "person-one",

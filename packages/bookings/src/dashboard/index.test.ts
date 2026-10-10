@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
-import { createRequest } from "@waitron/dashboard-kit";
+import { codeMessage, createRequest } from "@waitron/dashboard-kit";
 import { BOOKINGS_DASHBOARD } from "./index.js";
 import type { BookingsScreen } from "./bookings-screen.js";
 
@@ -23,6 +23,15 @@ describe("BOOKINGS_DASHBOARD contribution", () => {
   it("declares its strings in both languages, including the nav label", () => {
     expect(BOOKINGS_DASHBOARD.strings.en["nav.bookings"]).toBe("Bookings");
     expect(BOOKINGS_DASHBOARD.strings.es["nav.bookings"]).toBe("Reservas");
+  });
+
+  it("words table.booked, which bookings declares, in both languages", () => {
+    expect(codeMessage("table.booked", "en")).toBe(
+      "This table has an upcoming booking. Move the booking first",
+    );
+    expect(codeMessage("table.booked", "es")).toBe(
+      "Esta mesa tiene una reserva próxima. Mueve primero la reserva",
+    );
   });
 
   it("create() renders a screen wired to the context request (it loads through it on connect)", async () => {

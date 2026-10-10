@@ -126,7 +126,8 @@ import {
   type FireControl,
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
-import type { NarrowedDevice } from "@waitron/module";
+import type { NarrowedDevice, TableRemoval } from "@waitron/module";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import {
   createWatcher,
@@ -199,6 +200,8 @@ export interface ManagementApiDeps {
   credentialKeyRing: TotpKeyRing;
   googleOidc?: GoogleOidcConfig;
   googleCodeExchange?: typeof exchangeGoogleCode;
+  /** Each enabled module's part in removing a live table a floor-plan save deletes. */
+  tableRemovals?: readonly TableRemoval[];
 }
 
 async function deliverAccountAction(
@@ -304,6 +307,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.zone_inactive": 409,
+  "table.in_floor_plan": 409,
+  "table.booked": 409,
+  "floor_plan.out_of_date": 409,
+  "floor_plan.invalid": 400,
   "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
@@ -442,6 +449,62 @@ async function authorizeStationPrinters(
 ): Promise<void> {
   if (printerIds === undefined) return;
   await authorizeManager(tx, { managementSessionId: sessionId, permission: "printer.manage" });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalId(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new AppError("management.request_invalid", { field });
+  return value;
+}
+
+/**
+ * The shape of a floor-plan save; `checkZonePlanSave` checks the values. A null id or live table
+ * is absent, as the read shape sends them.
+ */
+function parseZonePlanSave(body: unknown): ZonePlanSave {
+  const refuse = (field: string): never => {
+    throw new AppError("management.request_invalid", { field });
+  };
+  if (!isRecord(body)) refuse("body");
+  const { revision, tables, joins } = body as Record<string, unknown>;
+  if (typeof revision !== "number") refuse("revision");
+  if (!Array.isArray(tables)) refuse("tables");
+  if (!Array.isArray(joins)) refuse("joins");
+  return {
+    revision: revision as number,
+    tables: (tables as unknown[]).map((table, index) => {
+      const at = `tables.${index}`;
+      if (!isRecord(table)) return refuse(at);
+      if (typeof table.key !== "string") refuse(`${at}.key`);
+      if (typeof table.label !== "string") refuse(`${at}.label`);
+      if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
+      if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
+      const id = optionalId(table.id, `${at}.id`);
+      const liveTableId = optionalId(table.liveTableId, `${at}.liveTableId`);
+      return {
+        ...(id === undefined ? {} : { id }),
+        ...(liveTableId === undefined ? {} : { liveTableId }),
+        key: table.key as string,
+        label: table.label as string,
+        seats: table.seats as number | null,
+        fixed: table.fixed as boolean,
+        placement: table.placement as ZonePlanSave["tables"][number]["placement"],
+      };
+    }),
+    joins: (joins as unknown[]).map((join, index) => {
+      const at = `joins.${index}`;
+      if (!isRecord(join)) return refuse(at);
+      const { tableKeys } = join;
+      if (!Array.isArray(tableKeys) || tableKeys.some((key) => typeof key !== "string")) {
+        refuse(`${at}.tableKeys`);
+      }
+      return { seats: join.seats as number, tableKeys: tableKeys as string[] };
+    }),
+  };
 }
 
 /** Runs `fn` in one transaction after confirming the session holds `venue.configure`. */
@@ -1744,6 +1807,29 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, sessionId, (tx) => deactivateZone(tx, cfg, id));
       return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/zones/:id/floor-plan", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireZoneId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => readZonePlan(tx, cfg, id)));
+    }),
+  );
+
+  app.put("/management-api/zones/:id/floor-plan", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireZoneId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const input = parseZonePlanSave(await readJsonBody<unknown>(c));
+      const now = new Date();
+      const saved = await withVenueAuth(deps, sessionId, (tx) =>
+        saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, input, now),
+      );
+      return c.json(saved);
     }),
   );
 

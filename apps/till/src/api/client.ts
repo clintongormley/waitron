@@ -1824,6 +1824,26 @@ export interface MoveBillResult {
   merged: boolean;
 }
 
+/** Whole grid squares; `x` and `y` name the unrotated table's top-left corner. */
+export interface TodayPlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  shape: "rect" | "round";
+  rotation: number;
+}
+
+export interface TableToday {
+  /** `null` for an unplaced spare, or a table taken off. */
+  placement: TodayPlacement | null;
+  seats: number | null;
+  fixed: boolean;
+  takenOff: boolean;
+  joinId: string | null;
+  joinSeats: number | null;
+}
+
 /**
  * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
  * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
@@ -1872,6 +1892,8 @@ export interface TableState {
   posY: number | null;
   shape: TableShape | null;
   rotation: number | null;
+  /** `null` when the table has no today's row. */
+  today: TableToday | null;
   party: TableParty | null;
   /** What wants attention at the table; several at once. */
   signals: TableSignal[];

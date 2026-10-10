@@ -518,6 +518,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table's zone or its department is disabled. Enable them, or move the table to another zone",
     es: "La zona de esa mesa o su departamento están deshabilitados. Habilítalos o pasa la mesa a otra zona",
   },
+  "table.in_floor_plan": {
+    en: "This table is in a floor plan; change it in the floor plan editor",
+    es: "Esta mesa está en un plano de sala; cámbiala en el editor del plano",
+  },
+  "floor_plan.out_of_date": {
+    en: "Someone else changed this floor plan. Reload it and try again",
+    es: "Otra persona ha cambiado este plano de sala. Vuelve a cargarlo e inténtalo de nuevo",
+  },
+  "floor_plan.invalid": {
+    en: "Check the floor plan's tables and try again",
+    es: "Revisa las mesas del plano de sala y vuelve a intentarlo",
+  },
   "tab.already_open": {
     en: "Another party is already seated at this table. Check the floor and try again",
     es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",

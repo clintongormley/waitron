@@ -37,6 +37,7 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     signals: [],
     party: null,
     ...over,

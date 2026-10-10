@@ -96,7 +96,10 @@ columns a served mark or a group move must leave unchanged. `0053_line_sent_afte
 re-creates it again, letting a presented (`placed`) or paid (`settled`) bill's line take a first `sent_at` with every
 other column unchanged. `0056_placed_order_handover.sql` re-creates
 `working_orders_enforce_transition`, letting a sent, unpaid (`placed`) order take its handover stamp
-(`collected_at`, from empty) with every other column unchanged. No migration
+(`collected_at`, from empty) with every other column unchanged. `0128_delivery_table_release.sql`
+re-creates it again, with `delivery_table_label` in the presented-bill and handover unchanged-column
+lists, letting an order past `open` drop its delivery table (`delivery_table_id`) and keep its name
+in `delivery_table_label` with every other column unchanged. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 

@@ -33,6 +33,7 @@ import {
   BOOKINGS_CLASSIFICATION,
   BOOKINGS_CHANGE_SOURCES,
   BOOKINGS_FLOOR_ANNOTATIONS,
+  BOOKINGS_TABLE_REMOVAL,
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
@@ -263,6 +264,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,
     floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,
+    tableRemoval: BOOKINGS_TABLE_REMOVAL,
     configurationTransfer: { kind: "none" },
   },
   {

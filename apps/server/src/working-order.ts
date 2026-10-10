@@ -20,6 +20,8 @@ import type {
   SaleLineClassification,
   TableSignal,
 } from "@waitron/shared";
+import type { Placement } from "./floor-reset-plan.js";
+import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
@@ -73,6 +75,9 @@ import {
   billPaymentRefunds,
   billPayments,
   diningTables,
+  floorTodayJoins,
+  floorTodayJoinTables,
+  floorTodayTables,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -151,6 +156,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readMadeHereStations } from "./made-here.js";
+import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { readUnsentDrafts } from "./order-drafts.js";
 import { readBillSignals, readPartySignals, tableSignals } from "./table-signals.js";
@@ -6774,6 +6780,7 @@ export async function readPassBoard(
       groupCreatedAt: orderGroups.createdAt,
       // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       label: workingOrders.label,
     })
     .from(ticketItems)
@@ -6812,6 +6819,7 @@ export async function readPassBoard(
       id: row.orderId,
       partyId: row.partyId,
       deliveryTableId: row.deliveryTableId,
+      deliveryTableLabel: row.deliveryTableLabel,
       label: row.label,
     })),
   );
@@ -6965,6 +6973,16 @@ export function tableCondition(row: {
   return row.needsClearingSince === null ? "free" : "needs_clearing";
 }
 
+export interface TableToday {
+  /** `null` for an unplaced spare, or a table taken off. */
+  placement: Placement | null;
+  seats: number | null;
+  fixed: boolean;
+  takenOff: boolean;
+  joinId: string | null;
+  joinSeats: number | null;
+}
+
 /** One row of the occupancy read-model. */
 export interface TableState {
   id: string;
@@ -6999,6 +7017,8 @@ export interface TableState {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
+  /** `null` when the table has no today's row. */
+  today: TableToday | null;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
   party: TableParty | null;
@@ -7125,19 +7145,11 @@ export async function listTablesWithState(
       where pt.left_at is null
       group by pt.table_id
     ) tab on tab.table_id = dt.id
-    -- The delivery count, grouped the same way: the LATERAL form's correlation was
-    -- d.delivery_table_id = dt.id, so it becomes the join key. A NULL delivery_table_id groups
-    -- to a row nothing joins to, which is the LATERAL form's no-rows answer.
     left join (
-      select d.delivery_table_id, cast(count(*) as int) as pending
-      from working_orders d
-      where d.status <> 'abandoned' and d.collected_at is null
-        and exists (
-          select 1 from ticket_items ti
-          where ti.working_order_id = d.id
-            and ti.made_here = 0
-        )
-      group by d.delivery_table_id
+      select delivery_table_id, cast(count(*) as int) as pending
+      from ${workingOrders}
+      where ${foodOnItsWay()}
+      group by delivery_table_id
     ) del on del.delivery_table_id = dt.id
     left join table_service_statuses tss
       on tss.id = dt.status_id
@@ -7145,6 +7157,7 @@ export async function listTablesWithState(
     order by dt.label
   `);
 
+  const today = await readTodayTables(tx, loc);
   const { seated, facts } = await readSeatedParties(tx, loc);
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
@@ -7189,6 +7202,7 @@ export async function listTablesWithState(
       posY: r.pos_y,
       shape: r.shape,
       rotation: r.rotation,
+      today: today.get(r.id) ?? null,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
       signals: tableSignals(
@@ -7216,6 +7230,46 @@ export async function listTablesWithState(
     }
   }
   return states;
+}
+
+/** Today's plan for each of the location's tables that has a today's row, keyed by table. */
+async function readTodayTables(
+  tx: Transaction,
+  locationId: string,
+): Promise<Map<string, TableToday>> {
+  const rows = await tx
+    .select({
+      tableId: floorTodayTables.tableId,
+      seats: floorTodayTables.seats,
+      fixed: floorTodayTables.fixed,
+      takenOff: floorTodayTables.takenOff,
+      x: floorTodayTables.x,
+      y: floorTodayTables.y,
+      width: floorTodayTables.width,
+      height: floorTodayTables.height,
+      shape: floorTodayTables.shape,
+      rotation: floorTodayTables.rotation,
+      joinId: floorTodayJoins.id,
+      joinSeats: floorTodayJoins.seats,
+    })
+    .from(floorTodayTables)
+    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
+    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
+    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .where(eq(diningTables.locationId, locationId));
+  return new Map(
+    rows.map((row) => [
+      row.tableId,
+      {
+        placement: row.takenOff ? null : placementOf(row),
+        seats: row.seats,
+        fixed: row.fixed,
+        takenOff: row.takenOff,
+        joinId: row.joinId,
+        joinSeats: row.joinSeats,
+      },
+    ]),
+  );
 }
 
 /**

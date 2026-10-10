@@ -27,6 +27,7 @@ export async function readReceiptOrder(
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
       deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       partyId: parties.id,
       partyName: parties.name,
       saleId: sales.id,
@@ -54,6 +55,7 @@ export async function readReceiptOrder(
       id: workingOrderId,
       partyId: null,
       deliveryTableId: order.deliveryTableId,
+      deliveryTableLabel: order.deliveryTableLabel,
       label: order.label,
     },
   ]);

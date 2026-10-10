@@ -68,6 +68,27 @@ export interface FloorAnnotator {
   ): Promise<Map<string, { reservedTime: string | null }>>;
 }
 
+/** A module's part in removing a live table. */
+export interface TableRemoval {
+  /**
+   * The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry.
+   * A throw is not a refusal: it fails the caller, the till's floor read included.
+   */
+  refuse(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    tableIds: readonly string[],
+    now: Date,
+  ): Promise<ReadonlyMap<string, AppError>>;
+  /** Lets go of every row naming the table, keeping `label` as text where history needs it. */
+  release(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    tableId: string,
+    label: string,
+  ): Promise<void>;
+}
+
 export type ServiceMode = "table_tab" | "prepay" | "ticket_then_pay";
 
 export interface OrderServiceContext {
@@ -1115,6 +1136,7 @@ export interface WaitronModule {
   readonly fiscal?: FiscalContribution;
   readonly routes?: ModuleRoutes;
   readonly floorAnnotations?: FloorAnnotator;
+  readonly tableRemoval?: TableRemoval;
   readonly venueService?: VenueServiceContribution;
   /** Incident codes this module claims for the dashboard alerts, and its ongoing checks. Claims are
    * read from every module; sources only from enabled modules, since a disabled module's tables are

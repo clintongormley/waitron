@@ -384,6 +384,7 @@ async function readOrderHeaders(
       orderNumber: workingOrders.orderNumber,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       label: workingOrders.label,
     })
     .from(workingOrders)
@@ -1351,6 +1352,7 @@ export async function readPartiesSentWork(
       orderNumber: workingOrders.orderNumber,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       label: workingOrders.label,
       ticketItemId: ticketItems.id,
     })

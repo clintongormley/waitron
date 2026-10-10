@@ -324,6 +324,7 @@ describe("till-table-order-screen: the bill request", () => {
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     party,
     signals: requested ? [{ kind: "bill_requested", requestedAt: "2026-09-30T20:00:00.000Z" }] : [],
   });

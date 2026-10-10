@@ -158,6 +158,7 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     signals: [],
     party: tableParty,
   };

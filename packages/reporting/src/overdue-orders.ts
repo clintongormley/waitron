@@ -55,6 +55,7 @@ export async function computeOverdueOrders(
       forgottenAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.forgottenAfterMinutes}, ${kitchenTimingDefaults.forgottenAfterMinutes})`,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       label: workingOrders.label,
     })
     .from(ticketItems)
@@ -87,6 +88,7 @@ export async function computeOverdueOrders(
     orderNumber: number;
     partyId: string | null;
     deliveryTableId: string | null;
+    deliveryTableLabel: string | null;
     label: string | null;
     lines: Line[];
   }
@@ -107,6 +109,7 @@ export async function computeOverdueOrders(
         orderNumber: row.orderNumber,
         partyId: row.partyId,
         deliveryTableId: row.deliveryTableId,
+        deliveryTableLabel: row.deliveryTableLabel,
         label: row.label,
         lines: [],
       };
