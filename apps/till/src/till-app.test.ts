@@ -11078,8 +11078,8 @@ describe("till-app", () => {
       await toCounterAs(el, "en-GB");
       expect(currentLocale()).toBe("en-GB");
       const logout = shell(el)!.shadowRoot!.querySelector(".logout")!;
-      expect(logout.textContent).toContain(t("action.logout", "en-GB")); // "Log out"
-      expect(logout.textContent).not.toContain(t("action.logout", "es-ES")); // not "Cerrar sesión"
+      expect(logout.textContent).toContain(t("shell.logout", "en-GB")); // "Log out"
+      expect(logout.textContent).not.toContain(t("shell.logout", "es-ES")); // not "Salir"
     });
 
     it("boot does NOT clobber an operator locale applied while getTill was still in flight (slow-link race)", async () => {

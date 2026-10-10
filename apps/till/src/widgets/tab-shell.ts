@@ -492,7 +492,7 @@ export class TillTabShell extends LitElement {
         variant=${variant}
         align=${variant === "ghost" ? "start" : nothing}
         @click=${() => this.#emit("logout")}
-        >${t("action.logout")}</wt-button
+        >${t("shell.logout")}</wt-button
       >`;
   }
 

@@ -1011,6 +1011,61 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "Log out", "Log out"],
+    ["es-ES", "Salir", "Cerrar sesión"],
+  ] as const)(
+    "labels Log out %s's short word, on the bar and inside More, keeping the counter header's full name",
+    async (locale, label, headerName) => {
+      await withLocale(locale, async () => {
+        expect(t("action.logout")).toBe(headerName);
+        await atViewport(ROOMY_WIDTH, async () => {
+          const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          expect(menuOf(el)).toBeNull();
+          const onBar = el.shadowRoot!.querySelector<HTMLElement>("header .session > .logout")!;
+          expect(onBar.textContent!.trim()).toBe(label);
+          await expect
+            .element(page.getByRole("button", { name: label, exact: true }))
+            .toBeVisible();
+          host.remove();
+        });
+        await atViewport(390, async () => {
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          const inMenu = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
+          expect(inMenu.textContent!.trim()).toBe(label);
+          await userEvent.click(triggerOf(el));
+          await expect
+            .element(page.getByRole("button", { name: label, exact: true }))
+            .toBeVisible();
+        });
+      });
+    },
+  );
+
+  it("keeps Find a bill, Pass and Kitchen on the demo counter's Spanish bar at 800 wide when its measured width fits there", async () => {
+    await withLocale("es-ES", async () => {
+      const { fits, tight } = await serviceWidths(demoCounter);
+      console.info(
+        `The demo counter's Spanish bar keeps Find a bill, Pass and Kitchen from ${fits} px.`,
+      );
+      await atViewport(800, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", demoCounter);
+        await settle(el);
+        expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
+        const moved = inMore(el);
+        if (800 >= fits) {
+          for (const key of ["find-bill", "expo", "station"]) {
+            expect(moved, `fits from ${fits}`).not.toContain(key);
+          }
+        }
+        if (800 <= tight) expect(moved, `fits from ${fits}`).toContain("station");
+        expectOneRow(el);
+      });
+    });
+  });
+
   it("keeps More in the bar's order, showing only the items that left", async () => {
     await atViewport(1024, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
