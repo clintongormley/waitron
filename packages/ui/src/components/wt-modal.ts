@@ -7,11 +7,7 @@ export class WtModal extends WtDialog {
   /** Unset, or any other value, is wide. */
   @property({ reflect: true }) size?: "compact" | "standard" | "wide";
 
-  override firstUpdated(): void {
-    super.firstUpdated();
-    // A text-only modal still needs a keyboard target inside its scrolling body.
-    this.renderRoot.querySelector<HTMLElement>(".body")!.tabIndex = 0;
-  }
+  protected override readonly bodyTabStop = "always";
 
   static override styles = [
     ...WtDialog.styles,

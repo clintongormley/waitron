@@ -168,7 +168,13 @@ export class WtDialog extends LitElement {
     if (reason === "saved" || reason === "security") this.open = false;
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.observeBody();
+  }
+
   override disconnectedCallback(): void {
+    this.bodyResize.disconnect();
     this.openingGeneration++;
     this.pendingClose = undefined;
     super.disconnectedCallback();
@@ -234,6 +240,7 @@ export class WtDialog extends LitElement {
 
   override firstUpdated(): void {
     this.updateHasFooter();
+    this.observeBody();
   }
 
   override updated(changed: Map<string, unknown>): void {
@@ -242,10 +249,10 @@ export class WtDialog extends LitElement {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
         this.dialog.showModal();
-        // Chromium makes an overflowing body a tab stop by itself, slotted field or not, and
-        // opening focus then lands on it ahead of the field. A subclass that sets the body's
-        // tabindex itself chose that.
-        if (this.shadowRoot!.activeElement === this.bodyEl && !this.bodyEl.hasAttribute("tabindex"))
+        this.syncBodyTabStop();
+        // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
+        // it; a body with something to focus hands it on.
+        if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
           this.focusFirstContent();
       }
       if (!this.open && this.dialog.open) {
@@ -260,6 +267,7 @@ export class WtDialog extends LitElement {
     if (changed.has("open") || (changed.has("footerMessage") && !this.editing)) {
       this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
+    this.syncBodyTabStop();
   }
 
   private onClose(): void {
@@ -294,6 +302,29 @@ export class WtDialog extends LitElement {
       if (!skip.has(at) && isTabbable(at) && this.takesFocus(at)) return;
       skip.add(at);
     }
+  }
+
+  /** Whether the body is in the tab order: "overflow" only while it has more than it shows, so a
+   * body of text alone can still be scrolled from the keyboard. */
+  protected readonly bodyTabStop: "always" | "overflow" = "overflow";
+
+  private readonly bodyResize = new ResizeObserver(() => this.syncBodyTabStop());
+
+  /** The body, and what is slotted into it: once the body reaches the dialog's height limit it
+   * stops resizing, while its content still grows. */
+  private observeBody(): void {
+    this.bodyResize.disconnect();
+    this.bodyResize.observe(this.bodyEl);
+    for (const each of this.bodySlot.assignedElements({ flatten: true })) {
+      this.bodyResize.observe(each);
+    }
+  }
+
+  private syncBodyTabStop(): void {
+    const body = this.bodyEl;
+    const overflows = this.dialog.open && body.scrollHeight > body.clientHeight;
+    if (this.bodyTabStop === "always" || overflows) body.tabIndex = 0;
+    else body.removeAttribute("tabindex");
   }
 
   private focusFirstContent(): void {
@@ -379,7 +410,7 @@ export class WtDialog extends LitElement {
               ? html`<p class="description" id=${this.descriptionId}>${this.description}</p>`
               : nothing
           }
-          <slot @wt-form-error=${this.onBodyMessage}></slot>
+          <slot @wt-form-error=${this.onBodyMessage} @slotchange=${this.observeBody}></slot>
           ${formMessage(this.footerMessage)}
         </div>
         <div class="footer">

@@ -609,13 +609,19 @@ test.each([
       `${field}<div style="height: 1800px">Long order</div>`,
     );
     if (field) expect(deepActiveElement(), "opening focus").toBeInstanceOf(HTMLInputElement);
+    else expect(deepActiveElement(), "opening focus").toBe(body);
     expectFooterInView(dialog, cancel, save);
     expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-    const before = [cancel.getBoundingClientRect(), save.getBoundingClientRect()];
+    const placed = () =>
+      [cancel, save].flatMap((button) => {
+        const box = button.getBoundingClientRect();
+        return [box.top, box.bottom, box.left, box.right];
+      });
+    const before = placed();
     body.scrollTop = body.scrollHeight;
     await frame();
     expect(body.scrollTop).toBeGreaterThan(0);
-    expect([cancel.getBoundingClientRect(), save.getBoundingClientRect()]).toEqual(before);
+    expect(placed()).toEqual(before);
     expect(dialog.scrollHeight).toBe(dialog.clientHeight);
   },
 );
@@ -651,6 +657,7 @@ test("keeps a short dialog fitted to its content", async () => {
 test("keeps the footer in view when the body outgrows the window after opening", async () => {
   const { el, dialog, body, cancel, save } = await openAtPhoneSize("<p>Loading lines</p>");
   expect(body.scrollHeight).toBe(body.clientHeight);
+  expect(body.tabIndex, "a short body's tabIndex").toBe(-1);
   expect(await bodyIsTabStop(el, cancel), "a short body is a tab stop").toBe(false);
   const rows = Array.from({ length: 40 }, (_, index) => {
     const row = document.createElement("div");
@@ -662,11 +669,13 @@ test("keeps the footer in view when the body outgrows the window after opening",
   await frame();
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expectFooterInView(dialog, cancel, save);
+  await vi.waitFor(() => expect(body.tabIndex, "an overflowing body's tabIndex").toBe(0));
   expect(await bodyIsTabStop(el, cancel), "an overflowing body is a tab stop").toBe(true);
 
   for (const row of rows) row.remove();
   await frame();
   expect(body.scrollHeight).toBe(body.clientHeight);
+  await vi.waitFor(() => expect(body.tabIndex, "a body short again: tabIndex").toBe(-1));
   expect(await bodyIsTabStop(el, cancel), "a body short again is a tab stop").toBe(false);
 });
 

@@ -57,10 +57,12 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     ["focusable content", '<label>Note <input name="note" /></label>'],
     ["text only", ""],
   ])("open, with a body taller than the window, holding %s", async (_, field) => {
+    // Text past the visible part of the body, which is what axe's scrollable-region rule looks for.
+    const lines = Array.from({ length: 80 }, (_, index) => `<p>Order line ${index + 1}</p>`);
     const el = (await mountThemed(
       `<wt-dialog heading="Edit order">
         ${field}
-        <p style="height: 1800px">Order lines</p>
+        ${lines.join("")}
         <wt-form-actions slot="footer">
           <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
           <wt-button>Save</wt-button>
