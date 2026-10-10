@@ -1826,7 +1826,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   save routes, and the demo seed. Slice 2 is the dashboard editor. Slice 3 is the till's map: a
   planned zone drawn on a new map with status colours and dots, a details sheet, the seat dialog,
   a 15-second re-read, and the order screen's status pin and notice. Left: today's
-  changes on the till, and removing the old pieces.
+  changes on the till, and removing the old pieces. The map follows the zone's proportions;
+  Bill requested chips share its purple, and Guests has no placeholder.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
 
 - **A466 — floor plan editor follow-ups (2026-10-10).** Small gaps the dashboard floor plan editor
