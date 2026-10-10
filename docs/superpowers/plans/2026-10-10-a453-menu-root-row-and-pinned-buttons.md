@@ -1,5 +1,10 @@
 # A453 — The menu Structure tab gets a root row; long windows keep their buttons in view
 
+> **2026-10-10 — A462 supersedes the always-open Products root described here.**
+> Products now has a root chevron and cascading closure; see
+> [A462](2026-10-10-a462-table-toolbars.md). Structure's corresponding change is tracked in A462 Task 5.
+
+
 Queue item A453 (lane B), owner 2026-10-09 ~22:00. Two parts:
 
 1. **Root row.** The Structure tab (`apps/dashboard/src/widgets/menu-structure-table.ts`, hosted by

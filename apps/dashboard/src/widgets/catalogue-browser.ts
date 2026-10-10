@@ -257,10 +257,16 @@ export class CatalogueBrowser extends LitElement {
     this.#list()?.focusRowMenu(categoryId);
   }
 
-  /** The address follows the category a person opens; closing it, or one above it, names its parent. */
-  #categoryToggled(event: CustomEvent<{ categoryId: string; open: boolean }>): void {
+  #categoryToggled(event: CustomEvent<{ categoryId: string | null; open: boolean }>): void {
     event.stopPropagation();
     const { categoryId, open } = event.detail;
+    if (categoryId === null) {
+      if (!open && this.categoryId !== null) {
+        this.#revealed = null;
+        this.#emit("open-category", { categoryId: null });
+      }
+      return;
+    }
     if (open) {
       this.#revealed = categoryId;
       this.#emit("open-category", { categoryId });

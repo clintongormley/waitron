@@ -3696,3 +3696,56 @@ describe("archived product entry", () => {
     ).toBe(false);
   });
 });
+
+it("A462 Products root closure clears category URL through native tree events", async () => {
+  const previousUrl = location.href;
+  onTestFinished(() => history.replaceState(null, "", previousUrl));
+  history.replaceState(null, "", "/manage/catalogue");
+  localStorage.clear();
+  sessionStorage.clear();
+  const api = stubApi({
+    listProducts: vi
+      .fn()
+      .mockResolvedValue([{ ...products[0]!, primaryCategoryId: "b", categoryId: "b" }]),
+    listCategories: vi.fn().mockResolvedValue([
+      { id: "d", name: "Drinks", parentId: null, color: null },
+      { id: "b", name: "Beer", parentId: "d", color: null },
+    ]),
+  });
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await vi.waitFor(() => expect(list(el)?.categories).toHaveLength(2));
+  const table = await productTable(el);
+  const root = table.shadowRoot!;
+  for (const key of ["folder:d", "folder:b"]) {
+    root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!.click();
+    await el.updateComplete;
+    await productTable(el);
+  }
+  expect(list(el).categoryId).toBe("b");
+  expect(location.pathname).toBe("/manage/catalogue/category/b");
+  const search = list(el).shadowRoot!.querySelector('[name="catalogue-search"]')!;
+  emit(search, "wt-change", { value: "Beer" });
+  await productTable(el);
+  for (let i = 0; i < 2; i++) {
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="folder:b"] .row-activate')!.click();
+    await productTable(el);
+    expect(list(el).categoryId).toBe("b");
+    expect(location.pathname).toBe("/manage/catalogue/category/b");
+  }
+  emit(search, "wt-change", { value: "" });
+  await productTable(el);
+  const sent: unknown[] = [];
+  list(el).addEventListener("open-category", (event) => sent.push((event as CustomEvent).detail));
+  const toggle = root.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle');
+  expect(toggle).not.toBeNull();
+  toggle!.click();
+  await el.updateComplete;
+  await productTable(el);
+  expect(sent).toEqual([{ categoryId: null }]);
+  expect(list(el).categoryId).toBeNull();
+  expect(location.pathname).toBe("/manage/catalogue");
+  expect(root.querySelectorAll("tr[data-row-key]")).toHaveLength(1);
+  expect(editor(el).open).toBe(false);
+  expect(api.createProductEditor).not.toHaveBeenCalled();
+  expect(api.updateProductEditor).not.toHaveBeenCalled();
+});

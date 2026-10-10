@@ -1590,7 +1590,10 @@ selecting. Pressing it again clears the selection and leaves the mode.
 
 While selecting, show a separate bar directly below Search, above the table body. Put the live
 selected count, Move to…, Disable or Delete as the selection allows, and Done in that bar. Let
-its controls wrap at phone width. Keep the table's Expand all and Customise in the search toolbar.
+its controls wrap at phone width. Keep Customise after Search in the toolbar.
+The All products row has a named chevron: closing it closes every category and product branch;
+opening it shows only its own level. Products has no Expand all button. A saved closed root stays
+closed on reload; an explicit category or product reveal opens only its ancestor path.
 
 Products leaves the mode by **Done** rather than Cancel, the one exception to the rule above. A drag
 made in the mode is saved as soon as it is dropped (`#drop`,

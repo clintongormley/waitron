@@ -3781,7 +3781,7 @@ it("passes whether products can be added to every menu", async () => {
   ).toBe(false);
 });
 
-it("A462 Customise follows Filters, Select, Expand all and search on one toolbar line, in that order", async () => {
+it("A462 Customise follows Filters, Select and search on one toolbar line, in that order", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3798,7 +3798,6 @@ it("A462 Customise follows Filters, Select, Expand all and search on one toolbar
     const boxes = [
       table.shadowRoot!.querySelector(".filters-trigger")!,
       select,
-      table.shadowRoot!.querySelector(".expand-all")!,
       search,
       table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
@@ -3956,7 +3955,7 @@ it("shows each filter's whole choice in the panel beside the rows, in Spanish", 
   }
 });
 
-it("at phone width puts Filters, Select and Expand all above search and Customise", async () => {
+it("at phone width puts Filters and Select above search and Customise", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3967,7 +3966,6 @@ it("at phone width puts Filters, Select and Expand all above search and Customis
     const line = [
       table.shadowRoot!.querySelector(".filters-trigger")!,
       el.shadowRoot!.querySelector('[data-test="select"]')!,
-      table.shadowRoot!.querySelector(".expand-all")!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < line.length; index++) {
       expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
@@ -3985,7 +3983,7 @@ it("at phone width puts Filters, Select and Expand all above search and Customis
     expect(toolbar.bottom).toBeCloseTo(Math.max(search.bottom, chooser.bottom), 0);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.focus();
     await userEvent.tab();
-    expect(table.shadowRoot!.activeElement).toBe(table.shadowRoot!.querySelector(".expand-all"));
+    expect(el.shadowRoot!.activeElement?.getAttribute("name")).toBe("catalogue-search");
   } finally {
     await page.viewport(width, height);
   }
@@ -4000,7 +3998,7 @@ it.each([
   [600, "es-ES"],
   [640, "es-ES"],
 ])(
-  "in a wide window, a list %ipx wide puts three buttons before the search and Customise line (%s)",
+  "in a wide window, a list %ipx wide puts Filters and Select before the search and Customise line (%s)",
   async (listWidth, locale) => {
     const { page } = await import("vitest/browser");
     const width = window.innerWidth,
@@ -4015,7 +4013,6 @@ it.each([
       const line = [
         table.shadowRoot!.querySelector(".filters-trigger")!,
         el.shadowRoot!.querySelector('[data-test="select"]')!,
-        table.shadowRoot!.querySelector(".expand-all")!,
       ].map((element) => element.getBoundingClientRect());
       for (let index = 1; index < line.length; index++) {
         expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
@@ -4039,7 +4036,7 @@ it.each([
   },
 );
 
-it("A462 Customise follows Filters, Select, Expand all and search on one line in a Spanish list 660px wide", async () => {
+it("A462 Customise follows Filters, Select and search on one line in a Spanish list 660px wide", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -4052,7 +4049,6 @@ it("A462 Customise follows Filters, Select, Expand all and search on one line in
     const boxes = [
       table.shadowRoot!.querySelector(".filters-trigger")!,
       el.shadowRoot!.querySelector('[data-test="select"]')!,
-      table.shadowRoot!.querySelector(".expand-all")!,
       el.shadowRoot!.querySelector('[name="catalogue-search"]')!,
       table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
@@ -4154,13 +4150,14 @@ it("a click on the Select tooltip, where it lies over the sticky headings, leave
   }
 });
 
-it("Expand all opens every category, and reads Collapse all until one is closed", async () => {
-  const el = await mountBrowser();
+it("A462 Products root closes all categories and reopening exposes only its own level", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
   const table = await tableOf(el);
-  const button = () => table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
-  expect(button().textContent!.trim()).toBe("Expand all");
-  button().click();
-  await table.updateComplete;
+  const button = () =>
+    table.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!;
+  expect(table.shadowRoot!.querySelector(".expand-all")).toBeNull();
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
   expect(await rowKeys(el)).toEqual([
     "folder:d",
     "folder:b",
@@ -4169,12 +4166,17 @@ it("Expand all opens every category, and reads Collapse all until one is closed"
     "burger",
     "bread",
   ]);
-  expect(button().textContent!.trim()).toBe("Collapse all");
-  await toggleCategory(el, "f");
-  expect(button().textContent!.trim()).toBe("Expand all");
+  button().click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual([]);
+  for (const key of ["root", "folder:d", "folder:b", "folder:f"])
+    expect(table.isExpanded(key), key).toBe(false);
+  button().click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
 });
 
-it("Expand all leaves a product's variants closed, and still reads Collapse all", async () => {
+it("A462 Products root reopening leaves product variants closed", async () => {
   const el = await mountBrowser({
     products: [
       {
@@ -4197,9 +4199,20 @@ it("Expand all leaves a product's variants closed, and still reads Collapse all"
     ],
   });
   const table = await tableOf(el);
-  const button = () => table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  const button = () =>
+    table.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!;
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  table.setExpanded("cola", true);
+  await table.updateComplete;
+  expect(await rowKeys(el)).toContain("cola:v");
   button().click();
   await table.updateComplete;
+  expect(await rowKeys(el)).toEqual([]);
+  button().click();
+  await table.updateComplete;
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
   expect(await rowKeys(el)).toEqual([
     "folder:d",
     "folder:b",
@@ -4209,7 +4222,7 @@ it("Expand all leaves a product's variants closed, and still reads Collapse all"
     "bread",
   ]);
   expect(table.isExpanded("cola")).toBe(false);
-  expect(button().textContent!.trim()).toBe("Collapse all");
+  expect(table.shadowRoot!.querySelector(".expand-all")).toBeNull();
 });
 
 it.each([390, 1280])(
@@ -4291,7 +4304,6 @@ it.each(
   const controls = [
     table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!,
-    table.shadowRoot!.querySelector<HTMLElement>(".expand-all")!,
     search.shadowRoot!.querySelector<HTMLInputElement>("input")!,
     table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
   ];
@@ -4704,4 +4716,39 @@ it.each(
   expect((await tableOf(el)).selected).toEqual(["iced"]);
   expect((await tableOf(el)).shadowRoot!.querySelector('[part~="search-path"]')).toBeNull();
   await capture("restored");
+});
+
+it("A462 Products root closure reports the top category once and survives a live snapshot", async () => {
+  const el = await mountBrowser({
+    categoryId: "b",
+    products: [...PRODUCTS, product("stout", "Stout", "b")],
+  });
+  await vi.waitFor(async () => expect(await rowKeys(el)).toContain("stout"));
+  const sent: unknown[] = [];
+  el.addEventListener("open-category", (event) => {
+    const detail = (event as CustomEvent<{ categoryId: string | null }>).detail;
+    sent.push(detail);
+    el.categoryId = detail.categoryId;
+  });
+  const table = await tableOf(el);
+  const toggle = table.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="root"] .tree-toggle',
+  );
+  expect(toggle).not.toBeNull();
+  toggle!.click();
+  await tableOf(el);
+  expect(sent).toEqual([{ categoryId: null }]);
+  expect(el.categoryId).toBeNull();
+  expect(await rowKeys(el)).toEqual([]);
+  el.categories = [...CATEGORIES];
+  el.products = [...el.products];
+  await tableOf(el);
+  expect(await rowKeys(el)).toEqual([]);
+  expect(sent).toHaveLength(1);
+  table
+    .shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!
+    .click();
+  await tableOf(el);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+  expect(sent).toHaveLength(1);
 });

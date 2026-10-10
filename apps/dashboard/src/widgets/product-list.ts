@@ -1574,7 +1574,8 @@ export class ProductList extends LitElement {
     event.stopPropagation();
     if (this.search.trim() !== "") return;
     const { key, expanded } = event.detail;
-    if (key.startsWith("folder:"))
+    if (key === ROOT_KEY) this.#send("category-toggle", { categoryId: null, open: expanded });
+    else if (key.startsWith("folder:"))
       this.#send("category-toggle", { categoryId: key.slice(7), open: expanded });
   };
 
@@ -1636,9 +1637,9 @@ export class ProductList extends LitElement {
         sortDirection="ascending"
         collapseLabel=${t("categories.collapse")}
         expandLabel=${t("categories.expand")}
-        expandAllLabel=${t("folders.expand_all")}
-        collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
+        collapseDescendants
+        .rowInitiallyExpanded=${(row: ListRow) => row.kind === "root"}
         .searchTerm=${this.search}
         .rowControls=${this.reordering ? (row: ListRow) => this.#rowControls(row) : undefined}
         rowControlsLabel=${t("folders.drag")}
@@ -1653,10 +1654,8 @@ export class ProductList extends LitElement {
               ? (row.variant?.name ?? row.product.name)
               : ""}
         .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
-        .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
         .rowJoinsParent=${(row: ListRow) => row.kind === "product" && row.variant !== null}
         .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
-        .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
         .rowActivation=${(row: ListRow) =>
           row.kind === "folder" && !this.#renaming(row.folder.id)
             ? "toggle"
@@ -1665,10 +1664,10 @@ export class ProductList extends LitElement {
               : "none"}
         .rowToggleParts=${(row: ListRow) => (row.kind === "product" ? "variant-toggle" : "")}
         .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
-          row.kind === "folder"
+          row.kind === "folder" || row.kind === "root"
             ? t(expanded ? "folders.close_named" : "folders.open_named").replace(
                 "{name}",
-                row.folder.name,
+                row.kind === "root" ? t("folders.all_products") : row.folder.name,
               )
             : t(expanded ? "categories.collapse" : "categories.expand")}
         .rowClick=${(row: ListRow) => {

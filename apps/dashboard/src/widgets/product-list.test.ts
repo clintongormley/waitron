@@ -28,6 +28,7 @@ beforeEach(async () => {
   sessionStorage.clear();
   localStorage.removeItem("waitron.products.table:columns");
   localStorage.removeItem("waitron.products.table:expanded");
+  localStorage.removeItem("waitron.products.table:collapsed");
   localStorage.removeItem("waitron.products.table:column-order");
 });
 
@@ -589,7 +590,7 @@ describe("product-list", () => {
             .textContent;
         expect(price("plain")).toBe(want.plain);
         expect(price("with-variants")).toBe(want.range);
-        root.querySelector<HTMLElement>(".tree-toggle")!.click();
+        root.querySelector<HTMLElement>('tr[data-row-key="with-variants"] .tree-toggle')!.click();
         await table.updateComplete;
         expect(price("with-variants:large")).toBe(want.variant);
       } finally {
@@ -666,7 +667,7 @@ describe("product-list", () => {
         .querySelector('[data-test="price"]')!
         .textContent!.trim(),
     ).toBe(`${euros("4,00")}–${euros("5,50")}`);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="wine"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(
       cellUnder(root, "wine:w125", t("product.price"))
@@ -861,7 +862,7 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     await choose(el, "ordering", ["not_sold_separately"]);
     expect(rowKeys(root)).toEqual(["bun"]);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
     await choose(el, "ordering", ["public"]);
@@ -891,7 +892,7 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
     await table.updateComplete;
     const cell = cellUnder(root, "bun:small", t("product.ordering"));
     expect(cell.querySelector("[data-test=ordering-badge]")).toBeNull();
@@ -934,7 +935,7 @@ describe("product-list", () => {
     expect(table.rowParent).toBeDefined();
     const root = await tableRoot(el);
     expect(productRows(root)).toHaveLength(1);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="coffee"] .tree-toggle')!.click();
     await table.updateComplete;
     const rows = productRows(root);
     expect(rows).toHaveLength(3);
@@ -1027,7 +1028,7 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium"]);
     const small = cellUnder(root, "bun:small", t("product.availability"));
@@ -1177,7 +1178,7 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="wine"] .tree-toggle')!.click();
     await table.updateComplete;
     const note = (rowKey: string) =>
       cellUnder(root, rowKey, t("product.price")).querySelector<HTMLElement>(
@@ -1269,7 +1270,7 @@ describe("product-list", () => {
     await showArchived(el);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
     await table.updateComplete;
     const actions = root.querySelector<HTMLElement>('[data-test="actions-small"]')!;
     expect(actions.tagName).toBe("WT-ROW-ACTIONS");
@@ -1643,7 +1644,7 @@ it("drags a product outside the selection alone and never offers a variant as a 
   cell.dispatchEvent(
     new PointerEvent("pointercancel", { bubbles: true, composed: true, pointerId: 1 }),
   );
-  root.querySelector<HTMLElement>(".tree-toggle")!.click();
+  root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
   const variant = (await tableRoot(el)).querySelector('tr[data-row-key="bun:small"]')!;
   expect(variant).not.toBeNull();
   const variantName = variant.querySelector('[part~="variant-name"]')!;
@@ -2511,7 +2512,7 @@ describe("the product list at phone width", () => {
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const root = await tableRoot(el);
-    root.querySelector<HTMLButtonElement>(".tree-toggle")!.click();
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="plain"] .tree-toggle')!.click();
     await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
     const bottom = (node: Element) => {
       const range = document.createRange();
@@ -2531,13 +2532,14 @@ describe("the product list at phone width", () => {
 });
 
 describe("the product list as a tree", () => {
-  it("puts every category and product under an All products row that has no arrow, cannot be selected, and counts the catalogue", async () => {
+  it("puts every category and product under an All products row with a named chevron, no selection, and the catalogue count", async () => {
     const { root } = await mountTree({ selecting: true });
     const top = root.querySelector<HTMLElement>(`tr[data-row-key="${ROOT_KEY}"]`)!;
     expect(root.querySelector("tbody tr")).toBe(top);
     expect(top.getAttribute("aria-level")).toBe("1");
     expect(top.getAttribute("aria-expanded")).toBe("true");
-    expect(top.querySelector(".tree-toggle, .tree-arrow, .row-activate")).toBeNull();
+    expect(top.querySelector(".tree-toggle")).not.toBeNull();
+    expect(top.querySelector(".tree-arrow, .row-activate")).toBeNull();
     expect(top.querySelector('input[type="checkbox"]')).toBeNull();
     expect(top.textContent).toContain(t("folders.all_products"));
     expect(top.querySelector('[data-test="count-root"]')!.textContent!.trim()).toBe(counted(3, 3));
@@ -3307,7 +3309,7 @@ describe("the product list as a tree", () => {
       await showArchived(el);
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       const root = await tableRoot(el);
-      root.querySelector<HTMLElement>(".tree-toggle")!.click();
+      root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
       await table.updateComplete;
       const seen: [string, string][] = [];
       for (const name of ["edit-product", "delete-product", "view-product"])
@@ -6278,5 +6280,179 @@ it.each(
     });
   } finally {
     setLocale(before);
+  }
+});
+
+it("A462 Products root replaces Expand all and closes every level", async () => {
+  const { el, root, table } = await mountTree({
+    selecting: true,
+    reordering: true,
+    products: [
+      ...treeProducts(),
+      product({ id: "bun", name: "Bun", primaryCategoryId: "b", variants: [bunVariant] }),
+    ],
+  });
+  expect(root.querySelector(".expand-all")).toBeNull();
+  const top = () => root.querySelector<HTMLElement>('tr[data-row-key="root"]')!;
+  const toggle = () => top().querySelector<HTMLButtonElement>(".tree-toggle")!;
+  expect(top().getAttribute("aria-expanded")).toBe("true");
+  expect(toggle()).not.toBeNull();
+  expect(toggle().getAttribute("aria-label")).toBe(
+    t("folders.close_named").replace("{name}", t("folders.all_products")),
+  );
+  expect(top().querySelector('input[type="checkbox"], .row-activate, .drag-grip')).toBeNull();
+  expect(top().querySelector('[data-test="color-root"]')).not.toBeNull();
+  expect(top().querySelector('[data-test="actions-root"]')).not.toBeNull();
+  await openRow(el, "folder:d");
+  await openRow(el, "folder:b");
+  root.querySelector<HTMLButtonElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+  await table.updateComplete;
+  expect(rowKeys(root)).toContain("bun:small");
+  const toggles: unknown[] = [];
+  el.addEventListener("category-toggle", (event) => toggles.push((event as CustomEvent).detail));
+  toggle().focus();
+  await userEvent.keyboard("{Enter}");
+  await table.updateComplete;
+  expect(rowKeys(root)).toEqual([]);
+  for (const key of ["root", "folder:d", "folder:b", "bun"])
+    expect(table.isExpanded(key), key).toBe(false);
+  expect(toggles).toEqual([{ categoryId: null, open: false }]);
+  toggle().click();
+  await table.updateComplete;
+  expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
+  expect(toggles).toEqual([
+    { categoryId: null, open: false },
+    { categoryId: null, open: true },
+  ]);
+});
+
+it("A462 Products remembers a closed root and deep-link reveal opens only its path", async () => {
+  const first = await mountTree({
+    products: [...treeProducts(), product({ id: "cake", name: "Cake", primaryCategoryId: "f" })],
+  });
+  await openRow(first.el, "folder:f");
+  await openRow(first.el, "folder:d");
+  await openRow(first.el, "folder:b");
+  const toggle = first.root.querySelector<HTMLButtonElement>(
+    'tr[data-row-key="root"] .tree-toggle',
+  );
+  expect(toggle).not.toBeNull();
+  toggle!.click();
+  await first.table.updateComplete;
+  expect(JSON.parse(localStorage.getItem("waitron.products.table:expanded")!)).toEqual([]);
+  expect(JSON.parse(localStorage.getItem("waitron.products.table:collapsed")!)).toEqual(
+    expect.arrayContaining(["root", "folder:d", "folder:b", "folder:f"]),
+  );
+  cleanupWidgets();
+  const second = await mountTree();
+  expect(rowKeys(second.root)).toEqual([]);
+  expect(second.table.isExpanded("root")).toBe(false);
+  await second.el.revealCategory("b");
+  expect(rowKeys(second.root)).toEqual([
+    "folder:d",
+    "folder:b",
+    "lager",
+    "cola",
+    "folder:f",
+    "bread",
+  ]);
+  expect(second.table.isExpanded("folder:f")).toBe(false);
+});
+
+it("A462 Products closes saved descendant openings through a flat search branch", async () => {
+  const { el, root, table } = await mountTree({
+    products: [
+      ...treeProducts(),
+      product({ id: "bun", name: "Bun", primaryCategoryId: "b", variants: [bunVariant] }),
+    ],
+  });
+  await openRow(el, "folder:d");
+  await openRow(el, "folder:b");
+  table.setExpanded("bun", true);
+  await table.updateComplete;
+  el.search = "Beer";
+  await el.updateComplete;
+  await table.updateComplete;
+  const toggles = vi.fn();
+  el.addEventListener("category-toggle", toggles);
+  await openRow(el, "folder:b");
+  await openRow(el, "folder:b");
+  expect(table.isExpanded("bun")).toBe(false);
+  expect(toggles).not.toHaveBeenCalled();
+  el.search = "";
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  expect(table.isExpanded("folder:b")).toBe(false);
+  cleanupWidgets();
+  const again = await mountTree();
+  expect(again.table.isExpanded("folder:b")).toBe(false);
+  expect(again.table.isExpanded("bun")).toBe(false);
+});
+
+it("A462 Products narrowed branch closure clears hidden descendants on refresh", async () => {
+  const { el, root, table } = await mountTree({
+    products: treeProducts().map((row) =>
+      row.id === "cola" ? { ...row, modifiers: [{ kind: "extras" as const, id: "ex-1" }] } : row,
+    ),
+  });
+  await openRow(el, "folder:d");
+  await openRow(el, "folder:b");
+  await choose(el, "modifiers", "has");
+  expect(rowKeys(root)).toContain("cola");
+  expect(rowKeys(root)).not.toContain("lager");
+  await openRow(el, "folder:d");
+  expect(table.isExpanded("folder:b")).toBe(false);
+  await choose(el, "modifiers", "");
+  el.categories = [...el.categories];
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
+  expect(table.isExpanded("folder:d")).toBe(false);
+});
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)("A462 Products root controls render at %i px (%s, %s)", async (width, locale, theme) => {
+  const previousLocale = currentLocale();
+  const previousTheme = document.documentElement.getAttribute("data-theme");
+  try {
+    setLocale(locale);
+    document.documentElement.setAttribute("data-theme", theme);
+    await page.viewport(width, 844);
+    expect(window.innerWidth).toBe(width);
+    const { el, root, table } = await mountTree({ selecting: true, reordering: true });
+    el.parentElement!.setAttribute("data-theme", theme);
+    const frame = async (state: string) => {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const top = root.querySelector<HTMLElement>('tr[data-row-key="root"]')!;
+      const color = getComputedStyle(top).color;
+      expect(color).toBe(theme === "light" ? "rgb(22, 24, 29)" : "rgb(236, 238, 242)");
+      await page.screenshot({
+        path: `__screenshots__/a462-task4/products-${width}-${locale}-${theme}-${state}.png`,
+      });
+    };
+    await openRow(el, "folder:d");
+    await openRow(el, "folder:b");
+    await frame("deep");
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual([]);
+    await frame("closed");
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
+    await frame("reopened");
+  } finally {
+    setLocale(previousLocale);
+    if (previousTheme === null) document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", previousTheme);
+    await page.viewport(1280, 844);
   }
 });
