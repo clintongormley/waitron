@@ -166,8 +166,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 /**
  * The pass levers run the till's Fire, Ready and Away, so they answer its codes as the till does.
- * On a lever `kitchen_screen.zone_not_allowed` means the order the path names is outside this
- * pass's zones: 403.
+ * On a lever `kitchen_screen.zone_not_allowed` means the order or party the path names is outside
+ * this pass's zones: 403.
  */
 export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
   ...TILL_STATUS,
