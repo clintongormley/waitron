@@ -4,7 +4,7 @@ import "./errors.js";
 import "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
@@ -720,7 +720,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)
-          .where(eq(devices.id, deviceId));
+          .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
         if (device === undefined) throw new AppError("device.not_found", { deviceId });
         if (readerId !== null) await requireKnownReader(tx, readerId);
         await selectDeviceEquipment(tx, {

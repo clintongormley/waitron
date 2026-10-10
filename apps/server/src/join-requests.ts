@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -127,7 +127,13 @@ export async function createJoinRequest(
     const [row] = await tx
       .select({ tokenHash: devices.tokenHash })
       .from(devices)
-      .where(and(eq(devices.id, input.returning.deviceId), eq(devices.active, false)));
+      .where(
+        and(
+          eq(devices.id, input.returning.deviceId),
+          eq(devices.active, false),
+          isNull(devices.deletedAt),
+        ),
+      );
     if (row?.tokenHash !== input.returning.tokenHash) throw new AppError("device.join_stale", {});
     returningId = input.returning.deviceId;
     // The device's id is the request's primary key, so a second knock replaces the first.
@@ -200,7 +206,10 @@ export async function createJoinRequest(
   // the old token stops proving anything, and the new one still proves the device if this request is
   // denied or lapses.
   if (returningId !== undefined)
-    await tx.update(devices).set({ tokenHash }).where(eq(devices.id, returningId));
+    await tx
+      .update(devices)
+      .set({ tokenHash })
+      .where(and(eq(devices.id, returningId), isNull(devices.deletedAt)));
   return { joinId: row!.id, verificationNumber, token, createdAt };
 }
 
@@ -213,9 +222,9 @@ export interface ReturningDevice {
 
 /**
  * The disabled device a knock's parsed device cookie proves, or `null` — for no cookie (or a
- * malformed one, which parses to `null`), an id that names no device or an active one, or a token
- * that does not verify. Every `null` makes the knock an ordinary new request, answered as one from a
- * browser with no cookie.
+ * malformed one, which parses to `null`), an id that names no device, an active one or a deleted
+ * one, or a token that does not verify. Every `null` makes the knock an ordinary new request,
+ * answered as one from a browser with no cookie.
  *
  * Called with no transaction open, so scrypt never holds the write lock; {@link createJoinRequest}
  * re-reads the row before relying on the result.
@@ -228,7 +237,7 @@ export async function provenDisabledDevice(
   const [row] = await db
     .select({ tokenHash: devices.tokenHash })
     .from(devices)
-    .where(and(eq(devices.id, parsed.id), eq(devices.active, false)));
+    .where(and(eq(devices.id, parsed.id), eq(devices.active, false), isNull(devices.deletedAt)));
   if (row === undefined) return null;
   if (!(await verifySecretAsync(parsed.token, row.tokenHash))) return null;
   return { deviceId: parsed.id, tokenHash: row.tokenHash };
@@ -265,7 +274,9 @@ export async function returningDevicesOf(
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(and(inArray(devices.id, [...ids]), eq(devices.active, false)));
+    .where(
+      and(inArray(devices.id, [...ids]), eq(devices.active, false), isNull(devices.deletedAt)),
+    );
   const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
     tx,
     cfg,
@@ -482,7 +493,8 @@ export async function checkDeviceJoinNumber(
  * `input.label`, not the label the request was made with.
  *
  * A request holding a disabled device's id (a returning knock, {@link createJoinRequest}) enables
- * that row, under the request's token, rather than inserting one.
+ * that row, under the request's token, rather than inserting one. One holding a deleted device's id
+ * is refused `join_request.not_found`, and the request stays until it lapses.
  */
 export async function acceptDeviceJoinRequest(
   tx: Transaction,
@@ -505,6 +517,11 @@ export async function acceptDeviceJoinRequest(
       locationId: joinRequests.locationId,
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
+  const [deleted] = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, row.id), isNotNull(devices.deletedAt)));
+  if (deleted !== undefined) throw new AppError("join_request.not_found", {});
 
   const { kitchenScreens, formFactor } = await resolveDeviceKitchenScreens(tx, cfg, {
     profileId: input.profileId,

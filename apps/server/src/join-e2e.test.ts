@@ -1016,6 +1016,46 @@ describe("a disabled device comes back as the same device", () => {
     ]);
   });
 
+  it("a deleted device's browser comes back as a new device whose sign-in works, and the old cookie stays refused", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar: oldJar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    expect((await signIn(app, oldJar, person!.id)).status).toBe(200);
+    const deleted = await send(app, "DELETE", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+    });
+    expect(deleted.status).toBe(200);
+
+    const back = await joined(await knockWith(app, "Bar till", oldJar));
+    expect(back.joinId).not.toBe(deviceId);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: back.joinId, returning: null },
+    ]);
+    const accepted = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
+    expect(accepted.status).toBe(200);
+
+    const old = await send(app, "GET", "/api/device/me", { cookie: oldJar });
+    expect(old.status).toBe(401);
+    expect((await errorOf(old)).code).toBe("device.unauthorized");
+    const signedIn = await signIn(app, back.jar, person!.id);
+    expect(signedIn.status).toBe(200);
+    expect(await openSessionsOn(back.joinId)).toBe(1);
+    expect(await openSessionsOn(deviceId)).toBe(0);
+    expect(await deviceCount()).toBe(2);
+    const row = await deviceRow(deviceId);
+    expect({ active: row.active, tokenHash: row.tokenHash }).toEqual({
+      active: false,
+      tokenHash: "",
+    });
+    expect(row.deletedAt).not.toBeNull();
+  });
+
   it("a cookie naming a disabled device with the wrong token joins as a new device", async () => {
     const { venue, app, deviceId } = await disabledTill();
     const stored = await deviceRow(deviceId);

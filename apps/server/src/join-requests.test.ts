@@ -36,7 +36,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { verifySecretAsync } from "@waitron/identity";
+import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -52,6 +52,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import { offerOnProfile } from "./testing/enrol.js";
+import { deleteDevice } from "./device-delete.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 
 const stationScreen = (stationId: string): DeviceKitchenScreen => ({
@@ -1414,6 +1415,56 @@ describe("a returning disabled device", () => {
     expect(await proven(null)).toBeNull();
     expect(await proven("no-dot")).toBeNull();
     expect(await proven(`not-a-uuid.${made.token}`)).toBeNull();
+  });
+
+  /** A till enrolled and then deleted through `deleteDevice`, with a REAL hash of its token written
+   * back onto the row. The delete itself blanks the hash, which refuses every proof on its own; the
+   * write puts the conditions on `deleted_at` alone between a deleted row and a match. */
+  async function deletedWithRealHash(venue: { cfg: TillConfig }, profileId: string) {
+    const made = await withTransaction(suite.db, async (tx) => {
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });
+      return made;
+    });
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, venue.cfg, made.joinId));
+    const tokenHash = hashSecret(made.token);
+    await suite.db.update(devices).set({ tokenHash }).where(eq(devices.id, made.joinId));
+    return { deviceId: made.joinId, tokenHash };
+  }
+
+  it("backstop: createJoinRequest with a proof matching a deleted row's real hash answers device.join_stale and leaves the row", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const { deviceId, tokenHash } = await deletedWithRealHash(venue, profileId);
+    const before = await suite.db.select().from(devices).where(eq(devices.id, deviceId));
+    expect(before[0]!.deletedAt).not.toBeNull();
+
+    const code = await codeOf(() =>
+      withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "Tablet",
+          returning: { deviceId, tokenHash },
+        }),
+      ),
+    );
+
+    expect(code).toBe("device.join_stale");
+    expect(await pendingRows()).toBe(0);
+    expect(await suite.db.select().from(devices).where(eq(devices.id, deviceId))).toEqual(before);
+  });
+
+  it("backstop: returningDevicesOf does not report a deleted device, even with a real hash on its row", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const { deviceId: deletedId } = await deletedWithRealHash(venue, profileId);
+    const disabledId = await disabledDevice(venue, profileId);
+
+    const returning = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, venue.cfg, [deletedId, disabledId]),
+    );
+
+    expect([...returning.keys()]).toEqual([disabledId]);
   });
 });
 

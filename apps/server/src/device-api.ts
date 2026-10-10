@@ -2,7 +2,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   deviceProfiles,
@@ -384,7 +384,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const [row] = await tx
           .select({ charging: devices.batteryCharging, reportedAt: devices.batteryReportedAt })
           .from(devices)
-          .where(ownDeviceById(device.deviceId));
+          .where(and(ownDeviceById(device.deviceId), isNull(devices.deletedAt)));
         // At most one stored report a minute, as for last-seen, unless the charger was plugged or
         // unplugged.
         if (
@@ -396,7 +396,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         await tx
           .update(devices)
           .set({ batteryLevel: level, batteryCharging: charging, batteryReportedAt: at })
-          .where(ownDeviceById(device.deviceId));
+          .where(and(ownDeviceById(device.deviceId), isNull(devices.deletedAt)));
       });
       return c.body(null, 204);
     }),
@@ -633,6 +633,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             })
             .from(devices)
             .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+            .where(isNull(devices.deletedAt))
             .orderBy(desc(devices.enrolledAt));
           return {
             rows,
@@ -679,7 +680,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const updated = await tx
           .update(devices)
           .set({ active: false })
-          .where(ownDeviceById(id))
+          .where(and(ownDeviceById(id), isNull(devices.deletedAt)))
           .returning({ id: devices.id });
         if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
         await endDeviceSessions(tx, id);
