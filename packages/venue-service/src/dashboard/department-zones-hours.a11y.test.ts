@@ -20,6 +20,7 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
           for (const state of ["grouped", "open", "count", "failure"] as const) {
             setLocale(locale);
             await page.viewport(width, 844);
+            expect(window.innerWidth).toBe(width);
             const hours = departmentHoursModel();
             if (state === "open") hours.departments[0]!.zones[0]!.week = [];
             if (state === "count")
