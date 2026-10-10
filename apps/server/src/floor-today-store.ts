@@ -35,7 +35,7 @@ type Placed = {
 };
 
 /** The placement checks hold all six columns set or none, so `x` alone tells which. */
-function placementOf(row: Placed): Placement | null {
+export function placementOf(row: Placed): Placement | null {
   if (row.x === null) return null;
   return {
     x: row.x,
