@@ -2624,8 +2624,9 @@ design-system.md → "Adding a primitive" is at `:3120`, its item 4's `delegates
 - A merge's words take the fill's words from the member that supplied the fill and the dot's count
   from the member that supplied the dot; nothing is summed (`statusWords`, `pinText`). Its members
   are grouped over every table in the zone, drawn or not.
-- `mapLabel` is exported from `@waitron/ui`; the details sheet's heading is `mapLabel` over the
-  labels of the table's merge.
+- `mergeLabel` is exported from `@waitron/ui`, and `mapLabel` only from the component's file; the
+  details sheet's heading is `mergeLabel` over the labels of the table's merge, the map's own
+  naming, so both read "Terrace 4+10".
 - The sheet's kitchen line counts each dish once (to serve, ready, en route), and leaves out the
   ready count when a station's ready chip shows. It drops the party-name line when the name is null
   or equals the heading, adds a "Needs clearing" line, says "Free" only with no lines and no chips,

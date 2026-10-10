@@ -14,7 +14,7 @@ import {
   defaultTraySlot,
   floorTrayStyles,
   isTableZoneless,
-  mapLabel,
+  mergeLabel,
   renderFloorChips,
   resolveActiveTabKey,
   toFloorTable,
@@ -552,8 +552,8 @@ export class TillFloorScreen extends LitElement {
       joinId === null
         ? []
         : mapTables(this.#zone.visible).filter((drawn) => drawn.joinId === joinId);
-    if (!members.some((drawn) => drawn.id === table.id)) return mapLabel([table.label]);
-    return mapLabel(members.map((drawn) => drawn.label));
+    if (!members.some((drawn) => drawn.id === table.id)) return table.label;
+    return mergeLabel(members.map((drawn) => drawn.label));
   }
 
   #detailsSheet(): TemplateResult | typeof nothing {

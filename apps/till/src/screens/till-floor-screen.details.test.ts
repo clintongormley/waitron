@@ -114,6 +114,20 @@ describe("till-floor-screen's details sheet", () => {
     expect(sheet.heading).toBe("Terrace 4+5");
   });
 
+  it("names a merge in number order on the sheet, as the map does", async () => {
+    const el = await mount([
+      table("t10", { today: today({ joinId: "j1", joinSeats: 8 }) }),
+      table("t4", { today: today({ joinId: "j1", joinSeats: 8 }) }),
+    ]);
+    const map = el.shadowRoot!.querySelector("wt-floor-map")!;
+    await expect
+      .poll(() => map.shadowRoot!.querySelector("[data-merge]")?.getAttribute("aria-label"))
+      .toMatch(/^Terrace 4\+10, /);
+
+    const sheet = await askDetails(el, "t10");
+    expect(sheet.heading).toBe("Terrace 4+10");
+  });
+
   it("the open sheet shows Time to fire when the floor redraws at the due time", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     vi.setSystemTime(Date.parse("2026-10-10T11:59:59Z"));
