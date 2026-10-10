@@ -39,6 +39,7 @@ import {
   rotateTable,
   sameDraft,
   saveFromDraft,
+  withLiveTables,
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
@@ -312,6 +313,8 @@ export class FloorPlanEditor extends LitElement {
   #markedValue: unknown;
   #history: UndoHistory<FloorPlanDraft> | null = null;
   #opened: FloorPlanDraft | null = null;
+  /** The last refresh kept from replacing a changed draft; Undo and Redo take its live tables. */
+  #liveFrom: FloorPlanDraft | null = null;
   #scope?: DraftScope<StagedPlan>;
   readonly #scopeId = {};
 
@@ -457,6 +460,7 @@ export class FloorPlanEditor extends LitElement {
     this.draft = null;
     this.#opened = null;
     this.#history = null;
+    this.#liveFrom = null;
     this.selected = null;
     this.loadError = null;
     this.message = null;
@@ -501,8 +505,9 @@ export class FloorPlanEditor extends LitElement {
     this.requestUpdate();
   }
 
-  #step(next: FloorPlanDraft | undefined): void {
-    if (next === undefined) return;
+  #step(step: FloorPlanDraft | undefined): void {
+    if (step === undefined) return;
+    const next = this.#liveFrom === null ? step : withLiveTables(step, this.#liveFrom);
     this.draft = next;
     this.#setTyped([]);
     this.#clearReadMessage();
@@ -753,9 +758,11 @@ export class FloorPlanEditor extends LitElement {
       this.typedMarks = [];
       this.refused = null;
     } else if (!saveActionState(this.#scope).unchanged) {
+      this.#adoptLiveTables(draftFromPlan(plan));
       return;
     }
     const draft = draftFromPlan(plan);
+    this.#liveFrom = null;
     this.plan = plan;
     this.revision = plan.revision;
     this.#opened = draft;
@@ -765,6 +772,17 @@ export class FloorPlanEditor extends LitElement {
     if (this.selected !== null && !draft.tables.some((t) => t.key === this.selected)) {
       this.selected = null;
     }
+    this.#scope?.changed();
+  }
+
+  /** A refresh may not replace a changed draft, but the live tables it names (a table a save just
+   *  created has none until then) are the server's, and a booked refusal finds its table by them. */
+  #adoptLiveTables(from: FloorPlanDraft): void {
+    this.#liveFrom = from;
+    this.#opened = withLiveTables(this.#opened!, from);
+    this.#commit(this.#opened);
+    this.draft = withLiveTables(this.draft!, from);
+    this.#followRefused(this.draft);
     this.#scope?.changed();
   }
 

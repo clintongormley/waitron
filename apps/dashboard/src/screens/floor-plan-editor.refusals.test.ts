@@ -921,3 +921,43 @@ it("a refused field typed into a new table while it is saved stays marked under 
   expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
   expect(button(el, "save").disabled).toBe(true);
 });
+
+it("a table saved new while other edits were made comes back when its delete is refused as booked", async () => {
+  await wide();
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const reread = deferred<FloorPlan>();
+  const t5 = { ...placement, x: 20 };
+  const afterSave: FloorPlan = {
+    ...plan(),
+    revision: 4,
+    tables: [
+      ...plan().tables.slice(0, 2),
+      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+      { id: "m5", liveTableId: "l5", label: "T5", seats: 2, fixed: false, placement: t5 },
+    ],
+  };
+  const saveFloorPlan = vi
+    .fn()
+    .mockReturnValueOnce(write.promise)
+    .mockRejectedValueOnce(booked({ tableId: "l5", date: "2026-10-12", time: "21:00" }));
+  const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockReturnValueOnce(reread.promise);
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  const added = patchTable(withT5(), "new:1", { placement: t5 });
+  await change(el, added);
+  await press(el, "save");
+  await change(el, moveTable(added, "m1", 5, 4));
+  write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", "live:l9": "m9", "new:1": "m5" } });
+  await flush(el);
+  reread.resolve(afterSave);
+  await flush(el);
+  expect(button(el, "save").disabled).toBe(false);
+  await select(el, "m5");
+  await tablePanel(el).updateComplete;
+  tablePanel(el).shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=delete]")!.click();
+  await el.updateComplete;
+  expect(drawn(el, "m5")).toBeUndefined();
+  await press(el, "save");
+  expect(drawn(el, "m5")?.refused).toBe("Booked 12 Oct, 21:00");
+  expect(canvas(el).selected).toBe("m5");
+  expect(message(el)).toBe("");
+});

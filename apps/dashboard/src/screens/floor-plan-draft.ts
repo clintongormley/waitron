@@ -78,6 +78,19 @@ export function rekeyDraft(
   };
 }
 
+/** Each table keyed as in `from` takes its live table from there; the same draft when none moves. */
+export function withLiveTables(draft: FloorPlanDraft, from: FloorPlanDraft): FloorPlanDraft {
+  const live = new Map(from.tables.map((t) => [t.key, t.liveTableId]));
+  let moved = false;
+  const tables = draft.tables.map((t) => {
+    const liveTableId = live.get(t.key);
+    if (liveTableId == null || liveTableId === t.liveTableId) return t;
+    moved = true;
+    return { ...t, liveTableId };
+  });
+  return moved ? { ...draft, tables } : draft;
+}
+
 function sameTable(a: DraftTable, b: DraftTable): boolean {
   if (
     a.id !== b.id ||

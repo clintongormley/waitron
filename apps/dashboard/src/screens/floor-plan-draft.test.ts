@@ -16,6 +16,7 @@ import {
   rotateTable,
   sameDraft,
   saveFromDraft,
+  withLiveTables,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -455,6 +456,23 @@ describe("floor plan draft", () => {
     const restored = restoreTable(deleted, table(saved, "m2"), saved.joins);
     expect(restored.joins).toEqual(saved.joins);
     expect(sameDraft(restored, saved)).toBe(true);
+  });
+
+  it("gives tables keyed as in another draft that draft's live tables, and leaves the rest", () => {
+    const d = addTables(open(), [{ label: "T5", seats: 3, fixed: false }], counter("new"));
+    const from: FloorPlanDraft = {
+      tables: [
+        { ...table(d, "m1"), liveTableId: "l7" },
+        { ...table(d, "m2"), liveTableId: null },
+        { ...table(d, "live:l9") },
+      ],
+      joins: [],
+    };
+    const merged = withLiveTables(d, from);
+    expect(merged.tables.map((t) => t.liveTableId)).toEqual(["l7", "l2", "l9", null]);
+    expect(merged.joins).toBe(d.joins);
+    expect(d.tables[0]!.liveTableId).toBe("l1");
+    expect(withLiveTables(merged, from)).toBe(merged);
   });
 
   it("returns the draft itself when the key is already in it", () => {

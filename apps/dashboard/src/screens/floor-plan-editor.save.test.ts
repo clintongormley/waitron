@@ -309,6 +309,28 @@ it("a re-read answer does not replace a draft changed since the save", async () 
   expectSave(el, "awake");
 });
 
+it("a re-read kept from a changed draft still gives a new table its live table, so Undo quiets Save", async () => {
+  const reread = deferred<FloorPlan>();
+  const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockReturnValueOnce(reread.promise);
+  const saveFloorPlan = vi
+    .fn()
+    .mockResolvedValue({ revision: 4, ids: { ...savedIds, "new:1": "m5" } });
+  const el = await open(stubApi({ getFloorPlan, saveFloorPlan }));
+  await fromCanvas(el, "floor-plan-change", { draft: withT5() });
+  await press(el, "save");
+  await move(el, "m1", 7);
+  reread.resolve(afterFirstSave);
+  await flush(el);
+  expect(placed(el, "m1").x).toBe(7);
+  expectSave(el, "awake");
+  await press(el, "undo");
+  expectSave(el, "quiet");
+  await press(el, "redo");
+  await press(el, "save");
+  const body = saveFloorPlan.mock.calls[1]![1] as ReturnType<typeof saveFromDraft>;
+  expect(body.tables).toContainEqual(expect.objectContaining({ id: "m5", key: "m5" }));
+});
+
 it("a save in progress keeps a second press from sending", async () => {
   const write = deferred<{ revision: number; ids: Record<string, string> }>();
   const saveFloorPlan = vi.fn().mockReturnValue(write.promise);
