@@ -214,7 +214,6 @@ async function catchUpPass(
         .where(inArray(floorTodayTables.tableId, ids))
     ).map((row) => row.tableId),
   );
-  // A refused table waits whole: held, and counted as having its today's row so nothing seeds it.
   const refused = new Set(
     (
       await refusedByAModule(
@@ -235,17 +234,15 @@ async function catchUpPass(
     tx,
     ids.filter((id) => removing.has(id) && !waiting.has(id)),
   );
-  const live: LiveTable[] = inZone.map((table) => {
-    const held = waiting.has(table.id);
-    return {
-      id: table.id,
-      label: table.label,
-      held,
-      tied: held || tied.has(table.id),
-      hasToday: withToday.has(table.id) || refused.has(table.id),
-      mergedWithHeld: mergedWithHeld.has(table.id),
-    };
-  });
+  const live: LiveTable[] = inZone.map((table) => ({
+    id: table.id,
+    label: table.label,
+    held: held.has(table.id),
+    refused: refused.has(table.id),
+    tied: held.has(table.id) || tied.has(table.id),
+    hasToday: withToday.has(table.id),
+    mergedWithHeld: mergedWithHeld.has(table.id),
+  }));
 
   const plan = planReset({ targets, live, takenElsewhere });
 

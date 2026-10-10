@@ -15,6 +15,7 @@ const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable 
   id,
   label,
   held: false,
+  refused: false,
   tied: false,
   hasToday: true,
   mergedWithHeld: false,
@@ -50,6 +51,29 @@ describe("planReset", () => {
     });
     expect(plan.seed).toEqual([t("a", "Patio 1")]);
     expect(plan.pending).toEqual([t("a", "Patio 1")]);
+  });
+
+  it("leaves a table a module refuses to let go of pending, neither removed, hidden nor seeded", () => {
+    const plan = planReset({
+      targets: [t("a", "T1", { remove: true })],
+      live: [l("a", "T1", { refused: true })],
+      takenElsewhere: none,
+    });
+    expect(plan.remove).toEqual([]);
+    expect(plan.hide).toEqual([]);
+    expect(plan.seed).toEqual([]);
+    expect(plan.pending).toEqual([t("a", "T1", { remove: true })]);
+  });
+
+  it("gives a refused table with no today's row none", () => {
+    const plan = planReset({
+      targets: [t("a", "T1", { remove: true })],
+      live: [l("a", "T1", { refused: true, hasToday: false })],
+      takenElsewhere: none,
+    });
+    expect(plan.seed).toEqual([]);
+    expect(plan.remove).toEqual([]);
+    expect(plan.pending).toEqual([t("a", "T1", { remove: true })]);
   });
 
   it("creates a table the target adds", () => {

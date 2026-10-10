@@ -26,6 +26,8 @@ export interface LiveTable {
   label: string;
   /** An open party sits there now. */
   held: boolean;
+  /** A module refuses to let it go, so it waits whole as a held table does, but is never seeded. */
+  refused: boolean;
   /** Held, or used earlier by a party still open, or an order to it unpaid or with food on its way. */
   tied: boolean;
   /** It has a today's row. */
@@ -76,7 +78,7 @@ export function planReset(input: {
       // The table's state is unknown, so nothing is done to it and no other table takes its target name.
       plan.pending.push(target);
       fixedInUse.add(target.label);
-    } else if (table && (table.held || table.mergedWithHeld)) {
+    } else if (table && (table.held || table.refused || table.mergedWithHeld)) {
       plan.pending.push(target);
       if (table.held && !table.hasToday) plan.seed.push(target);
       fixedInUse.add(table.label);
