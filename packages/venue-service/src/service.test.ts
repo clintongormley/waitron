@@ -54,6 +54,8 @@ describe("VENUE_SERVICE", () => {
       "openStationForToday",
       "orderInZones",
       "readClearingWorkflow",
+      "readDepartmentLogoRasters",
+      "readDepartmentReceipt",
       "readDepartmentTransfer",
       "readDeviceKitchenScreens",
       "readDevicesKitchenScreens",
@@ -63,6 +65,7 @@ describe("VENUE_SERVICE", () => {
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
       "readPrintHeldWork",
+      "readPrintedDepartmentReceipt",
       "readProfileKitchenScreens",
       "readProfileServiceAccess",
       "readProfileServiceScopes",
@@ -71,6 +74,9 @@ describe("VENUE_SERVICE", () => {
       "readSaleReceiptHeader",
       "readStationScreens",
       "readZoneKeepOpenState",
+      "receiptDefaultDepartment",
+      "receiptDepartmentForOrder",
+      "receiptDepartmentForSale",
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",
@@ -92,6 +98,7 @@ describe("VENUE_SERVICE", () => {
       "stationStates",
       "withdrawDepartmentTransfer",
       "withdrawPendingDepartmentTransfers",
+      "writeDepartmentReceipt",
     ]);
   });
 
