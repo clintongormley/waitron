@@ -953,6 +953,7 @@ export const en = {
   "floor_plan_editor.title": "Floor plan",
   "floor_plan_editor.undo": "Undo",
   "floor_plan_editor.redo": "Redo",
+  "floor_plan_editor.load_newer": "Load newer plan",
   "floor_plan_editor.fixed": "Fixed",
   "floor_plan_editor.rotate": "Rotate {name}",
   "floor_plan_editor.first_note":
@@ -3496,6 +3497,7 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.title": "Plano de sala",
   "floor_plan_editor.undo": "Deshacer",
   "floor_plan_editor.redo": "Rehacer",
+  "floor_plan_editor.load_newer": "Cargar el plano más reciente",
   "floor_plan_editor.fixed": "Fija",
   "floor_plan_editor.rotate": "Girar {name}",
   "floor_plan_editor.first_note":

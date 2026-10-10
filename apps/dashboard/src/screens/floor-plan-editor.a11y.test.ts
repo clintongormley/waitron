@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -35,9 +35,13 @@ const plan: FloorPlan = {
   joins: [],
 };
 
-function stubApi(getFloorPlan: DashboardApi["getFloorPlan"]): DashboardApi {
+function stubApi(
+  getFloorPlan: DashboardApi["getFloorPlan"],
+  saveFloorPlan?: DashboardApi["saveFloorPlan"],
+): DashboardApi {
   return {
     getFloorPlan,
+    saveFloorPlan,
     listZones: vi
       .fn()
       .mockResolvedValue([{ id: "z1", name: "Terrace", displayOrder: 0, active: true }]),
@@ -65,6 +69,29 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
       new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
     );
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows an older copy's message with Load newer plan accessibly", async () => {
+    const { el, host } = await open(
+      stubApi(
+        vi.fn().mockResolvedValue(plan),
+        vi.fn().mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1" } }),
+      ),
+      theme,
+    );
+    el.shadowRoot!.querySelector("wt-floor-plan-canvas")!.dispatchEvent(
+      new CustomEvent("wt-table-move", {
+        detail: { key: "m1", x: 5, y: 4 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=save]")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("wt-button[data-action=load-newer]"))
+      .not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

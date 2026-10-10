@@ -69,7 +69,10 @@ async function mount() {
       { id: "z2", name: "Bar", displayOrder: 1, active: true },
     ],
     listTables: async () => [],
-    saveFloorPlan: vi.fn(async () => undefined),
+    saveFloorPlan: vi.fn(async (): Promise<{ revision: number; ids: Record<string, string> }> => ({
+      revision: 4,
+      ids: { m1: "m1" },
+    })),
   };
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
     api: api as unknown as DashboardApi,
@@ -208,4 +211,38 @@ it("put back after a detached update, the editor still asks before Close discard
   close(el);
   await expect.poll(() => question(app).open).toBe(true);
   expect(location.pathname).toBe("/manage/floor-plan/zone/z1");
+});
+
+it("a departed save's answer cannot change a reconnected editor", async () => {
+  const { app, api } = await mount();
+  let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
+  api.saveFloorPlan.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+  const el = editor(app);
+  await move(el);
+  button(el, "save").click();
+  await expect.poll(() => api.saveFloorPlan.mock.calls.length).toBe(1);
+  const parent = el.parentNode!;
+  el.remove();
+  parent.append(el);
+  await el.updateComplete;
+  answer({ revision: 4, ids: { m1: "m1" } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(button(el, "save").variant).toBe("primary");
+  expect(api.getFloorPlan).toHaveBeenCalledTimes(1);
+  close(el);
+  await expect.poll(() => question(app).open).toBe(true);
+  expect(location.pathname).toBe("/manage/floor-plan/zone/z1");
+});
+
+it("an accepted save leaves without asking", async () => {
+  const { app, api } = await mount();
+  const el = editor(app);
+  await move(el);
+  button(el, "save").click();
+  await expect.poll(() => api.getFloorPlan.mock.calls.length).toBe(2);
+  await el.updateComplete;
+  close(el);
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(question(app).open).toBe(false);
 });
