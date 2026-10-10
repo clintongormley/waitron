@@ -4716,6 +4716,13 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   passes alone. Neither types a search. **Next action:** reproduce each under load and fix at the
   root (standing rule: a flaky test is fixed, never re-run to green).
 
+- **A receipts-screen test failed once during A463's work and was not reproduced**: "previews the
+  independent department draft when getReceiptLanguage refuses"
+  (`apps/dashboard/src/screens/receipts-screen.defaults.test.ts`, from #1501), once in a full
+  `pnpm --filter @waitron/dashboard test:coverage` run on 2026-10-10, then three passes alone and a
+  second full run green. A463 (#1508) does not touch that screen. **Next action:** reproduce it
+  under load and fix at the root (standing rule: a flaky test is fixed, never re-run to green).
+
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
   other half — a matrix that varies two things separately and never crosses them proves less than
