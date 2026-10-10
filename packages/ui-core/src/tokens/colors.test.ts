@@ -365,7 +365,7 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
   });
 });
 
-// The till map's table fills; its status dots are drawn on a --wt-color-surface ring.
+// The till map's table fills.
 const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
   (fill) => `--wt-color-table-${fill}`,
 );

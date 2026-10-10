@@ -122,7 +122,8 @@ at Waitron's red. Set each one too, with a light and a dark value (see Tokens �
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, each with an `--wt-color-on-…` text colour
+`--wt-color-day-closed`, and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+each with an `--wt-color-on-…` text colour
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -205,6 +206,23 @@ each other and from both reserved fills, that the standard and Closed fills are 
 and that the `prefers-color-scheme` blocks give the same values as the explicit themes. They do not
 hold that two palette colours are told apart by eye: the light standard fill, for one, is only
 about 1.2:1 against `--wt-color-surface`, which is why the words carry the meaning.
+
+The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
+`--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`),
+which styles any element carrying `data-fill="<fill>"`:
+
+| Fill                        | Light     | Text on it | Dark      | Text on it |
+| --------------------------- | --------- | ---------- | --------- | ---------- |
+| `--wt-color-table-free`     | `#dff3e8` | `#16181d`  | `#183626` | `#eceef2`  |
+| `--wt-color-table-seated`   | `#1f6feb` | `#ffffff`  | `#4c8dff` | `#06101f`  |
+| `--wt-color-table-bill`     | `#7e3fb8` | `#ffffff`  | `#c39bf0` | `#1d0b33`  |
+| `--wt-color-table-clearing` | `#f5a623` | `#241500`  | `#f5b34a` | `#241500`  |
+| `--wt-color-table-reserved` | `#fde7c8` | `#16181d`  | `#4a3a1c` | `#eceef2`  |
+
+The "table fill colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both
+themes, that each text colour is 4.5:1 or more on its fill, that the five fills differ, that
+`--wt-color-success` and `--wt-color-danger` are 3:1 or more on `--wt-color-surface`, and that the
+`prefers-color-scheme` blocks give the same values as the explicit themes.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
