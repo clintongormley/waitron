@@ -1338,7 +1338,10 @@ heading over the tree's column is wrapped in `part="tree-heading"`, so a screen 
 what its rows draw there. Supply `rowControls` to render controls in the leading column shared with
 selection checkboxes, outside tree indentation. Name that column with `rowControlsLabel`. Keep
 its default baseline alignment for Products' wrapped names; Structure uses
-`rowControlsAlign="center"` for its name-and-note stacks. Put a full-width lower toolbar in the
+`rowControlsAlign="center"` for its name-and-note stacks. In Select mode, the header's native
+checkbox and each row's checkbox share a leading inset, with the grip after the checkbox.
+Controls without selection keep their horizontal centering when `rowControlsAlign="center"`.
+Put a full-width lower toolbar in the
 `toolbar-bottom` slot; Products forwards that slot for its selection bar. A control that is not
 a column's filter but belongs with the filters goes in the `filters-start` slot, at the top of the
 Filters panel: Products puts its Show archived switch there. The panel is drawn only when some

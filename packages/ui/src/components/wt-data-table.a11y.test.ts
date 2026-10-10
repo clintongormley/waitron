@@ -72,6 +72,33 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test.each(["gripless", "grips", "controls-only"])("A462 selection controls %s", async (state) => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Products"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.rows = [
+      { id: "a", name: "Ada", status: "Active" },
+      { id: "b", name: "A long product name", status: "Inactive" },
+    ];
+    el.columns = [{ key: "name", label: "Name", cell: (row) => row.name }];
+    el.rowKey = (row) => row.id;
+    el.selectable = state !== "controls-only";
+    el.rowSelectable = (row) => row.id === "a";
+    el.selectionLabel = (row) => `Select ${row.name}`;
+    el.rowControlsLabel = "Move row";
+    el.rowControlsAlign = "center";
+    if (state !== "gripless")
+      el.rowControls = (row) => html`<button aria-label=${`Move ${row.name}`}>↕</button>`;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    if (el.selectable) {
+      el.selected = ["a"];
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    }
+  });
+
   test("search field while focused", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',

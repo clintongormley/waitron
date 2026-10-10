@@ -6231,3 +6231,52 @@ it.each([0, 1])("A461 highlights the hovered Products copy %i", async (copy) => 
   send("pointerup", copies()[copy]!);
   expect(drops).toEqual([{ keys: ["cake"], folderId: "coffee" }]);
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)("A462 Products native select-all aligns at %i px (%s, %s)", async (width, locale, theme) => {
+  const before = currentLocale();
+  try {
+    setLocale(locale);
+    await page.viewport(width, 844);
+    const { el, root } = await mountTree({
+      selecting: true,
+      reordering: true,
+      products: [
+        product({
+          id: "bread",
+          name: "Bread with a long name to wrap on a phone",
+          primaryCategoryId: null,
+        }),
+      ],
+    });
+    el.parentElement!.setAttribute("data-theme", theme);
+
+    const header = root.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+    expect(header).not.toBeNull();
+    const h = header.getBoundingClientRect();
+    const boxes = [...root.querySelectorAll<HTMLInputElement>("tbody input[type=checkbox]")];
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) {
+      const b = box.getBoundingClientRect();
+      expect(Math.abs(b.left - h.left)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(b.width - h.width)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(b.height - h.height)).toBeLessThanOrEqual(0.5);
+      const cell = box.closest("td")!;
+      const grip = cell.querySelector<HTMLElement>('[part~="drag-grip"]');
+      if (grip) expect(b.right).toBeLessThanOrEqual(grip.getBoundingClientRect().left);
+      expect(b.right).toBeLessThanOrEqual(cell.nextElementSibling!.getBoundingClientRect().left);
+    }
+
+    expect(root.querySelector(`[data-test="select-${ROOT_KEY}"]`)).toBeNull();
+    await page.screenshot({
+      path: `__screenshots__/a462-task2/products-${width}-${locale}-${theme}.png`,
+    });
+  } finally {
+    setLocale(before);
+  }
+});

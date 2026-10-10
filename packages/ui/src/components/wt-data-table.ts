@@ -368,6 +368,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      table[data-selectable] .select {
+        text-align: start;
+      }
+      table[data-selectable] .row-controls {
+        display: flex;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: var(--wt-space-2);
+      }
+      table[data-selectable][data-center-controls] .row-controls {
+        align-items: center;
+      }
+
       .select input {
         width: var(--wt-space-4);
         height: var(--wt-space-4);
@@ -2236,17 +2249,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   ${this.rowControls ? html`<span class="visually-hidden">${this.rowControlsLabel}</span>` : nothing}
                   ${
                     this.selectable
-                      ? html`<input
-                          type="checkbox"
-                          data-test="select-all"
-                          aria-label=${this.selectAllLabel}
-                          .checked=${allSelected}
-                          .indeterminate=${someSelected && !allSelected}
-                          @change=${(event: Event) => {
-                            event.stopPropagation();
-                            this.#toggleAll(visibleKeys);
-                          }}
-                        />`
+                      ? html`<span class="row-controls"
+                          ><input
+                            type="checkbox"
+                            data-test="select-all"
+                            aria-label=${this.selectAllLabel}
+                            .checked=${allSelected}
+                            .indeterminate=${someSelected && !allSelected}
+                            @change=${(event: Event) => {
+                              event.stopPropagation();
+                              this.#toggleAll(visibleKeys);
+                            }}
+                        /></span>`
                       : nothing
                   }
                 </th>`
@@ -2739,6 +2753,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return this.#withToolbar(
         html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table
+            ?data-selectable=${this.selectable}
             ?data-center-controls=${this.rowControls !== undefined && this.rowControlsAlign === "center"}
             data-locked-columns=${widths ? "" : nothing}
             style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
@@ -2802,6 +2817,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table
           role="treegrid"
+          ?data-selectable=${this.selectable}
           ?data-center-controls=${this.rowControls !== undefined && this.rowControlsAlign === "center"}
           data-locked-columns=${widths ? "" : nothing}
           style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}

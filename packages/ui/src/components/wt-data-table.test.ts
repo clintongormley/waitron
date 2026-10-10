@@ -8981,3 +8981,113 @@ test("A462 Customise without search is last and no chooser is introduced without
   expect(el.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
   expect(el.shadowRoot!.querySelector(".table-search")).not.toBeNull();
 });
+
+const selectionGeometryCases = [
+  [390, "light", "Select all", "baseline", true, true],
+  [390, "dark", "Seleccionar todo", "center", true, false],
+  [1280, "light", "Seleccionar todo", "center", true, true],
+  [1280, "dark", "Select all", "baseline", true, false],
+  [390, "dark", "Select all", "baseline", false, false],
+  [390, "light", "Seleccionar todo", "center", false, true],
+  [1280, "dark", "Seleccionar todo", "center", false, false],
+  [1280, "light", "Select all", "baseline", false, true],
+] as const;
+
+test.each(selectionGeometryCases)(
+  "A462 native select-all aligns with native row boxes at %i px (%s, %s, %s, grip=%s, tree=%s)",
+  async (width, theme, label, align, grip, tree) => {
+    await page.viewport(width, 844);
+    const el = await table({
+      rows: [
+        { id: "a", name: "Ada", count: 1 },
+        {
+          id: "b",
+          name: "A long product name that wraps across several lines on a phone",
+          count: 2,
+        },
+        { id: "c", name: "Not selectable", count: 3 },
+      ],
+      columns: [
+        {
+          ...columns[0],
+          cell: (row) =>
+            html`<span data-name style="display:block;max-width:160px;white-space:normal"
+              >${row.name}</span
+            >`,
+        },
+        { ...columns[2], key: "actions", pinned: "end" },
+      ],
+      selectable: true,
+      selectAllLabel: label,
+      rowSelectable: (row) => row.id !== "c",
+      rowSelectionKey: (row) => `member-${row.id}`,
+      rowParent: tree ? (row) => (row.id === "a" ? null : "a") : undefined,
+      rowControlsAlign: align,
+      rowControls: grip
+        ? (row) => html`<button data-grip=${row.id} aria-label=${`Move ${row.name}`}>↕</button>`
+        : undefined,
+    });
+    host.setAttribute("data-theme", theme);
+    const root = el.shadowRoot!;
+    const header = root.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+    const headerRect = header.getBoundingClientRect();
+    expect(header.getAttribute("aria-label")).toBe(label);
+    expect(root.querySelector("[data-test=select-c]")).toBeNull();
+    for (const id of ["a", "b"]) {
+      const row = root.querySelector<HTMLTableRowElement>(`tr[data-row-key="${id}"]`)!;
+      const rect = row
+        .querySelector<HTMLInputElement>(`[data-test=select-${id}]`)!
+        .getBoundingClientRect();
+      expect(Math.abs(rect.left - headerRect.left)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(rect.width - headerRect.width)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(rect.height - headerRect.height)).toBeLessThanOrEqual(0.5);
+      const name = row.cells[1]!.getBoundingClientRect();
+      const menu = row.cells[2]!.getBoundingClientRect();
+      expect(rect.right).toBeLessThanOrEqual(name.left);
+      expect(rect.right).toBeLessThanOrEqual(menu.left);
+      if (grip) {
+        const handle = row
+          .querySelector<HTMLElement>(`[data-grip="${id}"]`)!
+          .getBoundingClientRect();
+        expect(rect.right).toBeLessThanOrEqual(handle.left);
+        expect(handle.right).toBeLessThanOrEqual(name.left);
+      }
+    }
+    expect(
+      root.querySelector('[data-row-key="b"] [data-name]')!.getBoundingClientRect().height,
+    ).toBeGreaterThan(
+      root.querySelector('[data-row-key="a"] [data-name]')!.getBoundingClientRect().height,
+    );
+    const seen: string[][] = [];
+    el.addEventListener("wt-selection-change", (event) => {
+      const selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+      seen.push(selected);
+      el.selected = selected;
+    });
+    root.querySelector<HTMLInputElement>("[data-test=select-a]")!.click();
+    await el.updateComplete;
+    expect(header.indeterminate).toBe(true);
+    header.click();
+    await el.updateComplete;
+    expect(seen).toEqual([["member-a"], ["member-a", "member-b"]]);
+    expect(header.checked).toBe(true);
+    expect(header.indeterminate).toBe(false);
+    await page.screenshot({
+      path: `__screenshots__/a462-task2/shared-${width}-${theme}-${align}-${grip}-${tree}.png`,
+    });
+  },
+);
+
+test("A462 native select-all and row boxes paint from the same size and accent tokens", async () => {
+  const el = await table({ selectable: true, rowControls: () => html`<button>Move</button>` });
+  el.style.setProperty("--wt-space-4", "21px");
+  el.style.setProperty("--wt-color-primary", "rgb(11, 22, 33)");
+  const boxes = [...el.shadowRoot!.querySelectorAll<HTMLInputElement>(".select input")];
+  expect(boxes).toHaveLength(3);
+  for (const box of boxes) {
+    const css = getComputedStyle(box);
+    expect(css.width).toBe("21px");
+    expect(css.height).toBe("21px");
+    expect(css.accentColor).toBe("rgb(11, 22, 33)");
+  }
+});
