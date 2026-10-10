@@ -888,45 +888,105 @@ describe("till-tab-shell above phone width", () => {
 
   const service = [".find-bill", ".expo", ".station"] as const;
 
-  // Spanish at 800 has no room for all three, so Kitchen, the lowest of them, leaves first.
-  for (const [fixture, shell, width, locale, onBar] of [
-    ["full", full, 1024, "en-GB", 3],
-    ["full", full, 1024, "es-ES", 3],
-    ["the demo counter", demoCounter, 1024, "en-GB", 3],
-    ["the demo counter", demoCounter, 1024, "es-ES", 3],
-    ["the demo counter", demoCounter, 800, "en-GB", 3],
-    ["the demo counter", demoCounter, 800, "es-ES", 2],
-  ] as const) {
-    it(`moves the transfers into More before ${service
-      .slice(0, onBar)
-      .map((selector) => selector.slice(1))
-      .join(", ")}, with ${fixture} at ${width} wide in ${locale}`, async () => {
-      await withLocale(locale, () =>
-        atViewport(width, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", shell);
-          await settle(el);
-          const menu = menuOf(el);
-          expect(menu).not.toBeNull();
-          for (const [index, selector] of service.entries()) {
-            const found = [...el.shadowRoot!.querySelectorAll<HTMLElement>(`header ${selector}`)];
-            expect(found, selector).toHaveLength(1);
-            expect(menu!.contains(found[0]!), selector).toBe(index >= onBar);
-            if (index >= onBar) continue;
-            const r = found[0]!.getBoundingClientRect();
-            expect(r.width, selector).toBeGreaterThan(0);
-            expect(r.left, selector).toBeGreaterThanOrEqual(0);
-            expect(r.right, selector).toBeLessThanOrEqual(window.innerWidth);
-          }
-          expect(menu!.querySelector("[data-open-transfers]")).not.toBeNull();
-          const present = leaveOrder
-            .filter(([, selector]) => el.shadowRoot!.querySelector(`header ${selector}`) !== null)
-            .map(([k]) => k);
-          const now = inMore(el);
-          expect(now).toEqual(present.slice(0, now.length));
-          expectOneRow(el);
-        }),
-      );
+  /** What each item that ranks below Find a bill, Pass and Kitchen draws in the session row. */
+  const belowService: Record<string, readonly string[]> = {
+    transfers: ['[data-test="department-transfers"]', "[data-open-transfers]"],
+    equipment: [".equipment"],
+    profile: [".profile"],
+    allergens: [".allergens"],
+    schedule: [".schedule"],
+  };
+
+  /** The items of `shell` that rank below Find a bill, Pass and Kitchen, and the viewport widths
+   * just wide enough (`fits`) and just too narrow (`tight`) for its bar to keep all three with the
+   * name hidden and those items in More. Measured in the running browser, because how wide the text
+   * draws differs between platforms. */
+  async function serviceWidths(
+    shell: Partial<TillTabShell>,
+  ): Promise<{ below: string[]; fits: number; tight: number }> {
+    let result = { below: [] as string[], fits: 0, tight: 0 };
+    await atViewport(ROOMY_WIDTH, async () => {
+      const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
+      await settle(el);
+      await settle(el);
+      expect(menuOf(el)).toBeNull();
+      const header = el.shadowRoot!.querySelector("header")!;
+      const session = header.querySelector<HTMLElement>(".session")!;
+      const width = (node: Element) => node.getBoundingClientRect().width;
+      const px = (value: string) => parseFloat(value);
+      const below = leaveOrder
+        .slice(
+          0,
+          leaveOrder.findIndex(([key]) => key === "station"),
+        )
+        .filter(([, selector]) => header.querySelector(selector) !== null)
+        .map(([key]) => key);
+      const sessionGap = px(getComputedStyle(session).columnGap);
+      const head = getComputedStyle(header);
+      let need =
+        px(head.paddingLeft) +
+        px(head.columnGap) +
+        width(header.querySelector(".tabs")!) +
+        width(session) +
+        px(head.paddingRight);
+      for (const key of below) {
+        for (const selector of belowService[key]!) {
+          need -= width(session.querySelector(`:scope > ${selector}`)!) + sessionGap;
+        }
+      }
+      const offset = window.innerWidth - width(header);
+      await page.viewport(700, 844);
+      await settle(el);
+      need += width(menuOf(el)!) + sessionGap;
+      host.remove();
+      result = {
+        below,
+        fits: Math.ceil(need + offset) + 2,
+        tight: Math.floor(need + offset) - 2,
+      };
     });
+    return result;
+  }
+
+  for (const [fixture, shell] of [
+    ["full", full],
+    ["the demo counter", demoCounter],
+  ] as const) {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      it(`moves the transfers, and what ranks below Find a bill, Pass and Kitchen, into More before them, then Kitchen first, with ${fixture} in ${locale}`, async () => {
+        await withLocale(locale, async () => {
+          const { below, fits, tight } = await serviceWidths(shell);
+          expect(below[0]).toBe("transfers");
+          for (const [width, left] of [
+            [fits, below],
+            [tight, [...below, "station"]],
+          ] as const) {
+            await atViewport(width, async () => {
+              const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
+              await settle(el);
+              expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).toBeNull();
+              expect(inMore(el), `${width}`).toEqual(left);
+              const menu = menuOf(el)!;
+              for (const selector of service) {
+                const found = [
+                  ...el.shadowRoot!.querySelectorAll<HTMLElement>(`header ${selector}`),
+                ];
+                expect(found, `${width} ${selector}`).toHaveLength(1);
+                const moved = left.includes(selector.slice(1));
+                expect(menu.contains(found[0]!), `${width} ${selector}`).toBe(moved);
+                if (moved) continue;
+                const r = found[0]!.getBoundingClientRect();
+                expect(r.width, `${width} ${selector}`).toBeGreaterThan(0);
+                expect(r.left, `${width} ${selector}`).toBeGreaterThanOrEqual(0);
+                expect(r.right, `${width} ${selector}`).toBeLessThanOrEqual(window.innerWidth);
+              }
+              expectOneRow(el);
+              host.remove();
+            });
+          }
+        });
+      });
+    }
   }
 
   it.each([

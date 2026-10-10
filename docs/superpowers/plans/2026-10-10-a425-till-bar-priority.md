@@ -81,6 +81,12 @@ Files: `apps/till/src/widgets/tab-shell.ts`, `apps/till/src/widgets/tab-shell.te
    bar, at 800 px at least). Run it and confirm it fails for that reason.
    As built (2026-10-10): `full` at 1024; the demo counter's bar (`demoCounter`) at 1024 and 800;
    in Spanish at 800 Kitchen also leaves.
+   Changed after CI (2026-10-10): the case no longer uses fixed widths, because the bar's text draws
+   at different widths on different platforms (on CI's Linux runner Pass left too at 800 in Spanish,
+   and Kitchen at 1024 with `full`). For `full` and `demoCounter`, in en-GB and es-ES, it measures in
+   the running browser the width at which the bar keeps Find a bill, Pass and Kitchen with
+   everything ranked below them in More, then checks 2 px wider (exactly those in More) and 2 px
+   narrower (Kitchen too). Which items leave at 800 px is no longer pinned by any test.
 2. **A second failing case:** the bar's button reads "Transfers" in en-GB and "Traspasos" in es-ES,
    and the transfers dialog heading key still reads "Department transfers" /
    "Traspasos entre departamentos" (assert `t("department_transfer.title")` unchanged and the
