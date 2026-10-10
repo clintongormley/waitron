@@ -4696,6 +4696,15 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
   the same limit and, if so, share one constant.
 
+- **Till retained-basket history test failed in main CI after A464.** Run
+  [38062347613](https://github.com/clintongormley/waitron/actions/runs/38062347613), head
+  `9ccb026c77ce577db8846c6130e5d7f58dad8110`, failed `test-till (1)` in
+  `retained basket traverses indexed and unindexed history without a discard warning`:
+  `counter(el)` was null at `apps/till/src/till-app.test.ts:17818`, where the test reads its
+  store after switching to Counter. The shard reported 1 failed and 3264 passed. Found during
+  A459's required readback of A464's merge CI. **Next action:** reproduce the history/tab
+  sequence and distinguish a render wait from a lost basket. No cause or repair verified.
+
 - **Two browser tests failed once each during A454's work (search everywhere), and neither was
   reproduced or checked on `main`**: "edge scroll reaches hidden column choices during a stationary
   reorder" (`packages/ui/src/components/wt-data-table.test.ts`), once in a `packages/ui` coverage
