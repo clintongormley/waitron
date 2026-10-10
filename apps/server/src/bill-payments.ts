@@ -91,6 +91,7 @@ import {
 import type { TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
+import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 
@@ -990,10 +991,11 @@ export async function findSubmission(
 }
 
 /**
- * The start every payment of a bill shares, in the caller's transaction: a retry finds its first
- * row; otherwise the bill must be open and no payment of the whole order in flight, the allocation
- * must be the one the operator saw (design §3.6), and the payment and its lines are inserted in
- * `state`. A new payment answers the bill's total too, which the insert leaves as it was.
+ * The start every payment of a bill shares, in the caller's transaction: the operator must still
+ * be signed in on the requesting device ({@link assertStillSignedIn}); a retry finds its first row;
+ * otherwise the bill must be open and no payment of the whole order in flight, the allocation must be
+ * the one the operator saw (design §3.6), and the payment and its lines are inserted in `state`. A new
+ * payment answers the bill's total too, which the insert leaves as it was.
  *
  * Keyed by `submissionId` within the bill (design §5.1): the same request again answers the first
  * row and writes nothing; the id with another request, or naming one of the bill's refunds, is
@@ -1009,6 +1011,12 @@ async function beginBillPayment(
   state: "received" | "pending",
   now: Date,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
+  // Before the replay lookup: a retry the route would now refuse is refused too.
+  await assertStillSignedIn(tx, {
+    deviceId: cfg.origin.deviceId,
+    sessionId: operator.sessionId,
+    personId: operator.personId,
+  });
   const print = fingerprint(retryShapeOf(req));
   const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
   if (earlier.payment !== undefined) {
