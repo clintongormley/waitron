@@ -88,10 +88,10 @@ const placed = (el: FloorPlanEditor, key: string) =>
   canvasOf(el)!.tables.find((t) => t.key === key)!.placement!;
 const question = (app: DashboardApp) => app.shadowRoot!.querySelector("wt-unsaved-changes")!;
 
-async function move(el: FloorPlanEditor) {
+async function move(el: FloorPlanEditor, x = 5, y = 4) {
   canvasOf(el)!.dispatchEvent(
     new CustomEvent("wt-table-move", {
-      detail: { key: "m1", x: 5, y: 4 },
+      detail: { key: "m1", x, y },
       bubbles: true,
       composed: true,
     }),
@@ -150,6 +150,17 @@ it("undoing every change closes without asking", async () => {
   const el = editor(app);
   await move(el);
   await undo(el);
+  close(el);
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(question(app).open).toBe(false);
+});
+
+it("a table moved by hand back to where it was closes without asking", async () => {
+  const { app } = await mount();
+  const el = editor(app);
+  await move(el);
+  await move(el, placement.x, placement.y);
+  expect(button(el, "undo").disabled).toBe(false);
   close(el);
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);

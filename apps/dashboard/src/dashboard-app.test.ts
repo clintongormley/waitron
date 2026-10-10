@@ -2940,6 +2940,13 @@ describe("dashboard-app", () => {
   it.each([
     ["manager", ["venue.configure"], "dashboard-floor-plan-editor", "/manage/floor-plan/zone/z1"],
     ["supervisor", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
+    [
+      "supervisor",
+      ["venue.configure"],
+      "dashboard-floor-plan-editor",
+      "/manage/floor-plan/zone/z1",
+    ],
+    ["manager", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
   ])(
     "opens the floor plan editor at /manage/floor-plan/zone/z1 as %s, only with venue.configure",
     async (role, permissions, tag, path) => {
