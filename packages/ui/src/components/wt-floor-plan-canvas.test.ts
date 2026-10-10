@@ -12,6 +12,8 @@ import type {
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
+// reveal scrolls the test page too when the canvas is wider than it.
+afterEach(() => window.scrollTo(0, 0));
 
 const place = (over: Partial<PlanPlacement> = {}): PlanPlacement => ({
   x: 0,
@@ -969,4 +971,73 @@ it("each event bubbles out of a shadow root", async () => {
     expect(e.bubbles).toBe(true);
     expect(e.composed).toBe(true);
   }
+});
+
+const viewportOf = (el: WtFloorPlanCanvas) => part(el, "viewport");
+
+it("reveal scrolls a table into view with the inset free below it", async () => {
+  const el = await canvas([table("t1", "T1", { x: 70, y: 60, width: 6, height: 4 })]);
+  await settled(el);
+  el.reveal("t1", 60);
+  const view = viewportOf(el).getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(viewportOf(el).scrollTop).toBeGreaterThan(0);
+  expect(box.bottom).toBeCloseTo(view.bottom - 60, 0);
+  expect(box.right).toBeLessThanOrEqual(view.right);
+  expect(box.left).toBeGreaterThanOrEqual(view.left);
+  expect(button(el, "t1").style.scrollMargin).toBe("");
+});
+
+it("reveal leaves a table already in view where it is", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 2 })]);
+  await settled(el);
+  el.reveal("t1", 100);
+  expect(viewportOf(el).scrollTop).toBe(0);
+  expect(viewportOf(el).scrollLeft).toBe(0);
+});
+
+it("reveal brings a refused table's reason below it into view", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked 12 Oct, 21:00", { x: 2, y: 40 })]);
+  await settled(el);
+  el.reveal("t1", 0);
+  const view = viewportOf(el).getBoundingClientRect();
+  const reason = reasonOf(el, "t1")!.getBoundingClientRect();
+  expect(reason.top).toBeGreaterThanOrEqual(button(el, "t1").getBoundingClientRect().bottom);
+  expect(reason.bottom).toBeCloseTo(view.bottom, 0);
+});
+
+it("reveal brings the handle above a table into view", async () => {
+  const el = await canvas(
+    [table("t1", "T1", { x: 2, y: 40, width: 4, height: 4 }), table("t2", "T2", { y: 80 })],
+    { selected: "t1" },
+  );
+  await settled(el);
+  viewportOf(el).scrollTop = 40 * 12;
+  el.reveal("t1", 0);
+  const view = viewportOf(el).getBoundingClientRect();
+  const handle = part(el, "rotate-handle").getBoundingClientRect();
+  expect(handle.bottom).toBeLessThan(button(el, "t1").getBoundingClientRect().top);
+  expect(handle.top).toBeCloseTo(view.top, 0);
+});
+
+it("reveal brings a reason wider than its table into view sideways", async () => {
+  const el = await canvas([
+    refusedTable("t1", "T1", "Booked 12 Oct, 21:00", { x: 10, y: 2, width: 2, height: 2 }),
+    table("t2", "T2", { x: 80, y: 2 }),
+  ]);
+  el.style.width = "300px";
+  await settled(el);
+  viewportOf(el).scrollLeft = viewportOf(el).scrollWidth;
+  el.reveal("t1", 0);
+  const view = viewportOf(el).getBoundingClientRect();
+  const reason = reasonOf(el, "t1")!.getBoundingClientRect();
+  expect(reason.left).toBeLessThan(button(el, "t1").getBoundingClientRect().left);
+  expect(reason.left).toBeCloseTo(view.left, 0);
+});
+
+it("reveal of a table it does not draw does nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 60 })]);
+  await settled(el);
+  el.reveal("t2", 0);
+  expect(viewportOf(el).scrollTop).toBe(0);
 });

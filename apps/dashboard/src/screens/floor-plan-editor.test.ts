@@ -454,6 +454,97 @@ it("tells the panel when it sits in the sheet", async () => {
   ).toBe(true);
 });
 
+/** Terrace with T1 and T2 low on the canvas, where an expanded sheet at 390 × 844 covers them. */
+const lowApi = () =>
+  stubApi({
+    getFloorPlan: vi.fn().mockResolvedValue({
+      ...terrace(),
+      tables: terrace().tables.map((t) => ({
+        ...t,
+        placement: { ...placement, y: t.id === "m1" ? 40 : 70 },
+      })),
+    }),
+  });
+
+/** Whether what the canvas draws for `key` (its box, handle and reason) sits between the canvas's
+ *  visible top and the sheet's top. */
+function aboveSheet(el: FloorPlanEditor, key: string): boolean {
+  const root = canvas(el).shadowRoot!;
+  const parts = [
+    ...[...root.querySelectorAll<HTMLElement>("[data-key]")].filter((n) => n.dataset.key === key),
+    ...root.querySelectorAll(".rotate-handle"),
+  ].map((n) => n.getBoundingClientRect());
+  const viewTop = Math.max(0, root.querySelector(".viewport")!.getBoundingClientRect().top);
+  const sheetTop = sheet(el)!.getBoundingClientRect().top;
+  return (
+    parts.length > 0 &&
+    Math.max(...parts.map((r) => r.bottom)) <= sheetTop + 0.5 &&
+    Math.min(...parts.map((r) => r.top)) >= viewTop - 0.5
+  );
+}
+
+async function expandSheet(el: FloorPlanEditor): Promise<void> {
+  sheet(el)!.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+  await el.updateComplete;
+}
+
+it("at 390 px scrolls a table selected under the open sheet up above it", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await expandSheet(el);
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+});
+
+it("at 390 px scrolls the selected table above the sheet when the sheet opens", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+  await expandSheet(el);
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+});
+
+it("at 390 px scrolls each newly selected table above the open sheet", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await expandSheet(el);
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+  expect(aboveSheet(el, "m2")).toBe(false);
+  await fromCanvas(el, "wt-table-select", { key: "m2" });
+  await expect.poll(() => aboveSheet(el, "m2")).toBe(true);
+});
+
+it("at 390 px keeps the selected table above the sheet when the sheet grows", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+  sheet(el)!.style.paddingTop = "400px";
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+});
+
+it("leaves the canvas where it is at 1280 px", async () => {
+  await viewport(1280, 800);
+  const el = await open(lowApi());
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  const scrolled = () => [
+    window.scrollY,
+    canvas(el).shadowRoot!.querySelector(".viewport")!.scrollTop,
+  ];
+  const before = scrolled();
+  const reveal = vi.spyOn(canvas(el), "reveal");
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await canvas(el).updateComplete;
+  expect(reveal).not.toHaveBeenCalled();
+  expect(scrolled()).toEqual(before);
+});
+
 const panelOf = (el: FloorPlanEditor) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-tables-panel"]>(
     "floor-plan-tables-panel",

@@ -79,13 +79,22 @@ const field = (el: FloorPlanAddJoin, name: string) =>
 const confirm = (el: FloorPlanAddJoin) =>
   dialog(el).querySelector<WtButton>("wt-button[data-action=join-confirm]")!;
 
-it("opens closed until shown, headed Add join", async () => {
+it("opens closed until shown, headed Join and its table's name", async () => {
   const el = await mount();
   expect(dialog(el).open).toBe(false);
   await show(el);
   expect(dialog(el).open).toBe(true);
-  expect(dialog(el).heading).toBe("Add join");
+  expect(dialog(el).heading).toBe("Join T1");
   expect(field(el, "join-seats").value).toBe("");
+});
+
+it("heads a table with no name Join Unnamed, and a name holding $& as typed", async () => {
+  const el = await mount(patchTable(draftFromPlan(plan), "m1", { label: "  " }));
+  await show(el);
+  expect(dialog(el).heading).toBe("Join Unnamed");
+  el.draft = patchTable(draftFromPlan(plan), "m1", { label: "A$&B $1" });
+  await el.updateComplete;
+  expect(dialog(el).heading).toBe("Join A$&B $1");
 });
 
 it("Add join waits for a table and the seats", async () => {
@@ -175,7 +184,7 @@ it("is in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount();
   await show(el);
-  expect(dialog(el).heading).toBe("Añadir unión");
+  expect(dialog(el).heading).toBe("Unir T1");
   expect((field(el, "join-tables") as Field & { label: string }).label).toBe("Mesas");
   expect((field(el, "join-seats") as Field & { label: string }).label).toBe("Plazas");
 });

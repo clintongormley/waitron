@@ -146,6 +146,13 @@ export class FloorPlanAddJoin extends LitElement {
       }));
   }
 
+  #heading(form: JoinForm): string {
+    const name =
+      this.draft.tables.find((table) => table.key === form.tableKey)?.label.trim() ||
+      t("floor_plan_editor.unnamed");
+    return t("floor_plan_editor.join_heading").replace("{name}", () => name);
+  }
+
   /** The chosen tables the draft still holds. */
   #present(form: JoinForm): string[] {
     return form.others.filter((key) => this.draft.tables.some((t) => t.key === key));
@@ -205,7 +212,7 @@ export class FloorPlanAddJoin extends LitElement {
     return html`<wt-modal
       data-dialog="add-join"
       size="standard"
-      heading=${t("floor_plan_editor.add_join")}
+      heading=${form === null ? "" : this.#heading(form)}
       .open=${form !== null}
       .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {

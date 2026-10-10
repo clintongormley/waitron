@@ -385,6 +385,32 @@ export class WtFloorPlanCanvas extends LitElement {
     }
   }
 
+  /**
+   * Scrolls the drawn table `key`, with its handle and reason, into view in every scroller round
+   * it, keeping `bottomInset` px below it clear for something the parent draws over the bottom.
+   */
+  reveal(key: string, bottomInset: number): void {
+    const drawn = [...this.renderRoot.querySelectorAll<HTMLElement>("[data-key]")].filter(
+      (node) => node.dataset.key === key,
+    );
+    const table = drawn.find((node) => node.classList.contains("table"));
+    if (table === undefined) return;
+    const handle = key === this.selected ? this.renderRoot.querySelector(".rotate-handle") : null;
+    const box = table.getBoundingClientRect();
+    const rects = [...drawn, ...(handle === null ? [] : [handle])].map((node) =>
+      node.getBoundingClientRect(),
+    );
+    const top = Math.min(...rects.map((r) => r.top));
+    const right = Math.max(...rects.map((r) => r.right));
+    const bottom = Math.max(...rects.map((r) => r.bottom));
+    const left = Math.min(...rects.map((r) => r.left));
+    table.style.scrollMargin = `${box.top - top}px ${right - box.right}px ${
+      bottom - box.bottom + bottomInset
+    }px ${box.left - left}px`;
+    table.scrollIntoView({ block: "nearest", inline: "nearest" });
+    table.style.scrollMargin = "";
+  }
+
   #onTableKey(e: KeyboardEvent, t: PlanCanvasTable): void {
     const arrow = ARROWS[e.key];
     if (arrow === undefined) return;

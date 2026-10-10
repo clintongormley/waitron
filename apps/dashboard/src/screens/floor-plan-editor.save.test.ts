@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
@@ -327,7 +328,7 @@ it("an older copy offers the newer plan, keeping Save available", async () => {
   await move(el, "m1", 5);
   await press(el, "save");
   expect(message(el)).toBe("Someone else changed this floor plan. Reload it and try again");
-  expect(button(el, "load-newer")!.textContent!.trim()).toBe("Load newer plan");
+  expect(button(el, "load-newer")!.textContent!.trim()).toBe("Reload");
   expectSave(el, "awake");
 });
 
@@ -339,8 +340,32 @@ it("offers the newer plan in Spanish", async () => {
   const el = await open(stubApi({ saveFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
-  expect(button(el, "load-newer")!.textContent!.trim()).toBe("Cargar el plano nuevo");
+  expect(button(el, "load-newer")!.textContent!.trim()).toBe("Recargar");
 });
+
+it.each(["en-GB", "es-ES"])(
+  "keeps Close, Undo, Redo and Save on one row at 390 px with Reload shown (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(...before));
+    const saveFloorPlan = vi
+      .fn()
+      .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+    const el = await open(stubApi({ saveFloorPlan }));
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-sheet")).not.toBeNull();
+    await move(el, "m1", 5);
+    await press(el, "save");
+    expect(button(el, "load-newer")).not.toBeNull();
+    const top = (node: Element) => Math.round(node.getBoundingClientRect().top);
+    const close = el.shadowRoot!.querySelector("[data-action=close]")!;
+    expect(top(close)).toBe(top(button(el, "save")!));
+    expect(top(button(el, "undo")!)).toBe(top(button(el, "save")!));
+    expect(top(button(el, "redo")!)).toBe(top(button(el, "save")!));
+    expect(top(button(el, "load-newer")!)).toBeLessThan(top(button(el, "save")!));
+  },
+);
 
 it("Load newer plan replaces the draft and writes nothing", async () => {
   const saveFloorPlan = vi

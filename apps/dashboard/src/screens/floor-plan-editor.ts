@@ -13,6 +13,8 @@ import {
   type TableMove,
   type TableRotate,
   type TableSelect,
+  type WtFloorPlanCanvas,
+  type WtSheet,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -184,6 +186,10 @@ export class FloorPlanEditor extends LitElement {
         flex: 1 1 auto;
         width: auto;
       }
+      /* On a phone Reload takes a row of its own, so the form's four buttons keep theirs. */
+      header.narrow wt-button[data-action="load-newer"] {
+        flex-basis: 100%;
+      }
       .note {
         margin: var(--wt-space-2) 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
@@ -291,6 +297,10 @@ export class FloorPlanEditor extends LitElement {
     this.narrow = entry!.contentRect.width < NARROW_PX;
   });
 
+  /** The sheet grows and shrinks with its panels after it is drawn, so its height is watched. */
+  readonly #sheetResize = new ResizeObserver(() => void this.#reveal());
+  #watchedSheet: WtSheet | null = null;
+
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -326,6 +336,8 @@ export class FloorPlanEditor extends LitElement {
     this.saving = false;
     this.loadingNewer = false;
     this.#resize.disconnect();
+    this.#sheetResize.disconnect();
+    this.#watchedSheet = null;
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -348,6 +360,28 @@ export class FloorPlanEditor extends LitElement {
     }).scope;
     this.#scope.commit(this.#opened!);
     this.#scope.changed();
+  }
+
+  override updated(changed: Map<string, unknown>): void {
+    const sheet = this.renderRoot.querySelector("wt-sheet");
+    if (sheet !== this.#watchedSheet) {
+      this.#sheetResize.disconnect();
+      this.#watchedSheet = sheet;
+      if (sheet !== null) this.#sheetResize.observe(sheet, { box: "border-box" });
+    }
+    if (changed.has("selected") || changed.has("sheetOpen")) {
+      void this.#reveal();
+    }
+  }
+
+  /** On a phone, keeps the selected table in the part of the canvas the sheet leaves showing. */
+  async #reveal(): Promise<void> {
+    const canvas = this.renderRoot.querySelector<WtFloorPlanCanvas>("wt-floor-plan-canvas");
+    const sheet = this.#watchedSheet;
+    if (canvas === null || sheet === null) return;
+    await Promise.all([canvas.updateComplete, sheet.updateComplete]);
+    const key = this.selected;
+    if (key !== null) canvas.reveal(key, sheet.getBoundingClientRect().height);
   }
 
   #disposeScope(): void {
@@ -612,7 +646,7 @@ export class FloorPlanEditor extends LitElement {
     void this.#reread(this.#zoneId!, ++this.#request, true);
   };
 
-  /** A refresh replaces only an unchanged draft; Load newer plan replaces it whatever it holds. */
+  /** A refresh replaces only an unchanged draft; Reload replaces it whatever it holds. */
   async #reread(zoneId: string, request: number, replace: boolean): Promise<void> {
     let plan: FloorPlan;
     try {
@@ -831,7 +865,7 @@ export class FloorPlanEditor extends LitElement {
     const history = this.#history;
     return html`
       <div class="width-probe"></div>
-      <header>
+      <header class=${this.narrow ? "narrow" : ""}>
         <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
         <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
           <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
