@@ -28,6 +28,7 @@ import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
+import "../src/components/wt-floor-plan-preview.js";
 import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
@@ -124,6 +125,7 @@ const panel = (theme: "light" | "dark") => `
       </div>
     </wt-card>
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
+    <wt-floor-plan-preview label="Floor plan: Terrace" style="width: 240px; margin-top: 16px"></wt-floor-plan-preview>
     <wt-sheet heading="Mesas" style="margin-top: 16px">
       <p>Mesa 1 · Mesa 2 · Mesa 3</p>
     </wt-sheet>
@@ -273,6 +275,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   plan.addEventListener("wt-table-select", (e) => {
     plan.selected = (e as CustomEvent<TableSelect>).detail.key;
   });
+  el.querySelector("wt-floor-plan-preview")!.tables = plan.tables;
   const tabs = el.querySelector("wt-tabs")!;
   tabs.items = [
     { key: "status", label: "Status" },
