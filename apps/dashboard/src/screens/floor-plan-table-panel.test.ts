@@ -164,11 +164,11 @@ it("a valid value after a refusal tells the page the field is fine", async () =>
 
 it("shows the refused text the page hands back, and the draft's value once it goes", async () => {
   const el = await open({
-    fieldError: { field: "seats", message: "Enter 0 to 999.", text: "1000" },
+    fieldErrors: [{ field: "seats", message: "Enter 0 to 999.", text: "1000" }],
   });
   expect(field(el, "seats")!.value).toBe("1000");
   expect(field(el, "seats")!.error).toBe("Enter 0 to 999.");
-  el.fieldError = null;
+  el.fieldErrors = [];
   await el.updateComplete;
   expect(field(el, "seats")!.value).toBe("4");
   expect(field(el, "seats")!.error).toBe("");
@@ -287,17 +287,33 @@ it("a table offered for adoption has Remove from plan but no Delete", async () =
 });
 
 it("shows a refusal under the field it names", async () => {
-  const el = await open({ fieldError: { field: "seats", message: "Too many seats" } });
+  const el = await open({ fieldErrors: [{ field: "seats", message: "Too many seats" }] });
   expect(field(el, "seats")!.error).toBe("Too many seats");
   expect(field(el, "table-name")!.error).toBe("");
-  el.fieldError = { field: "label", message: "A table with that name already exists" };
+  el.fieldErrors = [{ field: "label", message: "A table with that name already exists" }];
   await el.updateComplete;
   expect(field(el, "table-name")!.error).toBe("A table with that name already exists");
   expect(field(el, "seats")!.error).toBe("");
 });
 
+it("shows each marked field's own refused text and reason, the first mark of a field winning", async () => {
+  const el = await open({
+    fieldErrors: [
+      { field: "seats", message: "Enter 0 to 999.", text: "1000" },
+      { field: "width", message: "Enter 1 to 99.", text: "1.5" },
+      { field: "seats", message: "Too many seats" },
+    ],
+  });
+  expect([field(el, "seats")!.value, field(el, "seats")!.error]).toEqual([
+    "1000",
+    "Enter 0 to 999.",
+  ]);
+  expect([field(el, "width")!.value, field(el, "width")!.error]).toEqual(["1.5", "Enter 1 to 99."]);
+  expect([field(el, "height")!.value, field(el, "height")!.error]).toEqual(["8", ""]);
+});
+
 it("shows a refusal of Fixed in place under the switch", async () => {
-  const el = await open({ fieldError: { field: "fixed", message: "Not allowed" } });
+  const el = await open({ fieldErrors: [{ field: "fixed", message: "Not allowed" }] });
   const note = el.shadowRoot!.querySelector("[data-error=fixed]")!;
   expect(note.textContent!.trim()).toBe("Not allowed");
   expect((field(el, "fixed") as unknown as { description: string }).description).toBe(

@@ -91,11 +91,26 @@ interface FieldMark {
   key: string;
   field: FloorPlanField;
   text: () => string;
-  /** The editor's own check, or a panel's refusal of typed text, keeps Save disabled; a request's
-   *  refusal never does. */
-  from: "check" | "typed" | "refusal";
-  /** The refused text, which the panel shows in place of the draft's value. */
-  typed?: string;
+  /** The editor's own check keeps Save disabled; a request's refusal never does. */
+  from: "check" | "refusal";
+}
+
+/** A panel's refusal of typed text; any of them keeps Save disabled. */
+interface TypedMark {
+  key: string;
+  field: FloorPlanTypedField;
+  text: () => string;
+  /** Shown in place of the draft's value while the mark stands. */
+  typed: string;
+  /** The field's draft value when the text was refused; the mark goes when it changes. */
+  value: unknown;
+}
+
+/** What the table panel shows beside each field of one table. */
+export interface FloorPlanPanelError {
+  field: string;
+  message: string;
+  text?: string;
 }
 
 const SERVER_FIELDS: Record<string, FloorPlanField> = {
@@ -258,6 +273,7 @@ export class FloorPlanEditor extends LitElement {
   @state() private outOfDate = false;
   @state() private saving = false;
   @state() private mark: FieldMark | null = null;
+  @state() private typedMarks: readonly TypedMark[] = [];
   @state() private loadingNewer = false;
   @state() private narrow = false;
   @state() private sheetOpen = false;
@@ -267,7 +283,7 @@ export class FloorPlanEditor extends LitElement {
 
   /** The field a refusal or the editor's own check points at, for the side panels. */
   get fieldError(): FloorPlanFieldError | null {
-    const mark = this.mark;
+    const mark = this.mark ?? this.typedMarks[0] ?? null;
     return mark === null ? null : { key: mark.key, field: mark.field, message: mark.text() };
   }
 
@@ -373,6 +389,7 @@ export class FloorPlanEditor extends LitElement {
         this.selected = null;
         this.refused = null;
         this.#clearMark();
+        this.#setTyped([]);
       },
     }).scope;
     this.#scope.commit(this.#opened!);
@@ -434,6 +451,7 @@ export class FloorPlanEditor extends LitElement {
     this.message = null;
     this.outOfDate = false;
     this.mark = null;
+    this.typedMarks = [];
     this.refused = null;
     this.sent = null;
     if (zoneId !== null) void this.#load(zoneId, request);
@@ -475,7 +493,7 @@ export class FloorPlanEditor extends LitElement {
   #step(next: FloorPlanDraft | undefined): void {
     if (next === undefined) return;
     this.draft = next;
-    if (this.mark?.from === "typed") this.#clearMark();
+    this.#setTyped([]);
     this.#clearReadMessage();
     this.#followMark(next);
     this.#followRefused(next);
@@ -488,23 +506,32 @@ export class FloorPlanEditor extends LitElement {
 
   /** Typed text stays marked until its field holds a value again, or the draft's value changes. */
   #typed(detail: FloorPlanInvalid): void {
-    const mark = this.mark;
+    const others = this.typedMarks.filter(
+      (mark) => mark.key !== detail.key || mark.field !== detail.field,
+    );
     if (detail.text === null) {
-      if (mark?.from === "typed" && mark.key === detail.key && mark.field === detail.field) {
-        this.#clearMark();
-      }
+      if (others.length !== this.typedMarks.length) this.#setTyped(others);
       return;
     }
     const table = this.draft?.tables.find((t) => t.key === detail.key);
     if (table === undefined) return;
-    this.#markedValue = fieldValue(table, detail.field);
-    this.#setMark({
-      key: detail.key,
-      field: detail.field,
-      text: detail.message,
-      from: "typed",
-      typed: detail.text,
-    });
+    this.#setTyped([
+      ...others,
+      {
+        key: detail.key,
+        field: detail.field,
+        text: detail.message,
+        typed: detail.text,
+        value: fieldValue(table, detail.field),
+      },
+    ]);
+  }
+
+  #setTyped(marks: readonly TypedMark[]): void {
+    if (marks.length === 0 && this.typedMarks.length === 0) return;
+    this.typedMarks = marks;
+    if (marks.length > 0) this.message = this.#fixMessage();
+    else if (this.mark === null && this.message?.fix) this.message = null;
   }
 
   /** A table a check or a refusal points at; on a phone the sheet opens so its fields show. */
@@ -525,14 +552,18 @@ export class FloorPlanEditor extends LitElement {
     this.message = { text: () => codeMessage(code), from: "read" };
   }
 
+  #fixMessage(): EditorMessage {
+    return { ...actionMessage(() => t("form.fix_fields")), fix: true };
+  }
+
   #setMark(mark: FieldMark): void {
     this.mark = mark;
-    this.message = { ...actionMessage(() => t("form.fix_fields")), fix: true };
+    this.message = this.#fixMessage();
   }
 
   #clearMark(): void {
     this.mark = null;
-    if (this.message?.fix) this.message = null;
+    if (this.typedMarks.length === 0 && this.message?.fix) this.message = null;
   }
 
   #markCheck(draft: FloorPlanDraft): boolean {
@@ -570,6 +601,11 @@ export class FloorPlanEditor extends LitElement {
 
   /** A check's mark follows the draft until it passes; a refusal's goes when its field changes. */
   #followMark(next: FloorPlanDraft): void {
+    const standing = this.typedMarks.filter((typed) => {
+      const table = next.tables.find((t) => t.key === typed.key);
+      return table !== undefined && fieldValue(table, typed.field) === typed.value;
+    });
+    if (standing.length !== this.typedMarks.length) this.#setTyped(standing);
     const mark = this.mark;
     if (mark === null) return;
     if (mark.from === "check") {
@@ -619,7 +655,7 @@ export class FloorPlanEditor extends LitElement {
 
   readonly #save = async (): Promise<void> => {
     if (this.saving || this.loadingNewer || saveActionState(this.#scope).unchanged) return;
-    if (this.mark?.from === "typed") return;
+    if (this.typedMarks.length > 0) return;
     if (this.#markCheck(this.draft!)) {
       this.#selectFlagged(this.mark!.key);
       return;
@@ -656,17 +692,27 @@ export class FloorPlanEditor extends LitElement {
     const saved = rekeyDraft(sentDraft, ids);
     const current = rekeyDraft(trimLabels(this.draft!, draft), ids);
     this.renderRoot.querySelector("floor-plan-add-join")?.rekey(ids);
+    const rekey = (key: string): string => (Object.hasOwn(ids, key) ? ids[key]! : key);
+    this.#rekeyMarks(rekey);
     this.revision = answer.revision;
     this.outOfDate = false;
     this.#opened = saved;
     this.#scope?.commit(saved);
     this.#history?.reset(current);
     this.draft = current;
-    if (this.selected !== null && Object.hasOwn(ids, this.selected))
-      this.selected = ids[this.selected]!;
+    if (this.selected !== null) this.selected = rekey(this.selected);
     this.#scope?.changed();
     void this.#reread(zoneId, ++this.#request, false);
   };
+
+  #rekeyMarks(rekey: (key: string) => string): void {
+    if (this.typedMarks.some((mark) => rekey(mark.key) !== mark.key)) {
+      this.typedMarks = this.typedMarks.map((mark) => ({ ...mark, key: rekey(mark.key) }));
+    }
+    const mark = this.mark;
+    if (mark !== null && rekey(mark.key) !== mark.key)
+      this.mark = { ...mark, key: rekey(mark.key) };
+  }
 
   readonly #loadNewer = (): void => {
     this.loadingNewer = true;
@@ -692,6 +738,7 @@ export class FloorPlanEditor extends LitElement {
       this.outOfDate = false;
       this.message = null;
       this.mark = null;
+      this.typedMarks = [];
       this.refused = null;
     } else if (!saveActionState(this.#scope).unchanged) {
       return;
@@ -794,26 +841,33 @@ export class FloorPlanEditor extends LitElement {
   }
 
   #errorFor: FieldMark | null = null;
+  #errorTyped: readonly TypedMark[] = [];
   #errorKey: string | null = null;
   #errorLocale: string | null = null;
-  #panelErrorValue: { field: string; message: string; text?: string } | null = null;
+  #panelErrorValue: readonly FloorPlanPanelError[] = [];
 
-  /** The mark for the selected table only; the same object while it, the key and the language stay. */
-  #panelError(key: string): { field: string; message: string; text?: string } | null {
+  /** The selected table's marks, typed text first so it wins over a refusal of the same field; the
+   *  same array while the marks, the key and the language stay. */
+  #panelErrors(key: string): readonly FloorPlanPanelError[] {
     const mark = this.mark;
+    const typed = this.typedMarks;
     const locale = currentLocale();
-    if (mark !== this.#errorFor || key !== this.#errorKey || locale !== this.#errorLocale) {
+    if (
+      mark !== this.#errorFor ||
+      typed !== this.#errorTyped ||
+      key !== this.#errorKey ||
+      locale !== this.#errorLocale
+    ) {
       this.#errorFor = mark;
+      this.#errorTyped = typed;
       this.#errorKey = key;
       this.#errorLocale = locale;
-      this.#panelErrorValue =
-        mark === null || mark.key !== key
-          ? null
-          : {
-              field: mark.field,
-              message: mark.text(),
-              ...(mark.typed === undefined ? {} : { text: mark.typed }),
-            };
+      this.#panelErrorValue = [
+        ...typed.flatMap((m) =>
+          m.key === key ? [{ field: m.field, message: m.text(), text: m.typed }] : [],
+        ),
+        ...(mark === null || mark.key !== key ? [] : [{ field: mark.field, message: mark.text() }]),
+      ];
     }
     return this.#panelErrorValue;
   }
@@ -855,7 +909,7 @@ export class FloorPlanEditor extends LitElement {
         ? html`<floor-plan-table-panel
             .draft=${draft}
             .tableKey=${this.selected}
-            .fieldError=${this.#panelError(this.selected)}
+            .fieldErrors=${this.#panelErrors(this.selected)}
           ></floor-plan-table-panel>`
         : nothing;
     const panels = html`${tablePanel}${panel}`;
@@ -933,7 +987,8 @@ export class FloorPlanEditor extends LitElement {
               save.unchanged ||
               this.saving ||
               this.loadingNewer ||
-              (this.mark !== null && this.mark.from !== "refusal")
+              this.mark?.from === "check" ||
+              this.typedMarks.length > 0
             }
             @click=${this.#save}
             >${t("action.save")}</wt-button

@@ -779,7 +779,7 @@ it("a refusal shows only on the table it names, and comes back with it", async (
   );
   await el.updateComplete;
   expect(tablePanel(el).tableKey).toBe("m1");
-  expect(tablePanel(el).fieldError).toBeNull();
+  expect(tablePanel(el).fieldErrors).toEqual([]);
   expect(panelField(el, "seats").error).toBe("");
   canvas(el).dispatchEvent(
     new CustomEvent("wt-table-select", { detail: { key: "m2" }, bubbles: true, composed: true }),
@@ -869,4 +869,55 @@ it("a typed refusal stays on its table while another is selected", async () => {
   await select(el, "m1");
   expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
   expect(panelField(el, "seats").value).toBe("1000");
+});
+
+it("a second refused field keeps the first's refused text and reason, and Save waits for both", async () => {
+  await wide();
+  const api = stubApi();
+  const el = await open(api);
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await typeIntoPanel(el, "width", "1.5");
+  expect(panelField(el, "seats").value).toBe("1000");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(panelField(el, "width").value).toBe("1.5");
+  expect(panelField(el, "width").error).toBe("Enter 1 to 99.");
+  expect(button(el, "save").disabled).toBe(true);
+  await typeIntoPanel(el, "width", "9");
+  expect(panelField(el, "width").error).toBe("");
+  expect(panelField(el, "seats").value).toBe("1000");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(true);
+  await typeIntoPanel(el, "seats", "12");
+  expect(message(el)).toBe("");
+  expect(button(el, "save").disabled).toBe(false);
+  await press(el, "save");
+  const sent = vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables[0]!;
+  expect([sent.seats, sent.placement!.width]).toEqual([12, 9]);
+});
+
+it("a refused field typed into a new table while it is saved stays marked under its master id", async () => {
+  await wide();
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const el = await open(
+    stubApi({
+      saveFloorPlan: vi.fn().mockReturnValue(write.promise),
+      getFloorPlan: vi
+        .fn()
+        .mockResolvedValueOnce(plan())
+        .mockReturnValue(new Promise(() => {})),
+    }),
+  );
+  await change(el, withT5());
+  await select(el, "new:1");
+  await press(el, "save");
+  await typeIntoPanel(el, "seats", "1000");
+  write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", "live:l9": "m9", "new:1": "m5" } });
+  await flush(el);
+  await tablePanel(el).updateComplete;
+  expect(tablePanel(el).tableKey).toBe("m5");
+  expect(panelField(el, "seats").value).toBe("1000");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(button(el, "save").disabled).toBe(true);
 });

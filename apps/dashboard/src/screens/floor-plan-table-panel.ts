@@ -23,6 +23,7 @@ import type {
   FloorPlanAddJoinAsk,
   FloorPlanChange,
   FloorPlanInvalid,
+  FloorPlanPanelError,
   FloorPlanSelect,
   FloorPlanTypedField,
 } from "./floor-plan-editor.js";
@@ -101,13 +102,9 @@ export class FloorPlanTablePanel extends LitElement {
 
   @property({ attribute: false }) draft!: FloorPlanDraft;
   @property() tableKey = "";
-  /** The page's mark for this table; `text` is a typed value it refused, shown in place of the
-   *  draft's while the mark stands. */
-  @property({ attribute: false }) fieldError: {
-    field: string;
-    message: string;
-    text?: string;
-  } | null = null;
+  /** The page's marks for this table; a `text` is a typed value it refused, shown in place of the
+   *  draft's while the mark stands. The first mark of a field is the one shown. */
+  @property({ attribute: false }) fieldErrors: readonly FloorPlanPanelError[] = [];
 
   constructor() {
     super();
@@ -141,19 +138,15 @@ export class FloorPlanTablePanel extends LitElement {
   }
 
   #error(field: string): string {
-    return this.fieldError?.field === field ? this.fieldError.message : "";
+    return this.fieldErrors.find((e) => e.field === field)?.message ?? "";
   }
 
   /** The refused text while the page's mark holds it, else the draft's value, re-applied over
    *  anything typed since. */
   #shown(field: FloorPlanTypedField, draftValue: number | null): ReturnType<typeof live> {
-    const mark = this.fieldError;
+    const mark = this.fieldErrors.find((e) => e.field === field);
     return live(
-      mark?.field === field && mark.text !== undefined
-        ? mark.text
-        : draftValue === null
-          ? ""
-          : String(draftValue),
+      mark?.text !== undefined ? mark.text : draftValue === null ? "" : String(draftValue),
     );
   }
 
