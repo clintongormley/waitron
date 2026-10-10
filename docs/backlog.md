@@ -658,6 +658,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   label has no such rule. **Next action:** measure at phone width with a long name before changing
   anything.
 
+- **On a phone, sections nested more than four deep read flat in the Structure tab** — left open
+  by A453. At narrow width `wt-data-table` stops indenting after four levels
+  (`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
+  root row now takes one of them. A453's look at 390px wide: level 4, level 5 and a product in
+  level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
+  should go deeper (a shared table rule, so the Products tree changes too).
+
 - **A menu member whose id is literally `root` would share a key with the Structure tab's root row**
   — left open by A453, stated rather than guarded. Minted member ids are UUIDs, but a configuration
   import keeps the file's ids, and no UUID check on them was found (A453 plan, decision 1), so a
