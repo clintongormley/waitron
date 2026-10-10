@@ -3592,6 +3592,74 @@ describe("saving a cell's period choices", () => {
           { ...line(f.brunch, station(f.downstairs)), notOffered: true },
         ]);
       }));
+
+    it("marks a stored line whose period is not one of the venue's, last, rather than failing the read", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const [elsewhere] = await tx
+          .insert(locations)
+          .values({
+            name: "Elsewhere",
+            invoiceLocales: ["en-GB"],
+            operationDescription: "Hospitality",
+          })
+          .returning();
+        const otherCfg = { locationId: locationId(elsewhere!.id) };
+        const otherDepartment = await createDepartment(tx, otherCfg, {
+          name: "Dining",
+          orderStart: "table",
+        });
+        const otherLunch = (
+          await saveMenuPeriod(tx, otherCfg, otherDepartment.id, {
+            name: "Lunch",
+            menuId: f.lunchMenu,
+            staffMenuIds: [],
+            colour: "blue",
+          })
+        ).id;
+        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs));
+        const [cell] = await tx
+          .select({ id: routingCells.id })
+          .from(routingCells)
+          .where(eq(routingCells.productId, f.mojito));
+        for (const [periodId, departmentId] of [
+          [otherLunch, otherDepartment.id],
+          [f.lunch, f.department],
+        ])
+          await tx.insert(routingCellPeriods).values({
+            cellId: cell!.id,
+            periodId: periodId!,
+            departmentId: departmentId!,
+            stationId: f.downstairs,
+          });
+        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+          line(f.lunch, station(f.downstairs)),
+          { ...line(otherLunch, station(f.downstairs)), notOffered: true },
+        ]);
+      }));
+
+    it("reads no product list when no cell stores a period line", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const session = (
+          tx as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        const productListReads = () =>
+          prepared.mock.calls.filter(([query]) => query.sql.includes("coalesce(")).length;
+        try {
+          await routingModel(tx, f.cfg, at);
+          expect(productListReads()).toBe(0);
+          await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs), [
+            line(f.lunch, station(f.downstairs)),
+          ]);
+          prepared.mockClear();
+          await routingModel(tx, f.cfg, at);
+          expect(productListReads()).toBe(1);
+        } finally {
+          prepared.mockRestore();
+        }
+      }));
   });
 
   it("checks every line sent to pin an inherited cell, as the cell stores none of them", async () =>

@@ -1121,7 +1121,7 @@ export async function routingModel(
   const periods = await readRoutingPeriods(tx, cfg, clock.dayCutover);
   const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
   const periodProducts = new Map(periods.map((period) => [period.id, period.productIds]));
-  const active = await activeProducts(tx);
+  const active = (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];
   const productsOfRow = new Map<string, Set<string>>();
   const rowProducts = (cell: CellAddress) => {
     const key = cellKey({ row: cell.row, zoneId: null });
@@ -1144,11 +1144,15 @@ export async function routingModel(
           ...cell,
           periods: [...lines]
             .map(([periodId, target]) =>
-              periodProducts.get(periodId)!.some((productId) => covered.has(productId))
+              (periodProducts.get(periodId) ?? []).some((productId) => covered.has(productId))
                 ? { periodId, target }
                 : { periodId, target, notOffered: true as const },
             )
-            .sort((a, b) => periodOrder.get(a.periodId)! - periodOrder.get(b.periodId)!),
+            .sort(
+              (a, b) =>
+                (periodOrder.get(a.periodId) ?? periods.length) -
+                (periodOrder.get(b.periodId) ?? periods.length),
+            ),
         };
       }),
     periods,
