@@ -14,6 +14,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./service-settings-fields.js";
 import type { VenueServiceApi, VenueServiceView, ZoneServiceSettingsInput } from "./client.js";
 import { t } from "./strings.js";
+import { currentLocale } from "@waitron/dashboard-kit";
+import type { OpeningHoursModel } from "../menu-timetable-types.js";
 const copy = (value: ZoneServiceSettingsInput) => ({ ...value });
 const equal = (a: ZoneServiceSettingsInput, b: ZoneServiceSettingsInput) =>
   a.orderStart === b.orderStart &&
@@ -52,6 +54,13 @@ export class DepartmentZones extends LitElement {
         overflow-wrap: anywhere;
         min-width: 0;
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
+      a:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
       .muted {
         color: var(--wt-color-text-muted);
       }
@@ -70,6 +79,10 @@ export class DepartmentZones extends LitElement {
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
   @property() zone = "";
+  @state() private hours?: OpeningHoursModel;
+  @state() private hoursFailed = false;
+  private hoursDetach?: () => void;
+  private hoursApi?: VenueServiceApi;
   @state() private draft?: ZoneServiceSettingsInput;
   @state() private busy = false;
   @state() private failure = "";
@@ -85,6 +98,11 @@ export class DepartmentZones extends LitElement {
     this.requestUpdate();
   }
   override disconnectedCallback() {
+    this.hoursDetach?.();
+    this.hoursDetach = undefined;
+    this.hoursApi = undefined;
+    this.hours = undefined;
+    this.hoursFailed = false;
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -105,6 +123,24 @@ export class DepartmentZones extends LitElement {
     return !this.department?.active || this.selected?.active === false;
   }
   protected override willUpdate() {
+    if (this.isConnected && this.api !== this.hoursApi) {
+      this.hoursDetach?.();
+      this.hoursApi = this.api;
+      this.hours = undefined;
+      this.hoursFailed = false;
+      this.hoursDetach = this.api?.openingHours?.watchOpeningHours(
+        (model) => {
+          this.hours = model;
+          this.hoursFailed = false;
+        },
+        () => {
+          this.hoursFailed = true;
+        },
+        () => {
+          this.hoursFailed = false;
+        },
+      );
+    }
     const row = this.selected;
     if (!row) {
       this.scope?.dispose();
@@ -248,6 +284,62 @@ export class DepartmentZones extends LitElement {
       if (this.current(id, generation)) this.busy = false;
     }
   }
+  private closedWeek() {
+    const zone = this.hours?.departments
+      ?.find((d) => d.id === this.departmentId)
+      ?.zones.find((z) => z.id === this.selected?.id);
+    if (!zone) return nothing;
+    const groups = new Map<
+      string,
+      { ranges: readonly { startsAt: string; endsAt: string }[]; days: number[] }
+    >();
+    const cutover = this.hours!.dayCutover;
+    const minute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+    const rank = (time: string) => (minute(time) - minute(cutover) + 1440) % 1440;
+    for (const weekday of [1, 2, 3, 4, 5, 6, 0]) {
+      const ranges = [...(zone.week.find((d) => d.weekday === weekday)?.ranges ?? [])].sort(
+        (a, b) => rank(a.startsAt) - rank(b.startsAt),
+      );
+      if (!ranges.length) continue;
+      const key = ranges.map((r) => `${r.startsAt}/${r.endsAt}`).join(",");
+      const group = groups.get(key) ?? { ranges, days: [] };
+      group.days.push(weekday);
+      groups.set(key, group);
+    }
+    if (!groups.size) return t("venue.zone_open_with_department");
+    if (groups.size > 2)
+      return t("venue.zone_closed_days").replace(
+        "{count}",
+        String([...groups.values()].reduce((sum, g) => sum + g.days.length, 0)),
+      );
+    const list = new Intl.ListFormat(currentLocale(), { style: "long", type: "conjunction" });
+    const day = (n: number) => t(`hours.day_in_sentence.${n}` as Parameters<typeof t>[0]);
+    const days = (values: number[]) => {
+      const labels: string[] = [];
+      for (let start = 0; start < values.length;) {
+        let end = start;
+        while (end + 1 < values.length && values[end + 1] === (values[end]! + 1) % 7) end++;
+        if (end - start >= 2)
+          labels.push(
+            t("venue.zone_day_range")
+              .replace("{start}", day(values[start]!))
+              .replace("{end}", day(values[end]!)),
+          );
+        else for (let i = start; i <= end; i++) labels.push(day(values[i]!));
+        start = end + 1;
+      }
+      return list.format(labels);
+    };
+    return t("venue.zone_closed_summary").replace(
+      "{groups}",
+      [...groups.values()]
+        .map(
+          (g) =>
+            `${list.format(g.ranges.map((r) => (r.endsAt === cutover ? t("venue.zone_closed_from").replace("{time}", r.startsAt) : `${r.startsAt}–${r.endsAt}`)))} ${days(g.days)}`,
+        )
+        .join("; "),
+    );
+  }
   override render() {
     const row = this.selected,
       department = this.department;
@@ -294,6 +386,17 @@ export class DepartmentZones extends LitElement {
                   ${this.model!.departments.some((d) => d.active && d.id !== department.id) ? html`<wt-button variant="secondary" align="start" data-test="move-zone" ?disabled=${this.busy} @click=${() => this.action("move-zone", { zoneId: row.id })}>${t("venue.move_to_department")}</wt-button>` : nothing}
                   ${row.active === false ? (department.active ? html`<wt-button variant="secondary" align="start" data-test="enable-zone" ?disabled=${this.busy} @click=${() => this.action("enable-zone", { zoneId: row.id })}>${t("venue.enable")}</wt-button>` : nothing) : html`<wt-button variant="danger" align="start" data-test="disable-zone" ?disabled=${this.busy} @click=${() => this.action("disable-zone", { zoneId: row.id })}>${t("venue.disable")}</wt-button>`}
                 </wt-row-actions>
+              </div>
+              <div>
+                ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
+                <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
+                <p>
+                  <a
+                    data-test="zone-opening-hours"
+                    href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
+                    >${t("venue.zone_opening_hours")}</a
+                  >
+                </p>
               </div>
               <dashboard-service-settings-fields
                 .value=${this.draft}

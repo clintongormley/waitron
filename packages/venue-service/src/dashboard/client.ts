@@ -1,4 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import { OpeningHoursApi } from "./opening-hours-client.js";
 
 export type ServiceMode = "table_tab" | "prepay" | "ticket_then_pay";
 export interface Department {
@@ -102,11 +103,14 @@ export interface DepartmentTransfersView {
 }
 
 export class VenueServiceApi {
+  readonly openingHours: OpeningHoursApi;
   constructor(
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
     private readonly passive = false,
-  ) {}
+  ) {
+    this.openingHours = new OpeningHoursApi(request, liveData);
+  }
 
   get background(): VenueServiceApi {
     return new VenueServiceApi(this.request, this.liveData, true);
