@@ -13,6 +13,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
+import { AppError } from "@waitron/shared";
 import {
   planReset,
   targetsFromMaster,
@@ -23,6 +24,7 @@ import {
 import { leaveMerges } from "./floor-today-merges.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
+import "./errors.js";
 
 type Placed = {
   x: number | null;
@@ -420,4 +422,102 @@ export async function ensureToday(
       await catchUpZone(tx, cfg, removals, zoneId, now);
     }
   }
+}
+
+interface Today {
+  tableId: string;
+  row: typeof floorTodayTables.$inferSelect;
+  /** Every member's today's row, this table's included; null when the table is in no merge. */
+  merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;
+}
+
+async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string): Promise<Today> {
+  const [table] = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
+  if (table === undefined) throw new AppError("table.not_found", { tableId });
+  const [row] = await tx
+    .select()
+    .from(floorTodayTables)
+    .where(eq(floorTodayTables.tableId, tableId));
+  if (row === undefined) throw new AppError("table.not_in_floor_plan", { tableId });
+  const [own] = await tx
+    .select({ joinId: floorTodayJoinTables.joinId })
+    .from(floorTodayJoinTables)
+    .where(eq(floorTodayJoinTables.tableId, tableId));
+  if (own === undefined) return { tableId, row, merge: null };
+  const members = await tx
+    .select({ row: floorTodayTables })
+    .from(floorTodayJoinTables)
+    .innerJoin(floorTodayTables, eq(floorTodayTables.tableId, floorTodayJoinTables.tableId))
+    .where(eq(floorTodayJoinTables.joinId, own.joinId));
+  return { tableId, row, merge: { joinId: own.joinId, members: members.map((m) => m.row) } };
+}
+
+/** The refusals a move or a turn shares, in the order the routes answer them. */
+function refuseUnmovable(today: Today): void {
+  const { tableId, row } = today;
+  if (row.x === null) throw new AppError("table.not_in_floor_plan", { tableId });
+  if (row.takenOff) throw new AppError("table.taken_off", { tableId });
+  if (row.fixed) throw new AppError("table.fixed", { tableId });
+}
+
+/** `low + step` and `high + step` stay within 0–999. */
+function heldStep(step: number, low: number, high: number): number {
+  return Math.min(Math.max(step, -low), 999 - high);
+}
+
+/** Moves the table's top-left corner to `at`; a merge's members all move by the same distance. */
+export async function moveToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  at: { x: number; y: number },
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  refuseUnmovable(today);
+  const members = (today.merge?.members ?? [today.row]).filter((m) => m.x !== null);
+  const xs = members.map((m) => m.x!);
+  const ys = members.map((m) => m.y!);
+  const dx = heldStep(at.x - today.row.x!, Math.min(...xs), Math.max(...xs));
+  const dy = heldStep(at.y - today.row.y!, Math.min(...ys), Math.max(...ys));
+  for (const member of members) {
+    await tx
+      .update(floorTodayTables)
+      .set({ x: member.x! + dx, y: member.y! + dy })
+      .where(eq(floorTodayTables.id, member.id));
+  }
+}
+
+/** Turns the table 15° clockwise about its centre: its corner, `x` and `y`, does not change. */
+export async function rotateToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  refuseUnmovable(today);
+  if (today.merge !== null) throw new AppError("table.merged", { tableId });
+  await tx
+    .update(floorTodayTables)
+    .set({ rotation: (today.row.rotation! + 15) % 360 })
+    .where(eq(floorTodayTables.id, today.row.id));
+}
+
+/** Puts a spare on the map with its top-left corner at `at`; a table with a place is left alone. */
+export async function placeSpareToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  at: { x: number; y: number },
+): Promise<void> {
+  const { row } = await todayOf(tx, cfg, tableId);
+  if (row.takenOff) throw new AppError("table.taken_off", { tableId });
+  if (row.fixed) throw new AppError("table.fixed", { tableId });
+  if (row.x !== null) return;
+  await tx
+    .update(floorTodayTables)
+    .set({ x: at.x, y: at.y, width: 8, height: 8, shape: "rect", rotation: 0 })
+    .where(eq(floorTodayTables.id, row.id));
 }

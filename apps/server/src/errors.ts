@@ -332,6 +332,14 @@ declare module "@waitron/shared" {
      * zone's floor plan owns (`dining_tables.planned`).
      */
     "table.in_floor_plan": { tableId: string };
+    /** A change to today's plan named a table with no today's row, or a spare where it needs a place. */
+    "table.not_in_floor_plan": { tableId: string };
+    /** A change to today's plan named a table taken off for today. */
+    "table.taken_off": { tableId: string };
+    /** A change to today's plan would move, turn or place a fixed table. */
+    "table.fixed": { tableId: string };
+    /** A change to today's plan would turn a table in one of today's merges. */
+    "table.merged": { tableId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
