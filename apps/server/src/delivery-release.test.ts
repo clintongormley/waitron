@@ -1,21 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction, workingOrderLines } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { releaseDeliveries } from "./delivery-release.js";
 import { billRow, inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { createStation } from "./kitchen.js";
-import { routeProductTo } from "./testing/zone-offers.js";
 import { payWorkingOrder } from "./till-sale.js";
-import {
-  abandonHeldOrder,
-  createOpenOrder,
-  fireableLineColumns,
-  fireLines,
-  handOverOrder,
-} from "./working-order.js";
+import { abandonHeldOrder, createOpenOrder, handOverOrder } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -24,26 +16,18 @@ const suite = useVenueDb({
 
 const TRANSITION_REFUSAL = "working order cannot make that transition";
 
-/** A counter order of one Burger delivered to `tableId`, optionally fired, paid in cash. */
-async function settledDelivery(v: PartyVenue, tableId: string, fired = false): Promise<string> {
+/**
+ * A counter order of one Burger delivered to `tableId`, paid in cash; paying fires the dish. The
+ * order takes the delivery table's zone, so the table must sit in a prepay zone.
+ */
+async function settledDelivery(v: PartyVenue, tableId: string): Promise<string> {
   const id = randomUUID();
-  await inTx(v, async (tx) => {
-    await createOpenOrder(
-      tx,
-      v.cfg,
-      id,
-      [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-      null,
-      { deliveryTableId: tableId, zoneId: v.counter.zoneId },
-    );
-    if (fired) {
-      const lines = await tx
-        .select(fireableLineColumns)
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id));
-      await fireLines(tx, v.cfg, id, lines);
-    }
-  });
+  await inTx(v, (tx) =>
+    createOpenOrder(tx, v.cfg, id, [{ menuItemId: v.counterItem("Burger"), quantity: "1" }], null, {
+      deliveryTableId: tableId,
+      zoneId: v.counter.zoneId,
+    }),
+  );
   await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
     id,
     lines: [],
@@ -52,15 +36,16 @@ async function settledDelivery(v: PartyVenue, tableId: string, fired = false): P
   return id;
 }
 
+/** A table in the counter zone. */
+function deliveryTable(v: PartyVenue, label: string): Promise<string> {
+  return v.table(label, v.counter.zoneId);
+}
+
 describe("releaseDeliveries", () => {
   it("lets go of the table on a settled, collected order and keeps its name", async () => {
     const v = await setupPartyVenue(suite.db);
-    await inTx(v, async (tx) => {
-      const kitchen = (await createStation(tx, v.cfg, { name: "Kitchen" })).id;
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), kitchen);
-    });
-    const t4 = await v.table("Terrace 4");
-    const id = await settledDelivery(v, t4, true);
+    const t4 = await deliveryTable(v, "Terrace 4");
+    const id = await settledDelivery(v, t4);
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, id));
 
     await inTx(v, (tx) => releaseDeliveries(tx, t4, "Terrace 4"));
@@ -74,7 +59,7 @@ describe("releaseDeliveries", () => {
 
   it("lets go of the table on a settled order never collected, and on an abandoned one", async () => {
     const v = await setupPartyVenue(suite.db);
-    const t5 = await v.table("Terrace 5");
+    const t5 = await deliveryTable(v, "Terrace 5");
     const settled = await settledDelivery(v, t5);
     const abandoned = randomUUID();
     await inTx(v, (tx) =>
@@ -88,7 +73,7 @@ describe("releaseDeliveries", () => {
       ),
     );
     await abandonHeldOrder({ db: v.db }, v.cfg, abandoned);
-    const elsewhere = await settledDelivery(v, await v.table("Terrace 6"));
+    const elsewhere = await settledDelivery(v, await deliveryTable(v, "Terrace 6"));
 
     await inTx(v, (tx) => releaseDeliveries(tx, t5, "Terrace 5"));
 
@@ -120,7 +105,7 @@ describe("releaseDeliveries", () => {
     ],
   ])("refuses %s on a settled order", async (_name, set) => {
     const v = await setupPartyVenue(suite.db);
-    const id = await settledDelivery(v, await v.table(`T-${randomUUID().slice(0, 8)}`));
+    const id = await settledDelivery(v, await deliveryTable(v, `T-${randomUUID().slice(0, 8)}`));
 
     let refusal: { cause?: { message?: string } } | undefined;
     try {
