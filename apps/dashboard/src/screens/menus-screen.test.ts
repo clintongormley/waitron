@@ -5487,6 +5487,49 @@ describe("the Structure tree", () => {
     expect(focusedRowMenu(el)).toBe("m-drinks");
   });
 
+  it("keeps Add products' buttons in a 390×700 window with 200 products, and adds two from the root's ⋮", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(390, 700);
+    onTestFinished(() => page.viewport(width, height));
+    const many = Array.from({ length: 200 }, (_, index) =>
+      product(`p-many-${String(index).padStart(3, "0")}`, `Many ${String(index).padStart(3, "0")}`),
+    );
+    const client = api({ listLibraryProducts: vi.fn().mockResolvedValue([...products, ...many]) });
+    const el = await mountLunch(client);
+    await rowAction(el, "", "open-add-products");
+    expect(modal(el, "add-products").open).toBe(true);
+    const picker = inModal<SectionAddProducts>(
+      el,
+      "add-products",
+      "dashboard-section-add-products",
+    );
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelectorAll("li").length).toBeGreaterThanOrEqual(200);
+    const add = picker.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!;
+    const cancel = inModal(el, "add-products", '[data-test="add-products-cancel"]');
+    for (const button of [cancel, add]) {
+      const box = button.getBoundingClientRect();
+      expect(box.top, button.dataset.test).toBeGreaterThanOrEqual(0);
+      expect(box.bottom, button.dataset.test).toBeLessThanOrEqual(window.innerHeight);
+      expect(box.left, button.dataset.test).toBeGreaterThanOrEqual(0);
+      expect(box.right, button.dataset.test).toBeLessThanOrEqual(window.innerWidth);
+    }
+    for (const id of ["p-many-000", "p-many-001"])
+      picker.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${id}"]`)!.click();
+    await picker.updateComplete;
+    add.click();
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+    expect(client.addSectionProducts).toHaveBeenCalledExactlyOnceWith("root-lunch", [
+      "p-many-000",
+      "p-many-001",
+    ]);
+    await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("");
+  });
+
   it("hands focus to the holding section's ⋮ after a removal", async () => {
     const client = api();
     const el = await mountLunch(client);

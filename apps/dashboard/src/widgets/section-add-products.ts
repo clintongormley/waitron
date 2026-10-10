@@ -23,7 +23,7 @@ export interface AddableProduct {
  * Picks several products to add to one section. A product the section already holds is not
  * offered; one elsewhere on the menu around it is only marked, since a product may sit in several
  * sections. A host may put its own Cancel in the `cancel` slot, which lands beside the confirm
- * action.
+ * action, and a message of its own, such as a refused add, in the `message` slot above the count.
  */
 @customElement("dashboard-section-add-products")
 export class SectionAddProducts extends LitElement {
@@ -112,9 +112,26 @@ export class SectionAddProducts extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .error {
-        margin: var(--wt-space-2) 0 0;
+        margin: 0;
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
+      }
+      /* Inside a scrolling window body this stays at the body's visible bottom. Sticky stops at the
+         body's padding, so the negative inset and margin, with matching padding, carry the block
+         over the body's bottom padding, where list rows would otherwise show below the buttons. */
+      .bottom {
+        position: sticky;
+        bottom: calc(-1 * var(--wt-space-5));
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: var(--wt-space-2) 0 calc(-1 * var(--wt-space-5));
+        padding: var(--wt-space-3) 0 var(--wt-space-5);
+        border-top: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface-raised);
+      }
+      .bottom .count {
+        margin: 0;
       }
     `,
   ];
@@ -340,26 +357,29 @@ export class SectionAddProducts extends LitElement {
         <legend class="visually-hidden">${t("add_products.list")}</legend>
         ${this.#list()}
       </fieldset>
-      ${
-        this.error
-          ? html`<p class="error" id="add-products-error" data-test="error">
-              ${t("add_products.none_chosen")}
-            </p>`
-          : nothing
-      }
-      <p class="count" data-test="count" role="status">
-        ${t("add_products.selected").replace("{count}", String(count))}
-      </p>
-      <wt-form-actions>
-        <slot name="cancel" slot="cancel"></slot>
-        <wt-button
-          variant=${addAction.variant}
-          data-test="add"
-          .disabled=${addAction.unchanged || this.busy}
-          @click=${(event: Event) => this.#confirm(event)}
-          >${t("add_products.confirm")}</wt-button
-        >
-      </wt-form-actions>`;
+      <div class="bottom">
+        <slot name="message"></slot>
+        ${
+          this.error
+            ? html`<p class="error" id="add-products-error" data-test="error">
+                ${t("add_products.none_chosen")}
+              </p>`
+            : nothing
+        }
+        <p class="count" data-test="count" role="status">
+          ${t("add_products.selected").replace("{count}", String(count))}
+        </p>
+        <wt-form-actions>
+          <slot name="cancel" slot="cancel"></slot>
+          <wt-button
+            variant=${addAction.variant}
+            data-test="add"
+            .disabled=${addAction.unchanged || this.busy}
+            @click=${(event: Event) => this.#confirm(event)}
+            >${t("add_products.confirm")}</wt-button
+          >
+        </wt-form-actions>
+      </div>`;
   }
 }
 

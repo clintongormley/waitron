@@ -777,8 +777,9 @@ export class MenuStructureTable extends LitElement {
       }
     }
     (
-      root.querySelector<HTMLElement>(`tr[data-row-key="${ROOT_KEY}"] wt-row-actions`) ??
-      this.renderRoot.querySelector<HTMLElement>('[data-test$="-empty"]')
+      root.querySelector<HTMLElement>(
+        `tr[data-row-key="${ROOT_KEY}"] [data-test="actions-root"]`,
+      ) ?? this.renderRoot.querySelector<HTMLElement>('[data-test$="-empty"]')
     )?.focus();
   }
 

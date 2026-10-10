@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { SectionAddProducts } from "./section-add-products.js";
 import type { CategorySummary } from "../api/client.js";
@@ -128,4 +130,56 @@ describe.each(["light", "dark"] as const)("section add products Add states (%s)"
     expect(await addState(el)).toEqual(ready);
     await expectNoA11yViolations(host);
   });
+});
+
+describe.each(["light", "dark"] as const)("the Add products window at 390×700 (%s)", (theme) => {
+  it.each(["plain", "with messages"] as const)(
+    "is accessible with 200 products, %s",
+    async (state) => {
+      const before = [window.innerWidth, window.innerHeight] as const;
+      await page.viewport(390, 700);
+      onTestFinished(() => page.viewport(...before));
+      const { el: modal, host } = await mountWidget<HTMLElementTagNameMap["wt-modal"]>(
+        "wt-modal",
+        { size: "standard", heading: "Add products to Drinks" },
+        theme,
+      );
+      const el = document.createElement("dashboard-section-add-products");
+      Object.assign(el, {
+        products: Array.from({ length: 200 }, (_, index) => ({
+          id: `p-${index}`,
+          name: `Product ${index}`,
+          categoryId: null,
+        })),
+        categories,
+        inSection: [],
+        onMenu: null,
+      });
+      const cancel = document.createElement("wt-button");
+      cancel.slot = "cancel";
+      cancel.variant = "secondary";
+      cancel.textContent = "Cancel";
+      el.append(cancel);
+      modal.append(el);
+      modal.open = true;
+      await modal.updateComplete;
+      await el.updateComplete;
+      if (state === "with messages") {
+        const message = document.createElement("p");
+        message.slot = "message";
+        message.setAttribute("role", "alert");
+        message.style.margin = "0";
+        message.style.color = "var(--wt-color-danger)";
+        message.textContent = "Some of these products could not be added. Try again.";
+        el.append(message);
+        el.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-0"]')!.click();
+        el.inSection = ["p-0"];
+        await el.updateComplete;
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector('[data-test="error"]')).not.toBeNull();
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
 });
