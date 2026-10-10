@@ -4,10 +4,11 @@ import {
   UndoHistory,
   UrlStateController,
   baseStyles,
-  disabledStyles,
   draftScopeFor,
+  navigationGuardFor,
   saveActionState,
   type DraftScope,
+  type FloorPlanCanvasCopy,
   type PlanCanvasTable,
   type TableMove,
   type TableRotate,
@@ -17,7 +18,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import { dashboardPath } from "../navigation.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorPlan } from "../api/client.js";
 import {
@@ -112,9 +114,6 @@ export class FloorPlanEditor extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      a.close[aria-disabled="true"] {
-        ${disabledStyles}
-      }
     `,
   ];
 
@@ -141,6 +140,7 @@ export class FloorPlanEditor extends LitElement {
 
   constructor() {
     super();
+    new LocaleChangeController(this);
     this.addEventListener("floor-plan-change", (event) => {
       const { draft, mergeKey } = (event as CustomEvent<FloorPlanChange>).detail;
       this.#change(draft, mergeKey);
@@ -184,10 +184,11 @@ export class FloorPlanEditor extends LitElement {
   }
 
   #route(): void {
-    this.back = new URL(location.href).searchParams.get("back");
+    this.back = new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("back");
     const zoneId = this.#url.read("zone");
     if (zoneId === this.#zoneId) return;
     this.#zoneId = zoneId;
+    const request = ++this.#request;
     this.#disposeScope();
     this.plan = null;
     this.zoneName = null;
@@ -196,11 +197,10 @@ export class FloorPlanEditor extends LitElement {
     this.#history = null;
     this.selected = null;
     this.loadError = null;
-    if (zoneId !== null) void this.#load(zoneId);
+    if (zoneId !== null) void this.#load(zoneId, request);
   }
 
-  async #load(zoneId: string): Promise<void> {
-    const request = ++this.#request;
+  async #load(zoneId: string, request: number): Promise<void> {
     try {
       const [plan, zones, tables] = await Promise.all([
         this.api.getFloorPlan(zoneId),
@@ -226,6 +226,7 @@ export class FloorPlanEditor extends LitElement {
     this.#history.push(next, mergeKey);
     this.draft = next;
     this.#scope?.changed();
+    this.requestUpdate();
   }
 
   #step(next: FloorPlanDraft | undefined): void {
@@ -235,6 +236,7 @@ export class FloorPlanEditor extends LitElement {
       this.selected = null;
     }
     this.#scope?.changed();
+    this.requestUpdate();
   }
 
   readonly #onMove = (event: CustomEvent<TableMove>): void => {
@@ -252,12 +254,42 @@ export class FloorPlanEditor extends LitElement {
     this.selected = event.detail.key;
   };
 
+  #tablesFor: FloorPlanDraft | null = null;
+  #tables: PlanCanvasTable[] = [];
+
   #canvasTables(draft: FloorPlanDraft): PlanCanvasTable[] {
-    return draft.tables.flatMap((table) =>
-      table.placement === null
-        ? []
-        : [{ key: table.key, label: table.label, fixed: table.fixed, placement: table.placement }],
-    );
+    if (draft !== this.#tablesFor) {
+      this.#tablesFor = draft;
+      this.#tables = draft.tables.flatMap((table) =>
+        table.placement === null
+          ? []
+          : [
+              {
+                key: table.key,
+                label: table.label,
+                fixed: table.fixed,
+                placement: table.placement,
+              },
+            ],
+      );
+    }
+    return this.#tables;
+  }
+
+  #copyLocale: string | null = null;
+  #copy!: FloorPlanCanvasCopy;
+
+  #canvasCopy(): FloorPlanCanvasCopy {
+    const locale = currentLocale();
+    if (locale !== this.#copyLocale) {
+      this.#copyLocale = locale;
+      this.#copy = {
+        label: t("floor_plan_editor.title"),
+        fixed: t("floor_plan_editor.fixed"),
+        rotate: t("floor_plan_editor.rotate"),
+      };
+    }
+    return this.#copy;
   }
 
   override render() {
@@ -308,7 +340,7 @@ export class FloorPlanEditor extends LitElement {
             : html`<wt-floor-plan-canvas
                 .tables=${this.#canvasTables(this.draft)}
                 .selected=${this.selected}
-                .copy=${{ label: t("floor_plan_editor.title") }}
+                .copy=${this.#canvasCopy()}
                 @wt-table-move=${this.#onMove}
                 @wt-table-rotate=${this.#onRotate}
                 @wt-table-select=${this.#onSelect}

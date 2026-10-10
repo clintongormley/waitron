@@ -317,3 +317,67 @@ it("takes its draft scope again when put back in the page", async () => {
   await press(el, "undo");
   expectSaveQuiet(el);
 });
+
+it("names the canvas's fixed tables and turn handle in the dashboard's language", async () => {
+  setLocale("es-ES");
+  const plan = terrace();
+  plan.tables[0] = { ...plan.tables[0]!, fixed: true };
+  const el = await open(
+    stubApi({ getFloorPlan: vi.fn().mockResolvedValue(plan) as DashboardApi["getFloorPlan"] }),
+  );
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await canvas(el).updateComplete;
+  const root = canvas(el).shadowRoot!;
+  expect(root.querySelector(".table[data-key=m1]")!.getAttribute("aria-label")).toBe("T1, Fija");
+  expect(root.querySelector(".rotate-handle")!.getAttribute("aria-label")).toBe("Girar T1");
+});
+
+it("a change of selection hands the canvas the same tables and copy", async () => {
+  const el = await open();
+  const tables = canvas(el).tables;
+  const copy = canvas(el).copy;
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(canvas(el).tables).toBe(tables);
+  expect(canvas(el).copy).toBe(copy);
+});
+
+it("a late answer for a zone it left for no zone is dropped", async () => {
+  let answerTerrace!: (plan: FloorPlan) => void;
+  const api = stubApi({
+    getFloorPlan: vi.fn(
+      () =>
+        new Promise<FloorPlan>((resolve) => {
+          answerTerrace = resolve;
+        }),
+    ) as DashboardApi["getFloorPlan"],
+  });
+  const el = await open(api);
+  history.pushState(null, "", "/manage/floor-plan");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  answerTerrace(terrace());
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("wt-floor-plan-canvas")).toBeNull();
+  expect(heading(el)).toBe("Floor plan");
+});
+
+it("a late failure for the zone it left is dropped", async () => {
+  let failTerrace!: (error: unknown) => void;
+  const api = stubApi({
+    getFloorPlan: vi.fn((zoneId: string) =>
+      zoneId === "z2"
+        ? Promise.resolve(bar)
+        : new Promise<FloorPlan>((_, reject) => {
+            failTerrace = reject;
+          }),
+    ) as DashboardApi["getFloorPlan"],
+  });
+  const el = await open(api);
+  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  failTerrace({ code: "zone.not_found" });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-load-error]")).toBeNull();
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["b1"]);
+});
