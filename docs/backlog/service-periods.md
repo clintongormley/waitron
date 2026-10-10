@@ -21,7 +21,7 @@ their full text.
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — kitchen screens and monitors after slice 1 (Part A, #1479), and watchers
-  retired after slice 4 (Part B, built on `feat/service-periods-slice-5-part-b`): watcher copies
+  retired after slice 4 (Part B, #1502): watcher copies
   and slips, the watcher routes and refusals, the Prep stations Watchers tab and the four watcher
   tables are gone, and a pass printer is a printer listed on every station. A venue's existing
   watchers and their printer settings are deleted with the tables, so its pass printer prints

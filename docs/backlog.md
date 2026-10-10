@@ -1345,7 +1345,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Slice 4 Part A is built: combined tickets on shared printers, period choices in routing cells and
   the station editor. Station-hours and fallback retirement and the read-only station Week view are
   built. Slice 5 is built: kitchen screens and monitors (Part A, #1479) and watchers retired
-  (Part B), so a pass printer is a printer listed on every station. Department receipts (slice 7)
+  (Part B, #1502), so a pass printer is a printer listed on every station. Department receipts (slice 7)
   remain. Slice 6's
   remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
