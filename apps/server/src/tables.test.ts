@@ -318,6 +318,62 @@ describe("updateTable on a table in a floor plan", () => {
   });
 });
 
+describe("other old-screen writes on a table in a floor plan", () => {
+  async function seedTable(cfg: OriginConfig, planned: boolean) {
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Sala" }));
+    const { id: otherZoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Patio" }));
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "Q1", zoneId }));
+    if (planned)
+      await db.update(diningTables).set({ planned: true }).where(eq(diningTables.id, id));
+    return { id, zoneId, otherZoneId };
+  }
+
+  async function readTable(id: string) {
+    const [row] = await db
+      .select({ zoneId: diningTables.zoneId, active: diningTables.active, posX: diningTables.posX })
+      .from(diningTables)
+      .where(eq(diningTables.id, id));
+    return row!;
+  }
+
+  const spot = { posX: 10, posY: 20, shape: "square" as const, rotation: 0 };
+
+  it("deactivateTable refuses a planned table with table.in_floor_plan and leaves it on", async () => {
+    const cfg = await setupVenue();
+    const { id } = await seedTable(cfg, true);
+    await expect(asApp(cfg, (tx) => deactivateTable(tx, cfg, id))).rejects.toMatchObject({
+      code: "table.in_floor_plan",
+      params: { tableId: id },
+    });
+    expect((await readTable(id)).active).toBe(true);
+  });
+
+  it("deactivateTable still switches off a table never planned", async () => {
+    const cfg = await setupVenue();
+    const { id } = await seedTable(cfg, false);
+    await asApp(cfg, (tx) => deactivateTable(tx, cfg, id));
+    expect((await readTable(id)).active).toBe(false);
+  });
+
+  it("setTablePlacement refuses moving a planned table to another zone, and places it within its own", async () => {
+    const cfg = await setupVenue();
+    const { id, zoneId, otherZoneId } = await seedTable(cfg, true);
+    await expect(
+      asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...spot, zoneId: otherZoneId })),
+    ).rejects.toMatchObject({ code: "table.in_floor_plan", params: { tableId: id } });
+    expect(await readTable(id)).toMatchObject({ zoneId, posX: null });
+    await asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...spot, zoneId }));
+    expect(await readTable(id)).toMatchObject({ zoneId, posX: 10 });
+  });
+
+  it("setTablePlacement moves a table never planned to another zone", async () => {
+    const cfg = await setupVenue();
+    const { id, otherZoneId } = await seedTable(cfg, false);
+    await asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...spot, zoneId: otherZoneId }));
+    expect(await readTable(id)).toMatchObject({ zoneId: otherZoneId, posX: 10 });
+  });
+});
+
 describe("zone CRUD", () => {
   it("creates, lists (ordered by display_order, active-only), renames, deactivates a zone", async () => {
     const cfg = await setupVenue();

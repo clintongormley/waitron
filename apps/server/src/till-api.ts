@@ -489,6 +489,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_found": 404,
   "table.inactive": 409,
   "table.zone_inactive": 409,
+  "table.in_floor_plan": 409,
   "zone.not_found": 404,
   "placement.invalid": 400,
   "tab.already_open": 409,

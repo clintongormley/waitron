@@ -191,7 +191,7 @@ export async function updateTable(
 /**
  * A planned table's name, zone and on/off state belong to its zone's floor plan: a reset would
  * revert a change made here. Compared by value, because the old floor screen resends the
- * unchanged name with every capacity edit.
+ * unchanged name with every capacity edit and the current zone with every placement.
  */
 async function refuseFloorPlanChange(
   tx: Transaction,
@@ -223,6 +223,7 @@ export async function deactivateTable(
   _cfg: TillConfig,
   id: string,
 ): Promise<void> {
+  await refuseFloorPlanChange(tx, id, { active: false });
   const updated = await tx
     .update(diningTables)
     .set({ active: false })
@@ -259,6 +260,7 @@ export async function setTablePlacement(
     throw new AppError("zone.not_found", { zoneId: p.zoneId });
   }
 
+  await refuseFloorPlanChange(tx, tableId, { zoneId: p.zoneId });
   await requireZoneInService(tx, tableId, p.zoneId);
 
   requirePlacementInt(p.posX, COORD_MAX, "posX");
