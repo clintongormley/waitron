@@ -23,6 +23,6 @@
     "@waitron/print-agent": "workspace:*",
     "opentype.js": "^2.0.0",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.3"
   }
 }
