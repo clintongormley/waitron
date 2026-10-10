@@ -304,6 +304,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.zone_inactive": 409,
+  "table.in_floor_plan": 409,
   "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,

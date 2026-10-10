@@ -316,6 +316,11 @@ declare module "@waitron/shared" {
     "table.inactive": { tableId: string };
     "table.zone_inactive": { tableId: string; zoneId: string };
     /**
+     * The old floor screen tried to rename, rezone or switch on or off a table its zone's floor
+     * plan owns (`dining_tables.planned`).
+     */
+    "table.in_floor_plan": { tableId: string };
+    /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */

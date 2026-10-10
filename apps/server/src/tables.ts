@@ -148,6 +148,9 @@ export async function updateTable(
     capacity?: number | null;
     active?: boolean;
   } = {};
+  if (input.label !== undefined || input.zoneId !== undefined || input.active !== undefined) {
+    await refuseFloorPlanChange(tx, id, input);
+  }
   if (input.label !== undefined) patch.label = input.label;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.active !== undefined) patch.active = input.active;
@@ -182,6 +185,35 @@ export async function updateTable(
   }
   if (updated.length === 0) {
     throw new AppError("table.not_found", { tableId: id });
+  }
+}
+
+/**
+ * A planned table's name, zone and on/off state belong to its zone's floor plan: a reset would
+ * revert a change made here. Compared by value, because the old floor screen resends the
+ * unchanged name with every capacity edit.
+ */
+async function refuseFloorPlanChange(
+  tx: Transaction,
+  id: string,
+  input: { label?: string; zoneId?: string; active?: boolean },
+): Promise<void> {
+  const [table] = await tx
+    .select({
+      label: diningTables.label,
+      zoneId: diningTables.zoneId,
+      active: diningTables.active,
+      planned: diningTables.planned,
+    })
+    .from(diningTables)
+    .where(eq(diningTables.id, id));
+  if (table === undefined || !table.planned) return;
+  if (
+    (input.label !== undefined && input.label !== table.label) ||
+    (input.zoneId !== undefined && input.zoneId !== table.zoneId) ||
+    (input.active !== undefined && input.active !== table.active)
+  ) {
+    throw new AppError("table.in_floor_plan", { tableId: id });
   }
 }
 
