@@ -54,6 +54,14 @@ export type {
 } from "./components/wt-floor-plan-canvas.js";
 export { WtFloorPlanPreview } from "./components/wt-floor-plan-preview.js";
 export type { PreviewTable } from "./components/wt-floor-plan-preview.js";
+export { WtFloorMap, mapLabel } from "./components/wt-floor-map.js";
+export type {
+  FloorMapCopy,
+  FloorMapDetails,
+  FloorMapDrop,
+  FloorMapTable,
+  FloorMapTap,
+} from "./components/wt-floor-map.js";
 export { WtSheet } from "./components/wt-sheet.js";
 export {
   FLOOR_ASPECT,
