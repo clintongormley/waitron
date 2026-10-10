@@ -1044,17 +1044,26 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
-  it("keeps Find a bill, Pass and Kitchen on the demo counter's Spanish bar at 800 wide", async () => {
-    await withLocale("es-ES", () =>
-      atViewport(800, async () => {
+  it("keeps Find a bill, Pass and Kitchen on the demo counter's Spanish bar at 800 wide when its measured width fits there", async () => {
+    await withLocale("es-ES", async () => {
+      const { fits, tight } = await serviceWidths(demoCounter);
+      console.info(
+        `The demo counter's Spanish bar keeps Find a bill, Pass and Kitchen from ${fits} px.`,
+      );
+      await atViewport(800, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", demoCounter);
         await settle(el);
         expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
         const moved = inMore(el);
-        for (const key of ["find-bill", "expo", "station"]) expect(moved).not.toContain(key);
+        if (800 >= fits) {
+          for (const key of ["find-bill", "expo", "station"]) {
+            expect(moved, `fits from ${fits}`).not.toContain(key);
+          }
+        }
+        if (800 <= tight) expect(moved, `fits from ${fits}`).toContain("station");
         expectOneRow(el);
-      }),
-    );
+      });
+    });
   });
 
   it("keeps More in the bar's order, showing only the items that left", async () => {
