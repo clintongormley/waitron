@@ -578,6 +578,12 @@ turns the table by as much as the pointer went round, or ArrowRight and ArrowLef
 `--wt-color-danger` outline and that text below it in the same colour, centred but kept inside
 the grid, past the handle when the handle is below; the text is a sibling of the button, so a round table does not clip it, and is the
 button's accessible description.
+`bottomInset` (px) is how much of the canvas's bottom its parent draws over; the grid is drawn that
+much taller, so every table can be scrolled above it. `reveal(key)` scrolls the canvas, never the
+page, so that table, with its handle and reason, sits above `bottomInset` and inside the window's
+height. The floor-plan editor sets `bottomInset` to how far its phone sheet reaches over the canvas,
+and calls `reveal` when the selection changes or the sheet opens, and again whenever the sheet's
+height changes, until the person's next press, wheel or page scroll.
 
 `wt-sheet` is a bar with a top border on the surface colour, whose toggle (at least `--wt-tap-min`
 tall, with `aria-expanded` and `aria-controls` naming the body) shows `heading`. Pressing it flips

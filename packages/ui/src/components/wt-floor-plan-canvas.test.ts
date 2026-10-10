@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { PlanPlacement } from "../floor-plan-geometry.js";
@@ -12,8 +12,6 @@ import type {
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
-// reveal scrolls the test page too when the canvas is wider than it.
-afterEach(() => window.scrollTo(0, 0));
 
 const place = (over: Partial<PlanPlacement> = {}): PlanPlacement => ({
   x: 0,
@@ -30,7 +28,7 @@ const table = (key: string, label: string, over: Partial<PlanPlacement> = {}, fi
 
 async function canvas(
   tables: PlanCanvasTable[],
-  props: Partial<Pick<WtFloorPlanCanvas, "selected" | "copy">> = {},
+  props: Partial<Pick<WtFloorPlanCanvas, "selected" | "copy" | "bottomInset">> = {},
   mounter: (html: string) => Promise<HTMLElement> = mount,
 ): Promise<WtFloorPlanCanvas> {
   const el = (await mounter(
@@ -976,22 +974,23 @@ it("each event bubbles out of a shadow root", async () => {
 const viewportOf = (el: WtFloorPlanCanvas) => part(el, "viewport");
 
 it("reveal scrolls a table into view with the inset free below it", async () => {
-  const el = await canvas([table("t1", "T1", { x: 70, y: 60, width: 6, height: 4 })]);
+  const el = await canvas([table("t1", "T1", { x: 70, y: 60, width: 6, height: 4 })], {
+    bottomInset: 60,
+  });
   await settled(el);
-  el.reveal("t1", 60);
+  el.reveal("t1");
   const view = viewportOf(el).getBoundingClientRect();
   const box = button(el, "t1").getBoundingClientRect();
   expect(viewportOf(el).scrollTop).toBeGreaterThan(0);
   expect(box.bottom).toBeCloseTo(view.bottom - 60, 0);
   expect(box.right).toBeLessThanOrEqual(view.right);
   expect(box.left).toBeGreaterThanOrEqual(view.left);
-  expect(button(el, "t1").style.scrollMargin).toBe("");
 });
 
 it("reveal leaves a table already in view where it is", async () => {
-  const el = await canvas([table("t1", "T1", { x: 2, y: 2 })]);
+  const el = await canvas([table("t1", "T1", { x: 2, y: 2 })], { bottomInset: 100 });
   await settled(el);
-  el.reveal("t1", 100);
+  el.reveal("t1");
   expect(viewportOf(el).scrollTop).toBe(0);
   expect(viewportOf(el).scrollLeft).toBe(0);
 });
@@ -999,7 +998,7 @@ it("reveal leaves a table already in view where it is", async () => {
 it("reveal brings a refused table's reason below it into view", async () => {
   const el = await canvas([refusedTable("t1", "T1", "Booked 12 Oct, 21:00", { x: 2, y: 40 })]);
   await settled(el);
-  el.reveal("t1", 0);
+  el.reveal("t1");
   const view = viewportOf(el).getBoundingClientRect();
   const reason = reasonOf(el, "t1")!.getBoundingClientRect();
   expect(reason.top).toBeGreaterThanOrEqual(button(el, "t1").getBoundingClientRect().bottom);
@@ -1013,7 +1012,7 @@ it("reveal brings the handle above a table into view", async () => {
   );
   await settled(el);
   viewportOf(el).scrollTop = 40 * 12;
-  el.reveal("t1", 0);
+  el.reveal("t1");
   const view = viewportOf(el).getBoundingClientRect();
   const handle = part(el, "rotate-handle").getBoundingClientRect();
   expect(handle.bottom).toBeLessThan(button(el, "t1").getBoundingClientRect().top);
@@ -1028,7 +1027,7 @@ it("reveal brings a reason wider than its table into view sideways", async () =>
   el.style.width = "300px";
   await settled(el);
   viewportOf(el).scrollLeft = viewportOf(el).scrollWidth;
-  el.reveal("t1", 0);
+  el.reveal("t1");
   const view = viewportOf(el).getBoundingClientRect();
   const reason = reasonOf(el, "t1")!.getBoundingClientRect();
   expect(reason.left).toBeLessThan(button(el, "t1").getBoundingClientRect().left);
@@ -1038,6 +1037,69 @@ it("reveal brings a reason wider than its table into view sideways", async () =>
 it("reveal of a table it does not draw does nothing", async () => {
   const el = await canvas([table("t1", "T1", { x: 2, y: 60 })]);
   await settled(el);
-  el.reveal("t2", 0);
+  el.reveal("t2");
   expect(viewportOf(el).scrollTop).toBe(0);
+});
+
+it("bottomInset draws the grid that much taller", async () => {
+  const el = await canvas([table("t1", "T1", { y: 60 })]);
+  await settled(el);
+  const before = part(el, "grid").getBoundingClientRect().height;
+  el.bottomInset = 200;
+  await el.updateComplete;
+  expect(part(el, "grid").getBoundingClientRect().height).toBe(before + 200);
+});
+
+it("reveal lifts the lowest table above the inset, through the room the inset adds", async () => {
+  const el = await canvas([table("t1", "T1", { y: 20, height: 4 })], { bottomInset: 300 });
+  await settled(el);
+  el.reveal("t1");
+  const view = viewportOf(el).getBoundingClientRect();
+  expect(button(el, "t1").getBoundingClientRect().bottom).toBeCloseTo(view.bottom - 300, 0);
+});
+
+it("reveal scrolls only the canvas, never the page round it", async () => {
+  document.body.style.paddingBottom = "3000px";
+  onTestFinished(() => {
+    document.body.style.paddingBottom = "";
+    window.scrollTo(0, 0);
+  });
+  const el = await canvas([table("t1", "T1", { x: 70, y: 60 })], { bottomInset: 200 });
+  await settled(el);
+  el.reveal("t1");
+  expect(viewportOf(el).scrollTop).toBeGreaterThan(0);
+  expect([window.scrollX, window.scrollY]).toEqual([0, 0]);
+});
+
+it("reveal keeps a table taller than the space left showing at its top", async () => {
+  const el = await canvas([table("t1", "T1", { y: 40, height: 20 })], { bottomInset: 300 });
+  await settled(el);
+  el.reveal("t1");
+  const view = viewportOf(el).getBoundingClientRect();
+  expect(button(el, "t1").getBoundingClientRect().top).toBeCloseTo(view.top, 0);
+});
+
+it("reveal brings a table below the top of a scrolled page down onto the screen", async () => {
+  document.body.style.paddingBottom = "3000px";
+  onTestFinished(() => {
+    document.body.style.paddingBottom = "";
+    window.scrollTo(0, 0);
+  });
+  const el = await canvas([table("t1", "T1", { y: 20 }), table("t2", "T2", { y: 60 })]);
+  await settled(el);
+  viewportOf(el).scrollTop = 200;
+  window.scrollTo(0, el.getBoundingClientRect().top + 100);
+  el.reveal("t1");
+  expect(button(el, "t1").getBoundingClientRect().top).toBeCloseTo(0, 0);
+});
+
+it("reveal lifts a table past the bottom of the window up onto the screen", async () => {
+  document.body.style.paddingTop = `${window.innerHeight - 200}px`;
+  onTestFinished(() => {
+    document.body.style.paddingTop = "";
+  });
+  const el = await canvas([table("t1", "T1", { y: 20 }), table("t2", "T2", { y: 60 })]);
+  await settled(el);
+  el.reveal("t1");
+  expect(button(el, "t1").getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight, 0);
 });

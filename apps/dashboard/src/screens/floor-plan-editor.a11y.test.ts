@@ -120,7 +120,7 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("shows an older copy's message with Load newer plan accessibly", async () => {
+  it("shows an older copy's message with Reload accessibly", async () => {
     const { el, host } = await open(
       stubApi(
         vi.fn().mockResolvedValue(plan),

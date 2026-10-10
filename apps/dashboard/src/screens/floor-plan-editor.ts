@@ -262,6 +262,8 @@ export class FloorPlanEditor extends LitElement {
   @state() private narrow = false;
   @state() private sheetOpen = false;
   @state() private refused: RefusedTable | null = null;
+  /** How far the phone sheet reaches up over the canvas, in px. */
+  @state() private sheetOverlap = 0;
 
   /** The field a refusal or the editor's own check points at, for the side panels. */
   get fieldError(): FloorPlanFieldError | null {
@@ -300,6 +302,12 @@ export class FloorPlanEditor extends LitElement {
   /** The sheet grows and shrinks with its panels after it is drawn, so its height is watched. */
   readonly #sheetResize = new ResizeObserver(() => void this.#reveal());
   #watchedSheet: WtSheet | null = null;
+  /** Set by a new selection or the sheet opening, cleared by the user's press, wheel or page
+   *  scroll, so a later change in the sheet's height never moves a canvas the user has panned. */
+  #revealing = false;
+  readonly #userScrolls = (): void => {
+    this.#revealing = false;
+  };
 
   constructor() {
     super();
@@ -326,6 +334,9 @@ export class FloorPlanEditor extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate();
+    window.addEventListener("pointerdown", this.#userScrolls, { capture: true, passive: true });
+    window.addEventListener("wheel", this.#userScrolls, { capture: true, passive: true });
+    window.addEventListener("scroll", this.#userScrolls, { passive: true });
     void this.updateComplete.then(() => {
       if (this.isConnected) this.#resize.observe(this.renderRoot.querySelector(".width-probe")!);
     });
@@ -338,6 +349,9 @@ export class FloorPlanEditor extends LitElement {
     this.#resize.disconnect();
     this.#sheetResize.disconnect();
     this.#watchedSheet = null;
+    window.removeEventListener("pointerdown", this.#userScrolls, { capture: true });
+    window.removeEventListener("wheel", this.#userScrolls, { capture: true });
+    window.removeEventListener("scroll", this.#userScrolls);
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -369,7 +383,8 @@ export class FloorPlanEditor extends LitElement {
       this.#watchedSheet = sheet;
       if (sheet !== null) this.#sheetResize.observe(sheet, { box: "border-box" });
     }
-    if (changed.has("selected") || changed.has("sheetOpen")) {
+    if (changed.has("selected") || (changed.has("sheetOpen") && this.sheetOpen)) {
+      this.#revealing = true;
       void this.#reveal();
     }
   }
@@ -380,8 +395,14 @@ export class FloorPlanEditor extends LitElement {
     const sheet = this.#watchedSheet;
     if (canvas === null || sheet === null) return;
     await Promise.all([canvas.updateComplete, sheet.updateComplete]);
+    this.sheetOverlap = Math.max(
+      0,
+      canvas.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top,
+    );
+    await this.updateComplete;
+    await canvas.updateComplete;
     const key = this.selected;
-    if (key !== null) canvas.reveal(key, sheet.getBoundingClientRect().height);
+    if (this.#revealing && key !== null) canvas.reveal(key);
   }
 
   #disposeScope(): void {
@@ -812,6 +833,7 @@ export class FloorPlanEditor extends LitElement {
       .tables=${this.#canvasTables(draft)}
       .selected=${this.selected}
       .copy=${this.#canvasCopy()}
+      .bottomInset=${this.narrow ? this.sheetOverlap : 0}
       @wt-table-move=${this.#onMove}
       @wt-table-rotate=${this.#onRotate}
       @wt-table-select=${this.#onSelect}

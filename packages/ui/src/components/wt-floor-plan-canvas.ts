@@ -60,6 +60,13 @@ const px = (squares: number): string => `${squares * GRID_SQUARE_PX}px`;
 
 const ROTATE_KEY_STEP = 15;
 
+/** How far to scroll so `start..end` lies inside `from..to`, keeping `start` when it cannot fit. */
+function nearest(start: number, end: number, from: number, to: number): number {
+  if (start < from) return start - from;
+  if (end > to) return Math.min(end - to, start - from);
+  return 0;
+}
+
 const ARROWS: Record<string, { dx: number; dy: number }> = {
   ArrowRight: { dx: 1, dy: 0 },
   ArrowLeft: { dx: -1, dy: 0 },
@@ -206,6 +213,10 @@ export class WtFloorPlanCanvas extends LitElement {
 
   @property({ attribute: false }) copy: Partial<FloorPlanCanvasCopy> = {};
 
+  /** Px at the canvas's bottom the parent draws over. The grid is drawn that much taller, so every
+   *  table can be scrolled above it, and `reveal` keeps it clear. */
+  @property({ type: Number }) bottomInset = 0;
+
   @state() private visible = { columns: 0, rows: 0 };
 
   @state() private draft: Draft | null = null;
@@ -255,7 +266,7 @@ export class WtFloorPlanCanvas extends LitElement {
     );
     const gridStyle = styleMap({
       width: px(extent.columns),
-      height: px(extent.rows),
+      height: `${extent.rows * GRID_SQUARE_PX + this.bottomInset}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
     });
     return html`
@@ -386,29 +397,33 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   /**
-   * Scrolls the drawn table `key`, with its handle and reason, into view in every scroller round
-   * it, keeping `bottomInset` px below it clear for something the parent draws over the bottom.
+   * Scrolls the canvas, never the page, so the drawn table `key` with its handle and reason sits in
+   * the part of the canvas above `bottomInset` and inside the window's height; one taller than that
+   * keeps its top.
    */
-  reveal(key: string, bottomInset: number): void {
+  reveal(key: string): void {
     const drawn = [...this.renderRoot.querySelectorAll<HTMLElement>("[data-key]")].filter(
       (node) => node.dataset.key === key,
     );
-    const table = drawn.find((node) => node.classList.contains("table"));
-    if (table === undefined) return;
+    if (!drawn.some((node) => node.classList.contains("table"))) return;
     const handle = key === this.selected ? this.renderRoot.querySelector(".rotate-handle") : null;
-    const box = table.getBoundingClientRect();
     const rects = [...drawn, ...(handle === null ? [] : [handle])].map((node) =>
       node.getBoundingClientRect(),
     );
-    const top = Math.min(...rects.map((r) => r.top));
-    const right = Math.max(...rects.map((r) => r.right));
-    const bottom = Math.max(...rects.map((r) => r.bottom));
-    const left = Math.min(...rects.map((r) => r.left));
-    table.style.scrollMargin = `${box.top - top}px ${right - box.right}px ${
-      bottom - box.bottom + bottomInset
-    }px ${box.left - left}px`;
-    table.scrollIntoView({ block: "nearest", inline: "nearest" });
-    table.style.scrollMargin = "";
+    const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
+    const view = viewport.getBoundingClientRect();
+    viewport.scrollTop += nearest(
+      Math.min(...rects.map((r) => r.top)),
+      Math.max(...rects.map((r) => r.bottom)),
+      Math.max(view.top, 0),
+      Math.min(view.bottom - this.bottomInset, window.innerHeight),
+    );
+    viewport.scrollLeft += nearest(
+      Math.min(...rects.map((r) => r.left)),
+      Math.max(...rects.map((r) => r.right)),
+      view.left,
+      view.right,
+    );
   }
 
   #onTableKey(e: KeyboardEvent, t: PlanCanvasTable): void {

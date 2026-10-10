@@ -319,7 +319,7 @@ it("a save in progress keeps a second press from sending", async () => {
   expect(saveFloorPlan).toHaveBeenCalledTimes(1);
 });
 
-it("an older copy offers the newer plan, keeping Save available", async () => {
+it("an older copy offers Reload, keeping Save available", async () => {
   const saveFloorPlan = vi
     .fn()
     .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
@@ -332,7 +332,7 @@ it("an older copy offers the newer plan, keeping Save available", async () => {
   expectSave(el, "awake");
 });
 
-it("offers the newer plan in Spanish", async () => {
+it("offers Reload in Spanish", async () => {
   setLocale("es-ES");
   const saveFloorPlan = vi
     .fn()
@@ -367,7 +367,7 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-it("Load newer plan replaces the draft and writes nothing", async () => {
+it("Reload replaces the draft and writes nothing", async () => {
   const saveFloorPlan = vi
     .fn()
     .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
@@ -474,7 +474,7 @@ it("a refresh's answer that lands after a later save's refresh is dropped", asyn
   expectSave(el, "quiet");
 });
 
-it("a successful Load newer plan clears every message", async () => {
+it("a successful Reload clears every message", async () => {
   const saveFloorPlan = vi
     .fn()
     .mockRejectedValueOnce({
@@ -496,7 +496,7 @@ it("a successful Load newer plan clears every message", async () => {
   expect(button(el, "load-newer")).toBeNull();
 });
 
-it("Save pressed again after an older copy hides Load newer plan while it is sent", async () => {
+it("Save pressed again after an older copy hides Reload while it is sent", async () => {
   const write = deferred<{ revision: number; ids: Record<string, string> }>();
   const saveFloorPlan = vi
     .fn()
@@ -517,7 +517,7 @@ it("Save pressed again after an older copy hides Load newer plan while it is sen
   expect(button(el, "load-newer")).not.toBeNull();
 });
 
-it("Load newer plan drops the selection of a table the newer plan no longer has", async () => {
+it("Reload drops the selection of a table the newer plan no longer has", async () => {
   const saveFloorPlan = vi
     .fn()
     .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });

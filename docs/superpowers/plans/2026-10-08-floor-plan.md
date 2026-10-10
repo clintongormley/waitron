@@ -1224,6 +1224,8 @@ Each is the default this slice builds; the owner may override any at review.
 5. **On `floor_plan.out_of_date`** the code's sentence shows with a "Load newer plan" button;
    pressing it replaces the draft with a fresh read and empties Undo and Redo, writing nothing. The
    press is the person's choice to drop their draft, so it does not ask again. Save stays enabled.
+   _Note 2026-10-10: the button shipped as "Reload" / "Recargar", to match the code's sentence
+   ("Reload it and try again"); this plan's later mentions of "Load newer plan" mean it._
 6. **`table.booked` names a table the draft has deleted, so there is no field to put it beside.** The
    message is "<name>: <the code's sentence>", the name taken from the plan as opened (matched by
    `liveTableId`). Undo brings the table back. This replaces the task list's "beside it in the panel".
@@ -1887,6 +1889,7 @@ read's failure never replaces an action's message; and a read's success clears o
 message. Save stays quiet after a failed re-read, since the write succeeded.
 
 New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente".
+_Note 2026-10-10: shipped as "Reload" / "Recargar" (Task 2.8's look pass)._
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.save.test.ts` (Task 2.4a's fixture
   plan; a change is made by dispatching `floor-plan-change` from inside the page):

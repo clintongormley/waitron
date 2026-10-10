@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas, WtModal, WtSheet } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -507,6 +507,16 @@ it("at 390 px scrolls the selected table above the sheet when the sheet opens", 
   await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
 });
 
+it("at 390 px lifts the selected table above the sheet the user taps open", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await userEvent.click(sheet(el)!.shadowRoot!.querySelector<HTMLElement>("button")!);
+  await expect.poll(() => sheet(el)!.expanded).toBe(true);
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+});
+
 it("at 390 px scrolls each newly selected table above the open sheet", async () => {
   await viewport(390, 844);
   const el = await open(lowApi());
@@ -519,7 +529,7 @@ it("at 390 px scrolls each newly selected table above the open sheet", async () 
   await expect.poll(() => aboveSheet(el, "m2")).toBe(true);
 });
 
-it("at 390 px keeps the selected table above the sheet when the sheet grows", async () => {
+it("at 390 px keeps the selected table above the sheet when the sheet grows before the user scrolls", async () => {
   await viewport(390, 844);
   const el = await open(lowApi());
   await expect.poll(() => sheet(el)).not.toBeNull();
@@ -527,6 +537,62 @@ it("at 390 px keeps the selected table above the sheet when the sheet grows", as
   await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
   sheet(el)!.style.paddingTop = "400px";
   await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+});
+
+it("at 390 px lifts a table above the open sheet by scrolling the canvas, never the page", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await expandSheet(el);
+  await fromCanvas(el, "wt-table-select", { key: "m2" });
+  await expect.poll(() => aboveSheet(el, "m2")).toBe(true);
+  expect(window.scrollY).toBe(0);
+  expect(button(el, "save").getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+});
+
+async function frames(n: number): Promise<void> {
+  for (let i = 0; i < n; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+it("at 390 px leaves the user's own pan alone when the sheet grows after it", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await expandSheet(el);
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+  const view = canvas(el).shadowRoot!.querySelector(".viewport")!;
+  const table = canvas(el).shadowRoot!.querySelector("button[data-key=m1]")!;
+  await userEvent.wheel(table, { delta: { y: -2000 } });
+  await expect.poll(() => view.scrollTop).toBe(0);
+  const pageY = window.scrollY;
+  const height = sheet(el)!.getBoundingClientRect().height;
+  sheet(el)!.style.paddingTop = "100px";
+  await frames(3);
+  await el.updateComplete;
+  await canvas(el).updateComplete;
+  expect(sheet(el)!.getBoundingClientRect().height).toBeGreaterThan(height);
+  expect(view.scrollTop).toBe(0);
+  expect(window.scrollY).toBe(pageY);
+});
+
+it("at 390 px leaves the canvas alone when the sheet grows after the user scrolls the page", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await expandSheet(el);
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
+  const view = canvas(el).shadowRoot!.querySelector(".viewport")!;
+  const panned = view.scrollTop;
+  window.scrollTo(0, 200);
+  await frames(2);
+  sheet(el)!.style.paddingTop = "100px";
+  await frames(3);
+  await el.updateComplete;
+  await canvas(el).updateComplete;
+  expect(aboveSheet(el, "m1")).toBe(false);
+  expect(view.scrollTop).toBe(panned);
 });
 
 it("leaves the canvas where it is at 1280 px", async () => {

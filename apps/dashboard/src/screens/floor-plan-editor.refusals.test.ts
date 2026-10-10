@@ -299,6 +299,10 @@ it("at 390 px a booked table comes back above the sheet the refusal opens, with 
   expect(box().top).toBeGreaterThanOrEqual(
     Math.max(0, root.querySelector(".viewport")!.getBoundingClientRect().top) - 0.5,
   );
+  expect(window.scrollY).toBe(0);
+  expect(
+    el.shadowRoot!.querySelector("wt-button[data-action=save]")!.getBoundingClientRect().top,
+  ).toBeGreaterThanOrEqual(0);
 });
 
 it("a booked table's mark goes at the next Save, which sends it back", async () => {
@@ -424,7 +428,7 @@ it("the tables list is handed the same refused value until the mark changes", as
   expect(panel().refused).toEqual({ key: "m2", reason: "Reservada el 12 oct, 21:00" });
 });
 
-it("Load newer plan clears a booked table's mark", async () => {
+it("Reload clears a booked table's mark", async () => {
   const saveFloorPlan = vi
     .fn()
     .mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" }));
@@ -627,7 +631,7 @@ it("the next Save clears a refusal's mark", async () => {
   expect(message(el)).toBe("");
 });
 
-it("Save does not send while a Load newer plan read is pending", async () => {
+it("Save does not send while a Reload read is pending", async () => {
   const newer = deferred<FloorPlan>();
   const saveFloorPlan = vi
     .fn()
