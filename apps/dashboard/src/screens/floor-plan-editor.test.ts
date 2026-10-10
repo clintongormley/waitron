@@ -452,3 +452,75 @@ it("tells the panel when it sits in the sheet", async () => {
       .inSheet,
   ).toBe(true);
 });
+
+const panelOf = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-tables-panel"]>(
+    "floor-plan-tables-panel",
+  )!;
+
+async function addTablesHint(el: FloorPlanEditor): Promise<string> {
+  const panel = panelOf(el);
+  panel.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!.click();
+  await panel.updateComplete;
+  return panel.shadowRoot!.querySelector<HTMLElement & { hint: string }>("[name=prefix]")!.hint;
+}
+
+const venueTable = (id: string, label: string, zoneId: string | null, active: boolean) => ({
+  id,
+  label,
+  zoneId,
+  capacity: null,
+  active,
+  createdAt: "2026-10-01T10:00:00.000Z",
+});
+
+it("counts this zone's switched-off tables no draft table follows as taken", async () => {
+  const el = await open(
+    stubApi({
+      listTables: vi.fn().mockResolvedValue([venueTable("l7", "Terrace 30", "z1", false)]),
+    }),
+  );
+  expect(await addTablesHint(el)).toBe("Terrace 31");
+});
+
+it("counts other zones' tables as taken, but not this zone's live or followed tables", async () => {
+  const el = await open(
+    stubApi({
+      listTables: vi
+        .fn()
+        .mockResolvedValue([
+          venueTable("l1", "Terrace 50", "z1", false),
+          venueTable("l8", "Terrace 60", "z1", true),
+          venueTable("l9", "Terrace 20", "z2", true),
+          venueTable("l10", "Terrace 9", null, false),
+        ]),
+    }),
+  );
+  expect(panelOf(el).zoneName).toBe("Terrace");
+  expect([...panelOf(el).takenElsewhere].sort()).toEqual(["Terrace 20", "Terrace 9"]);
+  expect(await addTablesHint(el)).toBe("Terrace 21");
+});
+
+it("gives added tables keys no draft table holds, before and after a save", async () => {
+  const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: { "new:1": "m5" } });
+  const el = await open(stubApi({ saveFloorPlan }));
+  const panel = panelOf(el);
+  const first = panel.nextKey();
+  expect(first).toBe("new:1");
+  const draft = el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft;
+  panel.dispatchEvent(
+    new CustomEvent("floor-plan-change", {
+      detail: { draft: addTables(draft, [{ label: "T3", seats: 4, fixed: false }], () => first) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  await press(el, "save");
+  await flush(el);
+  expect(saveFloorPlan).toHaveBeenCalledOnce();
+  const keys = panelOf(el).draft.tables.map((t) => t.key);
+  const next = panelOf(el).nextKey();
+  expect(keys).not.toContain(next);
+  expect(next).not.toBe(first);
+});

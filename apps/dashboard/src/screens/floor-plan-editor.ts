@@ -252,6 +252,9 @@ export class FloorPlanEditor extends LitElement {
   protected venueTables: DashboardTable[] = [];
 
   #zoneId: string | null = null;
+  #newKeys = 0;
+  /** Monotonic, so a key never returns: not after a save turns `new:<n>` into an id, nor on undo. */
+  readonly #nextKey = (): string => `new:${++this.#newKeys}`;
   #request = 0;
   #saveRequest = 0;
   /** The refused field's value when the refusal arrived. */
@@ -639,6 +642,25 @@ export class FloorPlanEditor extends LitElement {
     return this.#tables;
   }
 
+  #takenFor: FloorPlanDraft | null = null;
+  #takenTables: DashboardTable[] | null = null;
+  #taken: ReadonlySet<string> = new Set();
+
+  /** Decision 8: another zone's tables, and this zone's switched-off ones no draft table follows. */
+  #takenElsewhere(draft: FloorPlanDraft): ReadonlySet<string> {
+    if (draft !== this.#takenFor || this.venueTables !== this.#takenTables) {
+      this.#takenFor = draft;
+      this.#takenTables = this.venueTables;
+      const followed = new Set(draft.tables.map((t) => t.liveTableId));
+      this.#taken = new Set(
+        this.venueTables
+          .filter((t) => (t.zoneId === this.#zoneId ? !t.active && !followed.has(t.id) : true))
+          .map((t) => t.label),
+      );
+    }
+    return this.#taken;
+  }
+
   #panelFor: RefusedTable | null = null;
   #panelLocale: string | null = null;
   #panelRefused: { key: string; reason: string } | null = null;
@@ -686,6 +708,10 @@ export class FloorPlanEditor extends LitElement {
       .selected=${this.selected}
       .refused=${this.#refusedForPanel()}
       .inSheet=${this.narrow}
+      .zoneName=${this.zoneName ?? ""}
+      .takenElsewhere=${this.#takenElsewhere(draft)}
+      .nextKey=${this.#nextKey}
+      .draftParent=${this.#scopeId}
     ></floor-plan-tables-panel>`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">
       ${canvas}${this.narrow ? this.#sheet(draft, panel) : html`<div class="side">${panel}</div>`}
