@@ -29,8 +29,7 @@ export async function readStationQueueMoves(
     .leftJoin(persons, eq(persons.id, ticketItemMoves.movedByPersonId))
     .leftJoin(devices, eq(devices.id, ticketItemMoves.movedByDeviceId))
     .where(inArray(ticketItemMoves.workingOrderLineId, lineIds))
-    // Two moves can share a millisecond; rowid keeps their insertion order.
-    .orderBy(desc(ticketItemMoves.movedAt), desc(sql`${ticketItemMoves}.rowid`));
+    .orderBy(desc(sql`${ticketItemMoves}.rowid`));
   for (const { lineId, ...move } of rows) {
     if (!latest.has(lineId)) latest.set(lineId, move);
   }

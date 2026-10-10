@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   devices,
@@ -466,6 +466,24 @@ describe("station queue move attribution", () => {
       movedAt: "2026-10-10T18:12:00.000Z",
     });
     expect(queues.get(grill)!.find((g) => g.orderId === tabId)).toBeUndefined();
+    await inTx(venue, (tx) =>
+      tx
+        .update(ticketItemMoves)
+        .set({ movedAt: "2026-10-10T18:11:00.000Z" })
+        .where(
+          and(
+            eq(ticketItemMoves.workingOrderLineId, item!.workingOrderLineId),
+            eq(ticketItemMoves.toStationId, bar),
+          ),
+        ),
+    );
+    const clockWentBack = await send(venue.app, venue.cookie, "GET", `/api/stations/${bar}/queue`);
+    expect(group(clockWentBack.json).items[0]!.lastMove).toEqual({
+      fromStationName: "Grill",
+      personName: "Luis",
+      deviceName: null,
+      movedAt: "2026-10-10T18:11:00.000Z",
+    });
     await inTx(venue, (tx) =>
       tx.update(ticketItems).set({ stationId: grill }).where(eq(ticketItems.id, item!.id)),
     );

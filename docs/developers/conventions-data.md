@@ -2313,3 +2313,18 @@ Service settings are saved through their own routes. Real-row preservation check
 `packages/venue-service/src/operations.test.ts` and
 `apps/server/src/till-api.service-periods.test.ts`. The old department and zone style columns
 are retired without data conversion; this pre-live change requires a venue reset.
+
+
+## Latest station move follows insertion order
+
+A458's `station queue move attribution` test inserts two moves at 18:12, then sets the second
+move's time to 18:11. Ranking by time lost that second move from the receiving card. The reader
+now ranks `ticket_item_moves.rowid`; it shows the recorded time without using it to pick the mover.
+
+A split copies the move records in rowid order. The `keeps the latest mover when splitting a dish`
+case in `apps/server/src/station-move.test.ts` turns `reverse_unordered_selects` on for the split
+and restores it in `finally`. Without the copy's explicit order, the split line loses the latest
+mover. Both cases failed before their fixes; deleting either order in a disposable checkout failed
+its respective case again. Commands: `pnpm --filter @waitron/server exec vitest run
+src/till-api.station-move.test.ts -t attribution` and the same command with
+`src/station-move.test.ts -t 'latest mover when splitting'`.

@@ -3924,7 +3924,8 @@ async function splitTicketItem(
   const moves = await tx
     .select()
     .from(ticketItemMoves)
-    .where(eq(ticketItemMoves.workingOrderLineId, ticket!.workingOrderLineId));
+    .where(eq(ticketItemMoves.workingOrderLineId, ticket!.workingOrderLineId))
+    .orderBy(sql`${ticketItemMoves}.rowid`);
   if (moves.length) {
     await tx
       .insert(ticketItemMoves)
