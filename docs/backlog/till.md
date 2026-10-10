@@ -277,11 +277,8 @@ screen is designed.
   - The canvas: a narrow table at x=0 draws part of its rotate handle left of the grid; a table
     dragged into the top rows shows its handle above the grid until it is released; the size
     tokens are read once for the element's whole life.
-  - Draft-function tidy-ups: `removeJoin` with an unknown key returns a new object, so Undo can
-    record an empty step; `placeTable` on a table already placed moves it; `patchTable` keeps the
-    caller's placement object.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
-    `super.disconnectedCallback`, `delegatesFocus` and `preventScroll`.
+    `super.disconnectedCallback` and `preventScroll`.
 
 ## Small floor-plan refusals still missing
 

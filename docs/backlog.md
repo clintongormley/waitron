@@ -1862,7 +1862,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A466 — floor plan editor follow-ups (2026-10-10).** Small gaps the dashboard floor plan editor
   left: a preview not heard on focus, an ungated link, a duplicated address template, list and
-  canvas details, draft-function tidy-ups and surviving mutants. Left open by A429 slice 2.
+  canvas details and surviving mutants. Left open by A429 slice 2.
   [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name

@@ -1354,6 +1354,7 @@ export interface PlanRect { x: number; y: number; width: number; height: number 
 export function snapToSquare(px: number, squarePx?: number): number;      // Math.round(px / squarePx)
 export function clampToGrid(value: number): number;                       // whole, 0–999
 export function rotationFromAngle(degrees: number): number;                // nearest 15, 0–345
+// Note 2026-10-10: removed in slice 2's finish; the canvas uses floor.ts's snapRotation.
 export function rotatedRect(p: PlanPlacement): PlanRect;                   // box around the table turned about its centre
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null;
 export function cropToTables(placements: readonly PlanPlacement[], margin?: number): PlanRect | null; // margin 2, not clamped at 0
@@ -1891,7 +1892,7 @@ re-read shows its sentence as a read's message, which the next change or the nex
 read's failure never replaces an action's message; and a read's success clears only a read's
 message. Save stays quiet after a failed re-read, since the write succeeded.
 
-New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente".
+New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente". (Note 2026-10-10: shipped as `floor_plan_editor.reload`, "Reload" / "Recargar".)
 _Note 2026-10-10: shipped as "Reload" / "Recargar" (Task 2.8's look pass)._
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.save.test.ts` (Task 2.4a's fixture
@@ -1954,6 +1955,7 @@ it("an accepted save leaves without asking", async () => { /* move, Save, Close 
 
 **Interfaces:**
 - Consumes: Task 2.4d's `sent` body and message slot; `checkDraft` (Task 2.4a).
+- (Note 2026-10-10: the panel takes a list, `fieldErrors`, one per refused field, since slice 2's finish.)
 - Produces, for Task 2.6a's panel: the page's `fieldError: { key: string; field: "label" | "seats" |
   "fixed" | "width" | "height" | "shape" | "rotation"; message: string } | null` (a server field
   `tables.<i>.placement.width` becomes `width`, and so on).
