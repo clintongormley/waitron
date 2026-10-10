@@ -245,6 +245,7 @@ describe("whole service settings saves", () => {
       name: "New dining",
       tradingName: "Dining receipt",
       active: true,
+      isDefault: false,
     });
     expect(
       model.salePolicies.departments.find(
