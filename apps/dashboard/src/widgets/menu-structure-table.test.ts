@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { iconButtonStyles, registerIcons } from "@waitron/ui";
+import { registerIcons } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -303,7 +303,7 @@ it("opens and closes each place a section is shown on its own", async () => {
   ]);
 });
 
-/** What the widget draws itself, outside its table: the toolbar's Add ⋮ and the empty box's adds. */
+/** What the widget draws itself, outside its table: the empty box's adds. */
 function own<T extends Element = HTMLElement>(el: MenuStructureTable, test: string): T | null {
   return el.shadowRoot!.querySelector<T>(`[data-test="${CSS.escape(test)}"]`);
 }
@@ -313,37 +313,29 @@ it("names a new section's add Add section, in English and Spanish", async () => 
   onTestFinished(() => setLocale(before));
   setLocale("en");
   const el = await mount();
-  expect(own(el, "new-section-top")!.textContent!.trim()).toBe("Add section");
+  expect(item(el, "new-section-top").textContent!.trim()).toBe("Add section");
   setLocale("es");
   el.requestUpdate();
-  await el.updateComplete;
-  expect(own(el, "new-section-top")!.textContent!.trim()).toBe("Añadir sección");
+  await settle(el);
+  expect(item(el, "new-section-top").textContent!.trim()).toBe("Añadir sección");
 });
 
-it("offers the top-level adds in the toolbar's Add ⋮ and on each place an owned section is shown, naming that list", async () => {
+it("offers the top-level adds in the root row's ⋮ and on each place an owned section is shown, naming that list", async () => {
   const el = await mount();
   const adds = listen(el, "wt-structure-add");
-  const toolbar = own<HTMLElementTagNameMap["wt-row-actions"]>(el, "toolbar-adds")!;
-  expect(toolbar.localName).toBe("wt-row-actions");
-  expect(toolbar.getAttribute("slot")).toBe("toolbar-end");
-  expect(toolbar.icon).toBe("plus");
-  expect(toolbar.getAttribute("label")).toBe(t("menus.add_to_menu"));
-  expect(
-    [...toolbar.children]
-      .filter((child) => child.hasAttribute("data-test"))
-      .map((child) => child.getAttribute("data-test")),
-  ).toEqual(["new-section-top", "include-menu-top", "open-add-products-top"]);
+  expect(menuItems(el, "root")).toEqual([
+    "new-section-top",
+    "include-menu-top",
+    "open-add-products-top",
+  ]);
   expect(
     ["new-section-top", "include-menu-top", "open-add-products-top"].map((test) =>
-      own(el, test)!.textContent!.trim(),
+      item(el, test).textContent!.trim(),
     ),
   ).toEqual([t("menus.new_section"), t("menus.include_menu"), t("sections.add_products")]);
-  // The table draws the toolbar's end slot, so the Add ⋮ is on screen.
-  expect(toolbar.assignedSlot).not.toBeNull();
-  expect(toolbar.getBoundingClientRect().width).toBeGreaterThan(0);
-  own(el, "new-section-top")!.click();
-  own(el, "include-menu-top")!.click();
-  own(el, "open-add-products-top")!.click();
+  item(el, "new-section-top").click();
+  item(el, "include-menu-top").click();
+  item(el, "open-add-products-top").click();
   item(el, "open-add-products-m-drinks").click();
   await toggle(el, "m-fav");
   item(el, "new-section-m-fav/m-fav-drinks").click();
@@ -357,58 +349,18 @@ it("offers the top-level adds in the toolbar's Add ⋮ and on each place an owne
   expect(inTable(el, '[data-test="actions-root"]')).not.toBeNull();
 });
 
-it("keeps a button the host puts in the toolbar's end after the Add ⋮", async () => {
+it("draws no plus in the toolbar; the host's toolbar-end content is all that is there", async () => {
   const el = await mount();
   const done = document.createElement("button");
   done.slot = "toolbar-end";
   done.textContent = "Done";
   el.append(done);
   await settle(el);
-  const toolbar = own(el, "toolbar-adds")!;
+  const end = inTable<HTMLSlotElement>(el, 'slot[name="toolbar-end"]')!;
+  expect(end.assignedElements({ flatten: true })).toEqual([done]);
   expect(done.getBoundingClientRect().width).toBeGreaterThan(0);
-  expect(done.getBoundingClientRect().left).toBeGreaterThan(toolbar.getBoundingClientRect().right);
-  // In the order a keyboard reaches them, too.
-  expect(
-    toolbar.compareDocumentPosition(done.assignedSlot!) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-});
-
-it("draws the Add ⋮ with the border and fill of the toolbar's icon buttons", async () => {
-  const el = await mount();
-  // The menus screen's Reorder and Select are icon buttons; it puts them in the toolbar's start.
-  const neighbour = document.createElement("span");
-  neighbour.slot = "toolbar-end";
-  const shadow = neighbour.attachShadow({ mode: "open" });
-  shadow.adoptedStyleSheets = [iconButtonStyles.styleSheet!];
-  shadow.innerHTML = `<button class="icon-button">R</button>`;
-  el.append(neighbour);
-  const bare = document.createElement("wt-row-actions");
-  bare.icon = "plus";
-  bare.label = "Bare";
-  document.body.append(bare);
-  onTestFinished(() => bare.remove());
-  await settle(el);
-  await bare.updateComplete;
-  const look = (button: Element): Record<string, string> => {
-    const style = getComputedStyle(button);
-    return {
-      background: style.backgroundColor,
-      ...Object.fromEntries(
-        ["top", "right", "bottom", "left"].flatMap((side) =>
-          ["width", "style", "color"].map((what) => [
-            `${side}-${what}`,
-            style.getPropertyValue(`border-${side}-${what}`),
-          ]),
-        ),
-      ),
-    };
-  };
-  const trigger = (actions: Element) => actions.shadowRoot!.querySelector('[part~="trigger"]')!;
-  const plus = look(trigger(own(el, "toolbar-adds")!));
-  expect(plus).toEqual(look(shadow.querySelector("button")!));
-  expect(plus["top-style"]).toBe("solid");
-  // A wt-row-actions without the class draws no border, so the match above is the class's doing.
-  expect(look(trigger(bare))).not.toEqual(plus);
+  // The widget's own ⋮s live in its table's rows; it draws none beside the table.
+  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
 });
 
 it("offers Edit and Delete on an owned section and Remove on a product, naming the holding list", async () => {
@@ -701,8 +653,9 @@ it("shows an empty menu as the table's empty box, saying so, with the three adds
   expect(shown(el)).toEqual([]);
   expect(inTable(el, ".empty .message")!.textContent!.trim()).toBe(t("menus.structure_empty"));
   expect(table(el).shadowRoot!.textContent!).not.toContain(menuLabel("Lunch Menu"));
-  // The table draws no toolbar while empty, so the adds are in the box instead.
-  expect(own(el, "toolbar-adds")).toBeNull();
+  // The table draws no rows while empty, so no root ⋮: the adds are in the box instead.
+  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+  expect(inTable(el, '[data-test="actions-root"]')).toBeNull();
   const tests = ["new-section-empty", "include-menu-empty", "open-add-products-empty"];
   const buttons = tests.map((test) => own(el, test)!);
   for (const button of buttons) {
@@ -734,21 +687,21 @@ it("shows an empty menu as the table's empty box, saying so, with the three adds
   el.nodes = lunchNodes();
   await settle(el);
   for (const test of tests) expect(own(el, test), test).toBeNull();
-  expect(own(el, "toolbar-adds")).not.toBeNull();
+  expect(inTable(el, '[data-test="actions-root"]')).not.toBeNull();
 });
 
-it("disables the toolbar's adds while busy, and a click on one sends nothing", async () => {
+it("disables the root ⋮'s adds while busy, and a click on one sends nothing", async () => {
   const el = await mount({ busy: true });
   const adds = listen(el, "wt-structure-add");
   for (const test of ["new-section-top", "include-menu-top", "open-add-products-top"]) {
-    const button = own<HTMLElement & { disabled: boolean }>(el, test)!;
+    const button = item(el, test) as HTMLElement & { disabled: boolean };
     expect(button.disabled, test).toBe(true);
     button.click();
   }
   expect(adds).toEqual([]);
 });
 
-it("focuses a row's menu, or its nearest drawn ancestor's, or the toolbar's Add ⋮ for the top level or when none is drawn", async () => {
+it("focuses a row's menu, or its nearest drawn ancestor's, or the root row's ⋮ for the top level or when none is drawn", async () => {
   const el = await mount({ current: ["m-drinks", "m-beer"] });
   const focused = () => (table(el).shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
   const focusedOwn = () => (el.shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
@@ -762,11 +715,11 @@ it("focuses a row's menu, or its nearest drawn ancestor's, or the toolbar's Add 
   expect(focusedOwn()).toBe(undefined);
 
   el.focusRowMenu("m-gone/m-also-gone");
-  expect(focusedOwn()).toBe("toolbar-adds");
+  expect(focused()).toBe("actions-root");
   el.focusRowMenu("m-drinks");
   expect(focused()).toBe("actions-m-drinks");
   el.focusRowMenu("");
-  expect(focusedOwn()).toBe("toolbar-adds");
+  expect(focused()).toBe("actions-root");
   // Before it is drawn there is no menu to focus, and asking is harmless.
   document.createElement("dashboard-menu-structure-table").focusRowMenu("");
 });
@@ -804,12 +757,6 @@ it("keeps every row's menu on a phone's screen", async () => {
     expect(drawn(el)).toHaveLength(9);
     expectRowMenusOnScreen(table(el), 9, 'wt-row-actions[data-test^="actions-"]');
     expect(inTable(el, '[data-test="actions-root"]')).not.toBeNull();
-    // The toolbar's Add ⋮ too.
-    const adds = own(el, "toolbar-adds")!.shadowRoot!.querySelector("button")!;
-    const at = adds.getBoundingClientRect();
-    expect(at.width).toBeGreaterThan(0);
-    expect(at.left).toBeGreaterThanOrEqual(0);
-    expect(at.right).toBeLessThanOrEqual(window.innerWidth);
   } finally {
     await page.viewport(width, height);
   }

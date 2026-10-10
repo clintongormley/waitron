@@ -146,10 +146,6 @@ export class MenuStructureTable extends LitElement {
       :host {
         display: block;
       }
-      wt-row-actions.toolbar-adds::part(trigger) {
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-      }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
         align-items: center;
@@ -748,14 +744,14 @@ export class MenuStructureTable extends LitElement {
   }
 
   /** Focuses the row's ⋮, or the nearest drawn ancestor's; for the top level (`""`), or when no
-   * ancestor is drawn, the toolbar's Add menu; in an empty menu, which draws no toolbar, the empty
-   * box's first add. */
+   * ancestor is drawn, the root row's ⋮; in an empty menu, which draws no rows, the empty box's
+   * first add. */
   focusRowMenu(key: string): void {
     const table = this.#table();
     const root = table?.shadowRoot;
     if (!table || !root) return;
     // A host asks from its own `updated`, before the rows it just handed over are drawn: emptying
-    // the menu swaps the toolbar's Add menu for the empty box's adds.
+    // the menu swaps the root row's ⋮ for the empty box's adds.
     if (this.isUpdatePending || table.isUpdatePending) {
       void (async () => {
         await this.updateComplete;
@@ -775,9 +771,10 @@ export class MenuStructureTable extends LitElement {
         return;
       }
     }
-    this.renderRoot
-      .querySelector<HTMLElement>('[data-test="toolbar-adds"], [data-test$="-empty"]')
-      ?.focus();
+    (
+      root.querySelector<HTMLElement>(`tr[data-row-key="${ROOT_KEY}"] wt-row-actions`) ??
+      this.renderRoot.querySelector<HTMLElement>('[data-test$="-empty"]')
+    )?.focus();
   }
 
   #rowsMemo?: { inputs: readonly unknown[]; rows: TableRow[] };
@@ -812,8 +809,8 @@ export class MenuStructureTable extends LitElement {
     return rows;
   }
 
-  /** The whole menu as a guest sees it, each section and product once, those inside included menus
-   * too; an included menu itself is no section. */
+  /** Each section and product once, those inside included menus too; an included menu itself is no
+   * section. */
   #counts(): string {
     const sections = new Set<string>();
     const products = new Set<string>();
@@ -1217,15 +1214,7 @@ export class MenuStructureTable extends LitElement {
             ? html`<div slot="empty-action" class="empty-adds">
                 ${this.#adds([], "empty", "center")}
               </div>`
-            : html`<wt-row-actions
-                slot="toolbar-end"
-                align="end"
-                icon="plus"
-                class="toolbar-adds"
-                data-test="toolbar-adds"
-                label=${t("menus.add_to_menu")}
-                >${this.#adds([], "top")}</wt-row-actions
-              >`
+            : nothing
         }<slot name="toolbar-end" slot="toolbar-end"></slot
         ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot
       ></wt-data-table>

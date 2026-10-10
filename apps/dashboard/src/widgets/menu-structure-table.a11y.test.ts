@@ -65,7 +65,7 @@ const states = [
   "open",
   "current",
   "menu open",
-  "toolbar add menu open",
+  "root menu open",
   "empty",
   "included menu open",
   "included shown directly",
@@ -75,6 +75,7 @@ const states = [
 
 const MENU_OF: Partial<Record<(typeof states)[number], string>> = {
   "menu open": "actions-m-drinks",
+  "root menu open": "actions-root",
   "included menu open": "actions-included-wine",
   "included shown directly": "actions-included-wine",
 };
@@ -116,15 +117,8 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
         expect(menu.querySelector('a[href][data-test="source-included-wine"]')).not.toBeNull();
       if (state.startsWith("included"))
         expect(menu.querySelector('[data-test="edit-included-wine"]')).not.toBeNull();
-    }
-    if (state === "toolbar add menu open") {
-      const menu = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-        '[data-test="toolbar-adds"]',
-      )!;
-      await menu.updateComplete;
-      menu.show();
-      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      expect(menu.querySelector('[data-test="new-section-top"]')).not.toBeNull();
+      if (state === "root menu open")
+        expect(menu.querySelector('[data-test="new-section-top"]')).not.toBeNull();
     }
     if (state === "empty") {
       expect(table.shadowRoot!.querySelector(".empty .message")!.textContent!.trim()).toBe(
