@@ -59,12 +59,18 @@ export interface FloorRefreshDetail {
   poll: true;
 }
 
+type PlacedTable = TableState & { posX: number; posY: number };
+
 interface ZoneOnScreen {
   tabs: ZoneTab[];
   refusedZone: FloorZone | undefined;
   activeKey: string | null | undefined;
-  visible: TableState[];
   planned: boolean;
+  view: "map" | "list";
+  listed: TableState[];
+  onMap: FloorMapTable[];
+  placed: PlacedTable[];
+  unplaced: TableState[];
 }
 
 @customElement("till-floor-screen")
@@ -450,14 +456,14 @@ export class TillFloorScreen extends LitElement {
     tillPath,
   );
 
-  /** The zone on screen, worked out once per update in `willUpdate`. */
+  /** The zone on screen, worked out in `willUpdate` when one of `#zoneInputs` changes. */
   #zone!: ZoneOnScreen;
+  #zoneInputs?: readonly unknown[];
+  #mapCopy = { locale: "", copy: { label: "" } };
 
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
-  /** The last render drew a planned zone's map, so the screen re-reads the floor. */
-  #drawsPlannedMap = false;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
   override connectedCallback(): void {
@@ -493,7 +499,8 @@ export class TillFloorScreen extends LitElement {
 
   /** A planned map shows statuses other tills change, so it asks for the floor every 15 s. */
   #watchFloor(): void {
-    if (!this.#drawsPlannedMap || !this.isConnected) {
+    const drawsPlannedMap = this.#zone.planned && this.#zone.view === "map";
+    if (!drawsPlannedMap || !this.isConnected) {
       clearInterval(this.#rereadTimer);
       this.#rereadTimer = undefined;
       return;
@@ -557,9 +564,7 @@ export class TillFloorScreen extends LitElement {
   #detailsHeading(table: TableState): string {
     const joinId = table.today?.joinId ?? null;
     const members =
-      joinId === null
-        ? []
-        : mapTables(this.#zone.visible).filter((drawn) => drawn.joinId === joinId);
+      joinId === null ? [] : this.#zone.onMap.filter((drawn) => drawn.joinId === joinId);
     if (!members.some((drawn) => drawn.id === table.id)) return table.label;
     return mergeLabel(members.map((drawn) => drawn.label));
   }
@@ -703,6 +708,16 @@ export class TillFloorScreen extends LitElement {
   }
 
   #zoneOnScreen(): ZoneOnScreen {
+    const inputs = [
+      this.tables,
+      this.zones,
+      this.activeZone,
+      this.refusedZoneId,
+      this.viewOverride,
+      currentLocale(),
+    ];
+    if (this.#zoneInputs?.every((input, i) => input === inputs[i])) return this.#zone;
+    this.#zoneInputs = inputs;
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
     const tabs = buildZoneTabs(
       this.zones.map((zone) => ({
@@ -718,28 +733,34 @@ export class TillFloorScreen extends LitElement {
     const visible = this.tables.filter((table) =>
       activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
-    return { tabs, refusedZone, activeKey, visible, planned: isPlannedZone(visible) };
-  }
-
-  override render() {
-    const { tabs, refusedZone, activeKey, visible, planned } = this.#zone;
+    const planned = isPlannedZone(visible);
     const listed = planned ? listedTables(visible) : visible;
     const onMap = planned ? mapTables(visible) : [];
     // The server writes and nulls the four placement columns together, so `posX` alone tells placed
     // from unplaced.
     const placed = planned
       ? []
-      : visible.filter(
-          (table): table is TableState & { posX: number; posY: number } =>
-            table.posX != null && table.posY != null,
-        );
+      : visible.filter((table): table is PlacedTable => table.posX != null && table.posY != null);
     const mapIds = new Set(onMap.map((table) => table.id));
     const unplaced = planned
       ? listed.filter((table) => !mapIds.has(table.id))
       : visible.filter((table) => table.posX == null);
     const drawn = planned ? onMap.length : placed.length;
-    const view: "map" | "list" = this.viewOverride ?? (drawn > 0 ? "map" : "list");
-    this.#drawsPlannedMap = planned && view === "map";
+    const view = this.viewOverride ?? (drawn > 0 ? "map" : "list");
+    return { tabs, refusedZone, activeKey, planned, view, listed, onMap, placed, unplaced };
+  }
+
+  /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
+  #floorMapCopy(): { label: string } {
+    const locale = currentLocale();
+    if (this.#mapCopy.locale !== locale)
+      this.#mapCopy = { locale, copy: { label: t("floor.map_label") } };
+    return this.#mapCopy.copy;
+  }
+
+  override render() {
+    const { tabs, refusedZone, activeKey, planned, view, listed, onMap, placed, unplaced } =
+      this.#zone;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -812,10 +833,7 @@ export class TillFloorScreen extends LitElement {
     `;
   }
 
-  #map(
-    placed: (TableState & { posX: number; posY: number })[],
-    unplaced: TableState[],
-  ): TemplateResult {
+  #map(placed: PlacedTable[], unplaced: TableState[]): TemplateResult {
     return html`
       <div class="map">
         <wt-floor-canvas
@@ -844,7 +862,7 @@ export class TillFloorScreen extends LitElement {
           data-floor-map
           .tables=${onMap}
           .fitKey=${activeKey ?? ""}
-          .copy=${{ label: t("floor.map_label") }}
+          .copy=${this.#floorMapCopy()}
           .reducedMotion=${this.reducedMotion}
           @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
           @wt-table-details=${(event: Event) => this.#onDetails(event)}

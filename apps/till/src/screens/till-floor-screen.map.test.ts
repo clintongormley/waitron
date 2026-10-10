@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { mapTables } from "../state/floor-map.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
@@ -315,6 +316,39 @@ describe("till-floor-screen on the new map", () => {
     const [bx, by] = centre(box);
     expect(Math.abs(cx! - bx!)).toBeLessThan(1);
     expect(Math.abs(cy! - by!)).toBeLessThan(1);
+  });
+
+  it("a redraw that changes neither the tables nor the language hands the map what it had", async () => {
+    const el = await mount({ tables: [planned("t1", seated)] });
+    const { tables, copy } = mapOf(el);
+
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-details", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-table-details-sheet")).not.toBeNull();
+    expect(mapOf(el).tables).toBe(tables);
+    expect(mapOf(el).copy).toBe(copy);
+
+    el.tables = [planned("t1", seated)];
+    await el.updateComplete;
+    expect(mapOf(el).tables).not.toBe(tables);
+    expect(mapOf(el).copy).toBe(copy);
+
+    const was = currentLocale();
+    try {
+      setLocale(was === "es" ? "en" : "es");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(mapOf(el).copy).not.toBe(copy);
+      expect(mapOf(el).copy).not.toEqual(copy);
+    } finally {
+      setLocale(was);
+    }
   });
 
   it("opens on the list when a planned zone has nothing placed", async () => {
