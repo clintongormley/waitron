@@ -547,6 +547,7 @@ it.each(["getFolderRouting", "listMadeAt"] as const)(
               stationName: station,
               noPreparation: false,
               noReplacement: false,
+              unavailableStationId: null,
               variesByZone: false,
             },
           }

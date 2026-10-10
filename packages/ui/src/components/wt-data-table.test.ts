@@ -3735,7 +3735,7 @@ test("choosing the all option again removes the stored filter choice", async () 
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
-/** The status filter starting on "active" before anyone chooses: the products list's shape. */
+/** The status filter starting on "active" before anyone chooses. */
 const initiallyActive = statusOffering(statusFilter.options).map((column) =>
   column.filter ? { ...column, filter: { ...column.filter, initial: "active" } } : column,
 );

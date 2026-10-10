@@ -177,6 +177,7 @@ function product(
     ordering: "public",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,
@@ -252,6 +253,7 @@ describe("product-list", () => {
           stationName: "Cocktail bar",
           noPreparation: false,
           noReplacement: true,
+          unavailableStationId: "cocktail",
           variesByZone: false,
         },
       },
@@ -271,6 +273,7 @@ describe("product-list", () => {
           stationName: "Bar",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
         mojito: {
@@ -278,6 +281,7 @@ describe("product-list", () => {
           stationName: "Cocktail bar",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: true,
         },
       },
@@ -300,6 +304,7 @@ describe("product-list", () => {
           stationName: "Bar",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
       },
@@ -321,6 +326,7 @@ describe("product-list", () => {
           stationName: null,
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
       },
@@ -1393,19 +1399,16 @@ describe("product-list", () => {
   it.each([
     ["en-GB", "Any ordering"],
     ["es-ES", "Cualquier pedido por separado"],
-  ])(
-    "names the ordering filter's empty choice like the status filter's (%s)",
-    async (locale, label) => {
-      setLocale(locale);
-      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-        products: [product()],
-      });
-      const select = (await tableRoot(el)).querySelector<WtCombobox>(
-        'wt-combobox[data-filter="ordering"]',
-      )!;
-      expect(select.options[0]).toEqual({ value: "", label });
-    },
-  );
+  ])("names the ordering filter's empty choice (%s)", async (locale, label) => {
+    setLocale(locale);
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product()],
+    });
+    const select = (await tableRoot(el)).querySelector<WtCombobox>(
+      'wt-combobox[data-filter="ordering"]',
+    )!;
+    expect(select.options[0]).toEqual({ value: "", label });
+  });
 
   const kilo: Unit = {
     id: "kg",
@@ -1705,6 +1708,7 @@ describe("the product list at phone width", () => {
               stationName: "Downstairs bar",
               noPreparation: false,
               noReplacement: false,
+              unavailableStationId: null,
               variesByZone: true,
             },
           },
@@ -3331,6 +3335,7 @@ describe("a product's variants in the list", () => {
           stationName: "Deli counter",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
       },
@@ -3480,6 +3485,7 @@ describe("a product's variants in the list", () => {
       stationName: "Deli counter",
       noPreparation: false,
       noReplacement: false,
+      unavailableStationId: null,
       variesByZone: false,
     };
     // Thin cut is sold out while its product is not, so its Availability cell is its own.
@@ -4238,6 +4244,7 @@ describe("a category's Made at", () => {
             stationName: "Kitchen",
             noPreparation: false,
             noReplacement: false,
+            unavailableStationId: null,
             variesByZone: true,
           },
         },
@@ -5638,6 +5645,7 @@ describe("product-list filters (A463)", () => {
     stationName,
     noPreparation: false,
     noReplacement: false,
+    unavailableStationId: null,
     variesByZone: false,
     ...more,
   });
@@ -5682,7 +5690,10 @@ describe("product-list filters (A463)", () => {
       madeAt: {
         "a-beer": station("bar", "Bar"),
         "b-soup": station("kitchen", "Kitchen"),
-        "c-stew": station("kitchen", "Kitchen", { noReplacement: true }),
+        "c-stew": station(null, "Grill", {
+          noReplacement: true,
+          unavailableStationId: "grill",
+        }),
         "d-bread": station(null, null),
         "e-water": station(null, null, { noPreparation: true }),
       },
@@ -5692,17 +5703,20 @@ describe("product-list filters (A463)", () => {
     expect(filterOptions(root, "made-at")).toEqual([
       ["", "Any station"],
       ["bar", "Bar"],
+      ["grill", "Grill"],
       ["kitchen", "Kitchen"],
     ]);
     await choose(el, "made-at", ["kitchen"]);
-    expect(rowKeys(root)).toEqual(["b-soup", "c-stew"]);
+    expect(rowKeys(root)).toEqual(["b-soup"]);
+    await choose(el, "made-at", ["grill"]);
+    expect(rowKeys(root)).toEqual(["c-stew"]);
     await choose(el, "made-at", ["bar"]);
     expect(rowKeys(root)).toEqual(["a-beer"]);
     // A variant shows no station of its own and goes with its product.
     root.querySelector<HTMLElement>('tr[data-row-key="a-beer"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["a-beer", "a-beer:small"]);
-    await choose(el, "made-at", ["bar", "kitchen"]);
+    await choose(el, "made-at", ["bar", "grill", "kitchen"]);
     expect(rowKeys(root)).toEqual(["a-beer", "a-beer:small", "b-soup", "c-stew"]);
     await choose(el, "made-at", []);
     expect(rowKeys(root)).toEqual([
@@ -5713,6 +5727,51 @@ describe("product-list filters (A463)", () => {
       "d-bread",
       "e-water",
     ]);
+  });
+
+  it("offers a switched-off station that only products with no replacement name", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-beer", name: "A beer" }),
+        product({ id: "b-stew", name: "B stew" }),
+      ],
+      madeAt: {
+        "a-beer": station("bar", "Bar"),
+        "b-stew": station(null, "Kitchen", {
+          noReplacement: true,
+          unavailableStationId: "kitchen",
+        }),
+      },
+    });
+    const root = await tableRoot(el);
+    expect(filterOptions(root, "made-at")).toEqual([
+      ["", "Any station"],
+      ["bar", "Bar"],
+      ["kitchen", "Kitchen"],
+    ]);
+    await choose(el, "made-at", ["kitchen"]);
+    expect(rowKeys(root)).toEqual(["b-stew"]);
+  });
+
+  it("offers the stations a live routing update names, not the ones it replaced", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "a", name: "A" })],
+      madeAt: { a: station("bar", "Bar") },
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    await choose(el, "made-at", ["bar"]);
+    el.madeAt = { a: station("kitchen", "Kitchen") };
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(filterOptions(root, "made-at")).toEqual([
+      ["", "Any station"],
+      ["kitchen", "Kitchen"],
+    ]);
+    await choose(el, "made-at", ["kitchen"]);
+    expect(rowKeys(root)).toEqual(["a"]);
   });
 
   it("keeps products with or without modifiers", async () => {
@@ -5792,6 +5851,31 @@ describe("product-list filters (A463)", () => {
     await choose(el, "dietary", "has");
     expect(cellUnder(root, "a-declared", "Dietary info").textContent!.trim()).toBe("Vegan");
     expect(cellUnder(root, "b-override", "Dietary info").textContent!.trim()).toBe("Halal: No");
+  });
+
+  it("counts a recipe's categorised ingredient origins as dietary info, and an uncategorised one as none", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "a-recipe",
+          name: "A",
+          dietDerivation: { origins: ["meat", "plant", "meat"], pending: true },
+        }),
+        product({
+          id: "b-uncategorised",
+          name: "B",
+          dietDerivation: { origins: [], pending: true },
+        }),
+      ],
+    });
+    const root = await tableRoot(el);
+    await choose(el, "dietary", "has");
+    expect(rowKeys(root)).toEqual(["a-recipe"]);
+    expect(cellUnder(root, "a-recipe", "Dietary info").textContent!.trim()).toBe("Plant, Meat");
+    await choose(el, "dietary", "none");
+    expect(rowKeys(root)).toEqual(["b-uncategorised"]);
+    expect(cellUnder(root, "b-uncategorised", "Dietary info").textContent!.trim()).toBe("");
   });
 
   it("offers no Status filter: Show archived, off at first, lists archived products and variants read-only", async () => {

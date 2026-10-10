@@ -189,6 +189,7 @@ const PRODUCT_BASE_COLUMNS = {
   allergens: effective.allergens,
   manualAllergens: effective.manualAllergens,
   dietOverride: effective.dietOverride,
+  dietDerivation: effective.dietDerivation,
   image: effective.image,
   description: effective.description,
   kitchenName: products.kitchenName,
@@ -238,6 +239,7 @@ interface RawProduct {
     addContains?: string[];
     removeContains?: string[];
   } | null;
+  dietDerivation: { origins: string[]; pending: boolean } | null;
   image: string | null;
 }
 
@@ -257,6 +259,7 @@ function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
     variants,
   };
 }

@@ -1,7 +1,7 @@
 import type { PricingUnit } from "./pricing.js";
 import type { VatClass } from "./vat-rates.js";
 import type { ProductAllergens } from "./allergens.js";
-import type { DietOverride } from "./dietary.js";
+import type { DietDerivation, DietOverride } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
 import type { ProductOrdering } from "./product-ordering.js";
 
@@ -127,6 +127,9 @@ export interface Product {
   /** The staff diet override ALONE, or null when none — the diet twin of `manualAllergens`; the editor
    * seeds its diet-override controls from THIS without double-counting the recipe-derived profile. */
   dietOverride: DietOverride | null;
+  /** The recipe-derived diet overlay — the ingredients' origins folded together, plus a pending flag
+   * set by any uncategorised ingredient — or null when the product has no recipe. */
+  dietDerivation: DietDerivation | null;
   image: string | null;
   /** Its own tile colour, or null when it takes its category's. */
   color: string | null;

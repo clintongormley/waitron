@@ -53,6 +53,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     ordering: "public",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,

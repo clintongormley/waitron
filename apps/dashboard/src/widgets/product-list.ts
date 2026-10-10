@@ -20,7 +20,7 @@ import { countOf } from "./count-text.js";
 import {
   allergenState,
   allergenStateName,
-  productStatusName,
+  productArchivedName,
   vatClassName,
 } from "../i18n/domain.js";
 import { categoryWithDescendants } from "./category-form.js";
@@ -51,7 +51,13 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, MadeAt, Product } from "../api/client.js";
+import {
+  DIETARY_ORIGINS,
+  type CategorySummary,
+  type DietaryOrigin,
+  type MadeAt,
+  type Product,
+} from "../api/client.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import {
@@ -92,26 +98,33 @@ function rowActive({ product, variant }: ProductRow): boolean {
 
 const OVERRIDE_DIETS = ["vegan", "vegetarian", "halal", "kosher"] as const;
 
-/** A product has no dietary origin of its own; its declarations are the dietary info it carries. */
+function recipeOrigins(product: Product): DietaryOrigin[] {
+  const origins = product.dietDerivation?.origins ?? [];
+  return DIETARY_ORIGINS.filter((origin) => origins.includes(origin));
+}
+
 function hasDietaryInfo(product: Product): boolean {
   return (
+    recipeOrigins(product).length > 0 ||
     product.dietaryDeclarations.length > 0 ||
     OVERRIDE_DIETS.some((diet) => product.dietOverride?.[diet] !== undefined)
   );
 }
 
 function dietaryInfoText(product: Product): string {
+  const origins = recipeOrigins(product).map((origin) => t(`origin.${origin}`));
   const declared = product.dietaryDeclarations.map((label) => t(`editor.diet.${label}`));
   const overridden = OVERRIDE_DIETS.flatMap((diet) => {
     const answer = product.dietOverride?.[diet];
     return answer === undefined ? [] : [`${t(`diet.${diet}`)}: ${t(`diet.${answer}`)}`];
   });
-  return [...declared, ...overridden].join(", ");
+  return [...origins, ...declared, ...overridden].join(", ");
 }
 
 /** The station the Made at column names for a product, or null where it names none. */
 function madeAtStation(maker: MadeAt | undefined): string | null {
-  return maker === undefined || maker.noPreparation ? null : maker.stationId;
+  if (maker === undefined || maker.noPreparation) return null;
+  return maker.noReplacement ? maker.unavailableStationId : maker.stationId;
 }
 
 export function acceptsCatalogueDrop(
@@ -1160,7 +1173,7 @@ export class ProductList extends LitElement {
           const { product, variant } = row;
           if (!rowActive(row))
             return html`<span part="badge" data-test="availability-badge" data-state="archived"
-              >${productStatusName(false, variant !== null)}</span
+              >${productArchivedName(variant !== null)}</span
             >`;
           return (variant ?? product).available
             ? nothing

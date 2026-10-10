@@ -1586,7 +1586,7 @@ describe("mountCatalogueApi — products", () => {
     expect(body[lager]).toMatchObject({ stationName: "Bar", variesByZone: false });
     expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
     expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
-    await withTransaction(suite.db, async (tx) => {
+    const cocktailBarId = await withTransaction(suite.db, async (tx) => {
       const cfg = venueCfg();
       const [cocktailBar] = await tx
         .select({ id: kitchenStations.id })
@@ -1607,11 +1607,16 @@ describe("mountCatalogueApi — products", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, cocktailBar!.id));
+      return cocktailBar!.id;
     });
     const recovered = await send(app, "GET", "/management-api/products/made-at");
     expect(recovered.status).toBe(200);
     const recoveredBody = (await recovered.json()) as Record<string, unknown>;
-    expect(recoveredBody[lager]).toMatchObject({ stationName: "Bar", noReplacement: false });
+    expect(recoveredBody[lager]).toMatchObject({
+      stationName: "Bar",
+      noReplacement: false,
+      unavailableStationId: null,
+    });
     await withTransaction(suite.db, (tx) =>
       tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.isDefault, true)),
     );
@@ -1621,6 +1626,7 @@ describe("mountCatalogueApi — products", () => {
       stationId: null,
       stationName: "Cocktail bar",
       noReplacement: true,
+      unavailableStationId: cocktailBarId,
     });
   });
   it("GET /management-api/catalogues/:id/products → 200 (empty for a fresh catalogue)", async () => {

@@ -1386,6 +1386,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
                         : (names.get(unavailableStationId) ?? null),
                   noPreparation: route?.kind === "no_preparation",
                   noReplacement,
+                  unavailableStationId,
                   variesByZone,
                 },
               ],

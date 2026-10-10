@@ -55,6 +55,7 @@ function product(overrides: Partial<Product> = {}): Product {
     ordering: "not_sold_separately",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,

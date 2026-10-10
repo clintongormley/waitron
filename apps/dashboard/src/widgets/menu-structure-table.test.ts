@@ -39,6 +39,7 @@ function product(id: string, name: string, image: string | null = null): Product
     ordering: "public",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image,
     color: null,
