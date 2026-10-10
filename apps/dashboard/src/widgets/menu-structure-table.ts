@@ -3,7 +3,13 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { foldForSearch, textSearch, type TextSearch } from "@waitron/shared";
-import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import {
+  baseStyles,
+  reorder,
+  visuallyHiddenStyles,
+  type DataTableColumn,
+  type WtDataTable,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -29,8 +35,9 @@ import {
   type DropGap,
 } from "./tree-drag.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
+import { countOf } from "./count-text.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
-import { menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
+import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import {
   FOLLOWING_FOLDER,
@@ -50,6 +57,9 @@ const gripSpace = html`<span part="grip-space" aria-hidden="true"
   ><wt-icon name="grip"></wt-icon
 ></span>`;
 const TOP_LIST = "";
+/** The menu's own row. It stays out of the map of member rows, so every sibling, drag and move
+ * helper sees members only. */
+export const ROOT_KEY = "root";
 
 type MemberRef = MenuStructureNode["ref"];
 
@@ -79,10 +89,11 @@ const sameDrop = (a: Drop | undefined, b: Drop | undefined): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
 interface Row {
+  kind: "member";
   /** The member ids from the menu's top level to this member, joined with `/`. */
   key: string;
-  /** Null for a member of the menu's own top level. */
-  parentKey: string | null;
+  /** ROOT_KEY for a member of the menu's own top level. */
+  parentKey: string;
   path: string[];
   node: MenuStructureNode;
   name: string;
@@ -94,8 +105,20 @@ interface Row {
   readOnly: boolean;
 }
 
-const rowKey = (row: Row) => row.key;
-const rowParent = (row: Row) => row.parentKey;
+/** The menu itself, above its members. It holds the top level's adds and is never a member. */
+type RootRow = {
+  kind: "root";
+  key: typeof ROOT_KEY;
+  parentKey: null;
+  name: string;
+  counts: string;
+  color: string | null;
+};
+
+type TableRow = RootRow | Row;
+
+const rowKey = (row: TableRow) => row.key;
+const rowParent = (row: TableRow) => row.parentKey;
 
 export type StructureAddAction = "new-section" | "include-menu" | "add-products";
 
@@ -122,10 +145,6 @@ export class MenuStructureTable extends LitElement {
     css`
       :host {
         display: block;
-      }
-      wt-row-actions.toolbar-adds::part(trigger) {
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -172,6 +191,20 @@ export class MenuStructureTable extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      wt-data-table::part(count) {
+        margin-inline-start: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      wt-data-table[narrow]::part(count) {
+        ${visuallyHiddenStyles}
+        clip-path: inset(50%);
+      }
+      /* The narrow table's hidden count is placed against this, inside the table's scroll box, not
+         against the page, which a long name would then widen. */
+      wt-data-table::part(root-label) {
+        position: relative;
+      }
       wt-data-table::part(menu-divider) {
         align-self: stretch;
         margin: var(--wt-space-1) 0;
@@ -205,6 +238,7 @@ export class MenuStructureTable extends LitElement {
   /** With `defaultColor`, where a product without its own colour takes one from. */
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
+  @property({ attribute: false }) menuColor: string | null = null;
   @property() menuName = "";
   /** The path of the current section; empty for the menu's own top level. */
   @property({
@@ -628,7 +662,7 @@ export class MenuStructureTable extends LitElement {
 
   /** Out of its section, to the place directly after that section in the section's own list. */
   #moveOut(row: Row): void {
-    const section = row.parentKey === null ? undefined : this.#rowByKey.get(row.parentKey);
+    const section = this.#rowByKey.get(row.parentKey);
     if (!section || !this.#known(row.node.ref) || this.#listHolds(section, row.node.ref)) return;
     const position = this.#siblings(section).indexOf(section.node.memberId) + 1;
     this.#moveAcross(
@@ -653,8 +687,8 @@ export class MenuStructureTable extends LitElement {
   /** While a search or filter narrows the rows, a section the table keeps only on the way to a
    * match would carry everything the search hides when acted on, so only one that matches itself
    * takes a box. No section answers the Available filter, so none matches while it is on. */
-  #rowSelectable(row: Row): boolean {
-    if (row.readOnly) return false;
+  #rowSelectable(row: TableRow): boolean {
+    if (row.kind === "root" || row.readOnly) return false;
     if (row.node.ref.kind !== "section") return true;
     if (this.filtering) return false;
     const { search, names } = this.#compiledSearch();
@@ -685,8 +719,8 @@ export class MenuStructureTable extends LitElement {
     return row.node.ref.kind === "section" && !row.readOnly && !row.node.includedMenuId;
   }
 
-  #table(): WtDataTable<Row> | null {
-    return this.shadowRoot?.querySelector<WtDataTable<Row>>("wt-data-table") ?? null;
+  #table(): WtDataTable<TableRow> | null {
+    return this.shadowRoot?.querySelector<WtDataTable<TableRow>>("wt-data-table") ?? null;
   }
 
   #send(name: string, detail: unknown): void {
@@ -715,14 +749,14 @@ export class MenuStructureTable extends LitElement {
   }
 
   /** Focuses the row's ⋮, or the nearest drawn ancestor's; for the top level (`""`), or when no
-   * ancestor is drawn, the toolbar's Add menu; in an empty menu, which draws no toolbar, the empty
-   * box's first add. */
+   * ancestor is drawn, the root row's ⋮; in an empty menu, which draws no rows, the empty box's
+   * first add. */
   focusRowMenu(key: string): void {
     const table = this.#table();
     const root = table?.shadowRoot;
     if (!table || !root) return;
     // A host asks from its own `updated`, before the rows it just handed over are drawn: emptying
-    // the menu swaps the toolbar's Add menu for the empty box's adds.
+    // the menu swaps the root row's ⋮ for the empty box's adds.
     if (this.isUpdatePending || table.isUpdatePending) {
       void (async () => {
         await this.updateComplete;
@@ -742,30 +776,62 @@ export class MenuStructureTable extends LitElement {
         return;
       }
     }
-    this.renderRoot
-      .querySelector<HTMLElement>('[data-test="toolbar-adds"], [data-test$="-empty"]')
-      ?.focus();
+    (
+      root.querySelector<HTMLElement>(
+        `tr[data-row-key="${ROOT_KEY}"] [data-test="actions-root"]`,
+      ) ?? this.renderRoot.querySelector<HTMLElement>('[data-test$="-empty"]')
+    )?.focus();
   }
 
-  #rowsMemo?: { inputs: readonly unknown[]; rows: Row[] };
+  #rowsMemo?: { inputs: readonly unknown[]; rows: TableRow[] };
 
   /** The same array while what the rows are built from is unchanged, so a typed search does not
-   * make the table fold every row again. */
-  #rows(): Row[] {
+   * make the table fold every row again. An empty menu draws no row, so the table shows its empty
+   * box. */
+  #rows(): TableRow[] {
     const inputs = [
       currentLocale(),
       this.nodes,
       this.menuName,
+      this.menuColor,
       this.#order,
       this.#productNames,
       this.#sectionNames,
     ];
     if (this.#rowsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#rowsMemo.rows;
-    const rows = this.#buildRows();
+    const members = this.#buildRows();
+    const root: RootRow = {
+      kind: "root",
+      key: ROOT_KEY,
+      parentKey: null,
+      name: this.menuName,
+      counts: this.#counts(),
+      color: this.menuColor,
+    };
+    const rows = members.length === 0 ? [] : [root, ...members];
     this.#rowsMemo = { inputs, rows };
-    this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
+    this.#rowByKey = new Map(members.map((row) => [row.key, row]));
     return rows;
+  }
+
+  /** Each section and product once, those inside included menus too; an included menu itself is no
+   * section. */
+  #counts(): string {
+    const sections = new Set<string>();
+    const products = new Set<string>();
+    const walk = (nodes: MenuStructureNode[]) => {
+      for (const node of nodes) {
+        if (node.ref.kind === "product") products.add(node.ref.productId);
+        else if (!node.includedMenuId) sections.add(node.ref.sectionId);
+        walk(node.children ?? []);
+      }
+    };
+    walk(this.nodes);
+    const parts = sections.size > 0 ? [countOf("menus.section_count", sections.size)] : [];
+    if (products.size > 0 || sections.size === 0)
+      parts.push(countOf("folders.product_count", products.size));
+    return parts.join(", ");
   }
 
   #buildRows(): Row[] {
@@ -773,7 +839,7 @@ export class MenuStructureTable extends LitElement {
     const walk = (
       nodes: MenuStructureNode[],
       parentPath: string[],
-      parentKey: string | null,
+      parentKey: string,
       holder: string,
       list: string,
       readOnly: boolean,
@@ -785,7 +851,7 @@ export class MenuStructureTable extends LitElement {
         const name = node.includedMenuId
           ? t("menus.menu_prefix").replace("{name}", staffName)
           : staffName;
-        rows.push({ key, parentKey, path, node, name, holder, list, readOnly });
+        rows.push({ kind: "member", key, parentKey, path, node, name, holder, list, readOnly });
         walk(
           node.children ?? [],
           path,
@@ -796,7 +862,7 @@ export class MenuStructureTable extends LitElement {
         );
       }
     };
-    walk(this.nodes, [], null, this.menuName, TOP_LIST, false);
+    walk(this.nodes, [], ROOT_KEY, this.menuName, TOP_LIST, false);
     return rows;
   }
 
@@ -986,7 +1052,32 @@ export class MenuStructureTable extends LitElement {
     }${this.#remove(row, t("members.remove_from").replace("{list}", row.holder))}`;
   }
 
-  #actionsCell(row: Row) {
+  /** Never marked current: the top level is the current place when no row is marked. */
+  #rootNameCell(row: RootRow) {
+    const swatch =
+      row.color === null
+        ? nothing
+        : html`<span part="swatch-box" data-test="color-root" aria-hidden="true"
+            >${swatchChip(row.color)}</span
+          >`;
+    return html`<span part="folder-cell"
+      >${folderFrame(swatch)}<span part="name-stack folder-stack"
+        ><span part="root-label"
+          ><strong part="root-name" data-test="root-name">${row.name}</strong
+          ><span part="count" data-test="count-root">${row.counts}</span></span
+        ></span
+      ></span
+    >`;
+  }
+
+  #actionsCell(row: TableRow) {
+    if (row.kind === "root")
+      return html`<wt-row-actions
+        align="end"
+        data-test="actions-root"
+        label=${`${t("members.actions")}: ${row.name}`}
+        >${this.#adds([], "top")}</wt-row-actions
+      >`;
     if (row.readOnly) return nothing;
     return html`<wt-row-actions
       align="end"
@@ -996,11 +1087,11 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<Row>[] };
+  #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<TableRow>[] };
 
   /** The same array while everything a cell reads is unchanged, so a typed search does not make
    * the table fold every row again. */
-  #columns(): DataTableColumn<Row>[] {
+  #columns(): DataTableColumn<TableRow>[] {
     const inputs = [
       currentLocale(),
       this.busy,
@@ -1018,27 +1109,30 @@ export class MenuStructureTable extends LitElement {
     return columns;
   }
 
-  #buildColumns(): DataTableColumn<Row>[] {
+  #buildColumns(): DataTableColumn<TableRow>[] {
     return [
       {
         key: "name",
         label: t("members.name"),
-        cell: (row) => this.#nameCell(row),
-        searchValue: (row) => row.name,
+        cell: (row) => (row.kind === "root" ? this.#rootNameCell(row) : this.#nameCell(row)),
+        // The menu's own row is drawn only above a member that matches.
+        searchValue: (row) => (row.kind === "root" ? "" : row.name),
       },
       {
         key: "kind",
         label: t("members.kind"),
         cell: (row) =>
-          html`<span part=${row.readOnly ? "kind read-only" : "kind"} data-test="kind"
-            >${memberKindLabel(row.node.ref)}</span
-          >`,
+          row.kind === "root"
+            ? nothing
+            : html`<span part=${row.readOnly ? "kind read-only" : "kind"} data-test="kind"
+                >${memberKindLabel(row.node.ref)}</span
+              >`,
       },
       {
         key: "available",
         label: t("editor.available"),
         cell: (row) => {
-          if (row.node.ref.kind !== "product") return nothing;
+          if (row.kind === "root" || row.node.ref.kind !== "product") return nothing;
           const product = this.#productById.get(row.node.ref.productId);
           if (product === undefined) return nothing;
           return html`<span
@@ -1050,10 +1144,10 @@ export class MenuStructureTable extends LitElement {
         filter: {
           label: t("editor.available"),
           allLabel: t("menus.filter_available_all"),
-          // A section or an included menu answers no option: the table keeps it only on the way
-          // to a product that matches.
+          // The menu, a section or an included menu answers no option: the table keeps it only on
+          // the way to a product that matches.
           value: (row) => {
-            if (row.node.ref.kind !== "product") return [];
+            if (row.kind === "root" || row.node.ref.kind !== "product") return [];
             const product = this.#productById.get(row.node.ref.productId);
             if (product === undefined) return [];
             return product.available ? "yes" : "no";
@@ -1092,11 +1186,17 @@ export class MenuStructureTable extends LitElement {
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
-        .rowControls=${this.#reorderable ? (row: Row) => this.#grip(row) : undefined}
+        .rowControls=${
+          this.#reorderable
+            ? (row: TableRow) => (row.kind === "root" ? gripSpace : this.#grip(row))
+            : undefined
+        }
         rowControlsLabel=${t("folders.drag")}
         rowControlsAlign="center"
-        .rowActivation=${(row: Row) => (row.node.ref.kind === "section" ? "toggle" : "none")}
-        .rowToggleLabel=${(row: Row, expanded: boolean) =>
+        .rowActivation=${(row: TableRow) =>
+          row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
+        .rowCollapsible=${(row: TableRow) => row.kind !== "root"}
+        .rowToggleLabel=${(row: TableRow, expanded: boolean) =>
           t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.name)}
         .rows=${rows}
         .columns=${this.#columns()}
@@ -1105,9 +1205,11 @@ export class MenuStructureTable extends LitElement {
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}
-        .rowSelectable=${(row: Row) => this.#rowSelectable(row)}
-        .selectionLabel=${(row: Row) =>
-          t("menus.selection_label").replace("{name}", row.name).replace("{list}", row.holder)}
+        .rowSelectable=${(row: TableRow) => this.#rowSelectable(row)}
+        .selectionLabel=${(row: TableRow) =>
+          row.kind === "root"
+            ? row.name
+            : t("menus.selection_label").replace("{name}", row.name).replace("{list}", row.holder)}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
           event.stopPropagation();
           this.#send("wt-selection-change", { selected: event.detail.selected });
@@ -1120,15 +1222,7 @@ export class MenuStructureTable extends LitElement {
             ? html`<div slot="empty-action" class="empty-adds">
                 ${this.#adds([], "empty", "center")}
               </div>`
-            : html`<wt-row-actions
-                slot="toolbar-end"
-                align="end"
-                icon="plus"
-                class="toolbar-adds"
-                data-test="toolbar-adds"
-                label=${t("menus.add_to_menu")}
-                >${this.#adds([], "top")}</wt-row-actions
-              >`
+            : nothing
         }<slot name="toolbar-end" slot="toolbar-end"></slot
         ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot
       ></wt-data-table>

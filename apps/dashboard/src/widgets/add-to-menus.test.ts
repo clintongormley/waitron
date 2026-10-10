@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { CatalogueSummary, MenuStructure } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
@@ -443,5 +444,47 @@ describe("dashboard-add-to-menus", () => {
     const escape = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
     root(el).querySelector("wt-modal")!.dispatchEvent(escape);
     expect(escape.defaultPrevented).toBe(true);
+  });
+});
+
+describe("dashboard-add-to-menus on a phone", () => {
+  const twelve: PlacementMenu[] = Array.from({ length: 12 }, (_, menu) => ({
+    id: `m-${menu}`,
+    name: `Menu ${menu}`,
+    rootSectionId: `root-${menu}`,
+    sections: Array.from({ length: 10 }, (_, section) => ({
+      id: `s-${menu}-${section}`,
+      name: `Section ${menu}.${section}`,
+      sharedWith: [],
+      children: [],
+    })),
+  }));
+
+  it("keeps Add to menus and Skip inside the window at 390×700 with 12 menus of 10 sections, and still when scrolled to the end", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(390, 700);
+    onTestFinished(() => page.viewport(...before));
+    const el = await mount({ menus: twelve });
+    const body = root(el)
+      .querySelector("wt-modal")!
+      .shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const buttons = { "Add to menus": button(el, "add-to-menus")!, Skip: button(el, "skip")! };
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+
+    const placed = () =>
+      Object.entries(buttons).map(([label, target]) => {
+        const box = target.getBoundingClientRect();
+        expect(box.height, `${label} is drawn`).toBeGreaterThan(0);
+        expect(box.top, `${label}: top in the window`).toBeGreaterThanOrEqual(0);
+        expect(box.bottom, `${label}: bottom in the window`).toBeLessThanOrEqual(700);
+        expect(box.left, `${label}: left in the window`).toBeGreaterThanOrEqual(0);
+        expect(box.right, `${label}: right in the window`).toBeLessThanOrEqual(390);
+        return [box.top, box.left];
+      });
+    const unscrolled = placed();
+    body.scrollTop = body.scrollHeight;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(body.scrollTop).toBeGreaterThan(0);
+    expect(placed()).toEqual(unscrolled);
   });
 });

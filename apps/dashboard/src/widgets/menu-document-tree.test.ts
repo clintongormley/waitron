@@ -187,29 +187,21 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
     "dashboard-menu-structure-table",
     {
       menuName: "Frozen lunch",
-      // Structure has no menu row, so one more section puts its rows at the Preview rows' depth.
       nodes: [
         {
-          memberId: "outer",
-          ref: { kind: "section", sectionId: "outer" },
-          internalName: "Counter outer",
+          memberId: "drinks",
+          ref: { kind: "section", sectionId: "drinks" },
+          internalName: "Counter drinks",
           children: [
             {
-              memberId: "drinks",
-              ref: { kind: "section", sectionId: "drinks" },
-              internalName: "Counter drinks",
-              children: [
-                {
-                  memberId: "beer",
-                  ref: { kind: "section", sectionId: "beer" },
-                  internalName: "Counter beer",
-                  children: [{ memberId: "mi", ref: { kind: "product", productId: "lager" } }],
-                },
-              ],
+              memberId: "beer",
+              ref: { kind: "section", sectionId: "beer" },
+              internalName: "Counter beer",
+              children: [{ memberId: "mi", ref: { kind: "product", productId: "lager" } }],
             },
-            { memberId: "juice", ref: { kind: "product", productId: "juice" } },
           ],
         },
+        { memberId: "juice", ref: { kind: "product", productId: "juice" } },
       ],
       products: [
         {
@@ -231,14 +223,12 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
   );
   const otherTable = structure.shadowRoot!.querySelector("wt-data-table")!;
   await otherTable.updateComplete;
-  for (const key of ["outer", "outer/drinks", "outer/drinks/beer"]) {
+  for (const key of ["drinks", "drinks/beer"]) {
     otherTable.setExpanded(key, true);
     await otherTable.updateComplete;
   }
   const a = row(el, "drinks/beer/mi")!;
-  const b = otherTable.shadowRoot!.querySelector<HTMLElement>(
-    'tr[data-row-key="outer/drinks/beer/mi"]',
-  )!;
+  const b = otherTable.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="drinks/beer/mi"]')!;
   expect(getComputedStyle(a.querySelector(".tree-cell")!).paddingInlineStart).toBe(
     getComputedStyle(b.querySelector(".tree-cell")!).paddingInlineStart,
   );

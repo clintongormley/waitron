@@ -60,12 +60,23 @@ export class WtDialog extends LitElement {
         max-width: var(--wt-dialog-max-width);
       }
 
+      /* The native modal dialog's own height limit bounds this column, so a long body scrolls
+         inside it and the footer stays in view. */
+      dialog[open] {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
       dialog::backdrop {
         background: var(--wt-color-scrim);
       }
 
       .body {
         padding: var(--wt-space-5);
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
       }
 
       .body > .form-message {
@@ -83,6 +94,7 @@ export class WtDialog extends LitElement {
       }
 
       .footer {
+        flex-shrink: 0;
         display: flex;
         justify-content: flex-end;
         gap: var(--wt-space-2);
@@ -156,7 +168,15 @@ export class WtDialog extends LitElement {
     if (reason === "saved" || reason === "security") this.open = false;
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.observeBody();
+    if (this.hasUpdated && this.open) this.watchContent();
+  }
+
   override disconnectedCallback(): void {
+    this.bodyResize.disconnect();
+    this.unwatchContent();
     this.openingGeneration++;
     this.pendingClose = undefined;
     super.disconnectedCallback();
@@ -204,7 +224,9 @@ export class WtDialog extends LitElement {
   }
 
   @query("dialog") private dialog!: HTMLDialogElement;
+  @query(".body") private bodyEl!: HTMLElement;
   @query(".footer") private footerEl!: HTMLElement;
+  @query("slot:not([name])") private bodySlot!: HTMLSlotElement;
   @query('slot[name="footer"]') private footerSlot!: HTMLSlotElement;
 
   override willUpdate(): void {
@@ -220,6 +242,7 @@ export class WtDialog extends LitElement {
 
   override firstUpdated(): void {
     this.updateHasFooter();
+    this.observeBody();
   }
 
   override updated(changed: Map<string, unknown>): void {
@@ -227,8 +250,19 @@ export class WtDialog extends LitElement {
       if (this.open && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
+        // Before as well as after: the browser picks opening focus inside showModal(), and on the
+        // first render nothing has set a body that is always a tab stop yet.
+        this.syncBodyTabStop();
         this.dialog.showModal();
+        this.syncBodyTabStop();
+        this.watchContent();
+        // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
+        // it; a body with something to focus hands it on.
+        if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
+          this.focusFirstContent();
       }
+      // Also when the browser has already closed the dialog itself, as on Escape.
+      if (!this.open) this.unwatchContent();
       if (!this.open && this.dialog.open) {
         this.dialog.close();
         // Now as well as on the close report a task later: a screen that hands focus back once
@@ -241,6 +275,7 @@ export class WtDialog extends LitElement {
     if (changed.has("open") || (changed.has("footerMessage") && !this.editing)) {
       this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
+    this.syncBodyTabStop();
   }
 
   private onClose(): void {
@@ -274,6 +309,73 @@ export class WtDialog extends LitElement {
       for (const candidate of tabbables(at, skip)) if (this.takesFocus(candidate)) return;
       if (!skip.has(at) && isTabbable(at) && this.takesFocus(at)) return;
       skip.add(at);
+    }
+  }
+
+  /** Whether the body is in the tab order: "overflow" only while it has more than it shows, so a
+   * body of text alone can still be scrolled from the keyboard. */
+  protected readonly bodyTabStop: "always" | "overflow" = "overflow";
+
+  private readonly bodyResize = new ResizeObserver(() => this.syncBodyTabStop());
+
+  /** The body, and what is slotted into it: once the body reaches the dialog's height limit it
+   * stops resizing, while its content still grows. */
+  private observeBody(): void {
+    this.bodyResize.disconnect();
+    this.bodyResize.observe(this.bodyEl);
+    for (const each of this.bodySlot.assignedElements({ flatten: true })) {
+      this.bodyResize.observe(each);
+    }
+  }
+
+  /** Content growing inside a slotted element whose own size is fixed resizes nothing observed, so
+   * any change to the slotted content while open checks the body again, once a frame. */
+  private readonly contentChanges = new MutationObserver(() => {
+    this.contentFrame ||= requestAnimationFrame(() => {
+      this.contentFrame = 0;
+      this.syncBodyTabStop();
+    });
+  });
+  private contentFrame = 0;
+
+  private watchContent(): void {
+    if (this.bodyTabStop === "always") return;
+    this.contentChanges.observe(this, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+  }
+
+  private unwatchContent(): void {
+    this.contentChanges.disconnect();
+    cancelAnimationFrame(this.contentFrame);
+    this.contentFrame = 0;
+  }
+
+  private syncBodyTabStop(): void {
+    const body = this.bodyEl;
+    const overflows = this.dialog.open && body.scrollHeight > body.clientHeight;
+    if (this.bodyTabStop === "always" || overflows) {
+      body.tabIndex = 0;
+      // A group rather than a region: a region is a landmark, and a dialog's content can hold
+      // landmarks of its own.
+      body.setAttribute("role", "group");
+      if (this.heading) body.setAttribute("aria-labelledby", this.headingId);
+      else body.removeAttribute("aria-labelledby");
+      if (!this.heading && this.ariaLabel) body.setAttribute("aria-label", this.ariaLabel);
+      else body.removeAttribute("aria-label");
+    } else {
+      for (const name of ["tabindex", "role", "aria-labelledby", "aria-label"])
+        body.removeAttribute(name);
+    }
+  }
+
+  private focusFirstContent(): void {
+    for (const node of this.bodySlot.assignedElements({ flatten: true })) {
+      if (isTabbable(node) && this.takesFocus(node)) return;
+      for (const candidate of tabbables(node, new Set())) if (this.takesFocus(candidate)) return;
     }
   }
 
@@ -353,7 +455,7 @@ export class WtDialog extends LitElement {
               ? html`<p class="description" id=${this.descriptionId}>${this.description}</p>`
               : nothing
           }
-          <slot @wt-form-error=${this.onBodyMessage}></slot>
+          <slot @wt-form-error=${this.onBodyMessage} @slotchange=${this.observeBody}></slot>
           ${formMessage(this.footerMessage)}
         </div>
         <div class="footer">

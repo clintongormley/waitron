@@ -5238,7 +5238,7 @@ function manyChoosable(count: number): DataTableColumn<Row>[] {
 test("a long Customise list scrolls within the screen and reaches its last choice", async () => {
   const el = await table({ columns: manyChoosable(40) });
   await userEvent.click(trigger(el));
-  const popup = panel(el).querySelector<HTMLElement>(".columns-list")!;
+  const popup = panel(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
   const bounds = popup.getBoundingClientRect();
   expect(bounds.top).toBeGreaterThanOrEqual(0);
   expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
@@ -8288,6 +8288,15 @@ test("a screen-owned search is available when it is the only toolbar control", a
   expect(search.value).toBe("Ada");
 });
 
+/** The Customise dialog's scrolling body, opened in a 1280×600 window. */
+async function customiseBody(el: AnyTable): Promise<HTMLElement> {
+  const [width, height] = [innerWidth, innerHeight];
+  await page.viewport(1280, 600);
+  onTestFinished(() => page.viewport(width, height));
+  await userEvent.click(trigger(el));
+  return panel(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+}
+
 test("edge scroll reaches hidden column choices during a stationary reorder", async () => {
   const el = await table({
     columns: [
@@ -8300,11 +8309,9 @@ test("edge scroll reaches hidden column choices during a stationary reorder", as
       })),
     ],
   });
-  await userEvent.click(trigger(el));
-  const box = panel(el).querySelector<HTMLElement>(".columns-list")!;
-  box.style.maxHeight = "240px";
-  box.style.overflow = "auto";
-  const source = box.querySelector<HTMLElement>('[data-reorder="edge-0"]')!;
+  const box = await customiseBody(el);
+  expect(box.scrollHeight).toBeGreaterThan(box.clientHeight);
+  const source = panel(el).querySelector<HTMLElement>('[data-reorder="edge-0"]')!;
   const start = source.getBoundingClientRect();
   const bounds = box.getBoundingClientRect();
   source.dispatchEvent(
@@ -8352,11 +8359,10 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
         })),
       ],
     });
-    await userEvent.click(trigger(el));
-    const box = panel(el).querySelector<HTMLElement>(".columns-list")!;
-    box.style.maxHeight = "240px";
+    const box = await customiseBody(el);
+    if (action !== "fits") expect(box.scrollHeight).toBeGreaterThan(box.clientHeight);
     const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
-    const source = box.querySelector<HTMLElement>(`[data-reorder="${key}"]`)!;
+    const source = panel(el).querySelector<HTMLElement>(`[data-reorder="${key}"]`)!;
     if (action === "up")
       box.scrollTop = source.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
     const start = source.getBoundingClientRect();
@@ -8370,7 +8376,8 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
         pending.delete(id);
         callback(time);
       });
-      pending.add(id);
+      // The edge scroll's frames only: the dialog asks for frames of its own as the list changes.
+      if (new Error().stack?.includes("drag-edge-scroll")) pending.add(id);
       return id;
     });
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {

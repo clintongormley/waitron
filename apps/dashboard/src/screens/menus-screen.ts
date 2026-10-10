@@ -2375,6 +2375,7 @@ export class MenusScreen extends LitElement {
         .products=${this.products}
         .categories=${this.categories}
         .defaultColor=${this.defaultColor}
+        .menuColor=${structure.root?.color ?? null}
         .current=${this.path}
         .busy=${this.busy}
         .reordering=${this.structureReordering}
@@ -3413,38 +3414,42 @@ export class MenusScreen extends LitElement {
     >
       ${
         target !== null
-          ? html`${
+          ? html`<dashboard-section-add-products
+              .products=${this.#addable}
+              .categories=${this.categories}
+              .inSection=${this.#pickerHeld}
+              .onMenu=${target.menuId === this.menuId ? this.#onMenu : null}
+              .busy=${this.busy}
+              @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
+                event.stopPropagation();
+                this.#addProducts(event.detail.productIds);
+              }}
+              >${
                 this.addProductsError
-                  ? html`<p class="error" role="alert" data-test="add-products-error">
+                  ? html`<p
+                      class="error"
+                      slot="message"
+                      role="alert"
+                      data-test="add-products-error"
+                    >
                       ${this.addProductsError}
                     </p>`
                   : nothing
-              }
-              <dashboard-section-add-products
-                .products=${this.#addable}
-                .categories=${this.categories}
-                .inSection=${this.#pickerHeld}
-                .onMenu=${target.menuId === this.menuId ? this.#onMenu : null}
-                .busy=${this.busy}
-                @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
-                  event.stopPropagation();
-                  this.#addProducts(event.detail.productIds);
+              }<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="add-products-cancel"
+                .disabled=${this.busy}
+                @click=${() => {
+                  if (leaveCoordinatorFor(this))
+                    void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+                      '[data-test="add-products"]',
+                    )!.requestClose("cancel");
+                  else this.addingProducts = null;
                 }}
-                ><wt-button
-                  slot="cancel"
-                  variant="secondary"
-                  data-test="add-products-cancel"
-                  .disabled=${this.busy}
-                  @click=${() => {
-                    if (leaveCoordinatorFor(this))
-                      void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-                        '[data-test="add-products"]',
-                      )!.requestClose("cancel");
-                    else this.addingProducts = null;
-                  }}
-                  >${t("action.cancel")}</wt-button
-                ></dashboard-section-add-products
-              >`
+                >${t("action.cancel")}</wt-button
+              ></dashboard-section-add-products
+            >`
           : nothing
       }
     </wt-modal>`;

@@ -526,6 +526,35 @@ test("keeps the body in the tab order, whether or not there is anything to scrol
   await vi.waitFor(() => expect(longBody.scrollTop).toBeGreaterThan(0));
 });
 
+test("names its body, a tab stop even when short, as a group after its heading", async () => {
+  const modal = await openModal();
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  await expect.element(page.elementLocator(body)).toHaveRole("group");
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Add printer");
+});
+
+test("opens with focus on its body, not on a field first in a long body", async () => {
+  const modal = await openModal(
+    '<wt-input name="name" label="Name"></wt-input><div style="height: 1800px">Long form</div>',
+  );
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(modal.shadowRoot!.activeElement).toBe(body);
+});
+
+test.each([
+  ["a field first", '<wt-input name="name" label="Name"></wt-input>'],
+  ["text only", "Printer settings"],
+])("opens with focus on its body when open at its first render (%s)", async (_, body) => {
+  const modal = (await mount(`<wt-modal heading="Add printer" open>
+    ${body}
+    <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  await modal.updateComplete;
+  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(modal.shadowRoot!.activeElement).toBe(modal.shadowRoot!.querySelector(".body"));
+});
+
 async function openModalWithMessage(body: string, footer: string) {
   const modal = (await mount(`<wt-modal heading="Add printer">
     ${body}
@@ -889,5 +918,22 @@ test("wraps a long unbroken heading inside the modal at phone width", async () =
     expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
   } finally {
     await page.viewport(1280, 900);
+  }
+});
+
+test("asks for no frame when its content changes, since its body is always a tab stop", async () => {
+  const modal = await openModal("<p>Line</p>");
+  const inner = modal.querySelector("p")!;
+  const frames = vi.spyOn(window, "requestAnimationFrame");
+  try {
+    inner.textContent = "Lines";
+    await Promise.resolve();
+    inner.style.color = "red";
+    await Promise.resolve();
+    inner.append(document.createElement("span"));
+    await Promise.resolve();
+    expect(frames).not.toHaveBeenCalled();
+  } finally {
+    frames.mockRestore();
   }
 });

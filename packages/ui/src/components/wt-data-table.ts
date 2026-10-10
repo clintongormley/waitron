@@ -555,8 +555,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .columns-list {
         display: flex;
         flex-direction: column;
-        max-height: calc(100dvh - 2 * var(--wt-space-6));
-        overflow-y: auto;
       }
 
       .column-move-status {

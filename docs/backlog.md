@@ -650,6 +650,21 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   the spec's rule section says "caller order". Built as the table's sort. **Next action:** the owner
   confirms, or asks for caller order.
 
+- **The Products tree's hidden counts may be placed against the page at narrow width** — not
+  measured; left open by A453. At 440px or less the tree hides its counts visually
+  (`wt-data-table[narrow]::part(count)`, `apps/dashboard/src/widgets/product-list.ts`) as the menu's
+  Structure tab does. A453 found the Structure tab's hidden root count was positioned against the
+  page, not the table's scroll box, and gave its root label `position: relative`; Products' root
+  label has no such rule. **Next action:** measure at phone width with a long name before changing
+  anything.
+
+- **On a phone, sections nested more than four deep read flat in the Structure tab** — left open
+  by A453. At narrow width `wt-data-table` stops indenting after four levels
+  (`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
+  root row now takes one of them. A453's look at 390px wide: level 4, level 5 and a product in
+  level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
+  should go deeper (a shared table rule, so the Products tree changes too).
+
 - **Menu-root default fallback when content languages are unset (A420 review).**
   `updateMenuDetails` validates against English; section and include-folder writers use
   their supplied venue fallback. Decide whether the menu-root writer should take that

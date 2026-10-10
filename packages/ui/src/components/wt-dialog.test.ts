@@ -1,7 +1,8 @@
-import { expect, test, afterEach, vi } from "vitest";
+import { expect, test, afterEach, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, formMessageOf, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { WtDialog } from "./wt-dialog.js";
+import "./wt-button.js";
 import "./wt-form-actions.js";
 import "./wt-input.js";
 
@@ -522,9 +523,9 @@ test.each([
       el.open = true;
       await el.updateComplete;
       expect(deepActiveElement()).toBeInstanceOf(HTMLInputElement);
-      const dialog = el.shadowRoot!.querySelector("dialog")!;
-      await vi.waitFor(() => expect(dialog.scrollTop).toBeGreaterThan(0));
-      const frame = dialog.getBoundingClientRect();
+      const body = el.shadowRoot!.querySelector(".body")!;
+      await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+      const frame = body.getBoundingClientRect();
       const box = message.getBoundingClientRect();
       expect(box.top).toBeGreaterThanOrEqual(frame.top - 1);
       expect(box.bottom).toBeLessThanOrEqual(frame.bottom + 1);
@@ -533,6 +534,294 @@ test.each([
     }
   },
 );
+
+const SAVE_OR_CANCEL = `<wt-form-actions slot="footer">
+  <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+  <wt-button>Save</wt-button>
+</wt-form-actions>`;
+
+/** Opens a dialog holding `body` above Cancel and Save, at a 390×700 window restored afterwards. */
+async function openAtPhoneSize(body: string) {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    `<wt-dialog heading="Edit order">${body}${SAVE_OR_CANCEL}</wt-dialog>`,
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const [cancel, save] = el.querySelectorAll("wt-button");
+  await save!.updateComplete;
+  const parts = el.shadowRoot!;
+  return {
+    el,
+    dialog: parts.querySelector("dialog")!,
+    body: parts.querySelector<HTMLElement>(".body")!,
+    cancel: cancel!,
+    save: save!,
+  };
+}
+
+/** Whether Shift+Tab from Cancel lands on the body, the one place before the footer it could. */
+async function bodyIsTabStop(el: HTMLElement, cancel: HTMLElement): Promise<boolean> {
+  cancel.focus();
+  expect(composedContainsFocus(cancel)).toBe(true);
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  return el.shadowRoot!.activeElement === el.shadowRoot!.querySelector(".body");
+}
+
+function composedContainsFocus(element: HTMLElement): boolean {
+  const focused = deepActiveElement();
+  for (let at: Node | null = focused; at; at = at instanceof ShadowRoot ? at.host : at.parentNode)
+    if (at === element) return true;
+  return false;
+}
+
+function frame(): Promise<unknown> {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+/** Cancel and Save lie inside the window and the dialog, and the dialog itself does not scroll. */
+function expectFooterInView(dialog: HTMLDialogElement, cancel: HTMLElement, save: HTMLElement) {
+  const frameBox = dialog.getBoundingClientRect();
+  for (const [label, button] of [
+    ["Cancel", cancel],
+    ["Save", save],
+  ] as const) {
+    const box = button.getBoundingClientRect();
+    expect(box.height, `${label} is drawn`).toBeGreaterThan(0);
+    expect(box.bottom, `${label}: bottom in the window`).toBeLessThanOrEqual(window.innerHeight);
+    expect(box.bottom, `${label}: bottom in the dialog`).toBeLessThanOrEqual(frameBox.bottom);
+  }
+  expect(dialog.scrollHeight, "the dialog itself scrolls").toBe(dialog.clientHeight);
+}
+
+test.each([
+  ["a field", '<label>Note <input name="note" /></label>'],
+  ["a wt-input", '<wt-input name="note" label="Note"></wt-input>'],
+  ["nothing focusable", ""],
+])(
+  "scrolls a long body while the footer stays visible and stationary, with %s first",
+  async (_, field) => {
+    const { dialog, body, cancel, save } = await openAtPhoneSize(
+      `${field}<div style="height: 1800px">Long order</div>`,
+    );
+    if (field) expect(deepActiveElement(), "opening focus").toBeInstanceOf(HTMLInputElement);
+    else expect(deepActiveElement(), "opening focus").toBe(body);
+    expectFooterInView(dialog, cancel, save);
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    const placed = () =>
+      [cancel, save].flatMap((button) => {
+        const box = button.getBoundingClientRect();
+        return [box.top, box.bottom, box.left, box.right];
+      });
+    const before = placed();
+    body.scrollTop = body.scrollHeight;
+    await frame();
+    expect(body.scrollTop).toBeGreaterThan(0);
+    expect(placed()).toEqual(before);
+    expect(dialog.scrollHeight).toBe(dialog.clientHeight);
+  },
+);
+
+test("paints a long dialog's surface and footer divider from their tokens", async () => {
+  const { el, dialog } = await openAtPhoneSize('<div style="height: 1800px">Long order</div>');
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 31, 32)");
+  host.style.setProperty("--wt-color-border", "rgb(20, 21, 22)");
+  const footer = el.shadowRoot!.querySelector(".footer")!;
+  expect(getComputedStyle(dialog).backgroundColor).toBe("rgb(30, 31, 32)");
+  expect(getComputedStyle(footer).borderTopWidth).toBe("1px");
+  expect(getComputedStyle(footer).borderTopColor).toBe("rgb(20, 21, 22)");
+});
+
+test("opens a long dialog that is open at its first render with focus on its first field", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    `<wt-dialog heading="Edit order" open><label>Note <input name="note" /></label><div style="height: 1800px">Long order</div>${SAVE_OR_CANCEL}</wt-dialog>`,
+  )) as Openable;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(deepActiveElement()).toBe(el.querySelector("input"));
+});
+
+test("keeps a short dialog fitted to its content", async () => {
+  const el = (await mount(
+    `<wt-dialog heading="Void sale">This will create a corrective record.${SAVE_OR_CANCEL}</wt-dialog>`,
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  await el.querySelectorAll("wt-button")[1]!.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const footer = el.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+  const box = dialog.getBoundingClientRect();
+  // A 1px border above and below.
+  expect(box.height).toBeCloseTo(body.offsetHeight + footer.offsetHeight + 2, 0);
+  expect(body.scrollHeight).toBe(body.clientHeight);
+  expect(box.height).toBeLessThan(window.innerHeight / 2);
+  expect(box.width).toBeLessThan(window.innerWidth / 2);
+});
+
+test("keeps the footer in view when the body outgrows the window after opening", async () => {
+  const { el, dialog, body, cancel, save } = await openAtPhoneSize("<p>Loading lines</p>");
+  expect(body.scrollHeight).toBe(body.clientHeight);
+  expect(body.tabIndex, "a short body's tabIndex").toBe(-1);
+  expect(await bodyIsTabStop(el, cancel), "a short body is a tab stop").toBe(false);
+  const rows = Array.from({ length: 40 }, (_, index) => {
+    const row = document.createElement("div");
+    row.style.height = "48px";
+    row.textContent = `Line ${index + 1}`;
+    return row;
+  });
+  el.append(...rows);
+  await frame();
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expectFooterInView(dialog, cancel, save);
+  await vi.waitFor(() => expect(body.tabIndex, "an overflowing body's tabIndex").toBe(0));
+  expect(await bodyIsTabStop(el, cancel), "an overflowing body is a tab stop").toBe(true);
+
+  for (const row of rows) row.remove();
+  await frame();
+  expect(body.scrollHeight).toBe(body.clientHeight);
+  await vi.waitFor(() => expect(body.tabIndex, "a body short again: tabIndex").toBe(-1));
+  expect(await bodyIsTabStop(el, cancel), "a body short again is a tab stop").toBe(false);
+});
+
+/** Ways content inside a fixed-size wrapper grows and shrinks back, neither the body nor the
+ * wrapper changing size. */
+const insideWrapper = [
+  [
+    "a style change",
+    (inner: HTMLElement) => (inner.style.height = "1800px"),
+    (inner: HTMLElement) => (inner.style.height = ""),
+  ],
+  [
+    "added content",
+    (inner: HTMLElement) => {
+      const added = document.createElement("div");
+      added.style.height = "1800px";
+      inner.append(added);
+    },
+    (inner: HTMLElement) => inner.lastElementChild!.remove(),
+  ],
+  [
+    "a text change",
+    (inner: HTMLElement) => (inner.firstChild!.textContent = "Line ".repeat(2000)),
+    (inner: HTMLElement) => (inner.firstChild!.textContent = "Line"),
+  ],
+] as const;
+
+test.each(insideWrapper)(
+  "makes the body a tab stop when content grows by %s inside a fixed-height wrapper",
+  async (_, grow, shrink) => {
+    const { el, body } = await openAtPhoneSize(
+      '<label>Note <input name="note" /></label><div style="height: 200px; width: 200px"><div style="min-height: 100px">Line</div></div>',
+    );
+    const field = el.querySelector("input")!;
+    const inner = el.querySelector<HTMLElement>("div > div")!;
+    expect(body.tabIndex, "before: tabIndex").toBe(-1);
+    // The ResizeObserver's first reports, which arrive a frame after it starts watching, are past.
+    await frame();
+    await frame();
+    grow(inner);
+    await frame();
+    expect(body.scrollHeight, "grown: scrollHeight").toBeGreaterThan(body.clientHeight);
+    await vi.waitFor(() => expect(body.tabIndex, "grown: tabIndex").toBe(0));
+    field.focus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(el.shadowRoot!.activeElement, "Shift+Tab from the field").toBe(body);
+
+    shrink(inner);
+    await frame();
+    expect(body.scrollHeight, "shrunk: scrollHeight").toBe(body.clientHeight);
+    await vi.waitFor(() => expect(body.tabIndex, "shrunk: tabIndex").toBe(-1));
+  },
+);
+
+test("still notices content growing inside a fixed-size wrapper after it is moved while open", async () => {
+  const { el, body } = await openAtPhoneSize(
+    '<div style="height: 200px; width: 200px"><div style="height: 100px">Line</div></div>',
+  );
+  const parent = el.parentNode!;
+  el.remove();
+  parent.append(el);
+  await frame();
+  await frame();
+  expect(body.tabIndex, "before: tabIndex").toBe(-1);
+  el.querySelector<HTMLElement>("div > div")!.style.height = "1800px";
+  await frame();
+  expect(body.scrollHeight, "grown: scrollHeight").toBeGreaterThan(body.clientHeight);
+  await vi.waitFor(() => expect(body.tabIndex, "grown: tabIndex").toBe(0));
+});
+
+test.each(["Escape", "open", "removal"] as const)(
+  "asks for one frame for many content changes while open, and none once closed by %s",
+  async (how) => {
+    const { el } = await openAtPhoneSize('<div style="height: 200px"><p>Line</p></div>');
+    const inner = el.querySelector("p")!;
+    const frames = vi.spyOn(window, "requestAnimationFrame");
+    onTestFinished(() => frames.mockRestore());
+    // Each awaited, so each reaches the observer in its own report.
+    const change = async () => {
+      inner.textContent = "Lines";
+      await Promise.resolve();
+      inner.style.color = "red";
+      await Promise.resolve();
+      inner.append(document.createElement("span"));
+      await Promise.resolve();
+    };
+    await change();
+    expect(frames, "while open").toHaveBeenCalledTimes(1);
+    await frame();
+
+    if (how === "removal") el.remove();
+    else {
+      const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
+      if (how === "Escape") await userEvent.keyboard("{Escape}");
+      else el.open = false;
+      await closed;
+    }
+    frames.mockClear();
+    await change();
+    expect(frames, "once closed").not.toHaveBeenCalled();
+  },
+);
+
+test("names its body as a group after its heading only while the body is a tab stop", async () => {
+  const { el, body } = await openAtPhoneSize("<p>Loading lines</p>");
+  const located = page.elementLocator(body);
+  for (const name of ["role", "aria-labelledby", "aria-label"])
+    expect(body.getAttribute(name), `a short body's ${name}`).toBeNull();
+
+  const long = document.createElement("div");
+  long.style.height = "1800px";
+  el.append(long);
+  await vi.waitFor(() => expect(body.tabIndex, "an overflowing body's tabIndex").toBe(0));
+  await expect.element(located).toHaveRole("group");
+  await expect.element(located).toHaveAccessibleName("Edit order");
+
+  long.remove();
+  await vi.waitFor(() => expect(body.tabIndex, "a body short again: tabIndex").toBe(-1));
+  for (const name of ["role", "aria-labelledby", "aria-label"])
+    expect(body.getAttribute(name), `a body short again: ${name}`).toBeNull();
+});
+
+test("names an overflowing body after the dialog's own label when it has no heading", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    '<wt-dialog aria-label="Edit order"><div style="height: 1800px">Long order</div></wt-dialog>',
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.tabIndex).toBe(0);
+  await expect.element(page.elementLocator(body)).toHaveRole("group");
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Edit order");
+});
 
 test.each(["Escape", "open"] as const)(
   "closed by %s, hands focus back to what had it when it opened, not to the button that opened it",

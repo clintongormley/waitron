@@ -2182,7 +2182,6 @@ export const en = {
   "menus.collapse": "Hide what is in {name}",
   "menus.new_section": "Add section",
   "menus.include_menu": "Include a menu",
-  "menus.add_to_menu": "Add to this menu",
   "menus.search_structure": "Search this menu",
   "menus.move_selected": "Move to section…",
   "menus.move_selected_confirm": "Move",
@@ -2208,6 +2207,8 @@ export const en = {
   "menus.delete_section_note":
     "Delete {name} and the {count} sections below it? Its products stay.",
   "menus.menu_prefix": "Menu: {name}",
+  "menus.section_count": "{count} sections",
+  "menus.section_count_one": "1 section",
   "menus.open_included": "Open {name}",
   "menus.remove_included": "Remove from this menu",
   "menus.include_as_folder": "Shown as a folder",
@@ -4718,7 +4719,6 @@ export const es: Record<StringKey, string> = {
   "menus.collapse": "Ocultar lo que hay en {name}",
   "menus.new_section": "Añadir sección",
   "menus.include_menu": "Incluir una carta",
-  "menus.add_to_menu": "Añadir a esta carta",
   "menus.search_structure": "Buscar en esta carta",
   "menus.move_selected": "Mover a una sección…",
   "menus.move_selected_confirm": "Mover",
@@ -4744,6 +4744,8 @@ export const es: Record<StringKey, string> = {
   "menus.delete_section_note":
     "¿Eliminar {name} y las {count} secciones debajo? Sus productos se conservan.",
   "menus.menu_prefix": "Carta: {name}",
+  "menus.section_count": "{count} secciones",
+  "menus.section_count_one": "1 sección",
   "menus.open_included": "Abrir {name}",
   "menus.remove_included": "Quitar de esta carta",
   "menus.include_as_folder": "Se muestra como carpeta",

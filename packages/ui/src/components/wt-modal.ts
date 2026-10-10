@@ -7,11 +7,7 @@ export class WtModal extends WtDialog {
   /** Unset, or any other value, is wide. */
   @property({ reflect: true }) size?: "compact" | "standard" | "wide";
 
-  override firstUpdated(): void {
-    super.firstUpdated();
-    // A text-only modal still needs a keyboard target inside its scrolling body.
-    this.renderRoot.querySelector<HTMLElement>(".body")!.tabIndex = 0;
-  }
+  protected override readonly bodyTabStop = "always";
 
   static override styles = [
     ...WtDialog.styles,
@@ -22,7 +18,6 @@ export class WtModal extends WtDialog {
         max-height: calc(100dvh - 2 * var(--wt-space-5));
         width: min(var(--wt-modal-max-width), calc(100dvw - 2 * var(--wt-modal-inline-margin)));
         max-width: none;
-        overflow: hidden;
       }
 
       /* Set on this modal's own dialog rather than passed down as a custom property, which a modal
@@ -39,23 +34,10 @@ export class WtModal extends WtDialog {
         );
       }
 
-      dialog[open] {
-        display: flex;
-        flex-direction: column;
-      }
-
-      /* The body owns scrolling so the actions remain reachable on long forms. */
       .body {
         --wt-field-max-width: var(--wt-form-max-width);
         padding-inline: var(--wt-modal-inline-padding);
         flex: 1;
-        min-height: 0;
-        overflow: auto;
-        overscroll-behavior: contain;
-      }
-
-      .footer {
-        flex-shrink: 0;
       }
 
       .footer.has-content {

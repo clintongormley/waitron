@@ -830,20 +830,18 @@ async function toggleRow(el: MenusScreen, key: string): Promise<void> {
   await settleStructure(el);
 }
 
-/** The tree's toolbar Add ⋮, which holds the adds for the menu's own top level. */
-function toolbarAdds(el: MenusScreen): HTMLElementTagNameMap["wt-row-actions"] | null {
-  return structure(el).shadowRoot!.querySelector('[data-test="toolbar-adds"]');
+/** The root row's ⋮, which holds the adds for the menu's own top level. */
+function rootAdds(el: MenusScreen): HTMLElementTagNameMap["wt-row-actions"] | null {
+  return inStructure(el, '[data-test="actions-root"]');
 }
 
-/** Opens a row's ⋮ — for `""`, the toolbar's Add ⋮ — and chooses `action` in it, focusing the
- * item first as a person's click leaves it. */
+/** Opens a row's ⋮ — for `""`, the root row's — and chooses `action` in it, focusing the item
+ * first as a person's click leaves it. */
 async function rowAction(el: MenusScreen, key: string, action: string): Promise<void> {
   await settleStructure(el);
   if (key === "") {
-    toolbarAdds(el)!.show();
-    const item = structure(el).shadowRoot!.querySelector<HTMLElement>(
-      `[data-test="${CSS.escape(`${action}-top`)}"]`,
-    )!;
+    rootAdds(el)!.show();
+    const item = inStructure(el, `[data-test="${CSS.escape(`${action}-top`)}"]`)!;
     item.focus();
     item.click();
     await settleStructure(el);
@@ -870,25 +868,27 @@ async function emptyAdd(el: MenusScreen, action: string): Promise<void> {
   await settleStructure(el);
 }
 
-/** The keys of the rows drawn at the menu's own top level, in order. */
+/** The keys of the rows drawn at the menu's own top level, under the menu's own row, in order. */
 function topLevelKeys(el: MenusScreen): string[] {
-  return allInStructure(el, 'tbody tr[aria-level="1"]').map((row) => row.dataset.rowKey!);
+  return allInStructure(el, 'tbody tr[aria-level="2"]').map((row) => row.dataset.rowKey!);
 }
 
-/** The keys of the rows drawn directly under `key`'s row (`""`: the top level), in order. */
+/** The keys of the member rows drawn directly under `key`'s row (`""`: the top level), in order. */
 function childKeys(el: MenusScreen, key: string): string[] {
   const depth = key === "" ? 0 : key.split("/").length;
   return allInStructure(el, "tbody tr[data-row-key]")
     .map((row) => row.dataset.rowKey!)
     .filter(
       (shown) =>
-        shown.split("/").length === depth + 1 && (depth === 0 || shown.startsWith(`${key}/`)),
+        shown !== "root" &&
+        shown.split("/").length === depth + 1 &&
+        (depth === 0 || shown.startsWith(`${key}/`)),
     );
 }
 
 /** The menu's name, then the names down to the row marked current; the menu's name alone when
- * the tree is at the top level, which no row stands for; "" when a section is current but no row
- * is marked. */
+ * the tree is at the top level, which no row is marked for; "" when a section is current but no
+ * row is marked. */
 function currentPlace(el: MenusScreen): string {
   const key = inStructure(el, '[aria-current="true"]')?.closest("tr")?.dataset.rowKey;
   if (key === undefined) return structure(el).current.length === 0 ? structure(el).menuName : "";
@@ -901,7 +901,7 @@ function currentPlace(el: MenusScreen): string {
   ].join(" › ");
 }
 
-/** The key of the row marked current; `""` at the menu's top level, which no row stands for. */
+/** The key of the row marked current; `""` at the menu's top level, which no row is marked for. */
 function currentKey(el: MenusScreen): string {
   const marked = inStructure(el, '[aria-current="true"]');
   if (marked === null && structure(el).current.length === 0) return "";
@@ -966,6 +966,46 @@ it("lists the menus by name, and reverses that order when the name heading is pr
   table(el).shadowRoot.querySelector<HTMLElement>('button[data-sort="name"]')!.click();
   await table(el).updateComplete;
   expect(order()).toEqual(["menu-a", "menu-b"]);
+});
+
+it("draws the menu's own colour on its Structure root row, and the colour its settings then save once it is opened again", async () => {
+  let color: string | null = "#aa3300";
+  const client = api();
+  const read = client.getMenuStructure.getMockImplementation() as (
+    id: string,
+  ) => Promise<MenuStructure>;
+  client.getMenuStructure.mockImplementation(async (id: string) => {
+    const value = await read(id);
+    return id === "menu-lunch" ? { ...value, root: { ...value.root, color } } : value;
+  });
+  client.updateMenuDetails.mockImplementation(async (_id: string, input: { color: string }) => {
+    color = input.color;
+  });
+  const el = await mountLunch(client);
+  const chip = () => inStructure(el, '[data-test="color-root"] [part~="color-swatch"]')!;
+  await settleStructure(el);
+  expect(getComputedStyle(chip()).backgroundColor).toBe("rgb(170, 51, 0)");
+  await click(el, "back");
+  await inTable(el, "rename-menu-lunch");
+  const swatch = inModal(el, "menu-form", 'button[data-color]:not([data-color=""])');
+  const picked = swatch.dataset.color!;
+  expect(picked).not.toBe("#aa3300");
+  swatch.click();
+  await el.updateComplete;
+  inModal(el, "menu-form", '[data-test="menu-save"]').click();
+  await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+  expect(client.updateMenuDetails).toHaveBeenCalledWith(
+    "menu-lunch",
+    expect.objectContaining({ color: picked }),
+  );
+  await inTable(el, "edit-menu-lunch");
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  await settleStructure(el);
+  const probe = document.createElement("span");
+  probe.style.backgroundColor = picked;
+  document.body.append(probe);
+  onTestFinished(() => probe.remove());
+  expect(getComputedStyle(chip()).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
 });
 
 it("opens the menu and tab the address names, and leaves the list by the Back control", async () => {
@@ -2062,7 +2102,7 @@ it("edits a section in place, marking the path followed in the tree", async () =
   expect(currentPlace(el)).toBe("Lunch Menu");
 });
 
-it("keeps the current list's Add actions in its own row's ⋮ and the top level's in the toolbar's Add ⋮, not beside the Structure tab", async () => {
+it("keeps the current list's Add actions in its own row's ⋮ and the top level's in the root row's ⋮, not beside the Structure tab", async () => {
   const el = await mountLunch(api());
   await editDrinks(el);
   const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
@@ -2072,14 +2112,14 @@ it("keeps the current list's Add actions in its own row's ⋮ and the top level'
       `${action}-m-drinks`,
     ).not.toBeNull();
     expect(
-      toolbarAdds(el)!.querySelector(`[data-test="${action}-top"]`),
+      rootAdds(el)!.querySelector(`[data-test="${action}-top"]`),
       `${action}-top`,
     ).not.toBeNull();
   }
   expect(tabs.querySelector('[slot="actions"]')).toBeNull();
 });
 
-it("creates a section at the menu's top level from the toolbar's Add ⋮, and gives focus back to it", async () => {
+it("creates a section at the menu's top level from the root row's ⋮, and gives focus back to it", async () => {
   const client = api();
   const el = await mountLunch(client);
   await rowAction(el, "", "new-section");
@@ -2100,16 +2140,7 @@ it("creates a section at the menu's top level from the toolbar's Add ⋮, and gi
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
   await afterDialogCloses(el);
   await settleStructure(el);
-  expect(structure(el).shadowRoot!.activeElement).toBe(toolbarAdds(el));
-});
-
-it("draws Reorder's Done after the toolbar's Add ⋮", async () => {
-  const el = await mountLunch();
-  await pressReorder(el);
-  const done = q(el, '[data-test="reorder-done"]')!;
-  const adds = toolbarAdds(el)!;
-  expect(done.getBoundingClientRect().width).toBeGreaterThan(0);
-  expect(done.getBoundingClientRect().left).toBeGreaterThan(adds.getBoundingClientRect().right);
+  expect(structureRows(el).shadowRoot.activeElement).toBe(rootAdds(el));
 });
 
 it("turns Reorder off and puts focus on the empty box's first add when removing the last member empties the menu", async () => {
@@ -2394,7 +2425,7 @@ it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the 
   const handle = () =>
     list.shadowRoot.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
   const order = () =>
-    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="1"]')].map((row) =>
+    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="2"]')].map((row) =>
       row.getAttribute("data-row-key"),
     );
   handle().focus();
@@ -3246,6 +3277,10 @@ it("keeps the picker open and explains a refused product add", async () => {
       codeMessage("menu_section.membership_invalid"),
     ),
   );
+  // It sits with the buttons, in the picker's bottom block.
+  expect(inModal(el, "add-products", '[data-test="add-products-error"]').assignedSlot?.name).toBe(
+    "message",
+  );
   expect(modal(el, "add-products").open).toBe(true);
 });
 
@@ -4039,23 +4074,6 @@ describe("the Structure tree", () => {
 
     const grips = (el: MenusScreen) => allInStructure(el, '[data-test^="drag-"]');
 
-    it("draws the toolbar's plus with the same border as Reorder beside it", async () => {
-      const el = await mountLunch();
-      await settleStructure(el);
-      const adds = structure(el).shadowRoot!.querySelector('[data-test="toolbar-adds"]')!;
-      const plus = getComputedStyle(adds.shadowRoot!.querySelector("button")!);
-      const reorder = getComputedStyle(reorderToggle(el));
-      const border = (style: CSSStyleDeclaration) =>
-        ["Top", "Right", "Bottom", "Left"].map((side) =>
-          ["Width", "Style", "Color"].map((part) =>
-            style.getPropertyValue(`border-${side.toLowerCase()}-${part.toLowerCase()}`),
-          ),
-        );
-      expect(border(reorder)[0]).toEqual(["1px", "solid", expect.any(String)]);
-      expect(border(plus)).toEqual(border(reorder));
-      expect(plus.borderRadius).toBe(reorder.borderRadius);
-    });
-
     it("starts with no grip on any row and the Reorder toggle not pressed", async () => {
       const el = await mountLunch();
       await toggleRow(el, "m-drinks");
@@ -4186,12 +4204,13 @@ describe("the Structure tree", () => {
       expect(box.getAttribute("slot")).toBe("toolbar-search");
       expect(box.assignedSlot).not.toBeNull();
       expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
-      expect(shownKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+      expect(shownKeys(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
 
       await typeSearch(el, "Lemonade");
       expect(structure(el).search).toBe("Lemonade");
       expect(box.value).toBe("Lemonade");
       expect(shownKeys(el)).toEqual([
+        "root",
         "m-drinks",
         "m-drinks/m-lemonade",
         "m-fav",
@@ -5209,14 +5228,13 @@ describe("the Structure tree", () => {
     });
   });
 
-  /** The ⋮ that has focus in the tree's table, as its row's key; `""` for the toolbar's Add ⋮. */
+  /** The ⋮ that has focus in the tree's table, as its row's key; `""` for the root row's. */
   function focusedRowMenu(el: MenusScreen): string | undefined {
-    const adds = toolbarAdds(el);
-    if (adds !== null && structure(el).shadowRoot!.activeElement === adds) return "";
     const focused = structureRows(el).shadowRoot.activeElement;
-    return focused?.localName === "wt-row-actions"
-      ? focused.closest("tr")?.dataset.rowKey
-      : `not a row menu: ${focused?.localName ?? "nothing"}`;
+    if (focused?.localName !== "wt-row-actions")
+      return `not a row menu: ${focused?.localName ?? "nothing"}`;
+    const key = focused.closest("tr")?.dataset.rowKey;
+    return key === "root" ? "" : key;
   }
 
   async function closeSectionForm(el: MenusScreen): Promise<void> {
@@ -5285,6 +5303,54 @@ describe("the Structure tree", () => {
         await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
       },
       focused: "m-fav",
+    },
+    {
+      name: "Add section at the top level, cancelled",
+      open: (el) => rowAction(el, "", "new-section"),
+      close: closeSectionForm,
+      focused: "",
+    },
+    {
+      name: "Add products at the top level, cancelled",
+      open: (el) => rowAction(el, "", "open-add-products"),
+      close: async (el) => {
+        inModal(el, "add-products", '[data-test="add-products-cancel"]').click();
+        await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+      },
+      focused: "",
+    },
+    {
+      name: "Add products at the top level, saved",
+      open: (el) => rowAction(el, "", "open-add-products"),
+      close: async (el, client) => {
+        emit(inModal(el, "add-products", "dashboard-section-add-products"), "wt-add-products", {
+          productIds: ["p-chips"],
+        });
+        await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      },
+      focused: "",
+    },
+    {
+      name: "Include a menu, saved",
+      client: () => {
+        const client = api();
+        const read = client.getMenuStructure.getMockImplementation()! as (
+          id: string,
+        ) => Promise<MenuStructure>;
+        client.getMenuStructure.mockImplementation(async (id: string) => ({
+          ...(await read(id)),
+          includable: [{ id: "wine", name: "Wines", rootSectionId: "wine-root" }],
+        }));
+        return client;
+      },
+      open: (el) => rowAction(el, "", "include-menu"),
+      close: async (el, client) => {
+        await chooseOption(inModal(el, "include", '[name="included-menu"]'), "wine-root");
+        await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      },
+      focused: "",
     },
     {
       name: "Include a menu, cancelled",
@@ -5425,6 +5491,49 @@ describe("the Structure tree", () => {
     expect(focusedRowMenu(el)).toBe("m-drinks");
   });
 
+  it("keeps Add products' buttons in a 390×700 window with 200 products, and adds two from the root's ⋮", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(390, 700);
+    onTestFinished(() => page.viewport(width, height));
+    const many = Array.from({ length: 200 }, (_, index) =>
+      product(`p-many-${String(index).padStart(3, "0")}`, `Many ${String(index).padStart(3, "0")}`),
+    );
+    const client = api({ listLibraryProducts: vi.fn().mockResolvedValue([...products, ...many]) });
+    const el = await mountLunch(client);
+    await rowAction(el, "", "open-add-products");
+    expect(modal(el, "add-products").open).toBe(true);
+    const picker = inModal<SectionAddProducts>(
+      el,
+      "add-products",
+      "dashboard-section-add-products",
+    );
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelectorAll("li").length).toBeGreaterThanOrEqual(200);
+    const add = picker.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!;
+    const cancel = inModal(el, "add-products", '[data-test="add-products-cancel"]');
+    for (const button of [cancel, add]) {
+      const box = button.getBoundingClientRect();
+      expect(box.top, button.dataset.test).toBeGreaterThanOrEqual(0);
+      expect(box.bottom, button.dataset.test).toBeLessThanOrEqual(window.innerHeight);
+      expect(box.left, button.dataset.test).toBeGreaterThanOrEqual(0);
+      expect(box.right, button.dataset.test).toBeLessThanOrEqual(window.innerWidth);
+    }
+    for (const id of ["p-many-000", "p-many-001"])
+      picker.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${id}"]`)!.click();
+    await picker.updateComplete;
+    add.click();
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+    expect(client.addSectionProducts).toHaveBeenCalledExactlyOnceWith("root-lunch", [
+      "p-many-000",
+      "p-many-001",
+    ]);
+    await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("");
+  });
+
   it("hands focus to the holding section's ⋮ after a removal", async () => {
     const client = api();
     const el = await mountLunch(client);
@@ -5520,6 +5629,7 @@ describe("the Structure tree", () => {
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const menus = allInStructure(el, 'wt-row-actions[data-test^="actions-"]');
     expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
+      "root",
       "m-burger",
       "m-drinks",
       "m-drinks/m-lager",
@@ -5538,14 +5648,6 @@ describe("the Structure tree", () => {
       const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
       expect(hit !== null && button.contains(hit), `${key} is covered`).toBe(true);
     }
-    const adds = toolbarAdds(el)!;
-    const button = adds.shadowRoot!.querySelector("button")!;
-    window.scrollTo(0, button.getBoundingClientRect().top + window.scrollY - 100);
-    const at = button.getBoundingClientRect();
-    expect(at.left).toBeGreaterThanOrEqual(0);
-    expect(at.right).toBeLessThanOrEqual(window.innerWidth);
-    const hit = adds.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
-    expect(hit !== null && button.contains(hit), "the toolbar's Add ⋮ is covered").toBe(true);
   });
 
   it.each(["en-GB", "es-ES"])(
