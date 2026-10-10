@@ -514,8 +514,8 @@ export async function placeSpareToday(
 ): Promise<void> {
   const { row } = await todayOf(tx, cfg, tableId);
   if (row.takenOff) throw new AppError("table.taken_off", { tableId });
-  if (row.fixed) throw new AppError("table.fixed", { tableId });
   if (row.x !== null) return;
+  if (row.fixed) throw new AppError("table.fixed", { tableId });
   await tx
     .update(floorTodayTables)
     .set({ x: at.x, y: at.y, width: 8, height: 8, shape: "rect", rotation: 0 })

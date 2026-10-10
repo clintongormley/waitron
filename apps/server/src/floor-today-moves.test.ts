@@ -4,10 +4,12 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  diningTables,
   floorPlanTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodayTables,
+  locations,
 } from "@waitron/db";
 import { moveToday, placeSpareToday, resetZone, rotateToday } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -207,7 +209,30 @@ describe("today's moves", () => {
   });
 
   it("refuses a table of another venue as not found", async () => {
+    const elsewhere = randomUUID();
     const id = randomUUID();
+    await inTx(v, async (tx) => {
+      await tx.insert(locations).values({
+        id: elsewhere,
+        name: "Other",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant",
+      });
+      await tx
+        .insert(diningTables)
+        .values({ id, locationId: elsewhere, label: `Elsewhere ${id.slice(0, 6)}` });
+      await tx.insert(floorTodayTables).values({
+        tableId: id,
+        seats: 4,
+        x: 0,
+        y: 0,
+        width: 8,
+        height: 8,
+        shape: "rect",
+        rotation: 0,
+      });
+    });
+    const before = await todayRow(v, id);
     for (const write of [
       () => move(id, { x: 1, y: 1 }),
       () => rotate(id),
@@ -218,6 +243,17 @@ describe("today's moves", () => {
         params: { tableId: id },
       });
     }
+    expect(await todayRow(v, id)).toEqual(before);
+  });
+
+  it("refuses a spare that is also taken off as not on the plan", async () => {
+    const { table } = await plannedZone(v, [{ key: "spare", place: null }], [], NOW);
+    await setToday(table.spare!, { takenOff: true });
+
+    await expect(move(table.spare!, { x: 1, y: 1 })).rejects.toMatchObject({
+      code: "table.not_in_floor_plan",
+      params: { tableId: table.spare },
+    });
   });
 
   it("places a spare 8 × 8 at the corner it is given, and leaves a placed table where it is", async () => {
@@ -268,6 +304,20 @@ describe("today's moves", () => {
     });
     expect(await todayRow(v, table.fixed!)).toMatchObject({ x: null });
     expect(await todayRow(v, table.off!)).toMatchObject({ x: null });
+  });
+
+  it("leaves a placed fixed table where it is", async () => {
+    const { table } = await plannedZone(
+      v,
+      [{ key: "fixed", fixed: true, place: { x: 3, y: 4 } }],
+      [],
+      NOW,
+    );
+    const before = await todayRow(v, table.fixed!);
+
+    await placeSpare(table.fixed!, { x: 20, y: 10 });
+
+    expect(await todayRow(v, table.fixed!)).toEqual(before);
   });
 
   it("puts a placed spare back among the spares at the next reset", async () => {

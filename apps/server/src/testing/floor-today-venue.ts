@@ -16,7 +16,8 @@ export interface PlannedEntry {
 
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
-async function freshZone(v: PartyVenue): Promise<string> {
+/** A fresh table-service zone, so one case's plans never meet another's. */
+export async function tableServiceZone(v: PartyVenue): Promise<string> {
   const id = randomUUID();
   await inTx(v, async (tx) => {
     const [tables] = await tx
@@ -51,7 +52,7 @@ export async function plannedZone(
   master: Record<string, string>;
   revision: number;
 }> {
-  const zoneId = await freshZone(v);
+  const zoneId = await tableServiceZone(v);
   const table: Record<string, string> = {};
   const tables: ZonePlanSave["tables"] = [];
   for (const entry of entries) {
