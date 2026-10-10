@@ -63,6 +63,7 @@ interface Press {
   pointerId?: number;
   pointerType?: string;
   button?: number;
+  ctrlKey?: boolean;
 }
 
 /** Client coordinates of a point given relative to the map. */
@@ -80,6 +81,7 @@ function pointer(target: EventTarget, type: string, client: object, press: Press
       pointerId: press.pointerId ?? 1,
       pointerType: press.pointerType ?? "touch",
       button: press.button ?? 0,
+      ctrlKey: press.ctrlKey ?? false,
       ...client,
     }),
   );
@@ -434,4 +436,67 @@ it("a removed and re-added map hears each tap once", async () => {
   await el.updateComplete;
   tapAt(el, 300, 150);
   expect(taps).toEqual([{ tableId: "t1" }]);
+});
+
+/** The middle of `id`'s button, relative to the map. */
+function middleOf(el: WtFloorMap, id: string): [number, number] {
+  const outer = el.getBoundingClientRect();
+  const box = button(el, id).getBoundingClientRect();
+  return [box.left - outer.left + box.width / 2, box.top - outer.top + box.height / 2];
+}
+
+it("a hold that drags and drops leaves no mark", async () => {
+  const el = await map([t1]);
+  down(el, 300, 150);
+  vi.advanceTimersByTime(500);
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(true);
+  pointer(window, "pointermove", at(el, 320, 150), {});
+  up(el, 320, 150);
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(false);
+  expect(details).toEqual([]);
+});
+
+it("a second hold leaves only its own table marked", async () => {
+  const el = await map([t("t1", "T1", { x: 0 }), t("t2", "T2", { x: 0, y: 6 })]);
+  const [a, b] = [middleOf(el, "t1"), middleOf(el, "t2")];
+  down(el, ...a);
+  vi.advanceTimersByTime(500);
+  pointer(window, "pointermove", at(el, a[0] + 20, a[1]), {});
+  up(el, a[0] + 20, a[1]);
+  down(el, ...b);
+  vi.advanceTimersByTime(500);
+  expect(button(el, "t2").hasAttribute("data-held")).toBe(true);
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(false);
+});
+
+it("holding Shift+F10 down asks for details once", async () => {
+  const el = await map([t1]);
+  shiftF10On(button(el, "t1"));
+  const repeat = new KeyboardEvent("keydown", {
+    key: "F10",
+    shiftKey: true,
+    repeat: true,
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  button(el, "t1").dispatchEvent(repeat);
+  expect(details).toEqual([{ tableId: "t1" }]);
+});
+
+it("a Ctrl+click on a table asks for details, not to open it", async () => {
+  const el = await map([t1]);
+  const ctrl = { pointerType: "mouse", ctrlKey: true };
+  down(el, 300, 150, ctrl);
+  contextMenuOn(shapeOf(el, "t1"));
+  up(el, 300, 150, ctrl);
+  vi.advanceTimersByTime(300);
+  expect(details).toEqual([{ tableId: "t1" }]);
+  expect(taps).toEqual([]);
+});
+
+it("a contextmenu on a removed map is still prevented", async () => {
+  const el = await map([t1]);
+  el.remove();
+  expect(contextMenuOn(shapeOf(el, "t1")).defaultPrevented).toBe(true);
 });

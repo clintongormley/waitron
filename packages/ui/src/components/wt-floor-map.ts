@@ -82,7 +82,7 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
 const px = (value: number): string => `${value}px`;
 
 const tableOf = (target: EventTarget | null): HTMLElement | null =>
-  (target as Element).closest<HTMLElement>("[part=table]");
+  (target as Element | null)?.closest<HTMLElement>("[part=table]") ?? null;
 
 const idOf = (target: EventTarget | null): string | null =>
   tableOf(target)?.dataset["tableId"] ?? null;
@@ -236,6 +236,7 @@ export class WtFloorMap extends LitElement {
       tap: this.#onTap,
       doubleTap: this.#onDoubleTap,
       holdStart: (at) => {
+        this.#clearHeld();
         this.#held = tableOf(at.target);
         this.#held?.setAttribute("data-held", "");
       },
@@ -244,6 +245,7 @@ export class WtFloorMap extends LitElement {
         const id = idOf(at.target);
         if (id !== null) this.#send("wt-table-details", id);
       },
+      holdDrop: () => this.#clearHeld(),
       cancel: () => this.#clearHeld(),
     });
   }
@@ -311,13 +313,14 @@ export class WtFloorMap extends LitElement {
     const swallow = this.#swallowContextMenu;
     this.#swallowContextMenu = false;
     const id = idOf(e.composedPath()[0]!);
-    if (swallow || this.#gestures!.active || id === null) return;
+    if (swallow || this.#gestures?.active === true || id === null) return;
     e.stopPropagation();
     this.#send("wt-table-details", id);
   };
 
   /** Never stopped: the till's idle logout listens for keydown at its host. */
   readonly #onKeyDown = (e: KeyboardEvent): void => {
+    if (e.repeat) return;
     this.#swallowContextMenu = false;
     const id = idOf(e.composedPath()[0]!);
     if (e.key !== "F10" || !e.shiftKey || id === null) return;

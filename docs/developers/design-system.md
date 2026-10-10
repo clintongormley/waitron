@@ -640,10 +640,10 @@ member's. A touch or pen tap on a table, and Enter or Space on a focused one, se
 once; a mouse click waits 300 ms and sends it unless a second click on the same table makes a
 double-click, which sends `wt-table-details`. A second tap on a different table counts as a tap on
 it. A press held 500 ms marks its table (`data-held`, outlined in `--wt-color-primary`) and its
-release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
-nothing. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
+release sends `wt-table-details`; a drag's drop, a second finger or a cancelled pointer clears the
+mark and sends nothing. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
 `contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is
-handled on its `keydown`, which the map prevents, and the next `contextmenu` is ignored unless a
+handled on its first `keydown`, not its repeats, which the map prevents, and the next `contextmenu` is ignored unless a
 `keydown` or `pointerdown` comes first. The map stops the `click` or `contextmenu` it turns into one
 of its events and never stops a `pointerdown` or `keydown`. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
