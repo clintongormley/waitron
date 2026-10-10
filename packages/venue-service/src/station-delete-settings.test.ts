@@ -538,3 +538,59 @@ it.each(["read", "clear"])("refuses %s settings for another location", async (ki
     ),
   ).rejects.toMatchObject({ code: "station.not_found" });
 });
+
+it.each(["pass", "pass_monitor"] as const)(
+  "finds explicit KDS %s bindings while excluding Every and removed choices",
+  async (kind) => {
+    await run(async (tx) => {
+      const f = await fixture(tx);
+      const bounded = await profile(tx, "Bound pass");
+      const every = await profile(tx, "Every pass");
+      const till = await profile(tx, "Till pass", "till");
+      await setProfileKitchenScreens(tx, f.cfg, bounded, {
+        [kind]: { stationIds: [f.gone, f.other], zoneIds: null },
+      });
+      for (const pid of [every, till])
+        await setProfileKitchenScreens(tx, f.cfg, pid, {
+          [kind]: { stationIds: null, zoneIds: null },
+        });
+      const explicit = await device(tx, f, every, "A explicit");
+      const boundEvery = await device(tx, f, bounded, "B bound");
+      const bothEvery = await device(tx, f, every, "Every");
+      const off = await device(tx, f, every, "Off", false);
+      const removed = await device(tx, f, every, "Removed");
+      const kindRemoved = await device(tx, f, every, "Kind removed");
+      const tillExplicit = await device(tx, f, till, "Till explicit");
+      for (const [did, pid] of [
+        [explicit, every],
+        [off, every],
+        [removed, every],
+        [kindRemoved, every],
+        [tillExplicit, till],
+      ])
+        await setDeviceKitchenScreens(tx, f.cfg, {
+          deviceId: did!,
+          profileId: pid!,
+          screens: [{ kind, stationIds: [f.gone, f.other], zoneIds: null }],
+        });
+      for (const [did, pid] of [
+        [boundEvery, bounded],
+        [bothEvery, every],
+      ])
+        await setDeviceKitchenScreens(tx, f.cfg, {
+          deviceId: did!,
+          profileId: pid!,
+          screens: [{ kind, stationIds: null, zoneIds: null }],
+        });
+      await tx.insert(deviceKitchenScreenRemovals).values([
+        { deviceId: removed, screen: kind, stationId: f.gone },
+        { deviceId: kindRemoved, screen: kind },
+      ]);
+      expect((await module.readStationDeleteSettings(tx, f.cfg, f.gone)).boundScreens).toEqual([
+        { id: explicit, name: "A explicit" },
+        { id: boundEvery, name: "B bound" },
+        { id: off, name: "Off" },
+      ]);
+    });
+  },
+);

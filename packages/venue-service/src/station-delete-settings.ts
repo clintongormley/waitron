@@ -94,7 +94,6 @@ async function settings(tx: Transaction, cfg: VenueScope, id: string) {
     if (
       screens.some(
         (screen) =>
-          screen.kind === "station" &&
           screen.available &&
           !(screen.everyStation && screen.profileEveryStation) &&
           screen.stations.some((slot) => slot.id === id && slot.available),
