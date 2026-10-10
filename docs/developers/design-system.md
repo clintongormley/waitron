@@ -644,7 +644,8 @@ drawn at its true size and angle, so a small one is below `--wt-tap-min`. Groups
 merge) sharing a `linkId` are one party at several groups: each stays its own button and is dragged
 alone, and one `<svg part="links">` per party, drawn under the buttons and taking no pointer, joins
 the centres of its groups in the number order of their first members' labels with 1 px
-`--wt-color-field-line` lines. They are named once: every one's accessible name starts with
+`--wt-color-field-line` lines, a dragged movable group's end following it and going back with
+it on release (a fixed group's copy moves no end). They are named once: every one's accessible name starts with
 `mergeLabel` of all their tables' labels ("Bar 1+2"), and only the first draws it, when its own box
 is big enough for a name. A `linkId` on one group alone draws nothing more. Each shape is painted from
 its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line` with `--wt-radius-sm`

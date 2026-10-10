@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -164,6 +164,12 @@ function linksOf(groups: readonly Group[]): Group[][] {
 }
 
 const px = (value: number): string => `${value}px`;
+
+/** A box's centre in host px, moved by (dx, dy) squares. */
+const centreOf = (box: PlanRect, view: View, dx = 0, dy = 0): { x: number; y: number } => ({
+  x: view.x + (box.x + dx + box.width / 2) * view.scale,
+  y: view.y + (box.y + dy + box.height / 2) * view.scale,
+});
 
 /** A wheel's delta in px; `page` is the host's size along the delta's axis. */
 const wheelPx = (delta: number, mode: number, page: number): number =>
@@ -783,16 +789,19 @@ export class WtFloorMap extends LitElement {
   }
 
   #renderLink(linked: readonly Group[], view: View): TemplateResult {
-    const centres = linked.map(({ box }) => ({
-      x: view.x + (box.x + box.width / 2) * view.scale,
-      y: view.y + (box.y + box.height / 2) * view.scale,
-    }));
+    const drag = this.#drag;
+    const centres = linked.map((g) =>
+      drag?.tableId === g.members[0]!.id && !g.fixed
+        ? centreOf(g.box, view, drag.dx, drag.dy)
+        : centreOf(g.box, view),
+    );
+    // `svg`, not `html`: a separate `html` fragment makes an HTML-namespace <line> that draws nothing.
     return html`<svg part="links" aria-hidden="true">
       ${centres
         .slice(1)
         .map(
           (to, i) =>
-            html`<line x1=${centres[i]!.x} y1=${centres[i]!.y} x2=${to.x} y2=${to.y}></line>`,
+            svg`<line x1=${centres[i]!.x} y1=${centres[i]!.y} x2=${to.x} y2=${to.y}></line>`,
         )}
     </svg>`;
   }
@@ -804,12 +813,8 @@ export class WtFloorMap extends LitElement {
     if (!group?.fixed) return nothing;
     const { box, members } = group;
     const target = drag!.targetId === null ? undefined : this.#groupOf.get(drag!.targetId);
-    const centre = (b: PlanRect) => ({
-      x: view.x + (b.x + b.width / 2) * view.scale,
-      y: view.y + (b.y + b.height / 2) * view.scale,
-    });
-    const from = centre(box);
-    const to = target === undefined ? null : centre(target.box);
+    const from = centreOf(box, view);
+    const to = target === undefined ? null : centreOf(target.box, view);
     return html`<span
         part="ghost"
         aria-hidden="true"

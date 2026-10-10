@@ -119,7 +119,9 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
       t("T3", { x: 0, y: 8 }),
     ]);
     const root = host.querySelector("wt-floor-map")!.shadowRoot!;
-    expect(root.querySelectorAll('[part="links"] line')).toHaveLength(1);
+    const lines = root.querySelectorAll('[part="links"] line');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBeInstanceOf(SVGLineElement);
     await expectNoA11yViolations(host);
   });
 

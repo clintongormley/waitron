@@ -399,6 +399,11 @@ it("links a party's tables with a line and names them once", async () => {
     ...(await centreIn(el, "t1")),
     ...(await centreIn(el, "t2")),
   ]);
+  expect(lines[0]).toBeInstanceOf(SVGLineElement);
+  const [x1] = await centreIn(el, "t1");
+  const [x2] = await centreIn(el, "t2");
+  expect((lines[0] as SVGLineElement).getTotalLength()).toBeCloseTo(x2 - x1, 3);
+  expect(lines[0]!.getBoundingClientRect().width).toBeCloseTo(x2 - x1, 3);
   expect(getComputedStyle(lines[0]!).stroke).toBe(colourOf(el, "--wt-color-field-line"));
   expect(getComputedStyle(lines[0]!).stroke).not.toBe(colourOf(el, "--wt-color-primary"));
   expect(getComputedStyle(lines[0]!).strokeWidth).toBe("1px");
@@ -480,4 +485,33 @@ it("a linked table is dragged alone", async () => {
   expect(await boxIn(el, button(el, "t2"))).toEqual(before2);
   up(el, x1, y1 + square * 2);
   expect(drops).toEqual([{ tableId: "t1", x: 0, y: 2, targetId: null }]);
+});
+
+it("a party's link follows a dragged table and goes back on release", async () => {
+  const el = await map([linked(bar1, "p1"), linked(bar2, "p1"), t3]);
+  const line = () => el.shadowRoot!.querySelector('[part="links"] line')!;
+  const at1 = await centreIn(el, "t1");
+  const at2 = await centreIn(el, "t2");
+  const square = (await boxIn(el, button(el, "t1"))).width / 8;
+  hold(el, at1[0], at1[1]);
+  move(el, at1[0] + square, at1[1] + square * 2);
+  await el.updateComplete;
+  expect(lineEnds(line())).toEqual([...(await centreIn(el, "t1")), ...at2]);
+  expect(lineEnds(line())).toEqual([at1[0] + square, at1[1] + square * 2, ...at2]);
+  up(el, at1[0] + square, at1[1] + square * 2);
+  await el.updateComplete;
+  expect(lineEnds(line())).toEqual([...at1, ...at2]);
+});
+
+it("a party's link stays put while a fixed table's copy is dragged", async () => {
+  const el = await map([{ ...linked(bar1, "p1"), fixed: true }, linked(bar2, "p1"), t3]);
+  const line = () => el.shadowRoot!.querySelector('[part="links"] line')!;
+  const at1 = await centreIn(el, "t1");
+  const at2 = await centreIn(el, "t2");
+  const square = (await boxIn(el, button(el, "t1"))).width / 8;
+  hold(el, at1[0], at1[1]);
+  move(el, at1[0], at1[1] + square * 2);
+  await el.updateComplete;
+  expect(part(el, "ghost")).not.toBeNull();
+  expect(lineEnds(line())).toEqual([...at1, ...at2]);
 });
