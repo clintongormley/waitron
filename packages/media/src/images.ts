@@ -14,9 +14,13 @@ import {
 import { catalogues, products, tenantReceipts, type Transaction } from "@waitron/db";
 import {
   AppError,
+  compareSearchRanks,
   contentLanguageCode,
   FALLBACK_LOCALE,
+  foldForSearch,
   resolveContentText,
+  textSearch,
+  type SearchRank,
 } from "@waitron/shared";
 import { and, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -384,110 +388,6 @@ export async function deleteImage(
   return { deleted: true, uses: [] };
 }
 
-/**
- * One term of a parsed query: a single word, or a phrase whose words must appear together and in
- * order.
- */
-interface QueryItem {
-  readonly negated: boolean;
-  readonly tokens: readonly string[];
-  /** The last token may match the start of a longer word: it is still being typed. */
-  readonly prefix: boolean;
-}
-
-/**
- * Words, lowercased, with everything that is not a letter or a digit treated as a separator.
- *
- * Nothing stems. FTS5's `porter` tokenizer is deliberately not taken: it would need an FTS5
- * virtual table, and it would apply English suffix rules to every language. Stopwords are kept.
- */
-function searchTokens(value: string): string[] {
-  return value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-}
-
-/**
- * Double-quoted phrases, a leading `-` for exclusion, and a bare `or` joining groups.
- *
- * `or` binds LOOSER than the implicit `and`, so the result is a list of groups and a row matches
- * when ANY group does.
- *
- * The query's last word is a prefix while it is still being typed: when the query ends in a letter
- * or digit and that word is not excluded. A last word `or` is still the operator, not a prefix. A
- * quote left open runs to the end of the query, so a phrase being typed stays one phrase.
- *
- * A non-empty query that yields no groups matches NOTHING. An EMPTY query never reaches here; its
- * caller skips the filter entirely.
- */
-function parseSearch(query: string): QueryItem[][] {
-  const groups: QueryItem[][] = [];
-  let current: QueryItem[] = [];
-  const typing = /[\p{L}\p{N}]$/u.test(query);
-  for (const match of query.matchAll(/-?"[^"]*"?|[^\s"]+/gu)) {
-    const raw = match[0];
-    if (/^or$/iu.test(raw)) {
-      if (current.length > 0) groups.push(current);
-      current = [];
-      continue;
-    }
-    const negated = raw.startsWith("-");
-    const tokens = searchTokens(negated ? raw.slice(1) : raw);
-    const prefix = typing && !negated && match.index + raw.length === query.length;
-    if (tokens.length > 0) current.push({ negated, tokens, prefix });
-  }
-  if (current.length > 0) groups.push(current);
-  return groups;
-}
-
-/**
- * Does `tokens` appear intact and in order inside `field`? With `prefix`, the last may be the start
- * of a longer word. A single word is the length-1 case.
- */
-function fieldHolds(field: readonly string[], tokens: readonly string[], prefix: boolean): boolean {
-  const last = tokens.length - 1;
-  for (let start = 0; start + tokens.length <= field.length; start += 1) {
-    if (
-      tokens.every((token, offset) =>
-        prefix && offset === last
-          ? field[start + offset]!.startsWith(token)
-          : field[start + offset] === token,
-      )
-    )
-      return true;
-  }
-  return false;
-}
-
-/**
- * Does any group match, and how strongly?
- *
- * `null` is "no match". The score is the number of positive terms in the best-scoring group, less
- * a half for a term found only as the start of a longer word, so among photos matching the same
- * number of terms a whole word ranks first. A phrase is matched WITHIN one translation of the name,
- * so it cannot straddle two.
- */
-function scoreSearch(
-  groups: readonly QueryItem[][],
-  names: readonly (readonly string[])[],
-): number | null {
-  let best: number | null = null;
-  for (const group of groups) {
-    let score = 0;
-    let matched = true;
-    for (const item of group) {
-      const whole = names.some((name) => fieldHolds(name, item.tokens, false));
-      const found =
-        whole || (item.prefix && names.some((name) => fieldHolds(name, item.tokens, true)));
-      if (item.negated === found) {
-        matched = false;
-        break;
-      }
-      if (!item.negated) score += whole ? 1 : 0.5;
-    }
-    if (matched && (best === null || score > best)) best = score;
-  }
-  return best;
-}
-
 export interface ListImagesOptions {
   query?: string;
   sort?: "relevance" | "date" | "name";
@@ -536,7 +436,7 @@ export async function listImages(
   // resolves to. The library's first load sends `sort=relevance` with no query.
   const effectiveSort = sort === "relevance" && !query ? "date" : sort;
   // Untrimmed, so a trailing space still finishes the last word.
-  const groups = query ? parseSearch(typed) : [];
+  const search = textSearch(typed);
 
   if (!query && effectiveSort === "date") {
     const [{ total }] = await tx.select({ total: count() }).from(mediaImages);
@@ -553,17 +453,20 @@ export async function listImages(
 
   const rows = await tx.select(IMAGE_LIST_COLUMNS).from(mediaImages);
 
-  const matched: { row: (typeof rows)[number]; score: number }[] = [];
+  const matched: { row: (typeof rows)[number]; rank: SearchRank | undefined }[] = [];
   for (const row of rows) {
-    if (!query) {
-      matched.push({ row, score: 0 });
+    if (search === undefined) {
+      matched.push({ row, rank: undefined });
       continue;
     }
-    const score = scoreSearch(
-      groups,
-      Object.values(row.names).map((name) => searchTokens(name)),
-    );
-    if (score !== null) matched.push({ row, score });
+    // Each translation is searched alone, so every word must be in one language.
+    let best: SearchRank | undefined;
+    for (const name of Object.values(row.names)) {
+      const rank = search.rank(foldForSearch(name));
+      if (rank !== undefined && (best === undefined || compareSearchRanks(rank, best) < 0))
+        best = rank;
+    }
+    if (best !== undefined) matched.push({ row, rank: best });
   }
 
   // An empty or whitespace-only translation is not a name: it falls through to the site default.
@@ -576,7 +479,8 @@ export async function listImages(
   const sign = direction === "asc" ? 1 : -1;
   matched.sort((left, right) => {
     if (effectiveSort === "relevance") {
-      if (left.score !== right.score) return right.score - left.score;
+      const order = compareSearchRanks(left.rank!, right.rank!);
+      if (order !== 0) return order;
     } else if (effectiveSort === "name") {
       const order = collator.compare(displayName(left.row.names), displayName(right.row.names));
       if (order !== 0) return sign * order;
