@@ -191,6 +191,7 @@ export class FloorPlanEditor extends LitElement {
   @state() private outOfDate = false;
   @state() private saving = false;
   @state() private mark: FieldMark | null = null;
+  @state() private loadingNewer = false;
 
   /** The field a refusal or the editor's own check points at, for the side panels. */
   get fieldError(): FloorPlanFieldError | null {
@@ -207,7 +208,6 @@ export class FloorPlanEditor extends LitElement {
   #zoneId: string | null = null;
   #request = 0;
   #saveRequest = 0;
-  #loadingNewer = false;
   /** The refused field's value when the refusal arrived. */
   #markedValue: unknown;
   #history: UndoHistory<FloorPlanDraft> | null = null;
@@ -237,7 +237,7 @@ export class FloorPlanEditor extends LitElement {
   override disconnectedCallback(): void {
     this.#saveRequest++;
     this.saving = false;
-    this.#loadingNewer = false;
+    this.loadingNewer = false;
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -274,7 +274,7 @@ export class FloorPlanEditor extends LitElement {
     const request = ++this.#request;
     this.#saveRequest++;
     this.saving = false;
-    this.#loadingNewer = false;
+    this.loadingNewer = false;
     this.#disposeScope();
     this.plan = null;
     this.zoneName = null;
@@ -375,6 +375,7 @@ export class FloorPlanEditor extends LitElement {
     if (mark === null) return;
     if (mark.from === "check") {
       if (!this.#markCheck(next)) this.#clearMark();
+      else if (this.mark!.key !== mark.key) this.selected = this.mark!.key;
       return;
     }
     const table = next.tables.find((t) => t.key === mark.key);
@@ -402,7 +403,9 @@ export class FloorPlanEditor extends LitElement {
       const label = this.plan!.tables.find((t) => t.liveTableId === tableId)?.label;
       if (label !== undefined) {
         this.message = actionMessage(() =>
-          t("floor_plan_editor.booked").replace("{name}", label).replace("{message}", own()),
+          t("floor_plan_editor.booked").replace(/\{(name|message)\}/g, (_, slot: string) =>
+            slot === "name" ? label : own(),
+          ),
         );
         return;
       }
@@ -418,7 +421,7 @@ export class FloorPlanEditor extends LitElement {
   }
 
   readonly #save = async (): Promise<void> => {
-    if (this.saving || this.#loadingNewer || saveActionState(this.#scope).unchanged) return;
+    if (this.saving || this.loadingNewer || saveActionState(this.#scope).unchanged) return;
     if (this.#markCheck(this.draft!)) {
       this.selected = this.mark!.key;
       return;
@@ -466,7 +469,7 @@ export class FloorPlanEditor extends LitElement {
   };
 
   readonly #loadNewer = (): void => {
-    this.#loadingNewer = true;
+    this.loadingNewer = true;
     void this.#reread(this.#zoneId!, ++this.#request, true);
   };
 
@@ -477,13 +480,13 @@ export class FloorPlanEditor extends LitElement {
       plan = await this.api.getFloorPlan(zoneId);
     } catch (error) {
       if (this.isConnected && request === this.#request) {
-        this.#loadingNewer = false;
+        this.loadingNewer = false;
         this.#showReadFailure(error);
       }
       return;
     }
     if (!this.isConnected || request !== this.#request) return;
-    this.#loadingNewer = false;
+    this.loadingNewer = false;
     this.#clearReadMessage();
     if (replace) {
       this.outOfDate = false;
@@ -598,7 +601,7 @@ export class FloorPlanEditor extends LitElement {
           <wt-button
             data-action="save"
             variant=${save.variant}
-            ?disabled=${save.unchanged || this.mark?.from === "check"}
+            ?disabled=${save.unchanged || this.loadingNewer || this.mark?.from === "check"}
             @click=${this.#save}
             >${t("action.save")}</wt-button
           >

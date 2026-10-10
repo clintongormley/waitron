@@ -230,6 +230,24 @@ it("a booked table the draft deleted is named, and Undo brings it back", async (
   expect(button(el, "save").disabled).toBe(true);
 });
 
+it("a booked table's name is shown as typed, whatever characters it holds", async () => {
+  const odd: FloorPlan = {
+    ...plan(),
+    tables: plan().tables.map((t) => (t.id === "m2" ? { ...t, label: "T$&{message}$'" } : t)),
+  };
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(odd),
+      saveFloorPlan: vi.fn().mockRejectedValue({ code: "table.booked", params: { tableId: "l2" } }),
+    }),
+  );
+  await change(el, deleteTable(draftFromPlan(odd), "m2"));
+  await press(el, "save");
+  expect(message(el)).toBe(
+    "T$&{message}$': This table has an upcoming booking. Move the booking first",
+  );
+});
+
 it("a booked table the opened plan does not hold shows the code's own sentence", async () => {
   const el = await open(refusing({ code: "table.booked", params: { tableId: "l7" } }));
   await change(el, deleteTable(opened(), "m2"));
@@ -294,6 +312,7 @@ it("a fix that leaves another name failing moves the mark to it", async () => {
   expect(el.fieldError?.key).toBe("m2");
   await change(el, renamed(both, "m2", "T2"));
   expect(el.fieldError?.key).toBe("live:l9");
+  expect(canvas(el).selected).toBe("live:l9");
   expect(button(el, "save").disabled).toBe(true);
 });
 
@@ -342,6 +361,7 @@ it("Save does not send while a Load newer plan read is pending", async () => {
   await change(el, moveTable(opened(), "m1", 5, 4));
   await press(el, "save");
   await press(el, "load-newer");
+  expect(button(el, "save").disabled).toBe(true);
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(1);
   newer.resolve({ ...plan(), revision: 4 });
