@@ -1103,3 +1103,86 @@ it("reveal lifts a table past the bottom of the window up onto the screen", asyn
   el.reveal("t1");
   expect(button(el, "t1").getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight, 0);
 });
+
+it("draws room for a turned table at the grid's origin, so reveal brings all of it into view", async () => {
+  const el = await canvas([table("t1", "T1", { rotation: 45 })], { selected: "t1" });
+  await settled(el);
+  el.reveal("t1");
+  const view = viewportOf(el).getBoundingClientRect();
+  const grid = part(el, "grid").getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(grid.left);
+  expect(box.top).toBeGreaterThanOrEqual(grid.top);
+  expect(box.left).toBeGreaterThanOrEqual(view.left);
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
+  const handle = handles(el)[0]!.getBoundingClientRect();
+  expect(handle.left + handle.width / 2).toBeCloseTo(box.left + box.width / 2, 1);
+});
+
+it("a turned table dragged to the origin stays under the pointer and inside the grid", async () => {
+  const el = await canvas([table("t1", "T1", { x: 5, y: 10, rotation: 45 })]);
+  await settled(el);
+  const before = button(el, "t1").getBoundingClientRect();
+  const seen = moves(el);
+  const at = dragBy(el, "t1", -60, 0);
+  await el.updateComplete;
+  const during = button(el, "t1").getBoundingClientRect();
+  expect(during.left).toBeCloseTo(before.left - 60, 1);
+  expect(during.top).toBeCloseTo(before.top, 1);
+  expect(during.left).toBeGreaterThanOrEqual(part(el, "grid").getBoundingClientRect().left);
+  await release(el, at);
+  expect(seen).toEqual([{ key: "t1", x: 0, y: 10 }]);
+});
+
+it("the handle of a turned table at the origin turns it round its own centre", async () => {
+  const el = await canvas([table("t1", "T1", { rotation: 45 })], { selected: "t1" });
+  await settled(el);
+  const seen = rotates(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  pointer(handles(el)[0]!, "pointerdown", 1, cx + 80, cy);
+  pointer(window, "pointermove", 1, cx, cy + 80);
+  await release(el, { x: cx, y: cy + 80 });
+  expect(seen).toEqual([{ key: "t1", rotation: 135 }]);
+});
+
+it("centres a turned table's refused reason under it at the origin", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked", { rotation: 45 })]);
+  await settled(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  const reason = reasonOf(el, "t1")!.getBoundingClientRect();
+  expect(reason.left + reason.width / 2).toBeCloseTo(box.left + box.width / 2, 0);
+  expect(reason.top).toBeGreaterThan(box.bottom);
+});
+
+it("a pointer move inside the same square, or the same turn step, draws nothing new", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const updated = vi.spyOn(el as unknown as { updated(): void }, "updated");
+  const box = button(el, "t1").getBoundingClientRect();
+  const x = box.left + 5;
+  const y = box.top + 5;
+  pointer(button(el, "t1"), "pointerdown", 1, x, y);
+  pointer(window, "pointermove", 1, x + 3, y + 2);
+  await el.updateComplete;
+  pointer(window, "pointermove", 1, x + 5, y - 4);
+  await el.updateComplete;
+  expect(updated).not.toHaveBeenCalled();
+  pointer(window, "pointermove", 1, x + 30, y);
+  await el.updateComplete;
+  expect(updated).toHaveBeenCalledTimes(1);
+  pointer(window, "pointercancel", 1, 0, 0);
+  await el.updateComplete;
+
+  updated.mockClear();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  pointer(handles(el)[0]!, "pointerdown", 1, cx, cy - 80);
+  pointer(window, "pointermove", 1, cx + 5, cy - 80);
+  await el.updateComplete;
+  expect(updated).not.toHaveBeenCalled();
+  pointer(window, "pointermove", 1, cx + 80, cy);
+  await el.updateComplete;
+  expect(updated).toHaveBeenCalledTimes(1);
+  pointer(window, "pointercancel", 1, 0, 0);
+});

@@ -6,6 +6,8 @@ import { baseStyles } from "../base-styles.js";
 import {
   GRID_SQUARE_PX,
   type PlanPlacement,
+  type PlanRect,
+  bounds,
   clampToGrid,
   gridExtent,
   rotatedRect,
@@ -66,6 +68,11 @@ function nearest(start: number, end: number, from: number, to: number): number {
   return 0;
 }
 
+/** Degrees clockwise from straight up, round the centre. */
+function angleAround(centreX: number, centreY: number, clientX: number, clientY: number): number {
+  return (Math.atan2(clientX - centreX, centreY - clientY) * 180) / Math.PI;
+}
+
 const ARROWS: Record<string, { dx: number; dy: number }> = {
   ArrowRight: { dx: 1, dy: 0 },
   ArrowLeft: { dx: -1, dy: 0 },
@@ -79,6 +86,9 @@ interface Drag {
   pointerId: number;
   startX: number;
   startY: number;
+  /** The table's centre on screen when it was pressed; it stays put while the drag lasts. */
+  centreX: number;
+  centreY: number;
   /** For a turn: the pointer's angle round the table's centre when it was pressed. */
   startAngle: number;
 }
@@ -226,6 +236,18 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #room: number | null = null;
 
+  /**
+   * Squares drawn left of and above the plan's (0, 0), so a turned table's corners past it can be
+   * scrolled to. It only grows: a shrink at scroll 0 cannot be scrolled away, so tables would jump
+   * under a pointer mid-drag.
+   */
+  #origin = { x: 0, y: 0 };
+
+  /** Squares `#origin` grew by in this update, scrolled away in `updated` so nothing drawn moves. */
+  #shift = { x: 0, y: 0 };
+
+  #drewTables = false;
+
   #observer = new ResizeObserver(([entry]) => {
     // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
     // never overflows only because a scrollbar appeared; min-width/min-height fill the remainder.
@@ -257,15 +279,30 @@ export class WtFloorPlanCanvas extends LitElement {
     return this.draft?.key === t.key ? this.draft.placement : t.placement;
   }
 
+  override willUpdate(): void {
+    const box = bounds(this.tables.map((t) => this.#placementOf(t)));
+    if (box === null) return;
+    // Tolerates float error in a corner computed to land exactly on the edge.
+    const x = Math.max(this.#origin.x, Math.ceil(-box.x - 1e-9));
+    const y = Math.max(this.#origin.y, Math.ceil(-box.y - 1e-9));
+    // The first tables drawn take their room unscrolled, so their corners show from the start.
+    if (this.#drewTables) {
+      this.#shift = { x: x - this.#origin.x, y: y - this.#origin.y };
+    }
+    this.#drewTables = true;
+    this.#origin = { x, y };
+  }
+
   override render(): TemplateResult {
     const copy = this.#copy;
+    const origin = this.#origin;
     const extent = gridExtent(
       this.tables.map((t) => this.#placementOf(t)),
       this.visible,
     );
     const gridStyle = styleMap({
-      width: px(extent.columns),
-      height: `${extent.rows * GRID_SQUARE_PX + this.bottomInset}px`,
+      width: px(origin.x + extent.columns),
+      height: `${(origin.y + extent.rows) * GRID_SQUARE_PX + this.bottomInset}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
     });
     return html`
@@ -291,8 +328,8 @@ export class WtFloorPlanCanvas extends LitElement {
   #renderTable(t: PlanCanvasTable, copy: FloorPlanCanvasCopy): TemplateResult {
     const p = this.#placementOf(t);
     const style = styleMap({
-      left: px(p.x),
-      top: px(p.y),
+      left: px(this.#origin.x + p.x),
+      top: px(this.#origin.y + p.y),
       width: px(p.width),
       height: px(p.height),
       transform: `rotate(${p.rotation}deg)`,
@@ -324,7 +361,7 @@ export class WtFloorPlanCanvas extends LitElement {
   /** Outside the table's button, so a round table's clip never cuts it. Always below, past the
    *  handle when that is below too: the grid runs `gridExtent`'s margin past the lowest table. */
   #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
-    const box = rotatedRect(p);
+    const box = this.#drawnBox(p);
     const handleBelow = t.key === this.selected && !this.#handleAbove(t);
     const style = styleMap({
       top: handleBelow
@@ -343,7 +380,7 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
-    const box = rotatedRect(p);
+    const box = this.#drawnBox(p);
     const above = this.#handleAbove(t);
     const style = styleMap({
       left: px(box.x + box.width / 2),
@@ -367,6 +404,12 @@ export class WtFloorPlanCanvas extends LitElement {
     `;
   }
 
+  /** `p`'s turned box in squares from the drawn grid's corner. */
+  #drawnBox(p: PlanPlacement): PlanRect {
+    const box = rotatedRect(p);
+    return { ...box, x: box.x + this.#origin.x, y: box.y + this.#origin.y };
+  }
+
   /** The side follows the table's saved place, so it does not jump while a drag is drawn. */
   #handleAbove(t: PlanCanvasTable): boolean {
     return rotatedRect(t.placement).y * GRID_SQUARE_PX >= this.#handleRoom();
@@ -385,6 +428,12 @@ export class WtFloorPlanCanvas extends LitElement {
 
   /** Centres each reason under its table, held inside the grid: its width is known only once drawn. */
   override updated(): void {
+    if (this.#shift.x !== 0 || this.#shift.y !== 0) {
+      const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
+      viewport.scrollLeft += this.#shift.x * GRID_SQUARE_PX;
+      viewport.scrollTop += this.#shift.y * GRID_SQUARE_PX;
+      this.#shift = { x: 0, y: 0 };
+    }
     const reasons = this.renderRoot.querySelectorAll<HTMLElement>(".refused-reason");
     if (reasons.length === 0) return;
     const grid = this.renderRoot.querySelector<HTMLElement>(".grid")!.clientWidth;
@@ -450,13 +499,19 @@ export class WtFloorPlanCanvas extends LitElement {
     // Cancelling the press also cancels the focus it would give, so give it back by hand.
     e.preventDefault();
     (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+    const grid = this.renderRoot.querySelector(".grid")!.getBoundingClientRect();
+    const p = t.placement;
+    const centreX = grid.left + (this.#origin.x + p.x + p.width / 2) * GRID_SQUARE_PX;
+    const centreY = grid.top + (this.#origin.y + p.y + p.height / 2) * GRID_SQUARE_PX;
     this.#drag = {
       kind,
       table: t,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      startAngle: this.#angleAround(t.placement, e.clientX, e.clientY),
+      centreX,
+      centreY,
+      startAngle: angleAround(centreX, centreY, e.clientX, e.clientY),
     };
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
@@ -468,24 +523,21 @@ export class WtFloorPlanCanvas extends LitElement {
     const drag = this.#drag!;
     if (e.pointerId !== drag.pointerId) return;
     const p = drag.table.placement;
+    const now = this.draft?.placement ?? p;
     if (drag.kind === "move") {
       const x = clampToGrid(p.x + snapToSquare(e.clientX - drag.startX));
       const y = clampToGrid(p.y + snapToSquare(e.clientY - drag.startY));
-      this.draft = { key: drag.table.key, placement: { ...p, x, y } };
+      if (x !== now.x || y !== now.y) {
+        this.draft = { key: drag.table.key, placement: { ...p, x, y } };
+      }
       return;
     }
-    const turn = this.#angleAround(p, e.clientX, e.clientY) - drag.startAngle;
+    const turn = angleAround(drag.centreX, drag.centreY, e.clientX, e.clientY) - drag.startAngle;
     const rotation = snapRotation(p.rotation + turn);
-    this.draft = { key: drag.table.key, placement: { ...p, rotation } };
+    if (rotation !== now.rotation) {
+      this.draft = { key: drag.table.key, placement: { ...p, rotation } };
+    }
   };
-
-  /** Degrees clockwise from straight up, round the table's centre. */
-  #angleAround(p: PlanPlacement, clientX: number, clientY: number): number {
-    const grid = this.renderRoot.querySelector(".grid")!.getBoundingClientRect();
-    const dx = clientX - (grid.left + (p.x + p.width / 2) * GRID_SQUARE_PX);
-    const dy = clientY - (grid.top + (p.y + p.height / 2) * GRID_SQUARE_PX);
-    return (Math.atan2(dx, -dy) * 180) / Math.PI;
-  }
 
   readonly #onPointerUp = (e: PointerEvent): void => {
     const drag = this.#drag!;
