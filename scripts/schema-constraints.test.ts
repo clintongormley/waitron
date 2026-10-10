@@ -144,6 +144,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["floor_plan_joins", ["plan_id"], "floor_plans"],
   ["floor_plan_tables", ["plan_id"], "floor_plans"],
   ["floor_plans", ["zone_id"], "floor_zones"],
+  ["floor_reset_tables", ["plan_table_id"], "floor_plan_tables"],
   ["floor_reset_tables", ["table_id"], "dining_tables"],
   ["floor_reset_tables", ["zone_id"], "floor_zones"],
   ["floor_today_join_tables", ["join_id"], "floor_today_joins"],

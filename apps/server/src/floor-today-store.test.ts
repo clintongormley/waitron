@@ -165,6 +165,17 @@ async function liveTablesOf(zoneId: string) {
   return inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId)));
 }
 
+async function mergeMembersIn(zoneId: string): Promise<string[]> {
+  const rows = await inTx(v, (tx) =>
+    tx
+      .select({ tableId: floorTodayJoinTables.tableId })
+      .from(floorTodayJoinTables)
+      .innerJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+      .where(eq(floorTodayJoins.zoneId, zoneId)),
+  );
+  return rows.map((row) => row.tableId).sort();
+}
+
 async function finish(partyId: string): Promise<void> {
   const sent = await commandFor(v, partyId);
   await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
@@ -276,6 +287,10 @@ describe("building today's plan from a zone's master plan", () => {
     await editMaster(master.get("Mid 1")!, { label: "Mid 1b", x: 40 });
     await addToMaster(z, { label: "Mid 3", place: place(50, 50) });
     await deleteFromMaster(master.get("Mid 2")!);
+    const [copied] = await inTx(v, (tx) =>
+      tx.select().from(floorResetTables).where(eq(floorResetTables.tableId, t2)),
+    );
+    expect(copied).toMatchObject({ label: "Mid 2", planTableId: null });
     const { partyId } = await seat(v, t1);
     await finish(partyId);
 
@@ -389,18 +404,30 @@ describe("building today's plan from a zone's master plan", () => {
     const z = await zone();
     const t1 = await v.table("Day 1", z);
     await masterOf(z, [{ label: "Day 1", live: t1 }]);
+    const [{ cutover }] = (await inTx(v, (tx) =>
+      tx
+        .select({ cutover: locations.dayCutover })
+        .from(locations)
+        .where(eq(locations.id, v.cfg.locationId)),
+    )) as [{ cutover: string }];
     await inTx(v, (tx) =>
       tx.update(locations).set({ dayCutover: "04:00" }).where(eq(locations.id, v.cfg.locationId)),
     );
     // Europe/Madrid is two hours ahead of UTC on these dates.
     const at = (utc: string) => inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(utc)));
 
-    await at("2026-10-09T01:30:00Z");
-    expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-08", generation: 1 });
-    await at("2026-10-09T03:00:00Z");
-    expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", generation: 2 });
-    await at("2026-10-09T04:00:00Z");
-    expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", generation: 2 });
+    try {
+      await at("2026-10-09T01:30:00Z");
+      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-08", generation: 1 });
+      await at("2026-10-09T03:00:00Z");
+      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", generation: 2 });
+      await at("2026-10-09T04:00:00Z");
+      expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", generation: 2 });
+    } finally {
+      await inTx(v, (tx) =>
+        tx.update(locations).set({ dayCutover: cutover }).where(eq(locations.id, v.cfg.locationId)),
+      );
+    }
   });
 
   it("catches up a pending zone without resetting it", async () => {
@@ -499,22 +526,85 @@ describe("building today's plan from a zone's master plan", () => {
     expect(members.map((m) => m.tableId).sort()).toEqual([u1, u2].sort());
   });
 
-  it("creates a waiting table unlinked once its master table was renamed", async () => {
+  it("links a waiting new table to its own master table after the master's names are swapped", async () => {
     const z = await zone();
     const t1 = await v.table("Late 1", z);
-    await masterOf(z, [{ label: "Late 2", live: t1 }, { label: "Late 1" }]);
+    const master = await masterOf(z, [{ label: "Late 2", live: t1 }, { label: "Late 1" }]);
     const { partyId } = await seat(v, t1);
     await reset(z);
-    const [master] = await inTx(v, (tx) =>
-      tx.select().from(floorPlanTables).where(eq(floorPlanTables.label, "Late 1")),
-    );
-    await editMaster(master!.id, { label: "Late 3" });
+    const a = master.get("Late 1")!;
+    const b = master.get("Late 2")!;
+    await editMaster(a, { label: "Late tmp" });
+    await editMaster(b, { label: "Late 1" });
+    await editMaster(a, { label: "Late 2" });
 
     await finish(partyId);
     await catchUp(z);
 
-    const created = (await liveTablesOf(z)).find((t) => t.id !== t1);
-    expect(created).toMatchObject({ label: "Late 1", planned: true, planTableId: null });
+    expect(await tableRow(v, t1)).toMatchObject({ label: "Late 2", planTableId: b });
+    const created = (await liveTablesOf(z)).filter((t) => t.id !== t1);
+    expect(created).toMatchObject([{ label: "Late 1", planTableId: a, planned: true }]);
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("keeps the day's move, take-off and merge of a table waiting only for its name", async () => {
+    const z = await zone();
+    const t1 = await v.table("Name 1", z);
+    const t2 = await v.table("Name 2", z);
+    await v.table("Name elsewhere");
+    await masterOf(z, [
+      { label: "Name elsewhere", place: place(0, 0), live: t1 },
+      { label: "Name 2", place: place(10, 0), live: t2 },
+    ]);
+    await reset(z);
+    await inTx(v, async (tx) => {
+      await tx
+        .update(floorTodayTables)
+        .set({ x: 70, takenOff: true })
+        .where(eq(floorTodayTables.tableId, t1));
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId: z, seats: 8 })
+        .returning({ id: floorTodayJoins.id });
+      for (const tableId of [t1, t2]) {
+        await tx
+          .insert(floorTodayJoinTables)
+          .values({ joinId: merge!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+      }
+    });
+
+    await catchUp(z);
+
+    expect(await todayRow(t1)).toMatchObject({ x: 70, takenOff: true });
+    expect(await mergeMembersIn(z)).toEqual([t1, t2].sort());
+    expect(await pendingRows(z)).toMatchObject([{ tableId: t1, placed: true }]);
+  });
+
+  it("puts a merge's last table back where it stood before the merge", async () => {
+    const z = await zone();
+    const t1 = await v.table("Back merge 1", z);
+    const u1 = await v.table("Back merge 2", z);
+    await masterOf(z, [{ label: "Back merge 1", place: place(0, 0), live: t1 }]);
+    await inTx(v, async (tx) => {
+      await tx
+        .insert(floorTodayTables)
+        .values({ tableId: u1, x: 9, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 });
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId: z, seats: 8 })
+        .returning({ id: floorTodayJoins.id });
+      await tx
+        .insert(floorTodayJoinTables)
+        .values({ joinId: merge!.id, tableId: t1, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+      await tx
+        .insert(floorTodayJoinTables)
+        .values({ joinId: merge!.id, tableId: u1, beforeX: 30, beforeY: 40, beforeRotation: 90 });
+    });
+
+    await reset(z);
+
+    expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
+    expect(await mergeMembersIn(z)).toEqual([]);
   });
 
   it("does not hand a name to a new table while a hidden table still holds it", async () => {

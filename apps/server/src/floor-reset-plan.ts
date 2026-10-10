@@ -12,6 +12,8 @@ export interface Placement {
 /** What a reset copies for one table: the master's values, or that the table goes. */
 export interface Target {
   tableId: string | null;
+  /** The master table copied; null for a removal. */
+  planTableId: string | null;
   label: string;
   seats: number | null;
   fixed: boolean;
@@ -139,10 +141,19 @@ export function targetsFromMaster(
     if (source) {
       followed.add(source.id);
       const { label, seats, fixed, placement } = source;
-      targets.push({ tableId: table.id, label, seats, fixed, placement, remove: false });
+      targets.push({
+        tableId: table.id,
+        planTableId: source.id,
+        label,
+        seats,
+        fixed,
+        placement,
+        remove: false,
+      });
     } else {
       targets.push({
         tableId: table.id,
+        planTableId: null,
         label: table.label,
         seats: null,
         fixed: false,
@@ -153,7 +164,15 @@ export function targetsFromMaster(
   }
   for (const { id, label, seats, fixed, placement } of master) {
     if (!followed.has(id))
-      targets.push({ tableId: null, label, seats, fixed, placement, remove: false });
+      targets.push({
+        tableId: null,
+        planTableId: id,
+        label,
+        seats,
+        fixed,
+        placement,
+        remove: false,
+      });
   }
   return targets;
 }

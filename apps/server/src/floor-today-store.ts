@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
   diningTables,
   floorPlans,
@@ -121,6 +121,7 @@ async function resetZoneFor(
     await tx.insert(floorResetTables).values({
       zoneId,
       tableId: target.tableId,
+      planTableId: target.planTableId,
       ...targetRow(target),
       remove: target.remove,
       pending: true,
@@ -169,6 +170,7 @@ async function catchUpPass(
   for (const row of rows) {
     const target: Target = {
       tableId: row.tableId,
+      planTableId: row.planTableId,
       label: row.label,
       seats: row.seats,
       fixed: row.fixed,
@@ -188,6 +190,7 @@ async function catchUpPass(
     venueTables.filter((table) => table.zoneId !== zoneId).map((table) => table.label),
   );
   const ids = inZone.map((table) => table.id);
+  const inZoneIds = new Set(ids);
   const held = new Set(
     (
       await tx
@@ -208,7 +211,7 @@ async function catchUpPass(
   const refused = new Set<string>();
   for (const target of targets) {
     const id = target.tableId;
-    if (!target.remove || id === null || held.has(id) || !ids.includes(id)) continue;
+    if (!target.remove || id === null || held.has(id) || !inZoneIds.has(id)) continue;
     if (await refusedByAModule(tx, cfg, removals, id, now)) refused.add(id);
   }
   const waiting = new Set([...held, ...refused]);
@@ -234,27 +237,26 @@ async function catchUpPass(
   }
   const createdIds = new Map<Target, string>();
   for (const target of plan.create) {
-    const [masterTable] = await tx
-      .select({ id: floorPlanTables.id })
-      .from(floorPlanTables)
-      .innerJoin(floorPlans, eq(floorPlans.id, floorPlanTables.planId))
-      .where(and(eq(floorPlans.zoneId, zoneId), eq(floorPlanTables.label, target.label)));
     const [created] = await tx
       .insert(diningTables)
       .values({
         locationId: cfg.locationId,
         zoneId,
         label: target.label,
-        planTableId: masterTable?.id ?? null,
+        planTableId: target.planTableId,
         planned: true,
       })
       .returning({ id: diningTables.id });
     createdIds.set(target, created!.id);
     await tx.insert(floorTodayTables).values({ tableId: created!.id, ...todayColumns(target) });
   }
+  const placedNow = new Set<Target>();
   for (const { target, label } of plan.apply) {
     const tableId = target.tableId!;
     if (label !== null) await setLabel(tx, tableId, label);
+    // Placed once per reset: a row waiting only for its name keeps the day's moves and merges.
+    if (rowOf.get(target)!.placed) continue;
+    placedNow.add(target);
     await tx.update(diningTables).set({ active: true }).where(eq(diningTables.id, tableId));
     await leaveMerges(tx, [tableId]);
     await tx
@@ -269,11 +271,16 @@ async function catchUpPass(
   const stillPending = new Set(plan.pending);
   let changed = false;
   for (const [target, row] of rowOf) {
-    if (stillPending.has(target)) continue;
-    changed = true;
+    const pending = stillPending.has(target);
+    if (pending && !placedNow.has(target)) continue;
+    if (!pending) changed = true;
     await tx
       .update(floorResetTables)
-      .set({ pending: false, tableId: createdIds.get(target) ?? row.tableId })
+      .set({
+        pending,
+        placed: row.placed || placedNow.has(target),
+        tableId: createdIds.get(target) ?? row.tableId,
+      })
       .where(eq(floorResetTables.id, row.id));
   }
   return changed;
@@ -341,7 +348,10 @@ async function mergedWithAny(
   return new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId));
 }
 
-/** The tables leave their today's merges; a merge left with fewer than two members goes with them. */
+/**
+ * The tables leave their today's merges; a merge left with fewer than two members goes, and its last
+ * member goes back to where it stood before the merge.
+ */
 async function leaveMerges(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   const left = await tx
     .delete(floorTodayJoinTables)
@@ -349,10 +359,21 @@ async function leaveMerges(tx: Transaction, tableIds: readonly string[]): Promis
     .returning({ joinId: floorTodayJoinTables.joinId });
   for (const joinId of new Set(left.map((row) => row.joinId))) {
     const rest = await tx
-      .select({ id: floorTodayJoinTables.id })
+      .select({
+        tableId: floorTodayJoinTables.tableId,
+        beforeX: floorTodayJoinTables.beforeX,
+        beforeY: floorTodayJoinTables.beforeY,
+        beforeRotation: floorTodayJoinTables.beforeRotation,
+      })
       .from(floorTodayJoinTables)
       .where(eq(floorTodayJoinTables.joinId, joinId));
     if (rest.length >= 2) continue;
+    for (const member of rest) {
+      await tx
+        .update(floorTodayTables)
+        .set({ x: member.beforeX, y: member.beforeY, rotation: member.beforeRotation })
+        .where(and(eq(floorTodayTables.tableId, member.tableId), isNotNull(floorTodayTables.x)));
+    }
     await tx.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, joinId));
     await tx.delete(floorTodayJoins).where(eq(floorTodayJoins.id, joinId));
   }

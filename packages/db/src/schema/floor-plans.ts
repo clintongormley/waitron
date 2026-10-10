@@ -163,6 +163,12 @@ export const floorResetTables = table(
     ...placementColumns(),
     remove: flag("remove").notNull().default(false),
     pending: flag("pending").notNull().default(false),
+    // The master table the target was copied from; a table created for the target follows it.
+    planTableId: id("plan_table_id").references(() => floorPlanTables.id, {
+      onDelete: "set null",
+    }),
+    // Today's row has been set from the target; a pending row then waits only for its name.
+    placed: flag("placed").notNull().default(false),
   },
   (t) => [
     unique("floor_reset_tables_table_key").on(t.tableId),

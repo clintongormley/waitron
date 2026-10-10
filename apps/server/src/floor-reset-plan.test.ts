@@ -3,6 +3,7 @@ import { type LiveTable, planReset, type Target, targetsFromMaster } from "./flo
 
 const t = (tableId: string | null, label: string, over: Partial<Target> = {}): Target => ({
   tableId,
+  planTableId: null,
   label,
   seats: 4,
   fixed: false,
@@ -207,8 +208,24 @@ describe("targetsFromMaster", () => {
       { id: "b", label: "Old 2", planTableId: "m9", planned: true },
     ];
     expect(targetsFromMaster(master, live)).toEqual([
-      { tableId: "a", label: "T1", seats: 6, fixed: true, placement, remove: false },
-      { tableId: "b", label: "Old 2", seats: null, fixed: false, placement: null, remove: true },
+      {
+        tableId: "a",
+        planTableId: "m1",
+        label: "T1",
+        seats: 6,
+        fixed: true,
+        placement,
+        remove: false,
+      },
+      {
+        tableId: "b",
+        planTableId: null,
+        label: "Old 2",
+        seats: null,
+        fixed: false,
+        placement: null,
+        remove: true,
+      },
     ]);
   });
 });
