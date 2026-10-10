@@ -23,7 +23,7 @@ import {
   productArchivedName,
   vatClassName,
 } from "../i18n/domain.js";
-import { categoryWithDescendants } from "./category-form.js";
+import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { fillPlaceholders, productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
@@ -289,6 +289,19 @@ export class ProductList extends LitElement {
       wt-data-table::part(variant-name) {
         display: inline-flex;
         flex-direction: column;
+      }
+      wt-data-table::part(search-name-line) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--wt-space-2);
+        max-inline-size: var(--name-room);
+        overflow-wrap: anywhere;
+      }
+      wt-data-table::part(search-path) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        min-inline-size: 0;
       }
       /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
          keeps its baseline and its square stays put. */
@@ -845,7 +858,7 @@ export class ProductList extends LitElement {
     const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
     const names = [
       ...root.querySelectorAll<HTMLElement>(
-        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"]',
+        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"], [part~="search-name-line"]',
       ),
     ];
     const fitted = box ? [...names, box] : names;
@@ -1027,6 +1040,27 @@ export class ProductList extends LitElement {
       }`;
   }
 
+  #categoryPath(row: ListRow): string {
+    const id =
+      row.kind === "folder"
+        ? row.folder.parentId
+        : row.kind === "product"
+          ? row.product.primaryCategoryId
+          : null;
+    const parent = id === null ? undefined : this.#categoryById.get(id);
+    if (!parent) return "";
+    const categories =
+      row.kind === "folder"
+        ? this.categories.filter((category) => category.id !== row.folder.id)
+        : this.categories;
+    return categoryPath(parent, categories);
+  }
+
+  #searchPath(row: ListRow) {
+    const path = this.#categoryPath(row);
+    return path === "" ? nothing : html`<span part="search-path">${path}</span>`;
+  }
+
   #productColumns(): DataTableColumn<ProductRow>[] {
     return [
       {
@@ -1035,7 +1069,8 @@ export class ProductList extends LitElement {
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: ({ product }) =>
           [product.name, ...product.variants.map(({ name }) => name)].join(" "),
-        cell: ({ product, variant }, { ancestorOnly }) => {
+        cell: (row, { ancestorOnly, searchRoot }) => {
+          const { product, variant } = row;
           const { color, inheritedFrom } =
             product.color === null
               ? this.#inheritedColor(product.primaryCategoryId)
@@ -1062,7 +1097,13 @@ export class ProductList extends LitElement {
                   busy: false,
                   open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
-                  ><strong>${product.name}</strong>${this.#variantCount(product)}</span
+                  >${
+                    searchRoot
+                      ? html`<span part="search-name-line"
+                          ><strong>${product.name}</strong>${this.#searchPath(row)}</span
+                        >`
+                      : html`<strong>${product.name}</strong>`
+                  }${this.#variantCount(product)}</span
                 >
               </span>`;
         },
@@ -1399,7 +1440,10 @@ export class ProductList extends LitElement {
                       "folder-color",
                       { folderId: folder.id },
                     )}<span part="folder-name"
-                      ><span><strong>${folder.name}</strong>${after}</span></span
+                      ><span part=${context.searchRoot ? "search-name-line" : nothing}
+                        ><span><strong>${folder.name}</strong>${after}</span
+                        >${context.searchRoot ? this.#searchPath(row) : nothing}</span
+                      ></span
                     >`
             }</span
           >`;
@@ -1520,6 +1564,7 @@ export class ProductList extends LitElement {
 
   readonly #expandChange = (event: CustomEvent<{ key: string; expanded: boolean }>): void => {
     event.stopPropagation();
+    if (this.search.trim() !== "") return;
     const { key, expanded } = event.detail;
     if (key.startsWith("folder:"))
       this.#send("category-toggle", { categoryId: key.slice(7), open: expanded });
@@ -1563,7 +1608,7 @@ export class ProductList extends LitElement {
         aria-label=${t("catalogue.title")}
         viewKey="waitron.products.table"
         rememberExpanded
-        searchOpensPath
+        flatTreeSearch
         .stickyHeader=${this.stickyHeader}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
