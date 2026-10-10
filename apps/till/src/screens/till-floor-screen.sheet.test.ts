@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mergeLabel } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -159,6 +160,26 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect((await openSheet(el, "t1")).actions).toBe(false);
   });
 
+  it("lets the map drag tables only when the profile takes orders", async () => {
+    const mapOf = (el: TillFloorScreen) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-floor-map"]>("wt-floor-map")!;
+    expect(mapOf(await mount([planned("t1", 2)], stubApi(), false)).canDrag).toBe(false);
+    cleanupWidgets();
+    expect(mapOf(await mount([planned("t1", 2)], stubApi())).canDrag).toBe(true);
+  });
+
+  it("an action with no connection to the server sends nothing", async () => {
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: [zone],
+      tables: [planned("t1", 2)],
+      canChangeToday: true,
+    });
+    const refreshes = countRefreshes(el);
+    await press(el, "t1", "take-off");
+    expect(refreshes.count).toBe(0);
+    expect(refusal(el)).toBeNull();
+  });
+
   it("Join with… joins the chosen table as a drop on it would", async () => {
     const api = stubApi();
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
@@ -182,6 +203,40 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
       side: "left",
     });
     expect(refreshes.count).toBe(1);
+  });
+
+  it("Join with… places the table on the side of the target it stands on", async () => {
+    const api = stubApi();
+    const el = await mount([planned("t1", 20), planned("t2", 2)], api);
+    await press(el, "t1", "join-with");
+    send(joinDialog(el)!, "join-with-pick", { tableId: "t1", targetId: "t2" });
+    await settle(el);
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith("t1", {
+      targetId: "t2",
+      side: "right",
+    });
+  });
+
+  it("Join with… closes when its table loses its place", async () => {
+    const api = stubApi();
+    const el = await mount([planned("t1", 2), planned("t2", 20)], api);
+    await press(el, "t1", "join-with");
+    expect(joinDialog(el)).not.toBeNull();
+    el.tables = [planned("t1", 2, { placement: null, takenOff: true }), planned("t2", 20)];
+    await settle(el);
+    expect(joinDialog(el)).toBeNull();
+    el.tables = [planned("t1", 2), planned("t2", 20)];
+    await settle(el);
+    expect(joinDialog(el)).toBeNull();
+    expect(api.mergeToday).not.toHaveBeenCalled();
+  });
+
+  it("Join with… lists the tables of the latest floor read", async () => {
+    const el = await mount([planned("t1", 2), planned("t2", 20)], stubApi());
+    await press(el, "t1", "join-with");
+    el.tables = [planned("t1", 2), planned("t2", 20), planned("t3", 40)];
+    await settle(el);
+    expect(targetIds(el)).toEqual(["t2", "t3"]);
   });
 
   it("Join with… names a merge as the map does, once", async () => {
@@ -272,6 +327,32 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(api.setSeatsToday).toHaveBeenCalledExactlyOnceWith("t1", 8);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(refreshes.count).toBe(4);
+  });
+
+  it("Split takes off the table the merge's name ends with", async () => {
+    const P = party("P", 2, ["t1", "t2"]);
+    const api = stubApi();
+    const el = await mount(
+      [
+        { ...planned("t1", 20, { joinId: "J" }, P), label: "1.10" },
+        { ...planned("t2", 22, { joinId: "J" }, P), label: "1.5" },
+      ],
+      api,
+    );
+    await press(el, "t1", "split");
+    expect(mergeLabel(["1.10", "1.5"])).toBe("1.5+1.10");
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith("P", "t1", null, 2);
+  });
+
+  it("Change seats on a table with no seats opens empty", async () => {
+    const el = await mount([planned("t1", 2, { seats: null })], stubApi());
+    await press(el, "t1", "seats");
+    const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+    await dialog.updateComplete;
+    expect(dialog.seats).toBe(0);
+    const stepper =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!;
+    expect(stepper.shadowRoot!.querySelector("input")!.value).toBe("");
   });
 
   it("Change seats cancelled sends nothing and re-reads nothing", async () => {

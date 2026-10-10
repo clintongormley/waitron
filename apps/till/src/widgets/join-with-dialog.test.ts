@@ -126,6 +126,18 @@ it("closes on Escape", async () => {
   expect(seen).toEqual(["close"]);
 });
 
+it("asks nothing when its table is taken away", async () => {
+  const el = await mount();
+  const seen = captured(el);
+  const closed = new Promise((resolve) =>
+    dialogOf(el).addEventListener("wt-close", resolve, { once: true }),
+  );
+  el.table = null;
+  await closed;
+  expect(dialogOf(el).open).toBe(false);
+  expect(seen).toEqual([]);
+});
+
 it("stays closed, and asks nothing, without a table", async () => {
   const el = await mount({ table: null });
   const seen = captured(el);

@@ -97,7 +97,8 @@ const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
 
 const collator = new Intl.Collator(undefined, { numeric: true });
 
-const inNumberOrder = (a: string, b: string): number => collator.compare(a, b);
+/** The order the map names a merge's labels in, and so the order a waiter reads them. */
+export const inNumberOrder = (a: string, b: string): number => collator.compare(a, b);
 
 /** Names the labels in the order given; `mergeLabel` is the map's own naming. */
 export const mapLabel = (labels: readonly string[]): string => partyTablesName(labels, "+");
@@ -357,6 +358,9 @@ export class WtFloorMap extends LitElement {
   /** `undefined` reads `prefers-reduced-motion` on every render; a test sets it. */
   @property({ attribute: false }) reducedMotion?: boolean;
 
+  /** Off, a held table neither moves nor sends `wt-table-drag-end`; a long press still works. */
+  @property({ attribute: false }) canDrag = true;
+
   #size: { width: number; height: number } | null = null;
 
   #view: View | null = null;
@@ -516,6 +520,7 @@ export class WtFloorMap extends LitElement {
   }
 
   readonly #onHoldDrag = (at: GesturePoint & { dx: number; dy: number }): void => {
+    if (!this.canDrag) return;
     const { dx, dy } = at;
     const id = this.#held?.dataset["tableId"];
     const first =

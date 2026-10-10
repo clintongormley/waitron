@@ -36,14 +36,35 @@ function table(id: string, over: Partial<TableState> = {}): TableState {
 }
 
 describe.each(["light", "dark"] as const)("till-join-with-dialog a11y (%s theme)", (theme) => {
-  it("has no violations listing free and clearing tables", async () => {
+  it("has no violations listing free, clearing and seated tables", async () => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillJoinWithDialog>(
       "till-join-with-dialog",
       {
         table: table("t1"),
         heading: "Unir 1 con",
-        targets: [table("t2"), table("t3", { condition: "needs_clearing" })],
+        targets: [
+          table("t2"),
+          table("t3", { condition: "needs_clearing" }),
+          table("t4", {
+            state: "open-tab",
+            condition: "held",
+            party: {
+              id: "P",
+              revision: 1,
+              guestCount: 2,
+              state: "open",
+              name: "Ana",
+              displayName: "Ana",
+              mainBillId: null,
+              outstanding: "0.00",
+              billCount: 1,
+              tableIds: ["t4"],
+              unsentDrafts: [],
+              reminder: null,
+            },
+          }),
+        ],
       },
       theme,
     );

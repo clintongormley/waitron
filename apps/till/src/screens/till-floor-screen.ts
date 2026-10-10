@@ -23,6 +23,7 @@ import {
   buildZoneTabs,
   defaultTraySlot,
   floorTrayStyles,
+  inNumberOrder,
   isTableZoneless,
   mergeLabel,
   renderFloorChips,
@@ -38,7 +39,7 @@ import type {
   PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
-import { compareLabels, decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -458,7 +459,8 @@ export class TillFloorScreen extends LitElement {
    * every placement write. */
   @property({ attribute: false }) canEdit = false;
   @property({ attribute: false }) canExitToCounter = true;
-  /** The device's profile allows `take-orders`, which today's changes from the details sheet need. */
+  /** The device's profile allows `take-orders`, which every change to today's plan needs: the map's
+   * drag and the details sheet's actions. */
   @property({ attribute: false }) canChangeToday = false;
   /** The device has a station view, so each station's ready work links into it. */
   @property({ attribute: false }) canOpenStation = false;
@@ -501,8 +503,8 @@ export class TillFloorScreen extends LitElement {
     action: "join" | "save";
     resend: (seats: number) => void;
   } | null = null;
-  /** Join with…'s table and the groups it may join. */
-  @state() private joiningWith: { table: TableState; targets: TableState[] } | null = null;
+  /** Join with…'s table; closed when the table leaves the map. */
+  @state() private joiningWith: { tableId: string } | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
 
@@ -553,6 +555,8 @@ export class TillFloorScreen extends LitElement {
     // Edit plan's writes move the old placement columns, which a planned zone's map does not read.
     this.#zone = this.#zoneOnScreen();
     if (this.#zone.planned) this.editing = false;
+    if (this.joiningWith !== null && this.#joining(this.joiningWith.tableId) === undefined)
+      this.joiningWith = null;
   }
 
   override updated(): void {
@@ -785,12 +789,13 @@ export class TillFloorScreen extends LitElement {
     this.refusal = null;
     const { action, tableId } = (event as CustomEvent<{ action: SheetAction; tableId: string }>)
       .detail;
-    const table = this.tables.find((each) => each.id === tableId);
+    // The sheet is drawn only while `tables` holds its table.
+    const table = this.tables.find((each) => each.id === tableId)!;
     const api = this.api;
-    if (table === undefined || api === undefined) return;
+    if (api === undefined) return;
     switch (action) {
       case "join-with":
-        this.joiningWith = { table, targets: this.#joinTargets(table) };
+        this.joiningWith = { tableId };
         return;
       case "split":
         void this.#settle(this.#split(api, table));
@@ -815,29 +820,35 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
-  /** A seated merge loses its last member in label order, with a new empty bill (decision 16). */
+  /** A seated merge loses the last member of its name, with a new empty bill (decision 16). */
   async #split(api: TillApi, table: TableState): Promise<void> {
     const party = table.party;
     if (party === null) return api.splitToday(table.id);
     const joinId = table.today?.joinId;
     const last = this.#zone.visible
       .filter((each) => each.today?.joinId === joinId)
-      .sort((a, b) => compareLabels(a.label, b.label))
+      .sort((a, b) => inNumberOrder(a.label, b.label))
       .at(-1)!;
     await api.splitTable(party.id, last.id, null, party.revision);
   }
 
+  /** The zone's table Join with… was opened for, while the map draws it. */
+  #joining(tableId: string): (TableState & { today: { placement: TodayPlacement } }) | undefined {
+    return this.#zone.visible.find(
+      (each): each is TableState & { today: { placement: TodayPlacement } } =>
+        each.id === tableId && each.today?.placement != null,
+    );
+  }
+
   /**
-   * One per placed group of the zone, its first member in label order named as the map names the
-   * group, leaving out every group a drop of `table` on it would do nothing with.
+   * One per placed group of the zone, its first member in the map's label order named as the map
+   * names the group, leaving out every group a drop of `table` on it would do nothing with.
    */
-  #joinTargets(table: TableState): TableState[] {
+  #joinTargets(table: TableState, from: TodayPlacement): TableState[] {
     const zoneTables = this.#zone.visible;
-    const from = table.today?.placement;
-    if (from == null) return [];
     const seen = new Set<string>();
     const targets: TableState[] = [];
-    for (const each of [...zoneTables].sort((a, b) => compareLabels(a.label, b.label))) {
+    for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
       if (each.today?.placement == null) continue;
       const group = each.today.joinId ?? each.id;
       if (seen.has(group)) continue;
@@ -849,21 +860,21 @@ export class TillFloorScreen extends LitElement {
     return targets;
   }
 
+  /** The dialog is drawn only while `#joining` finds its table, so the pick finds it too. */
   #onJoinWithPick(event: Event): void {
     event.stopPropagation();
     const { tableId, targetId } = (event as CustomEvent<JoinWithPickDetail>).detail;
-    const from = this.#zone.visible.find((each) => each.id === tableId)?.today?.placement;
-    if (from == null) return;
-    this.#onDrop({ tableId, x: from.x, y: from.y, targetId });
+    const { x, y } = this.#joining(tableId)!.today.placement;
+    this.#onDrop({ tableId, x, y, targetId });
   }
 
   #joinWith(): TemplateResult | typeof nothing {
-    const joining = this.joiningWith;
-    if (joining === null) return nothing;
+    const joining = this.joiningWith === null ? undefined : this.#joining(this.joiningWith.tableId);
+    if (joining === undefined) return nothing;
     return html`<till-join-with-dialog
-      .table=${joining.table}
-      .targets=${joining.targets}
-      .heading=${t("floor.join_with_title").replace("{table}", () => joining.table.label)}
+      .table=${joining}
+      .targets=${this.#joinTargets(joining, joining.today.placement)}
+      .heading=${t("floor.join_with_title").replace("{table}", () => joining.label)}
       @join-with-pick=${(event: Event) => this.#onJoinWithPick(event)}
       @join-with-close=${(event: Event) => {
         event.stopPropagation();
@@ -1226,6 +1237,7 @@ export class TillFloorScreen extends LitElement {
           .fitKey=${activeKey ?? ""}
           .copy=${this.#floorMapCopy()}
           .reducedMotion=${this.reducedMotion}
+          .canDrag=${this.canChangeToday}
           @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
           @wt-table-details=${(event: Event) => this.#onDetails(event)}
           @wt-table-drag-end=${(event: Event) => this.#onDragEnd(event)}

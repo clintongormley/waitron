@@ -190,6 +190,29 @@ it("a movable table's drag draws no copy and no line", async () => {
   expect(part(el, "drag-link")).toBeNull();
 });
 
+it("without canDrag a held table moves nothing and drops nothing", async () => {
+  const el = await map([t1, t2]);
+  expect(el.canDrag).toBe(true);
+  el.canDrag = false;
+  hold(el, 300, 150);
+  move(el, 150, 150);
+  expect((await boxIn(el, button(el, "t1"))).left).toBe(225);
+  expect(targets(el)).toEqual([]);
+  up(el, 150, 150);
+  await el.updateComplete;
+  expect(drops).toEqual([]);
+});
+
+it("without canDrag a held fixed table draws no copy", async () => {
+  const el = await map([fixedT1, t2]);
+  el.canDrag = false;
+  hold(el, 300, 150);
+  move(el, 150, 150);
+  await el.updateComplete;
+  expect(part(el, "ghost")).toBeNull();
+  expect(part(el, "drag-link")).toBeNull();
+});
+
 it("a merge with one fixed member stays put, and its copy holds every member", async () => {
   const a = { ...t("a", "4", { x: 10, y: 5 }), joinId: "j" };
   const b = { ...t("b", "5", { x: 18, y: 5 }), joinId: "j", fixed: true };
