@@ -2937,6 +2937,34 @@ describe("dashboard-app", () => {
     },
   );
 
+  it.each([
+    ["manager", ["venue.configure"], "dashboard-floor-plan-editor", "/manage/floor-plan/zone/z1"],
+    ["supervisor", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
+    [
+      "supervisor",
+      ["venue.configure"],
+      "dashboard-floor-plan-editor",
+      "/manage/floor-plan/zone/z1",
+    ],
+    ["manager", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens the floor plan editor at /manage/floor-plan/zone/z1 as %s, only with venue.configure",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getFloorPlan: vi.fn(() => new Promise(() => undefined)),
+          listZones: vi.fn().mockResolvedValue([]),
+          listTables: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
   it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

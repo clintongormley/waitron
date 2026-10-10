@@ -235,13 +235,14 @@ screen is designed.
 
 ## A429 — floor plans: a master plan per zone, today's plan on the till
 
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slice
-  1 landed, #1493; slices 2–5 open).** Slice 1 is the
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
+  1 (#1493) and 2 built; slices 3–5 open).** Slice 1 is the
   storage and reads: the master plan's tables, today's plan, table names kept as text when a party
   closes or a table is removed, today's plan in the till's table-state answer, the dashboard's
   read and save routes for a zone's master plan, today's plan caught up on every floor read and
   change, the old floor screen refusing to change a planned table, and the demo seed writing
-  master plans. Left: slice 2 (the dashboard editor), slice 3 (the till's map), slice 4 (today's
+  master plans. Slice 2 is the dashboard editor at `/manage/floor-plan/zone/<id>`, opened from
+  the zone panel's "Edit floor plan". Left: slice 3 (the till's map), slice 4 (today's
   changes on the till) and slice 5 (removing the old pieces). A Square-style editor on the
   dashboard for each zone's master plan (tables created in bulk, saved joins, Undo/Redo), and a
   till map whose job is status and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
@@ -256,12 +257,48 @@ screen is designed.
   and zones screen the editor opens from; A182 (canvases retired) touches the till's floor
   screen that slice 3 replaces.
 
+## A466 — floor plan editor follow-ups
+
+- **A466 — floor plan editor follow-ups (2026-10-10).** Left open by A429 slice 2.
+  - `wt-input` has no visible description, so the Add tables names preview is a polite live region
+    after Prefix rather than the field's description, and is not heard when the field takes focus.
+    The proper fix is a visible description in `wt-input` (a shared component).
+  - The zone panel's "Edit floor plan" link is not hidden without `venue.configure`. Today every
+    role with `venue_service.manage` also has `venue.configure`, and a module screen's context
+    carries no permissions. Revisit beside the permissions review.
+  - The department zone address template is written in two places:
+    `packages/venue-service/src/dashboard/department-zones.ts` and `department-settings.ts`.
+  - The tables list sorts on the raw name but shows the trimmed one, and does not mark the
+    selected row.
+  - A failed Reload read shows nothing while the out-of-date message stands.
+  - A refusal mark on table A while table B is selected leaves nothing pointing back to A.
+  - The booked reason ("Booked 12 Oct, 21:00") is worded in the dashboard's core strings, not the
+    bookings module's, because the module code-message route takes no parameters.
+  - The canvas: a narrow table at x=0 draws part of its rotate handle left of the grid; a table
+    dragged into the top rows shows its handle above the grid until it is released; the size
+    tokens are read once for the element's whole life.
+  - The canvas's extra squares for a turned table at the top-left corner: after a corner drop, an
+    Undo or a refused move back to the earlier layout keeps the extra room and a scrollbar until
+    another change; a keyboard nudge or turn of a corner table in a plan that fits shifts the whole
+    plan by a square; and on computers whose scrollbars take space, a size reading that arrives just
+    after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
+    scrollbar, since headless Chromium's scrollbars take none).
+  - Place on a plan with no free spot does nothing and says nothing.
+  - On a phone the header's buttons do not stay on one row. Inside the dashboard's page padding a
+    390 px phone leaves the editor about 310 px, while Close, Undo, Redo and Save need about 346 px
+    in Spanish with the Mac's font. When they wrap, Undo and Redo sit on a row above Close and Save,
+    because `wt-form-actions`' outer row never wraps. The editor's own tests mount it at 390 px
+    without the page padding, so they do not see this. A fix needs a decision: less page padding on
+    phones, or Close on its own row by design.
+  - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
+    `super.disconnectedCallback` and `preventScroll`.
+
 ## Small floor-plan refusals still missing
 
 - **Small floor-plan refusals still missing.** Left open by A429 slice 1 (#1493).
   - `dining_tables.plan_table_id` has no unique index; no writer makes two live tables follow one
     master table today.
-  - A saved join's seats have no upper bound, and two saved joins of the same tables are accepted.
+  - A saved join's seats have no upper bound.
   - The delivery-release trigger accepts an empty label.
 
 ## A phone's Chrome drew a white page for the box (watch, not a job yet)

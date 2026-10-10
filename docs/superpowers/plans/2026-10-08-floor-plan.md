@@ -625,7 +625,8 @@ without the table.
   `packages/composition/src/modules.ts:265` (the bookings descriptor gains `tableRemoval`),
   `packages/bookings/src/schema/bookings.ts` (`tableLabel: label("table_label")`),
   `packages/bookings/src/bookings.ts` (`listBookings`, `getBooking` return `tableLabel`),
-  `packages/bookings/src/errors.ts` (`table.booked { tableId }`)
+  `packages/bookings/src/errors.ts` (`table.booked { tableId }`; note 2026-10-10: since slice 2 it
+  also carries `date` (YYYY-MM-DD) and `time` (HH:MM) of the earliest upcoming booking)
 - Create: `packages/bookings/src/table-removal.ts`, `packages/bookings/src/table-removal.test.ts`
 - Generated: a bookings migration (`pnpm --filter @waitron/bookings db:generate`), one `ALTER TABLE … ADD`
 
@@ -1224,9 +1225,13 @@ Each is the default this slice builds; the owner may override any at review.
 5. **On `floor_plan.out_of_date`** the code's sentence shows with a "Load newer plan" button;
    pressing it replaces the draft with a fresh read and empties Undo and Redo, writing nothing. The
    press is the person's choice to drop their draft, so it does not ask again. Save stays enabled.
+   _Note 2026-10-10: the button shipped as "Reload" / "Recargar", to match the English code
+   sentence; this plan's later mentions of "Load newer plan" mean it._
 6. **`table.booked` names a table the draft has deleted, so there is no field to put it beside.** The
    message is "<name>: <the code's sentence>", the name taken from the plan as opened (matched by
    `liveTableId`). Undo brings the table back. This replaces the task list's "beside it in the panel".
+   Owner 2026-10-10: replaced — the table comes back as last saved, outlined, with 'Booked 12 Oct,
+   21:00' beside it and in the tables list; no message above the buttons.
 7. **A refusal that names a table selects it.** `table.label_taken { label }` selects the draft table
    whose trimmed name is that label; `floor_plan.invalid { field: "tables.<i>.<name>" }` selects the
    table whose key is `tables[i].key` in the body that was SENT (not the draft's `<i>`th table at
@@ -1285,7 +1290,9 @@ Each is the default this slice builds; the owner may override any at review.
 16. **The line under the header** says when the till's TABLES follow, not where they are drawn (the
     till draws today's places only from slice 3): before a zone's first save, "Your first save
     updates the till's tables. After that, saved changes wait for the next business day."; after,
-    "Saved changes reach the till's tables when the next business day starts." A table a party sits
+    "Saved changes reach the till's tables when the next business day starts." (owner 2026-10-10:
+    now "Your first save goes live now; later changes, tomorrow." and "Your changes will go live
+    tomorrow.", the owner's 2026-10-10 overrides, built as an extra task after 2.5b.) A table a party sits
     at waits for its tab to close either way (the plan's decision 3). The task list's "with Reset on
     the till for sooner" names a till button slice 4 builds; Task 4.5 adds those words when it does
     (noted there).
@@ -1347,6 +1354,7 @@ export interface PlanRect { x: number; y: number; width: number; height: number 
 export function snapToSquare(px: number, squarePx?: number): number;      // Math.round(px / squarePx)
 export function clampToGrid(value: number): number;                       // whole, 0–999
 export function rotationFromAngle(degrees: number): number;                // nearest 15, 0–345
+// Note 2026-10-10: removed in slice 2's finish; the canvas uses floor.ts's snapRotation.
 export function rotatedRect(p: PlanPlacement): PlanRect;                   // box around the table turned about its centre
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null;
 export function cropToTables(placements: readonly PlanPlacement[], margin?: number): PlanRect | null; // margin 2, not clamped at 0
@@ -1748,7 +1756,10 @@ selection. Strings (EN / ES): `floor_plan_editor.title` "Floor plan" / "Plano de
 changes wait for the next business day." / "El primer guardado actualiza las mesas de la caja.
 Después, los cambios guardados esperan al siguiente día de actividad."; `floor_plan_editor.note`
 "Saved changes reach the till's tables when the next business day starts." / "Los cambios
-guardados llegan a las mesas de la caja al empezar el siguiente día de actividad."; Close and Save
+guardados llegan a las mesas de la caja al empezar el siguiente día de actividad." (owner
+2026-10-10: now "Your first save goes live now; later changes, tomorrow." / "Tu primer guardado se
+aplica ya; los cambios posteriores, mañana." and "Your changes will go live tomorrow." / "Tus
+cambios se aplicarán mañana.", the owner's 2026-10-10 overrides, built as an extra task after 2.5b); Close and Save
 reuse `action.close` and `action.save` (`strings.ts:475`, `:548`).
 
 - [ ] **Step 1: Write the failing tests.** Mount with `mountWidget` and a stubbed API, the URL set
@@ -1881,7 +1892,7 @@ re-read shows its sentence as a read's message, which the next change or the nex
 read's failure never replaces an action's message; and a read's success clears only a read's
 message. Save stays quiet after a failed re-read, since the write succeeded.
 
-New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente".
+New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente". (Note 2026-10-10: shipped as `floor_plan_editor.reload`, "Reload" / "Recargar", in Task 2.8's look pass.)
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.save.test.ts` (Task 2.4a's fixture
   plan; a change is made by dispatching `floor-plan-change` from inside the page):
@@ -1943,6 +1954,7 @@ it("an accepted save leaves without asking", async () => { /* move, Save, Close 
 
 **Interfaces:**
 - Consumes: Task 2.4d's `sent` body and message slot; `checkDraft` (Task 2.4a).
+- (Note 2026-10-10: the panel takes a list, `fieldErrors`, one per refused field, since slice 2's finish.)
 - Produces, for Task 2.6a's panel: the page's `fieldError: { key: string; field: "label" | "seats" |
   "fixed" | "width" | "height" | "shape" | "rotation"; message: string } | null` (a server field
   `tables.<i>.placement.width` becomes `width`, and so on).
@@ -1954,7 +1966,10 @@ disabled while `checkDraft` still fails. On a refusal from the server: decisions
 `tables.<i>` read through Task 2.4d's `sent` body; a `table.label_taken` whose label no draft table
 carries, and any refusal not named there, shows its own sentence above the buttons. These are
 action messages (Task 2.4d's slot). New strings: `floor_plan_editor.name_missing` "Enter a name." /
-"Escribe un nombre."; `floor_plan_editor.booked` "{name}: {message}" (both languages).
+"Escribe un nombre."; `floor_plan_editor.booked` "{name}: {message}" (both languages). (Owner
+2026-10-10: a `table.booked` refusal now puts the table back, marked, with no message above the
+buttons, and the string is now "Booked {date}, {time}" / "Reservada el {date}, {time}" (the owner's
+2026-10-10 overrides, built as an extra task after 2.5b).)
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.refusals.test.ts` (Task 2.4a's
   fixture plan; changes by dispatching `floor-plan-change`). The file imports
@@ -1976,6 +1991,7 @@ it("an invalid field of a table deleted since sending selects nothing", async ()
 });
 it("an invalid field the panel does not show selects the table and shows the refusal's own sentence", async () => { /* field "tables.0.placement.x" → selected "m1"; fieldError null; message "Check the floor plan's tables and try again" */ });
 it("a refusal about a join selects nothing and shows its own sentence", async () => { /* field "joins.0.tableKeys" → selection unchanged; message "Check the floor plan's tables and try again" */ });
+// Note 2026-10-10: stale — decision 6's owner replacement (the table comes back marked, no message) applies.
 it("a booked table the draft deleted is named, and Undo brings it back", async () => {
   /* delete m2; reject { code: "table.booked", params: { tableId: "l2" } } → message "T2: This table has an upcoming booking. Move the booking first"; Undo → m2 back */
 });

@@ -1,5 +1,11 @@
 import { html } from "lit";
-import { DROPDOWN_ICONS, applyTokens, registerIcons, type WtDataTable } from "../src/index.js";
+import {
+  DROPDOWN_ICONS,
+  applyTokens,
+  registerIcons,
+  type TableSelect,
+  type WtDataTable,
+} from "../src/index.js";
 import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-disclosure.js";
@@ -21,6 +27,8 @@ import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
+import "../src/components/wt-floor-plan-canvas.js";
+import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-relative-time.js";
@@ -115,6 +123,10 @@ const panel = (theme: "light" | "dark") => `
         ></wt-combobox>
       </div>
     </wt-card>
+    <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
+    <wt-sheet heading="Mesas" style="margin-top: 16px">
+      <p>Mesa 1 · Mesa 2 · Mesa 3</p>
+    </wt-sheet>
     <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
       <wt-disclosure heading="Cocina" summary="Sin opciones">
         <wt-input label="Nota para cocina"></wt-input>
@@ -237,6 +249,30 @@ app.innerHTML = `<div class="panels">${panel("light")}${panel("dark")}</div>`;
 
 for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   applyTokens(el);
+  const plan = el.querySelector("wt-floor-plan-canvas")!;
+  plan.tables = [
+    {
+      key: "t1",
+      label: "T1",
+      fixed: false,
+      placement: { x: 2, y: 2, width: 8, height: 4, shape: "rect", rotation: 0 },
+    },
+    {
+      key: "t2",
+      label: "T2",
+      fixed: true,
+      placement: { x: 14, y: 2, width: 6, height: 6, shape: "round", rotation: 0 },
+    },
+    {
+      key: "b1",
+      label: "Bar 1",
+      fixed: false,
+      placement: { x: 24, y: 3, width: 2, height: 2, shape: "rect", rotation: 45 },
+    },
+  ];
+  plan.addEventListener("wt-table-select", (e) => {
+    plan.selected = (e as CustomEvent<TableSelect>).detail.key;
+  });
   const tabs = el.querySelector("wt-tabs")!;
   tabs.items = [
     { key: "status", label: "Status" },

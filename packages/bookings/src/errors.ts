@@ -11,7 +11,8 @@ declare module "@waitron/shared" {
     "booking.invalid_transition": { bookingId: string };
     /** Seating named no table and the booking has none assigned. */
     "booking.table_required": Record<string, never>;
-    /** A table cannot be removed while a booking from the venue's today on is booked at it. */
-    "table.booked": { tableId: string };
+    /** A table cannot be removed while a booking from the venue's today on is booked at it; `date`
+     *  (`YYYY-MM-DD`) and `time` (`HH:MM`) are the earliest such booking's. */
+    "table.booked": { tableId: string; date?: string; time?: string };
   }
 }

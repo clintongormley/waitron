@@ -78,6 +78,11 @@ describe("wholeWithin", () => {
     expect(wholeWithin(String(MAX_MODIFIER_INTEGER + 1), 0)).toBeNull();
   });
 
+  it("takes a lower ceiling when given one", () => {
+    expect(wholeWithin("999", 0, 999)).toBe(999);
+    expect(wholeWithin("1000", 0, 999)).toBeNull();
+  });
+
   it("reads leading zeros as the number they spell", () => {
     expect(wholeWithin("007", 0)).toBe(7);
   });

@@ -43,6 +43,15 @@ export { WtDataTable } from "./components/wt-data-table.js";
 export type { DataTableColumn } from "./components/wt-data-table.js";
 export { WtFloorCanvas } from "./components/wt-floor-canvas.js";
 export type { FloorCanvasCopy } from "./components/wt-floor-canvas.js";
+export { WtFloorPlanCanvas } from "./components/wt-floor-plan-canvas.js";
+export type {
+  FloorPlanCanvasCopy,
+  PlanCanvasTable,
+  TableMove,
+  TableRotate,
+  TableSelect,
+} from "./components/wt-floor-plan-canvas.js";
+export { WtSheet } from "./components/wt-sheet.js";
 export {
   FLOOR_ASPECT,
   GRID_STEP,
@@ -71,6 +80,23 @@ export type {
   TableShape,
   ZoneTab,
 } from "./floor.js";
+export {
+  GRID_SQUARE_PX,
+  NAME_MIN_PX,
+  NEW_TABLE_SIZE,
+  automaticNames,
+  bounds,
+  clampToGrid,
+  cropToTables,
+  firstFreeSpot,
+  fitScale,
+  gridExtent,
+  rotatedRect,
+  showsName,
+  snapToSquare,
+} from "./floor-plan-geometry.js";
+export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.js";
+export { UndoHistory } from "./history.js";
 export { submitOnEnter } from "./submit-on-enter.js";
 export {
   ContentLanguageController,

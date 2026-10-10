@@ -44,7 +44,7 @@ async function makeTable(v: Venue, label: string): Promise<string> {
 
 async function insertBooking(
   v: Venue,
-  fields: { tableId: string; date: string; status?: string },
+  fields: { tableId: string; date: string; time?: string; status?: string },
 ): Promise<string> {
   const id = newId();
   await db.execute(sql`
@@ -52,7 +52,7 @@ async function insertBooking(
       (id, created_at, location_id, table_id, booking_date, booking_time, party_size,
        contact_name, created_by, status)
     values
-      (${id}, ${nowIso()}, ${v.locationId}, ${fields.tableId}, ${fields.date}, '20:00:00',
+      (${id}, ${nowIso()}, ${v.locationId}, ${fields.tableId}, ${fields.date}, ${fields.time ?? "20:00:00"},
        2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
   return id;
 }
@@ -98,6 +98,31 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     expect([...refusals.keys()].sort()).toEqual([booked, twice].sort());
     expect(refusals.get(twice)).toMatchObject({ code: "table.booked", params: { tableId: twice } });
     expect((await refusalsOf(v, [])).size).toBe(0);
+  });
+
+  it("names the earliest upcoming booking's date and time, by date before time", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "T10");
+    const other = await makeTable(v, "T11");
+    await insertBooking(v, { tableId: t, date: "2026-09-20", time: "19:00:00" });
+    await insertBooking(v, { tableId: t, date: "2026-09-17", time: "22:00:00" });
+    await insertBooking(v, { tableId: t, date: "2026-09-17", time: "21:30:00" });
+    await insertBooking(v, {
+      tableId: t,
+      date: "2026-09-16",
+      time: "09:00:00",
+      status: "cancelled",
+    });
+    await insertBooking(v, { tableId: other, date: "2026-09-16", time: "08:00:00" });
+
+    const refusals = await refusalsOf(v, [t, other]);
+
+    expect(refusals.get(t)?.params).toEqual({ tableId: t, date: "2026-09-17", time: "21:30" });
+    expect(refusals.get(other)?.params).toEqual({
+      tableId: other,
+      date: "2026-09-16",
+      time: "08:00",
+    });
   });
 
   it("does not refuse for the venue's yesterday, a cancelled or completed booking today, or another table", async () => {

@@ -217,6 +217,7 @@ function checkEntries(input: ZonePlanSave): void {
       ids.add(ref);
     }
   });
+  const sets = new Set<string>();
   input.joins.forEach((join, index) => {
     const at = `joins.${index}`;
     const members = new Set(join.tableKeys);
@@ -227,6 +228,9 @@ function checkEntries(input: ZonePlanSave): void {
     ) {
       throw invalid(`${at}.tableKeys`);
     }
+    const set = JSON.stringify([...members].sort());
+    if (sets.has(set)) throw invalid(`${at}.tableKeys`);
+    sets.add(set);
     if (!Number.isInteger(join.seats) || join.seats < 1) throw invalid(`${at}.seats`);
   });
 }

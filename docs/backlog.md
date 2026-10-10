@@ -1358,7 +1358,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) —
   remaining work is slice 7 Part B and slice 6 Part C.**
-  Add the department page's Receipt tab and the floor-plan entry. Department receipt
+  Add the department page's Receipt tab, and the zone panel's floor-plan preview and "Add a floor
+  plan". Department receipt
   storage, translated text, live venue defaults, independent saves and previews,
   thermal/A4 composition, till presentation and email contacts are built.
   Core email consent removal stays separate.
@@ -1851,13 +1852,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Unassigned Profile cells stay blank; the None profile filter selects them.** No cell-wording
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slice
-  1 landed, #1493; slices 2–5 open).** Slice 1 is the
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
+  1 (#1493) and 2 built; slices 3–5 open).** Slice 1 is the
   storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
   the till works from), kept table names, the till's table-state answer, the dashboard's read and
-  save routes, and the demo seed. Left: the editor, the till's map, today's changes on the till,
-  and removing the old pieces.
+  save routes, and the demo seed. Slice 2 is the dashboard editor. Left: the till's map, today's
+  changes on the till, and removing the old pieces.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
+
+- **A466 — floor plan editor follow-ups (2026-10-10).** Small gaps the dashboard floor plan editor
+  left: a preview not heard on focus, an ungated link, a duplicated address template, list and
+  canvas details and surviving mutants. Left open by A429 slice 2.
+  [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
@@ -1880,7 +1886,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   API's wiring. Left open by A429 slice 1 (#1493).
 
 - **Small floor-plan refusals still missing.** `dining_tables.plan_table_id` has no unique index;
-  a saved join's seats have no upper bound and duplicate joins are accepted; the delivery-release
+  a saved join's seats have no upper bound; the delivery-release
   trigger accepts an empty label. Left open by A429 slice 1 (#1493).
   [Detail](backlog/till.md#small-floor-plan-refusals-still-missing)
 

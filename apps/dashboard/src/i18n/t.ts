@@ -7,3 +7,8 @@ export { setLocale, currentLocale, subscribeLocale, pickLocale } from "@waitron/
 registerCatalogue({ en, es });
 
 export const t = makeT<StringKey>();
+
+/** Fills `{name}` placeholders; each value is inserted once, never re-read as a placeholder. */
+export function fill(key: StringKey, values: Readonly<Record<string, string>>): string {
+  return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
+}
