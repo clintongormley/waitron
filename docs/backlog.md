@@ -4875,6 +4875,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
   linked spec and preserves recorded history.
 
+- **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
+  second run-it review, deleting the `working_orders` location `exists` clause in
+  `apps/server/src/station-delete.ts` left all 47 station-delete and management-delete cases
+  passing. Add a second-location draft case that fails without the clause, or establish by running
+  the real writers that it is redundant before removing it. Its necessity remains unverified.
+
 - **The till's status for an original whose printer was deleted uses the error code's sentence**
   ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose
   the wording. Left open by A435 step 2.
