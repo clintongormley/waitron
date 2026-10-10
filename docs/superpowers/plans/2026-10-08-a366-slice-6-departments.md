@@ -1281,9 +1281,13 @@ line says "normal week" in its link text).
 1.14).
 
 **Behaviour:** §9.1: a zone with tables shows a small read-only preview of its master plan, fitted
-to the panel, and "Edit floor plan", which opens A429's editor (`/manage/floor-plan/<zoneId>`); a
+to the panel, and "Edit floor plan", which opens A429's editor (`/manage/floor-plan/zone/<zoneId>`); a
 zone without tables shows "Add a floor plan". If A429 Task 2.7 put the action in the zone's ⋮ menu
 or panel, keep its test and its permission rule (hidden without `venue.configure`, A429 Task 2.7).
+(Amended 2026-10-10 by A429 slice 2's expansion: the address form; the link itself lands in A429
+slice 2 on the zone panel. A429 slice 2 shows that link without a permission check of its own,
+because only a manager or an admin can open the department page: `venue_service.manage` is granted
+from manager up, and the role map gives both roles `venue.configure`; role map read 2026-10-10.)
 
 - [ ] Steps: failing tests (preview present with tables, absent without; the link; hidden without
   `venue.configure`); watch them fail; implement; the browser files; LOOK in EN and ES, both themes,
