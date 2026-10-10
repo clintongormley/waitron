@@ -15,10 +15,12 @@ import {
   isAdoptable,
   patchTable,
   placeTable,
+  removeJoin,
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 import type {
+  FloorPlanAddJoinAsk,
   FloorPlanChange,
   FloorPlanInvalid,
   FloorPlanSelect,
@@ -68,6 +70,26 @@ export class FloorPlanTablePanel extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
+      .joins {
+        margin-top: var(--wt-space-4);
+      }
+      .joins h2 {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
+        color: var(--wt-color-text);
+      }
+      .joins ul {
+        margin: 0 0 var(--wt-space-2);
+        padding: 0;
+        list-style: none;
+      }
+      .joins li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-1) 0;
+      }
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -86,8 +108,6 @@ export class FloorPlanTablePanel extends LitElement {
     message: string;
     text?: string;
   } | null = null;
-  /** The page's join keys, for the joins this panel will add. */
-  @property({ attribute: false }) nextJoinKey!: () => string;
 
   constructor() {
     super();
@@ -179,6 +199,53 @@ export class FloorPlanTablePanel extends LitElement {
   #delete(): void {
     this.#change(deleteTable(this.draft, this.tableKey));
     this.#send<FloorPlanSelect>("floor-plan-select", { key: null });
+  }
+
+  #label(key: string): string {
+    const label = this.draft.tables.find((t) => t.key === key)?.label.trim() ?? "";
+    return label || t("floor_plan_editor.unnamed");
+  }
+
+  /** Names go in last and through a function, so a name holding `{seats}` or `$&` stays as typed. */
+  #joinText(tableKeys: string[], seats: number): string {
+    const names = tableKeys
+      .filter((key) => key !== this.tableKey)
+      .map((key) => this.#label(key))
+      .join(", ");
+    return t("floor_plan_editor.join_with")
+      .replace("{seats}", String(seats))
+      .replace("{tables}", () => names);
+  }
+
+  #joins() {
+    const joins = this.draft.joins.filter((j) => j.tableKeys.includes(this.tableKey));
+    return html`<section class="joins" aria-labelledby="joins-heading">
+      <h2 id="joins-heading" data-joins-heading>${t("floor_plan_editor.joins")}</h2>
+      ${
+        joins.length === 0
+          ? nothing
+          : html`<ul>
+              ${joins.map(
+                (join) =>
+                  html`<li data-join=${join.key}>
+                    <span data-join-text>${this.#joinText(join.tableKeys, join.seats)}</span
+                    ><wt-button
+                      variant="secondary"
+                      data-test="remove-join"
+                      @click=${() => this.#change(removeJoin(this.draft, join.key))}
+                      >${t("action.remove")}</wt-button
+                    >
+                  </li>`,
+              )}
+            </ul>`
+      }
+      <wt-button
+        variant="secondary"
+        data-test="add-join"
+        @click=${() => this.#send<FloorPlanAddJoinAsk>("floor-plan-add-join", { tableKey: this.tableKey })}
+        >${t("floor_plan_editor.add_join")}</wt-button
+      >
+    </section>`;
   }
 
   #placed(table: DraftTable) {
@@ -287,7 +354,8 @@ export class FloorPlanTablePanel extends LitElement {
                 >${t("action.delete")}</wt-button
               >`
         }
-      </div>`;
+      </div>
+      ${this.#joins()}`;
   }
 }
 

@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-sheet.js";
+import "./floor-plan-add-join.js";
 import "./floor-plan-add-tables.js";
 import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
@@ -47,6 +48,10 @@ export interface FloorPlanChange {
 
 export interface FloorPlanSelect {
   key: string | null;
+}
+
+export interface FloorPlanAddJoinAsk {
+  tableKey: string;
 }
 
 /** A panel field whose typed text the draft cannot hold. */
@@ -295,6 +300,10 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-add-tables", () => {
       this.renderRoot.querySelector("floor-plan-add-tables")?.show();
+    });
+    this.addEventListener("floor-plan-add-join", (event) => {
+      const { tableKey } = (event as CustomEvent<FloorPlanAddJoinAsk>).detail;
+      this.renderRoot.querySelector("floor-plan-add-join")?.show(tableKey);
     });
     this.addEventListener("floor-plan-invalid", (event) => {
       this.#typed((event as CustomEvent<FloorPlanInvalid>).detail);
@@ -784,7 +793,6 @@ export class FloorPlanEditor extends LitElement {
             .draft=${draft}
             .tableKey=${this.selected}
             .fieldError=${this.#panelError(this.selected)}
-            .nextJoinKey=${this.#nextJoinKey}
           ></floor-plan-table-panel>`
         : nothing;
     const panels = html`${tablePanel}${panel}`;
@@ -797,7 +805,12 @@ export class FloorPlanEditor extends LitElement {
         .takenElsewhere=${this.#takenElsewhere(draft)}
         .nextKey=${this.#nextKey}
         .draftParent=${this.#scopeId}
-      ></floor-plan-add-tables>`;
+      ></floor-plan-add-tables>
+      <floor-plan-add-join
+        .draft=${draft}
+        .nextJoinKey=${this.#nextJoinKey}
+        .draftParent=${this.#scopeId}
+      ></floor-plan-add-join>`;
   }
 
   #sheet(draft: FloorPlanDraft, panel: unknown) {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas, WtModal, WtSheet } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -648,3 +648,61 @@ it("a panel's typed name goes into the draft and Undo takes the whole typing bac
   expect(canvas(el).tables[0]!.label).toBe("T1");
   expect(button(el, "undo").disabled).toBe(true);
 });
+
+const joinDialogOf = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-add-join"]>(
+    "floor-plan-add-join",
+  )!;
+const joinModal = (el: FloorPlanEditor) =>
+  joinDialogOf(el).shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=add-join]")!;
+const joinField = (el: FloorPlanEditor, name: string) =>
+  joinModal(el).querySelector<HTMLElement & { value: string; values: string[] }>(`[name=${name}]`)!;
+
+async function openAddJoin(el: FloorPlanEditor): Promise<void> {
+  tablePanel(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=add-join]")!.click();
+  await joinDialogOf(el).updateComplete;
+  await joinModal(el).updateComplete;
+}
+
+async function addJoinOf(el: FloorPlanEditor, others: string[], seats: string): Promise<void> {
+  await openAddJoin(el);
+  await chooseOptions(joinField(el, "join-tables"), others);
+  await chooseOption(joinField(el, "join-seats"), seats);
+  await joinDialogOf(el).updateComplete;
+  joinModal(el).querySelector<HTMLElement>("wt-button[data-action=join-confirm]")!.click();
+  await el.updateComplete;
+  await expect.poll(() => joinModal(el).open).toBe(false);
+}
+
+it("Add join from the selected table's panel adds a join with a fresh key each time", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await addJoinOf(el, ["m2"], "6");
+  expect(tablePanel(el)!.draft.joins).toEqual([
+    { key: "join:1", seats: 6, tableKeys: ["m1", "m2"] },
+  ]);
+  expect(button(el, "save").variant).toBe("primary");
+  await press(el, "undo");
+  expect(tablePanel(el)!.draft.joins).toEqual([]);
+  await addJoinOf(el, ["m2"], "5");
+  expect(tablePanel(el)!.draft.joins.map((j) => j.key)).toEqual(["join:2"]);
+});
+
+for (const [from, to] of sizes) {
+  it(`keeps Add join open with its chosen table when the page goes from ${from[0]} to ${to[0]} px`, async () => {
+    await viewport(...from);
+    const el = await open();
+    await expect.poll(() => sheet(el) !== null).toBe(from[0] < 600);
+    await fromCanvas(el, "wt-table-select", { key: "m1" });
+    await openAddJoin(el);
+    await chooseOptions(joinField(el, "join-tables"), ["m2"]);
+    await joinDialogOf(el).updateComplete;
+    const before = tablePanel(el);
+    await page.viewport(...to);
+    await expect.poll(() => sheet(el) !== null).toBe(to[0] < 600);
+    expect(tablePanel(el)).not.toBe(before);
+    await el.updateComplete;
+    expect(joinModal(el).open).toBe(true);
+    expect(joinField(el, "join-tables").values).toEqual(["m2"]);
+  });
+}

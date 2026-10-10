@@ -37,11 +37,9 @@ const opened = (): FloorPlanDraft => draftFromPlan(plan);
 type Field = HTMLElement & { value: string; error: string; checked: boolean };
 
 async function open(props: Partial<FloorPlanTablePanel> = {}): Promise<FloorPlanTablePanel> {
-  let n = 0;
   const { el } = await mountWidget<FloorPlanTablePanel>("floor-plan-table-panel", {
     draft: opened(),
     tableKey: "m1",
-    nextJoinKey: () => `join:${++n}`,
     ...props,
   });
   await el.updateComplete;
@@ -310,4 +308,64 @@ it("shows a refusal of Fixed in place under the switch", async () => {
 it("shows nothing for a table the draft does not hold", async () => {
   const el = await open({ tableKey: "gone" });
   expect(el.shadowRoot!.querySelector("[name]")).toBeNull();
+});
+
+const joinRows = (el: FloorPlanTablePanel) => [
+  ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-join]"),
+];
+
+it("lists the table's joins and removes one", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  expect(el.shadowRoot!.querySelector("[data-joins-heading]")!.textContent!.trim()).toBe("Joins");
+  expect(
+    joinRows(el).map((row) => row.querySelector("[data-join-text]")!.textContent!.trim()),
+  ).toEqual(["with T2 · seats 6"]);
+  joinRows(el)[0]!.querySelector<HTMLElement>("[data-test=remove-join]")!.click();
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.draft.joins).toEqual([]);
+  await el.updateComplete;
+  expect(joinRows(el)).toEqual([]);
+});
+
+it("names a join's unnamed table Unnamed and lists several with commas", async () => {
+  let draft = patchTable(opened(), "m2", { label: " " });
+  draft = { ...draft, joins: [{ key: "j1", seats: 8, tableKeys: ["m2", "m1", "live:l9"] }] };
+  const el = await open({ draft });
+  expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
+    "with Unnamed, T9 · seats 8",
+  );
+});
+
+it("shows only the joins the selected table is in", async () => {
+  const el = await open({ tableKey: "live:l9" });
+  expect(joinRows(el)).toEqual([]);
+});
+
+it("Add join asks the page to open the dialog for this table", async () => {
+  const el = await open();
+  const asked: unknown[] = [];
+  el.addEventListener("floor-plan-add-join", (e) => asked.push((e as CustomEvent).detail));
+  const add = action(el, "add-join")!;
+  expect(add.textContent!.trim()).toBe("Add join");
+  add.click();
+  expect(asked).toEqual([{ tableKey: "m1" }]);
+});
+
+it("shows the joins in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await open();
+  expect(el.shadowRoot!.querySelector("[data-joins-heading]")!.textContent!.trim()).toBe("Uniones");
+  expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
+    "con T2 · 6 plazas",
+  );
+  expect(action(el, "add-join")!.textContent!.trim()).toBe("Añadir unión");
+});
+
+it("shows a join's table name as typed, even one that looks like a placeholder", async () => {
+  const draft = patchTable(opened(), "m2", { label: "$& {seats}" });
+  const el = await open({ draft });
+  expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
+    "with $& {seats} · seats 6",
+  );
 });

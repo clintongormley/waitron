@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtModal, WtSheet } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { draftFromPlan, patchTable } from "./floor-plan-draft.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -209,6 +209,29 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
     const panel = await selectTable(el, "m2");
     expect(panel.shadowRoot!.querySelector("[name=shape]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows a table with a join accessibly", async () => {
+    const joined: FloorPlan = { ...plan, joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }] };
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(joined)), theme);
+    const panel = await selectTable(el, "m1");
+    expect(panel.shadowRoot!.querySelectorAll("[data-join]")).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows Add join open, with a table chosen, accessibly", async () => {
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    const panel = await selectTable(el, "m1");
+    panel.shadowRoot!.querySelector<HTMLElement>("[data-test=add-join]")!.click();
+    const join = el.shadowRoot!.querySelector("floor-plan-add-join")!;
+    await join.updateComplete;
+    const dialog = join.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=add-join]")!;
+    await dialog.updateComplete;
+    expect(dialog.open).toBe(true);
+    await expectNoA11yViolations(host);
+    await chooseOptions(dialog.querySelector("[name=join-tables]")!, ["m2"]);
+    await join.updateComplete;
     await expectNoA11yViolations(host);
   });
 
