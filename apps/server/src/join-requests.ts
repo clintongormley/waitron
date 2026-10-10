@@ -38,9 +38,8 @@ export const PENDING_CAP = 10;
 
 const lapseCutoff = () => new Date(Date.now() - JOIN_TTL_MS).toISOString();
 
-/** Delete every lapsed request this node holds. Called at the head of every verb that reads or
- * counts them, so a lapsed row never occupies the cap, never blocks a number, and never appears in
- * the pending list. */
+/** Delete every lapsed request this node holds, so a lapsed row never occupies the cap, never
+ * blocks a number, and never appears in the pending list. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
   await tx.delete(joinRequests).where(and(ownedBy(cfg), lt(joinRequests.createdAt, lapseCutoff())));
 }

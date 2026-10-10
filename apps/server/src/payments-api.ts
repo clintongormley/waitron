@@ -152,6 +152,15 @@ async function requireKnownReader(tx: Transaction, readerId: string): Promise<vo
   }
 }
 
+/** Refuses an id naming no device, or a deleted one. */
+async function requireKnownDevice(tx: Transaction, deviceId: string): Promise<void> {
+  const [device] = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
+  if (device === undefined) throw new AppError("device.not_found", { deviceId });
+}
+
 async function requireDeviceProfile(tx: Transaction, profileId: string): Promise<void> {
   const [profile] = await tx
     .select({ id: deviceProfiles.id })
@@ -690,20 +699,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  const requireDevice = async (tx: Transaction, deviceId: string): Promise<void> => {
-    const [device] = await tx
-      .select({ id: devices.id })
-      .from(devices)
-      .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
-    if (device === undefined) throw new AppError("device.not_found", { deviceId });
-  };
-
   app.get("/management-api/payments/devices/:id/reader", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceId = requireUuidParam(c.req.param("id"), "DeviceId");
       const rows = await gated(sessionId, async (tx) => {
-        await requireDevice(tx, deviceId);
+        await requireKnownDevice(tx, deviceId);
         return tx
           .select({ readerId: deviceCardReaders.readerId })
           .from(deviceCardReaders)
@@ -725,8 +726,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // So an unknown device is `device.not_found`, not a foreign-key refusal (a 500).
-        await requireDevice(tx, deviceId);
+        await requireKnownDevice(tx, deviceId);
         if (readerId !== null) await requireKnownReader(tx, readerId);
         await selectDeviceEquipment(tx, {
           deviceId,

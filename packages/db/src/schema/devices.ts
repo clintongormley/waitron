@@ -43,7 +43,7 @@ export const devices = table(
     }),
     /* v8 ignore stop */
     label: label("label").notNull(),
-    // `hashSecret` of the device token, never the plaintext.
+    // `hashSecret` of the device token, never the plaintext; "" once the device is deleted.
     tokenHash: label("token_hash").notNull(),
     active: flag("active").notNull().default(true),
     deletedAt: tsString("deleted_at"),
