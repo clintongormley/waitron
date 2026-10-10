@@ -1,3 +1,5 @@
+import { deleteCourse } from "./course-delete.js";
+import { deleteStation } from "./station-delete.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -25,11 +27,9 @@ import type { TillConfig } from "./till-config.js";
 import {
   createCourse,
   createStation,
-  deactivateStation,
   listCourses,
   listStations,
   moveCourse,
-  removeCourse,
   setDefaultStation,
   setProductCourse,
   updateCourse,
@@ -83,7 +83,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 describe("kitchen-station config", () => {
-  it("creates/lists/renames/deactivates a station and flips the default atomically", async () => {
+  it("creates/lists stations and flips the default atomically", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
       createStation(tx, cfg, { name: "Cocina", isDefault: true }),
@@ -188,7 +188,7 @@ describe("kitchen-station config", () => {
         forgottenAfterMinutes: 15,
       },
     ]);
-    await asApp(cfg, (tx) => deactivateStation(tx, cfg, id));
+    await asApp(cfg, (tx) => deleteStation(tx, cfg, id));
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([]);
     await expect(
       asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true, displayOrder: 9 } as never)),
@@ -208,13 +208,13 @@ describe("kitchen-station config", () => {
     ).rejects.toMatchObject({ code: "station.name_taken", params: { name: "Cocina" } });
   });
 
-  it("updateStation and deactivateStation throw station.not_found for an unknown id", async () => {
+  it("updateStation and deleteStation throw station.not_found for an unknown id", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => updateStation(tx, cfg, missing, { name: "X" })),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
-    await expect(asApp(cfg, (tx) => deactivateStation(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => deleteStation(tx, cfg, missing))).rejects.toMatchObject({
       code: "station.not_found",
       params: { stationId: missing },
     });
@@ -319,7 +319,7 @@ describe("kitchen-station config", () => {
     ).toEqual([]);
   });
 
-  it("setDefaultStation throws station.not_found for an absent OR a deactivated station", async () => {
+  it("setDefaultStation throws station.not_found for an absent OR a deleted station", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();
     await expect(asApp(cfg, (tx) => setDefaultStation(tx, cfg, missing))).rejects.toMatchObject({
@@ -327,7 +327,7 @@ describe("kitchen-station config", () => {
       params: { stationId: missing },
     });
     const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Old" }));
-    await asApp(cfg, (tx) => deactivateStation(tx, cfg, id));
+    await asApp(cfg, (tx) => deleteStation(tx, cfg, id));
     await expect(asApp(cfg, (tx) => setDefaultStation(tx, cfg, id))).rejects.toMatchObject({
       code: "station.not_found",
       params: { stationId: id },
@@ -387,7 +387,7 @@ describe("kitchen-course config", () => {
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
     const productId = await seedProduct();
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, a));
-    await asApp(cfg, (tx) => removeCourse(tx, cfg, a));
+    await asApp(cfg, (tx) => deleteCourse(tx, cfg, a));
     expect((await asApp(cfg, (tx) => listCourses(tx, cfg))).some((c) => c.id === a)).toBe(false);
     expect(await productCourse(productId)).toBeNull();
     expect(
@@ -418,13 +418,13 @@ describe("kitchen-course config", () => {
     ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Entrantes" } });
   });
 
-  it("updateCourse and removeCourse throw course.not_found for an unknown id", async () => {
+  it("updateCourse and deleteCourse throw course.not_found for an unknown id", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => updateCourse(tx, cfg, missing, { name: "X" })),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
-    await expect(asApp(cfg, (tx) => removeCourse(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => deleteCourse(tx, cfg, missing))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
     });

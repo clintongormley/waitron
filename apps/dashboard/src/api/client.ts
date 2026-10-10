@@ -2879,7 +2879,6 @@ export class DashboardApi {
     patch: {
       name?: string;
       displayOrder?: number;
-      active?: boolean;
       showsRestOfOrder?: boolean;
       warmAfterMinutes?: number;
       overdueAfterMinutes?: number;
@@ -2889,8 +2888,18 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/stations/${id}`, "PATCH", patch);
   }
 
-  deactivateStation(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/stations/${id}`, "DELETE");
+  getStationDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/stations/${encodeURIComponent(id)}/delete-impact`,
+      "GET",
+    );
+  }
+
+  deleteStation(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/stations/${encodeURIComponent(id)}`,
+      "DELETE",
+    );
   }
 
   setDefaultStation(id: string): Promise<void> {
@@ -2912,7 +2921,21 @@ export class DashboardApi {
   }
 
   listCoursesWithDisabled(): Promise<Course[]> {
-    return this.#request<Course[]>("/management-api/courses?includeDisabled=true", "GET");
+    return this.#request<Course[]>("/management-api/courses", "GET");
+  }
+
+  getCourseDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/courses/${encodeURIComponent(id)}/delete-impact`,
+      "GET",
+    );
+  }
+
+  deleteCourse(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/courses/${encodeURIComponent(id)}`,
+      "DELETE",
+    );
   }
 
   createCourse(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
@@ -2926,8 +2949,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
   }
 
-  /** The server deletes the course when nothing names it, and disables it otherwise; with
-   *  `disable`, it only ever disables it. */
   removeCourse(id: string, { disable }: { disable: boolean }): Promise<void> {
     return this.#request<void>(
       `/management-api/courses/${id}${disable ? "?disable=true" : ""}`,

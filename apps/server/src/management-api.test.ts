@@ -1998,13 +1998,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect((await listStations()).find((station) => station.id === id)?.name).toBe(name);
     expect((await req("/stations", { method: "GET" })).status).toBe(401);
   });
-  it("explicitly lists retained disabled station metadata without changing the default active-only list", async () => {
+  it("ignores obsolete includeDisabled and hides deleted station metadata", async () => {
     const id = await createStation(unique("Retained metadata"));
     await req(`/stations/${id}`, { method: "DELETE" }, managerCookie);
     expect((await listStations()).some((station) => station.id === id)).toBe(false);
     const response = await req("/stations?includeDisabled=true", { method: "GET" }, managerCookie);
     expect(response.status).toBe(200);
-    expect(await response.json()).toContainEqual(expect.objectContaining({ id, active: false }));
+    expect(await response.json()).not.toContainEqual(expect.objectContaining({ id }));
   });
   it("saves the complete active station order atomically without changing default or disabled rows", async () => {
     await createStation(unique("First order"), { displayOrder: 8 });
@@ -2355,7 +2355,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(list.find((s) => s.id === second)!.isDefault).toBe(false);
   });
 
-  it("keeps a station open through default changes until it is deactivated", async () => {
+  it("keeps a station open through default changes until it is deleted", async () => {
     const cfg = { locationId: brandLocationId(venue.locationId) };
     const first = await createStation(unique("Swap default"), { isDefault: true });
     const second = await createStation(unique("Swap closed"));
@@ -2374,9 +2374,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
     ).toBe(204);
     expect(await state()).toMatchObject({ open: true, isDefault: false, active: true });
     expect((await req(`/stations/${second}`, { method: "DELETE" }, managerCookie)).status).toBe(
-      204,
+      200,
     );
-    expect(await state()).toMatchObject({ open: false, isDefault: false, active: false });
+    expect(await state()).toBeUndefined();
   });
 
   it.each(["existing", "new"] as const)(
@@ -2471,11 +2471,11 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
   });
 
-  it("PATCH edits name/displayOrder/active; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
+  it("PATCH edits name/displayOrder; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
     const id = await createStation(unique("Edit"));
     const patch = await req(
       `/stations/${id}`,
-      { method: "PATCH", body: JSON.stringify({ displayOrder: 7, active: false }) },
+      { method: "PATCH", body: JSON.stringify({ displayOrder: 7 }) },
       managerCookie,
     );
     expect(patch.status).toBe(204);
@@ -2484,7 +2484,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       .select({ displayOrder: kitchenStations.displayOrder, active: kitchenStations.active })
       .from(kitchenStations)
       .where(eq(kitchenStations.id, id));
-    expect(row).toMatchObject({ displayOrder: 7, active: false });
+    expect(row).toMatchObject({ displayOrder: 7, active: true });
 
     const taken = unique("Taken");
     await createStation(taken);
@@ -2660,11 +2660,11 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("DELETE deactivates a station (drops off the active list); unknown/malformed :id → 404", async () => {
+  it("DELETE permanently deletes a station (drops off the active list); unknown/malformed :id → 404", async () => {
     const id = await createStation(unique("Del"));
     expect((await listStations()).find((s) => s.id === id)).toBeDefined();
     const del = await req(`/stations/${id}`, { method: "DELETE" }, managerCookie);
-    expect(del.status).toBe(204);
+    expect(del.status).toBe(200);
     expect((await listStations()).find((s) => s.id === id)).toBeUndefined();
 
     const unknown = await req(`/stations/${randomUUID()}`, { method: "DELETE" }, managerCookie);
@@ -2874,21 +2874,53 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(await printersOf(id)).toEqual([]);
     });
 
-    it("a PATCH that switches a station off or on saves the printers it carries", async () => {
+    it("a PATCH containing active refuses both values without changing printer memberships", async () => {
       const id = await createStation(unique("Switched"));
       const [a, b] = [await addPrinter(), await addPrinter()];
-      expect((await patch(id, { active: false, printerIds: [a] })).status).toBe(204);
-      expect(await printersOf(id)).toEqual([a]);
-      expect((await patch(id, { active: true, printerIds: [b] })).status).toBe(204);
-      expect(await printersOf(id)).toEqual([b]);
+      expect((await patch(id, { printerIds: [a] })).status).toBe(204);
+      for (const active of [false, true]) {
+        const refused = await patch(id, { active, printerIds: [b] });
+        expect(refused.status).toBe(400);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "active" } },
+        });
+        expect(await printersOf(id)).toEqual([a]);
+      }
     });
 
-    it("a switched-off station's name can still be edited when no printers are sent", async () => {
-      const id = await createStation(unique("Retired"));
-      expect((await req(`/stations/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-      const renamed = unique("Retired renamed");
-      expect((await patch(id, { name: renamed })).status).toBe(204);
-      expect(await stationName(id)).toBe(renamed);
+    it("a deleted station cannot be edited when no printers are sent", async () => {
+      const original = unique("Retired");
+      const id = await createStation(original);
+      expect((await req(`/stations/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(200);
+      const refused = await patch(id, { name: unique("Retired renamed") });
+      expect(refused.status).toBe(404);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "station.not_found", params: { stationId: id } },
+      });
+      expect(await stationName(id)).toBe(original);
+    });
+
+    it("station deletion removes printers with venue.configure alone", async () => {
+      const id = await createStation(unique("Delete printers"));
+      const a = await addPrinter();
+      expect((await patch(id, { printerIds: [a] })).status).toBe(204);
+      printerGate.deny = true;
+      try {
+        const answer = await req(`/stations/${id}`, { method: "DELETE" }, managerCookie);
+        expect(answer.status).toBe(200);
+        const [printer] = await suite.db.select().from(printers).where(eq(printers.id, a));
+        expect(await answer.json()).toEqual({
+          target: { id, name: await stationName(id) },
+          refusals: [],
+          ends: [],
+          removes: [
+            { key: "station_printers", count: 1, targets: [{ id: a, name: printer!.name }] },
+          ],
+        });
+        expect(await printersOf(id)).toEqual([]);
+      } finally {
+        printerGate.deny = false;
+      }
     });
 
     it("refuses a malformed printerIds before any write", async () => {
@@ -3018,11 +3050,11 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     });
   });
 
-  it("PATCH edits name/displayOrder/active; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
+  it("PATCH edits name/displayOrder; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
     const id = await createCourse(unique("Edit"));
     const patch = await req(
       `/courses/${id}`,
-      { method: "PATCH", body: JSON.stringify({ displayOrder: 9, active: false }) },
+      { method: "PATCH", body: JSON.stringify({ displayOrder: 9 }) },
       managerCookie,
     );
     expect(patch.status).toBe(204);
@@ -3031,7 +3063,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       .select({ displayOrder: kitchenCourses.displayOrder, active: kitchenCourses.active })
       .from(kitchenCourses)
       .where(eq(kitchenCourses.id, id));
-    expect(row).toMatchObject({ displayOrder: 9, active: false });
+    expect(row).toMatchObject({ displayOrder: 9, active: true });
 
     const taken = unique("Taken");
     await createCourse(taken);
@@ -3101,7 +3133,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const id = await createCourse(unique("Del"));
     expect((await listCourses()).find((c) => c.id === id)).toBeDefined();
     const del = await req(`/courses/${id}`, { method: "DELETE" }, managerCookie);
-    expect(del.status).toBe(204);
+    expect(del.status).toBe(200);
     expect((await listCourses()).find((c) => c.id === id)).toBeUndefined();
     expect(await suite.db.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))).toEqual(
       [],
@@ -3114,7 +3146,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(malformed.status).toBe(404);
   });
 
-  it("DELETE disables a course a product names; only ?includeDisabled=true lists it, and PATCH enables it", async () => {
+  it("DELETE clears product defaults, hides the retained course and refuses repeats or reactivation", async () => {
     const used = await createCourse(unique("Used"));
     const unused = await createCourse(unique("Unused"));
     const productId = await withTransaction(suite.db, async (tx) => {
@@ -3143,29 +3175,51 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       id: string;
       inUse: boolean;
     }[];
-    expect(listed.find((c) => c.id === used)).toMatchObject({ active: true, inUse: true });
-    expect(listed.find((c) => c.id === unused)).toMatchObject({ active: true, inUse: false });
-    expect(listed.every((c) => typeof c.inUse === "boolean")).toBe(true);
+    expect(listed.find((c) => c.id === used)).toMatchObject({ active: true });
+    expect(listed.find((c) => c.id === unused)).toMatchObject({ active: true });
+    expect(listed.every((c) => !("inUse" in c))).toBe(true);
 
-    expect((await req(`/courses/${used}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    const deleted = await req(`/courses/${used}`, { method: "DELETE" }, managerCookie);
+    expect(deleted.status).toBe(200);
+    const [recorded] = await suite.db
+      .select()
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, used));
+    expect(await deleted.json()).toEqual({
+      target: { id: used, name: recorded!.name },
+      refusals: [],
+      ends: [],
+      removes: [{ key: "course_products", count: 1, targets: [] }],
+    });
+    expect(recorded!.active).toBe(false);
+    expect(
+      (await suite.db.select().from(products).where(eq(products.id, productId)))[0]!.courseId,
+    ).toBeNull();
     expect((await listCourses()).find((c) => c.id === used)).toBeUndefined();
     const all = (await (
       await req("/courses?includeDisabled=true", { method: "GET" }, managerCookie)
     ).json()) as { id: string; active: boolean; inUse: boolean }[];
-    expect(all.find((c) => c.id === used)).toMatchObject({ active: false, inUse: true });
-    expect(all.find((c) => c.id === unused)).toMatchObject({ active: true, inUse: false });
-    expect((await req(`/courses/${used}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    expect(all.find((c) => c.id === used)).toBeUndefined();
+    expect(all.find((c) => c.id === unused)).toMatchObject({ active: true });
+    const repeat = await req(`/courses/${used}`, { method: "DELETE" }, managerCookie);
+    expect(repeat.status).toBe(404);
+    expect(await repeat.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: used } },
+    });
 
     const enable = await req(
       `/courses/${used}`,
       { method: "PATCH", body: JSON.stringify({ active: true }) },
       managerCookie,
     );
-    expect(enable.status).toBe(204);
-    expect((await listCourses()).find((c) => c.id === used)).toMatchObject({ active: true });
+    expect(enable.status).toBe(400);
+    expect(await enable.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "active" } },
+    });
+    expect((await listCourses()).find((c) => c.id === used)).toBeUndefined();
   });
 
-  it("DELETE ?disable=true keeps a course nothing refers to, disabled; a malformed flag → 400, changing nothing", async () => {
+  it("DELETE rejects legacy disable query presence, changing nothing", async () => {
     const id = await createCourse(unique("Kept"));
     const row = () =>
       suite.db
@@ -3179,8 +3233,11 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     });
     expect(await row()).toEqual([{ active: true }]);
     const res = await req(`/courses/${id}?disable=true`, { method: "DELETE" }, managerCookie);
-    expect(res.status).toBe(204);
-    expect(await row()).toEqual([{ active: false }]);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "disable" } },
+    });
+    expect(await row()).toEqual([{ active: true }]);
   });
 
   it("PATCH refuses another venue's course with 404 course.not_found, changing nothing", async () => {
@@ -3201,7 +3258,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     });
     const res = await req(
       `/courses/${foreign}`,
-      { method: "PATCH", body: JSON.stringify({ active: true, name: unique("Taken") }) },
+      { method: "PATCH", body: JSON.stringify({ name: unique("Taken") }) },
       managerCookie,
     );
     expect(res.status).toBe(404);
@@ -3231,7 +3288,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       await req("/courses?includeDisabled=true", { method: "GET" }, managerCookie)
     ).json()) as { active: boolean; inUse: boolean }[];
     expect(moved).toEqual(withDisabled.filter((c) => c.active));
-    expect(moved.every((c) => typeof (c as { inUse?: unknown }).inUse === "boolean")).toBe(true);
+    expect(moved.every((c) => !("inUse" in c))).toBe(true);
   });
 
   it("PUT /courses/:id/position refuses a `to` that is not a non-negative integer, or a non-object body, leaving the order as it was", async () => {
@@ -3257,11 +3314,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
 
   it("PUT /courses/:id/position on an unknown, retired or malformed :id → 404 course.not_found", async () => {
     const retired = await createCourse(unique("Retired"));
-    await req(
-      `/courses/${retired}`,
-      { method: "PATCH", body: JSON.stringify({ active: false }) },
-      managerCookie,
-    );
+    await req(`/courses/${retired}`, { method: "DELETE" }, managerCookie);
     for (const id of [randomUUID(), retired, "not-a-uuid"]) {
       const res = await req(
         `/courses/${id}/position`,

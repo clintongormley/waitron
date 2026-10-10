@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { devices, deviceProfiles, ticketItemMoves, ticketItems } from "@waitron/db";
+import {
+  kitchenStations,
+  devices,
+  deviceProfiles,
+  ticketItemMoves,
+  ticketItems,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { DeviceKitchenScreen } from "@waitron/module";
@@ -13,7 +19,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { loginWithPin } from "@waitron/identity";
 import { createPairingMode } from "./pairing-mode.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { createStation, deactivateStation } from "./kitchen.js";
+import { createStation } from "./kitchen.js";
 import { moveDishesToStation } from "./station-move.js";
 import {
   inTx,
@@ -38,7 +44,7 @@ useVenueDb({
       bar = (await createStation(tx, venue.cfg, { name: "Bar", isDefault: true })).id;
       grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
       off = (await createStation(tx, venue.cfg, { name: "Fryer" })).id;
-      await deactivateStation(tx, venue.cfg, off);
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off));
     });
     app = new Hono();
     mountDeviceApi(
@@ -268,15 +274,15 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     expect(await movesOf(other.item.workingOrderLineId)).toEqual([]);
   });
 
-  it("answers a started dish and a switched-off destination as the till does", async () => {
+  it("answers a started dish and a deleted destination as the till does", async () => {
     const screen = await display(stationScreen(bar));
     const { tabId, item } = await paella();
     const inactive = await move(screen.cookie, tabId, {
       lineIds: [item.workingOrderLineId],
       stationId: off,
     });
-    expect(inactive.status).toBe(409);
-    expect(inactive.json).toMatchObject({ code: "route.station_inactive" });
+    expect(inactive.status).toBe(404);
+    expect(inactive.json).toMatchObject({ code: "station.not_found", params: { stationId: off } });
     await inTx(venue, (tx) =>
       tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, item.id)),
     );

@@ -33,7 +33,7 @@ import {
   writeEditSentLines,
   writePrintHeldWork,
 } from "@waitron/venue-service";
-import { createCourse, createStation, deactivateStation, setProductCourse } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
@@ -2244,7 +2244,10 @@ describe("moveDishesToStation", () => {
     const { tabId, item } = await burger();
     const inactive = await inTx(venue, async (tx) => {
       const station = await createStation(tx, venue.cfg, { name: `Off ${randomUUID()}` });
-      await deactivateStation(tx, venue.cfg, station.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, station.id));
       return station.id;
     });
     const before = await snapshot(tabId, item.id);

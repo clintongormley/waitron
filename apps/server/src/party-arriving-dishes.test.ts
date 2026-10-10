@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,7 +18,7 @@ import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { writePrintHeldWork } from "@waitron/venue-service";
 import { splitBill } from "./bill-actions.js";
-import { createCourse, removeCourse } from "./kitchen.js";
+import { createCourse } from "./kitchen.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
 import {
   bumpGroupReady,
@@ -490,7 +491,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       );
     } finally {
       // The venue is shared by the whole file.
-      await inTx(v, (tx) => removeCourse(tx, v.cfg, retired));
+      await inTx(v, (tx) => deleteCourse(tx, v.cfg, retired));
     }
     const mesa = await v.table("Sin curso 6");
     const luis = await seat(v, mesa);
@@ -537,8 +538,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
     } finally {
       // The venue is shared by the whole file.
       await inTx(v, async (tx) => {
-        await removeCourse(tx, v.cfg, terceros);
-        await removeCourse(tx, v.cfg, cuartos);
+        await deleteCourse(tx, v.cfg, terceros);
+        await deleteCourse(tx, v.cfg, cuartos);
       });
     }
     const mesa = await v.table("Sin curso 8");

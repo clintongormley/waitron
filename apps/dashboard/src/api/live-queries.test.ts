@@ -1,3 +1,4 @@
+import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { DashboardApi } from "./client.js";
@@ -359,9 +360,9 @@ it("refreshes the bucket copy's settings every ten seconds, and depends on `back
   expect(query.refreshMs).toBe(10_000);
 });
 
-it("reads the course list again when a course or a product changes, never on an order's lines", () => {
+it("reads the active course list on course changes alone", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "listCoursesWithDisabled", []);
-  expect(query.dependencies).toEqual([{ type: "kitchen_courses" }, { type: "products" }]);
+  expect(query.dependencies).toEqual([{ type: "kitchen_courses" }]);
 });
 
 it("reads the folders' Made at again when a routing cell's period lines change", () => {
@@ -768,6 +769,133 @@ it("venue-default refresh reads only its settings route and becomes passive", as
       "/management-api/receipt-settings",
     ]);
     expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+  } finally {
+    observed.unsubscribe();
+  }
+});
+
+it.each(["Course", "Station"] as const)(
+  "kitchen delete %s reads impact passively and deletes actively without a body",
+  async (kind) => {
+    const impact = { target: { id: "a/b", name: "Kitchen" }, refusals: [], ends: [], removes: [] };
+    const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+      async () => new Response(JSON.stringify(impact), { status: 200 }),
+    );
+    const active = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, active);
+    const query = dashboardQuery(
+      api,
+      kind === "Course" ? "getCourseDeleteImpact" : "getStationDeleteImpact",
+      ["a/b"],
+    );
+    expect(await query.read()).toEqual(impact);
+    expect(await query.read()).toEqual(impact);
+    const path = `/management-api/${kind === "Course" ? "courses" : "stations"}/a%2Fb`;
+    expect(fetchImpl.mock.calls[1]![0]).toBe(`${path}/delete-impact`);
+    expect(fetchImpl.mock.calls[1]![1].method).toBe("GET");
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+    expect(await (kind === "Course" ? api.deleteCourse("a/b") : api.deleteStation("a/b"))).toEqual(
+      impact,
+    );
+    expect(fetchImpl.mock.calls[2]![0]).toBe(path);
+    expect(fetchImpl.mock.calls[2]![1].method).toBe("DELETE");
+    expect(fetchImpl.mock.calls[2]![1].body).toBeUndefined();
+    expect(new Headers(fetchImpl.mock.calls[2]![1].headers).has("x-waitron-live")).toBe(false);
+    expect(active).toHaveBeenCalledTimes(2);
+    await (kind === "Course"
+      ? api.background.deleteCourse("a/b")
+      : api.background.deleteStation("a/b"));
+    expect(new Headers(fetchImpl.mock.calls[3]![1].headers).has("x-waitron-live")).toBe(false);
+    expect(fetchImpl.mock.calls[3]![1].body).toBeUndefined();
+  },
+);
+
+const stationDeleteReads = [
+  "kitchen_stations",
+  "ticket_items",
+  "working_order_lines",
+  "working_orders",
+  "dining_tables",
+  "party_tables",
+  "parties",
+  "order_drafts",
+  "order_draft_lines",
+  "station_printers",
+  "printers",
+  "device_made_here_stations",
+  "devices",
+  "device_profiles",
+  "device_kitchen_screens",
+  "device_kitchen_screen_stations",
+  "device_kitchen_screen_zones",
+  "device_kitchen_screen_removals",
+  "device_profile_kitchen_screens",
+  "device_profile_kitchen_screen_stations",
+  "device_profile_kitchen_screen_zones",
+  "routing_cells",
+  "routing_cell_periods",
+  "station_day_states",
+  "kitchen_station_timing",
+  "floor_zones",
+] as const;
+it("kitchen delete impact subscribes to every refusal, setting and naming source", () => {
+  const api = new DashboardApi("", vi.fn());
+  expect(dashboardQuery(api, "getStationDeleteImpact", ["station"]).dependencies).toEqual(
+    stationDeleteReads.map((type) => ({ type })),
+  );
+  expect(dashboardQuery(api, "getCourseDeleteImpact", ["course"]).dependencies).toEqual([
+    { type: "kitchen_courses" },
+    { type: "products" },
+  ]);
+});
+it("kitchen delete receives an arriving blocker and removed binding through passive rereads", async () => {
+  const before = {
+    target: { id: "grill", name: "Grill" },
+    refusals: [],
+    ends: [],
+    removes: [{ key: "station_made_here", count: 1, targets: [{ id: "till", name: "Till" }] }],
+  };
+  const blocked = {
+    ...before,
+    refusals: [
+      {
+        code: "station.work_in_progress",
+        params: { stationId: "grill", count: 1 },
+        targets: [{ id: "order", name: "Table 8" }],
+      },
+    ],
+  };
+  const cleared = { ...blocked, removes: [] };
+  let model: DeleteImpact = before;
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify(model), { status: 200 }),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const observed = api.liveData.observe(
+    dashboardQuery(api, "getStationDeleteImpact", ["grill"]),
+    () => {},
+  );
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.value).toEqual(before));
+    model = blocked;
+    api.liveData.invalidate([{ type: "ticket_items", id: "new-ticket" }]);
+    await vi.waitFor(() => expect(observed.snapshot.value).toEqual(blocked));
+    model = cleared;
+    api.liveData.invalidate([{ type: "device_made_here_stations", id: "removed-binding" }]);
+    await vi.waitFor(() => expect(observed.snapshot.value).toEqual(cleared));
+    expect(fetchImpl.mock.calls).toHaveLength(3);
+    expect(
+      fetchImpl.mock.calls
+        .slice(1)
+        .every(
+          ([path, init]) =>
+            path === "/management-api/stations/grill/delete-impact" &&
+            new Headers(init.headers).get("x-waitron-live") === "1",
+        ),
+    ).toBe(true);
     expect(active).toHaveBeenCalledOnce();
   } finally {
     observed.unsubscribe();

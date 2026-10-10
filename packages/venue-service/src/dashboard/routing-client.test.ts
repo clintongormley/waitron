@@ -1,3 +1,4 @@
+import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
@@ -25,7 +26,7 @@ it("loads the routing and station context, including each station printer assign
       defaultStationId: null,
       stations: [],
     },
-    "/management-api/stations?includeDisabled=true": [{ id: "bar", name: "Bar" }],
+    "/management-api/stations": [{ id: "bar", name: "Bar" }],
     "/management-api/categories": [],
     "/management-api/zones": [],
     "/management-api/products": [],
@@ -405,4 +406,68 @@ it.each([
   const api = new PrepStationsApi(request as DashboardRequest);
   await api.deactivateStation("grill", choice);
   expect(request.mock.calls).toEqual([["/management-api/stations/grill", "DELETE", choice]]);
+});
+
+it("delete impact reads passively in the background and delete sends no body or passive option", async () => {
+  const impact = { target: { id: "grill", name: "Grill" }, refusals: [], ends: [], removes: [] };
+  const request = vi.fn(async () => impact);
+  const api = new PrepStationsApi(request as DashboardRequest).background;
+  expect(await api.getStationDeleteImpact("a/b")).toEqual(impact);
+  expect(await api.deleteStation("a/b")).toEqual(impact);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/a%2Fb/delete-impact", "GET", undefined, { passive: true }],
+    ["/management-api/stations/a%2Fb", "DELETE"],
+  ]);
+});
+
+it("delete impact refreshes a new blocker and a removed binding through the module's subscription", async () => {
+  const { LiveData } = await import("@waitron/dashboard-kit");
+  const { QUERY_DEPENDENCIES } = await import("./live-queries.js");
+  const liveData = new LiveData();
+  let model: DeleteImpact = {
+    target: { id: "grill", name: "Grill" },
+    refusals: [],
+    ends: [],
+    removes: [{ key: "station_made_here", count: 1, targets: [{ id: "till", name: "Till" }] }],
+  };
+  const request = vi.fn(async () => model);
+  const api = new PrepStationsApi(request as DashboardRequest, liveData).background;
+  const observed = liveData.observe(
+    {
+      key: "station-delete-impact:grill",
+      dependencies: QUERY_DEPENDENCIES["station-delete-impact"].map((type) => ({ type })),
+      read: () => api.getStationDeleteImpact("grill"),
+    },
+    () => {},
+  );
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.value).toEqual(model));
+    model = {
+      ...model,
+      refusals: [
+        {
+          code: "station.work_in_progress",
+          params: { stationId: "grill", count: 1 },
+          targets: [{ id: "order", name: "Table 8" }],
+        },
+      ],
+    };
+    liveData.invalidate([{ type: "ticket_items", id: "arriving" }]);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(observed.snapshot.value).toEqual(model);
+    model = { ...model, removes: [] };
+    liveData.invalidate([{ type: "device_made_here_stations", id: "removed" }]);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(observed.snapshot.value).toEqual(model);
+    expect(request.mock.calls).toEqual(
+      Array.from({ length: 3 }, () => [
+        "/management-api/stations/grill/delete-impact",
+        "GET",
+        undefined,
+        { passive: true },
+      ]),
+    );
+  } finally {
+    observed.unsubscribe();
+  }
 });

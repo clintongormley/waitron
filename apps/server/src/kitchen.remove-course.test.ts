@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { eq, getTableName, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -18,7 +19,6 @@ import {
   coursesInUse,
   createCourse,
   listCourses,
-  removeCourse,
   setProductCourse,
   updateCourse,
 } from "./kitchen.js";
@@ -50,7 +50,7 @@ describe("removing a course", () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set());
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toEqual([]);
   });
 
@@ -59,7 +59,7 @@ describe("removing a course", () => {
     const id = await course(v);
     await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set([id]));
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
     expect(
       await inTx(v, (tx) =>
@@ -69,7 +69,7 @@ describe("removing a course", () => {
           .where(eq(products.id, v.productId("Flan"))),
       ),
     ).toEqual([{ courseId: null }]);
-    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, id))).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => deleteCourse(tx, v.cfg, id))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: id },
     });
@@ -91,7 +91,7 @@ describe("removing a course", () => {
           .where(eq(workingOrderLines.workingOrderId, tabId)),
       ),
     ).toEqual([{ courseId: id }]);
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
@@ -113,7 +113,7 @@ describe("removing a course", () => {
           .where(eq(ticketItems.workingOrderId, tabId)),
       ),
     ).toEqual([{ courseId: id }]);
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
@@ -148,17 +148,19 @@ describe("removing a course", () => {
           .where(eq(orderDraftLines.draftId, draft.id)),
       ),
     ).toEqual([{ courseId: id }]);
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("rejects the temporary bridge's disable request without changing an unused course", async () => {
+  it("rejects active edits without changing an unused course", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set());
-    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, id, true))).rejects.toMatchObject({
+    await expect(
+      inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active: false } as never)),
+    ).rejects.toMatchObject({
       code: "management.request_invalid",
-      params: { field: "disable" },
+      params: { field: "active" },
     });
     expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: true }]);
   });
@@ -206,11 +208,11 @@ describe("removing a course", () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
     await inTx(v, (tx) =>
       tx.update(products).set({ courseId: null }).where(eq(products.courseId, id)),
     );
-    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, id))).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => deleteCourse(tx, v.cfg, id))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: id },
     });
@@ -221,7 +223,7 @@ describe("removing a course", () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     const missing = randomUUID();
-    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, missing))).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => deleteCourse(tx, v.cfg, missing))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
     });
@@ -233,7 +235,7 @@ describe("removing a course", () => {
       return location!.id;
     });
     const foreignCfg = { ...v.cfg, locationId: otherLocation as typeof v.cfg.locationId };
-    await expect(inTx(v, (tx) => removeCourse(tx, foreignCfg, id))).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => deleteCourse(tx, foreignCfg, id))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: id },
     });
@@ -247,7 +249,7 @@ describe("removing a course", () => {
     await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), used));
     expect(await inTx(v, (tx) => coursesInUse(tx, [used, free]))).toEqual(new Set([used]));
     expect(await inTx(v, (tx) => coursesInUse(tx, []))).toEqual(new Set());
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, used));
+    await inTx(v, (tx) => deleteCourse(tx, v.cfg, used));
     expect((await inTx(v, (tx) => listCourses(tx, v.cfg))).map((c) => c.id)).toEqual([free]);
     expect(
       (

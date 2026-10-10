@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -10,7 +10,6 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell, stationDayStates } from "@waitron/venue-service";
@@ -76,13 +75,20 @@ beforeEach(async () => {
   expect(login.status).toBe(200);
   cookie = login.headers.get("set-cookie")!.split(";")[0]!;
 });
-function request(
+async function request(
   method: string,
   suffix = "",
   body?: unknown,
   session: string | undefined = cookie,
 ) {
-  return app.request(`/management-api/stations/${grill}${suffix}`, {
+  const guarded =
+    method === "DELETE" ||
+    (method === "PATCH" &&
+      typeof body === "object" &&
+      body !== null &&
+      Object.hasOwn(body, "active"));
+  const before = guarded ? await snapshot() : undefined;
+  const answer = await app.request(`/management-api/stations/${grill}${suffix}`, {
     method,
     headers: {
       "content-type": "application/json",
@@ -90,6 +96,8 @@ function request(
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+  if (guarded && answer.status >= 400) expect(await snapshot()).toEqual(before);
+  return answer;
 }
 async function dish(station = grill) {
   await inTx(v, (tx) =>
@@ -100,41 +108,87 @@ async function dish(station = grill) {
       { kind: "station", stationId: station },
     ),
   );
-  const group = await seat(v, await v.table(`Dish ${randomUUID()}`));
+  const tableName = `Dish ${randomUUID()}`;
+  const group = await seat(v, await v.table(tableName));
   await orderForParty(v, group.partyId, ["Burger"], group.tabId);
   const [item] = await suite.db
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, group.tabId));
   expect(item!.stationId).toBe(station);
-  return item!;
+  return { ...item!, tableName };
+}
+async function snapshot() {
+  return inTx(v, async (tx) => {
+    const result: Record<string, unknown> = {};
+    for (const name of [
+      "kitchen_stations",
+      "kitchen_station_timing",
+      "station_printers",
+      "device_made_here_stations",
+      "routing_cells",
+      "routing_cell_periods",
+      "station_day_states",
+      "device_kitchen_screens",
+      "device_kitchen_screen_stations",
+      "device_kitchen_screen_zones",
+      "device_kitchen_screen_removals",
+      "device_profile_kitchen_screens",
+      "device_profile_kitchen_screen_stations",
+      "device_profile_kitchen_screen_zones",
+      "working_orders",
+      "working_order_lines",
+      "ticket_items",
+      "ticket_item_moves",
+      "order_drafts",
+      "order_draft_lines",
+      "order_draft_events",
+      "print_jobs",
+      "kitchen_print_jobs",
+      "kitchen_print_job_lines",
+      "kitchen_notices",
+    ]) {
+      result[name] = (
+        await tx.execute(sql`select * from ${sql.identifier(name)} order by rowid`)
+      ).rows;
+    }
+    return result;
+  });
 }
 async function active() {
   return (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, grill)))[0]!
     .active;
 }
 it.each(["queued", "preparing", "ready", "held"] as const)(
-  "Disable preflight counts unfinished %s work",
+  "Delete impact distinguishes preparation from ready %s work",
   async (state) => {
     const item = await dish();
     await suite.db
       .update(ticketItems)
       .set(state === "held" ? { firedAt: null } : { state })
       .where(eq(ticketItems.id, item.id));
-    const answer = await request("GET", "/closing");
+    const answer = await request("GET", "/delete-impact");
     expect(answer.status).toBe(200);
     expect(await answer.json()).toEqual({
-      openDishCount: 1,
-      destinations: [
-        { id: bar, name: "Bar", isDefault: true },
-        { id: pastry, name: "Pastry", isDefault: false },
-      ],
+      target: { id: grill, name: "Grill" },
+      refusals:
+        state === "ready"
+          ? []
+          : [
+              {
+                code: "station.work_in_progress",
+                params: { stationId: grill, count: 1 },
+                targets: [{ id: item.workingOrderId, name: item.tableName }],
+              },
+            ],
+      ends: [],
+      removes: [{ key: "station_routing_cells", count: 1, targets: [] }],
     });
     expect(await active()).toBe(true);
   },
 );
 it.each(["away", "served", "collected", "abandoned", "made_here", "another_station"] as const)(
-  "Disable preflight excludes %s work",
+  "Delete impact excludes %s work",
   async (kind) => {
     const item = await dish(kind === "another_station" ? pastry : grill);
     const at = new Date().toISOString();
@@ -152,20 +206,31 @@ it.each(["away", "served", "collected", "abandoned", "made_here", "another_stati
         .update(workingOrders)
         .set(kind === "collected" ? { collectedAt: at } : { status: "abandoned" })
         .where(eq(workingOrders.id, item.workingOrderId));
-    const answer = await request("GET", "/closing");
+    const answer = await request("GET", "/delete-impact");
     expect(answer.status).toBe(200);
-    expect(await answer.json()).toMatchObject({ openDishCount: 0 });
+    expect(await answer.json()).toEqual({
+      target: { id: grill, name: "Grill" },
+      refusals: [],
+      ends: [],
+      removes:
+        kind === "another_station" ? [] : [{ key: "station_routing_cells", count: 1, targets: [] }],
+    });
   },
 );
-it("Disable refuses an unread arriving dish without a disposition", async () => {
-  const preflight = await request("GET", "/closing");
+it("Delete refuses an unread arriving dish without changing it", async () => {
+  const preflight = await request("GET", "/delete-impact");
   expect(preflight.status).toBe(200);
-  expect(await preflight.json()).toMatchObject({ openDishCount: 0 });
+  expect(await preflight.json()).toEqual({
+    target: { id: grill, name: "Grill" },
+    refusals: [],
+    ends: [],
+    removes: [],
+  });
   const item = await dish();
   const answer = await request("DELETE");
-  expect(answer.status).toBe(400);
+  expect(answer.status).toBe(409);
   expect(await answer.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "openDishes" } },
+    error: { code: "station.work_in_progress", params: { stationId: grill, count: 1 } },
   });
   expect(await active()).toBe(true);
   expect(
@@ -173,62 +238,56 @@ it("Disable refuses an unread arriving dish without a disposition", async () => 
   ).toBe(grill);
 });
 it.each([null, [], "", true, "discard"])(
-  "Disable rejects invalid disposition %j",
+  "Delete rejects legacy disposition %j",
   async (openDishes) => {
     const answer = await request("DELETE", "", { openDishes });
     expect(answer.status).toBe(400);
     expect(await answer.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "openDishes" } },
+      error: { code: "management.request_invalid", params: { field: "body" } },
     });
     expect(await active()).toBe(true);
   },
 );
 it.each(["queued", "held"] as const)(
-  "Disable sends %s work to the selected station without closing for today",
+  "Delete rejects Send for %s work without moving or closing it",
   async (state) => {
     const item = await dish();
     if (state === "held")
       await suite.db.update(ticketItems).set({ firedAt: null }).where(eq(ticketItems.id, item.id));
     const answer = await request("DELETE", "", { openDishes: "send", sendsToStationId: pastry });
-    expect(answer.status).toBe(204);
-    expect(await active()).toBe(false);
+    expect(answer.status).toBe(400);
+    expect(await answer.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(await active()).toBe(true);
     expect(
       (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
     ).toMatchObject({
-      stationId: pastry,
+      stationId: grill,
       state: "queued",
       firedAt: state === "held" ? null : item.firedAt,
     });
     expect(await suite.db.select().from(stationDayStates)).toEqual([]);
-    const [owner] = await suite.db
-      .select()
-      .from(persons)
-      .where(eq(persons.email, "owner@example.test"));
-    expect(await suite.db.select().from(ticketItemMoves)).toEqual([
-      expect.objectContaining({
-        workingOrderLineId: item.workingOrderLineId,
-        fromStationId: grill,
-        toStationId: pastry,
-        movedByDeviceId: null,
-        movedByPersonId: owner!.id,
-      }),
-    ]);
+    expect(await suite.db.select().from(ticketItemMoves)).toEqual([]);
   },
 );
 it.each(["queued", "preparing", "ready"] as const)(
-  "Disable leaves %s work at the station to finish",
+  "Delete rejects Leave for %s work without changing food",
   async (state) => {
     const item = await dish();
     await suite.db.update(ticketItems).set({ state }).where(eq(ticketItems.id, item.id));
     const answer = await request("DELETE", "", { openDishes: "leave" });
-    expect(answer.status).toBe(204);
-    expect(await active()).toBe(false);
+    expect(answer.status).toBe(400);
+    expect(await answer.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(await active()).toBe(true);
     expect(
       (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
     ).toMatchObject({ stationId: grill, state, firedAt: item.firedAt });
   },
 );
-it("Disable refuses a closed destination and leaves station and work unchanged", async () => {
+it("Delete rejects legacy Send to a deleted destination and leaves work unchanged", async () => {
   const item = await dish();
   await suite.db
     .update(kitchenStations)
@@ -237,31 +296,38 @@ it("Disable refuses a closed destination and leaves station and work unchanged",
   const answer = await request("DELETE", "", { openDishes: "send", sendsToStationId: pastry });
   expect(answer.status).toBe(400);
   expect(await answer.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "sendsToStationId" } },
+    error: { code: "management.request_invalid", params: { field: "body" } },
   });
   expect(await active()).toBe(true);
   expect(
     (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0]!.stationId,
   ).toBe(grill);
 });
-it("Disable with no work retains the bodyless confirmation", async () => {
-  expect((await request("DELETE")).status).toBe(204);
+it("Delete with no work returns the full impact", async () => {
+  const answer = await request("DELETE");
+  expect(answer.status).toBe(200);
+  expect(await answer.json()).toEqual({
+    target: { id: grill, name: "Grill" },
+    refusals: [],
+    ends: [],
+    removes: [],
+  });
   expect(await active()).toBe(false);
 });
-it.each(["GET", "DELETE"])("Disable %s refuses an absent session", async (method) => {
-  const answer = await request(method, method === "GET" ? "/closing" : "", undefined, "");
+it.each(["GET", "DELETE"])("Delete %s refuses an absent session", async (method) => {
+  const answer = await request(method, method === "GET" ? "/delete-impact" : "", undefined, "");
   expect(answer.status).toBe(401);
   expect(await answer.json()).toMatchObject({ error: { code: "management_session.required" } });
   expect(await active()).toBe(true);
 });
 
 it.each(["staff", "supervisor"] as const)(
-  "Disable preflight and write refuse %s without configuration rights",
+  "Delete impact and write refuse %s without configuration rights",
   async (role) => {
     const { persons } = await import("@waitron/identity");
     await suite.db.update(persons).set({ role }).where(eq(persons.email, "owner@example.test"));
     for (const [method, suffix] of [
-      ["GET", "/closing"],
+      ["GET", "/delete-impact"],
       ["DELETE", ""],
     ]) {
       const answer = await request(method!, suffix!);
@@ -272,13 +338,13 @@ it.each(["staff", "supervisor"] as const)(
   },
 );
 it.each([undefined, null, "", [], true])(
-  "Disable send refuses destination %j",
+  "Delete refuses legacy Send with destination %j",
   async (sendsToStationId) => {
     const item = await dish();
     const answer = await request("DELETE", "", { openDishes: "send", sendsToStationId });
     expect(answer.status).toBe(400);
     expect(await answer.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "sendsToStationId" } },
+      error: { code: "management.request_invalid", params: { field: "body" } },
     });
     expect(await active()).toBe(true);
     expect(
@@ -287,7 +353,7 @@ it.each([undefined, null, "", [], true])(
   },
 );
 it.each(["preparing", "ready", "partly_served"] as const)(
-  "Disable send leaves %s source work untouched",
+  "Rejected Delete Send leaves %s source work untouched",
   async (kind) => {
     const item = await dish();
     if (kind === "partly_served")
@@ -297,29 +363,40 @@ it.each(["preparing", "ready", "partly_served"] as const)(
         .where(eq(workingOrderLines.id, item.workingOrderLineId));
     else await suite.db.update(ticketItems).set({ state: kind }).where(eq(ticketItems.id, item.id));
     const answer = await request("DELETE", "", { openDishes: "send", sendsToStationId: pastry });
-    expect(answer.status).toBe(204);
-    expect(await active()).toBe(false);
+    expect(answer.status).toBe(400);
+    expect(await answer.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(await active()).toBe(true);
     expect(
       (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
     ).toMatchObject({ stationId: grill, state: kind === "partly_served" ? "queued" : kind });
   },
 );
-it("Disable sends only the source station's unfinished work", async () => {
+it("Rejected Delete Send changes neither source nor other station work", async () => {
   const item = await dish();
   const other = await dish(bar);
   expect(
     (await request("DELETE", "", { openDishes: "send", sendsToStationId: pastry })).status,
-  ).toBe(204);
+  ).toBe(400);
   expect(
     (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0]!.stationId,
-  ).toBe(pastry);
+  ).toBe(grill);
   expect(
     (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, other.id)))[0]!.stationId,
   ).toBe(bar);
 });
-it("Disable keeps the configured routing cell and sends new work to the default", async () => {
-  await dish();
-  expect((await request("DELETE", "", { openDishes: "leave" })).status).toBe(204);
+it("Permitted Delete removes routing cell and sends new work to the default", async () => {
+  const item = await dish();
+  await suite.db.update(ticketItems).set({ state: "ready" }).where(eq(ticketItems.id, item.id));
+  const answer = await request("DELETE");
+  expect(answer.status).toBe(200);
+  expect(await answer.json()).toEqual({
+    target: { id: grill, name: "Grill" },
+    refusals: [],
+    ends: [],
+    removes: [{ key: "station_routing_cells", count: 1, targets: [] }],
+  });
   const group = await seat(v, await v.table(`New ${randomUUID()}`));
   await orderForParty(v, group.partyId, ["Burger"], group.tabId);
   expect(
@@ -329,21 +406,22 @@ it("Disable keeps the configured routing cell and sends new work to the default"
   ).toBe(bar);
   const { routingCells } = await import("@waitron/venue-service");
   expect(
-    (
-      await suite.db
-        .select()
-        .from(routingCells)
-        .where(eq(routingCells.productId, v.productId("Burger")))
-    )[0]!.stationId,
-  ).toBe(grill);
+    await suite.db
+      .select()
+      .from(routingCells)
+      .where(eq(routingCells.productId, v.productId("Burger"))),
+  ).toEqual([]);
+  expect(
+    (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
+  ).toMatchObject({ stationId: grill, state: "ready", firedAt: item.firedAt });
 });
 
-it("PATCH active=false cannot bypass the unread-dish choice or partly rename the station", async () => {
+it("PATCH active=false cannot delete or partly rename the station", async () => {
   const item = await dish();
   const answer = await request("PATCH", "", { active: false, name: "Unexpected rename" });
   expect(answer.status).toBe(400);
   expect(await answer.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "openDishes" } },
+    error: { code: "management.request_invalid", params: { field: "active" } },
   });
   expect(
     (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, grill)))[0],
@@ -352,7 +430,7 @@ it("PATCH active=false cannot bypass the unread-dish choice or partly rename the
     (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0]!.stationId,
   ).toBe(grill);
 });
-it("PATCH active=false sends waiting work and applies the remaining station edit together", async () => {
+it("PATCH active=false rejects Send and keeps the remaining edit and food unchanged", async () => {
   const item = await dish();
   const answer = await request("PATCH", "", {
     active: false,
@@ -360,17 +438,20 @@ it("PATCH active=false sends waiting work and applies the remaining station edit
     openDishes: "send",
     sendsToStationId: pastry,
   });
-  expect(answer.status).toBe(204);
+  expect(answer.status).toBe(400);
+  expect(await answer.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "active" } },
+  });
   expect(
     (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, grill)))[0],
-  ).toMatchObject({ active: false, name: "Renamed Grill" });
+  ).toMatchObject({ active: true, name: "Grill" });
   expect(
     (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0]!.stationId,
-  ).toBe(pastry);
+  ).toBe(grill);
 });
 
 it.each(["leave", "send", "move", "split"] as const)(
-  "Disable %s preserves the chosen station when a held group is fired",
+  "Rejected Delete %s preserves held work through firing and later split or move",
   async (openDishes) => {
     await inTx(v, (tx) =>
       setRoutingCell(
@@ -411,9 +492,9 @@ it.each(["leave", "send", "move", "split"] as const)(
           ...(openDishes === "send" ? { sendsToStationId: pastry } : {}),
         })
       ).status,
-    ).toBe(204);
-    expect(await active()).toBe(false);
-    const destination = openDishes === "send" ? pastry : grill;
+    ).toBe(400);
+    expect(await active()).toBe(true);
+    const destination = grill;
     const [retained] = await suite.db
       .select()
       .from(ticketItems)
@@ -422,8 +503,8 @@ it.each(["leave", "send", "move", "split"] as const)(
       stationId: destination,
       firedAt: null,
       state: "queued",
-      stationChosenAt: expect.any(String),
-      stationRetainedAtRelease: openDishes !== "send",
+      stationChosenAt: null,
+      stationRetainedAtRelease: false,
     });
     const billIds = [seated.tabId];
     if (openDishes === "split") {
@@ -444,7 +525,7 @@ it.each(["leave", "send", "move", "split"] as const)(
       for (const row of split)
         expect(row).toMatchObject({
           stationId: grill,
-          stationRetainedAtRelease: true,
+          stationRetainedAtRelease: false,
           stationChosenAt: retained!.stationChosenAt,
           firedAt: null,
         });
@@ -480,7 +561,7 @@ it.each(["leave", "send", "move", "split"] as const)(
     );
     const [after] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item!.id));
     expect(after).toMatchObject({
-      stationId: openDishes === "move" ? bar : destination,
+      stationId: destination,
       state: "queued",
     });
     if (openDishes !== "move") expect(after!.stationChosenAt).toBe(retained!.stationChosenAt);
@@ -492,7 +573,7 @@ it.each(["leave", "send", "move", "split"] as const)(
         .where(inArray(ticketItems.workingOrderId, billIds));
       expect(split).toHaveLength(2);
       for (const row of split) {
-        expect(row).toMatchObject({ stationId: grill, stationRetainedAtRelease: true });
+        expect(row).toMatchObject({ stationId: grill, stationRetainedAtRelease: false });
         expect(row.firedAt).not.toBeNull();
       }
     }

@@ -606,14 +606,17 @@ describe("the till's station day", () => {
     expect(answer.status).toBe(404);
     expect(answer.json).toMatchObject({ code: "station.not_found" });
   });
-  it("refuses an inactive source and an unreadable location clock without changing rows", async () => {
+  it("refuses a deleted source and an unreadable location clock without changing rows", async () => {
     await suite.db
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, grill));
     const inactive = await call("PUT", today(), close());
-    expect(inactive.status).toBe(409);
-    expect(inactive.json).toMatchObject({ code: "route.station_inactive" });
+    expect(inactive.status).toBe(404);
+    expect(inactive.json).toMatchObject({
+      code: "station.not_found",
+      params: { stationId: grill },
+    });
     await suite.db
       .update(kitchenStations)
       .set({ active: true })
@@ -669,6 +672,26 @@ describe("the kitchen display's station day", () => {
   const deviceCall = (method: string, route: string, body?: unknown, cookie = deviceCookie) =>
     call(method, route, body, cookie);
 
+  it.each(["GET", "PUT"])(
+    "a deleted station addressed by device %s is not found",
+    async (method) => {
+      await suite.db
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, grill));
+      const answer = await deviceCall(
+        method,
+        path(),
+        method === "PUT" ? authorizedClose() : undefined,
+      );
+      expect(answer.status).toBe(404);
+      expect(answer.json).toMatchObject({
+        code: "station.not_found",
+        params: { stationId: grill },
+      });
+      expect(await rows()).toEqual([]);
+    },
+  );
   beforeEach(async () => {
     const [profile] = await suite.db
       .insert(deviceProfiles)
@@ -781,24 +804,14 @@ describe("the kitchen display's station day", () => {
       today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" },
     });
   });
-  it("shows an assigned station switched off since enrollment", async () => {
+  it("hides a deleted assigned station since enrollment", async () => {
     await suite.db
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, grill));
     const answer = await deviceCall("GET", "/api/device/station-screen");
     expect(answer.status).toBe(200);
-    expect((answer.json.stations as unknown[])[0]).toMatchObject({
-      id: grill,
-      name: "Grill",
-      today: {
-        open: false,
-        isDefault: false,
-        byHand: null,
-        sendsTo: { id: bar, name: "Bar" },
-        why: "switched_off",
-      },
-    });
+    expect(answer.json.stations).toEqual([]);
   });
   it("reads only open destinations and managers without needing a staff session", async () => {
     const answer = await deviceCall("GET", path());

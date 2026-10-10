@@ -1799,10 +1799,11 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("deactivateStation DELETEs the station and resolves undefined on an empty 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+  it("deleteStation DELETEs the station and returns its complete impact", async () => {
+    const impact = { target: { id: "s1", name: "Station" }, refusals: [], ends: [], removes: [] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.deactivateStation("s1")).resolves.toBeUndefined();
+    await expect(api.deleteStation("s1")).resolves.toEqual(impact);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1", {
       method: "DELETE",
       credentials: "include",
@@ -1865,18 +1866,19 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("listCoursesWithDisabled GETs the courses with the disabled ones too", async () => {
+  it("temporary course list declaration reads the active-only list", async () => {
     const rows = [
-      { id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: true },
-      { id: "k2", name: "Brunch", displayOrder: 1, active: false, inUse: false },
+      { id: "k1", name: "Entrantes", displayOrder: 0, active: true },
+      { id: "k2", name: "Brunch", displayOrder: 1, active: true },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCoursesWithDisabled()).toEqual(rows);
-    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
-      "/management-api/courses?includeDisabled=true",
-      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
-    );
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses", {
+      method: "GET",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("createCourse POSTs { name } and returns the id (201)", async () => {

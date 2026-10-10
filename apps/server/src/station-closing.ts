@@ -3,7 +3,6 @@ import { and, count, eq, gt, inArray, isNull, ne } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { invalid } from "./bill-allocation.js";
 import { moveDishesToStation, stillMovable, type StationMover } from "./station-move.js";
-import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 
 export async function openDishCount(
@@ -98,31 +97,4 @@ export async function withStationDishes(
         ),
       );
   }
-}
-
-export async function disableWithDishes(
-  tx: Transaction,
-  cfg: TillConfig,
-  id: string,
-  body: Record<string, unknown>,
-  disable: () => Promise<void>,
-  mover: StationMover,
-): Promise<void> {
-  const choice = openDishesChoice(body.openDishes);
-  const destination = body.sendsToStationId;
-  const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
-  if (
-    choice === "send" &&
-    (typeof destination !== "string" || !destinations.some((row) => row.id === destination))
-  )
-    throw invalid("sendsToStationId");
-  await withStationDishes(
-    tx,
-    cfg,
-    id,
-    typeof destination === "string" ? destination : undefined,
-    choice,
-    disable,
-    mover,
-  );
 }

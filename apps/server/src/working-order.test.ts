@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -77,13 +78,7 @@ import {
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
-import {
-  createCourse,
-  createStation,
-  deactivateStation,
-  removeCourse,
-  setProductCourse,
-} from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -3099,7 +3094,10 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const [line] = await fireableLines(tx, id);
       await fireLines(tx, cfg, id, [line!]);
       expect((await ticketItemsFor(tx, id))[0]!.stationId).toBe(kitchen.id);
-      await deactivateStation(tx, cfg, kitchen.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, kitchen.id));
       await expect(fireLines(tx, cfg, id, [line!])).rejects.toMatchObject({
         code: "station.no_default",
         params: { locationId: cfg.locationId },
@@ -3257,15 +3255,14 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("refuses to fire when the only default station has been DEACTIVATED (station.no_default)", async () => {
-    // `deactivateStation` sets `active=false` but leaves `is_default=true`, so the venue keeps a
-    // default row that is no longer a live routing target. The fallback query must filter `active=true`,
-    // else it resolves the dead station and food routes to a queue the till/station display (active-only)
-    // never surface — silently dropped. With the filter it resolves no default and fires fail loud.
+  it("refuses to fire when the only default station is inactive in stored data (station.no_default)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      await deactivateStation(tx, cfg, cocina.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, cocina.id));
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
       await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toMatchObject({
         code: "station.no_default",
@@ -3578,7 +3575,10 @@ describe("opening hours", () => {
         expect(
           (await ticketItemsFor(tx, tabId)).every((item) => item.stationId === upstairs.id),
         ).toBe(true);
-        await deactivateStation(tx, cfg, upstairs.id);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(eq(kitchenStations.id, upstairs.id));
         const [{ revision: lastRevision }] = await tx
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
@@ -3744,7 +3744,10 @@ describe("opening hours", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      await deactivateStation(tx, cfg, kitchen.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, kitchen.id));
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
@@ -3764,7 +3767,10 @@ describe("opening hours", () => {
         expect(await ticketItemsFor(tx, orderId)).toEqual([]);
         expect(await fireLines(tx, cfg, orderId, lines, { unroutable: "skip" })).toEqual(lines);
         const off = await createStation(tx, cfg, { name: "Off bar" });
-        await deactivateStation(tx, cfg, off.id);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(eq(kitchenStations.id, off.id));
         await tx
           .update(workingOrderLines)
           .set({ makeAtStationId: off.id })
@@ -4908,10 +4914,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     });
   });
 
-  it("releases a HELD course's items even after the course is DEACTIVATED (A2: existence, not liveness)", async () => {
-    // The deactivated-course edge: a course deactivated WHILE it holds items must still be fireable, or
-    // its held items are stranded (can't fire, can't advance). `fireCourse` requires only that the
-    // course EXISTS in this venue (active OR inactive) — the items already carry the `course_id` snapshot.
+  it("releases a HELD course's items after deletion while its historical course row exists", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -4925,7 +4928,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
 
-      await removeCourse(tx, cfg, pri.id);
+      await deleteCourse(tx, cfg, pri.id);
       await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
       expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).not.toBeNull(); // released
     });

@@ -13,7 +13,6 @@ import {
 import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
-import { deleteCourse } from "./course-delete.js";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
@@ -241,23 +240,6 @@ export async function updateStation(
   if (printerIds !== undefined) await replaceStationPrinters(tx, cfg, id, printerIds);
 }
 
-/** Deactivate a station — never a hard delete, since a `ticket_items.station_id` snapshot may
- *  reference it. */
-export async function deactivateStation(
-  tx: Transaction,
-  _cfg: TillConfig,
-  id: string,
-): Promise<void> {
-  const updated = await tx
-    .update(kitchenStations)
-    .set({ active: false })
-    .where(eq(kitchenStations.id, id))
-    .returning({ id: kitchenStations.id });
-  if (updated.length === 0) {
-    throw new AppError("station.not_found", { stationId: id });
-  }
-}
-
 export async function setDefaultStation(
   tx: Transaction,
   cfg: TillConfig,
@@ -455,16 +437,6 @@ export async function updateCourse(
   if (updated.length === 0) {
     throw new AppError("course.not_found", { courseId: id });
   }
-}
-
-export async function removeCourse(
-  tx: Transaction,
-  cfg: TillConfig,
-  id: string,
-  disable = false,
-): Promise<void> {
-  if (disable) throw new AppError("management.request_invalid", { field: "disable" });
-  await deleteCourse(tx, cfg, id);
 }
 
 export async function setProductCourse(
