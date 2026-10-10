@@ -55,6 +55,7 @@ interface Renaming {
 
 export function planReset(input: {
   targets: readonly Target[];
+  /** Every live table of the zone, inactive ones included. */
   live: readonly LiveTable[];
   takenElsewhere: ReadonlySet<string>;
 }): ResetPlan {
@@ -69,18 +70,23 @@ export function planReset(input: {
 
   for (const target of input.targets) {
     const table = target.tableId === null ? undefined : live.get(target.tableId);
-    if (table && (table.held || table.mergedWithHeld)) {
+    if (target.tableId !== null && !table) {
+      // The table's state is unknown, so nothing is done to it and no other table takes its target name.
+      plan.pending.push(target);
+      fixedInUse.add(target.label);
+    } else if (table && (table.held || table.mergedWithHeld)) {
       plan.pending.push(target);
       if (table.held && !table.hasToday) plan.seed.push(target);
       fixedInUse.add(table.label);
     } else if (target.remove) {
+      if (!table) continue;
       // A removal frees its name only once it has succeeded, so the name stays taken this pass.
-      if (table) fixedInUse.add(table.label);
-      if (table?.tied) {
+      fixedInUse.add(table.label);
+      if (table.tied) {
         plan.hide.push(table.id);
         plan.pending.push(target);
-      } else if (target.tableId !== null) {
-        plan.remove.push(target.tableId);
+      } else {
+        plan.remove.push(table.id);
       }
     } else {
       renamings.push({ target, current: table?.label, wantsNew: true });

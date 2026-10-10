@@ -155,14 +155,20 @@ describe("planReset", () => {
     ).toEqual([]);
   });
 
-  it("plans a target whose table is not live as a free table", () => {
+  it("leaves a target whose table is not live pending, its name kept from every other table", () => {
     const plan = planReset({
-      targets: [t("gone", "T1"), t("old", "T2", { remove: true })],
-      live: [],
-      takenElsewhere: new Set(["T1"]),
+      targets: [t("gone", "T1"), t("old", "T2", { remove: true }), t(null, "T1"), t("a", "T2")],
+      live: [l("a", "T3")],
+      takenElsewhere: none,
     });
-    expect(plan.apply).toEqual([{ target: t("gone", "T1"), label: null }]);
-    expect(plan.remove).toEqual(["old"]);
+    expect(plan).toMatchObject({ seed: [], create: [], remove: [], hide: [] });
+    expect(plan.apply).toEqual([{ target: t("a", "T2"), label: null }]);
+    expect(plan.pending).toEqual([
+      t("gone", "T1"),
+      t("old", "T2", { remove: true }),
+      t(null, "T1"),
+      t("a", "T2"),
+    ]);
   });
 
   it("ignores a removal that names no table", () => {
