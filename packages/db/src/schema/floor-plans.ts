@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { check, foreignKey, unique, type SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, unique, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   count,
   day,
@@ -170,6 +170,7 @@ export const floorResetTables = table(
   },
   (t) => [
     unique("floor_reset_tables_table_key").on(t.tableId),
+    index("floor_reset_tables_zone_pending_idx").on(t.zoneId, t.pending),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
@@ -233,6 +234,7 @@ export const floorTodayJoins = table(
     seats: count("seats").notNull(),
   },
   (t) => [
+    index("floor_today_joins_zone_idx").on(t.zoneId),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
