@@ -7425,7 +7425,7 @@ describe("mounted public department pages", () => {
       );
       expect(find(app, "dashboard-receipts-screen")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
-      if (permissions.includes("venue_service.manage")) {
+      if (permissions.some((permission: string) => permission === "venue_service.manage")) {
         expect(find(app, 'button[data-key="settings"]')?.getAttribute("aria-selected")).toBe(
           "true",
         );
