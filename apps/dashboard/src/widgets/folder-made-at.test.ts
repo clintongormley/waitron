@@ -461,6 +461,92 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     );
     expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
+
+  describe("a period line inside the category", () => {
+    const period = (id: string, departmentId: string) => ({
+      id,
+      departmentId,
+      departmentName: departmentId,
+      name: id,
+      colour: "blue" as const,
+      productIds: ["cola"],
+    });
+    const diningTerrace = {
+      zones: [{ id: "terrace-zone", name: "Terrace", departmentId: "dining" }],
+      periods: [period("lunch", "dining"), period("brunch", "bar-dept")],
+    };
+    const withLine = (row: Row, zoneId: string | null, periodId: string, target: Target) => ({
+      ...cell(row, station("bar"), zoneId),
+      periods: [{ periodId, target }],
+    });
+    const somewhere = (exception: RoutingModel["cells"][number]) => {
+      const result = madeAt(
+        routing({ ...diningTerrace, cells: [onCategory("drinks", station("bar")), exception] }),
+        [product("cola", "beer")],
+      );
+      return Object.fromEntries([...result].map(([id, { someElsewhere }]) => [id, someElsewhere]));
+    };
+
+    it("qualifies the categories holding a product whose cell sends it elsewhere during a period", () => {
+      expect(somewhere(withLine(productRow("cola"), null, "lunch", station("kitchen")))).toEqual({
+        drinks: true,
+        beer: true,
+        craft: false,
+        food: false,
+      });
+    });
+
+    it("qualifies a parent whose subcategory's cell sends its dishes elsewhere during a period", () => {
+      expect(somewhere(withLine(category("beer"), null, "lunch", station("kitchen")))).toEqual({
+        drinks: true,
+        beer: true,
+        craft: true,
+        food: false,
+      });
+    });
+
+    it("qualifies a category whose zone cell sends its dishes elsewhere during that zone's period", () => {
+      expect(
+        somewhere(withLine(category("drinks"), "terrace-zone", "lunch", station("kitchen"))),
+      ).toEqual({ drinks: true, beer: true, craft: true, food: false });
+    });
+
+    it("qualifies the categories holding a product that needs no preparation during a period", () => {
+      expect(
+        somewhere(withLine(productRow("cola"), null, "lunch", { kind: "no_preparation" })),
+      ).toEqual({ drinks: true, beer: true, craft: false, food: false });
+    });
+
+    it("follows a switched-off station's fallback for a period line, as for a cell", () => {
+      const fallsBackToBar = madeAt(
+        routing({
+          ...diningTerrace,
+          stationTimes: [times("cocktail", { fallbackStationId: "bar" })],
+          cells: [
+            onCategory("drinks", station("bar")),
+            withLine(productRow("cola"), null, "lunch", station("cocktail")),
+          ],
+        }),
+        [product("cola", "beer")],
+      );
+      expect(fallsBackToBar.get("drinks")?.someElsewhere).toBe(false);
+    });
+
+    it("does not qualify the category for a line naming the station the category already uses", () => {
+      expect(somewhere(withLine(productRow("cola"), null, "lunch", station("bar")))).toEqual({
+        drinks: false,
+        beer: false,
+        craft: false,
+        food: false,
+      });
+    });
+
+    it("does not qualify the category for a zone cell's line of another department's period", () => {
+      expect(
+        somewhere(withLine(category("drinks"), "terrace-zone", "brunch", station("kitchen"))),
+      ).toEqual({ drinks: false, beer: false, craft: false, food: false });
+    });
+  });
 });
 
 describe("folderMadeAt — names it cannot find", () => {
