@@ -931,6 +931,7 @@ export class FloorPlanEditor extends LitElement {
             variant=${save.variant}
             ?disabled=${
               save.unchanged ||
+              this.saving ||
               this.loadingNewer ||
               (this.mark !== null && this.mark.from !== "refusal")
             }

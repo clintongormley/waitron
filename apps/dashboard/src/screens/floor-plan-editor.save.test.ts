@@ -319,6 +319,17 @@ it("a save in progress keeps a second press from sending", async () => {
   expect(saveFloorPlan).toHaveBeenCalledTimes(1);
 });
 
+it("Save is drawn disabled while a save is sent, and can be pressed again once it is refused", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const el = await open(stubApi({ saveFloorPlan: vi.fn().mockReturnValue(write.promise) }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  expect(button(el, "save")!.disabled).toBe(true);
+  write.reject({ code: "server.internal" });
+  await flush(el);
+  expectSave(el, "awake");
+});
+
 it("an older copy offers Reload, keeping Save available", async () => {
   const saveFloorPlan = vi
     .fn()
