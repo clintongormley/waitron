@@ -84,7 +84,7 @@ async function cardReaderDeleteRules(
       await tx
         .select({ purpose: tenantCredentials.purpose })
         .from(tenantCredentials)
-        .where(eq(tenantCredentials.purpose, seat!.credentialPurpose))
+        .where(eq(tenantCredentials.purpose, seat.credentialPurpose))
     ).length > 0;
   const unpairAtProvider = canUnpair && connected;
   const registrationKept = canUnpair && !connected;
@@ -219,6 +219,23 @@ export async function prepareCardReaderDelete(
   return plan;
 }
 
+/**
+ * Step (a), and the whole delete when no provider call is planned, on one transaction: returns
+ * `deleted` once deleted, or only the plan when the caller must unpair at the provider first.
+ */
+export async function startCardReaderDelete(
+  tx: Transaction,
+  seats: readonly CardProviderContribution[],
+  id: string,
+  now = new Date(),
+  options: CardReaderDeleteOptions = {},
+): Promise<{ plan: CardReaderDeletePlan; deleted?: DeleteImpact }> {
+  const plan = await prepareCardReaderDelete(tx, seats, id, now, options);
+  if (plan.unpairAtProvider) return { plan };
+  await removeCardReader(tx, id, now);
+  return { plan, deleted: plan.impact };
+}
+
 /** Unpair's local write: active false, disabled_at and unpaired_at = at, undeleted rows only. */
 export async function markCardReaderUnpaired(
   tx: Transaction,
@@ -246,6 +263,12 @@ export async function deleteCardReader(
   const plan = await unrefusedRules(tx, seats, id, options.acceptRegistrationKept === true);
   if (plan.unpairAtProvider)
     throw new AppError("reader.unpair_failed", { providerId: plan.provider });
+  await removeCardReader(tx, id, now);
+  return plan.impact;
+}
+
+/** The delete's writes, for a plan computed on `tx` that needs no unpair. */
+async function removeCardReader(tx: Transaction, id: string, now: Date): Promise<void> {
   await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.readerId, id));
   await tx.delete(deviceProfileCardReaders).where(eq(deviceProfileCardReaders.readerId, id));
   await tx.delete(cardReaderHolders).where(eq(cardReaderHolders.readerId, id));
@@ -257,5 +280,4 @@ export async function deleteCardReader(
       disabledAt: sql`coalesce(${cardReaders.disabledAt}, ${now.toISOString()})`,
     })
     .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
-  return plan.impact;
 }

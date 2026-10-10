@@ -8,6 +8,7 @@ import {
   withTransaction,
   workingOrders,
   type Database,
+  type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -30,6 +31,7 @@ import {
   markCardReaderUnpaired,
   prepareCardReaderDelete,
   readCardReaderDeleteImpact,
+  startCardReaderDelete,
   type CardReaderDeleteOptions,
 } from "./card-reader-delete.js";
 
@@ -616,6 +618,90 @@ describe("preparing a card reader delete (step a)", () => {
     expect(await prepare([unpairing], v.r, NOW, accepted)).toMatchObject({
       unpairAtProvider: true,
     });
+  });
+});
+
+/** Runs `body` on a transaction whose `select` calls are counted, answering the count. */
+const selectsMadeBy = (body: (tx: Transaction) => Promise<unknown>) =>
+  withTransaction(suite.db, async (tx) => {
+    let selects = 0;
+    const counted = new Proxy(tx, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target) as unknown;
+        if (typeof value !== "function") return value;
+        const bound = (value as (...args: unknown[]) => unknown).bind(target);
+        if (prop !== "select") return bound;
+        return (...args: unknown[]) => {
+          selects += 1;
+          return bound(...args);
+        };
+      },
+    });
+    await body(counted);
+    return selects;
+  });
+
+describe("starting a card reader delete (step a, and the delete when no provider is called)", () => {
+  it("deletes a reader no provider must unpair, returning the impact it read", async () => {
+    const v = await seedVenue({ unpairedAt: null });
+    const impact = await read([unpairing], v.r);
+    const before = await snapshot();
+
+    const started = await withTransaction(suite.db, (tx) =>
+      startCardReaderDelete(tx, [unpairing], v.r, NOW, accepted),
+    );
+
+    expect(started).toEqual({
+      plan: { impact, provider: "stripe", providerRef: "tmr_R", unpairAtProvider: false },
+      deleted: impact,
+    });
+    expect(await snapshot()).toEqual(
+      withoutReaderLinks(before, v.r, (row) => ({
+        ...row,
+        active: 0,
+        deleted_at: NOW.toISOString(),
+        disabled_at: NOW.toISOString(),
+      })),
+    );
+  });
+
+  it("only switches off a reader its provider will unpair, leaving the delete to the caller", async () => {
+    const v = await seedVenue({ unpairedAt: null });
+    await connectStripe(suite.db);
+    const impact = await read([unpairing], v.r);
+    const before = await snapshot();
+
+    const started = await withTransaction(suite.db, (tx) =>
+      startCardReaderDelete(tx, [unpairing], v.r, NOW, accepted),
+    );
+
+    expect(started).toEqual({
+      plan: { impact, provider: "stripe", providerRef: "tmr_R", unpairAtProvider: true },
+    });
+    expect(await snapshot()).toEqual(
+      withReaderRow(before, v.r, (row) => ({ ...row, active: 0, disabled_at: NOW.toISOString() })),
+    );
+  });
+
+  it("refuses as the delete does, and writes nothing", async () => {
+    const v = await seedVenue({ unpairedAt: null });
+    const before = await snapshot();
+    await expect(
+      withTransaction(suite.db, (tx) => startCardReaderDelete(tx, [unpairing], v.r, NOW)),
+    ).rejects.toMatchObject({ code: "reader.provider_disconnected" });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("reads no more than the impact read does when it deletes in the one call", async () => {
+    const v = await seedVenue({ unpairedAt: null });
+    const reading = await selectsMadeBy((tx) => readCardReaderDeleteImpact(tx, [unpairing], v.r));
+    const deleting = await selectsMadeBy((tx) =>
+      startCardReaderDelete(tx, [unpairing], v.r, NOW, accepted),
+    );
+    expect(reading).toBeGreaterThan(0);
+    expect(deleting).toBe(reading);
+    const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
+    expect(row!.deletedAt).toBe(NOW.toISOString());
   });
 });
 

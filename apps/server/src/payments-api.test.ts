@@ -2074,7 +2074,7 @@ describe("reader delete", () => {
     const { seat, removed } = unpairingSeat(async () => {
       if (!first) return;
       first = false;
-      // Step (a) switched the reader off, so the disconnect is allowed now.
+      // No reader of this provider is active now, so the disconnect is allowed.
       expect(
         (
           await send(app, "POST", `${base}/providers/stripe/disconnect`, {

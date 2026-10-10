@@ -5,7 +5,7 @@ import "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import { AppError, centsToDecimal, hasCode, isAppError, type DeleteImpact } from "@waitron/shared";
+import { AppError, centsToDecimal, hasCode, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -76,10 +76,9 @@ import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js"
 import {
   deleteCardReader,
   markCardReaderUnpaired,
-  prepareCardReaderDelete,
   readCardReaderDeleteImpact,
+  startCardReaderDelete,
   type CardReaderDeleteOptions,
-  type CardReaderDeletePlan,
 } from "./card-reader-delete.js";
 import { queryFlag } from "./report-api.js";
 
@@ -539,25 +538,18 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // wait on the network. A refusal after the unpair leaves the reader unpaired and switched off,
       // as Unpair would, and not deleted. Every other delete checks and acts in one transaction.
       return holdingReader(id, async (hold) => {
-        const first: { plan: CardReaderDeletePlan; deleted?: DeleteImpact } = await gated(
-          sessionId,
-          async (tx) => {
-            hold();
-            const plan = await prepareCardReaderDelete(tx, deps.providers, id, new Date(), options);
-            if (plan.unpairAtProvider) return { plan };
-            return {
-              plan,
-              deleted: await deleteCardReader(tx, deps.providers, id, new Date(), options),
-            };
-          },
-        );
+        const first = await gated(sessionId, (tx) => {
+          hold();
+          return startCardReaderDelete(tx, deps.providers, id, new Date(), options);
+        });
         if (first.deleted !== undefined) return c.json(first.deleted);
         const { plan } = first;
         const seat = cardProviderById(deps.providers, plan.provider);
         try {
           await removeAtProvider(seat, plan.providerRef);
         } catch (error) {
-          // Step (a) switched the reader off, which lets a disconnect through before this call.
+          // A disconnect can land once no reader of this provider is active, which step (a) may
+          // have just made true.
           if (isAppError(error) && hasCode(error, "credentials.missing"))
             throw new AppError("reader.provider_disconnected", { providerId: plan.provider });
           if (isAppError(error)) throw error;
