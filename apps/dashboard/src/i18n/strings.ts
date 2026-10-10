@@ -950,6 +950,13 @@ export const en = {
   "status.new_label": "New status",
   "status.new_color": "Colour",
   "floor.title": "Floor plan",
+  "floor_plan_editor.title": "Floor plan",
+  "floor_plan_editor.undo": "Undo",
+  "floor_plan_editor.redo": "Redo",
+  "floor_plan_editor.first_note":
+    "Your first save updates the till's tables. After that, saved changes wait for the next business day.",
+  "floor_plan_editor.note":
+    "Saved changes reach the till's tables when the next business day starts.",
   "floor.zones_title": "Zones",
   "floor.tables_title": "Tables",
   "floor.zone_name": "Name",
@@ -3484,6 +3491,13 @@ export const es: Record<StringKey, string> = {
   "status.new_label": "Nuevo estado",
   "status.new_color": "Color",
   "floor.title": "Sala",
+  "floor_plan_editor.title": "Plano de sala",
+  "floor_plan_editor.undo": "Deshacer",
+  "floor_plan_editor.redo": "Rehacer",
+  "floor_plan_editor.first_note":
+    "El primer guardado actualiza las mesas de la caja. Después, los cambios guardados esperan al siguiente día de actividad.",
+  "floor_plan_editor.note":
+    "Los cambios guardados llegan a las mesas de la caja al empezar el siguiente día de actividad.",
   "floor.zones_title": "Zonas",
   "floor.tables_title": "Mesas",
   "floor.zone_name": "Nombre",

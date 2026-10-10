@@ -1,0 +1,319 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import "./floor-plan-editor.js";
+import type { FloorPlanEditor } from "./floor-plan-editor.js";
+import type { DashboardApi, FloorPlan } from "../api/client.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import { addTables, draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
+
+const originalUrl = location.href;
+let originalLocale = currentLocale();
+beforeEach(() => {
+  originalLocale = currentLocale();
+  setLocale("en-GB");
+});
+afterEach(() => {
+  setLocale(originalLocale);
+  cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
+});
+
+const placement = { x: 2, y: 3, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+
+function terrace(revision = 3): FloorPlan {
+  return {
+    zoneId: "z1",
+    revision,
+    savedAt: revision === 0 ? null : "2026-10-01T10:00:00.000Z",
+    tables: [
+      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
+      { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: false, placement: null },
+    ],
+    joins: [],
+  };
+}
+
+const bar: FloorPlan = {
+  zoneId: "z2",
+  revision: 1,
+  savedAt: "2026-10-01T10:00:00.000Z",
+  tables: [{ id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement }],
+  joins: [],
+};
+
+function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
+  return {
+    getFloorPlan: vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : terrace())),
+    listZones: vi.fn().mockResolvedValue([
+      { id: "z1", name: "Terrace", displayOrder: 0, active: true },
+      { id: "z2", name: "Bar", displayOrder: 1, active: true },
+    ]),
+    listTables: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  } as unknown as DashboardApi;
+}
+
+async function flush(el: FloorPlanEditor): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+}
+
+async function open(
+  api: DashboardApi = stubApi(),
+  path = "/manage/floor-plan/zone/z1",
+): Promise<FloorPlanEditor> {
+  history.replaceState(null, "", path);
+  const { el } = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api });
+  await flush(el);
+  return el;
+}
+
+const canvas = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<WtFloorPlanCanvas>("wt-floor-plan-canvas")!;
+const button = (el: FloorPlanEditor, action: string) =>
+  el.shadowRoot!.querySelector<WtButton>(`wt-button[data-action=${action}]`)!;
+const heading = (el: FloorPlanEditor) => el.shadowRoot!.querySelector("h1")!.textContent!.trim();
+const placed = (el: FloorPlanEditor, key: string) =>
+  canvas(el).tables.find((t) => t.key === key)!.placement;
+
+async function fromCanvas(el: FloorPlanEditor, type: string, detail: unknown): Promise<void> {
+  canvas(el).dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  await el.updateComplete;
+}
+
+async function press(el: FloorPlanEditor, action: string): Promise<void> {
+  button(el, action).click();
+  await el.updateComplete;
+}
+
+function expectSaveQuiet(el: FloorPlanEditor): void {
+  expect(button(el, "save").variant).toBe("secondary");
+  expect(button(el, "save").disabled).toBe(true);
+}
+
+function expectSaveAwake(el: FloorPlanEditor): void {
+  expect(button(el, "save").variant).toBe("primary");
+  expect(button(el, "save").disabled).toBe(false);
+}
+
+it("opens the zone the URL names, headed with its name", async () => {
+  const api = stubApi();
+  const el = await open(api);
+  expect(api.getFloorPlan).toHaveBeenCalledWith("z1");
+  expect(api.listTables).toHaveBeenCalledWith({ includeDisabled: true });
+  expect(heading(el)).toBe("Terrace");
+});
+
+it("heads a zone the zone list lacks as Floor plan", async () => {
+  const el = await open(stubApi({ listZones: vi.fn().mockResolvedValue([]) }));
+  expect(heading(el)).toBe("Floor plan");
+});
+
+it("draws placed tables and leaves unplaced ones off the canvas", async () => {
+  const el = await open();
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
+  expect(canvas(el).tables[0]).toEqual({ key: "m1", label: "T1", fixed: false, placement });
+});
+
+it("says what a first save does, and when a saved plan's changes reach the till", async () => {
+  const first = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(terrace(0)) as DashboardApi["getFloorPlan"],
+    }),
+  );
+  expect(first.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
+    "Your first save updates the till's tables. After that, saved changes wait for the next business day.",
+  );
+  cleanupWidgets();
+  const saved = await open();
+  expect(saved.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
+    "Saved changes reach the till's tables when the next business day starts.",
+  );
+});
+
+it("a move from the canvas changes the draft and wakes Save", async () => {
+  const el = await open();
+  expectSaveQuiet(el);
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  expect(placed(el, "m1")).toMatchObject({ x: 5, y: 4 });
+  expectSaveAwake(el);
+});
+
+it("Undo puts the move back and quiets Save; Redo brings it back", async () => {
+  const el = await open();
+  expect(button(el, "undo").disabled).toBe(true);
+  expect(button(el, "redo").disabled).toBe(true);
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  expect(button(el, "undo").disabled).toBe(false);
+  await press(el, "undo");
+  expect(placed(el, "m1")!.x).toBe(2);
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+  expect(button(el, "redo").disabled).toBe(false);
+  await press(el, "redo");
+  expect(placed(el, "m1")!.x).toBe(5);
+  expectSaveAwake(el);
+  expect(button(el, "redo").disabled).toBe(true);
+});
+
+it("a change after Undo empties Redo", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await press(el, "undo");
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
+  expect(button(el, "redo").disabled).toBe(true);
+});
+
+it("a turn from the canvas turns the table", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
+  expect(placed(el, "m1")!.rotation).toBe(90);
+  expectSaveAwake(el);
+});
+
+it("selecting a table is not a change", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(canvas(el).selected).toBe("m1");
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("a move of a table the draft does not have adds no step", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-move", { key: "m9", x: 5, y: 4 });
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await press(el, "undo");
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("takes a panel's change and merges typing", async () => {
+  const el = await open();
+  const d = draftFromPlan(terrace());
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(d, "m1", { label: "T1a" }),
+    mergeKey: "label:m1",
+  });
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(d, "m1", { label: "T1ab" }),
+    mergeKey: "label:m1",
+  });
+  expect(canvas(el).tables[0]!.label).toBe("T1ab");
+  await press(el, "undo");
+  expect(canvas(el).tables[0]!.label).toBe("T1");
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("takes a panel's selection", async () => {
+  const el = await open();
+  await fromCanvas(el, "floor-plan-select", { key: "m1" });
+  expect(canvas(el).selected).toBe("m1");
+  await fromCanvas(el, "floor-plan-select", { key: null });
+  expect(canvas(el).selected).toBeNull();
+});
+
+it("Undo that removes the selected table clears the selection", async () => {
+  const el = await open();
+  let n = 0;
+  const added: FloorPlanDraft = addTables(
+    draftFromPlan(terrace()),
+    [{ label: "T3", seats: 2, fixed: false }],
+    () => `new:${++n}`,
+  );
+  await fromCanvas(el, "floor-plan-change", { draft: added });
+  await fromCanvas(el, "floor-plan-select", { key: "new:1" });
+  await press(el, "undo");
+  expect(canvas(el).selected).toBeNull();
+});
+
+it("Undo keeps the selection of a table it does not remove", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await press(el, "undo");
+  expect(canvas(el).selected).toBe("m1");
+});
+
+it("another zone in the address loads that zone afresh", async () => {
+  const api = stubApi();
+  const el = await open(api);
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(api.getFloorPlan).toHaveBeenLastCalledWith("z2");
+  expect(heading(el)).toBe("Bar");
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["b1"]);
+  expect(canvas(el).selected).toBeNull();
+  expect(button(el, "undo").disabled).toBe(true);
+  expectSaveQuiet(el);
+});
+
+it("a late answer for the zone it left is dropped", async () => {
+  let answerTerrace!: (plan: FloorPlan) => void;
+  const api = stubApi({
+    getFloorPlan: vi.fn((zoneId: string) =>
+      zoneId === "z2"
+        ? Promise.resolve(bar)
+        : new Promise<FloorPlan>((resolve) => {
+            answerTerrace = resolve;
+          }),
+    ) as DashboardApi["getFloorPlan"],
+  });
+  const el = await open(api);
+  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(heading(el)).toBe("Bar");
+  answerTerrace(terrace());
+  await flush(el);
+  expect(heading(el)).toBe("Bar");
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["b1"]);
+});
+
+it("a load failure shows its sentence and no canvas", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockRejectedValue({ code: "zone.not_found" }),
+    }),
+  );
+  expect(el.shadowRoot!.querySelector("[data-load-error]")!.textContent!.trim()).toBe(
+    "That zone no longer exists",
+  );
+  expect(el.shadowRoot!.querySelector("wt-floor-plan-canvas")).toBeNull();
+  expect(el.shadowRoot!.querySelector("a[data-action=close]")).not.toBeNull();
+});
+
+it("Close links to the way back, or to /manage when it is not a dashboard path", async () => {
+  const close = (el: FloorPlanEditor) =>
+    el.shadowRoot!.querySelector("a[data-action=close]")!.getAttribute("href");
+  const back = await open(stubApi(), "/manage/floor-plan/zone/z1?back=%2Fmanage%2Foverview");
+  expect(close(back)).toBe("/manage/overview");
+  cleanupWidgets();
+  const evil = await open(
+    stubApi(),
+    `/manage/floor-plan/zone/z1?back=${encodeURIComponent("https://evil.example/")}`,
+  );
+  expect(close(evil)).toBe("/manage");
+  cleanupWidgets();
+  const elsewhere = await open(stubApi(), "/manage/floor-plan/zone/z1?back=%2Flogin");
+  expect(close(elsewhere)).toBe("/manage");
+  cleanupWidgets();
+  const none = await open();
+  expect(close(none)).toBe("/manage");
+});
+
+it("takes its draft scope again when put back in the page", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  const parent = el.parentNode!;
+  el.remove();
+  await el.updateComplete;
+  parent.append(el);
+  await el.updateComplete;
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expectSaveQuiet(el);
+});

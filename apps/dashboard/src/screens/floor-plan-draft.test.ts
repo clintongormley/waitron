@@ -272,7 +272,7 @@ describe("floor plan draft", () => {
     expect(table(placed, "m1").placement).toEqual(m1Placement);
   });
 
-  it("keeps a placed table's y inside the grid when no row above 999 is free", () => {
+  it("keeps a placed table's y inside the grid when rows 0–999 are all taken", () => {
     const wall = { x: 0, y: 0, width: 40, height: 999, shape: "rect" as const, rotation: 0 };
     const d = patchTable(open(), "m1", { placement: wall });
     expect(table(placeTable(d, "m2"), "m2").placement).toEqual({
@@ -344,6 +344,23 @@ describe("floor plan draft", () => {
     const r = removeJoin(addJoin(d, ["m1", "live:l9"], 4, "join:1"), "j1");
     expect(r.joins).toEqual([{ key: "join:1", seats: 4, tableKeys: ["m1", "live:l9"] }]);
     expect(d.joins).toHaveLength(1);
+  });
+
+  it("returns the same draft when removing a join it does not have", () => {
+    const d = open();
+    expect(removeJoin(d, "join:9")).toBe(d);
+  });
+
+  it("stores a copy of the placement it is given", () => {
+    const placement = { ...m1Placement, x: 9 };
+    const p = patchTable(open(), "m1", { placement });
+    placement.x = 20;
+    expect(table(p, "m1").placement?.x).toBe(9);
+  });
+
+  it("returns the same draft when placing a table that already has a place", () => {
+    const d = open();
+    expect(placeTable(d, "m1")).toBe(d);
   });
 
   it("patches only the named table", () => {

@@ -145,7 +145,11 @@ function mapTable(
 }
 
 export function patchTable(draft: FloorPlanDraft, key: string, patch: TablePatch): FloorPlanDraft {
-  return mapTable(draft, key, (t) => ({ ...t, ...patch }));
+  const copied =
+    patch.placement === undefined || patch.placement === null
+      ? patch
+      : { ...patch, placement: { ...patch.placement } };
+  return mapTable(draft, key, (t) => ({ ...t, ...copied }));
 }
 
 export function moveTable(
@@ -166,6 +170,7 @@ export function rotateTable(draft: FloorPlanDraft, key: string, rotation: number
 }
 
 export function placeTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
+  if (draft.tables.find((t) => t.key === key)?.placement != null) return draft;
   const placed = draft.tables.flatMap((t) =>
     t.placement === null || t.key === key ? [] : [t.placement],
   );
@@ -226,5 +231,6 @@ export function addJoin(
 }
 
 export function removeJoin(draft: FloorPlanDraft, joinKey: string): FloorPlanDraft {
+  if (!draft.joins.some((j) => j.key === joinKey)) return draft;
   return { ...draft, joins: draft.joins.filter((j) => j.key !== joinKey) };
 }
