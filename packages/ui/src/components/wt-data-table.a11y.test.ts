@@ -372,7 +372,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("a phone-width searchable table with its search under its buttons", async () => {
+  test("a phone-width searchable table with search and Customise on its final line", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users" style="width: 390px"></wt-data-table>',
       theme,
@@ -380,6 +380,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.columns = [
       { key: "name", label: "Name", cell: (row) => row.name },
       {
+        choosable: "shown",
         key: "status",
         label: "Status",
         cell: (row) => row.status,
@@ -390,6 +391,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
           options: [{ value: "Active", label: "Active" }],
         },
       },
+      { key: "id", label: "ID", cell: (row) => row.id },
     ] satisfies DataTableColumn<Row>[];
     el.rows = [{ id: "1", name: "Ada", status: "Active" }];
     el.rowKey = (row) => row.id;
@@ -397,6 +399,14 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.searchLabel = "Search users";
     await el.updateComplete;
     await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+    const search = el
+      .shadowRoot!.querySelector<HTMLInputElement>(".table-search")!
+      .getBoundingClientRect();
+    const chooser = el
+      .shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!
+      .getBoundingClientRect();
+    expect(search.right).toBeLessThan(chooser.left);
+    expect(chooser.top).toBeLessThan(search.bottom);
     await expectNoA11yViolations(host);
   });
 

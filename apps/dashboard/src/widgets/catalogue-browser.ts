@@ -93,14 +93,7 @@ export class CatalogueBrowser extends LitElement {
       }
       wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
-        min-width: min(100%, calc(var(--wt-tap-min) * 7));
-      }
-      /* The list's width decides when search wraps, since a sidebar can leave a wide window
-         a narrow list. */
-      @container (max-width: 40rem) {
-        wt-input {
-          flex-basis: 100%;
-        }
+        min-width: 0;
       }
     `,
     iconButtonStyles,

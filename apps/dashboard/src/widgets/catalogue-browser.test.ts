@@ -1615,9 +1615,17 @@ it.each(["en-GB", "es-ES"])(
       setLocale(locale);
       el.requestUpdate();
       await el.updateComplete;
-      expect(
-        el.shadowRoot!.querySelector('[name="catalogue-search"]')!.getBoundingClientRect().width,
-      ).toBeGreaterThanOrEqual(el.getBoundingClientRect().width * 0.9);
+      const table = await tableOf(el);
+      await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
+      const search = el
+        .shadowRoot!.querySelector('[name="catalogue-search"]')!
+        .getBoundingClientRect();
+      const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
+      const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+      expect(search.left).toBeCloseTo(toolbar.left, 0);
+      expect(search.right).toBeLessThan(chooser.left);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+      expect(search.width + chooser.width + 12).toBeCloseTo(toolbar.width, 0);
     } finally {
       await page.viewport(1280, 720);
       setLocale("en-GB");
@@ -1768,6 +1776,8 @@ it.each(["light", "dark"])(
   async (theme) => {
     const el = await mountBrowser();
     el.parentElement!.setAttribute("data-theme", theme);
+    el.parentElement!.style.background = "var(--wt-color-bg)";
+    el.parentElement!.style.color = "var(--wt-color-text)";
     await selectKeys(el, ["bread"]);
     await press(el, "move");
     const confirm =
@@ -1849,6 +1859,8 @@ it.each(["light", "dark"])(
   async (theme) => {
     const el = await mountBrowser();
     el.parentElement!.setAttribute("data-theme", theme);
+    el.parentElement!.style.background = "var(--wt-color-bg)";
+    el.parentElement!.style.color = "var(--wt-color-text)";
     await press(el, "select");
     const remove = toolbarButton(el, "delete");
     const doneFill = buttonFill(toolbarButton(el, "cancel-selection"));
@@ -3769,7 +3781,7 @@ it("passes whether products can be added to every menu", async () => {
   ).toBe(false);
 });
 
-it("draws Filters, Select, Expand all, Customise and search on one toolbar line, in that order", async () => {
+it("A462 Customise follows Filters, Select, Expand all and search on one toolbar line, in that order", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3787,8 +3799,8 @@ it("draws Filters, Select, Expand all, Customise and search on one toolbar line,
       table.shadowRoot!.querySelector(".filters-trigger")!,
       select,
       table.shadowRoot!.querySelector(".expand-all")!,
-      table.shadowRoot!.querySelector(".columns-trigger")!,
       search,
+      table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < boxes.length; index++) {
       expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
@@ -3944,7 +3956,7 @@ it("shows each filter's whole choice in the panel beside the rows, in Spanish", 
   }
 });
 
-it("at phone width puts Filters, Select, Expand all and Customise on the first toolbar line and the search under them", async () => {
+it("at phone width puts Filters, Select and Expand all above search and Customise", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3956,7 +3968,6 @@ it("at phone width puts Filters, Select, Expand all and Customise on the first t
       table.shadowRoot!.querySelector(".filters-trigger")!,
       el.shadowRoot!.querySelector('[data-test="select"]')!,
       table.shadowRoot!.querySelector(".expand-all")!,
-      table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < line.length; index++) {
       expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
@@ -3967,7 +3978,11 @@ it("at phone width puts Filters, Select, Expand all and Customise on the first t
       .getBoundingClientRect();
     expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
     const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
-    expect(toolbar.bottom).toBeCloseTo(search.bottom, 0);
+    const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
+    expect(search.right).toBeLessThan(chooser.left);
+    expect(chooser.top).toBeLessThan(search.bottom);
+    expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+    expect(toolbar.bottom).toBeCloseTo(Math.max(search.bottom, chooser.bottom), 0);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.focus();
     await userEvent.tab();
     expect(table.shadowRoot!.activeElement).toBe(table.shadowRoot!.querySelector(".expand-all"));
@@ -3985,7 +4000,7 @@ it.each([
   [600, "es-ES"],
   [640, "es-ES"],
 ])(
-  "in a wide window, a list %ipx wide puts the four buttons on one line and the search under them (%s)",
+  "in a wide window, a list %ipx wide puts three buttons before the search and Customise line (%s)",
   async (listWidth, locale) => {
     const { page } = await import("vitest/browser");
     const width = window.innerWidth,
@@ -3996,11 +4011,11 @@ it.each([
       const el = await mountBrowser();
       el.style.width = `${listWidth}px`;
       const table = await tableOf(el);
+      await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
       const line = [
         table.shadowRoot!.querySelector(".filters-trigger")!,
         el.shadowRoot!.querySelector('[data-test="select"]')!,
         table.shadowRoot!.querySelector(".expand-all")!,
-        table.shadowRoot!.querySelector(".columns-trigger")!,
       ].map((element) => element.getBoundingClientRect());
       for (let index = 1; index < line.length; index++) {
         expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
@@ -4011,8 +4026,12 @@ it.each([
         .getBoundingClientRect();
       expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
       const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
-      expect(toolbar.bottom).toBeCloseTo(search.bottom, 0);
-      expect(search.width).toBeCloseTo(toolbar.width, 0);
+      const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
+      expect(search.right).toBeLessThan(chooser.left);
+      expect(chooser.top).toBeLessThan(search.bottom);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+      expect(toolbar.bottom).toBeCloseTo(Math.max(search.bottom, chooser.bottom), 0);
+      expect(search.left).toBeCloseTo(toolbar.left, 0);
     } finally {
       await page.viewport(width, height);
       setLocale("en-GB");
@@ -4020,7 +4039,7 @@ it.each([
   },
 );
 
-it("keeps Filters, Select, Expand all, Customise and search on one line in a Spanish list 660px wide", async () => {
+it("A462 Customise follows Filters, Select, Expand all and search on one line in a Spanish list 660px wide", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -4034,8 +4053,8 @@ it("keeps Filters, Select, Expand all, Customise and search on one line in a Spa
       table.shadowRoot!.querySelector(".filters-trigger")!,
       el.shadowRoot!.querySelector('[data-test="select"]')!,
       table.shadowRoot!.querySelector(".expand-all")!,
-      table.shadowRoot!.querySelector(".columns-trigger")!,
       el.shadowRoot!.querySelector('[name="catalogue-search"]')!,
+      table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < boxes.length; index++) {
       expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
@@ -4047,7 +4066,7 @@ it("keeps Filters, Select, Expand all, Customise and search on one line in a Spa
   }
 });
 
-it("at phone width fits Select mode's controls and the table's own on two toolbar lines", async () => {
+it("at phone width fits Select controls beneath the final search and Customise line", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -4056,22 +4075,24 @@ it("at phone width fits Select mode's controls and the table's own on two toolba
     const el = await mountBrowser();
     await press(el, "select");
     const table = await tableOf(el);
-    const boxes = [
-      table.shadowRoot!.querySelector(".expand-all")!,
-      ...["selected-count", "move", "delete", "cancel-selection"].map((test) =>
-        el.shadowRoot!.querySelector(`[data-test="${test}"]`)!,
-      ),
-      table.shadowRoot!.querySelector(".columns-trigger")!,
-    ]
-      .map((element) => element.getBoundingClientRect())
-      .sort((a, b) => a.top - b.top);
-    let lines = 0;
-    let bottom = -Infinity;
-    for (const box of boxes) {
-      if (box.top >= bottom) lines++;
-      bottom = box.top >= bottom ? box.bottom : Math.max(bottom, box.bottom);
+    await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
+    const controls = ["selected-count", "move", "delete", "cancel-selection"].map((key) =>
+      el.shadowRoot!.querySelector(`[data-test="${key}"]`)!.getBoundingClientRect(),
+    );
+    const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+    for (const box of controls) {
+      expect(box.top).toBeGreaterThanOrEqual(toolbar.bottom);
+      expect(box.top).toBeLessThan(controls[0]!.bottom);
+      expect(box.left).toBeGreaterThanOrEqual(table.getBoundingClientRect().left);
+      expect(box.right).toBeLessThanOrEqual(table.getBoundingClientRect().right);
     }
-    expect(lines).toBeLessThanOrEqual(2);
+    const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
+    const search = el
+      .shadowRoot!.querySelector('[name="catalogue-search"]')!
+      .getBoundingClientRect();
+    expect(search.right).toBeLessThan(chooser.left);
+    expect(chooser.top).toBeLessThan(search.bottom);
+    expect(chooser.right).toBeCloseTo(toolbar.right, 0);
   } finally {
     await page.viewport(width, height);
   }
@@ -4256,6 +4277,8 @@ it.each(
   const el = await mountBrowser();
   el.style.width = "100%";
   el.parentElement!.setAttribute("data-theme", theme);
+  el.parentElement!.style.background = "var(--wt-color-bg)";
+  el.parentElement!.style.color = "var(--wt-color-text)";
   const table = await tableOf(el);
   await vi.waitFor(() => expect(table.getBoundingClientRect().width).toBeGreaterThan(0));
   await new Promise<void>((resolve) =>
@@ -4269,26 +4292,24 @@ it.each(
     table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!,
     table.shadowRoot!.querySelector<HTMLElement>(".expand-all")!,
-    table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
     search.shadowRoot!.querySelector<HTMLInputElement>("input")!,
+    table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
   ];
-  const drawn = [...controls].sort((a, b) => {
-    const x = a.getBoundingClientRect(),
-      y = b.getBoundingClientRect();
-    return Math.abs(x.top - y.top) > 20 ? x.top - y.top : x.left - y.left;
-  });
   const before = document.createElement("button");
   before.textContent = "Before Products";
   el.before(before);
   onTestFinished(() => before.remove());
   before.focus();
-  for (const control of drawn) {
+  for (const control of controls) {
     await userEvent.keyboard("{Tab}");
     let focused = document.activeElement;
     while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
     expect(focused).toBe(control);
   }
   before.remove();
+  await page.screenshot({
+    path: `__screenshots__/a462-task1/products-${width}-${locale}-${theme}.png`,
+  });
 });
 
 it.each(["products", "category"])(
@@ -4650,6 +4671,8 @@ it.each(
     ],
   });
   el.parentElement!.setAttribute("data-theme", theme);
+  el.parentElement!.style.background = "var(--wt-color-bg)";
+  el.parentElement!.style.color = "var(--wt-color-text)";
   const capture = async (state: string) => {
     await tableOf(el);
     await new Promise<void>((resolve) =>

@@ -3321,10 +3321,11 @@ test("the search box draws a primary border, and a filter dropdown the 2px prima
 });
 
 test("the search box and filter dropdown paint from the theme tokens", async () => {
-  const el = await tableS({ searchable: true, columns: withStatus });
+  const el = await tableS({ searchable: true, columns: withStatusAndChooser });
   await openFilters(el);
   el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-close")!.focus();
   host.style.setProperty("--wt-tap-min", "52px");
+  host.style.setProperty("--wt-space-3", "17px");
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
   host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
@@ -3335,6 +3336,7 @@ test("the search box and filter dropdown paint from the theme tokens", async () 
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
   const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
   const box = filter.shadowRoot!.querySelector(".field")!;
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".table-search-end")!).gap).toBe("17px");
   expect(getComputedStyle(search).borderColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(search).backgroundColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(search).color).toBe("rgb(10, 11, 12)");
@@ -3378,26 +3380,26 @@ function toolbarBoxes(el: WtDataTable<RowS>) {
 }
 
 test.each([390, 640])(
-  "in a table %i px wide, Filters and the chooser share the first line and the search takes the full-width line below them",
+  "in a table %i px wide, Filters takes the first line and search ends with Customise on the full-width line below",
   async (width) => {
     const el = await tableS({ searchable: true, columns: withStatusAndChooser });
     el.style.width = `${width}px`;
     await el.updateComplete;
     await vi.waitFor(() => {
       const { toolbar, filters, search, chooser } = toolbarBoxes(el);
-      expect(chooser.top).toBeLessThan(filters.bottom);
-      expect(filters.top).toBeLessThan(chooser.bottom);
-      expect(search.top).toBeGreaterThanOrEqual(Math.max(filters.bottom, chooser.bottom));
+      expect(search.top).toBeGreaterThanOrEqual(filters.bottom);
+      expect(chooser.top).toBeCloseTo(search.top, 0);
+      expect(search.right).toBeLessThan(chooser.left);
       expect(filters.left).toBeCloseTo(toolbar.left, 0);
       expect(chooser.right).toBeGreaterThanOrEqual(toolbar.right - 8);
       expect(search.left).toBeCloseTo(toolbar.left, 0);
-      expect(search.width).toBeCloseTo(toolbar.width, 0);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
     });
   },
 );
 
 test.each([641, 1280])(
-  "in a table %i px wide, Filters, the chooser and the search share one line in that order",
+  "in a table %i px wide, Filters, search and Customise share one line in that order",
   async (width) => {
     const el = await tableS({ searchable: true, columns: withStatusAndChooser });
     el.style.width = `${width}px`;
@@ -3407,9 +3409,9 @@ test.each([641, 1280])(
       expect(search.top).toBeLessThan(filters.bottom);
       expect(chooser.top).toBeLessThan(search.bottom);
       expect(filters.left).toBeCloseTo(toolbar.left, 0);
-      expect(filters.right).toBeLessThan(chooser.left);
-      expect(chooser.right).toBeLessThan(search.left);
-      expect(search.right).toBeGreaterThanOrEqual(toolbar.right - 8);
+      expect(filters.right).toBeLessThan(search.left);
+      expect(search.right).toBeLessThan(chooser.left);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
       // The search grows into the room the buttons leave; they keep their natural width.
       expect(filters.width).toBeLessThan(search.width / 2);
     });
@@ -5604,6 +5606,8 @@ test.each(["light", "dark"] as const)(
   async (theme) => {
     const { el } = await narrowTable("end");
     host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    host.style.color = "var(--wt-color-text)";
     const table = el.shadowRoot!.querySelector("table")!;
     const row = el.shadowRoot!.querySelector("tbody tr")!;
     const cell = row.querySelector("td:last-child")!;
@@ -6506,6 +6510,8 @@ test("in both themes a hovered clickable row looks different from a resting one"
   for (const theme of ["light", "dark"]) {
     const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
     host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    host.style.color = "var(--wt-color-text)";
     const cell = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td')!;
     const pinned = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td:last-child')!;
     const resting = getComputedStyle(pinned).backgroundColor;
@@ -8268,6 +8274,8 @@ test.each(
     viewKey: "toolbar-tab",
   });
   host.setAttribute("data-theme", theme);
+  host.style.background = "var(--wt-color-bg)";
+  host.style.color = "var(--wt-color-text)";
   const before = document.createElement("button");
   before.textContent = "Before table";
   host.prepend(before);
@@ -8280,16 +8288,11 @@ test.each(
   await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(width === 390));
   const controls = [
     extra,
-    el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
     el.shadowRoot!.querySelector<HTMLElement>(".table-search")!,
+    el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
   ];
-  const drawn = [...controls].sort((a, b) => {
-    const x = a.getBoundingClientRect(),
-      y = b.getBoundingClientRect();
-    return Math.abs(x.top - y.top) > 20 ? x.top - y.top : x.left - y.left;
-  });
   before.focus();
-  for (const control of drawn) {
+  for (const control of controls) {
     await userEvent.keyboard("{Tab}");
     expect(el.shadowRoot!.activeElement ?? document.activeElement).toBe(control);
   }
@@ -8848,4 +8851,133 @@ test("A461 distinct row paths can share one controlled selection", async () => {
   el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
   await el.updateComplete;
   expect(el.selected).toEqual(["a"]);
+});
+
+test.each(
+  [390, 1280].flatMap((width) =>
+    ["light", "dark"].flatMap((theme) =>
+      ["Search", "Buscar"].flatMap((label) =>
+        [false, true].map((forwarded) => [width, theme, label, forwarded] as const),
+      ),
+    ),
+  ),
+)(
+  "A462 Customise is last after search at %i px (%s, %s, forwarded=%s)",
+  async (width, theme, label, forwarded) => {
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 844));
+    const el = await table({ searchable: !forwarded, searchLabel: label, columns: choosable });
+    host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    host.style.color = "var(--wt-color-text)";
+    const before = document.createElement("button");
+    before.textContent = "Before";
+    host.prepend(before);
+    const extra = document.createElement("button");
+    extra.slot = "toolbar-end";
+    extra.textContent = "Add";
+    el.append(extra);
+    let search: HTMLInputElement;
+    if (forwarded) {
+      search = document.createElement("input");
+      search.type = "search";
+      search.name = "forwarded-search";
+      search.setAttribute("aria-label", label);
+      search.slot = "toolbar-search";
+      search.style.flex = "1";
+      search.style.minWidth = "0";
+      el.append(search);
+    } else search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    el.requestUpdate();
+    await el.updateComplete;
+    await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(width === 390));
+    const chooser = trigger(el);
+    await vi.waitFor(() => {
+      const toolbar = el.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+      const s = search.getBoundingClientRect(),
+        c = chooser.getBoundingClientRect();
+      expect(s.right).toBeLessThanOrEqual(c.left);
+      expect(s.top).toBeLessThan(c.bottom);
+      expect(c.top).toBeLessThan(s.bottom);
+      expect(c.right).toBeCloseTo(toolbar.right, 0);
+      expect(s.left).toBeGreaterThanOrEqual(toolbar.left);
+      expect(c.bottom).toBeLessThanOrEqual(toolbar.bottom);
+      if (width === 390) expect(s.top).toBeGreaterThanOrEqual(extra.getBoundingClientRect().bottom);
+    });
+    before.focus();
+    for (const control of [extra, search, chooser]) {
+      await userEvent.keyboard("{Tab}");
+      let focused = document.activeElement;
+      while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+      expect(focused).toBe(control);
+    }
+    await page.screenshot({
+      path: `__screenshots__/a462-task1/shared-${width}-${theme}-${label}-${forwarded}.png`,
+    });
+  },
+);
+
+test("A462 Customise follows search through forwarded slot changes in a narrow container", async () => {
+  await page.viewport(1280, 844);
+  const el = await table({ columns: choosable });
+  el.style.width = "390px";
+  await settle();
+  expect(el.hasAttribute("stacked-search")).toBe(false);
+  const search = document.createElement("input");
+  search.slot = "toolbar-search";
+  search.setAttribute("aria-label", "Search");
+  el.append(search);
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+  expect(search.getBoundingClientRect().right).toBeLessThan(
+    trigger(el).getBoundingClientRect().left,
+  );
+  el.style.display = "none";
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(false));
+  el.style.display = "";
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+  search.remove();
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(false));
+  expect(trigger(el).getBoundingClientRect().width).toBeGreaterThan(0);
+});
+
+test("A462 Customise stays after both search channels and survives no matches, but not empty source rows", async () => {
+  const el = await table({ columns: choosable, searchable: true });
+  const forwarded = document.createElement("input");
+  forwarded.slot = "toolbar-search";
+  forwarded.setAttribute("aria-label", "Other search");
+  el.append(forwarded);
+  el.requestUpdate();
+  await el.updateComplete;
+  const own = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  own.focus();
+  await userEvent.keyboard("{Tab}");
+  expect(document.activeElement).toBe(forwarded);
+  await userEvent.keyboard("{Tab}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger(el));
+  own.value = "no matching name";
+  own.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".message")).not.toBeNull();
+  expect(trigger(el).getBoundingClientRect().width).toBeGreaterThan(0);
+  el.rows = [];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).toBeNull();
+});
+
+test("A462 Customise without search is last and no chooser is introduced without a choice", async () => {
+  const el = await table({ columns: choosable });
+  const start = document.createElement("button");
+  start.slot = "toolbar-start";
+  start.textContent = "Select";
+  el.append(start);
+  el.requestUpdate();
+  await el.updateComplete;
+  start.focus();
+  await userEvent.keyboard("{Tab}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger(el));
+  el.columns = [columns[0]!];
+  el.searchable = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".table-search")).not.toBeNull();
 });

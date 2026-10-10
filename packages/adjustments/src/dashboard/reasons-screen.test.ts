@@ -1871,3 +1871,53 @@ it("starts the reasons table's toolbar with Filters, opening beside the rows on 
     },
   );
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en", "es"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)(
+  "A462 Customise ends the toolbar without search at %i px (%s, %s)",
+  async (width, locale, theme) => {
+    const previous = [window.innerWidth, window.innerHeight];
+    await page.viewport(width, 844);
+    setLocale(locale);
+    try {
+      const el = await mount(fakeApi());
+      el.parentElement!.setAttribute("data-theme", theme);
+      el.parentElement!.style.background = "var(--wt-color-bg)";
+      el.parentElement!.style.color = "var(--wt-color-text)";
+      const list = table(el);
+      await vi.waitFor(() => {
+        const chooser = list
+          .shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!
+          .getBoundingClientRect();
+        const toolbar = list
+          .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
+          .getBoundingClientRect();
+        expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
+        expect(chooser.width).toBeGreaterThan(0);
+        expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+      });
+      const chooser = list.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
+      await userEvent.click(chooser);
+      await vi.waitFor(() => expect(chooser.getAttribute("aria-expanded")).toBe("true"));
+      const dialog = list.shadowRoot!.querySelector("wt-dialog")!;
+      await userEvent.click(
+        dialog
+          .querySelector<HTMLElement>('wt-button[slot="footer"]:last-of-type')!
+          .shadowRoot!.querySelector<HTMLButtonElement>("button")!,
+      );
+      await vi.waitFor(() => expect(chooser.getAttribute("aria-expanded")).toBe("false"));
+      expect(list.shadowRoot!.activeElement).toBe(chooser);
+      await page.screenshot({
+        path: `__screenshots__/a462-task1/reasons-${width}-${locale}-${theme}.png`,
+      });
+    } finally {
+      setLocale("en-GB");
+      await page.viewport(previous[0]!, previous[1]!);
+    }
+  },
+);
