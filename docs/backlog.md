@@ -1380,8 +1380,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   refreshes, plus unchanged snapshots and explicit preview-language choices.
   On that branch, loaded department edits, saves and draft previews now stay usable after
   unrelated receipt/location/language reads refuse; recovery retains refused department drafts.
-  Retiring the legacy combined form, remaining page lifecycle checks and branch review stay
-  open after landed 3A/6A. Core email consent removal stays separate.
+  The legacy combined form is retired on that branch; department contact, venue defaults,
+  receipt language and description each save independently. Remaining page lifecycle checks
+  and branch review stay open after landed 3A/6A. Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 

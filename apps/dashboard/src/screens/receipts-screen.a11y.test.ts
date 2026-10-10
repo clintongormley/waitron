@@ -32,10 +32,12 @@ function preview(config: ReceiptConfig): ReceiptPreview {
 }
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
-  return {
-    getVenueDepartments: vi.fn().mockResolvedValue([]),
+  const api = {
+    getVenueDepartments: vi
+      .fn()
+      .mockResolvedValue([{ id: "bar", name: "Bar", active: true, isDefault: true }]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt }, venueAddress: [] }),
-    putReceipt: vi.fn().mockResolvedValue(undefined),
+    putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
@@ -50,8 +52,43 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
     previewReceipt: vi.fn(async (config: ReceiptConfig) => preview(config)),
     ...overrides,
   } as unknown as DashboardApi;
+  api.getVenueReceiptSettings = vi.fn(async () => {
+    const settings = { ...(await api.getReceipt()).receipt };
+    delete settings.phone;
+    delete settings.email;
+    return { settings };
+  });
+  api.getDepartmentReceipt = vi.fn(async () => {
+    const { receipt, venueAddress } = await api.getReceipt();
+    return {
+      receipt: {
+        ...(receipt.phone ? { phone: receipt.phone } : {}),
+        ...(receipt.email ? { email: receipt.email } : {}),
+      },
+      venueDefaults: {},
+      venueAddress,
+      languages: ["es-ES"],
+      warningLanguages: [],
+    };
+  });
+  api.putDepartmentReceipt = vi.fn().mockResolvedValue(undefined);
+  api.previewReceiptDraft = vi.fn(async (draft) =>
+    api.previewReceipt({ ...draft.settings, ...draft.receipt } as ReceiptConfig),
+  );
+  return api;
 }
 
+function q<T extends Element = HTMLElement>(el: ReceiptsScreen, selector: string): T | null {
+  return (
+    el
+      .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")
+      ?.shadowRoot?.querySelector<T>(selector) ??
+    el
+      .shadowRoot!.querySelector("dashboard-department-receipt-editor")
+      ?.shadowRoot?.querySelector<T>(selector) ??
+    el.shadowRoot!.querySelector<T>(selector)
+  );
+}
 async function flush(el: ReceiptsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -59,15 +96,14 @@ async function flush(el: ReceiptsScreen): Promise<void> {
 
 /** An edit, so Save can be pressed. */
 async function editHeader(el: ReceiptsScreen, value: string): Promise<void> {
-  el.shadowRoot!.querySelector("wt-input[name=headerSubtitle]")!.dispatchEvent(
+  q(el, "wt-input[name=headerSubtitle]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
 
 async function saveState(el: ReceiptsScreen) {
-  const save =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+  const save = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=defaults-save]")!;
   await save.updateComplete;
   return [save.variant, save.disabled];
 }
@@ -128,24 +164,25 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
   it("renders accessibly with a refused save shown in the form's bottom message", async () => {
     const { el, host } = await mountWidget<ReceiptsScreen>(
       "dashboard-receipts-screen",
-      { api: stubApi({ putReceipt: vi.fn().mockRejectedValue({ code: "receipt.invalid" }) }) },
+      {
+        api: stubApi({
+          putVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "receipt.invalid" }),
+        }),
+      },
       theme,
     );
     await flush(el);
     await editHeader(el, "Calle Mayor 1");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    q<HTMLElement>(el, "[data-test=defaults-save]")!.click();
     await flush(el);
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=combined-actions]")!
-        .error,
-    ).not.toBe("");
+    expect(q<HTMLElement & { error: string }>(el, "wt-form-actions")!.error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 
   it("renders accessibly with a line of the preview outlined and both trim fields refused", async () => {
     const api = stubApi(
       {
-        putReceipt: vi.fn().mockRejectedValue({
+        putVenueReceiptSettings: vi.fn().mockRejectedValue({
           code: "receipt.invalid",
           params: { reason: "too_long", field: "footerMessage", maxLength: 200 },
         }),
@@ -158,10 +195,8 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-mark=headerSubtitle]")).not.toBeNull(),
-    );
-    el.shadowRoot!.querySelector("wt-textarea[name=footerMessage]")!.dispatchEvent(
+    await vi.waitFor(() => expect(q(el, "[data-mark=headerSubtitle]")).not.toBeNull());
+    q(el, "wt-textarea[name=footerMessage]")!.dispatchEvent(
       new CustomEvent("wt-change", {
         detail: { value: "Gracias por su visita" },
         bubbles: true,
@@ -169,20 +204,14 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       }),
     );
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    q<HTMLElement>(el, "[data-test=defaults-save]")!.click();
     await flush(el);
     expect(
-      el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-        "wt-textarea[name=footerMessage]",
-      )!.error,
+      q<HTMLElement & { error: string }>(el, "wt-textarea[name=footerMessage]")!.error,
     ).not.toBe("");
-    el.shadowRoot!.querySelector("wt-input[name=headerSubtitle]")!
-      .shadowRoot!.querySelector("input")!
-      .focus();
+    q(el, "wt-input[name=headerSubtitle]")!.shadowRoot!.querySelector("input")!.focus();
     await flush(el);
-    expect(
-      el.shadowRoot!.querySelector("[data-mark=headerSubtitle]")!.hasAttribute("data-active"),
-    ).toBe(true);
+    expect(q(el, "[data-mark=headerSubtitle]")!.hasAttribute("data-active")).toBe(true);
     await expectNoA11yViolations(host);
   });
 
@@ -205,11 +234,14 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
         theme,
       );
       await flush(el);
-      const shown = el.shadowRoot!.querySelector(
+      const shown = q(
+        el,
         venueAddress.length > 0 ? "[data-test=venue-address]" : "[data-test=no-address]",
       );
       expect(shown).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe(LOGO);
+      expect(
+        q<HTMLElementTagNameMap["dashboard-image-upload"]>(el, "dashboard-image-upload")!.image,
+      ).toBe(LOGO);
       await expectNoA11yViolations(host);
     },
   );
@@ -222,7 +254,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
   ])("renders accessibly with the save's refusal %j shown under its field", async (params, at) => {
     const api = stubApi({
       getReceipt: vi.fn().mockResolvedValue({ receipt: topBlock, venueAddress: ["Calle Mayor 1"] }),
-      putReceipt: vi.fn().mockRejectedValue({ code: "receipt.invalid", params }),
+      putVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "receipt.invalid", params }),
     });
     const { el, host } = await mountWidget<ReceiptsScreen>(
       "dashboard-receipts-screen",
@@ -230,10 +262,25 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    await editHeader(el, "Calle Mayor 1");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    const contact = params.field === "phone" || params.field === "email";
+    if (contact) {
+      api.putDepartmentReceipt = vi.fn().mockRejectedValue({ code: "receipt.invalid", params });
+      const input = q(el, `wt-input[name=${params.field}]`)!;
+      input.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: params.field === "phone" ? "933333333" : "other@example.com" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+    } else await editHeader(el, "Calle Mayor 1");
+    q<HTMLElement>(
+      el,
+      contact ? "[data-test=department-save]" : "[data-test=defaults-save]",
+    )!.click();
     await flush(el);
-    const marked = el.shadowRoot!.querySelector<HTMLElement & { error?: string }>(at)!;
+    const marked = q<HTMLElement & { error?: string }>(el, at)!;
     expect(marked.error ?? marked.textContent!.trim()).not.toBe("");
     await expectNoA11yViolations(host);
   });
@@ -251,9 +298,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("wt-combobox[name=paperWidth]")).not.toBeNull(),
-    );
+    await vi.waitFor(() => expect(q(el, "wt-combobox[name=paperWidth]")).not.toBeNull());
     await expectNoA11yViolations(host);
   });
 
@@ -284,11 +329,11 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    const language = el.shadowRoot!.querySelector("wt-combobox[name=receiptLanguage]");
+    const language = q(el, "wt-combobox[name=receiptLanguage]");
     if (receiptLanguage.fixed === null) {
       await chooseOption(language!, "ca-ES");
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+      q<HTMLElement>(el, "[data-test=language-save]")!.click();
       await flush(el);
       await vi.waitFor(() =>
         expect(language!.shadowRoot!.querySelector("[data-error]")).not.toBeNull(),
@@ -296,7 +341,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     } else {
       expect(language).toBeNull();
     }
-    expect(el.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).toBeNull();
+    expect(q(el, "[data-test=receipt-language-warning]")).toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -313,7 +358,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=receipt-language-warning]")).not.toBeNull();
+    expect(q(el, "[data-test=receipt-language-warning]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -324,7 +369,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    const footer = el.shadowRoot!.querySelector("wt-textarea[name=footerMessage]")!;
+    const footer = q(el, "wt-textarea[name=footerMessage]")!;
     const placeholder = getComputedStyle(
       footer.shadowRoot!.querySelector("textarea")!,
       "::placeholder",

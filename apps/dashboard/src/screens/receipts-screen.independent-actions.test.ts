@@ -40,6 +40,8 @@ const paper: ReceiptPreview = {
 };
 function fixture() {
   return {
+    getVenueReceiptSettings: vi.fn(async () => ({ settings: { headerSubtitle: "Restaurant" } })),
+    putVenueReceiptSettings: vi.fn(async () => {}),
     getVenueDepartments: vi.fn(async () => []),
     getReceipt: vi.fn(async () => ({
       receipt: {
@@ -74,7 +76,9 @@ async function mount(api = fixture(), theme: "light" | "dark" = "light") {
     { api: api as unknown as DashboardApi },
     theme,
   );
-  await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[data-test=save]")).toBeTruthy());
+  await vi.waitFor(() =>
+    expect(el.shadowRoot?.querySelector("[data-test=description-save]")).toBeTruthy(),
+  );
   return { el, host, api };
 }
 function action(el: Screen, part: "language" | "description") {
@@ -142,13 +146,15 @@ describe("independent location receipt actions", () => {
     const { el, api } = await mount();
     await editDescription(el, " ");
     await pick(el, "ca-ES");
-    el.shadowRoot!.querySelector("wt-input[name=headerSubtitle]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Unsaved venue" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+      .shadowRoot!.querySelector("wt-input[name=headerSubtitle]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Unsaved venue" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     expect(await state(el, "language")).toEqual({ variant: "primary", disabled: false });
     await press(el, "language");
     await vi.waitFor(() => expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("ca-ES"));

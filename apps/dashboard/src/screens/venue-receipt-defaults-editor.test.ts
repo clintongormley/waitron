@@ -227,6 +227,7 @@ it("publishes authored defaults to its parent without contact or unrelated scope
   });
   await edit(el, "Draft preview");
   expect(detail).toEqual({
+    active: true,
     settings: { headerSubtitle: "Draft preview", footerMessage: "Gracias", printAddress: false },
   });
 });
@@ -253,7 +254,10 @@ it("previews and saves trimmed defaults, omitting whitespace-only optional text"
   await footer.updateComplete;
   await userEvent.fill(page.elementLocator(footer.shadowRoot!.querySelector("textarea")!), " \n ");
   await el.updateComplete;
-  expect(detail).toEqual({ settings: { headerSubtitle: "Dinner", printAddress: false } });
+  expect(detail).toEqual({
+    settings: { headerSubtitle: "Dinner", printAddress: false },
+    active: true,
+  });
   save(el).click();
   await vi.waitFor(() =>
     expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
@@ -309,4 +313,19 @@ it("adopts untouched live fields while keeping the typed field and its original 
       logo,
     }),
   );
+});
+
+it("keeps an unassigned save failure when a field is edited", async () => {
+  const api = fixture();
+  api.putVenueReceiptSettings.mockRejectedValue({ code: "connection.failed" });
+  const { el } = await mount(api);
+  await edit(el, "New");
+  save(el).click();
+  const bottom = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error;
+  await vi.waitFor(() => expect(bottom()).not.toBe(""));
+  const refusal = bottom();
+  await edit(el, "Corrected");
+  expect(bottom()).toBe(refusal);
 });

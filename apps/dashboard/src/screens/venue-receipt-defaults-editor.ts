@@ -62,9 +62,11 @@ export class VenueReceiptDefaultsEditor extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) draftParent?: object;
+  @property({ attribute: false }) venueAddress: string[] = [];
   @state() private draft: VenueReceiptSettings = {};
   @state() private loaded = false;
   @state() private saving = false;
+  @state() private saved = false;
   @state() private loadError = "";
   @state() private actionError = "";
   @state() private errors: Partial<Record<Field, string>> = {};
@@ -158,12 +160,12 @@ export class VenueReceiptDefaultsEditor extends LitElement {
   }
   #changed(): void {
     this.#scope?.changed();
-    this.#publish();
+    this.#publish(true);
   }
-  #publish(): void {
+  #publish(active = false): void {
     this.dispatchEvent(
       new CustomEvent("venue-receipt-draft-changed", {
-        detail: { settings: settingsBody(this.draft) },
+        detail: { settings: settingsBody(this.draft), active },
         bubbles: true,
         composed: true,
       }),
@@ -177,16 +179,18 @@ export class VenueReceiptDefaultsEditor extends LitElement {
     } else if (typeof value === "string" && value !== "") next[field] = value;
     else delete next[field];
     this.draft = next;
+    this.saved = false;
     const errors = { ...this.errors };
+    if (errors[field]) this.actionError = "";
     delete errors[field];
     this.errors = errors;
-    this.actionError = "";
     this.#changed();
   }
   async #save(): Promise<void> {
     if (this.saving || !this.#scope || saveActionState(this.#scope).unchanged) return;
     this.errors = {};
     this.actionError = "";
+    this.saved = false;
     this.saving = true;
     const epoch = this.#epoch;
     const scope = this.#scope;
@@ -195,15 +199,21 @@ export class VenueReceiptDefaultsEditor extends LitElement {
       await this.api.putVenueReceiptSettings(settingsBody(submitted));
     } catch (error) {
       if (epoch !== this.#epoch) return;
-      const params = (error as { params?: { field?: unknown; maxLength?: unknown } })?.params;
+      const params = (
+        error as { params?: { field?: unknown; maxLength?: unknown; reason?: unknown } }
+      )?.params;
       const field =
         codeOf(error) === "image.invalid_file"
           ? "logo"
           : fields.find((name) => name === params?.field);
       const sentence =
-        typeof params?.maxLength === "number"
-          ? t("receipts.trim_too_long").replace("{max}", String(params.maxLength))
-          : codeMessage(codeOf(error));
+        params?.reason === "invalid_logo"
+          ? t("receipts.invalid_logo")
+          : params?.reason === "image_not_found"
+            ? t("receipts.logo_not_found")
+            : typeof params?.maxLength === "number"
+              ? t("receipts.trim_too_long").replace("{max}", String(params.maxLength))
+              : codeMessage(codeOf(error));
       this.actionError = sentence;
       if (field) this.errors = { [field]: sentence };
       this.saving = false;
@@ -216,7 +226,28 @@ export class VenueReceiptDefaultsEditor extends LitElement {
     scope.commit(submitted);
     this.#revision++;
     this.saving = false;
+    this.saved = true;
     await this.#load();
+  }
+  #focus(event: FocusEvent | null): void {
+    const target = event
+      ?.composedPath()
+      .find(
+        (node) =>
+          node instanceof HTMLElement &&
+          (node.hasAttribute("name") || node.localName === "dashboard-image-upload"),
+      ) as HTMLElement | undefined;
+    this.dispatchEvent(
+      new CustomEvent("receipt-field-focus", {
+        detail: {
+          field:
+            target?.getAttribute("name") ??
+            (target?.localName === "dashboard-image-upload" ? "logo" : null),
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   override render() {
     const action = saveActionState(this.#scope);
@@ -233,9 +264,12 @@ export class VenueReceiptDefaultsEditor extends LitElement {
       this.loaded
         ? html`<div
               class="fields"
+              @focusin=${(event: FocusEvent) => this.#focus(event)}
+              @focusout=${() => this.#focus(null)}
               @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=defaults-save]"))}
             >
               <h2>${t("receipts.venue_defaults")}</h2>
+              <a href="/manage/venue-operations">${t("receipts.departments_zones")}</a>
               <dashboard-image-upload
                 .api=${this.api}
                 label=${t("receipts.logo")}
@@ -248,10 +282,12 @@ export class VenueReceiptDefaultsEditor extends LitElement {
                   this.#edit("logo", event.detail.image);
                 }}
               ></dashboard-image-upload>
-              ${this.errors.logo ? html`<p class="error">${this.errors.logo}</p>` : nothing}
+              ${this.errors.logo ? html`<p class="error" data-test="logo-error">${this.errors.logo}</p>` : nothing}
               <wt-input
+                data-test="header-subtitle"
                 name="headerSubtitle"
                 label=${t("receipts.subtitle")}
+                hint=${t("receipts.header_subtitle_hint")}
                 .value=${this.draft.headerSubtitle ?? ""}
                 error=${this.errors.headerSubtitle ?? ""}
                 ?disabled=${this.saving}
@@ -261,8 +297,10 @@ export class VenueReceiptDefaultsEditor extends LitElement {
                 }}
               ></wt-input>
               <wt-textarea
+                data-test="footer-message"
                 name="footerMessage"
                 label=${t("receipt.footer_message")}
+                hint=${t("receipts.footer_message_hint")}
                 .value=${this.draft.footerMessage ?? ""}
                 error=${this.errors.footerMessage ?? ""}
                 ?disabled=${this.saving}
@@ -281,8 +319,12 @@ export class VenueReceiptDefaultsEditor extends LitElement {
                   this.#edit("printAddress", event.detail.checked);
                 }}
               ></wt-switch>
-              ${this.errors.printAddress ? html`<p class="error">${this.errors.printAddress}</p>` : nothing}
+              <p data-test=${this.venueAddress.length ? "venue-address" : "no-address"}>
+                ${this.venueAddress.length ? this.venueAddress.map((line, index) => html`${index ? html`<br />` : nothing}${line}`) : t("receipts.no_address")}
+              </p>
+              ${this.errors.printAddress ? html`<p class="error" data-test="print-address-error">${this.errors.printAddress}</p>` : nothing}
             </div>
+            ${this.saved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
             <wt-form-actions .error=${marked ? t("form.fix_fields") : this.actionError}>
               <wt-button
                 data-test="defaults-save"

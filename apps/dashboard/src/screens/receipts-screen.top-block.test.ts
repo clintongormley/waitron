@@ -62,9 +62,9 @@ function stubApi(
   receipt: ReceiptConfig = {},
   overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
 ): DashboardApi {
-  return {
+  const api = {
     getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt }, venueAddress: ADDRESS }),
-    putReceipt: vi.fn().mockResolvedValue(undefined),
+    putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
@@ -74,11 +74,39 @@ function stubApi(
       .mockResolvedValue({ language: "es-ES", choices: ["es-ES", "ca-ES"], fixed: null }),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    getVenueDepartments: vi.fn().mockResolvedValue([]),
+    getVenueDepartments: vi
+      .fn()
+      .mockResolvedValue([{ id: "bar", name: "Bar", active: true, isDefault: true }]),
     previewReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
     imageLibraryRequest: vi.fn().mockResolvedValue({ images: [], total: 0 }),
     ...overrides,
   } as unknown as DashboardApi;
+  api.getVenueReceiptSettings = vi.fn(async () => {
+    const { receipt } = await api.getReceipt();
+    const settings = { ...receipt };
+    delete settings.phone;
+    delete settings.email;
+    return { settings };
+  });
+  api.getDepartmentReceipt = vi.fn(async () => {
+    const { receipt, venueAddress } = await api.getReceipt();
+    return {
+      receipt: {
+        ...(receipt.phone ? { phone: receipt.phone } : {}),
+        ...(receipt.email ? { email: receipt.email } : {}),
+      },
+      venueDefaults: {},
+      venueAddress,
+      languages: ["es-ES"],
+      warningLanguages: [],
+    };
+  });
+  api.putDepartmentReceipt = (overrides.putDepartmentReceipt ??
+    vi.fn().mockResolvedValue(undefined)) as DashboardApi["putDepartmentReceipt"];
+  api.previewReceiptDraft = vi.fn(async (draft) =>
+    fakePreview({ ...draft.settings, ...draft.receipt } as ReceiptConfig),
+  );
+  return api;
 }
 
 async function flush(el: ReceiptsScreen): Promise<void> {
@@ -86,15 +114,32 @@ async function flush(el: ReceiptsScreen): Promise<void> {
   await el.updateComplete;
 }
 
+const defaultsRoot = (el: ReceiptsScreen) =>
+  el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
+const departmentRoot = (el: ReceiptsScreen) =>
+  el.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.shadowRoot!;
 const q = <T extends Element = HTMLElement>(el: ReceiptsScreen, selector: string) =>
-  el.shadowRoot!.querySelector<T & Element>(selector);
+  (selector.includes("name=phone") ||
+  selector.includes("name=email") ||
+  selector.includes("department-save")
+    ? departmentRoot(el)
+    : defaultsRoot(el)
+  ).querySelector<T>(selector) ?? el.shadowRoot!.querySelector<T>(selector);
 const paperLines = (el: ReceiptsScreen) =>
   [...el.shadowRoot!.querySelectorAll(".paper pre")].map((pre) => pre.textContent!.trim());
 const previewCalls = (api: DashboardApi) =>
-  vi.mocked(api.previewReceipt).mock.calls.map(([config]) => config);
-const lastPut = (api: DashboardApi) => vi.mocked(api.putReceipt).mock.calls.at(-1)![0];
+  vi
+    .mocked(api.previewReceiptDraft)
+    .mock.calls.map(([draft]) => ({ ...draft.settings, ...draft.receipt }));
+const lastPut = (api: DashboardApi) => ({
+  ...vi.mocked(api.putVenueReceiptSettings).mock.calls.at(-1)?.[0],
+  ...vi.mocked(api.putDepartmentReceipt).mock.calls.at(-1)?.[1],
+});
 const bottom = (el: ReceiptsScreen) =>
-  q<HTMLElement & { error: string }>(el, "[data-test=combined-actions]")!.error;
+  [defaultsRoot(el), departmentRoot(el)]
+    .map((root) => root.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error)
+    .filter(Boolean)
+    .join(" ");
 const logoControl = (el: ReceiptsScreen) => q<ImageUpload>(el, "dashboard-image-upload")!;
 const addressSwitch = (el: ReceiptsScreen) => q<WtSwitch>(el, "wt-switch[name=printAddress]")!;
 
@@ -117,7 +162,8 @@ function chooseLogo(el: ReceiptsScreen, image: string | null): void {
 }
 
 async function save(el: ReceiptsScreen): Promise<void> {
-  q(el, "[data-test=save]")!.click();
+  q(el, "[data-test=defaults-save]")!.click();
+  departmentRoot(el).querySelector<HTMLElement>("[data-test=department-save]")!.click();
   await flush(el);
 }
 
@@ -133,9 +179,9 @@ afterEach(() => setLocale("es-ES"));
 
 describe("the Receipts page's top-block fields", () => {
   it.each([
-    ["en-GB", "Slogan"],
-    ["es-ES", "Eslogan"],
-  ] as const)("calls the subtitle the slogan in %s", async (locale, label) => {
+    ["en-GB", "Subtitle"],
+    ["es-ES", "Subtítulo"],
+  ] as const)("calls the subtitle in %s", async (locale, label) => {
     setLocale(locale);
     const { el } = await mount();
     const slogan = q<WtInput>(el, "wt-input[name=headerSubtitle]")!;
@@ -232,7 +278,7 @@ describe("saving the top block", () => {
     chooseLogo(el, null);
     await flush(el);
     await save(el);
-    expect(lastPut(api)).toEqual({});
+    expect(lastPut(api)).toEqual({ printAddress: true });
   });
 
   it("previews what the fields hold, before they are saved", async () => {
@@ -298,14 +344,16 @@ describe("saving the top block", () => {
     for (const name of ["phone", "email", "address", "logo"]) {
       expect(q(el, `[data-mark=${name}]`)).not.toBeNull();
     }
-    q(el, "wt-input[name=phone]")!.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    q(el, "wt-input[name=phone]")!.dispatchEvent(
+      new FocusEvent("focusin", { bubbles: true, composed: true }),
+    );
     await flush(el);
     expect(q(el, "[data-mark=phone]")!.hasAttribute("data-active")).toBe(true);
-    addressSwitch(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    addressSwitch(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
     await flush(el);
     expect(q(el, "[data-mark=address]")!.hasAttribute("data-active")).toBe(true);
     expect(q(el, "[data-mark=phone]")!.hasAttribute("data-active")).toBe(false);
-    logoControl(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    logoControl(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
     await flush(el);
     expect(q(el, "[data-mark=logo]")!.hasAttribute("data-active")).toBe(true);
   });
@@ -324,15 +372,15 @@ describe("the top block's keyboard and focus", () => {
     await el.updateComplete;
     await userEvent.keyboard("{Enter}");
     await flush(el);
-    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({ [field]: value });
+    expect(api.putDepartmentReceipt).toHaveBeenCalledExactlyOnceWith("bar", { [field]: value });
   });
 
   it("stops outlining the address once focus leaves the switch", async () => {
     const { el } = await mount();
-    addressSwitch(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    addressSwitch(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
     await flush(el);
     expect(q(el, "[data-mark=address]")!.hasAttribute("data-active")).toBe(true);
-    addressSwitch(el).dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    addressSwitch(el).dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
     await flush(el);
     expect(q(el, "[data-mark=address]")!.hasAttribute("data-active")).toBe(false);
   });
@@ -340,7 +388,9 @@ describe("the top block's keyboard and focus", () => {
 
 describe("the phone and email checks before a save", () => {
   const saveButton = (el: ReceiptsScreen) =>
-    q<HTMLElement & { disabled: boolean }>(el, "[data-test=save]")!;
+    departmentRoot(el).querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=department-save]",
+    )!;
 
   it("says nothing about a half-typed phone until Save is pressed", async () => {
     const { el } = await mount();
@@ -356,7 +406,7 @@ describe("the phone and email checks before a save", () => {
     edit(el, "phone", "91");
     edit(el, "email", "hola@deli");
     await save(el);
-    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
     expect(api.putLocationSettings).not.toHaveBeenCalled();
     const phone = q<WtInput>(el, "wt-input[name=phone]")!;
     const email = q<WtInput>(el, "wt-input[name=email]")!;
@@ -364,7 +414,7 @@ describe("the phone and email checks before a save", () => {
     expect(email.error).toBe(t("receipts.invalid_email"));
     expect(bottom(el)).toBe(t("form.fix_fields"));
     expect(saveButton(el).disabled).toBe(true);
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(phone));
+    await vi.waitFor(() => expect(departmentRoot(el).activeElement).toBe(phone));
     edit(el, "phone", "912 345 678");
     await flush(el);
     expect(phone.error).toBe("");
@@ -384,7 +434,7 @@ describe("the phone and email checks before a save", () => {
     edit(el, "phone", `123${" ".repeat(25)}456`);
     edit(el, "email", `a@b.${"c".repeat(251)}`);
     await save(el);
-    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
     const tooLong = (max: number) => t("receipts.trim_too_long").replace("{max}", String(max));
     expect(q<WtInput>(el, "wt-input[name=phone]")!.error).toBe(tooLong(30));
     expect(q<WtInput>(el, "wt-input[name=email]")!.error).toBe(tooLong(254));
@@ -411,7 +461,7 @@ describe("the phone and email checks before a save", () => {
 describe("the top block while a save is in flight", () => {
   function delayedSave(api: DashboardApi): () => void {
     let finish!: () => void;
-    vi.mocked(api.putReceipt).mockReturnValue(
+    vi.mocked(api.putVenueReceiptSettings).mockReturnValue(
       new Promise<void>((resolve) => {
         finish = resolve;
       }),
@@ -429,7 +479,8 @@ describe("the top block while a save is in flight", () => {
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "Calle Mayor 1");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
+    departmentRoot(el).querySelector<HTMLElement>("[data-test=department-save]")!.click();
     await flush(el);
     expect(inner(el, "remove-image").disabled).toBe(true);
     expect(inner(el, "choose-image").disabled).toBe(true);
@@ -455,7 +506,8 @@ describe("the top block while a save is in flight", () => {
     expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
     edit(el, "headerSubtitle", "Calle Mayor 1");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
+    departmentRoot(el).querySelector<HTMLElement>("[data-test=department-save]")!.click();
     await flush(el);
     expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
     finish();
@@ -474,7 +526,7 @@ describe("a refused save of the top block", () => {
       const api = stubApi(
         {},
         {
-          putReceipt: vi
+          putDepartmentReceipt: vi
             .fn()
             .mockRejectedValue({ code: "receipt.invalid", params: { reason, field } }),
         },
@@ -485,8 +537,10 @@ describe("a refused save of the top block", () => {
       const input = q<WtInput>(el, `wt-input[name=${field}]`)!;
       expect(input.error).toBe(t(key));
       expect(bottom(el)).toBe(t("form.fix_fields"));
-      expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=save]")!.disabled).toBe(false);
-      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(input));
+      expect(
+        q<HTMLElement & { disabled: boolean }>(el, "[data-test=department-save]")!.disabled,
+      ).toBe(false);
+      await vi.waitFor(() => expect(departmentRoot(el).activeElement).toBe(input));
       edit(el, field, changed);
       await el.updateComplete;
       expect(input.error).toBe("");
@@ -506,7 +560,7 @@ describe("a refused save of the top block", () => {
   ] as const)(
     "puts a refused logo's sentence under the logo until another is chosen",
     async (error, key) => {
-      const api = stubApi({}, { putReceipt: vi.fn().mockRejectedValue(error) });
+      const api = stubApi({}, { putVenueReceiptSettings: vi.fn().mockRejectedValue(error) });
       const { el } = await mount(api);
       chooseLogo(el, LOGO);
       await save(el);
@@ -523,7 +577,11 @@ describe("a refused save of the top block", () => {
   it("puts an image the save could not read under the logo", async () => {
     const api = stubApi(
       {},
-      { putReceipt: vi.fn().mockRejectedValue({ code: "image.invalid_file", params: {} }) },
+      {
+        putVenueReceiptSettings: vi
+          .fn()
+          .mockRejectedValue({ code: "image.invalid_file", params: {} }),
+      },
     );
     const { el } = await mount(api);
     chooseLogo(el, LOGO);
@@ -538,7 +596,7 @@ describe("a refused save of the top block", () => {
     const api = stubApi(
       {},
       {
-        putReceipt: vi.fn().mockRejectedValue({
+        putVenueReceiptSettings: vi.fn().mockRejectedValue({
           code: "receipt.invalid",
           params: { reason: "not_boolean", field: "printAddress" },
         }),

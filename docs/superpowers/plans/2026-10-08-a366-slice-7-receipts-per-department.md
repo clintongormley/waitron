@@ -678,28 +678,28 @@ queries/strings/tests; lockfile only if normal installation changes it.
 **Files:** dashboard receipts-screen, API/live queries/types, strings/codes and focused sibling
 screen/client/a11y/save-state tests.
 
-- [ ] Failing user-action tests: picker edits and previews the same department; active default
+- [x] Failing user-action tests: picker edits and previews the same department; active default
   selection/first-active alternative, explicit disabled maintenance URL, no active department,
   department load refusal while global fields remain usable; department address key never sent.
-- [ ] Load department config through scoped query, global defaults/switch via their own query, and receipt
+- [x] Load department config through scoped query, global defaults/switch via their own query, and receipt
   language/description via their existing venue APIs. Department heading replaces “Every
   location”; “Subtitle” names the field. Empty department fields show ONLY their effective inherited value;
   empty logo shows the inherited logo thumbnail without adding it to the draft. Global logo,
   one-string subtitle/footer, Print the address, receipt language and description stay below.
   Global phone/email remain stored/API-readable for current delivery and venue-only rendering;
   the new defaults form does not edit, delete or inherit them into departments.
-- [ ] Carry A331 immediately, not as a later polish step: separate `draftScopeFor` identities for
+- [x] Carry A331 immediately, not as a later polish step: separate `draftScopeFor` identities for
   selected department and global defaults/switch plus existing language/description scopes;
   `saveActionState` makes each Save quiet/disabled until changed, then active, and each save
   handler returns early when that scope cannot submit. Submit only that scope's changed body.
   Clearing/adding an explicit logo changes the department draft; live inherited hints/thumbnails,
   preview/picker language and global-default refresh do not. A global save changes effective
   preview/hints without creating a department override or adopting a dirty draft as its baseline.
-- [ ] Include `*.unsaved.test.ts` and save-state tests using real controls: pristine disabled,
+- [x] Include `*.unsaved.test.ts` and save-state tests using real controls: pristine disabled,
   changed enabled, reverted disabled, double/unchanged action sends no request, rejected save
   keeps the draft, field refusal inline plus localized bottom summary, successful write closes/
   commits before separately reporting refresh failure. A refusal alone never disables the action.
-- [ ] Passive subscription callbacks assign snapshots and never reset dirty drafts or rerun a
+- [x] Passive subscription callbacks assign snapshots and never reset dirty drafts or rerun a
   loader. Track read/action errors separately and retain a newer subscription snapshot over
   an older reload. Run focused client/screen/a11y/save tests and types; inspect changed fields
   once at task end at 390 px/desktop in EN/ES and both themes.

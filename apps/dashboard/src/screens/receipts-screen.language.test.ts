@@ -67,9 +67,10 @@ function stubApi(
   overrides: Record<string, unknown> = {},
 ): DashboardApi {
   return {
+    getVenueReceiptSettings: vi.fn().mockResolvedValue({ settings: {} }),
+    putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
     getVenueDepartments: vi.fn().mockResolvedValue([]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
-    putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
@@ -82,8 +83,10 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
+const defaultsRoot = (el: ReceiptsScreen) =>
+  el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
 const q = <T extends HTMLElement = HTMLElement>(el: ReceiptsScreen, selector: string) =>
-  el.shadowRoot!.querySelector<T>(selector);
+  el.shadowRoot!.querySelector<T>(selector) ?? defaultsRoot(el).querySelector<T>(selector);
 type Dropdown = HTMLElement & {
   value: string;
   label: string;
@@ -104,7 +107,7 @@ const warning = (el: ReceiptsScreen) => q(el, "[data-test=receipt-language-warni
 const languageError = (el: ReceiptsScreen) =>
   select(el)?.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 async function bottomOf(el: ReceiptsScreen): Promise<string> {
-  const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
+  const actions = q(el, "[data-test=language-actions]")! as HTMLElement & { error: string };
   return actions.error;
 }
 
@@ -136,7 +139,13 @@ async function editHeader(el: ReceiptsScreen, value: string): Promise<void> {
   await el.updateComplete;
 }
 async function save(el: ReceiptsScreen): Promise<void> {
-  q(el, "[data-test=save]")!.click();
+  await el.updateComplete;
+  const language = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=language-save]")!;
+  const defaults = defaultsRoot(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=defaults-save]",
+  )!;
+  const description = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=description-save]")!;
+  (language.disabled ? (!defaults.disabled ? defaults : description) : language).click();
   await flush(el);
 }
 
@@ -201,7 +210,9 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
-    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({ headerSubtitle: "Calle Mayor 1" });
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+      headerSubtitle: "Calle Mayor 1",
+    });
   });
 
   it("keeps the picked language when the paper width or the text changes", async () => {
@@ -224,30 +235,29 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     );
   });
 
-  it("saves a changed language first, then the description and the texts as before", async () => {
+  it("saves the changed language without submitting other sections", async () => {
     const api = stubApi(madrid());
     const el = await mount(api);
     pick(el, "gl-ES");
     await save(el);
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
-    expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
-    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({});
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
     expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}]]);
-    const order = (fn: unknown) => vi.mocked(fn as () => void).mock.invocationCallOrder[0]!;
-    expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putReceipt));
-    expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putLocationSettings));
     expect(q(el, "[role=status]")!.textContent).toBe(t("receipts.saved"));
     expect(select(el)!.value).toBe("gl-ES");
     expect(await shown(el)).toBe("Galician");
-    const action = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!;
+    const action = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=language-save]")!;
     expect([action.variant, action.disabled]).toEqual(["secondary", true]);
     await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).toHaveBeenCalledTimes(1);
-    expect(api.putReceipt).toHaveBeenLastCalledWith({ headerSubtitle: "Calle Mayor 1" });
+    expect(api.putVenueReceiptSettings).toHaveBeenLastCalledWith({
+      headerSubtitle: "Calle Mayor 1",
+    });
   });
 
-  it("waits for the language to be saved before sending the rest", async () => {
+  it("does not submit other sections while the language save is pending", async () => {
     let answer!: () => void;
     const putReceiptLanguage = vi.fn(
       () =>
@@ -260,10 +270,11 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     pick(el, "gl-ES");
     await save(el);
     expect(api.putLocationSettings).not.toHaveBeenCalled();
-    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
     answer();
-    await vi.waitFor(() => expect(api.putLocationSettings).toHaveBeenCalledTimes(1));
-    expect(api.putReceipt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(q(el, "[role=status]")).not.toBeNull());
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   });
 
   it("sends nothing about the language when it was not changed", async () => {
@@ -272,7 +283,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
-    expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
   });
 
   it.each(["receipt.language_orders_open", "receipt.language_fixed"])(
@@ -287,7 +298,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
       pick(el, "gl-ES");
       await save(el);
       expect(api.putLocationSettings).not.toHaveBeenCalled();
-      expect(api.putReceipt).not.toHaveBeenCalled();
+      expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
       expect(languageError(el)).toBe(codeMessage(code));
       await select(el)!.updateComplete;
       const control = select(el)!.shadowRoot!.querySelector(".trigger")!;
@@ -299,7 +310,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
           .map((id) => select(el)!.shadowRoot!.getElementById(id)!.textContent!.trim()),
       ).toEqual([codeMessage(code)]);
       expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-      expect(q(el, "[data-test=save]")!.hasAttribute("disabled")).toBe(false);
+      expect(q(el, "[data-test=language-save]")!.hasAttribute("disabled")).toBe(false);
       expect(q(el, "[role=status]")).toBeNull();
       await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(select(el)));
       expect(select(el)!.value).toBe("gl-ES");
@@ -338,14 +349,14 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
       `${t("receipts.language_save_error")} ${codeMessage("server.internal")}`,
     );
     expect(api.putLocationSettings).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=save]")!.hasAttribute("disabled")).toBe(false);
+    expect(q(el, "[data-test=language-save]")!.hasAttribute("disabled")).toBe(false);
     vi.mocked(api.putReceiptLanguage).mockResolvedValue(undefined);
     await save(el);
     expect(await bottomOf(el)).toBe("");
-    expect(api.putLocationSettings).toHaveBeenCalledTimes(1);
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
   });
 
-  it("checks the description before sending the language", async () => {
+  it("saves the language independently of an invalid description", async () => {
     const api = stubApi(madrid());
     const el = await mount(api);
     pick(el, "gl-ES");
@@ -353,7 +364,8 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
       new CustomEvent("wt-change", { detail: { value: " " }, bubbles: true, composed: true }),
     );
     await save(el);
-    expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+    expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
   });
 
   it("shows a stored language the venue no longer offers as chosen, and saves nothing for it", async () => {
@@ -365,7 +377,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
-    expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
   });
 
   it("shows a stored value that is not a language as it is, without failing", async () => {
@@ -490,7 +502,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
     expect(q(el, "[role=alert]")!.textContent).toBe(t("location_settings.load_error"));
-    expect(q(el, "[data-test=save]")).toBeNull();
+    expect(q(el, "[data-test=language-save]")).toBeNull();
     q(el, "[data-test=retry]")!.click();
     await flush(el);
     await vi.waitFor(() => expect(select(el)?.value).toBe("gl-ES"));
@@ -509,7 +521,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
-    expect(api.putLocationSettings).toHaveBeenCalledTimes(1);
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
   });
 
   it("says a stored language other than the fixed one prints until corrected, and corrects it", async () => {
@@ -556,7 +568,10 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     expect(q(el, "[data-test=use-fixed-language]")).not.toBeNull();
     await editHeader(el, "Calle Mayor 1");
     await save(el);
-    expect(await bottomOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(codeMessage("receipt.language_orders_open"));
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+      headerSubtitle: "Calle Mayor 1",
+    });
     expect(api.putReceiptLanguage).toHaveBeenCalledTimes(1);
   });
 
@@ -572,7 +587,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     q(el, "[data-test=use-fixed-language]")!.click();
     await el.updateComplete;
     q(el, "[data-test=use-fixed-language]")!.click();
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=language-save]")!.click();
     answer();
     await flush(el);
     expect(putReceiptLanguage).toHaveBeenCalledTimes(1);

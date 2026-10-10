@@ -27,6 +27,15 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 
 type Field = "phone" | "email" | "logo" | "headerSubtitle" | "footerMessage";
+function receiptBody(receipt: DepartmentReceiptConfig): DepartmentReceiptConfig {
+  const body = structuredClone(receipt);
+  for (const field of ["phone", "email"] as const) {
+    const value = receipt[field]?.trim() ?? "";
+    if (value) body[field] = value;
+    else delete body[field];
+  }
+  return body;
+}
 const fields: readonly Field[] = ["phone", "email", "logo", "headerSubtitle", "footerMessage"];
 
 @customElement("dashboard-department-receipt-editor")
@@ -123,7 +132,7 @@ export class DepartmentReceiptEditor extends LitElement {
       parent: this.draftParent ?? this,
       current: () => this.draft,
       snapshot: (value) => structuredClone(value),
-      equal: sameValue,
+      equal: (a, b) => sameValue(receiptBody(a), receiptBody(b)),
       restore: (value) => {
         this.draft = structuredClone(value);
         this.errors = {};
@@ -151,12 +160,13 @@ export class DepartmentReceiptEditor extends LitElement {
           this.settings = value;
           this.loadError = "";
           if (!dirty && !this.saving) {
+            const baselineChanged = !sameValue(this.#saved, value.receipt);
             this.#saved = structuredClone(value.receipt);
             this.draft = structuredClone(value.receipt);
             this.#register();
-            this.#scope?.commit(structuredClone(this.#saved));
+            if (baselineChanged) this.#scope?.commit(structuredClone(this.#saved));
           }
-          this.#changed();
+          this.#publish();
         },
       );
     } catch (error) {
@@ -165,6 +175,9 @@ export class DepartmentReceiptEditor extends LitElement {
   }
   #changed(): void {
     this.#scope?.changed();
+    this.#publish();
+  }
+  #publish(): void {
     this.dispatchEvent(
       new CustomEvent("receipt-draft-changed", {
         detail: { departmentId: this.departmentId, receipt: structuredClone(this.draft) },
@@ -184,7 +197,9 @@ export class DepartmentReceiptEditor extends LitElement {
     else next[field] = value;
     this.draft = next;
     const errors = { ...this.errors };
-    delete errors[language ? `${field}-${language}` : field];
+    const key = language ? `${field}-${language}` : field;
+    if (errors[key]) this.actionError = "";
+    delete errors[key];
     this.errors = errors;
     this.#changed();
   }
@@ -220,7 +235,7 @@ export class DepartmentReceiptEditor extends LitElement {
     const submitted = structuredClone(this.draft);
     const scope = this.#scope;
     try {
-      await this.api.putDepartmentReceipt(id, submitted);
+      await this.api.putDepartmentReceipt(id, receiptBody(submitted));
     } catch (error) {
       if (epoch !== this.#epoch) return;
       const params = (
@@ -298,6 +313,26 @@ export class DepartmentReceiptEditor extends LitElement {
           @wt-change=${change}
         ></wt-textarea>`;
   }
+  #focus(event: FocusEvent | null): void {
+    const target = event
+      ?.composedPath()
+      .find(
+        (node) =>
+          node instanceof HTMLElement &&
+          (node.hasAttribute("name") || node.localName === "dashboard-image-upload"),
+      ) as HTMLElement | undefined;
+    this.dispatchEvent(
+      new CustomEvent("receipt-field-focus", {
+        detail: {
+          field:
+            target?.getAttribute("name") ??
+            (target?.localName === "dashboard-image-upload" ? "logo" : null),
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
   override render() {
     const settings = this.settings;
     const action = saveActionState(this.#scope);
@@ -326,6 +361,8 @@ export class DepartmentReceiptEditor extends LitElement {
         settings
           ? html`<div
                 class="fields"
+                @focusin=${(event: FocusEvent) => this.#focus(event)}
+                @focusout=${() => this.#focus(null)}
                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=department-save]"))}
               >
                 <h2>${this.departmentName}</h2>

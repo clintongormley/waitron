@@ -57,6 +57,10 @@ function apiFixture(rows = departments) {
   );
   return {
     liveData: new LiveData(),
+    getVenueReceiptSettings: vi.fn(async () => ({
+      settings: { headerSubtitle: "Venue subtitle" },
+    })),
+    putVenueReceiptSettings: vi.fn(async () => {}),
     getVenueDepartments: vi.fn(async () => structuredClone(rows)),
     getDepartmentReceipt: vi.fn(async (id: string) => ({
       ...structuredClone(settings),
@@ -102,7 +106,9 @@ async function mount(api = apiFixture(), theme: "light" | "dark" = "light") {
     },
     theme,
   );
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=description-save]")).not.toBeNull(),
+  );
   return { el, api };
 }
 function editor(el: ReceiptsScreen) {
@@ -122,9 +128,11 @@ function picker(el: ReceiptsScreen) {
   )!;
 }
 async function fill(el: ReceiptsScreen | DepartmentReceiptEditor, name: string, value: string) {
-  const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    `wt-input[name="${name}"]`,
-  )!;
+  const root =
+    name === "headerSubtitle" && el.localName === "dashboard-receipts-screen"
+      ? el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!
+      : el.shadowRoot!;
+  const field = root.querySelector<HTMLElementTagNameMap["wt-input"]>(`wt-input[name="${name}"]`)!;
   await field.updateComplete;
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await el.updateComplete;
@@ -182,9 +190,13 @@ describe("the receipt page's department context", () => {
     expect(editor(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=no-department]")).not.toBeNull();
     await fill(el, "headerSubtitle", "Updated venue");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=defaults-save]")!
+      .click();
     await vi.waitFor(() =>
-      expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({ headerSubtitle: "Updated venue" }),
+      expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+        headerSubtitle: "Updated venue",
+      }),
     );
     expect(api.getDepartmentReceipt).not.toHaveBeenCalled();
   });
@@ -199,8 +211,10 @@ describe("the receipt page's department context", () => {
       ).toBeTruthy(),
     );
     await fill(el, "headerSubtitle", "Updated venue");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-    await vi.waitFor(() => expect(api.putReceipt).toHaveBeenCalledOnce());
+    el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=defaults-save]")!
+      .click();
+    await vi.waitFor(() => expect(api.putVenueReceiptSettings).toHaveBeenCalledOnce());
     expect(api.previewReceiptDraft).not.toHaveBeenCalled();
   });
   it("uses the same department for picker, editor, draft preview and save without sending an address", async () => {
@@ -398,7 +412,9 @@ it("starts department previews in the saved receipt language and offers an indep
     )!.value,
   ).toBe("es-ES");
   for (const action of [
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!,
+    el
+      .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=defaults-save]")!,
     editor(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
       "[data-test=department-save]",
     )!,

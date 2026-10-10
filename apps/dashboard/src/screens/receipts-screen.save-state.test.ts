@@ -50,7 +50,28 @@ function stubApi() {
   let receipt = { ...storedReceipt };
   let description = storedDescription;
   let language = "es-ES";
+  const settings = () => {
+    const defaults: ReceiptConfig = { ...receipt };
+    delete defaults.phone;
+    delete defaults.email;
+    return defaults;
+  };
   const api = {
+    getVenueReceiptSettings: vi.fn(async () => ({ settings: settings() })),
+    putVenueReceiptSettings: vi.fn(async (next: ReceiptConfig) => {
+      receipt = { phone: receipt.phone, email: receipt.email, ...next };
+    }),
+    getDepartmentReceipt: vi.fn(async () => ({
+      receipt: { phone: receipt.phone, email: receipt.email },
+      venueDefaults: settings(),
+      venueAddress: ["Calle Mayor 1"],
+      languages: ["es-ES"],
+      warningLanguages: [],
+    })),
+    putDepartmentReceipt: vi.fn(async (_id: string, next: ReceiptConfig) => {
+      receipt = { ...settings(), ...next };
+    }),
+    previewReceiptDraft: vi.fn(async () => preview()),
     getReceipt: vi.fn(async () => ({ receipt: { ...receipt }, venueAddress: ["Calle Mayor 1"] })),
     putReceipt: vi.fn(async (next: ReceiptConfig) => {
       receipt = { ...next };
@@ -71,31 +92,47 @@ function stubApi() {
       language = next;
     }),
     getContentLanguages: vi.fn(async () => ({ defaultLanguage: "es", languages: ["es"] })),
-    getVenueDepartments: vi.fn(async () => []),
+    getVenueDepartments: vi.fn(async () => [
+      { id: "bar", name: "Bar", active: true, isDefault: true },
+    ]),
     previewReceipt: vi.fn(async () => preview()),
   };
   return api;
 }
 
 const q = <T extends HTMLElement = HTMLElement>(el: ReceiptsScreen, selector: string) =>
-  el.shadowRoot!.querySelector<T>(selector);
+  el.shadowRoot!.querySelector<T>(selector) ??
+  el
+    .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")
+    ?.shadowRoot?.querySelector<T>(selector) ??
+  el
+    .shadowRoot!.querySelector("dashboard-department-receipt-editor")
+    ?.shadowRoot?.querySelector<T>(selector);
 
 async function mount() {
   const api = stubApi();
   const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
     api: api as unknown as DashboardApi,
   });
-  await vi.waitFor(() => expect(q(el, "[data-test=save]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=defaults-save]")).not.toBeNull());
   return { el, api };
 }
 
-function save(el: ReceiptsScreen) {
-  return q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!;
+function save(el: ReceiptsScreen, name = "headerSubtitle") {
+  const part =
+    name === "receiptLanguage"
+      ? "language"
+      : name === "operationDescription"
+        ? "description"
+        : ["phone", "email"].includes(name)
+          ? "department"
+          : "defaults";
+  return q<HTMLElementTagNameMap["wt-button"]>(el, `[data-test=${part}-save]`)!;
 }
 /** What Save looks like and whether a person can press it: the host's state and its inner button's. */
-async function state(el: ReceiptsScreen) {
+async function state(el: ReceiptsScreen, name = "headerSubtitle") {
   await el.updateComplete;
-  const action = save(el);
+  const action = save(el, name);
   await action.updateComplete;
   return {
     variant: action.variant,
@@ -108,14 +145,16 @@ const ready = { variant: "primary", disabled: false, innerDisabled: false };
 const blocked = { variant: "primary", disabled: true, innerDisabled: true };
 
 /** A real pointer press on the inner button; `force` presses a disabled one too. */
-async function press(el: ReceiptsScreen) {
-  await userEvent.click(page.elementLocator(save(el).shadowRoot!.querySelector("button")!), {
+async function press(el: ReceiptsScreen, name = "headerSubtitle") {
+  await userEvent.click(page.elementLocator(save(el, name).shadowRoot!.querySelector("button")!), {
     force: true,
   });
   await el.updateComplete;
 }
 function sent(api: ReturnType<typeof stubApi>) {
   return (
+    api.putVenueReceiptSettings.mock.calls.length +
+    api.putDepartmentReceipt.mock.calls.length +
     api.putReceipt.mock.calls.length +
     api.putLocationSettings.mock.calls.length +
     api.putReceiptLanguage.mock.calls.length
@@ -197,22 +236,22 @@ describe("the receipts page's Save", () => {
     ],
   ])(
     "one %s edit wakes Save, and putting the stored value back quiets it",
-    async (_, edit, revert) => {
+    async (name, edit, revert) => {
       const { el } = await mount();
       await edit(el);
-      expect(await state(el)).toEqual(ready);
+      expect(await state(el, name)).toEqual(ready);
       await revert(el);
-      expect(await state(el)).toEqual(quiet);
+      expect(await state(el, name)).toEqual(quiet);
     },
   );
 
   it("a changed page its own checks refuse stays drawn primary and disabled after a press", async () => {
     const { el, api } = await mount();
     await typeInto("phone", "not a phone")(el);
-    expect(await state(el)).toEqual(ready);
-    await press(el);
+    expect(await state(el, "phone")).toEqual(ready);
+    await press(el, "phone");
     expect(sent(api)).toBe(0);
-    expect(await state(el)).toEqual(blocked);
+    expect(await state(el, "phone")).toEqual(blocked);
   });
 
   it("after a save, the page stays open with the saved values and Save quiet", async () => {
@@ -221,10 +260,15 @@ describe("the receipts page's Save", () => {
     await pickLanguage("ca-ES")(el);
     await typeInto("operationDescription", "Servicio de mesa")(el);
     await press(el);
+    await press(el, "receiptLanguage");
+    await press(el, "operationDescription");
     await vi.waitFor(() => expect(api.putLocationSettings).toHaveBeenCalledOnce());
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("ca-ES");
-    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({
-      ...storedReceipt,
+    const storedDefaults: ReceiptConfig = { ...storedReceipt };
+    delete storedDefaults.phone;
+    delete storedDefaults.email;
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+      ...storedDefaults,
       headerSubtitle: "Calle Mayor 2",
     });
     expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Servicio de mesa");

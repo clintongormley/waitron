@@ -67,9 +67,12 @@ async function bottomOf(el: ReceiptsScreen): Promise<string> {
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 const errorOf = (el: ReceiptsScreen) => q(el, "[name=operationDescription]").getAttribute("error");
-const saveDisabled = (el: ReceiptsScreen) => q(el, "[data-test=save]").hasAttribute("disabled");
+const saveDisabled = (el: ReceiptsScreen) =>
+  q(el, "[data-test=description-save]").hasAttribute("disabled");
 async function nativeSaveDisabled(el: ReceiptsScreen): Promise<boolean> {
-  const button = q(el, "[data-test=save]") as HTMLElement & { updateComplete: Promise<unknown> };
+  const button = q(el, "[data-test=description-save]") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
   await button.updateComplete;
   return button.shadowRoot!.querySelector("button")!.disabled;
 }
@@ -89,7 +92,7 @@ describe("receipts page: the location's invoice description", () => {
       "Venta en establecimiento",
     );
     edit(el, "Venta de comidas");
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(client.putLocationSettings).toHaveBeenCalledWith("Venta de comidas");
     expect(q(el, "[role=status]")).not.toBeNull();
@@ -101,7 +104,7 @@ describe("receipts page: the location's invoice description", () => {
     });
     await flush(el);
     edit(el, "  ");
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(client.putLocationSettings).not.toHaveBeenCalled();
     expect(q(el, "[name=operationDescription]").getAttribute("error")).not.toBe("");
@@ -118,7 +121,7 @@ describe("receipts page: the location's invoice description", () => {
     });
     await flush(el);
     edit(el, "x".repeat(501));
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(
       (q(el, "[name=operationDescription]") as unknown as { value: string }).value,
@@ -132,7 +135,7 @@ describe("receipts page: the location's invoice description", () => {
     });
     await flush(el);
     expect(q(el, "[data-test=retry]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=description-save]")).toBeNull();
   });
   it("keeps an edited description when the setting refreshes elsewhere", async () => {
     const liveData = new LiveData();
@@ -165,7 +168,7 @@ describe("receipts page: the location's invoice description", () => {
     await flush(el);
     edit(el, "Venta de comidas");
     await el.updateComplete;
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(await bottomOf(el)).toBe(t("location_settings.save_error"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
@@ -187,7 +190,7 @@ describe("receipts page: the location's invoice description", () => {
         await flush(el);
         edit(el, "Venta de comidas");
         await el.updateComplete;
-        q(el, "[data-test=save]").click();
+        q(el, "[data-test=description-save]").click();
         await flush(el);
         const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
           "[data-test=description-actions]",
@@ -196,7 +199,7 @@ describe("receipts page: the location's invoice description", () => {
         const message = actions.shadowRoot!.querySelector("[data-error]")!;
         expect(message.textContent).toBe(t("location_settings.save_error"));
         const field = q(el, "[name=operationDescription]").getBoundingClientRect();
-        const save = q(el, "[data-test=save]").getBoundingClientRect();
+        const save = q(el, "[data-test=description-save]").getBoundingClientRect();
         const box = message.getBoundingClientRect();
         expect(box.top).toBeGreaterThanOrEqual(field.bottom);
         expect(box.bottom).toBeLessThanOrEqual(save.top);
@@ -270,9 +273,9 @@ describe("receipts page: the location's invoice description", () => {
     await flush(el);
     edit(el, "Venta de comidas");
     await el.updateComplete;
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await el.updateComplete;
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     try {
       expect(putLocationSettings).toHaveBeenCalledTimes(1);
     } finally {
@@ -297,7 +300,7 @@ describe("receipts page: the location's invoice description", () => {
     });
     await flush(el);
     edit(el, "  ");
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(errorOf(el)).toBe(t("location_settings.required"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
@@ -311,7 +314,7 @@ describe("receipts page: the location's invoice description", () => {
     });
     await flush(el);
     edit(el, "");
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     edit(el, "Venta");
     await el.updateComplete;
@@ -335,7 +338,7 @@ describe("receipts page: the location's invoice description", () => {
     });
     await flush(el);
     edit(el, "x".repeat(501));
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     await vi.waitFor(() => expect(focusedInput(el)).toBe(true));
     expect(errorOf(el)).toBe(t("location_settings.invalid"));
@@ -357,7 +360,7 @@ describe("receipts page: the location's invoice description", () => {
     await flush(el);
     edit(el, "Venta de comidas");
     await el.updateComplete;
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     edit(el, " ");
     await flush(el);
@@ -377,7 +380,7 @@ describe("receipts page: the location's invoice description", () => {
     await flush(el);
     edit(el, "Venta de comidas");
     await el.updateComplete;
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(errorOf(el)).toBe("");
     expect(await bottomOf(el)).toBe(t("location_settings.save_error"));
@@ -393,10 +396,10 @@ describe("receipts page: the location's invoice description", () => {
     await flush(el);
     edit(el, "Venta de comidas");
     await el.updateComplete;
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(saveDisabled(el)).toBe(false);
-    q(el, "[data-test=save]").click();
+    q(el, "[data-test=description-save]").click();
     await flush(el);
     expect(client.putLocationSettings).toHaveBeenCalledTimes(2);
   });

@@ -46,7 +46,8 @@ function fakePreview(config: ReceiptConfig): ReceiptPreview {
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   return {
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
-    putReceipt: vi.fn().mockResolvedValue(undefined),
+    getVenueReceiptSettings: vi.fn().mockResolvedValue({ settings: {} }),
+    putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
       .mockResolvedValue({ name: "Calle Mayor", operationDescription: "Venta en establecimiento" }),
@@ -63,10 +64,10 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     getVenueDepartments: vi.fn().mockResolvedValue([]),
     getDepartmentReceipt: vi.fn(async () => ({
       receipt: {},
+      venueAddress: [],
       venueDefaults: {},
       languages: ["es-ES"],
       warningLanguages: [],
-      venueAddress: [],
     })),
     previewReceiptDraft: vi.fn(
       async (draft: Parameters<DashboardApi["previewReceiptDraft"]>[0]) => {
@@ -96,8 +97,10 @@ async function flush(el: ReceiptsScreen): Promise<void> {
   await el.updateComplete;
 }
 
+const defaultsRoot = (el: ReceiptsScreen) =>
+  el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
 const q = <T extends HTMLElement = HTMLElement>(el: ReceiptsScreen, selector: string) =>
-  el.shadowRoot!.querySelector<T>(selector);
+  defaultsRoot(el).querySelector<T>(selector) ?? el.shadowRoot!.querySelector<T>(selector);
 const paper = (el: ReceiptsScreen) => q(el, ".paper");
 const paperLines = (el: ReceiptsScreen) =>
   [...paper(el)!.querySelectorAll("pre")].map((pre) => pre.textContent!.trim());
@@ -141,7 +144,7 @@ describe("the Receipts page's fields", () => {
       el,
       "wt-textarea[name=footerMessage]",
     )!;
-    expect(header.label).toBe(t("receipt.header_subtitle"));
+    expect(header.label).toBe(t("receipts.subtitle"));
     expect(header.hint).toBe(t("receipts.header_subtitle_hint"));
     expect(footer.hint).toBe(t("receipts.footer_message_hint"));
     expect(footer.label).toContain(t("receipt.footer_message"));
@@ -173,8 +176,9 @@ describe("the Receipts page's fields", () => {
 
   it("puts the venue-wide texts and this location's description in separate sections, the second titled with the location's name, with no location picker", async () => {
     const { el } = await mount();
-    const [venueWide, location] = [...el.shadowRoot!.querySelectorAll("section.settings")];
-    expect(venueWide!.querySelector("h2")!.textContent).toBe(t("receipts.venue_wide"));
+    const venueWide = defaultsRoot(el);
+    const location = el.shadowRoot!.querySelector("section.settings")!;
+    expect(venueWide!.querySelector("h2")!.textContent).toBe(t("receipts.venue_defaults"));
     expect(venueWide!.querySelector("[name=headerSubtitle]")).not.toBeNull();
     expect(venueWide!.querySelector("[name=footerMessage]")).not.toBeNull();
     expect(location!.querySelector("h2")!.textContent).toBe("Calle Mayor");
@@ -218,7 +222,7 @@ describe("the Receipts page's live preview", () => {
         receipt: {},
         settings: {},
       });
-      expect(api.putReceipt).not.toHaveBeenCalled();
+      expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
     } finally {
       history.replaceState(null, "", originalUrl);
     }
@@ -247,7 +251,7 @@ describe("the Receipts page's live preview", () => {
       await chooseOption(q(el, "wt-combobox[name=departmentId]")!, "bar");
       expect(new URL(location.href).searchParams.get("departmentId")).toBe("bar");
       expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Today only");
-      expect(api.putReceipt).not.toHaveBeenCalled();
+      expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
     } finally {
       history.replaceState(null, "", originalUrl);
     }
@@ -317,9 +321,9 @@ describe("the Receipts page's live preview", () => {
     url.searchParams.set("departmentId", "bar");
     history.replaceState(null, "", url);
     try {
-      const receipt = heldRead<{ receipt: ReceiptConfig; venueAddress: string[] }>();
+      const receipt = heldRead<{ settings: ReceiptConfig }>();
       const api = stubApi({
-        getReceipt: vi.fn(receipt.read),
+        getVenueReceiptSettings: vi.fn(receipt.read),
         getVenueDepartments: vi.fn().mockResolvedValue([
           { id: "deli", name: "Deli", active: true },
           { id: "bar", name: "Bar", active: true },
@@ -328,7 +332,7 @@ describe("the Receipts page's live preview", () => {
       const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
       await flush(el);
       expect(api.previewReceiptDraft).not.toHaveBeenCalled();
-      receipt.release({ receipt: { headerSubtitle: "Saved header" }, venueAddress: [] });
+      receipt.release({ settings: { headerSubtitle: "Saved header" } });
       await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.previewReceiptDraft).mock.calls[0]).toEqual([
         {
@@ -344,9 +348,8 @@ describe("the Receipts page's live preview", () => {
 
   it("draws the saved texts as soon as the page opens", async () => {
     const api = stubApi({
-      getReceipt: vi.fn().mockResolvedValue({
-        receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" },
-        venueAddress: [],
+      getVenueReceiptSettings: vi.fn().mockResolvedValue({
+        settings: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" },
       }),
     });
     const { el } = await mount(api);
@@ -371,7 +374,7 @@ describe("the Receipts page's live preview", () => {
     expect(paper(el)!.querySelector("[data-mark=headerSubtitle]")!.textContent!.trim()).toBe(
       "Abierto todos los días",
     );
-    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   });
 
   it("shows typed footer text at the bottom of the receipt before anything is saved", async () => {
@@ -382,7 +385,7 @@ describe("the Receipts page's live preview", () => {
     expect(paper(el)!.querySelector("[data-mark=footerMessage]")!.textContent!.trim()).toBe(
       "Hasta pronto",
     );
-    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   });
 
   it("previews the text a save would send: trimmed, and a blank field left out", async () => {
@@ -413,9 +416,8 @@ describe("the Receipts page's live preview", () => {
 
   it("outlines the header line while the header field has focus, and the footer line while the footer has", async () => {
     const api = stubApi({
-      getReceipt: vi.fn().mockResolvedValue({
-        receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" },
-        venueAddress: [],
+      getVenueReceiptSettings: vi.fn().mockResolvedValue({
+        settings: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" },
       }),
     });
     const { el } = await mount(api);
@@ -427,11 +429,11 @@ describe("the Receipts page's live preview", () => {
     expect(mark("headerSubtitle").hasAttribute("data-active")).toBe(true);
     expect(getComputedStyle(mark("headerSubtitle")).outlineStyle).toBe("solid");
     expect(mark("footerMessage").hasAttribute("data-active")).toBe(false);
-    q(el, "wt-textarea[name=footerMessage]")!.focus();
+    q(el, "wt-textarea[name=footerMessage]")!.shadowRoot!.querySelector("textarea")!.focus();
     await el.updateComplete;
     expect(mark("headerSubtitle").hasAttribute("data-active")).toBe(false);
     expect(mark("footerMessage").hasAttribute("data-active")).toBe(true);
-    q(el, "wt-textarea[name=footerMessage]")!.blur();
+    q(el, "wt-textarea[name=footerMessage]")!.shadowRoot!.querySelector("textarea")!.blur();
     await el.updateComplete;
     expect(mark("footerMessage").hasAttribute("data-active")).toBe(false);
   });
@@ -526,56 +528,66 @@ describe("the Receipts page's live preview", () => {
   });
 });
 
-describe("the Receipts page's one Save", () => {
+describe("the Receipts page's independent Save actions", () => {
   it("saves both the receipt texts and the location's description", async () => {
     const api = stubApi();
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "Calle Mayor 1");
     edit(el, "operationDescription", "Venta de comidas");
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
+    q(el, "[data-test=description-save]")!.click();
     await flush(el);
-    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({ headerSubtitle: "Calle Mayor 1" });
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+      headerSubtitle: "Calle Mayor 1",
+    });
     expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta de comidas");
     expect(q(el, "[role=status]")!.textContent).toBe(t("receipts.saved"));
   });
 
   it("when only the receipt texts are refused, says so at the bottom and claims no success", async () => {
-    const api = stubApi({ putReceipt: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const api = stubApi({
+      putVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "Calle Mayor 1");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
-    expect(api.putLocationSettings).toHaveBeenCalledTimes(1);
-    const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
-    expect(actions.error).toBe(
-      `${t("receipts.trim_save_error")} ${codeMessage("server.internal")}`,
-    );
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
+    expect(actions.error).toBe(codeMessage("server.internal"));
     expect(q(el, "[role=status]")).toBeNull();
     expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.error).toBe("");
   });
 
   it("when both saves fail, names both failures at the bottom", async () => {
     const api = stubApi({
-      putReceipt: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      putVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
       putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "Calle Mayor 1");
+    edit(el, "operationDescription", "Changed description");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
+    q(el, "[data-test=description-save]")!.click();
     await flush(el);
-    const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
-    expect(actions.error).toBe(
-      `${t("receipts.trim_save_error")} ${codeMessage("server.internal")} ${t("location_settings.save_error")}`,
-    );
+    const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
+    expect(actions.error).toBe(codeMessage("server.internal"));
+    expect(
+      (
+        el.shadowRoot!.querySelector("[data-test=description-actions]") as HTMLElement & {
+          error: string;
+        }
+      ).error,
+    ).toBe(t("location_settings.save_error"));
   });
 
   it.each(["headerSubtitle", "footerMessage"] as const)(
     "puts a refused %s's reason under that field, focuses it, and leaves Save working",
     async (field) => {
       const api = stubApi({
-        putReceipt: vi.fn().mockRejectedValue({
+        putVenueReceiptSettings: vi.fn().mockRejectedValue({
           code: "receipt.invalid",
           params: { reason: "too_long", field, maxLength: 200 },
         }),
@@ -584,7 +596,7 @@ describe("the Receipts page's one Save", () => {
       if (field === "headerSubtitle") edit(el, "headerSubtitle", "Calle Mayor 1");
       else typeFooter(el, "Gracias por su visita");
       await el.updateComplete;
-      q(el, "[data-test=save]")!.click();
+      q(el, "[data-test=defaults-save]")!.click();
       await flush(el);
       const expected = t("receipts.trim_too_long").replace("{max}", "200");
       if (field === "headerSubtitle") {
@@ -602,11 +614,11 @@ describe("the Receipts page's one Save", () => {
           .split(" ")
           .map((id) => footer.shadowRoot!.getElementById(id)!.textContent);
         expect(descriptions).toEqual([t("receipts.footer_message_hint"), expected]);
-        await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(footer));
+        await vi.waitFor(() => expect(defaultsRoot(el).activeElement).toBe(footer));
       }
-      const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
+      const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
       expect(actions.error).toBe(t("form.fix_fields"));
-      expect(q(el, "[data-test=save]")!.hasAttribute("disabled")).toBe(false);
+      expect(q(el, "[data-test=defaults-save]")!.hasAttribute("disabled")).toBe(false);
       if (field === "headerSubtitle") edit(el, "headerSubtitle", "short");
       else typeFooter(el, "short");
       await el.updateComplete;
@@ -616,7 +628,7 @@ describe("the Receipts page's one Save", () => {
 
   it("names a refused receipt field without a stated limit by the refusal's own message", async () => {
     const api = stubApi({
-      putReceipt: vi.fn().mockRejectedValue({
+      putVenueReceiptSettings: vi.fn().mockRejectedValue({
         code: "receipt.invalid",
         params: { reason: "not_string", field: "headerSubtitle" },
       }),
@@ -624,7 +636,7 @@ describe("the Receipts page's one Save", () => {
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "Calle Mayor 1");
     await el.updateComplete;
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.error).toBe(
       codeMessage("receipt.invalid"),
@@ -636,9 +648,8 @@ describe("the Receipts page's one Save", () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const { el } = await mount(api);
-    vi.mocked(api.getReceipt).mockResolvedValue({
-      receipt: { headerSubtitle: "Desde otro sitio" },
-      venueAddress: [],
+    vi.mocked(api.getVenueReceiptSettings).mockResolvedValue({
+      settings: { headerSubtitle: "Desde otro sitio" },
     });
     liveData.invalidate([{ type: "tenant_receipts" }]);
     await vi.waitFor(() => expect(paperLines(el)).toContain("Desde otro sitio"));
@@ -661,16 +672,16 @@ describe("the Receipts page's one Save", () => {
     liveData.invalidate([{ type: "locations" }]);
     await vi.waitFor(() => expect(api.getLocationSettings).toHaveBeenCalledTimes(2));
     edit(el, "operationDescription", "Saved new");
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=description-save]")!.click();
     await flush(el);
     expect(q(el, "[role=status]")).not.toBeNull();
     held.release({ name: "Calle Mayor", operationDescription: "Before" });
     await flush(el);
     expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.value).toBe("Saved new");
     edit(el, "headerSubtitle", "Solo la cabecera");
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=description-save]")!.click();
     await flush(el);
-    expect(vi.mocked(api.putLocationSettings).mock.calls).toEqual([["Saved new"], ["Saved new"]]);
+    expect(vi.mocked(api.putLocationSettings).mock.calls).toEqual([["Saved new"]]);
   });
 
   it("still takes a description read that started after the Save", async () => {
@@ -679,7 +690,7 @@ describe("the Receipts page's one Save", () => {
     const api = Object.assign(stubApi(), { liveData });
     const { el } = await mount(api);
     edit(el, "operationDescription", "Saved new");
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=description-save]")!.click();
     await flush(el);
     vi.mocked(api.getLocationSettings).mockResolvedValue({
       name: "Calle Mayor",
@@ -698,29 +709,30 @@ describe("the Receipts page's one Save", () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
-        getReceipt: vi
+        getVenueReceiptSettings: vi
           .fn()
-          .mockResolvedValue({ receipt: { headerSubtitle: "Before" }, venueAddress: [] }),
+          .mockResolvedValue({ settings: { headerSubtitle: "Before" } }),
       }),
       { liveData },
     );
     const { el } = await mount(api);
-    const held = heldRead<{ receipt: ReceiptConfig; venueAddress: string[] }>();
-    vi.mocked(api.getReceipt).mockImplementation(held.read);
+    const held = heldRead<{ settings: ReceiptConfig }>();
+    vi.mocked(api.getVenueReceiptSettings)
+      .mockImplementationOnce(held.read)
+      .mockResolvedValue({ settings: { headerSubtitle: "Saved new" } });
     liveData.invalidate([{ type: "tenant_receipts" }]);
-    await vi.waitFor(() => expect(api.getReceipt).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.getVenueReceiptSettings).toHaveBeenCalledTimes(2));
     edit(el, "headerSubtitle", "Saved new");
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
     expect(q(el, "[role=status]")).not.toBeNull();
-    held.release({ receipt: { headerSubtitle: "Before" }, venueAddress: [] });
+    held.release({ settings: { headerSubtitle: "Before" } });
     await flush(el);
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Saved new");
     edit(el, "operationDescription", "Solo la descripción");
-    q(el, "[data-test=save]")!.click();
+    q(el, "[data-test=defaults-save]")!.click();
     await flush(el);
-    expect(vi.mocked(api.putReceipt).mock.calls).toEqual([
-      [{ headerSubtitle: "Saved new" }],
+    expect(vi.mocked(api.putVenueReceiptSettings).mock.calls).toEqual([
       [{ headerSubtitle: "Saved new" }],
     ]);
   });
@@ -731,7 +743,7 @@ describe("the Receipts page's refreshes from elsewhere", () => {
     const { LiveData } = await import("@waitron/dashboard-kit");
     const liveData = new LiveData();
     const api = Object.assign(
-      stubApi({ getReceipt: vi.fn().mockResolvedValue({ receipt, venueAddress: [] }) }),
+      stubApi({ getVenueReceiptSettings: vi.fn().mockResolvedValue({ settings: receipt }) }),
       {
         liveData,
       },
@@ -744,9 +756,8 @@ describe("the Receipts page's refreshes from elsewhere", () => {
     const { el, api, liveData } = await mountLive();
     edit(el, "headerSubtitle", "Mío");
     await vi.waitFor(() => expect(previewCalls(api)).toHaveLength(2));
-    vi.mocked(api.getReceipt).mockResolvedValue({
-      receipt: { headerSubtitle: "Suyo" },
-      venueAddress: [],
+    vi.mocked(api.getVenueReceiptSettings).mockResolvedValue({
+      settings: { headerSubtitle: "Suyo" },
     });
     vi.mocked(api.getLocationSettings).mockResolvedValue({
       name: "Calle Mayor",
@@ -756,7 +767,7 @@ describe("the Receipts page's refreshes from elsewhere", () => {
     await vi.waitFor(() =>
       expect(q<WtInput>(el, "wt-input[name=operationDescription]")!.value).toBe("Otra descripción"),
     );
-    await vi.waitFor(() => expect(api.getReceipt).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.getVenueReceiptSettings).toHaveBeenCalledTimes(2));
     await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Mío");
     expect(previewCalls(api)).toHaveLength(2);
@@ -765,9 +776,8 @@ describe("the Receipts page's refreshes from elsewhere", () => {
   it("sends no preview when a refresh changes the shown text only in what a save would trim off", async () => {
     const { el, api, liveData } = await mountLive({ headerSubtitle: "Hola" });
     expect(previewCalls(api)).toEqual([{ headerSubtitle: "Hola" }]);
-    vi.mocked(api.getReceipt).mockResolvedValue({
-      receipt: { headerSubtitle: "Hola " },
-      venueAddress: [],
+    vi.mocked(api.getVenueReceiptSettings).mockResolvedValue({
+      settings: { headerSubtitle: "Hola " },
     });
     liveData.invalidate([{ type: "tenant_receipts" }]);
     await vi.waitFor(() =>
@@ -807,7 +817,7 @@ describe("the Receipts page's refreshes from elsewhere", () => {
       const api = Object.assign(stubApi(), { liveData, background });
       const { el } = await mount(api);
       const savedElsewhere = (receipt: ReceiptConfig) => {
-        vi.mocked(background.getReceipt).mockResolvedValue({ receipt, venueAddress: [] });
+        vi.mocked(background.getVenueReceiptSettings).mockResolvedValue({ settings: receipt });
         liveData.invalidate([{ type: "tenant_receipts" }]);
       };
       return { el, api, background, savedElsewhere };
@@ -894,7 +904,7 @@ describe("the Receipts page's paper width", () => {
     const api = Object.assign(stubApi({ previewReceipt: drawer() }), { liveData, background });
     const { el } = await mount(api);
     const savedElsewhere = (receipt: ReceiptConfig) => {
-      vi.mocked(background.getReceipt).mockResolvedValue({ receipt, venueAddress: [] });
+      vi.mocked(background.getVenueReceiptSettings).mockResolvedValue({ settings: receipt });
       liveData.invalidate([{ type: "tenant_receipts" }]);
     };
     return { el, api, background, savedElsewhere };
@@ -965,7 +975,7 @@ describe("the Receipts page's paper width", () => {
     await vi.waitFor(() => expect(paper(el)!.style.width).toBe("30ch"));
     expect(widthSelect(el)!.value).toBe("58mm");
     expect(background.previewReceipt).not.toHaveBeenCalled();
-    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   });
 
   it("keeps a chosen width when another session's save redraws the preview through the passive client", async () => {

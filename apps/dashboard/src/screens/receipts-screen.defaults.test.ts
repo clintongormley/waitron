@@ -627,3 +627,39 @@ it("redraws the department's saved-language fallback after a live change despite
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   expect(api.putReceiptLanguage).not.toHaveBeenCalled();
 });
+
+it("shows one defaults form and no legacy global contact fields or combined Save", async () => {
+  const { el, api } = await mount();
+  expect(el.shadowRoot!.querySelectorAll("dashboard-venue-receipt-defaults-editor")).toHaveLength(
+    1,
+  );
+  expect(
+    el.shadowRoot!.querySelector(
+      "[name=headerSubtitle], [name=footerMessage], [name=phone], [name=email], [name=printAddress]",
+    ),
+  ).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=save], [data-test=combined-actions]")).toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("[name=operationDescription]")).toHaveLength(1);
+  expect(el.shadowRoot!.querySelectorAll("[name=receiptLanguage]")).toHaveLength(1);
+  expect(api.putReceipt).not.toHaveBeenCalled();
+});
+
+it("shows the current venue address beside its global switch and highlights focused defaults on the preview", async () => {
+  const api = fixture();
+  api.previewReceiptDraft.mockImplementation(async () => {
+    const result = paper("Current defaults\nCalle Mayor 1");
+    result.marks.headerSubtitle = { start: 0, end: 1 } as never;
+    return result;
+  });
+  const { el } = await mount(api);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".paper")).toBeTruthy());
+  const root = defaults(el).shadowRoot!;
+  expect(root.querySelector("[data-test=venue-address]")?.textContent).toContain("Calle Mayor 1");
+  const field = root.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=headerSubtitle]")!;
+  await field.updateComplete;
+  field.shadowRoot!.querySelector("input")!.focus();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector("[data-mark=headerSubtitle]")?.hasAttribute("data-active"),
+  ).toBe(true);
+});
