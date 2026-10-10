@@ -311,7 +311,11 @@ it("a re-read answer does not replace a draft changed since the save", async () 
 
 it("a re-read kept from a changed draft still gives a new table its live table, so Undo quiets Save", async () => {
   const reread = deferred<FloorPlan>();
-  const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockReturnValueOnce(reread.promise);
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(plan())
+    .mockReturnValueOnce(reread.promise)
+    .mockReturnValue(new Promise(() => {}));
   const saveFloorPlan = vi
     .fn()
     .mockResolvedValue({ revision: 4, ids: { ...savedIds, "new:1": "m5" } });

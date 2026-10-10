@@ -274,12 +274,12 @@ describe("floor plan draft", () => {
     expect(table(placed, "m1").placement).toEqual(m1Placement);
   });
 
-  it("keeps a placed table's y inside the grid when rows 0–999 are all taken", () => {
+  it("places a table beside a band whose rows 0–999 are all taken, inside the grid", () => {
     const wall = { x: 0, y: 0, width: 40, height: 999, shape: "rect" as const, rotation: 0 };
     const d = patchTable(open(), "m1", { placement: wall });
     expect(table(placeTable(d, "m2"), "m2").placement).toEqual({
-      x: 0,
-      y: 999,
+      x: 41,
+      y: 0,
       width: 8,
       height: 8,
       shape: "rect",
