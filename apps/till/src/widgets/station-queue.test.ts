@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
-import { clockTime, currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
@@ -2196,7 +2196,7 @@ describe("station move attribution", () => {
       setLocale(locale);
       try {
         for (const view of ["rail", "kanban"] as const) {
-          const movedAt = "2026-10-10T18:12:00.000Z";
+          const movedAt = new Date(2026, 9, 10, 20, 12).toISOString();
           const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
             view,
             stationId: "st-1",
@@ -2242,7 +2242,7 @@ describe("station move attribution", () => {
             el
               .shadowRoot!.querySelector(`[data-item="${id}"] [data-last-move]`)
               ?.textContent?.trim();
-          const time = clockTime(new Date(movedAt));
+          const time = "20:12";
           expect(text("ti-1")).toBe(`${prefix} Grill $& · Luis · Till 2 · ${time}`);
           expect(text("ti-2")).toBe(`${prefix} Bar · Ana · ${time}`);
           expect(text("ti-3")).toBe(`${prefix} Grill · Kitchen display · ${time}`);
