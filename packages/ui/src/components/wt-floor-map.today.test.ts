@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, mountInShadowRoot } from "../test-helpers.js";
+import { applyTokens } from "../tokens/index.js";
 import type { PlanPlacement } from "../floor-plan-geometry.js";
 import type { FloorMapDrop, FloorMapTable, WtFloorMap } from "./wt-floor-map.js";
 import "./wt-floor-map.js";
@@ -39,6 +40,7 @@ async function map(tables: FloorMapTable[]): Promise<WtFloorMap> {
   const el = (await mountInShadowRoot(
     `<wt-floor-map style="width: 600px; height: 300px"></wt-floor-map>`,
   )) as WtFloorMap;
+  applyTokens((el.getRootNode() as ShadowRoot).host as HTMLElement);
   el.tables = tables;
   await new Promise(requestAnimationFrame);
   await new Promise(requestAnimationFrame);
@@ -52,6 +54,16 @@ const part = (el: WtFloorMap, name: string) =>
 
 const button = (el: WtFloorMap, id: string) =>
   el.shadowRoot!.querySelector<HTMLButtonElement>(`[part="table"][data-table-id="${id}"]`)!;
+
+/** `--wt-color-primary` as the map's shadow root computes it. */
+function primaryOf(el: WtFloorMap): string {
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-primary)";
+  el.shadowRoot!.append(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}
 
 const targets = (el: WtFloorMap) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-drop-target]")].map(
@@ -206,7 +218,14 @@ it("a fixed table's copy over another table draws a line to it", async () => {
     375, 150, 150, 150,
   ]);
   expect(getComputedStyle(line).strokeWidth).toBe("1px");
+  expect(getComputedStyle(line).stroke).toBe(primaryOf(el));
   expect(targets(el)).toEqual(["t2"]);
+  const ring = (id: string) => {
+    const style = getComputedStyle(button(el, id).querySelector('[part="shape"]')!);
+    return [style.outlineStyle, style.outlineColor, style.outlineWidth, style.outlineOffset];
+  };
+  expect(ring("t2")[0]).not.toBe("none");
+  expect(ring("t2")).toEqual(ring("t1"));
   // The copy now covers t2 here; the target is still found through it.
   move(el, 160, 150);
   await el.updateComplete;

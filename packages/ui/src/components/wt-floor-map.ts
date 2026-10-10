@@ -205,7 +205,9 @@ export class WtFloorMap extends LitElement {
       /* Outside the edge, so --wt-focus-offset and not --wt-selected-ring-offset: the seated fill
          is the primary colour itself. */
       [part="table"][data-held]:not([data-merge]) [part="shape"],
-      [part="table"][data-held][data-merge] {
+      [part="table"][data-held][data-merge],
+      [part="table"][data-drop-target]:not([data-merge]) [part="shape"],
+      [part="table"][data-drop-target][data-merge] {
         outline: var(--wt-selected-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -213,12 +215,6 @@ export class WtFloorMap extends LitElement {
       /* Once around the whole merge, above a table touching it. */
       [part="table"][data-held][data-merge] {
         z-index: 1;
-      }
-
-      [part="table"][data-drop-target]:not([data-merge]) [part="shape"],
-      [part="table"][data-drop-target][data-merge] {
-        outline: var(--wt-selected-ring);
-        outline-offset: var(--wt-focus-offset);
       }
 
       [part="ghost"],
