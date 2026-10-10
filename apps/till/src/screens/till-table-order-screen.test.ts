@@ -478,6 +478,24 @@ describe("till-table-order-screen", () => {
     expect(widget.shadowRoot!.querySelector(".pay-card")).not.toBeNull();
   });
 
+  it.each([
+    { bill: "no lines", lines: [], variant: "secondary" },
+    { bill: "a line", lines: [pendingLine], variant: "primary" },
+  ])(
+    "draws the pay card's Cash and Card $variant on a bill with $bill",
+    async ({ lines, variant }) => {
+      const { el } = await mount({ lines });
+      await openDrawer(el);
+      const widget = tender(el);
+      await widget.updateComplete;
+      expect(
+        [".pay", ".pay-card"].map((name) =>
+          widget.shadowRoot!.querySelector(name)!.getAttribute("variant"),
+        ),
+      ).toEqual([variant, variant]);
+    },
+  );
+
   it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);
@@ -3193,6 +3211,85 @@ describe("till-table-order-screen", () => {
         expect(splitConfirm(el).disabled).toBe(true);
       },
     );
+
+    const buttonFill = (host: Element) =>
+      getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+    const variantOf = (el: TillTableOrderScreen, selector: string) =>
+      el.shadowRoot!.querySelector(selector)!.getAttribute("variant");
+
+    it.each(["light", "dark"] as const)(
+      "draws Transfer quiet like Back until a line is picked, then blue (%s theme)",
+      async (theme) => {
+        const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-4" });
+        el.parentElement!.setAttribute("data-theme", theme);
+        await toMenu(el);
+        click(el, '[data-action="transfer"]');
+        await el.updateComplete;
+        click(el, '[data-target="wo-check"]');
+        await el.updateComplete;
+        const transfer =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            "[data-transfer-confirm]",
+          )!;
+        const backFill = buttonFill(el.shadowRoot!.querySelector("[data-action-back]")!);
+        await transfer.updateComplete;
+        expect(transfer.hasAttribute("disabled")).toBe(true);
+        expect(variantOf(el, "[data-transfer-confirm]")).toBe("secondary");
+        expect(buttonFill(transfer)).toBe(backFill);
+        click(el, '[data-transfer-line="1"]');
+        await el.updateComplete;
+        await transfer.updateComplete;
+        expect(transfer.hasAttribute("disabled")).toBe(false);
+        expect(variantOf(el, "[data-transfer-confirm]")).toBe("primary");
+        expect(buttonFill(transfer)).not.toBe(backFill);
+      },
+    );
+
+    it.each(["light", "dark"] as const)(
+      "draws Add bill quiet like Cancel until a line is picked, then blue (%s theme)",
+      async (theme) => {
+        const { el } = await mount({ lines: [pendingLine], orderId: "wo-7" });
+        el.parentElement!.setAttribute("data-theme", theme);
+        await toMenu(el);
+        click(el, '[data-action="split"]');
+        await el.updateComplete;
+        const addBill =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-split-confirm]")!;
+        const cancelFill = buttonFill(el.shadowRoot!.querySelector("[data-action-back]")!);
+        await addBill.updateComplete;
+        expect(addBill.hasAttribute("disabled")).toBe(true);
+        expect(variantOf(el, "[data-split-confirm]")).toBe("secondary");
+        expect(buttonFill(addBill)).toBe(cancelFill);
+        click(el, '[data-split-line="1"]');
+        await el.updateComplete;
+        await addBill.updateComplete;
+        expect(addBill.hasAttribute("disabled")).toBe(false);
+        expect(variantOf(el, "[data-split-confirm]")).toBe("primary");
+        expect(buttonFill(addBill)).not.toBe(cancelFill);
+      },
+    );
+
+    it("keeps Add bill blue, though disabled, after a press its own quantity check refuses", async () => {
+      const weight = {
+        ...pendingLine,
+        productId: "jamon",
+        unitPrecision: 3,
+        quantity: "0.750",
+        unitPriceGross: "20.00",
+      };
+      const { el } = await mount({ lines: [weight], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+      await setSplitQuantity(el, 1, "0.751");
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+      expect(splitBottom(el).error).toBe(t("form.fix_fields"));
+      expect(splitConfirm(el).disabled).toBe(true);
+      expect(variantOf(el, "[data-split-confirm]")).toBe("primary");
+    });
 
     /** Two weighed dishes, on the split step with both picked. */
     const splitTwoLines = async () => {

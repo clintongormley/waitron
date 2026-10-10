@@ -194,11 +194,13 @@ export class TillTenderPay extends LitElement {
   /** The order this widget settles. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
   /**
-   * A sale is in flight, or a basket line must be resolved first. Disabling the controls is only the
-   * VISIBLE half of the double-file guard; the real safety is the app-level single-flight flag
-   * (`till-app`'s `submitting`).
+   * A sale or order is being sent (card-grid also ORs its held basket into it). Disabling the
+   * controls is only the VISIBLE half of the guard against a second send; the real safety is the
+   * app's own single-flight flags (`till-app`'s `submitting` and `placing`).
    */
   @property({ type: Boolean }) busy = false;
+  /** The pay controls are held while nothing is being sent; read only to draw Cash and Card grey. */
+  @property({ type: Boolean }) held = false;
   @property() mode: OrderFlow = "prepay";
   /** Only a weighed dish's weight entry, for a screen that takes payment elsewhere. */
   @property({ type: Boolean }) weighOnly = false;
@@ -741,11 +743,15 @@ export class TillTenderPay extends LitElement {
     return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
+  #tenderVariant(): "primary" | "secondary" {
+    return this.held || (!this.busy && this.store.lineCount === 0) ? "secondary" : "primary";
+  }
+
   #renderCardButton(disabled: boolean) {
     return html`
       <wt-button
         class="pay-card"
-        variant="primary"
+        variant=${this.#tenderVariant()}
         size="md"
         ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid())}
         @click=${() => this.#onCardTap()}
@@ -765,7 +771,7 @@ export class TillTenderPay extends LitElement {
       <div class="tenders">
         <wt-button
           class="pay"
-          variant="primary"
+          variant=${this.#tenderVariant()}
           size="md"
           ?disabled=${disabled}
           @click=${() => this.#startPaying()}

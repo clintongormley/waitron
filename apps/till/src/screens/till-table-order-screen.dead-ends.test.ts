@@ -137,3 +137,43 @@ it("ignores an earlier question answered after the same lines are reopened", asy
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("till-dead-ends-section")).not.toBeNull();
 });
+
+const buttonFill = (host: Element) =>
+  getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+
+it.each(["light", "dark"] as const)(
+  "draws Confirm quiet like Back while the station check is out and while a dish has no station, then blue (%s theme)",
+  async (theme) => {
+    const { el } = await mount();
+    el.parentElement!.setAttribute("data-theme", theme);
+    el.parentElement!.style.width = "1280px";
+    await resized(el);
+    store(el).loadFrom(store(el).id, [{ product: beer, quantity: "1" }]);
+    await el.updateComplete;
+    el.addEventListener("check-dead-ends", (event) => event.preventDefault());
+    el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+    await el.updateComplete;
+    const confirm =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-draft-confirm]")!;
+    const backFill = buttonFill(el.shadowRoot!.querySelector("[data-draft-dismiss]")!);
+    await confirm.updateComplete;
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.getAttribute("variant")).toBe("secondary");
+    expect(buttonFill(confirm)).toBe(backFill);
+
+    el.answerDeadEnds([store(el).lines[0]!], answer);
+    await el.updateComplete;
+    await confirm.updateComplete;
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.getAttribute("variant")).toBe("secondary");
+
+    el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!.dispatchEvent(
+      new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+    );
+    await el.updateComplete;
+    await confirm.updateComplete;
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.getAttribute("variant")).toBe("primary");
+    expect(buttonFill(confirm)).not.toBe(backFill);
+  },
+);

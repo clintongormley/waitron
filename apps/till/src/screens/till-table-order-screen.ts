@@ -3176,6 +3176,9 @@ export class TillTableOrderScreen extends LitElement {
               return row === undefined ? [] : [{ ...row, key: String(index) }];
             }),
           };
+    const waiting =
+      pending?.checking === true ||
+      [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt);
     return html`<wt-dialog
       ${trackDialog()}
       class="draft-preview"
@@ -3256,9 +3259,9 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 class="preview-confirm"
-                variant="primary"
+                variant=${waiting ? "secondary" : "primary"}
                 data-draft-confirm
-                ?disabled=${pending?.checking === true || [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt)}
+                ?disabled=${waiting}
                 @click=${() => this.#confirmPreview()}
               >
                 ${t("table.preview_confirm")}
@@ -4891,7 +4894,7 @@ export class TillTableOrderScreen extends LitElement {
       <wt-button
         class="transfer-confirm"
         data-transfer-confirm
-        variant="primary"
+        variant=${canConfirm ? "primary" : "secondary"}
         ?disabled=${!canConfirm}
         @click=${(event: Event) => this.#confirmTransfer(event)}
       >
@@ -4932,7 +4935,7 @@ export class TillTableOrderScreen extends LitElement {
         <wt-button
           class="transfer-confirm"
           data-split-confirm
-          variant="primary"
+          variant=${this.splitQuantities.size === 0 ? "secondary" : "primary"}
           ?disabled=${this.splitQuantities.size === 0 || errors.length > 0}
           @click=${(event: Event) => void this.#confirmSplit(event)}
         >

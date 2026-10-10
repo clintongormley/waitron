@@ -132,6 +132,7 @@ export class TillDeadEndsDialog extends LitElement {
 
   override render() {
     const remaining = this.answer.deadEnds.filter((row) => !this.removed.has(row.key));
+    const unanswered = remaining.some((row) => !this.choices.has(row.key));
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -152,8 +153,8 @@ export class TillDeadEndsDialog extends LitElement {
         >
         <wt-button
           data-continue
-          variant="primary"
-          ?disabled=${remaining.some((row) => !this.choices.has(row.key))}
+          variant=${unanswered ? "secondary" : "primary"}
+          ?disabled=${unanswered}
           @click=${() => this.#continue()}
           >${t("dead_end.continue")}</wt-button
         >

@@ -6908,6 +6908,7 @@ export class TillApp extends LitElement {
         <div slot="footer" class="edit-dead-ends-actions">
           <wt-button
             variant="secondary"
+            data-edit-dead-ends-cancel
             @click=${(event: Event) => {
               if (
                 !this.#editDeadEndsCurrent(pending) ||
@@ -6921,7 +6922,7 @@ export class TillApp extends LitElement {
             >${t("action.cancel")}</wt-button
           >
           <wt-button
-            variant="primary"
+            variant=${pending.stationId === undefined ? "secondary" : "primary"}
             data-edit-dead-ends-retry
             ?disabled=${pending.stationId === undefined}
             @click=${(event: Event) => {

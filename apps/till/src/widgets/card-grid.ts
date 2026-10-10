@@ -441,6 +441,7 @@ export class TillCardGrid extends LitElement {
         return html`${this.payRest === null ? nothing : this.#payRest(this.payRest)}<till-tender-pay
             .store=${this.store}
             .busy=${this.busy || this.payHeld}
+            .held=${this.payHeld && !this.busy}
             .mode=${this.orderFlow}
             .stage=${this.stage}
             .cardProvider=${this.cardProvider}
