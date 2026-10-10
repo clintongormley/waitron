@@ -1125,12 +1125,6 @@ export const en = {
   "printers.port": "Port",
   "printers.local_key": "Device ID",
   "printers.poll_id": "Poll ID",
-  "printers.watcher_copies": "Prints a watcher's copies",
-  "printers.watcher_no": "No: prints station tickets",
-  "printers.watcher_station_disabled":
-    "A printer that prints a watcher's copies prints no station tickets.",
-  "printers.watcher_conflict":
-    "Remove this printer from its stations in Prep stations → Tickets before using it for watcher copies.",
   "printers.paper_width": "Paper width",
   "printers.paper_width_58": "58 mm",
   "printers.paper_width_80": "80 mm",
@@ -3655,12 +3649,6 @@ export const es: Record<StringKey, string> = {
   "printers.port": "Puerto",
   "printers.local_key": "ID del dispositivo",
   "printers.poll_id": "ID de sondeo",
-  "printers.watcher_copies": "Imprime las copias de un punto de seguimiento",
-  "printers.watcher_no": "No: imprime comandas de estación",
-  "printers.watcher_station_disabled":
-    "Una impresora que imprime las copias de un punto de seguimiento no imprime comandas de estación.",
-  "printers.watcher_conflict":
-    "Quita esta impresora de sus estaciones en Estaciones de preparación → Comandas antes de usarla para copias de un punto de seguimiento.",
   "printers.paper_width": "Ancho del papel",
   "printers.paper_width_58": "58 mm",
   "printers.paper_width_80": "80 mm",

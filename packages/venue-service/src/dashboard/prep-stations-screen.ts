@@ -50,9 +50,7 @@ import type {
   PrepStationsApi,
   PrepStationsView,
   StationInput,
-  WatcherInput,
 } from "./routing-client.js";
-import { type WatcherView } from "./watchers-seen.js";
 import "./routing-grid.js";
 import { rowInModel } from "./routing-grid-model.js";
 import type {
@@ -77,7 +75,7 @@ type StationAction = { kind: "switch_off" | "switch_on"; stationId: string };
 
 type Editor = { kind: "station" };
 type NewStation = StationInput & { printerIds: string[] };
-const PREP_TABS = ["stations", "routing", "watchers", "settings"] as const;
+const PREP_TABS = ["stations", "routing", "settings"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
@@ -86,8 +84,6 @@ const TIMING_LABELS = {
   overdueAfterMinutes: "prep.overdue",
   forgottenAfterMinutes: "prep.forgotten",
 } as const;
-type WatcherCell = "follows" | "zones" | "pass";
-const EVERY_MEMBER = "__every__";
 
 type SettingsDraft = {
   stationId: string;
@@ -98,14 +94,6 @@ type SettingsDraft = {
   attempted: boolean;
 };
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
-
-function watcherInputErrors(input: WatcherInput) {
-  return {
-    name: input.name.trim() ? "" : t("venue.field_required"),
-    stationIds: input.everyStation || input.stationIds.length ? "" : t("watchers.need_station"),
-    zoneIds: input.everyZone || input.zoneIds.length ? "" : t("watchers.need_zone"),
-  };
-}
 
 /** One line per active device whose kitchen screens show the station, naming those screens' kinds. */
 function screenDevices(devices: PrepStationsView["devices"], stationId: string) {
@@ -144,7 +132,7 @@ export class PrepStationsScreen extends LitElement {
       wt-tabs::part(tab-actions) {
         max-width: 50%;
       }
-      wt-data-table::part(watcher-cell) {
+      wt-data-table::part(settings-cell) {
         display: grid;
         gap: var(--wt-space-2);
         max-width: calc(var(--wt-tap-min) * 5);
@@ -171,15 +159,6 @@ export class PrepStationsScreen extends LitElement {
       }
       wt-data-table::part(inherited) {
         --wt-color-text: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(disabled-watcher-cell) {
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(disabled-watcher) {
-        display: flex;
-        flex-wrap: wrap;
-        column-gap: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
       }
       h1 {
         margin: 0;
@@ -221,33 +200,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private view?: PrepStationsView;
   @state() private settingsEditor?: SettingsDraft;
   @state() private settingsBusy = false;
-  @state() private watcherPrinterEditor?: {
-    watcherId: string;
-    ids: string[];
-    fieldError: string;
-    error: string;
-    conflictPrinterId?: string;
-  };
-  @state() private watcherPrinterBusy = false;
-  @state() private watcherCellEditor?: {
-    watcherId: string;
-    field: WatcherCell;
-    values: string[];
-    attempted: boolean;
-    fieldError: string;
-    error: string;
-  };
-  @state() private watcherCellBusy = false;
   @state() private editor?: Editor;
-  @state() private watcherRename?: {
-    id: string;
-    name: string;
-    attempted: boolean;
-    fieldError: string;
-    error: string;
-  };
-  @state() private watcherRemoval?: WatcherView;
-  @state() private watcherRemoveError = "";
   @state() private draft: NewStation = {
     name: "",
     displayOrder: 0,
@@ -324,12 +277,6 @@ export class PrepStationsScreen extends LitElement {
   #stationScope?: DraftScope<NewStation>;
   #stationBaseline?: NewStation;
   #stationIdentity?: object;
-  #watcherRenameScope?: DraftScope<{ name: string }>;
-  #watcherRenameIdentity?: object;
-  #watcherCellScope?: DraftScope<string[]>;
-  #watcherCellIdentity?: object;
-  #watcherPrinterScope?: DraftScope<string[]>;
-  #watcherPrinterIdentity?: object;
   #stationActionIdentity?: object;
   #settingsScope?: DraftScope<string>;
   #settingsIdentity?: object;
@@ -416,131 +363,6 @@ export class PrepStationsScreen extends LitElement {
       }).scope;
       this.#stationScope.commit(this.#stationBaseline);
     }
-    if (!this.watcherRename) {
-      this.#watcherRenameScope?.dispose();
-      this.#watcherRenameScope = undefined;
-      this.#watcherRenameIdentity = undefined;
-    } else if (!this.#watcherRenameIdentity) {
-      const id = (this.#watcherRenameIdentity = {});
-      this.#leave ??= leaveCoordinatorFor(this);
-      this.#watcherRenameScope = draftScopeFor(this, {
-        id,
-        current: () => ({ name: this.watcherRename!.name }),
-        snapshot: (value) => ({ ...value }),
-        equal: (a, b) => a.name.trim() === b.name.trim(),
-        restore: (value) => {
-          if (this.watcherRename) this.watcherRename = { ...this.watcherRename, name: value.name };
-        },
-      }).scope;
-    }
-  }
-
-  #syncWatcherInlineDrafts(): void {
-    for (const printers of [false, true]) {
-      const editor = printers ? this.watcherPrinterEditor : this.watcherCellEditor;
-      const scope = printers ? this.#watcherPrinterScope : this.#watcherCellScope;
-      const identity = printers ? this.#watcherPrinterIdentity : this.#watcherCellIdentity;
-      if (!editor) {
-        scope?.dispose();
-        if (printers) {
-          this.#watcherPrinterScope = undefined;
-          this.#watcherPrinterIdentity = undefined;
-        } else {
-          this.#watcherCellScope = undefined;
-          this.#watcherCellIdentity = undefined;
-        }
-      } else if (!identity) {
-        const id = {};
-        this.#leave ??= leaveCoordinatorFor(this);
-        const registered = draftScopeFor(this, {
-          id,
-          current: () =>
-            printers ? this.watcherPrinterEditor!.ids : this.watcherCellEditor!.values,
-          snapshot: (ids) => [...ids],
-          equal: (a, b) => a.length === b.length && a.every((value) => b.includes(value)),
-          restore: (values) => {
-            if (printers && this.watcherPrinterEditor)
-              this.watcherPrinterEditor = { ...this.watcherPrinterEditor, ids: [...values] };
-            else if (!printers && this.watcherCellEditor)
-              this.watcherCellEditor = { ...this.watcherCellEditor, values: [...values] };
-          },
-        }).scope;
-        if (printers) {
-          this.#watcherPrinterIdentity = id;
-          this.#watcherPrinterScope = registered;
-        } else {
-          this.#watcherCellIdentity = id;
-          this.#watcherCellScope = registered;
-        }
-      }
-    }
-  }
-  #watcherInlineCurrent(printers: boolean, identity: object | undefined): boolean {
-    return (
-      this.isConnected &&
-      identity === (printers ? this.#watcherPrinterIdentity : this.#watcherCellIdentity)
-    );
-  }
-  #leaveWatcherInline(
-    printers: boolean,
-    reason: LeaveReason,
-    identity: object | undefined,
-    proceed: () => void,
-  ): void {
-    if (
-      !this.#watcherInlineCurrent(printers, identity) ||
-      (printers ? this.watcherPrinterBusy : this.watcherCellBusy)
-    )
-      return;
-    const scope = printers ? this.#watcherPrinterScope : this.#watcherCellScope;
-    if (!scope || !this.#leave) {
-      proceed();
-      return;
-    }
-    void this.#leave!.request({
-      scopes: [scope.id],
-      reason,
-      proceed: () => {
-        if (this.#watcherInlineCurrent(printers, identity)) proceed();
-      },
-    });
-  }
-  #openWatcherCell(watcher: WatcherView, field: WatcherCell): void {
-    this.#leaveWatcherInline(false, "navigation", this.#watcherCellIdentity, () => {
-      this.#watcherCellScope?.dispose();
-      this.#watcherCellScope = undefined;
-      this.#watcherCellIdentity = undefined;
-      this.watcherCellEditor = {
-        watcherId: watcher.id,
-        field,
-        attempted: false,
-        fieldError: "",
-        error: "",
-        values:
-          field === "pass"
-            ? [watcher.runsPass ? "yes" : "no"]
-            : field === "follows"
-              ? watcher.everyStation
-                ? [EVERY_MEMBER]
-                : [...watcher.stationIds]
-              : watcher.everyZone
-                ? [EVERY_MEMBER]
-                : [...watcher.zoneIds],
-      };
-    });
-  }
-  #openWatcherPrinters(watcher: WatcherView): void {
-    this.#leaveWatcherInline(true, "navigation", this.#watcherPrinterIdentity, () => {
-      this.#watcherPrinterScope?.dispose();
-      this.#watcherPrinterScope = undefined;
-      this.#watcherPrinterIdentity = undefined;
-      this.watcherPrinterEditor = {
-        watcherId: watcher.id,
-        ids: [...watcher.printerIds],
-        fieldError: "",
-        error: "",
-      };
-    });
   }
 
   readonly #beforeAddClose = async (reason: LeaveReason): Promise<boolean> => {
@@ -623,7 +445,6 @@ export class PrepStationsScreen extends LitElement {
       this.pending = undefined;
     }
     this.#syncStationDrafts();
-    this.#syncWatcherInlineDrafts();
     this.#syncSettingsDraft();
     this.#syncCellDraft();
     const changedState = changed as Map<PropertyKey, unknown>;
@@ -651,31 +472,16 @@ export class PrepStationsScreen extends LitElement {
       this.#stationIdentity ||
       this.pending !== undefined ||
       this.cellChoice !== null ||
-      this.stationAction !== undefined ||
-      this.#watcherRenameIdentity
+      this.stationAction !== undefined
     )
       this.busy = false;
     this.stationAction = undefined;
     this.#stationActionIdentity = undefined;
-    this.watcherCellEditor = undefined;
-    this.watcherPrinterEditor = undefined;
-    this.watcherCellBusy = false;
-    this.watcherPrinterBusy = false;
     this.settingsEditor = undefined;
     this.settingsBusy = false;
     this.#settingsScope?.dispose();
     this.#settingsScope = undefined;
     this.#settingsIdentity = undefined;
-    this.#watcherCellScope?.dispose();
-    this.#watcherPrinterScope?.dispose();
-    this.#watcherCellScope = undefined;
-    this.#watcherPrinterScope = undefined;
-    this.#watcherCellIdentity = undefined;
-    this.#watcherPrinterIdentity = undefined;
-    this.watcherRename = undefined;
-    this.#watcherRenameScope?.dispose();
-    this.#watcherRenameScope = undefined;
-    this.#watcherRenameIdentity = undefined;
     this.#stationScope?.dispose();
     this.stationEditBusy = false;
     this.pending = undefined;
@@ -716,13 +522,6 @@ export class PrepStationsScreen extends LitElement {
             this.#addressShown(this.cellRefusal.address)
           )
             this.cellRefusal = null;
-          const editor = this.watcherPrinterEditor;
-          if (
-            editor?.conflictPrinterId &&
-            !value.stationPrinters.some((row) => editor.ids.includes(row.printerId))
-          ) {
-            this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
-          }
         },
       );
     } catch {
@@ -1189,7 +988,6 @@ export class PrepStationsScreen extends LitElement {
           printerIds: this.#printersOf(station.id),
         }}
         .printers=${this.view.printers}
-        .watchers=${this.view.watchers}
         .canManagePrinters=${canManagePrinters}
         .refusal=${this.stationEditRefusal}
         @station-save=${(event: CustomEvent<StationEditorSave>) => {
@@ -1389,365 +1187,6 @@ export class PrepStationsScreen extends LitElement {
       </h2>
     </wt-card>`;
   }
-  async #saveWatcherPrinters(identity: object | undefined) {
-    if (saveActionState(this.#watcherPrinterScope).unchanged) return;
-    const editor = this.watcherPrinterEditor;
-    if (!editor || this.watcherPrinterBusy || !this.#watcherInlineCurrent(true, identity)) return;
-    const scope = this.#watcherPrinterScope;
-    const submitted = [...editor.ids];
-    this.watcherPrinterBusy = true;
-    this.watcherPrinterEditor = { ...editor, fieldError: "", error: "" };
-    this.#showError("");
-    try {
-      await this.api.setWatcherPrinters(editor.watcherId, submitted);
-      scope?.commit(submitted);
-    } catch (error) {
-      if (!this.#watcherInlineCurrent(true, identity)) return;
-      const code = codeOf(error);
-      const field = (error as { params?: { field?: string } })?.params?.field;
-      const fieldRefusal =
-        code === "printer.not_found" ||
-        code === "printer.makes_and_watches" ||
-        (code === "management.request_invalid" && field === "printerIds");
-      this.watcherPrinterEditor = {
-        ...this.watcherPrinterEditor!,
-        fieldError: fieldRefusal ? t("watchers.printer_refused") : "",
-        conflictPrinterId:
-          code === "printer.makes_and_watches"
-            ? (error as { params?: { id?: string } }).params?.id
-            : undefined,
-        error: fieldRefusal
-          ? ""
-          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
-      };
-      this.watcherPrinterBusy = false;
-      return;
-    }
-    if (!this.#watcherInlineCurrent(true, identity)) return;
-    if (!scope?.isDirty()) this.watcherPrinterEditor = undefined;
-    this.watcherPrinterBusy = false;
-    await this.#load();
-  }
-  #watcherPrinterCell(watcher: WatcherView) {
-    const view = this.view!;
-    const names =
-      watcher.printerIds
-        .map((id) => view.printers.find((printer) => printer.id === id)?.name ?? id)
-        .join(", ") || t("prep.none");
-    if (!watcher.active)
-      return html`<span part="disabled-watcher-cell" data-test=${`watcher-printers-${watcher.id}`}
-        >${names}</span
-      >`;
-    const editor =
-      this.watcherPrinterEditor?.watcherId === watcher.id ? this.watcherPrinterEditor : undefined;
-    if (!editor)
-      return html`<wt-button
-        variant="secondary"
-        data-test=${`edit-watcher-printers-${watcher.id}`}
-        aria-label=${`${watcher.name}: ${t("watchers.printers")}`}
-        ?disabled=${this.watcherPrinterBusy}
-        @click=${() => this.#openWatcherPrinters(watcher)}
-        >${names}</wt-button
-      >`;
-    const identity = this.#watcherPrinterIdentity;
-    const options = view.printers.map((printer) => {
-      const stations = view.stationPrinters
-        .filter((mapping) => mapping.printerId === printer.id)
-        .map((mapping) => this.#stationName(mapping.stationId));
-      const owner = view.watchers.find(
-        (row) =>
-          row.id !== watcher.id &&
-          (row.printerIds.includes(printer.id) || row.id === printer.watcherId),
-      );
-      return {
-        value: printer.id,
-        label: printer.name,
-        disabled:
-          (printer.active === false || stations.length > 0) && !editor.ids.includes(printer.id),
-        description:
-          printer.active === false
-            ? t("prep.health.disabled")
-            : stations.length
-              ? format("watchers.station_printer", { name: stations.join(", ") })
-              : owner
-                ? format("prep.tickets.watcher_printer", { name: owner.name })
-                : undefined,
-      };
-    });
-    return html`<div part="watcher-cell">
-      <wt-combobox
-        multiple
-        name="printerIds"
-        data-test=${`watcher-printers-${watcher.id}`}
-        label=${`${watcher.name}: ${t("watchers.printers")}`}
-        .options=${options}
-        .values=${editor.ids}
-        .disabled=${this.watcherPrinterBusy}
-        .error=${editor.fieldError}
-        .searchPlaceholder=${t("watchers.printers")}
-        .noResultsLabel=${t("venue.combobox_no_results")}
-        .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
-        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
-          event.stopPropagation();
-          if (!this.#watcherInlineCurrent(true, identity)) return;
-          this.watcherPrinterEditor = {
-            ...editor,
-            ids: event.detail.values,
-            conflictPrinterId: undefined,
-            fieldError: "",
-            error: "",
-          };
-          this.#watcherPrinterScope?.changed();
-        }}
-        @keydown=${(event: KeyboardEvent) => {
-          if (event.key === "Escape" && !this.watcherPrinterBusy) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.#leaveWatcherInline(true, "escape", identity, () => {
-              this.watcherPrinterEditor = undefined;
-            });
-          }
-        }}
-      ></wt-combobox>
-      <wt-form-actions
-        data-test=${`watcher-printer-actions-${watcher.id}`}
-        .error=${[editor.fieldError ? t("watchers.fix_fields") : "", editor.error].filter(Boolean).join(" ")}
-      >
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test=${`cancel-watcher-printers-${watcher.id}`}
-          ?disabled=${this.watcherPrinterBusy}
-          @click=${() => {
-            this.#leaveWatcherInline(true, "cancel", identity, () => {
-              this.watcherPrinterEditor = undefined;
-            });
-          }}
-          >${t("venue.cancel")}</wt-button
-        >
-        <wt-button
-          data-test=${`save-watcher-printers-${watcher.id}`}
-          variant=${saveActionState(this.#watcherPrinterScope).variant}
-          ?disabled=${saveActionState(this.#watcherPrinterScope).unchanged || this.watcherPrinterBusy}
-          @click=${() => void this.#saveWatcherPrinters(identity)}
-          >${t("venue.save")}</wt-button
-        >
-      </wt-form-actions>
-    </div>`;
-  }
-  #watcherInput(watcher: WatcherView, applyDraft = true): WatcherInput {
-    const input = {
-      name: watcher.name,
-      everyStation: watcher.everyStation,
-      stationIds: [...watcher.stationIds],
-      everyZone: watcher.everyZone,
-      zoneIds: [...watcher.zoneIds],
-      runsPass: watcher.runsPass,
-      displayOrder: watcher.displayOrder,
-    };
-    const editor = this.watcherCellEditor;
-    if (!applyDraft || !editor || editor.watcherId !== watcher.id) return input;
-    if (editor.field === "pass") return { ...input, runsPass: editor.values[0] === "yes" };
-    const every = editor.values.includes(EVERY_MEMBER);
-    const ids = every ? [] : editor.values;
-    return editor.field === "follows"
-      ? { ...input, everyStation: every, stationIds: ids }
-      : { ...input, everyZone: every, zoneIds: ids };
-  }
-  #watcherCellError(watcher: WatcherView) {
-    const editor = this.watcherCellEditor;
-    if (!editor?.attempted) return "";
-    const errors = watcherInputErrors(this.#watcherInput(watcher));
-    return editor.field === "follows"
-      ? errors.stationIds
-      : editor.field === "zones"
-        ? errors.zoneIds
-        : "";
-  }
-  async #saveWatcherCell(identity: object | undefined) {
-    if (saveActionState(this.#watcherCellScope).unchanged) return;
-    const editor = this.watcherCellEditor;
-    if (!editor || this.watcherCellBusy || !this.#watcherInlineCurrent(false, identity)) return;
-    const scope = this.#watcherCellScope;
-    const submitted = [...editor.values];
-    const watcher = this.view!.watchers.find((row) => row.id === editor.watcherId);
-    if (!watcher) return;
-    this.watcherCellEditor = { ...editor, attempted: true, fieldError: "", error: "" };
-    if (this.#watcherCellError(watcher)) {
-      await this.updateComplete;
-      this.shadowRoot!.querySelector('[data-test="watchers-table"]')
-        ?.shadowRoot?.querySelector<HTMLElement>('[data-test="watcher-cell-input"]')
-        ?.focus();
-      return;
-    }
-    const input = this.#watcherInput(watcher);
-    this.watcherCellBusy = true;
-    this.#showError("");
-    try {
-      await this.api.updateWatcher(watcher.id, input);
-      scope?.commit(submitted);
-    } catch (error) {
-      if (!this.#watcherInlineCurrent(false, identity)) return;
-      const code = codeOf(error);
-      const field = (error as { params?: { field?: string } })?.params?.field;
-      const fieldError =
-        editor.field === "follows" &&
-        (code === "station.not_found" ||
-          (code === "management.request_invalid" && field === "stationIds"))
-          ? t("watchers.need_station")
-          : editor.field === "zones" &&
-              (code === "zone.not_found" ||
-                (code === "management.request_invalid" && field === "zoneIds"))
-            ? t("watchers.need_zone")
-            : "";
-      this.watcherCellEditor = {
-        ...this.watcherCellEditor!,
-        attempted: true,
-        fieldError,
-        error: fieldError
-          ? ""
-          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
-      };
-      this.watcherCellBusy = false;
-      return;
-    }
-    if (!this.#watcherInlineCurrent(false, identity)) return;
-    if (!scope?.isDirty()) this.watcherCellEditor = undefined;
-    this.watcherCellBusy = false;
-    await this.#load();
-  }
-  #watcherChoiceCell(watcher: WatcherView, field: WatcherCell) {
-    const view = this.view!;
-    const label = t(
-      field === "follows"
-        ? "watchers.follows_column"
-        : field === "zones"
-          ? "watchers.zones_column"
-          : "watchers.runs_pass",
-    );
-    const follows = watcher.everyStation
-      ? t("watchers.every_station")
-      : view.stations
-          .filter((row) => row.active && watcher.stationIds.includes(row.id))
-          .map((row) => row.name)
-          .join(", ");
-    const zones = watcher.everyZone
-      ? t("watchers.every_zone")
-      : view.zones
-          .filter((row) => row.active !== false && watcher.zoneIds.includes(row.id))
-          .map((row) => row.name)
-          .join(", ");
-    const text =
-      field === "follows"
-        ? follows
-        : field === "zones"
-          ? zones
-          : t(watcher.runsPass ? "venue.yes" : "venue.no");
-    if (!watcher.active)
-      return html`<span part="disabled-watcher-cell" data-test=${`watcher-${field}-${watcher.id}`}
-        >${text}</span
-      >`;
-    const editor =
-      this.watcherCellEditor?.watcherId === watcher.id && this.watcherCellEditor.field === field
-        ? this.watcherCellEditor
-        : undefined;
-    if (!editor)
-      return html`<wt-button
-        variant="secondary"
-        data-test=${`edit-watcher-${field}-${watcher.id}`}
-        aria-label=${`${watcher.name}: ${label}`}
-        ?disabled=${this.watcherCellBusy}
-        @click=${() => this.#openWatcherCell(watcher, field)}
-        >${text || t("prep.none")}</wt-button
-      >`;
-    const identity = this.#watcherCellIdentity;
-    const options =
-      field === "pass"
-        ? [
-            { value: "yes", label: t("venue.yes") },
-            { value: "no", label: t("venue.no") },
-          ]
-        : [
-            {
-              value: EVERY_MEMBER,
-              label: t(
-                field === "follows"
-                  ? "watchers.choose_every_station"
-                  : "watchers.choose_every_zone",
-              ),
-            },
-            ...(field === "follows" ? view.stations : view.zones)
-              .filter((row) => row.active !== false)
-              .map((row) => ({ value: row.id, label: row.name })),
-          ];
-    const invalid = this.#watcherCellError(watcher);
-    const fieldError = invalid || editor.fieldError;
-    return html`<div part="watcher-cell">
-      <wt-combobox
-        data-test="watcher-cell-input"
-        name=${field === "follows" ? "stationIds" : field === "zones" ? "zoneIds" : "runsPass"}
-        label=${`${watcher.name}: ${label}`}
-        .required=${field !== "pass"}
-        .multiple=${field !== "pass"}
-        .options=${options}
-        .values=${editor.values}
-        .value=${editor.values[0] ?? ""}
-        .error=${fieldError}
-        .disabled=${this.watcherCellBusy}
-        .countLabel=${(count: number) => format("watchers.selection_count", { count: String(count) })}
-        .searchPlaceholder=${label}
-        .noResultsLabel=${t("venue.combobox_no_results")}
-        @wt-change=${(event: CustomEvent<{ values: string[]; value: string }>) => {
-          event.stopPropagation();
-          if (!this.#watcherInlineCurrent(false, identity)) return;
-          let values = field === "pass" ? [event.detail.value] : event.detail.values;
-          if (values.includes(EVERY_MEMBER) && values.length > 1)
-            values = editor.values.includes(EVERY_MEMBER)
-              ? values.filter((id) => id !== EVERY_MEMBER)
-              : [EVERY_MEMBER];
-          this.watcherCellEditor = {
-            ...this.watcherCellEditor!,
-            values,
-            fieldError: "",
-            error: "",
-          };
-          this.#watcherCellScope?.changed();
-        }}
-        @keydown=${(event: KeyboardEvent) => {
-          if (event.key === "Escape" && !this.watcherCellBusy) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.#leaveWatcherInline(false, "escape", identity, () => {
-              this.watcherCellEditor = undefined;
-            });
-          }
-        }}
-      ></wt-combobox
-      ><wt-form-actions
-        .error=${[fieldError ? t("watchers.fix_fields") : "", editor.error].filter(Boolean).join(" ")}
-      >
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="cancel-watcher-cell"
-          ?disabled=${this.watcherCellBusy}
-          @click=${() => {
-            this.#leaveWatcherInline(false, "cancel", identity, () => {
-              this.watcherCellEditor = undefined;
-            });
-          }}
-          >${t("venue.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save-watcher-cell"
-          variant=${saveActionState(this.#watcherCellScope).variant}
-          ?disabled=${saveActionState(this.#watcherCellScope).unchanged || this.watcherCellBusy || !!invalid}
-          @click=${() => void this.#saveWatcherCell(identity)}
-          >${t("venue.save")}</wt-button
-        >
-      </wt-form-actions>
-    </div>`;
-  }
   async #saveSettingsCell(identity: object | undefined) {
     if (saveActionState(this.#settingsScope).unchanged) return;
     const editor = this.settingsEditor;
@@ -1850,7 +1289,7 @@ export class PrepStationsScreen extends LitElement {
     const identity = this.#settingsIdentity;
     const invalid = this.#settingsInvalid();
     return html`<div
-      part="watcher-cell"
+      part="settings-cell"
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape" && !this.settingsBusy) {
           event.preventDefault();
@@ -1881,7 +1320,7 @@ export class PrepStationsScreen extends LitElement {
         }}
       ></wt-input>
       <wt-form-actions
-        .error=${invalid || editor.fieldError ? t("watchers.fix_fields") : editor.error}
+        .error=${invalid || editor.fieldError ? t("prep.settings_fix_fields") : editor.error}
       >
         <wt-button
           slot="cancel"
@@ -1931,313 +1370,6 @@ export class PrepStationsScreen extends LitElement {
       .rowKey=${(station: PrepStation) => station.id}
     ></wt-data-table>`;
   }
-  #watchers() {
-    const view = this.view!;
-    const inOrder = (watchers: readonly WatcherView[]) =>
-      [...watchers].sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
-    const ordered = [...inOrder(view.watchers), ...inOrder(view.disabledWatchers)];
-    const columns: DataTableColumn<WatcherView>[] = [
-      {
-        key: "name",
-        label: t("prep.name"),
-        cell: (watcher) =>
-          watcher.active
-            ? html`<span data-test=${`watcher-${watcher.id}`}>${watcher.name}</span>`
-            : html`<span part="disabled-watcher" data-test=${`watcher-${watcher.id}`}
-                ><span data-test=${`watcher-name-${watcher.id}`}>${watcher.name}</span
-                ><span data-test=${`watcher-status-${watcher.id}`}
-                  >${t("watchers.status_disabled")}</span
-                ></span
-              >`,
-      },
-      {
-        key: "follows",
-        label: t("watchers.follows_column"),
-        cell: (watcher) => this.#watcherChoiceCell(watcher, "follows"),
-      },
-      {
-        key: "zones",
-        label: t("watchers.zones_column"),
-        cell: (watcher) => this.#watcherChoiceCell(watcher, "zones"),
-      },
-      {
-        key: "pass",
-        label: t("watchers.runs_pass"),
-        cell: (watcher) => this.#watcherChoiceCell(watcher, "pass"),
-      },
-      {
-        key: "printers",
-        label: t("watchers.printers"),
-        cell: (watcher) => this.#watcherPrinterCell(watcher),
-      },
-      {
-        key: "actions",
-        label: t("prep.actions"),
-        pinned: "end",
-        cell: (watcher) =>
-          html`<wt-row-actions
-            data-test=${`watcher-actions-${watcher.id}`}
-            .label=${`${watcher.name}: ${t("prep.actions")}`}
-          >
-            ${
-              watcher.active
-                ? html`<wt-button
-                    variant="secondary"
-                    data-test=${`rename-watcher-${watcher.id}`}
-                    @click=${() => {
-                      this.#watcherRenameScope?.dispose();
-                      this.#watcherRenameScope = undefined;
-                      this.#watcherRenameIdentity = undefined;
-                      this.watcherRename = {
-                        id: watcher.id,
-                        name: watcher.name,
-                        attempted: false,
-                        fieldError: "",
-                        error: "",
-                      };
-                    }}
-                    >${t("venue.rename")}</wt-button
-                  >`
-                : html`<wt-button
-                    variant="secondary"
-                    data-test=${`enable-watcher-${watcher.id}`}
-                    ?disabled=${this.busy}
-                    @click=${() => void this.#enableWatcher(watcher)}
-                    >${t("prep.enable")}</wt-button
-                  >`
-            }
-            ${
-              watcher.active || !watcher.inUse
-                ? html`<wt-button
-                    variant="danger"
-                    data-test=${`remove-watcher-${watcher.id}`}
-                    @click=${() => {
-                      this.watcherRemoval = watcher;
-                      this.watcherRemoveError = "";
-                    }}
-                    >${t(watcher.inUse ? "prep.disable" : "prep.delete")}</wt-button
-                  >`
-                : nothing
-            }
-          </wt-row-actions>`,
-      },
-    ];
-    return html`<section data-test="watchers-group">
-      <wt-data-table
-        data-test="watchers-table"
-        aria-label=${t("watchers.title")}
-        .rows=${ordered}
-        .columns=${columns}
-        rowKey="id"
-        .emptyLabel=${t("venue.combobox_no_results")}
-      ></wt-data-table>
-    </section>`;
-  }
-  /** Comes back with its name, follows and order; the printers it lost when disabled stay lost. */
-  async #enableWatcher(watcher: WatcherView) {
-    const enabled = await this.#act(
-      () => this.api.enableWatcher(watcher.id),
-      (error) => {
-        const code = codeOf(error);
-        return code === "watcher.name_taken"
-          ? format("watchers.enable_name_taken", { name: watcher.name })
-          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error");
-      },
-    );
-    if (!enabled) return;
-    await this.updateComplete;
-    const table = this.shadowRoot!.querySelector<
-      HTMLElement & { updateComplete: Promise<unknown> }
-    >('[data-test="watchers-table"]');
-    await table?.updateComplete;
-    table?.shadowRoot
-      ?.querySelector<HTMLElement>(`[data-test="watcher-actions-${watcher.id}"]`)
-      ?.focus();
-  }
-  readonly #beforeWatcherRenameClose = async (reason: LeaveReason): Promise<boolean> => {
-    if (this.busy || !this.isConnected || !this.watcherRename) return false;
-    const identity = this.#watcherRenameIdentity;
-    const scope = this.#watcherRenameScope;
-    if (!scope || !this.#leave) return true;
-    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
-    return this.isConnected && identity === this.#watcherRenameIdentity && outcome === "proceeded";
-  };
-  async #saveWatcherName(identity: object | undefined) {
-    if (saveActionState(this.#watcherRenameScope).unchanged) return;
-    const draft = this.watcherRename;
-    if (!draft || this.busy || !this.isConnected || identity !== this.#watcherRenameIdentity)
-      return;
-    const scope = this.#watcherRenameScope;
-    const watcher = this.view!.watchers.find((row) => row.id === draft.id);
-    if (!watcher) return;
-    const name = draft.name.trim();
-    const input = { ...this.#watcherInput(watcher, false), name };
-    const invalid = watcherInputErrors(input).name;
-    this.watcherRename = { ...draft, attempted: true, fieldError: invalid, error: "" };
-    if (invalid) {
-      await this.updateComplete;
-      this.shadowRoot!.querySelector<HTMLElement>('[data-test="watcher-rename-name"]')?.focus();
-      return;
-    }
-    this.busy = true;
-    this.#showError("");
-    try {
-      await this.api.updateWatcher(watcher.id, input);
-    } catch (error) {
-      if (!this.isConnected || identity !== this.#watcherRenameIdentity) return;
-      const code = codeOf(error);
-      const field = (error as { params?: { field?: string } })?.params?.field;
-      const fieldError =
-        code === "watcher.name_taken"
-          ? t("watchers.name_taken")
-          : code === "management.request_invalid" && field === "name"
-            ? t("venue.field_required")
-            : "";
-      this.watcherRename = {
-        ...this.watcherRename!,
-        attempted: true,
-        fieldError,
-        error: fieldError
-          ? ""
-          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
-      };
-      this.busy = false;
-      return;
-    }
-    if (!this.isConnected || identity !== this.#watcherRenameIdentity) return;
-    scope?.commit({ name });
-    this.busy = false;
-    if (!scope?.isDirty()) {
-      this.renderRoot
-        .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=watcher-rename-modal]")
-        ?.closeAfter("saved");
-      this.watcherRename = undefined;
-    }
-    await this.#load();
-  }
-  #watcherRenameDialog() {
-    const draft = this.watcherRename;
-    if (!draft) return nothing;
-    const invalid = draft.attempted && !draft.name.trim();
-    const identity = this.#watcherRenameIdentity;
-    return keyed(
-      identity,
-      html`<wt-modal
-        open
-        size="compact"
-        data-test="watcher-rename-modal"
-        heading=${t("venue.rename")}
-        .dismissible=${!this.busy}
-        .beforeClose=${this.#beforeWatcherRenameClose}
-        @wt-close=${(event: Event) => {
-          event.stopPropagation();
-          if (this.isConnected && identity === this.#watcherRenameIdentity)
-            this.watcherRename = undefined;
-        }}
-      >
-        <wt-input
-          name="name"
-          required
-          data-test="watcher-rename-name"
-          label=${t("prep.name")}
-          .value=${draft.name}
-          .error=${draft.fieldError}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            if (!this.isConnected || identity !== this.#watcherRenameIdentity) return;
-            const name = event.detail.value;
-            this.watcherRename = {
-              ...draft,
-              name,
-              fieldError: draft.attempted && !name.trim() ? t("venue.field_required") : "",
-              error: "",
-            };
-            this.#watcherRenameScope?.changed();
-          }}
-          @keydown=${(event: KeyboardEvent) => {
-            if (this.isConnected && identity === this.#watcherRenameIdentity)
-              submitOnEnter(
-                event,
-                this.renderRoot.querySelector('[data-test="save-watcher-name"]'),
-              );
-          }}
-        ></wt-input>
-        <wt-form-actions
-          .error=${[draft.fieldError ? t("watchers.fix_fields") : "", draft.error].filter(Boolean).join(" ")}
-        >
-          <wt-button
-            slot="cancel"
-            variant="secondary"
-            ?disabled=${this.busy}
-            @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
-            >${t("venue.cancel")}</wt-button
-          >
-          <wt-button
-            data-test="save-watcher-name"
-            variant=${saveActionState(this.#watcherRenameScope).variant}
-            ?disabled=${saveActionState(this.#watcherRenameScope).unchanged || this.busy || invalid}
-            @click=${() => void this.#saveWatcherName(identity)}
-            >${t("venue.save")}</wt-button
-          >
-        </wt-form-actions>
-      </wt-modal>`,
-    );
-  }
-  /** A Disable only ever disables; a Delete disables instead a watcher something has come to name. */
-  async #removeWatcher() {
-    if (this.busy || !this.watcherRemoval) return;
-    this.busy = true;
-    this.#showError("");
-    try {
-      await this.api.removeWatcher(this.watcherRemoval.id, {
-        disable: this.watcherRemoval.inUse,
-      });
-      this.watcherRemoval = undefined;
-      await this.#load();
-    } catch (error) {
-      this.watcherRemoveError =
-        codeOf(error) === "watcher.not_found" ? t("watchers.not_found") : t("prep.save_error");
-    } finally {
-      this.busy = false;
-    }
-  }
-  #watcherDialogs() {
-    return html`${
-      this.watcherRemoval
-        ? html`<wt-modal
-            size="compact"
-            open
-            data-test="remove-watcher-modal"
-            heading=${this.watcherRemoval.inUse ? t("prep.disable") : t("watchers.delete_heading")}
-            .dismissible=${!this.busy}
-            @wt-close=${() => {
-              this.watcherRemoval = undefined;
-            }}
-          >
-            <p>
-              ${format(this.watcherRemoval.inUse ? "watchers.disable_confirm" : "watchers.delete_confirm", { name: this.watcherRemoval.name })}
-            </p>
-            ${this.watcherRemoveError ? html`<p class="error" role="alert">${this.watcherRemoveError}</p>` : nothing}
-            <wt-form-actions slot="footer"
-              ><wt-button
-                slot="cancel"
-                variant="secondary"
-                @click=${() => {
-                  this.watcherRemoval = undefined;
-                }}
-                >${t("venue.cancel")}</wt-button
-              ><wt-button
-                data-test="confirm-remove-watcher"
-                variant="danger"
-                ?disabled=${this.busy}
-                @click=${() => void this.#removeWatcher()}
-                >${t(this.watcherRemoval.inUse ? "prep.disable" : "prep.delete")}</wt-button
-              ></wt-form-actions
-            >
-          </wt-modal>`
-        : nothing
-    }`;
-  }
   #field(field: keyof StationInput, label: string, type = "number") {
     const identity = this.#stationIdentity;
     return html`<div>
@@ -2267,7 +1399,7 @@ export class PrepStationsScreen extends LitElement {
       label=${t("prep.printers")}
       multiple
       .values=${printerIds}
-      .options=${stationPrinterOptions(view.printers, view.watchers, printerIds)}
+      .options=${stationPrinterOptions(view.printers, printerIds)}
       .error=${this.fieldError.printerIds ?? ""}
       .countLabel=${() =>
         printerIds
@@ -2544,8 +1676,11 @@ export class PrepStationsScreen extends LitElement {
                 this.tab !== "stations"
                   ? nothing
                   : html`<div slot="actions">
-                      <wt-button @click=${() => this.#openStation()} data-test="new-station"
-                        >${t("prep.add_station")}</wt-button
+                      <wt-button
+                        @click=${() => this.#openStation()}
+                        data-test="new-station"
+                        aria-label=${t("prep.add_station")}
+                        >${t("prep.add")}</wt-button
                       >
                     </div>`
               }
@@ -2604,10 +1739,9 @@ export class PrepStationsScreen extends LitElement {
                     : nothing
                 }
               </div>
-              <div slot="watchers">${this.#watchers()}</div>
               <div slot="settings">${this.#settings()}</div>
             </wt-tabs>`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#stationEditor()}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#stationEditor()}`;
   }
 }

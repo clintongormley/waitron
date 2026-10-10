@@ -73,12 +73,11 @@ describe("formatKitchenTicket", () => {
     ]);
   });
 
-  it("prints the origin on a watcher's ticket", () => {
+  it("prints the origin on a station ticket", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
-          scope: "watcher",
-          watcherName: "Pase",
+          scope: "stations",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
@@ -89,7 +88,7 @@ describe("formatKitchenTicket", () => {
       ),
     );
     expect(lines).toEqual([
-      "Pase",
+      "Grill",
       "Mesa 4",
       "A-17",
       "14:30",
@@ -304,12 +303,11 @@ describe("formatKitchenTicket", () => {
     });
   });
 
-  describe("watcher copy", () => {
-    it("prints a pass header, table/order/time, and groups items under each station sub-header in order", () => {
+  describe("several stations' scope", () => {
+    it("prints a header naming the stations, table/order/time, and groups items under each station sub-header in order", () => {
       const bytes = formatKitchenTicket(
         {
-          scope: "watcher",
-          watcherName: "Pase",
+          scope: "stations",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
@@ -322,37 +320,23 @@ describe("formatKitchenTicket", () => {
       );
 
       const text = decodeTicket(bytes);
-      expect(text).toContain("Pase");
+      expect(text).toContain("Cocina · Parrilla");
       expect(text).toContain("Mesa 4");
       expect(text).toContain("A-17");
       expect(text).toContain("14:30");
 
+      // The header names both stations, so the sections are read from below it.
+      const body = text.slice(text.indexOf("14:30"));
       // Each station's item appears UNDER that station's sub-header...
-      expect(text.indexOf("Cocina")).toBeGreaterThanOrEqual(0);
-      expect(text.indexOf("Cocina")).toBeLessThan(text.indexOf("2 x Steak"));
-      expect(text.indexOf("Parrilla")).toBeLessThan(text.indexOf("1 x Chips"));
+      expect(body.indexOf("Cocina")).toBeGreaterThanOrEqual(0);
+      expect(body.indexOf("Cocina")).toBeLessThan(body.indexOf("2 x Steak"));
+      expect(body.indexOf("Parrilla")).toBeLessThan(body.indexOf("1 x Chips"));
 
       // ...and the stations appear in the order they were passed, with the first station's item
       // grouped before the second station begins (not floating past its own header).
-      expect(text.indexOf("Cocina")).toBeLessThan(text.indexOf("Parrilla"));
-      expect(text.indexOf("2 x Steak")).toBeLessThan(text.indexOf("Parrilla"));
+      expect(body.indexOf("Cocina")).toBeLessThan(body.indexOf("Parrilla"));
+      expect(body.indexOf("2 x Steak")).toBeLessThan(body.indexOf("Parrilla"));
 
-      expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
-    });
-
-    it("ends a zero-station watcher ticket in a cut", () => {
-      const bytes = formatKitchenTicket(
-        {
-          scope: "watcher",
-          watcherName: "Pase",
-          tableLabel: "Mesa 4",
-          orderNumber: "A-17",
-          firedAt: new Date(2026, 7, 17, 14, 30),
-          stations: [],
-        },
-        KITCHEN_80,
-      );
-      expect(decodeTicket(bytes)).toContain("Pase");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
   });
@@ -874,15 +858,14 @@ describe("the reprint mark and a party's group numbers", () => {
     expect(lines).toEqual(["Cocina", "Mesa 4", "A-17", "14:30", "1 x Chips", ""]);
   });
 
-  it("names a pass copy's one group once under the header, and heads each group within a station otherwise", () => {
+  it("names a combined ticket's one group once under the header, and heads each group within a station otherwise", () => {
     const pass = (
       stations: { stationName: string; items: { qty: number; name: string; group?: number }[] }[],
     ) =>
       printedLines(
         formatKitchenTicket(
           {
-            scope: "watcher",
-            watcherName: "Pase",
+            scope: "stations",
             tableLabel: "Mesa 4",
             orderNumber: "A-17",
             firedAt: at,
@@ -897,7 +880,7 @@ describe("the reprint mark and a party's group numbers", () => {
         { stationName: "Cocina", items: [{ qty: 1, name: "Steak", group: 3 }] },
       ]),
     ).toEqual([
-      "Pase",
+      "Barra · Cocina",
       "Mesa 4",
       "A-17",
       "14:30",
@@ -920,7 +903,7 @@ describe("the reprint mark and a party's group numbers", () => {
         },
       ]),
     ).toEqual([
-      "Pase",
+      "Barra · Cocina",
       "Mesa 4",
       "A-17",
       "14:30",
@@ -1083,12 +1066,11 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     },
   );
 
-  it("marks the pass copy too", () => {
+  it("marks a ticket for several stations too", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
-          scope: "watcher",
-          watcherName: "Pase",
+          scope: "stations",
           mark: "HOLD",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
@@ -1100,7 +1082,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     );
     expect(lines).toEqual([
       "*** HOLD ***",
-      "Pase",
+      "Cocina",
       "Mesa 4",
       "A-17",
       "14:30",

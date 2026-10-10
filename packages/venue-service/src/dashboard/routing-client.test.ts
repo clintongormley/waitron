@@ -31,73 +31,12 @@ it("loads the routing and station context, including each station printer assign
     "/management-api/products": [],
     "/management-api/printers": [],
     "/management-api/devices": [],
-    "/management-api/watchers?includeDisabled=true": [],
     "/management-api/stations/bar/printers": [{ stationId: "bar", printerId: "receipt" }],
   };
   const request = vi.fn(async (path: string) => responses[path]);
   const view = await new PrepStationsApi(request as DashboardRequest).load();
   expect(request.mock.calls.map((call) => call[0])).toEqual(Object.keys(responses));
   expect(view.stationPrinters).toEqual([{ stationId: "bar", printerId: "receipt" }]);
-});
-
-it("reads disabled watchers too, keeping them out of the watchers every other part of the page reads", async () => {
-  const watcher = {
-    displayOrder: 0,
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: false,
-    printerIds: [],
-    inUse: false,
-  };
-  const pass = { ...watcher, id: "pass", name: "Pass", active: true };
-  const old = { ...watcher, id: "old", name: "Old pass", active: false };
-  const request = vi.fn(async (path: string) =>
-    path === "/management-api/watchers?includeDisabled=true"
-      ? [old, pass]
-      : path === "/management-api/venue-service/routing"
-        ? {
-            zones: [],
-            categories: [],
-            products: [],
-            cells: [],
-            defaultStationId: null,
-            stations: [],
-            canMakeDefault: true,
-          }
-        : [],
-  );
-  const view = await new PrepStationsApi(request as DashboardRequest).load();
-  expect(view.watchers).toEqual([pass]);
-  expect(view.disabledWatchers).toEqual([old]);
-});
-
-it("enables a disabled watcher through its reactivate route", async () => {
-  const request = vi.fn(async () => undefined);
-  await new PrepStationsApi(request as DashboardRequest).enableWatcher("old");
-  expect(request.mock.calls).toEqual([["/management-api/watchers/old/reactivate", "POST"]]);
-});
-
-it("updates and removes watchers through management routes", async () => {
-  const request = vi.fn(async () => ({ id: "pass" }));
-  const api = new PrepStationsApi(request as DashboardRequest);
-  const input = {
-    name: "Pass",
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-  };
-  await api.updateWatcher("pass", input);
-  await api.removeWatcher("pass", { disable: false });
-  await api.removeWatcher("pass", { disable: true });
-  expect(request.mock.calls).toEqual([
-    ["/management-api/watchers/pass", "PUT", input],
-    ["/management-api/watchers/pass", "DELETE"],
-    ["/management-api/watchers/pass?disable=true", "DELETE"],
-  ]);
 });
 
 it("keeps top-level product names, active or not, and lists no variants", async () => {
@@ -153,7 +92,7 @@ it("uses passive reads for the background routing refresh", async () => {
   const background = new PrepStationsApi(request as DashboardRequest, liveData).background;
   expect(background.liveData).toBe(liveData);
   await background.load();
-  expect(request).toHaveBeenCalledTimes(8);
+  expect(request).toHaveBeenCalledTimes(7);
   expect(
     (request.mock.calls as unknown as [string, string, unknown, { passive: boolean }][]).every(
       (call) => call[3]?.passive === true,
@@ -446,17 +385,6 @@ it("writes a complete station order as one active request even from a background
   await client.reorderStations(["bar", "kitchen"]);
   expect(request.mock.calls).toEqual([
     ["/management-api/stations/order", "PUT", { ids: ["bar", "kitchen"] }],
-  ]);
-});
-
-it("submits a whole watcher printer set as an active write even from a background client", async () => {
-  const request = vi.fn(async () => undefined);
-  const api = new PrepStationsApi(request as DashboardRequest).background;
-  await api.setWatcherPrinters("pass", ["front", "back"]);
-  await api.setWatcherPrinters("pass", []);
-  expect(request.mock.calls).toEqual([
-    ["/management-api/watchers/pass/printers", "PUT", { printerIds: ["front", "back"] }],
-    ["/management-api/watchers/pass/printers", "PUT", { printerIds: [] }],
   ]);
 });
 

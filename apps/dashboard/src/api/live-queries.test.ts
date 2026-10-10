@@ -248,6 +248,15 @@ it("reads the folders' Made at again when a zone's department changes", () => {
   expect(query.dependencies).toContainEqual({ type: "zone_service_policies" });
 });
 
+it("subscribes no read to the retired watcher tables, and has no watcher list", () => {
+  const named = Object.values(QUERY_DEPENDENCIES).flat();
+  for (const table of ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"]) {
+    expect(named).not.toContain(table);
+  }
+  expect(Object.keys(QUERY_DEPENDENCIES)).not.toContain("listWatchers");
+  expect(QUERY_DEPENDENCIES.listPrinters).toEqual(["printers", "print_jobs", "printer_holders"]);
+});
+
 it("subscribes no read to the product label tables, which products no longer carry", () => {
   const named = Object.values(QUERY_DEPENDENCIES).flat();
   expect(named).not.toContain("labels");

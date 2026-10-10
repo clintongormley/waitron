@@ -657,19 +657,6 @@ export interface Station {
   forgottenAfterMinutes: number;
 }
 
-export interface Watcher {
-  id: string;
-  name: string;
-  everyStation: boolean;
-  stationIds: string[];
-  everyZone: boolean;
-  zoneIds: string[];
-  runsPass: boolean;
-  displayOrder: number;
-  active: boolean;
-  printerIds: string[];
-}
-
 export type BumpMode = "line" | "ticket";
 
 export interface Course {
@@ -1119,7 +1106,6 @@ export interface Printer {
   port: number | null;
   localKey: string | null;
   pollId: string | null;
-  watcherId: string | null;
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
@@ -2853,10 +2839,6 @@ export class DashboardApi {
     return this.#request<Station[]>("/management-api/stations", "GET");
   }
 
-  listWatchers(): Promise<Watcher[]> {
-    return this.#request<Watcher[]>("/management-api/watchers", "GET");
-  }
-
   createStation(input: {
     name: string;
     displayOrder?: number;
@@ -3236,12 +3218,6 @@ export class DashboardApi {
 
   updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
-  }
-
-  setPrinterWatcher(printerId: string, watcherId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/printers/${printerId}/watcher`, "PUT", {
-      watcherId,
-    });
   }
 
   deactivatePrinter(id: string): Promise<void> {

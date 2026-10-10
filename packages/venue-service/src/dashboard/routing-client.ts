@@ -9,7 +9,6 @@ import type {
   RoutingMove,
   RoutingView,
 } from "../routing-types.js";
-import type { WatcherView } from "./watchers-seen.js";
 
 export interface StationClosing {
   openDishCount: number;
@@ -48,7 +47,7 @@ export interface PrepStationsView {
   categories: { id: string; name: string; parentId: string | null }[];
   zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
-  printers: { id: string; name: string; active?: boolean; watcherId?: string | null }[];
+  printers: { id: string; name: string; active?: boolean }[];
   stationPrinters: { stationId: string; printerId: string }[];
   devices: {
     id: string;
@@ -58,9 +57,6 @@ export interface PrepStationsView {
     kind: string;
     active: boolean;
   }[];
-  /** The active watchers. Only the Watchers tab lists `disabledWatchers` as well. */
-  watchers: WatcherView[];
-  disabledWatchers: WatcherView[];
 }
 export type StationInput = {
   name: string;
@@ -69,10 +65,6 @@ export type StationInput = {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
 };
-export type WatcherInput = Pick<
-  WatcherView,
-  "name" | "everyStation" | "stationIds" | "everyZone" | "zoneIds" | "runsPass"
-> & { displayOrder?: number };
 export class PrepStationsApi {
   constructor(
     private readonly request: DashboardRequest,
@@ -86,17 +78,15 @@ export class PrepStationsApi {
     return this.request<T>(path, "GET", undefined, { passive: this.passive });
   }
   async load(): Promise<PrepStationsView> {
-    const [routing, stations, categories, zones, products, printers, devices, watchers] =
-      await Promise.all([
-        this.#read<RoutingView>("/management-api/venue-service/routing"),
-        this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
-        this.#read<PrepStationsView["categories"]>("/management-api/categories"),
-        this.#read<PrepStationsView["zones"]>("/management-api/zones"),
-        this.#read<PrepStationsView["products"]>("/management-api/products"),
-        this.#read<PrepStationsView["printers"]>("/management-api/printers"),
-        this.#read<PrepStationsView["devices"]>("/management-api/devices"),
-        this.#read<WatcherView[]>("/management-api/watchers?includeDisabled=true"),
-      ]);
+    const [routing, stations, categories, zones, products, printers, devices] = await Promise.all([
+      this.#read<RoutingView>("/management-api/venue-service/routing"),
+      this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
+      this.#read<PrepStationsView["categories"]>("/management-api/categories"),
+      this.#read<PrepStationsView["zones"]>("/management-api/zones"),
+      this.#read<PrepStationsView["products"]>("/management-api/products"),
+      this.#read<PrepStationsView["printers"]>("/management-api/printers"),
+      this.#read<PrepStationsView["devices"]>("/management-api/devices"),
+    ]);
     const stationPrinters = (
       await Promise.all(
         stations.map((s) =>
@@ -115,8 +105,6 @@ export class PrepStationsApi {
       printers,
       stationPrinters,
       devices,
-      watchers: watchers.filter((watcher) => watcher.active),
-      disabledWatchers: watchers.filter((watcher) => !watcher.active),
     };
   }
   preview(change: RoutingChange): Promise<RoutingMove[]> {
@@ -131,23 +119,6 @@ export class PrepStationsApi {
     input: StationInput & { printerIds?: readonly string[] },
   ): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);
-  }
-  updateWatcher(id: string, input: WatcherInput): Promise<void> {
-    return this.request(`/management-api/watchers/${id}`, "PUT", input);
-  }
-  setWatcherPrinters(id: string, printerIds: readonly string[]): Promise<void> {
-    return this.request(`/management-api/watchers/${id}/printers`, "PUT", { printerIds });
-  }
-  /** The server deletes a watcher nothing refers to and disables one something does; with
-   *  `disable`, it only ever disables it. */
-  removeWatcher(id: string, { disable }: { disable: boolean }): Promise<void> {
-    return this.request(
-      `/management-api/watchers/${id}${disable ? "?disable=true" : ""}`,
-      "DELETE",
-    );
-  }
-  enableWatcher(id: string): Promise<void> {
-    return this.request(`/management-api/watchers/${id}/reactivate`, "POST");
   }
   updateStation(
     id: string,

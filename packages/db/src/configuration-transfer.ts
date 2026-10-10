@@ -42,9 +42,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "floor_plan_tables" },
     { name: "floor_plan_joins" },
     { name: "floor_plan_join_tables" },
-    { name: "watchers", locationColumns: ["location_id"] },
-    { name: "watcher_stations" },
-    { name: "watcher_zones" },
     {
       name: "print_agents",
       locationColumns: ["location_id"],
@@ -62,7 +59,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "page_printers", locationColumns: ["location_id"], reconnect: true },
     { name: "device_profile_printers" },
     { name: "station_printers" },
-    { name: "watcher_printers" },
     { name: "tenant_themes" },
     { name: "tenant_receipts" },
   ],

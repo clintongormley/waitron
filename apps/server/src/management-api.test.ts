@@ -16,7 +16,6 @@ import {
   printers,
   products,
   stationPrinters,
-  watcherPrinters,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -299,213 +298,20 @@ async function createZone(name: string): Promise<string> {
 }
 
 describe("/management-api/watchers", () => {
-  const body = {
-    name: "Pass",
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-    displayOrder: 3,
-  };
-  it("creates, lists, replaces, and removes a watcher over HTTP", async () => {
-    const created = await req(
-      "/watchers",
-      { method: "POST", body: JSON.stringify({ ...body, name: unique("Pass") }) },
-      managerCookie,
-    );
-    expect(created.status).toBe(201);
-    const { id } = (await created.json()) as { id: string };
-    const list = await req("/watchers", { method: "GET" }, managerCookie);
-    expect(list.status).toBe(200);
-    expect(await list.json()).toContainEqual(
-      expect.objectContaining({ id, runsPass: true, everyZone: true }),
-    );
-    const updated = await req(
-      `/watchers/${id}`,
-      { method: "PUT", body: JSON.stringify({ ...body, name: unique("Runner"), runsPass: false }) },
-      managerCookie,
-    );
-    expect(updated.status).toBe(204);
-    const removed = await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
-    expect(removed.status).toBe(204);
-    expect(
-      await (await req("/watchers", { method: "GET" }, managerCookie)).json(),
-    ).not.toContainEqual(expect.objectContaining({ id }));
-  });
-  it("refuses malformed watcher bodies with the offending field", async () => {
-    for (const [patch, field] of [
-      [null, "body"],
-      [{ ...body, name: 3 }, "name"],
-      [{ ...body, everyStation: "yes" }, "everyStation"],
-      [{ ...body, stationIds: [3] }, "stationIds"],
-      [{ ...body, everyZone: null }, "everyZone"],
-      [{ ...body, zoneIds: [3] }, "zoneIds"],
-      [{ ...body, runsPass: 1 }, "runsPass"],
-      [{ ...body, displayOrder: 0.5 }, "displayOrder"],
+  it("answers 404 on every retired watcher route, even to a manager", async () => {
+    const id = randomUUID();
+    const body = JSON.stringify({ name: "Pass", everyStation: true, everyZone: true });
+    for (const [method, path] of [
+      ["GET", "/watchers"],
+      ["GET", "/watchers?includeDisabled=true"],
+      ["POST", "/watchers"],
+      ["PUT", `/watchers/${id}`],
+      ["DELETE", `/watchers/${id}`],
+      ["POST", `/watchers/${id}/reactivate`],
     ] as const) {
-      const res = await req(
-        "/watchers",
-        { method: "POST", body: JSON.stringify(patch) },
-        managerCookie,
-      );
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field } },
-      });
+      const init = method === "GET" || method === "DELETE" ? { method } : { method, body };
+      expect((await req(path, init, managerCookie)).status, `${method} ${path}`).toBe(404);
     }
-  });
-  it("refuses a staff session the watcher list and a new watcher (403), and the list to no session (401)", async () => {
-    expect((await req("/watchers", { method: "GET" })).status).toBe(401);
-    expect((await req("/watchers", { method: "GET" }, staffCookie)).status).toBe(403);
-    expect(
-      (await req("/watchers", { method: "POST", body: JSON.stringify(body) }, staffCookie)).status,
-    ).toBe(403);
-  });
-  it("lets a supervisor list watchers, disabled ones included, while refusing a new one", async () => {
-    for (const path of ["/watchers", "/watchers?includeDisabled=true"]) {
-      const response = await req(path, { method: "GET" }, supervisorCookie);
-      expect(response.status, path).toBe(200);
-      expect(Array.isArray(await response.json()), path).toBe(true);
-    }
-    const refused = await req(
-      "/watchers",
-      { method: "POST", body: JSON.stringify({ ...body, name: unique("Denied") }) },
-      supervisorCookie,
-    );
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
-    });
-  });
-  it("returns watcher.not_found for malformed and absent route ids", async () => {
-    for (const id of ["bad", randomUUID()]) {
-      const res = await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: { code: "watcher.not_found", params: { watcherId: id } },
-      });
-    }
-  });
-
-  async function createWatcher(name: string): Promise<string> {
-    const res = await req(
-      "/watchers",
-      { method: "POST", body: JSON.stringify({ ...body, name }) },
-      managerCookie,
-    );
-    expect(res.status).toBe(201);
-    return ((await res.json()) as { id: string }).id;
-  }
-
-  /** A switched-off kitchen screen still naming the watcher, so the watcher is in use. */
-  async function listWatchers(
-    query = "",
-  ): Promise<{ id: string; active: boolean; inUse: boolean }[]> {
-    const res = await req(`/watchers${query}`, { method: "GET" }, managerCookie);
-    expect(res.status).toBe(200);
-    return (await res.json()) as { id: string; active: boolean; inUse: boolean }[];
-  }
-
-  it("deletes a watcher, and disables one when asked, which only the disabled list shows; no device keeps one in use", async () => {
-    const unused = await createWatcher(unique("Unused"));
-    const kept = await createWatcher(unique("Kept"));
-    expect((await listWatchers()).every((w) => !("inUse" in w))).toBe(true);
-    expect(await listWatchers("?includeDisabled=true")).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: unused, active: true, inUse: false }),
-        expect.objectContaining({ id: kept, active: true, inUse: false }),
-      ]),
-    );
-    expect((await req(`/watchers/${unused}`, { method: "DELETE" }, managerCookie)).status).toBe(
-      204,
-    );
-    expect(
-      (await req(`/watchers/${kept}?disable=true`, { method: "DELETE" }, managerCookie)).status,
-    ).toBe(204);
-    const active = (await listWatchers()).map((w) => w.id);
-    expect(active).not.toContain(unused);
-    expect(active).not.toContain(kept);
-    const all = await listWatchers("?includeDisabled=true");
-    expect(all.find((w) => w.id === unused)).toBeUndefined();
-    expect(all.find((w) => w.id === kept)).toMatchObject({ active: false, inUse: false });
-    expect(all.every((w) => typeof w.inUse === "boolean")).toBe(true);
-    expect((await req(`/watchers/${kept}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-    expect(
-      (await listWatchers("?includeDisabled=true")).find((w) => w.id === kept),
-    ).toBeUndefined();
-  });
-
-  it("enables a disabled watcher as itself; refuses a taken name, an unknown id and a staff session", async () => {
-    const name = unique("Again");
-    const id = await createWatcher(name);
-    await req(`/watchers/${id}?disable=true`, { method: "DELETE" }, managerCookie);
-    const taker = await createWatcher(name);
-    const taken = await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie);
-    expect(taken.status).toBe(409);
-    expect(await taken.json()).toMatchObject({
-      error: { code: "watcher.name_taken", params: { name } },
-    });
-    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
-      active: false,
-    });
-    expect((await req(`/watchers/${taker}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-    expect((await req(`/watchers/${id}/reactivate`, { method: "POST" }, staffCookie)).status).toBe(
-      403,
-    );
-    expect((await req(`/watchers/${id}/reactivate`, { method: "POST" })).status).toBe(401);
-    const enabled = await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie);
-    expect(enabled.status).toBe(204);
-    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
-      name,
-      active: true,
-      inUse: false,
-      runsPass: true,
-      displayOrder: 3,
-    });
-    expect(
-      (await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie)).status,
-    ).toBe(204);
-    for (const missing of ["bad", randomUUID()]) {
-      const res = await req(`/watchers/${missing}/reactivate`, { method: "POST" }, managerCookie);
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: { code: "watcher.not_found", params: { watcherId: missing } },
-      });
-    }
-  });
-
-  it("DELETE ?disable=true keeps a watcher nothing refers to, disabled and without its printers", async () => {
-    const id = await createWatcher(unique("Kept"));
-    await withTransaction(suite.db, async (tx) => {
-      const [printer] = await tx
-        .insert(printers)
-        .values({
-          locationId: venue.locationId,
-          name: unique("Copy"),
-          transport: "network_tcp",
-          host: "10.0.0.9",
-        })
-        .returning({ id: printers.id });
-      await tx.insert(watcherPrinters).values({ printerId: printer!.id, watcherId: id });
-    });
-    const refused = await req(`/watchers/${id}?disable=yes`, { method: "DELETE" }, managerCookie);
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "disable" } },
-    });
-    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
-      active: true,
-      inUse: false,
-      printerIds: [expect.any(String)],
-    });
-    const res = await req(`/watchers/${id}?disable=true`, { method: "DELETE" }, managerCookie);
-    expect(res.status).toBe(204);
-    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
-      active: false,
-      inUse: false,
-      printerIds: [],
-    });
   });
 });
 
@@ -3053,40 +2859,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       } finally {
         printerGate.deny = false;
       }
-    });
-
-    it("a watcher's printer is refused printer.makes_and_watches and the old name is kept", async () => {
-      const original = unique("Bar");
-      const id = await createStation(original);
-      const watched = await addPrinter();
-      const created = await req(
-        "/watchers",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            name: unique("Pass"),
-            everyStation: true,
-            stationIds: [],
-            everyZone: true,
-            zoneIds: [],
-            runsPass: true,
-            displayOrder: 3,
-          }),
-        },
-        managerCookie,
-      );
-      expect(created.status).toBe(201);
-      const watcherId = ((await created.json()) as { id: string }).id;
-      await suite.db.insert(watcherPrinters).values({ watcherId, printerId: watched });
-      const free = await addPrinter();
-
-      const res = await patch(id, { name: unique("Bar refused"), printerIds: [free, watched] });
-      expect(res.status).toBe(409);
-      expect(await res.json()).toMatchObject({
-        error: { code: "printer.makes_and_watches", params: { id: watched } },
-      });
-      expect(await stationName(id)).toBe(original);
-      expect(await printersOf(id)).toEqual([]);
     });
 
     it("a switched-off printer is refused printer.not_found and the old name is kept", async () => {

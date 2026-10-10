@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 7, slice 5 Part B and slice 6 Part C, each planned
+  APPROVED 2026-10-07; remaining work is slice 7 and slice 6 Part C, each planned
   then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -20,8 +20,12 @@ their full text.
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
-  in two pull requests — kitchen screens and monitors after slice 1 (Part A), watcher printers
-  retired after slice 4 (Part B, still to build). Revised 2026-10-08 to the owner's answers (any device may run a station or pass
+  in two pull requests — kitchen screens and monitors after slice 1 (Part A, #1479), and watchers
+  retired after slice 4 (Part B, #1502): watcher copies
+  and slips, the watcher routes and refusals, the Prep stations Watchers tab and the four watcher
+  tables are gone, and a pass printer is a printer listed on every station. A venue's existing
+  watchers and their printer settings are deleted with the tables, so its pass printer prints
+  nothing until a manager lists it on every station (decision P5; pre-live, no data migration). Revised 2026-10-08 to the owner's answers (any device may run a station or pass
   screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
   revision added listed at its end.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
@@ -35,7 +39,7 @@ their full text.
   revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
   requests. Part A is built: combined tickets on shared printers, period choices in routing cells,
   the station editor, and the "Where is this made?" tester and the Stations tab's live kitchen
-  numbers removed. Part B removes station hours and fallbacks, asks what to do with unfinished
+  numbers removed. Part B (#1497) is built: it removes station hours and fallbacks, asks what to do with unfinished
   dishes at closure or Disable, and shows each station's computed times in Opening hours.
   The owner answered its decisions 29–37 on 2026-10-09; the changes
   to 29, 33 and 35 are built (A455), and 32 needed nothing.

@@ -12,8 +12,6 @@ import {
   printAgents,
   printJobs,
   printerHolders,
-  watchers,
-  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
@@ -46,7 +44,6 @@ import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
-import { createStation } from "./kitchen.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
@@ -1241,51 +1238,25 @@ describe("mountPrintApi — management: agents", () => {
 });
 
 describe("mountPrintApi — management: printers CRUD", () => {
-  it("sets a printer watcher and refuses invalid, unauthorized and conflicting attachments", async () => {
+  it("answers 404 on the retired watcher routes and lists printers with no watcherId", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
-    const printerId = await createPrinterVia(app, agentId, "Watcher copy");
-    const [watcher] = await suite.db
-      .insert(watchers)
-      .values({ locationId, name: `Pass ${randomUUID()}`, everyStation: true, everyZone: true })
-      .returning({ id: watchers.id });
-    const path = `/management-api/printers/${printerId}/watcher`;
-    for (const body of [{}, { watcherId: 42 }]) {
-      const response = await send(app, "PUT", path, { cookie: managerCookie, body });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "watcherId" } },
-      });
+    const printerId = await createPrinterVia(app, agentId, "Pass");
+    const watcherId = randomUUID();
+    for (const [path, body] of [
+      [`/management-api/printers/${printerId}/watcher`, { watcherId }],
+      [`/management-api/watchers/${watcherId}/printers`, { printerIds: [printerId] }],
+    ] as const) {
+      expect((await send(app, "PUT", path, { cookie: managerCookie, body })).status, path).toBe(
+        404,
+      );
     }
-    expect((await send(app, "PUT", path, { body: { watcherId: watcher!.id } })).status).toBe(401);
-    expect(
-      (await send(app, "PUT", path, { cookie: staffCookie, body: { watcherId: watcher!.id } }))
-        .status,
-    ).toBe(403);
-    expect(
-      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: randomUUID() } }))
-        .status,
-    ).toBe(404);
-    expect(
-      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: watcher!.id } }))
-        .status,
-    ).toBe(204);
     const rows = (await (
       await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
     ).json()) as Record<string, unknown>[];
-    expect(rows.find((row) => row.id === printerId)).toMatchObject({ watcherId: watcher!.id });
+    expect(rows.find((row) => row.id === printerId)).toBeDefined();
+    for (const row of rows) expect(row).not.toHaveProperty("watcherId");
     expect(rows.find((row) => row.id === printerId)).not.toHaveProperty("ticketScope");
-    expect(
-      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: null } })).status,
-    ).toBe(204);
-    const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: `Grill ${randomUUID()}` }),
-    );
-    await suite.db.insert(stationPrinters).values({ stationId: station.id, printerId });
-    expect(
-      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: watcher!.id } }))
-        .status,
-    ).toBe(409);
   });
   it("creates, lists, updates and deactivates a printer", async () => {
     const app = mountApp();

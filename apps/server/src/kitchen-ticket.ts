@@ -2,8 +2,7 @@
  * Formats kitchen tickets and correction slips into ESC/POS bytes. Pure: no state, no database.
  *
  * A station ticket lists its own printable items and may end with the rest of the order. A ticket
- * for several stations sharing a printer does the same with a section per station. A watcher
- * ticket groups the items it follows under their station names.
+ * for several stations sharing a printer does the same with a section per station.
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
@@ -65,14 +64,6 @@ export type KitchenTicket = {
       orderNumber: string;
       firedAt: Date;
       alsoOnOrder?: { locale: string; items: OtherStationItem[] };
-    }
-  | {
-      scope: "watcher";
-      watcherName: string;
-      tableLabel: string;
-      orderNumber: string;
-      firedAt: Date;
-      stations: KitchenTicketStation[];
     }
 );
 
@@ -208,9 +199,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   text(
     ticket.scope === "station"
       ? ticket.stationName
-      : ticket.scope === "stations"
-        ? ticket.stations.map((station) => station.stationName).join(" · ")
-        : ticket.watcherName,
+      : ticket.stations.map((station) => station.stationName).join(" · "),
   );
   text(ticket.tableLabel);
   text(ticket.orderNumber);
@@ -226,7 +215,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
       emitList(station.items);
     }
   }
-  const alsoOnOrder = ticket.scope === "watcher" ? undefined : ticket.alsoOnOrder;
+  const alsoOnOrder = ticket.alsoOnOrder;
   if (alsoOnOrder !== undefined && alsoOnOrder.items.length > 0) {
     const { heading, held } = alsoOnOrderWords(alsoOnOrder.locale);
     text(`-- ${heading} --`);

@@ -41,7 +41,6 @@ import {
 } from "@waitron/venue-service";
 import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { createWatcher, setPrinterWatcher } from "./watchers.js";
 import {
   enqueueCorrectionSlips,
   enqueueKitchenTickets,
@@ -78,7 +77,7 @@ import { cancelLine } from "./testing/cancel-line.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
-// Pins one watcher copy per send, round independence and never-block (no socket opened).
+// Pins round independence and never-block (no socket opened).
 // `station_printers`' keys are pinned in packages/db's station-printers.test.ts and the outbox shape in
 // packages/printing's outbox.test.ts. `node:sqlite` opens no socket of its own, so a spy on
 // `Socket.prototype.connect` sees only what the fire does.
@@ -173,7 +172,6 @@ describe("paper for a move to another station", () => {
             },
           ],
           "Grill",
-          grill.id,
         );
         return {
           notices: await listStationNotices(tx, cfg, bar.id),
@@ -247,7 +245,7 @@ describe("show the rest of the order", () => {
       await updateStation(tx, cfg, grill.id, { showsRestOfOrder: true });
       const grillPrinter = await makePrinter(tx, cfg, "Grill printer");
       const fryerPrinter = await makePrinter(tx, cfg, "Fryer printer");
-      const passPrinter = await makeWatcherPrinter(tx, cfg, "Pase", [grill.id]);
+      const passPrinter = await makeSharedPrinter(tx, cfg, "Pase", [grill.id, fryer.id]);
       await attachPrinterToStation(tx, { stationId: grill.id, printerId: grillPrinter });
       await attachPrinterToStation(tx, { stationId: fryer.id, printerId: fryerPrinter });
       const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: grill.id });
@@ -416,27 +414,15 @@ async function makePrinter(tx: Transaction, cfg: OriginConfig, name: string): Pr
   return id;
 }
 
-async function makeWatcherPrinter(
+/** Create a live printer attached to each of `stationIds`. */
+async function makeSharedPrinter(
   tx: Transaction,
   cfg: OriginConfig,
   name: string,
   stationIds: string[],
-  watcherId?: string,
 ): Promise<string> {
   const printerId = await makePrinter(tx, cfg, name);
-  const id =
-    watcherId ??
-    (
-      await createWatcher(tx, cfg, {
-        name: "Pase",
-        runsPass: true,
-        everyStation: false,
-        stationIds,
-        everyZone: true,
-        zoneIds: [],
-      })
-    ).id;
-  await setPrinterWatcher(tx, cfg, printerId, id);
+  for (const stationId of stationIds) await attachPrinterToStation(tx, { stationId, printerId });
   return printerId;
 }
 
@@ -499,46 +485,12 @@ function spyOnNoSocketOpened() {
 }
 
 describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse)", () => {
-  it("prints each station's ticket and one copy for the watcher following both", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    const { pCocina, pGroup, jobs } = await asApp(cfg, async (tx) => {
-      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const barra = await createStation(tx, cfg, { name: "Barra" });
-      const pCocina = await makePrinter(tx, cfg, "Cocina printer");
-      const pGroup = await makeWatcherPrinter(tx, cfg, "Pase", [cocina.id, barra.id]);
-      // The watcher follows both Cocina and Barra.
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pCocina });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
-      const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barra.id });
-
-      await fireNewOrder(tx, cfg, [line(steak), line(beer)]);
-      return { pCocina, pGroup, jobs: await printJobsFor(tx) };
-    });
-
-    const cocinaJobs = jobs.filter((j) => j.printerId === pCocina);
-    const groupJobs = jobs.filter((j) => j.printerId === pGroup);
-    expect(cocinaJobs).toHaveLength(1); // the station ticket
-    expect(groupJobs).toHaveLength(1); // ONE consolidated ticket, NOT two (deduped across both stations)
-
-    // The Cocina station ticket carries its own item and NOT Barra's.
-    const cocinaTicket = decodeTicket(cocinaJobs[0]!.payload);
-    expect(cocinaTicket).toContain("Chuleton");
-    expect(cocinaTicket).not.toContain("Cerveza");
-
-    // The consolidated group ticket carries BOTH items, each under its station sub-header.
-    const groupTicket = decodeTicket(groupJobs[0]!.payload);
-    expect(groupTicket).toContain("Chuleton");
-    expect(groupTicket).toContain("Cerveza");
-    expect(groupTicket).toContain("Cocina");
-    expect(groupTicket).toContain("Barra");
-  });
-
   it("heads no group on the ticket of an order whose lines are in no group", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { pCocina, pGroup, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const pCocina = await makePrinter(tx, cfg, "Cocina printer");
-      const pGroup = await makeWatcherPrinter(tx, cfg, "Pase", [cocina.id]);
+      const pGroup = await makeSharedPrinter(tx, cfg, "Pase", [cocina.id]);
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pCocina });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
 
@@ -737,7 +689,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     });
 
     expect(jobs).toHaveLength(0);
-    expect(selectCalls).toBe(2);
+    expect(selectCalls).toBe(1);
   });
 
   it("builds one kitchen ticket per distinct paper width and resolution among the printers", async () => {
@@ -748,16 +700,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const wideTwin = await makePrinter(tx, cfg, "Cocina 80 B");
       const narrow = await makePrinter(tx, cfg, "Cocina 58");
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
-      const watcher = await createWatcher(tx, cfg, {
-        name: "Pase",
-        runsPass: true,
-        everyStation: false,
-        stationIds: [cocina.id],
-        everyZone: true,
-        zoneIds: [],
-      });
-      const pass = await makeWatcherPrinter(tx, cfg, "Pase 180", [cocina.id], watcher.id);
-      const pass203 = await makeWatcherPrinter(tx, cfg, "Pase 203", [cocina.id], watcher.id);
+      const pass = await makeSharedPrinter(tx, cfg, "Pase 180", [cocina.id]);
+      const pass203 = await makeSharedPrinter(tx, cfg, "Pase 203", [cocina.id]);
       await updatePrinter(tx, printCfg(cfg), pass203, { resolution: "203dpi" });
       for (const printerId of [wide, wideTwin, narrow]) {
         await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
@@ -1247,7 +1191,7 @@ describe("dish extras on kitchen tickets", () => {
     expect(ticket).toContain("+ Jamón 0.150 kg");
   });
 
-  it("prints split chips once on Fryer paper and cross-references both station and watcher paper", async () => {
+  it("prints split chips once on Fryer paper and cross-references both station and pass paper", async () => {
     const venue = await setupSplitExtrasVenue();
     const { cfg, products, lists, printers } = venue;
     const jobs = await asApp(cfg, async (tx) => {
@@ -1641,7 +1585,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const { pStation, pGroup, beforeReprint, afterReprint } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const pStation = await makePrinter(tx, cfg, "Cocina printer");
-      const pGroup = await makeWatcherPrinter(tx, cfg, "Pase", [cocina.id]);
+      const pGroup = await makeSharedPrinter(tx, cfg, "Pase", [cocina.id]);
       await attachPrinterToStation(tx, {
         stationId: cocina.id,
         printerId: pStation,

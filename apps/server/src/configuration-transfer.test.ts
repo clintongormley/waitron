@@ -52,10 +52,7 @@ import {
   printAgents,
   printers,
   pagePrinters,
-  watchers,
-  watcherStations,
-  watcherZones,
-  watcherPrinters,
+  stationPrinters,
   CORE_CONFIGURATION_TRANSFER,
   products,
   sales,
@@ -1691,20 +1688,19 @@ it("transfers a station's rest of the order switch", async () => {
   expect(imported).toEqual([{ showsRestOfOrder: true }]);
 });
 
-it("transfers a watcher with its station, zone, and printer in configuration export", async () => {
+it("transfers a printer on two stations in configuration export", async () => {
   const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const [station] = await tx
+    const stations = await tx
       .insert(kitchenStations)
-      .values({ locationId: source.locationId, name: "Grill" })
+      .values([
+        { locationId: source.locationId, name: "Grill" },
+        { locationId: source.locationId, name: "Fryer" },
+      ])
       .returning({ id: kitchenStations.id });
-    const [zone] = await tx
-      .insert(floorZones)
-      .values({ locationId: source.locationId, name: "Terrace" })
-      .returning({ id: floorZones.id });
     const [printer] = await tx
       .insert(printers)
       .values({
@@ -1714,25 +1710,20 @@ it("transfers a watcher with its station, zone, and printer in configuration exp
         host: "10.0.0.8",
       })
       .returning({ id: printers.id });
-    const [watcher] = await tx
-      .insert(watchers)
-      .values({
-        locationId: source.locationId,
-        name: "Pass",
-        everyStation: false,
-        everyZone: false,
-        runsPass: true,
-      })
-      .returning({ id: watchers.id });
-    await tx.insert(watcherStations).values({ watcherId: watcher!.id, stationId: station!.id });
-    await tx.insert(watcherZones).values({ watcherId: watcher!.id, zoneId: zone!.id });
-    await tx.insert(watcherPrinters).values({ watcherId: watcher!.id, printerId: printer!.id });
+    await tx
+      .insert(stationPrinters)
+      .values(stations.map(({ id }) => ({ stationId: id, printerId: printer!.id })));
   });
   const declared = CORE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-  expect(declared).toEqual(
-    expect.arrayContaining(["watchers", "watcher_stations", "watcher_zones", "watcher_printers"]),
-  );
-  expect(declared).not.toContain("watcher_item_marks");
+  expect(declared).toContain("station_printers");
+  for (const retired of [
+    "watchers",
+    "watcher_stations",
+    "watcher_zones",
+    "watcher_printers",
+    "watcher_item_marks",
+  ])
+    expect(declared).not.toContain(retired);
   expect(declared).not.toContain("devices");
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -1748,52 +1739,17 @@ it("transfers a watcher with its station, zone, and printer in configuration exp
     beforeCommit: (tx, result) =>
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
-  const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const [watcher] = await tx.select().from(watchers).where(eq(watchers.name, "Pass"));
-    const [station] = await tx
-      .select()
-      .from(watcherStations)
-      .where(eq(watcherStations.watcherId, watcher!.id));
-    const [zone] = await tx
-      .select()
-      .from(watcherZones)
-      .where(eq(watcherZones.watcherId, watcher!.id));
-    const [printer] = await tx
-      .select()
-      .from(watcherPrinters)
-      .where(eq(watcherPrinters.watcherId, watcher!.id));
-    return { watcher, station, zone, printer };
-  });
-  expect(imported.watcher).toMatchObject({
-    name: "Pass",
-    everyStation: false,
-    everyZone: false,
-    runsPass: true,
-  });
-  expect(imported.station?.stationId).toBe(
-    (
-      await targetSuite.db
-        .select({ id: kitchenStations.id })
-        .from(kitchenStations)
-        .where(eq(kitchenStations.name, "Grill"))
-    )[0]?.id,
-  );
-  expect(imported.zone?.zoneId).toBe(
-    (
-      await targetSuite.db
-        .select({ id: floorZones.id })
-        .from(floorZones)
-        .where(eq(floorZones.name, "Terrace"))
-    )[0]?.id,
-  );
-  expect(imported.printer?.printerId).toBe(
-    (
-      await targetSuite.db
-        .select({ id: printers.id })
-        .from(printers)
-        .where(eq(printers.name, "Pass printer"))
-    )[0]?.id,
-  );
+  const imported = await targetSuite.db
+    .select({ station: kitchenStations.name, printer: printers.name })
+    .from(stationPrinters)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
+    .innerJoin(printers, eq(printers.id, stationPrinters.printerId))
+    .where(eq(printers.name, "Pass printer"))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { station: "Fryer", printer: "Pass printer" },
+    { station: "Grill", printer: "Pass printer" },
+  ]);
 });
 
 it("transfers a device profile's receipt and payment-slip printer lists, in order", async () => {

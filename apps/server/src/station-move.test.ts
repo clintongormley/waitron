@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
@@ -37,7 +37,7 @@ import { createCourse, createStation, deactivateStation, setProductCourse } from
 import { splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
-import { attachPrinterToStation } from "./station-printers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {
   inTx,
@@ -52,7 +52,6 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { readStationQueueMoves } from "./station-queue-moves.js";
 import { moveDishesToStation, stillMovable } from "./station-move.js";
-import { createWatcher, setPrinterWatcher } from "./watchers.js";
 import {
   addTabRound,
   carveOffLines,
@@ -170,6 +169,32 @@ async function heldDish(name: string) {
 }
 
 const heldBurger = () => heldDish("Burger");
+
+/** A new printer with a cash drawer, listed on each of `stationIds`. */
+async function stationPrinter(tx: Transaction, name: string, stationIds: readonly string[]) {
+  const { id } = await createPrinter(
+    tx,
+    { locationId: venue.cfg.locationId },
+    { name, transport: "cloud_poll", pollId: randomUUID() },
+  );
+  await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, id));
+  for (const stationId of stationIds)
+    await attachPrinterToStation(tx, { stationId, printerId: id });
+  return id;
+}
+
+/** Lifts each printer off the stations `stationPrinter` listed it on. */
+async function detachStationPrinters(listed: readonly (readonly [string, readonly string[]])[]) {
+  await inTx(venue, async (tx) => {
+    for (const [printerId, stationIds] of listed)
+      for (const stationId of stationIds)
+        await detachPrinterFromStation(
+          tx,
+          { locationId: venue.cfg.locationId },
+          { stationId, printerId },
+        );
+  });
+}
 
 async function fireHeldBurger(group: Awaited<ReturnType<typeof heldBurger>>) {
   return inTx(venue, (tx) =>
@@ -883,7 +908,7 @@ describe("release", () => {
   });
 
   it("leaves a made-here drink untouched beside a held dish that reroutes", async () => {
-    const { deviceId, cell, watcherPrinter } = await inTx(venue, async (tx) => {
+    const { deviceId, cell, passPrinter } = await inTx(venue, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
@@ -903,26 +928,19 @@ describe("release", () => {
         kind: "station",
         stationId: grill,
       });
-      const watcher = await createWatcher(tx, venue.cfg, {
-        name: `Every station ${randomUUID()}`,
-        runsPass: false,
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-      });
       const printer = await createPrinter(
         tx,
         { locationId: venue.cfg.locationId },
         {
-          name: `Every station ${randomUUID()}`,
+          name: `Bar and Grill ${randomUUID()}`,
           transport: "cloud_poll",
           pollId: randomUUID(),
         },
       );
-      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+      for (const stationId of [bar, grill])
+        await attachPrinterToStation(tx, { stationId, printerId: printer.id });
       await writePrintHeldWork(tx, true);
-      return { deviceId: device!.id, cell, watcherPrinter: printer.id };
+      return { deviceId: device!.id, cell, passPrinter: printer.id };
     });
     const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -959,7 +977,7 @@ describe("release", () => {
     expect(madeHere).toMatchObject({ stationId: bar, state: "ready", firedAt: expect.any(String) });
     expect(dishItem).toMatchObject({ stationId: grill, firedAt: null });
     expect(
-      (await jobs(watcherPrinter)).map((job) => decodeTicket(job.payload).includes("CAÑA")),
+      (await jobs(passPrinter)).map((job) => decodeTicket(job.payload).includes("CAÑA")),
     ).toEqual([false]);
     const at = new Date("2026-10-02T18:45:00.000Z");
     await inTx(venue, async (tx) => {
@@ -990,11 +1008,17 @@ describe("release", () => {
           .every((job) => !decodeTicket(job.payload).includes("CAÑA")),
       ).toBe(true);
       expect(
-        (await jobs(watcherPrinter)).every((job) => !decodeTicket(job.payload).includes("CAÑA")),
+        (await jobs(passPrinter)).every((job) => !decodeTicket(job.payload).includes("CAÑA")),
       ).toBe(true);
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
+        for (const stationId of [bar, grill])
+          await detachPrinterFromStation(
+            tx,
+            { locationId: venue.cfg.locationId },
+            { stationId, printerId: passPrinter },
+          );
         await clearRoutingCell(tx, venue.cfg, cell);
       });
     }
@@ -1475,71 +1499,38 @@ describe("moveDishesToStation", () => {
     expect(assertFrom).not.toHaveBeenCalled();
   });
 
-  it("prints RECALLED through the order action for a watcher of the dish", async () => {
-    const printerId = await inTx(venue, async (tx) => {
-      const watcher = await createWatcher(tx, venue.cfg, {
-        name: `Bar recall ${randomUUID()}`,
-        runsPass: false,
-        everyStation: false,
-        stationIds: [bar],
-        everyZone: true,
-        zoneIds: [],
-      });
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: `Bar recall ${randomUUID()}`,
-          transport: "cloud_poll",
-          pollId: randomUUID(),
-        },
-      );
-      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
-      return printer.id;
-    });
-    const { tabId } = await burger();
-    const before = (await jobs(printerId)).length;
-    await inTx(venue, (tx) => recallLines(tx, venue.cfg, tabId, [1]));
-    const added = (await jobs(printerId)).slice(before);
-    expect(added).toHaveLength(1);
-    expect(decodeTicket(added[0]!.payload)).toContain("RECALLED");
-    expect(decodeTicket(added[0]!.payload)).toContain("BURG");
+  it("prints RECALLED through the order action on a printer on the dish's station", async () => {
+    const printerId = await inTx(venue, (tx) =>
+      stationPrinter(tx, `Bar recall ${randomUUID()}`, [bar]),
+    );
+    try {
+      const { tabId } = await burger();
+      const before = (await jobs(printerId)).length;
+      await inTx(venue, (tx) => recallLines(tx, venue.cfg, tabId, [1]));
+      const added = (await jobs(printerId)).slice(before);
+      expect(added).toHaveLength(1);
+      expect(decodeTicket(added[0]!.payload)).toContain("RECALLED");
+      expect(decodeTicket(added[0]!.payload)).toContain("BURG");
+    } finally {
+      await detachStationPrinters([[printerId, [bar]]]);
+    }
   });
-  it("releases a rerouted HOLD dish once per watcher with the right correction or heading", async () => {
+  it("releases a rerouted HOLD dish on each station printer with the right correction or heading", async () => {
     await inTx(venue, (tx) => writePrintHeldWork(tx, true));
     const downstairs = await inTx(venue, (tx) =>
       createStation(tx, venue.cfg, {
         name: `Downstairs bar ${randomUUID()}`,
       }),
     );
+    const listed = [[bar, grill, downstairs.id], [bar], [downstairs.id]] as const;
     const printerIds = await inTx(venue, async (tx) => {
       const ids: string[] = [];
       for (const [name, stationIds] of [
-        [`Both release ${randomUUID()}`, [bar, grill, downstairs.id]],
-        [`Old release ${randomUUID()}`, [bar]],
-        [`New release ${randomUUID()}`, [downstairs.id]],
-      ] as const) {
-        const watcher = await createWatcher(tx, venue.cfg, {
-          name,
-          runsPass: false,
-          everyStation: false,
-          stationIds: [...stationIds],
-          everyZone: true,
-          zoneIds: [],
-        });
-        const printer = await createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          {
-            name,
-            transport: "cloud_poll",
-            pollId: randomUUID(),
-          },
-        );
-        await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
-        await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer.id));
-        ids.push(printer.id);
-      }
+        [`Both release ${randomUUID()}`, listed[0]],
+        [`Old release ${randomUUID()}`, listed[1]],
+        [`New release ${randomUUID()}`, listed[2]],
+      ] as const)
+        ids.push(await stationPrinter(tx, name, stationIds));
       return ids;
     });
     const cell = await inTx(venue, async (tx) => {
@@ -1613,14 +1604,25 @@ describe("moveDishesToStation", () => {
           .set({ isDefault: true })
           .where(eq(kitchenStations.id, bar));
       });
+      await detachStationPrinters(printerIds.map((id, i) => [id, listed[i]!] as const));
     }
     const added = await Promise.all(
       printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
     );
-    expect(added[0]).toHaveLength(1);
-    expect(decodeTicket(added[0]![0]!.payload)).toContain("FIRE");
-    expect(decodeTicket(added[0]![0]!.payload)).toContain("BURG");
-    expect(decodeTicket(added[0]![0]!.payload)).toContain("TINTO");
+    // The printer on all three stations gets each station's paper: Bar's correction, Grill's FIRE
+    // and Downstairs' ticket for the rerouted dish.
+    const onAll = added[0]!.map((job) => decodeTicket(job.payload));
+    expect(onAll).toHaveLength(3);
+    expect(onAll[0]).toContain("HOLD CANCELLED");
+    expect(onAll[0]).toContain("BURG");
+    expect(onAll[0]).not.toContain("FIRE");
+    expect(onAll[1]).toContain("FIRE");
+    expect(onAll[1]).toContain("TINTO");
+    expect(onAll[1]).not.toContain("BURG");
+    expect(onAll[2]).toContain("From Bar");
+    expect(onAll[2]).toContain("BURG");
+    expect(onAll[2]).not.toContain("FIRE");
+    expect(onAll[2]).not.toContain("TINTO");
     expect(added[1]).toHaveLength(1);
     expect(decodeTicket(added[1]![0]!.payload)).toContain("HOLD CANCELLED");
     expect(decodeTicket(added[1]![0]!.payload)).not.toContain("FIRE");
@@ -1630,70 +1632,75 @@ describe("moveDishesToStation", () => {
     expect(decodeTicket(added[2]![0]!.payload)).not.toContain("FIRE");
     expect(decodeTicket(added[2]![0]!.payload)).not.toContain("TINTO");
   });
-  it("corrects only watchers losing a moved dish and copies only to watchers gaining it", async () => {
-    const printerIds = await inTx(venue, async (tx) => {
-      const ids: string[] = [];
-      for (const [name, stationIds, everyStation] of [
-        [`Every ${randomUUID()}`, [], true],
-        [`Both ${randomUUID()}`, [bar, grill], false],
-        [`Old ${randomUUID()}`, [bar], false],
-        [`New ${randomUUID()}`, [grill], false],
-      ] as const) {
-        const watcher = await createWatcher(tx, venue.cfg, {
-          name,
-          runsPass: false,
-          everyStation,
-          stationIds: [...stationIds],
-          everyZone: true,
-          zoneIds: [],
-        });
-        const printer = await createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          {
-            name,
-            transport: "cloud_poll",
-            pollId: randomUUID(),
-          },
-        );
-        await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
-        await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer.id));
-        ids.push(printer.id);
-      }
-      return ids;
+  it("prints MOVED TO on the old station's printers and From on the new one's, both on a printer on both", async () => {
+    const listed = await inTx(venue, async (tx) => {
+      const everyStation = (
+        await tx
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(
+            and(
+              eq(kitchenStations.locationId, venue.cfg.locationId),
+              eq(kitchenStations.active, true),
+            ),
+          )
+      ).map((row) => row.id);
+      const rows: [string, readonly string[]][] = [];
+      for (const [name, stationIds] of [
+        [`Every ${randomUUID()}`, everyStation],
+        [`Both ${randomUUID()}`, [bar, grill]],
+        [`Old ${randomUUID()}`, [bar]],
+        [`New ${randomUUID()}`, [grill]],
+      ] as const)
+        rows.push([await stationPrinter(tx, name, stationIds), stationIds]);
+      return rows;
     });
-    const { tabId, item } = await burger();
-    const before = await Promise.all(printerIds.map(async (id) => (await jobs(id)).length));
-    await inTx(venue, (tx) =>
-      moveDishesToStation(
-        tx,
-        venue.cfg,
-        tabId,
-        {
-          submissionId: randomUUID(),
-          lineIds: [item.workingOrderLineId],
-          stationId: grill,
-        },
-        mover(),
-      ),
-    );
-    const added = await Promise.all(
-      printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
-    );
-    const addedIds = new Set(added.flat().map((job) => job.id));
-    const kinds = await inTx(venue, (tx) =>
-      tx.select({ id: printJobs.id, kind: printJobs.kind }).from(printJobs),
-    );
-    expect(kinds.filter((job) => addedIds.has(job.id)).map((job) => job.kind)).toEqual([
-      "document",
-      "document",
-    ]);
-    expect(added[0]).toHaveLength(0);
-    expect(added[1]).toHaveLength(0);
-    expect(added[2]).toHaveLength(1);
-    expect(decodeTicket(added[2]![0]!.payload)).toContain("MOVED TO GRILL");
-    expect(added[3]).toHaveLength(1);
-    expect(decodeTicket(added[3]![0]!.payload)).toContain("From Bar");
+    const printerIds = listed.map(([id]) => id);
+    try {
+      const { tabId, item } = await burger();
+      const before = await Promise.all(printerIds.map(async (id) => (await jobs(id)).length));
+      await inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [item.workingOrderLineId],
+            stationId: grill,
+          },
+          mover(),
+        ),
+      );
+      const added = await Promise.all(
+        printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
+      );
+      const addedIds = new Set(added.flat().map((job) => job.id));
+      const kinds = await inTx(venue, (tx) =>
+        tx.select({ id: printJobs.id, kind: printJobs.kind }).from(printJobs),
+      );
+      expect(kinds.filter((job) => addedIds.has(job.id)).map((job) => job.kind)).toEqual(
+        Array(6).fill("document"),
+      );
+      for (const onBoth of [added[0]!, added[1]!]) {
+        const printed = onBoth.map((job) => decodeTicket(job.payload));
+        expect(printed).toHaveLength(2);
+        expect(printed[0]).toContain("*** MOVED TO GRILL ***");
+        expect(printed[0]!.split("\n")[1]).toBe("Bar");
+        expect(printed[0]).toContain("BURG");
+        expect(printed[1]!.split("\n")[0]).toBe("Grill");
+        expect(printed[1]).toContain("From Bar");
+        expect(printed[1]).toContain("BURG");
+      }
+      expect(added[2]).toHaveLength(1);
+      expect(decodeTicket(added[2]![0]!.payload)).toContain("MOVED TO GRILL");
+      expect(decodeTicket(added[2]![0]!.payload)).not.toContain("From Bar");
+      expect(added[3]).toHaveLength(1);
+      expect(decodeTicket(added[3]![0]!.payload)).toContain("From Bar");
+      expect(decodeTicket(added[3]![0]!.payload)).not.toContain("MOVED TO");
+    } finally {
+      await detachStationPrinters(listed);
+    }
   });
   it("prints at both stations, records a reroute, and replays without moving work again", async () => {
     const { tabId, item } = await burger();

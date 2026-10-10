@@ -1345,9 +1345,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
   way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
   disabled (except a floor-plan zone's tables on today's plan, which come back since A429 slice 1),
-  and its routing exceptions and watcher zones stay gone (a profile's starting zone is
+  and its routing exceptions stay gone (a profile's starting zone is
   kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
   it is disabled).
+
+- **What a kitchen screen shows after its zone is switched off is unchecked.** Switching a zone off
+  (`deactivateServiceZone`, `packages/venue-service/src/operations.ts`) clears its routing cells
+  and disables its tables; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
+  `device_profile_kitchen_screen_zones`). What a pass screen or the device editor shows for that
+  zone was read, not run. Left open by A366 slice 5 Part B.
 
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
@@ -1355,10 +1361,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 7, slice 5 Part B and slice 6 Part C.**
-  Slice 4 Part A is built: combined tickets on shared printers, which retiring watchers (slice 5
-  Part B) waited for, period choices in routing cells and the station editor. Station-hours and
-  fallback retirement and the read-only station Week view are built. Department receipts (slice 7) remain. Slice 6's
+  APPROVED 2026-10-07; remaining work is slice 7 and slice 6 Part C.**
+  Slice 4 Part A is built: combined tickets on shared printers, period choices in routing cells and
+  the station editor. Station-hours and fallback retirement and the read-only station Week view are
+  built. Slice 5 is built: kitchen screens and monitors (Part A, #1479) and watchers retired
+  (Part B, #1502), so a pass printer is a printer listed on every station. Department receipts (slice 7)
+  remain. Slice 6's
   remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
@@ -1481,9 +1489,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of every
   station it covered, even where that station's own printer printed; it stops showing at a station
-  once a Reprint of the bill would not link that pass printer to that station. _2026-10-01 (slice
-  3d): the whole-order printer is gone; a watcher's copy is linked to no station and shows no
-  printing problem (W23)._ Left open by service Task 5 (#750).
+  once a Reprint of the bill would not link that pass printer to that station. _2026-10-10 (A366
+  slice 5 Part B): a pass printer is now a printer listed on every station, and its combined ticket
+  is linked to each, so this applies again._ Left open by service Task 5 (#750).
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
 
 - Finish table drops the problem of a bill that transfers emptied (read, not run; not re-checked by
@@ -1579,9 +1587,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `canManagePrinters` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open
   by A366 slice 4 Part A.
 
-- **Until slice 5 Part B, a station printing only through a watcher reads "No printer" on the
-  Stations tab**, and nothing station-side lists the watchers that follow it (`#stationOutputs`,
-  `packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open by A366 slice 4 Part A.
+- **A pass printer must be added to each new station by hand.** A pass printer is now a printer
+  listed on every station; a watcher set to follow every station used to cover a new station at
+  once. Consider an "add to every station" control. Left open by A366 slice 5 Part B (decision P2).
 
 - **The server accepts a routing period line naming the cell's own plain station**; it routes
   nothing differently (`validatePeriodLines`, `packages/venue-service/src/routing-store.ts`). Left
@@ -1640,11 +1648,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
   a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
-
-- **Avoid repeat watcher configuration reads during a table move — OPEN (3d).** — left open by the
-  product folders work. `readSentWork`, `enqueueMovedSlips`, and `printCorrectionSlips` each read
-  watcher printers in the move flow. Measure the query count on a moved order with a watcher
-  printer, then pass one read through the transaction if it repeats unchanged configuration.
 
 - **Show a device's own pass screen in a canvas card — OPEN (3d, P15).** — left open by the
   product folders work. The ordinary embedded pass card still shows All stations; a device's Pass
@@ -3015,10 +3018,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
   folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
   until the venue reset that permits the rebuild.
-
-- **Clear a failed watcher copy without printing or resending — OPEN (3d, P9).** — left open by the
-  product folders work. A Reprint does not clear its failed job because watcher copies have no
-  station or bill link.
 
 - **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
   discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap

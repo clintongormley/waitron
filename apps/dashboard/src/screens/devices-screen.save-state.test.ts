@@ -44,7 +44,6 @@ const printer = (id: string, name: string, extra: Partial<Printer> = {}): Printe
   port: 9100,
   localKey: null,
   pollId: null,
-  watcherId: null,
   paperWidth: "80mm",
   resolution: "180dpi",
   hasCashDrawer: false,

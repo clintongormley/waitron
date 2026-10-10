@@ -4,12 +4,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Reference } from "./in-use.js";
 import { COURSE_REFERENCES } from "./kitchen.js";
-import { WATCHER_REFERENCES, WATCHER_SETTINGS } from "./watchers.js";
 
 /**
- * Every foreign key into `watchers` and `kitchen_courses` in a venue migrated with every set is
- * either a reference that keeps the row from being deleted or, for a watcher, a setting deleted
- * with it. Weaker than its name: it reads declared foreign keys only, so an id kept in a column
+ * Every foreign key into `kitchen_courses` in a venue migrated with every set is a reference that
+ * keeps the row from being deleted. Weaker than its name: it reads declared foreign keys only, so an id kept in a column
  * with no key, in JSON or in text is not seen, and neither is a key a set outside the manifest adds.
  */
 
@@ -27,12 +25,7 @@ function named(references: readonly Reference[]): string[] {
   return references.map(({ table, column }) => `${getTableName(table)}.${column.name}`).sort();
 }
 
-describe("what can refer to a watcher or a course", () => {
-  it("lists every foreign key into watchers as a reference or one of its own settings", async () => {
-    expect(await keysInto("watchers")).toEqual(named([...WATCHER_REFERENCES, ...WATCHER_SETTINGS]));
-    expect(WATCHER_REFERENCES).toEqual([]);
-  });
-
+describe("what can refer to a course", () => {
   it("lists every foreign key into kitchen_courses as a reference", async () => {
     expect(await keysInto("kitchen_courses")).toEqual(named(COURSE_REFERENCES));
   });

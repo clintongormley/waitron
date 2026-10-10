@@ -2557,7 +2557,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       port: 9100,
       localKey: null,
       pollId: null,
-      watcherId: null,
       active: true,
     },
   ];
@@ -2803,18 +2802,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
-    });
-  });
-
-  it("sets a printer's watcher through its management route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await api.setPrinterWatcher("p1", "w1");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/watcher", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ watcherId: "w1" }),
     });
   });
 

@@ -72,22 +72,6 @@ const view: PrepStationsView = {
   printers: [],
   stationPrinters: [],
   devices: [],
-  watchers: [
-    {
-      id: "pass",
-      name: "Pass",
-      active: true,
-      displayOrder: 7,
-      everyStation: false,
-      stationIds: ["bar"],
-      everyZone: false,
-      zoneIds: ["terrace"],
-      runsPass: false,
-      printerIds: [],
-      inUse: false,
-    },
-  ],
-  disabledWatchers: [],
 };
 
 class SettingsLeaveApp extends LitElement {

@@ -109,10 +109,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("kitchen_station_timing", "state", STATE),
   classify("kitchen_courses", "state", STATE),
   classify("station_printers", "state", STATE),
-  classify("watchers", "state", STATE),
-  classify("watcher_stations", "state", STATE),
-  classify("watcher_zones", "state", STATE),
-  classify("watcher_printers", "state", STATE),
   classify(
     "pass_item_marks",
     "state",
