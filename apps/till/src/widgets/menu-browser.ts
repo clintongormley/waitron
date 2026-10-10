@@ -8,7 +8,7 @@ import {
   registerIcons,
   visuallyHiddenStyles,
 } from "@waitron/ui";
-import { foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
+import { foldCache, foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
 import {
   HOME_GRID_COLUMNS,
   arrangeHome,
@@ -46,6 +46,10 @@ registerIcons({
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 type MenuIndex = HomeIndex<TillProduct>;
+
+type SearchResult =
+  | { kind: "product"; product: TillProduct }
+  | { kind: "section"; section: SectionNode; path: SectionStep[]; disabled: boolean };
 
 /**
  * A product member whose offer is not among `products` is left out, and so is one not sold
@@ -340,6 +344,8 @@ export class TillMenuBrowser extends LitElement {
    * {@link productName} reads no language. */
   #searchable = new WeakMap<MenuIndex, [TillProduct, string][]>();
 
+  #sectionSearchName = foldCache<SectionNode>();
+
   #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
     if (cached?.menu === menu && cached.products === this.products) return cached.index;
@@ -420,7 +426,7 @@ export class TillMenuBrowser extends LitElement {
     </div>`;
   }
 
-  #matches(index: MenuIndex, search: NameSearch): TillProduct[] {
+  #productMatches(index: MenuIndex, search: NameSearch): TillProduct[] {
     let names = this.#searchable.get(index);
     if (names === undefined) {
       names = [...index.products.values()].map((product): [TillProduct, string] => [
@@ -430,6 +436,60 @@ export class TillMenuBrowser extends LitElement {
       this.#searchable.set(index, names);
     }
     return search(names);
+  }
+
+  #matches(index: MenuIndex, unfiltered: MenuIndex, search: NameSearch): SearchResult[] {
+    this.#productMatches(index, searchFor(""));
+    const productNames = new Map(this.#searchable.get(index)!);
+    const seen = new Set<string>();
+    const walk = (members: readonly DocumentMember[], path: SectionStep[]) => {
+      const list = shownMembers(members);
+      const paths = tilePaths(list, path);
+      const named: [SearchResult, string][] = [];
+      let populated = false;
+      let enabled = false;
+      list.forEach((member, position) => {
+        if (member.kind === "product") {
+          populated ||= unfiltered.products.has(member.productId);
+          const product = index.products.get(member.productId);
+          if (product === undefined) return;
+          enabled = true;
+          if (seen.has(member.productId)) return;
+          seen.add(member.productId);
+          named.push([{ kind: "product", product }, productNames.get(product)!]);
+        } else {
+          const opens = paths[position]!;
+          const children = walk(member.members, opens);
+          if (!children.populated) return;
+          populated = true;
+          enabled ||= children.enabled;
+          named.push(
+            [
+              { kind: "section", section: member, path: opens, disabled: !children.enabled },
+              this.#sectionSearchName(member, this.#sectionName(member)),
+            ],
+            ...children.named,
+          );
+        }
+      });
+      return { named, populated, enabled };
+    };
+    return search(walk(unfiltered.home, []).named);
+  }
+
+  #resultTile(result: SearchResult, mode: HomeTileMode): TemplateResult {
+    if (result.kind === "product")
+      return this.#productButton(result.product, mode, () => this.#pick(result.product));
+    return this.#sectionButton(
+      result.section,
+      mode,
+      result.disabled
+        ? undefined
+        : () => {
+            this.query = "";
+            this.#open(result.path);
+          },
+    );
   }
 
   #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
@@ -582,16 +642,19 @@ export class TillMenuBrowser extends LitElement {
    * regions fail axe's landmark-unique. */
   #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
     const search = searchFor(this.query);
-    const found = this.#matches(index, search);
+    const found = this.#matches(index, this.#unfilteredIndex(menu), search);
     const otherMenus = orderableMenus(this.menus).filter((other) => other.id !== menu.id);
     const others = otherMenus
-      .map((other) => ({ menu: other, found: this.#matches(this.#otherIndex(other), search) }))
-      .filter((other) => other.found.length > 0);
-    const tiles = (products: TillProduct[]) =>
-      this.#grid(
-        products.map((product) =>
-          this.#productButton(product, display.tiles, () => this.#pick(product)),
+      .map((other) => ({
+        menu: other,
+        found: this.#productMatches(this.#otherIndex(other), search).map(
+          (product): SearchResult => ({ kind: "product", product }),
         ),
+      }))
+      .filter((other) => other.found.length > 0);
+    const tiles = (results: SearchResult[]) =>
+      this.#grid(
+        results.map((result) => this.#resultTile(result, display.tiles)),
         display,
       );
     const empty = (text: string) => html`<p class="empty">${text}</p>`;

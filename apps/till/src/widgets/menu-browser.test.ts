@@ -894,9 +894,12 @@ describe("till-menu-browser", () => {
         "Café",
         "Caña",
         "Jamón",
+        "Favourites (EN)",
+        "plain-internal",
         "Cola",
         "Tostada",
         "Lemonade",
+        "Comida (ES)",
       ]);
 
       await search(el, "");
@@ -1088,7 +1091,7 @@ describe("till-menu-browser", () => {
       await search(el, "pancake");
       expect(names(entries(el, "results"))).toEqual([]);
       await search(el, "co");
-      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      expect(names(entries(el, "results"))).toEqual(["Cola", "Comida (ES)"]);
       expect(groupSections(el)).toHaveLength(0);
     });
 
@@ -1096,7 +1099,12 @@ describe("till-menu-browser", () => {
       const { el } = await served();
       await search(el, "co");
       expect(groups(el)).toEqual([
-        { menu: "menu-lunch", heading: "Lunch (this menu)", names: ["Cola"], empty: null },
+        {
+          menu: "menu-lunch",
+          heading: "Lunch (this menu)",
+          names: ["Cola", "Comida (ES)"],
+          empty: null,
+        },
         {
           menu: "menu-drinks",
           heading: "Drinks",
@@ -1135,7 +1143,7 @@ describe("till-menu-browser", () => {
       const { el } = await served({ menus: [lunch()] });
       await search(el, "co");
       expect(groupSections(el)).toEqual([]);
-      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      expect(names(entries(el, "results"))).toEqual(["Cola", "Comida (ES)"]);
       expect(root(el).querySelector('[data-region="results"] h2')!.textContent!.trim()).toBe(
         "Search results",
       );
@@ -1974,7 +1982,15 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Drinks (EN)"));
       expect(names(entries(el, "section"))).toEqual(["Lemonade"]);
       await search(el, "a");
-      expect(names(entries(el, "results"))).toEqual(["Agua", "Jamón", "Tostada", "Lemonade"]);
+      expect(names(entries(el, "results"))).toEqual([
+        "Agua",
+        "Jamón",
+        "Favourites (EN)",
+        "plain-internal",
+        "Tostada",
+        "Lemonade",
+        "Comida (ES)",
+      ]);
     });
 
     it("shows a staff-only product as it shows a public one, and rings it up", async () => {
@@ -2578,5 +2594,174 @@ describe("Spanish pricing-unit labels", () => {
     const price = entry(el, "structure", "Café").querySelector(".price")!.textContent;
     expect(price).toBe(`1,50\u00a0€/${label}`);
     expect(price).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}/i);
+  });
+});
+
+describe("A461 current-menu mixed search", () => {
+  const coffee = section("coffee", "internal-coffee", { en: "Coffee", es: "Café" }, [
+    member("espresso"),
+    member("iced"),
+    member("ice"),
+    member("ginger"),
+  ]);
+  const offered = [
+    product("iced", "Iced coffee"),
+    product("cake", "Coffee cake"),
+    product("espresso", "Espresso"),
+    product("ice", "Add ice"),
+    product("ginger", "Ginger tea"),
+  ];
+  const current = (members: DocumentMember[] = [member("cake"), coffee]) =>
+    lunch({ structure: { members }, ...withShortcuts([]) });
+
+  it("A461 till ranks products and sections together without pulling in section contents", async () => {
+    const { el } = await mount({ menu: current(), products: offered });
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual(["Coffee", "Coffee cake", "Iced coffee"]);
+    expect(entries(el, "results").map((tile) => tile.dataset.kind)).toEqual([
+      "section",
+      "product",
+      "product",
+    ]);
+    el.menu = current([
+      section("iced-section", "internal", { en: "Iced coffee" }, [member("espresso")]),
+      member("exact"),
+    ]);
+    el.products = [...offered, product("exact", "Coffee")];
+    await el.updateComplete;
+    expect(names(entries(el, "results"))).toEqual(["Coffee", "Iced coffee"]);
+    expect(entries(el, "results").map((tile) => tile.dataset.kind)).toEqual(["product", "section"]);
+  });
+
+  it.each([true, false])(
+    "A461 equal section/product ranks keep document order, section first %s",
+    async (sectionFirst) => {
+      const same = section("same", "internal", { en: "Coffee" }, [member("espresso")]);
+      const members = sectionFirst ? [same, member("exact")] : [member("exact"), same];
+      const { el } = await mount({
+        menu: current(members),
+        products: [...offered, product("exact", "Coffee")],
+      });
+      await search(el, "coffee");
+      expect(entries(el, "results").map((tile) => tile.dataset.kind)).toEqual(
+        sectionFirst ? ["section", "product"] : ["product", "section"],
+      );
+    },
+  );
+
+  it("A461 till section matching follows the displayed label and content-language changes", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es", "fr"] });
+    try {
+      const translated = section(
+        "translated",
+        "Private coffee",
+        { en: "Coffee", es: "Café", fr: "Café français" },
+        [member("espresso")],
+      );
+      const { el } = await mount({ menu: current([translated]), products: offered });
+      await search(el, "cafe");
+      expect(entries(el, "results")).toEqual([]);
+      setLocale("es-ES");
+      await el.updateComplete;
+      expect(names(entries(el, "results"))).toEqual(["Café"]);
+      setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
+      await el.updateComplete;
+      expect(names(entries(el, "results"))).toEqual(["Café français"]);
+      await search(el, "private");
+      expect(entries(el, "results")).toEqual([]);
+      await search(el, "espresso carta");
+      expect(entries(el, "results")).toEqual([]);
+      await search(el, "espresso KDS");
+      expect(entries(el, "results")).toEqual([]);
+    } finally {
+      setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
+    }
+  });
+
+  it("A461 till preserves whole-word, punctuation and blank query behavior", async () => {
+    const { el } = await mount({
+      menu: current([section("ginger", "internal", { en: "Ginger" }, [member("ginger")])]),
+      products: offered,
+    });
+    const before = names(entries(el, "structure"));
+    await search(el, "gin");
+    expect(names(entries(el, "results"))).toEqual(["Ginger", "Ginger tea"]);
+    await search(el, "gin ");
+    expect(entries(el, "results")).toEqual([]);
+    await search(el, "&");
+    expect(entries(el, "results")).toEqual([]);
+    await search(el, "   ");
+    expect(names(entries(el, "structure"))).toEqual(before);
+  });
+
+  it("A461 till search keeps diet-empty sections disabled and omits unoffered sections", async () => {
+    const extraOnly = section("extras", "internal", { en: "Coffee extras" }, [member("extra")]);
+    const absent = section("absent", "internal", { en: "Coffee absent" }, [member("missing")]);
+    const soldOut = section("sold", "internal", { en: "Coffee sold" }, [member("sold")]);
+    const all = [
+      ...offered,
+      product("extra", "Coffee extra", { ordering: "not_sold_separately" }),
+      product("sold", "Coffee sold out", { available: false }),
+    ];
+    const { el, store } = await mount({
+      menu: current([coffee, extraOnly, absent, soldOut]),
+      products: all.filter((p) => !offered.includes(p)),
+      unfilteredProducts: all,
+    });
+    const selected = vi.fn();
+    el.addEventListener("menu-selected", selected);
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual(["Coffee", "Coffee sold", "Coffee sold out"]);
+    const tile = entry(el, "results", "Coffee");
+    expect(tile.disabled).toBe(true);
+    const native = tile.shadowRoot!.querySelector("button")!;
+    expect(native.disabled).toBe(true);
+    native.click();
+    await el.updateComplete;
+    expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe(
+      "coffee",
+    );
+    expect(selected).not.toHaveBeenCalled();
+    expect(store.lines).toEqual([]);
+    expect(entry(el, "results", "Coffee sold").disabled).toBe(false);
+    expect(entry(el, "results", "Coffee sold out").disabled).toBe(true);
+  });
+
+  it("A461 section taps open nested and repeated visible copies without changing the basket", async () => {
+    const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
+    const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);
+    const direct = {
+      ...section("hidden", "internal", { en: "Coffee invisible" }, [first, second]),
+      direct: true,
+    } as DocumentMember;
+    const nested = section("parent", "internal", { en: "Drinks" }, [
+      section("nested", "internal", { en: "Coffee nested" }, [member("iced")]),
+    ]);
+    const { el, store } = await mount({
+      menu: current([direct, nested, member("cake")]),
+      products: offered,
+    });
+    store.addProduct(offered[0]!, "1");
+    const basket = [...store.lines];
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual([
+      "Coffee cake",
+      "Coffee first",
+      "Coffee second",
+      "Coffee nested",
+      "Iced coffee",
+    ]);
+    await tap(el, entry(el, "results", "Coffee second"));
+    expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe("");
+    expect(breadcrumb(el)).toBe("Home › Coffee second");
+    expect(names(entries(el, "section"))).toEqual(["Coffee cake"]);
+    expect(store.lines).toEqual(basket);
+    await search(el, "coffee");
+    await tap(el, entry(el, "results", "Coffee nested"));
+    expect(breadcrumb(el)).toBe("Home › Drinks › Coffee nested");
+    expect(names(entries(el, "section"))).toEqual(["Iced coffee"]);
+    expect(store.lines).toEqual(basket);
+    await search(el, "coffee");
+    expect(names(entries(el, "results")).filter((n) => n === "Coffee cake")).toHaveLength(1);
   });
 });
