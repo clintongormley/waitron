@@ -2603,7 +2603,9 @@ if it is wrong.
     (`overflow: auto`, `apps/till/src/widgets/tab-shell.ts:190-194`). Cost if wrong: keyboard users
     move between tables with the arrow keys, not Tab; and Tab into the map lands on the tab-stop
     table wherever the view has left it, so after a pan that put it off-screen, Tab can still scroll
-    the parent, which an arrow key never does.
+    the parent, which an arrow key never does; and because the arrow keys focus with
+    `preventScroll`, a table arrowed to in a part of the map the tab shell's body has scrolled out
+    of view stays off-screen.
 
 **Mutation runs.** As slice 2: each task that adds a `packages/ui` file runs
 `gtimeout 900 pnpm --filter @waitron/ui exec stryker run --mutate <file>` once, and a survivor gets
@@ -3053,7 +3055,8 @@ it("the drop event bubbles out of a shadow root", async () => { /* mountInShadow
 - Create: `packages/ui/src/components/wt-floor-map.keys.test.ts`
 
 **Interfaces:**
-- Consumes: Task 3.2d's view and its least-distance pan.
+- Consumes: Task 3.2d's view (offset and scale) and its moved mark; this task builds the
+  least-distance pan.
 - Produces: nothing new for other tasks; keyboard behaviour only (slice 3 decision 18).
 
 Behaviour: every table button has `tabindex="-1"` except the tab stop, which has `tabindex="0"`:
@@ -3062,7 +3065,8 @@ order (sorted by the top of its box, then its left). On a focused table, ArrowRi
 move to the next table in reading order, ArrowLeft and ArrowUp to the previous, Home and End to the
 first and last, stopping at the ends; each is prevented (never stopped: the idle logout listens for
 `keydown`), pans the target into view by the least distance, makes it the tab stop, and focuses it
-with `focus({ preventScroll: true })`. Other keys pass through, so Task 3.2c's Enter, Space and
+with `focus({ preventScroll: true })`. A pan an arrow key makes counts as the person moving the view:
+it sets Task 3.2d's moved mark, so a later resize keeps the view. Other keys pass through, so Task 3.2c's Enter, Space and
 Shift+F10 still work.
 
 - [ ] **Step 1: Write the failing tests** in `wt-floor-map.keys.test.ts` (real timers; t1, t2 and
@@ -3079,17 +3083,20 @@ it("the arrow keys move between tables in reading order, Home and End to the end
 });
 it("the table last focused is the tab stop", async () => { /* arrow to t2 → tabindex 0 on t2 only; tables re-set without t2 → t1 again */ });
 it("arrowing to a table below the edge pans it in without scrolling the map or its parent", async () => {
-  /* the map inside <div style="height: 200px; overflow: auto"> with 400 px of content after the map; zoom so t3 is below the map's bottom edge;
-     focus t2, ArrowDown → t3 focused; t3's box inside the map's; the parent's scrollTop unchanged (0); the map's scrollLeft and scrollTop 0 */
+  /* the 600 × 300 px map inside <div style="height: 200px; overflow: auto"> with 400 px of content after the map, so the map's lower 100 px lie below the
+     parent's visible part; zoom so t3 is below the map's bottom edge; focus t2, ArrowDown → t3 focused; t3's box inside the map's (the pan brings it in
+     at the map's bottom edge, so it lies below the parent's visible part); the parent's scrollTop unchanged (0); the map's scrollLeft and scrollTop 0 */
 });
+it("an arrow key's pan survives a resize", async () => { /* zoom so t3 is off-screen; arrow to t3 (pans it in); host width 500, two real animation frames → t3's box still inside the map's */ });
 it("a keydown on a table still reaches the page", async () => { /* a document keydown listener hears ArrowRight from t1 */ });
 // wt-floor-map.a11y.test.ts: the existing states now carry one tab stop; add "focus on the second table after an arrow key" in both themes
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
   `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.keys.test.ts src/components/wt-floor-map.a11y.test.ts`.
-  Expected: the new cases fail (every table is in the Tab order; arrows do nothing), except "a
-  keydown on a table still reaches the page", a guard that passes before the change.
+  Expected: the new cases fail (every table is in the Tab order; arrows do nothing), except two
+  that pass before the change: "a keydown on a table still reaches the page", a guard, and the
+  a11y case "focus on the second table after an arrow key", which axe passes either way.
 - [ ] **Step 3: Implement.** Then replace `preventScroll: true` with a plain `focus()` and watch the
   parent's `scrollTop` case fail, then restore it.
 - [ ] **Step 4: Run** every `wt-floor-map` test file and Task 3.2b's guards. Expected: pass.
@@ -3304,7 +3311,7 @@ it("an action's refresh is applied when an older poll answers first", async () =
 // till-app-parties.test.ts, with its Move a bill stubs (its api fixture stubs moveBill at :295):
 it("Move a bill's floor read is not replaced by an older poll that answers later", async () => {
   /* a floor-refresh poll deferred; move a bill (till-app.ts:7068-7076), whose floor read answers with the party at its new revision; then the poll answers with the old revision →
-     the order screen's `tables` row for the moved table (it is given the app's this.tables, :8851) holds the new revision. (Its `party` would pass today too:
+     in the order screen's `tables` (it is given the app's this.tables, :8851), the row whose id is the app's activeTableId (the table the move ran from, till-app.ts:7037-7047) holds the new revision. (Its `party` would pass today too:
      #rememberOrderParty, :5388-5394, copies the party from the move's own read into orderParty, which the screen reads, :8856; the table row is what the late poll overwrites today.) */
 });
 ```
@@ -3400,7 +3407,10 @@ it("Escape asks to close", async () => { /* keyboard Escape; await the wt-dialog
 // till-floor-screen.details.test.ts
 it("opens the sheet on the map's request, headed as the map draws the table", async () => { /* wt-table-details { tableId: "t4" } on a merge of "Terrace 4" and "Terrace 5" → sheet.table.id "t4", heading "Terrace 4+5" */ });
 it("the open sheet shows Time to fire when the floor redraws at the due time", async () => {
-  /* floor now 11:59:59Z, t4's reminder due 12:00:00Z, sheet open → no [data-fire-due]; set the floor's now to 12:00:00Z → the sheet shows "Time to fire" */
+  /* the floor's `now` left unset (with it set, #watchReminders returns at once, till-floor-screen.ts:474, and the case could not tell #drawnAt from this.now);
+     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] }) at 11:59:59Z; t4's reminder due 12:00:00Z; open the sheet → no [data-fire-due];
+     advance 1000 ms; await the floor's then the sheet's updateComplete → "Time to fire". Restore real timers before awaiting any animation frame wt-dialog needs.
+     Control: pass this.now to the sheet instead of #drawnAt and watch the case fail, then restore it. */
 });
 it("a re-read updates the open sheet", async () => { /* set tables with t4's readyToServe 2 → sheet shows "2 ready" */ });
 it("a re-read without the table closes the sheet", async () => { /* open for t4; set tables without t4 → no open till-table-details-sheet (table null) */ });
