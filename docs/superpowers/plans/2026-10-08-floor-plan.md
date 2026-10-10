@@ -2415,16 +2415,20 @@ check); design-system.md names both primitives and the editor; the backlog's A42
 ## Slice 3 — the till's map (spec §5)
 
 Branch `feat/floor-plan-till-map`, after slice 2 (landed as #1506). Expanded to step level on
-2026-10-10, unattended; every `file:line` in this slice was read at `main` `28f150197`.
+2026-10-10, unattended, and revised the same day on a fresh-context review's findings; every
+`file:line` in this slice was read at `main` `28f150197` and checked again at `f18ff0767` (#1507,
+which changed none of the cited code files; only the backlog's line numbers moved).
 
 What the slice builds: a gesture recogniser and a map primitive in `packages/ui`
 (`gestures.ts`, `wt-floor-map`), the table fill colours as tokens, and, on the till, the floor screen
 drawing a planned zone on the new map, the seat dialog's seats placeholder, a 15-second re-read, a
 details sheet, and on the order screen a flash notice and a status pin. A zone with no today's plan
-looks and works exactly as today (the plan's decision 2). Nothing on the server changes.
+keeps the old map, tray and Edit plan (the plan's decision 2); two changes reach every zone: the seat
+dialog's new placeholder (decision 12) and the app's rule for which table read wins (decision 13).
+Nothing on the server changes.
 
-**A182** (retire canvases) had not started at `28f150197`: the backlog says "Nothing has carried
-that out" (`docs/backlog.md:2406-2407`). The floor stays a card in the canvas grid
+**A182** (retire canvases) had not started at `f18ff0767`: the backlog says "Nothing has carried
+that out" (`docs/backlog.md:2403-2404`). The floor stays a card in the canvas grid
 (`apps/till/src/widgets/card-grid.ts:470-480`). If A182 has started when this slice is dispatched,
 the driver reads that branch first and moves this slice's floor-screen tasks onto it.
 
@@ -2463,8 +2467,15 @@ file (Task 3.3b), so the case stays where it is.
   the floor screen's `floor-refresh` event (`:5014-5027`, listener `:9026`); `#refreshFloor` assigns
   whatever answer comes back, in any order. The station and expo screens already re-read every 15
   seconds from their own `setInterval` (`till-station-screen.ts:55`, `:332`; `till-expo-screen.ts:63`).
-  The till's idle logout is fed by `#onInteraction` (`till-app.ts:1380`); whether a request
-  also counts was not checked, and the station screen's poll already runs beside it.
+- The till's idle logout restarts only on a `pointerdown` or `keydown` that reaches the app's host
+  (`#onInteraction`, `till-app.ts:1380`, listened for at `:1401-1402`, calling
+  `SessionActivity.noteInteraction`, `apps/till/src/session-activity.ts:93-95`); no request restarts
+  it. On the server, the till's session lookup has no idle expiry (it matches the token and an
+  unended session, `apps/server/src/till-session.ts:113`), and a request not marked passive records
+  a device sighting at most once a minute (`:117-118`; `sightingDue` and `recordSighting`,
+  `apps/server/src/device-session.ts:276-300`). So the 15-second re-read keeps no waiter signed in,
+  and **the map must never stop a `pointerdown` or `keydown`**: the `wt-*` rule's "stop the
+  triggering event" applied to them would log out a waiter who only uses the map.
 - `wt-toast` closes itself after `duration` ms, or when its message or close button is pressed, and
   pauses while hovered or focused (`packages/ui/src/components/wt-toast.ts:62`, `:94-101`, `:123-134`).
 
@@ -2484,7 +2495,7 @@ if it is wrong.
    is out of reach until slice 4's Add a spare table.
 3. **Edit plan is hidden while a planned zone shows.** Its placement writes move the old columns,
    which the new map does not read. Cost: none; slice 5 removes the editor.
-4. **The stand-in status set.** Fill, most urgent first: needs clearing; bill asked (a
+4. **The stand-in status set.** Fill, most urgent first: needs clearing; bill requested (a
    `bill_requested` signal); seated (a party holds it, or a delivery is on its way); reserved (free,
    with a booking today); free. Dot, at most one: forgotten (`timingBand` forgotten) before ready
    (`readyToServe > 0`, which counts dishes the pass has sent too). A merge shows its most urgent
@@ -2505,16 +2516,29 @@ if it is wrong.
    turn a hold into a drag. A press that moves 8 px or more before the hold pans the map, wherever
    it started. Once two fingers have pinched, nothing else happens until every finger lifts.
    Right-click, the ContextMenu key and Shift+F10 also open details (the keyboard's way; slice 4's
-   Join with… is in that sheet). Cost: mouse users wait 300 ms for a table to open.
+   Join with… is in that sheet), each exactly once: Shift+F10 is handled on `keydown`, because macOS
+   sends no `contextmenu` for it (the review's probe; Linux does), and a `contextmenu` straight after
+   it is swallowed. A mouse press with Ctrl held starts no gesture, so on macOS, where Ctrl+click
+   sends `contextmenu`, it opens details; elsewhere a Ctrl+click does nothing. Cost: mouse users wait
+   300 ms for a table to open.
 8. **The view.** The map fits the zone's crop when it first draws tables, when `fitKey` (the zone)
    changes, on a double tap on empty space, and on a resize unless the person has panned or zoomed
    since. A re-read keeps the view. Zoom runs from half to four times the fitted size; a pan stops
    with the crop's centre at the map's edge. The mouse wheel pans; Ctrl+wheel, which is also what a
    laptop trackpad's pinch sends, zooms ×2 per 100 of `deltaY` about the pointer. Focusing a table
-   outside the map pans it into view. There is no Fit button. Cost: a keyboard user cannot zoom.
-9. **Drawing.** No grid lines on the till's map. A merge is one button covering its members'
-   turned boxes, labelled with their names in number order joined by "+", its name shown when that
-   box's shorter side is 28 px or more; pressing it sends the first member's id (seating every
+   outside the map pans it into view when the focus came from the keyboard (the table matches
+   `:focus-visible`), never after a press. There is no Fit button. Cost: a keyboard user cannot zoom.
+9. **Drawing.** No grid lines on the till's map. A single table shows its name when its own
+   shorter side (width or height, before turning) is 28 px or more, the plan's decision 11. A merge
+   is one button covering its members' turned boxes, its name shown when that union box's shorter
+   side is 28 px or more, labelled with its tables in number order joined by "+", naming a first
+   word the tables share once, as `partyTablesName` does with ", "
+   (`packages/shared/src/party-name.ts:7-17`): "Terrace 4+5", "4+10", "Bar 1+Stool 2". The map has
+   no `delegatesFocus`, unlike design-system.md → "Adding a primitive" item 4 (`:3053-3056`): it is a
+   container of table buttons, and the review's probe in headless Chromium 153 found that a click on
+   empty space in a `delegatesFocus` host focused its first button. Its host is `overflow: clip`, not
+   `hidden`, which the same probe found the browser scrolled when an off-screen table took focus.
+   Pressing a merge sends the first member's id (seating every
    member is slice 4's, the plan's decision 18). Tables smaller than `--wt-tap-min` stay their true
    size, as in the editor (slice 2 decision 12); the list is the tap-sized way in. Cost: a small
    stool is hard to hit on a phone until zoomed.
@@ -2530,21 +2554,35 @@ if it is wrong.
     (listed under "Behaviour this plan removes"); the label stays "Guests" and the field stays
     optional and unmarked. Cost: the word "optional" is no longer said.
 13. **The 15-second re-read is the floor screen's**, only while a planned zone's map shows (not the
-    old map, not the list), and it asks through the existing `floor-refresh` event. The app drops a
-    table read answered after a newer one. Cost: a list view and the old map go on reading only on
-    tab select and after actions, as today.
+    old map, not the list), and it asks through the existing `floor-refresh` event. In the app every
+    table read takes a number as it starts, and an answer is applied only when its number is higher
+    than the last applied one; `#refreshFloor` answers true when its own answer or a newer one was
+    applied, because its callers read `this.tables` straight after (`#retakePartyFromFloor`,
+    `till-app.ts:5305-5309`; Move a bill, `:7074-7076`). So a poll that answers late never replaces
+    an action's newer read, and an action's read is never dropped because an older poll answered
+    first. Cost: a list view and the old map go on reading only on tab select and after actions.
 14. **The details sheet is a `wt-dialog`** (the till's dialogs all are; `wt-sheet` is an in-flow bar),
     opened from the map and from the order screen's status pin. It saves nothing, so it takes no
     draft scope and has no `*.unsaved.test.ts`. The list view's cards keep their details inline, as
     today, and do not open it. Cost: none.
-15. **The flash notice is a `wt-toast`** (4 s) at the top of the order screen, shown when the order
-    screen draws a party whose table has dishes ready, a forgotten order or a bill asked for, and
-    again only when the party changes. Cost: where the order screen stays mounted (the canvas
+15. **The flash notice is a `wt-toast`** (4 s) at the top of the window, placed by the equipment
+    toast's own rule (`till-app.ts:1078-1083`: fixed, `--wt-space-3` from the sides, below the safe
+    area, `z-index: 10`), shown when the order screen draws a party whose table has dishes ready, a
+    forgotten order or a bill requested, and again only when the party changes. When the equipment
+    toast is open too, the two sit in the same place at the same `z-index`, and the notice, later in
+    the page (the toasts are drawn at `till-app.ts:9111-9131`, the tab shell holding the order screen
+    at `:9299-9340`, and neither the shell's `.region` nor its `.drill`, `tab-shell.ts:182-207`, sets
+    a `z-index` or a transform), is painted over it for its 4 s; the equipment toast stays until
+    dismissed (`.duration=${0}`, `:9125`) and shows again when the notice goes (read, not run; the
+    look pass photographs both open). Cost: where the order screen stays mounted (the canvas
     layout's order card), reopening the same party shows no second notice.
 16. **The status pin and the notice live in one new till widget, `till-table-status`**, placed in the
     order screen's `.head-actions` before the Tab button, so the 5,036-line order screen gains one
-    element. The pin is hidden when the order has no party or the floor read has no row for it.
-    Cost: none.
+    element. The pin is hidden when the order has no party or the floor read has no row for it. The
+    pin is as fresh as the app's last table read: the 15-second re-read runs only while a planned
+    map shows, so on an order screen the pin changes after the order screen's own actions re-read
+    the floor, not while it sits open. Cost: a status that changed while the order was open (a dish
+    made ready) shows only after the next action.
 17. **The look pass photographs from Vitest browser files that are never committed**, with fixtures,
     as slice 2 decision 19 did.
 
@@ -2570,6 +2608,8 @@ case) applies to no form here; slice 4's Change seats for today is the first tha
 **Pointer events** are dispatched as `wt-floor-plan-canvas.test.ts` dispatches them: `pointerdown`
 on the element pressed (`bubbles: true, composed: true`, a `pointerId`, `pointerType`,
 `clientX`/`clientY`, `button: 0`), then `pointermove`, `pointerup` and `pointercancel` on `window`.
+Synthetic events cannot show what the browser does with focus or scrolling after a real press, so
+the cases about those use `userEvent.click` (a real Playwright click) instead.
 
 ### Task 3.1: Gestures
 
@@ -2601,7 +2641,8 @@ export interface GestureHandlers {
   pan?(by: { dx: number; dy: number }): void;
   /** Two pointers: their distance's ratio since the last call, their midpoint now (client px), and how far it moved. */
   pinch?(change: { ratio: number; x: number; y: number; dx: number; dy: number }): void;
-  /** A hold or drag ended without its own end: pointercancel, or a second pointer arriving. */
+  /** The gesture ended without its own end: a pointercancel at any point, or a second pointer
+   * arriving during a hold or a hold's drag. */
   cancel?(): void;
 }
 export class Gestures {
@@ -2612,7 +2653,9 @@ export class Gestures {
 }
 ```
 
-Behaviour: `pointerdown` on `host` starts tracking (a mouse's non-primary buttons start nothing);
+Behaviour: `pointerdown` on `host` starts tracking (a mouse's non-primary buttons, and a mouse
+press with Ctrl held, start nothing; slice 3 decision 7); the module only listens, and never stops
+or prevents a pointer event, so the app's idle logout still hears every press;
 `pointermove`, `pointerup` and `pointercancel` are heard on `window` while a gesture is active, and
 removed when it ends. The hold is a `setTimeout(LONG_PRESS_MS)`; the double-tap window is a
 `setTimeout(DOUBLE_TAP_MS)` started by a tap, so a second tap while it is pending is a double tap.
@@ -2646,6 +2689,8 @@ it("after a pinch nothing happens until every pointer lifts", () => { /* pinch; 
 it("a third pointer is ignored", () => { /* pinching with 1, 2; down 3 and move 3 → no further pinch */ });
 it("pointercancel ends the press", () => { /* down; pointercancel → cancel once; up → no tap; active false */ });
 it("a mouse's right button starts nothing", () => { /* mouse down/up with button 2 → no tap; active false throughout */ });
+it("a mouse press with Ctrl held starts nothing", () => { /* mouse button 0, ctrlKey true, down/up → no tap; active false */ });
+it("never stops or prevents a press", () => { /* a document pointerdown listener hears the press on #b; its defaultPrevented false */ });
 it("another pointer's moves do not move a one-finger press", () => { /* down 1; move pointerId 9 by 50 → no pan */ });
 it("disconnect stops listening and clears the hold", () => { /* down; disconnect(); advance 500 → no holdStart; down/up → no tap */ });
 ```
@@ -2719,7 +2764,7 @@ it("lists the five fills", () => { /* FLOOR_MAP_FILLS toEqual ["free", "seated",
 - [ ] **Step 3: Implement.** If a contrast case fails, change that value and say which in the commit.
 - [ ] **Step 4: Run** both commands, `pnpm exec vitest run scripts/style-token-names.test.ts`, both
   packages' typecheck and lint, `prettier --check` on the changed `.ts` files (`colors.css` too).
-- [ ] **Step 5: Commit** — e.g. "Floor map: table colours for free, seated, bill asked, needs
+- [ ] **Step 5: Commit** — e.g. "Floor map: table colours for free, seated, bill requested, needs
   clearing and reserved, in both themes (A429 slice 3)". (No mutation run: the new `packages/ui`
   file is a style sheet and a list.)
 
@@ -2759,8 +2804,10 @@ export class WtFloorMap extends LitElement {
 }
 ```
 
-Behaviour: the host is `display: block; position: relative; overflow: hidden; touch-action: none`
-on `--wt-color-surface`; its size is the parent's. The view is `{ scale, x, y }`: a grid point
+Behaviour: the host is `display: block; position: relative; overflow: clip; touch-action: none;
+user-select: none; -webkit-touch-callout: none` (the last two keep an iPad's long-press from
+selecting text or offering its callout) on `--wt-color-surface`; its size is the parent's. It sets
+no `shadowRootOptions` (no `delegatesFocus`, slice 3 decision 9). The view is `{ scale, x, y }`: a grid point
 `(gx, gy)` is drawn at `(x + gx × scale, y + gy × scale)` px from the host's corner. Fitting sets
 `scale = fitScale(crop, size)` and centres the crop. The host's size comes from a `ResizeObserver`.
 Tables are grouped by `joinId` (no join: a group of one). Each group is one
@@ -2770,11 +2817,17 @@ members' `rotatedRect`s and transparent itself (`pointer-events: none`), holding
 `width × scale` by `height × scale` and turned `rotate(<rotation>deg)` about its centre, round shapes
 `border-radius: 50%`, every shape outlined 1 px `--wt-color-field-line`, painted by
 `floorMapFillStyles`. Members are ordered by `label` with `Intl.Collator(undefined, { numeric: true })`;
-the group's label is their labels joined by "+". The visible name (`part="name"`, centred, in the
-fill's text colour) shows only when `showsName(<the group's box>, scale)`. The accessible name is
+the group's label is `mapLabel(labels)`: when every label has a first word and they all share it,
+that word once and then the rest of each joined by "+" ("Terrace 4+5"), else the labels joined by
+"+" ("4+10"), the rule of `partyTablesName` (`packages/shared/src/party-name.ts:7-17`) with "+" for
+its ", "; `mapLabel` is exported from the component's file. The visible name (`part="name"`,
+centred, in the fill's text colour) shows only when `showsName(placement, scale)` for a single
+table, which reads the table's own width and height, and `showsName(<the union box>, scale)` for a
+merge. The accessible name is
 `<label>, <description>`. A group's dot (`part="dot" data-dot`) sits at the box's top-right, a
-`--wt-space-3` circle in `--wt-color-success` (ready) or `--wt-color-danger` (forgotten) with a 2 px
-`--wt-color-surface` ring; it flashes (a 1 s opacity animation) unless motion is reduced, with the
+`--wt-space-3` circle in `--wt-color-success` (ready) or `--wt-color-danger` (forgotten) with a
+`calc(var(--wt-space-1) / 2)` `--wt-color-surface` ring (a literal width over 1 px is refused by
+`packages/ui/src/no-hardcoded-chrome.test.ts:50-55`); it flashes (a 1 s opacity animation) unless motion is reduced, with the
 same `@media (prefers-reduced-motion: reduce)` guard the floor's cards use
 (`till-floor-screen.ts:213-217`). The groups sit in a `role="group"` named `copy.label`. The view
 fits when tables are first drawn, when `fitKey` changes, and on every resize (Task 3.2d narrows
@@ -2792,6 +2845,10 @@ it("draws a round table as a circle", async () => { /* shape "round": border-rad
 it("draws a merge as one button named with its tables in number order", async () => {
   /* "10" at (8, 0) 8 × 8 and "4" at (0, 0) 8 × 8, both joinId "j1": one [part=table], two [part=shape], data-table-id is "4"'s id,
      name text "4+10", aria-label "4+10, Free" */
+});
+it("names a merge's shared first word once", () => { /* mapLabel(["Terrace 4", "Terrace 5"]) → "Terrace 4+5"; ["4", "10"] → "4+10"; ["Bar 1", "Stool 2"] → "Bar 1+Stool 2" */ });
+it("hides a turned table's name by its own size, not its turned box", async () => {
+  /* the crop of the next case plus "L" at (20, 8) 2 × 8 turned 45°, kept inside it: its turned box is about 7 squares wide (≈ 92 px), its own shorter side 2 (≈ 26 px) → no [part=name] */
 });
 it("hides a name drawn under 28 px and keeps it as the accessible name", async () => {
   /* "B1" at (0, 0) 2 × 2 and "B2" at (36, 16) 3 × 3: crop 43 × 23 → scale 300/23 ≈ 13.04; B1 (26.1 px): no [part=name], aria-label "B1, Free"; B2 (39.1 px): name "B2" */
@@ -2816,8 +2873,9 @@ test("one table in each fill", …); test("a ready dot and a forgotten dot", …
   `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.test.ts src/components/wt-floor-map.a11y.test.ts`.
   Expected: both files fail to load.
 - [ ] **Step 3: Implement** (design-system.md → "Adding a primitive", `:3046`: `baseStyles` first,
-  `delegatesFocus`, tokens only), the workbench entry and the design-system row and paragraph (what
-  it draws, its three events, names below 28 px, the dot and reduced motion, that `fitKey` refits).
+  tokens only; not its `delegatesFocus`, slice 3 decision 9), the workbench entry and the design-system row and paragraph (what
+  it draws, its three events, names below 28 px, the dot and reduced motion, that `fitKey` refits,
+  and why it has no `delegatesFocus` and clips rather than hides its overflow).
   Before trusting the a11y file, drop the buttons' `aria-label` and watch it fail, then restore it.
 - [ ] **Step 4: Run** the same command, `pnpm --filter @waitron/ui exec vitest run src/no-hardcoded-chrome.test.ts`,
   `pnpm exec vitest run scripts/style-token-names.test.ts`, typecheck, lint, `prettier --check`.
@@ -2845,9 +2903,18 @@ its composed path holds a `[part=table]` button; its id is that button's `data-t
 - `holdStart` on a table sets `data-held` on its button; `longPress` clears it and sends
   `wt-table-details`; `cancel` clears it.
 - `contextmenu` on the map is always prevented; on a table, while no gesture is active (a mouse's
-  right button, the ContextMenu key, Shift+F10), it sends `wt-table-details`.
+  right button, a macOS Ctrl+click, the ContextMenu key), it sends `wt-table-details`, unless a
+  Shift+F10 `keydown` came just before it.
+- `keydown` of Shift+F10 on a table is prevented and sends `wt-table-details` (macOS sends no
+  `contextmenu` for it), and notes that the next `contextmenu` (Linux sends one) is swallowed; the
+  note is cleared by the next `keydown` or `pointerdown`, so a macOS right-click after it still
+  works.
 - A `click` on a table with `detail === 0` (Enter or Space on a focused button) sends
   `wt-table-tap`; a pointer's own click is ignored, since the gesture already acted.
+- Events: the map stops a `click` or `contextmenu` it re-emits as a `wt-*` event, as the `wt-*`
+  event rule asks, and never stops a `pointerdown` or `keydown`, which the app's idle logout listens
+  for at its host (see "What earlier slices built"; the Shift+F10 `keydown` is prevented, not
+  stopped).
 
 - [ ] **Step 1: Write the failing tests** in `wt-floor-map.taps.test.ts`, with Task 3.2b's host and
   one table t1 (fitted at left 150, top 75, 300 × 150), points relative to the host, fake
@@ -2859,10 +2926,18 @@ it("a mouse click on a table waits for a second click", async () => { /* mouse d
 it("a mouse double-click on a table asks for its details instead", async () => { /* two clicks 100 ms apart → wt-table-details { tableId: "t1" }; advance 300 → no wt-table-tap */ });
 it("a real mouse click opens a table once", async () => { /* userEvent.click on t1's shape (a real click, detail 1); advance 300 → exactly one wt-table-tap */ });
 it("a hold on a table marks it, and its release asks for details", async () => { /* advance 500 → t1 [data-held]; up → wt-table-details; no wt-table-tap; data-held gone */ });
-it("right-click, the ContextMenu key and Shift+F10 ask for details and stop the browser's menu", async () => {
-  /* dispatch a cancelable contextmenu on t1's shape → defaultPrevented true; wt-table-details { tableId: "t1" };
-     focus t1 and userEvent.keyboard("{Shift>}{F10}{/Shift}") → a second wt-table-details */
+it("a right-click asks for details once and stops the browser's menu", async () => {
+  /* dispatch a cancelable contextmenu on t1's shape → defaultPrevented true; exactly one wt-table-details { tableId: "t1" } */
 });
+it("Shift+F10 asks for details exactly once, whether or not the platform sends a contextmenu", async () => {
+  /* focus t1; userEvent.keyboard("{Shift>}{F10}{/Shift}") → one wt-table-details (macOS sends no contextmenu, Linux CI does; the count is one on both);
+     then dispatch keydown Shift+F10 followed by a synthetic contextmenu on t1 → one more, not two */
+});
+it("a right-click after a Shift+F10 that sent no contextmenu still works", async () => {
+  /* keydown Shift+F10 alone (one event); then pointerdown with button 2 and a contextmenu → a second wt-table-details */
+});
+it("the ContextMenu key asks for details once", async () => { /* focus t1; userEvent.keyboard("{ContextMenu}") → exactly one wt-table-details */ });
+it("a press on a table still reaches the page", async () => { /* a document pointerdown and keydown listener each hear a press and a key on t1 (the idle logout's events) */ });
 it("a contextmenu during a touch hold sends nothing more", async () => { /* touch down on t1, contextmenu at 400 ms → prevented; no wt-table-details until release */ });
 it("Enter on a focused table asks to open it", async () => { /* userEvent.keyboard("{Enter}") → wt-table-tap */ });
 it("a merge sends its first member's id", async () => { /* tap on "10"'s shape in the merge of 4 and 10 → { tableId: <4's id> } */ });
@@ -2899,7 +2974,8 @@ Behaviour (slice 3 decisions 8 and 11):
   `−deltaY`; prevented either way.
 - A pan, pinch or wheel marks the view touched; a resize then keeps it (narrowing Task 3.2b's
   "every resize"), and a fit clears the mark.
-- `focusin` on a table whose box lies outside the host pans the least distance that brings it in.
+- `focusin` on a table that matches `:focus-visible` (focus from the keyboard) and whose box lies
+  outside the host pans the least distance that brings it in; focus a press gives pans nothing.
 - `holdDrag` draws the held group moved by `snapToSquare(d, scale)` squares, its first member
   clamped by `clampToGrid`; `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
   and `targetId`: the `data-table-id` of the first other table under the release point
@@ -2925,7 +3001,17 @@ it("the wheel pans, and Ctrl+wheel zooms about the pointer", async () => {
 it("a resize after a pan keeps the person's view, and one after a fit fits", async () => {
   /* pan +50; host width 500, two real animation frames → t1 still 300 wide; double tap empty; host width 300, two frames → t1 200 wide */
 });
-it("focusing a table outside the map brings it into view", async () => { /* pan by -1000 (clamped); t1.focus() → t1's box within the host's */ });
+it("tabbing to a table off the right edge brings it into view without scrolling the map", async () => {
+  /* t1 and t2 (t2 at the right); pan so t2 lies past the right edge; focus t1, then userEvent.keyboard("{Tab}") to t2 →
+     t2's box within the host's; host scrollLeft 0 and scrollTop 0 (overflow: clip; with hidden the review's probe saw 332) */
+});
+it("a real click on empty space after a pan moves nothing and focuses nothing", async () => {
+  /* real timers; pan +50; note document.activeElement; userEvent.click on the host at an empty point → t1 left unchanged; document.activeElement unchanged
+     (with delegatesFocus the review's probe saw the first table take focus and the view jump to it) */
+});
+it("a real click on a table focuses it without panning", async () => {
+  /* real timers; pan t1 half off the left edge; userEvent.click on its visible part → t1 left unchanged; t1 is the shadow root's activeElement */
+});
 it("a hold then a drag draws the table under the finger in whole squares, and drops it", async () => {
   /* hold t1, move +75, 0 → t1 left 225 (2 squares); up over empty → wt-table-drag-end { tableId: "t1", x: 12, y: 5, targetId: null }; then t1 left 150 */
 });
@@ -2972,12 +3058,11 @@ export function seatsFor(table: TableState): number | null;                     
 
 Words (`statusWords` is the fill's word, then the dot's, joined by ", "): free `floor.free`;
 reserved `floor.reserved` and the time ("Reserved 20:30"); seated `floor.status_seated`; bill
-`floor.status_bill`; clearing `floor.needs_clearing`; dot ready "<n> " + `floor.ready`; forgotten
+`signal.bill_requested` ("Bill requested" / "Cuenta pedida", `apps/till/src/i18n/strings.ts:543`, `:1676`, already the bill chip's words); clearing `floor.needs_clearing`; dot ready "<n> " + `floor.ready`; forgotten
 `floor.forgotten`. `pinText` is the dot's words if there is a dot, else for seated with
 `pendingToServe > 0` "<n> " + `floor.to_serve`, else the fill's word.
 
-New strings (EN / ES): `floor.status_seated` "Seated" / "Ocupada"; `floor.status_bill` "Bill asked"
-/ "Pide la cuenta"; `floor.map_label` "Tables" / "Mesas" (Task 3.3b); `floor.seats` "{n} seats" /
+New strings (EN / ES): `floor.status_seated` "Seated" / "Ocupada"; `floor.map_label` "Tables" / "Mesas" (Task 3.3b); `floor.seats` "{n} seats" /
 "{n} plazas" and `floor.seats_one` "1 seat" / "1 plaza" (Tasks 3.3c, 3.4).
 
 - [ ] **Step 1: Write the failing tests** (a `table(over)` fixture like
@@ -2987,13 +3072,13 @@ New strings (EN / ES): `floor.status_seated` "Seated" / "Ocupada"; `floor.status
 ```ts
 it("a free table is free, a booked free one reserved", () => { /* { fill: "free", dot: null }; nextReservation { time: "20:30" } → "reserved" */ });
 it("a party or a delivery on its way makes it seated, even when booked", () => { /* state open-tab → "seated"; delivery-pending → "seated"; open-tab + reservation → "seated" */ });
-it("a bill asked for beats seated, and needs clearing beats both", () => { /* signals [bill_requested] → "bill"; condition needs_clearing + bill signal → "clearing" */ });
+it("a bill requested beats seated, and needs clearing beats both", () => { /* signals [bill_requested] → "bill"; condition needs_clearing + bill signal → "clearing" */ });
 it("a forgotten order's dot beats ready dishes'", () => { /* readyToServe 2 → "ready"; + timingBand forgotten → "forgotten"; timingBand overdue alone → null */ });
 it("a merge shows its most urgent member", () => { /* [seated/ready, free/null] → seated/ready; [bill/null, seated/forgotten] → bill/forgotten */ });
 it("says the status in words", () => {
-  /* "Free"; "Reserved 20:30"; seated + 2 ready → "Seated, 2 ready"; bill + forgotten → "Bill asked, Forgotten"; "Needs clearing"; es: "Ocupada, 2 listos" */
+  /* "Free"; "Reserved 20:30"; seated + 2 ready → "Seated, 2 ready"; bill + forgotten → "Bill requested, Forgotten"; "Needs clearing"; es: "Ocupada, 2 listos" */
 });
-it("gives the pin its shortest word", () => { /* forgotten → "Forgotten"; ready 2 → "2 ready"; bill → "Bill asked"; seated, pendingToServe 3 → "3 to serve"; seated, nothing → "Seated" */ });
+it("gives the pin its shortest word", () => { /* forgotten → "Forgotten"; ready 2 → "2 ready"; bill → "Bill requested"; seated, pendingToServe 3 → "3 to serve"; seated, nothing → "Seated" */ });
 it("calls a zone planned when any of its tables has a today's row", () => { /* [today null, today {…}] → true; all null → false; [] → false */ });
 it("maps placed tables, leaving out spares and taken-off ones", () => {
   /* t1 placed; t2 placement null (spare); t3 takenOff → [t1] with { id, label, placement, fill, dot, joinId, description } toEqual */
@@ -3022,7 +3107,8 @@ it("reads a table's seats for today, a merge's for the merge, and the old capaci
 
 **Files:**
 - Modify: `apps/till/src/screens/till-floor-screen.ts` (render's zone filter and view choice,
-  `:633-656`; `#map`, `:727-752`; the Edit plan toggle, `:682-693`; the card's seat count,
+  `:633-656`; `#map`, `:727-752`; the Edit plan toggle, `:682-693`, and its state, `editing`,
+  `:428`, `#toggleEdit`, `:534-537`, and `#onTrayTap`, `:775-781`; the card's seat count,
   `:899-905` and the clearing card's, `:873-877`; styles), `apps/till/src/screens/till-floor-screen.a11y.test.ts`,
   `apps/till/src/screens/device-screens.phone-margin.test.ts` (one row in `screens`, `:73-135`)
 - Create: `apps/till/src/screens/till-floor-screen.map.test.ts`
@@ -3038,8 +3124,11 @@ without a place for the tray; the view defaults to the map when the map has a ta
 with the tray below it drawn by the existing `#trayItem` in view mode only. `wt-table-tap` stops
 and runs `#openTable` on the table it names, as `#onCanvasOpen` does (`:543-548`), so a closed zone
 still refuses a free table and a table needing clearing still offers Mark cleared. Edit plan is
-not drawn while the active zone is planned. A planned table's list card shows `seatsFor(table)` in
-the place of `capacity`. A zone with no today's rows takes exactly today's path.
+not drawn while the active zone is planned, and `editing`, which today outlives a change of zone
+(`:428`, set only by `#toggleEdit`, `:534-537`), is set false whenever the active zone is planned,
+so `#onTrayTap` (`:775-781`), which places a tray table while editing, opens it instead. A planned
+table's list card shows `seatsFor(table)` in the place of `capacity`. A zone with no today's rows
+takes today's path.
 
 - [ ] **Step 1: Write the failing tests** in `till-floor-screen.map.test.ts` (fixtures as
   `till-floor-screen.test.ts:7-45`, plus `today(over)` building a placed `TableToday`):
@@ -3048,6 +3137,7 @@ the place of `capacity`. A zone with no today's rows takes exactly today's path.
 it("draws a planned zone on the new map, not the old canvas", async () => {
   /* t1 today placed → wt-floor-map present, no wt-floor-canvas; map.tables toEqual mapTables([t1]); map.fitKey "z1"; map.copy.label "Tables" */
 });
+// A guard that passes before the change too, so it is not one of Step 2's failures:
 it("keeps the old canvas for a zone with no today's rows", async () => { /* placed("t1") with today null → wt-floor-canvas, no wt-floor-map */ });
 it("a tap on a free table asks for its guests", async () => { /* dispatch wt-table-tap { tableId: "t1" } from the map → till-seat-dialog with tableLabel "1" */ });
 it("a tap on a seated table opens its order", async () => { /* open-table { tableId: "t1", seated: true } */ });
@@ -3061,17 +3151,23 @@ it("shows today's seats on a planned table's card", async () => { /* today.seats
 it("hides Edit plan while a planned zone shows", async () => {
   /* canEdit; planned z1 active → no [data-edit-toggle]; select unplanned z2's tab → [data-edit-toggle] shown */
 });
+it("an Edit plan left on in another zone does not place a planned zone's tray table", async () => {
+  /* canEdit, api with setTablePlacement as a vi.fn(); in unplanned z2 press Edit plan; select planned z1 (with seated unplaced t4 in its tray);
+     tap [data-tray-table=t4] → open-table { tableId: "t4", seated: true }; setTablePlacement not called */
+});
 it("gives the map the active zone as its fitKey", async () => { /* two planned zones; select z2 → fitKey "z2" and z2's tables */ });
 it("opens on the list when a planned zone has nothing placed", async () => { /* only a seated unplaced table → list view */ });
 
-// device-screens.phone-margin.test.ts — a "floor with a map" row: a planned zone with one placed table, ".screen", TILL_SPACING
+// device-screens.phone-margin.test.ts — a case beside the loop (:137-155): at 411 px a planned zone with one placed table draws its
+// wt-floor-map inside the screen's content box: the map's box has left 8 and right 403 (8 + 395); at 1280 px left 40 and right 1240.
+// (A row in `screens` would read only .screen's padding, which the map cannot change.)
 // till-floor-screen.a11y.test.ts — "a planned zone's map" and "a planned zone's list" in both themes
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
   `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.map.test.ts src/screens/device-screens.phone-margin.test.ts src/screens/till-floor-screen.a11y.test.ts`.
-  Expected: the new file's cases fail (no `wt-floor-map`); the new phone-margin row passes already
-  or fails only once the map is drawn, and then must pass again by Step 4.
+  Expected: the new file's cases fail (no `wt-floor-map`), except the old-canvas guard, which
+  passes before and after; the phone-margin case fails because there is no map to measure.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same command plus every existing floor file
   (`src/screens/till-floor-screen.test.ts src/screens/till-floor-screen.parties.test.ts src/screens/till-floor-screen.signals.test.ts src/screens/till-floor-screen.unsaved.test.ts`),
@@ -3090,6 +3186,7 @@ it("opens on the list when a planned zone has nothing placed", async () => { /* 
   the reminder timer, `:444-465`), `apps/till/src/till-app.ts` (`#refreshFloor`, `:5018-5027`, and
   every assignment of `this.tables`: `:1323`, `:4939`, `:5022`, `:6980`, `:6982`),
   `apps/till/src/till-app.test.ts` (beside the floor-refresh cases, `:6486-6526`),
+  `apps/till/src/till-app-parties.test.ts` (one case),
   `apps/till/src/i18n/strings.ts` (`seat.covers`; `seat.guest_count_hint` deleted, EN `:546` and ES
   `:1679`, once nothing reads it)
 - Create: `apps/till/src/screens/till-floor-screen.refresh.test.ts`
@@ -3103,8 +3200,13 @@ is a number, else `t("seat.covers")` ("Covers" / "Cubiertos"). The floor passes
 `seatsFor(table)`. The floor's re-read is a `setInterval(15_000)` started in `updated` when the map
 view of a planned zone is drawn and cleared when it is not, and in `disconnectedCallback`; each tick
 sends `floor-refresh`, as the placement writes do (`:576-578`). In the app, every write of
-`this.tables` adds one to a `#tablesWritten` counter; `#refreshFloor` notes the counter before it
-asks and drops its answer when the counter moved meanwhile.
+The interval is started only when none is running, so a render while the map stays up leaves the
+running one alone. In the app (slice 3 decision 13), every table read takes a number as it starts
+(`const read = ++this.#tablesRead`), at each place that reads and writes `this.tables` (`:1321-1323`,
+`:4934-4939`, `:5020-5022`, `:6978-6982`), and applies its answer, an empty list from
+`#reloadTables`'s failure included, only when `read` is higher than `#tablesApplied`, then sets
+`#tablesApplied = read`. `#refreshFloor` answers true when `#tablesApplied >= read` after its own
+answer or failure, that is when its own answer or a newer one was applied.
 
 The dialog keeps its draft scope and its `seat-dialog.unsaved.test.ts` as they are: only the hint
 changes, so A331's save rule is not reopened here.
@@ -3119,22 +3221,34 @@ it("says Covers when the table has no seats", async () => { /* seats null → "C
 // till-floor-screen.refresh.test.ts — fake setInterval/clearInterval
 it("gives the seat dialog today's seats, a merge's, or the old capacity", async () => { /* tap planned t1 (seats 6) → dialog.seats 6; merge member (joinSeats 10) → 10; unplanned zone, capacity 4 → 4 */ });
 it("asks for the floor every 15 s while a planned zone's map shows", async () => { /* advance 14_999 → 0 floor-refresh; +1 → 1; +15_000 → 2 */ });
+// A guard that passes before the change too:
 it("does not ask while the list shows, or for the old map", async () => { /* toggle to list → none in 30 s; an unplanned zone's map → none */ });
+it("a redraw while the map stays up keeps the running interval", async () => { /* advance 10_000; set tables (a re-read); advance 5_000 → 1 floor-refresh, not 0 */ });
 it("starts again when the map comes back, and stops when the screen leaves", async () => { /* list → map → 1 after 15 s; remove the element → none; re-add → 1 after 15 s */ });
 
 // till-app.test.ts, as :6486
-it("drops a floor read answered after a newer one", async () => {
-  /* getTablesState: the first refresh deferred, the second resolves [tableB]; resolve the first with [tableA] → floor(el).tables toEqual [tableB] */
+it("an older poll that answers after the action's refresh began does not replace it", async () => {
+  /* two floor-refresh events, A then B, both deferred; resolve B with [tableB], then A with [tableA] → floor(el).tables toEqual [tableB] */
+});
+it("an action's refresh is applied when an older poll answers first", async () => {
+  /* A then B deferred; resolve A with [tableA] → tables [tableA]; resolve B with [tableB] → tables [tableB] (a "drop when the counter moved" rule would drop B here) */
+});
+// till-app-parties.test.ts, with its Move a bill stubs (its api fixture stubs moveBill at :295):
+it("Move a bill keeps the party its own floor read found when an older poll answers later", async () => {
+  /* a floor-refresh poll deferred; move a bill (till-app.ts:7068-7076), whose floor read answers with the party at its new revision; then the poll answers with the old revision → the order screen's party is the new revision */
 });
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.test.ts src/screens/till-floor-screen.refresh.test.ts src/till-app.test.ts -t "seats|Covers|15 s|list shows|map comes back|newer one"`.
+  `pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.test.ts src/screens/till-floor-screen.refresh.test.ts src/till-app.test.ts -t "seats|Covers|15 s|map stays up|map comes back|older poll"`
+  and `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "older poll"`.
   Expected: each new case fails (the old hint shows; no `floor-refresh` is sent; the late answer
-  wins).
-- [ ] **Step 3: Implement.** With the app case passing, delete the counter check in `#refreshFloor`
-  and watch it fail, then restore it.
-- [ ] **Step 4: Run** the three files without `-t`, `src/widgets/seat-dialog.unsaved.test.ts`,
+  wins), except "does not ask while the list shows, or for the old map", a guard that passes
+  before the change.
+- [ ] **Step 3: Implement.** With the app cases passing, replace "higher than the last applied" by
+  "no read started since" and watch "an action's refresh is applied when an older poll answers
+  first" fail, then restore it.
+- [ ] **Step 4: Run** the four files without `-t`, `src/widgets/seat-dialog.unsaved.test.ts`,
   `src/widgets/seat-dialog.a11y.test.ts`, `src/screens/till-floor-screen.map.test.ts`, the till's
   typecheck and lint, `prettier --check`. Expected: pass.
 - [ ] **Step 5: Commit** — e.g. "Till floor: the seat dialog suggests the table's seats, and a
@@ -3158,7 +3272,9 @@ it("drops a floor read answered after a newer one", async () => {
 @customElement("till-table-details-sheet")
 export class TillTableDetailsSheet extends LitElement {
   @property({ attribute: false }) table: TableState | null = null; // null: closed
-  @property() heading = "";                                         // the name as drawn: "4+5", or the party's name on the order screen
+  @property() heading = "";                                         // the name as drawn: "Terrace 4+5", or the party's name on the order screen
+  /** Injectable clock for Time to fire; unset reads Date.now() on each render. */
+  @property({ attribute: false }) now?: number;
 }
 // details-close: no detail, bubbles, composed — on Close, Escape and after Mark cleared
 // mark-cleared: { tableId }, bubbles, composed — the app's existing event (till-app.ts:9076)
@@ -3171,8 +3287,11 @@ name when it differs from the table's (as `shownPartyName`, `till-floor-screen.t
 through `formatMoney`) or "Paid" (`floor.paid`) when nothing is; "Bills: 2" when more than one;
 kitchen progress, each count above zero joined by " · " ("3 to serve · 2 ready · 1 en route",
 `floor.to_serve`, `floor.ready`, `floor.en_route`); the unsent drafts (as `#unsent`, `:991-997`);
-the signal chips; "Reserved 20:30"; "2 to deliver" (`floor.pending_delivery`); "Free" when none of
-these apply. Footer: Close (`floor.details_close`, secondary) and, for a table needing clearing,
+the signal chips; "Time to fire" (`floor.fire_due`) when the party's held group is due, judged as the
+floor's card judges it (`reminderDueAt(table.party?.reminder) <= now`, `#fireDue`,
+`till-floor-screen.ts:467-469`, shown on the card at `:921-925`), so a planned zone, whose map has no
+room for it, keeps it one press away; "Reserved 20:30"; "2 to deliver" (`floor.pending_delivery`);
+"Free" when none of these apply. The floor passes its own `now`. Footer: Close (`floor.details_close`, secondary) and, for a table needing clearing,
 Mark cleared (`floor.mark_cleared`, primary), which sends `mark-cleared` and then `details-close`.
 The floor screen opens it on the map's `wt-table-details`, with the heading of the map group the
 table belongs to, and closes it on `details-close`. It reads the table by id from `tables` on each
@@ -3186,12 +3305,15 @@ New strings (EN / ES): `floor.details_owed` "Owes {amount}" / "Debe {amount}"; `
 ```ts
 // table-details-sheet.test.ts — mountWidget, a fixed locale
 it("is closed with no table", async () => { /* wt-dialog open false */ });
-it("heads itself with the name it is given and shows today's seats", async () => { /* heading "4+5"; "6 seats" */ });
+it("heads itself with the name it is given and shows today's seats", async () => { /* heading "Terrace 4+5"; "6 seats" */ });
 it("shows a seated party: its name, guests, what it owes, its bills and its kitchen progress", async () => {
   /* party name "Ana" (displayName ≠ label), "Guests: 4", "Owes " + formatMoney("47.50", currentLocale()), "Bills: 2",
      pendingToServe 3, readyToServe 2, enRoute 1 → "3 to serve · 2 ready · 1 en route" */
 });
 it("says Paid when the party owes nothing", async () => { /* outstanding "0.00", no open tab */ });
+it("says Time to fire when the held group is due, and not before", async () => {
+  /* party.reminder.dueAt 12:00:00Z; now 11:59:59Z → no [data-fire-due]; now 12:00:00Z → "Time to fire" */
+});
 it("shows the signal chips, the booking and a delivery", async () => { /* a bill_requested chip [data-chip]; "Reserved 20:30"; "2 to deliver" */ });
 it("says Free for a free table with nothing on it", async () => { /* free, no booking, no seats → the only line is "Free"; no [data-mark-cleared] */ });
 it("offers Mark cleared only for a table needing clearing, and closes after it", async () => {
@@ -3201,7 +3323,7 @@ it("Close asks to close", async () => { /* details-close once */ });
 it("Escape asks to close", async () => { /* keyboard Escape; await the wt-dialog's wt-close event, then expect details-close */ });
 
 // till-floor-screen.details.test.ts
-it("opens the sheet on the map's request, headed as the map draws the table", async () => { /* wt-table-details { tableId: "t4" } on a merge of 4 and 5 → sheet.table.id "t4", heading "4+5" */ });
+it("opens the sheet on the map's request, headed as the map draws the table", async () => { /* wt-table-details { tableId: "t4" } on a merge of "Terrace 4" and "Terrace 5" → sheet.table.id "t4", heading "Terrace 4+5" */ });
 it("a re-read updates the open sheet", async () => { /* set tables with t4's readyToServe 2 → sheet shows "2 ready" */ });
 it("a re-read without the table closes the sheet", async () => { /* open for t4; set tables without t4 → no open till-table-details-sheet (table null) */ });
 it("Mark cleared in the sheet reaches the app and closes the sheet", async () => { /* document hears mark-cleared { tableId }; sheet closed */ });
@@ -3248,11 +3370,13 @@ party's, in `party.tableIds` order; with none, the widget draws nothing. The pin
 (`<span data-fill=<fill>>` painted by `floorMapFillStyles`) and `pinText` of the first row with
 the combined status; its accessible name is `table.status_pin` with the text. Pressing it opens the
 details sheet for the first row, headed `party.displayName`. The flash notice is a
-`<wt-toast data-flash-notice tone="info" .duration=${4000}>` fixed to the top of the window
-(`position: fixed; inset-inline: var(--wt-space-3); top: var(--wt-space-3)`), whose message is,
+`<wt-toast data-flash-notice tone="info" .duration=${4000}>` fixed to the top of the window by a
+copy of the equipment toast's rule (`till-app.ts:1078-1083`: `position: fixed; inset-inline:
+var(--wt-space-3); top: calc(var(--wt-space-3) + env(safe-area-inset-top)); z-index: 10`; what
+happens when both are open is in slice 3 decision 15), whose message is,
 joined by " · ", what applies of: ready dishes (`countText(readyToServe, "table.flash_ready",
-"table.flash_ready_one")`), a forgotten order (`table.flash_forgotten`), a bill asked for
-(`floor.status_bill`). It is shown (`show()`) on the first render with a party that has any of them,
+"table.flash_ready_one")`), a forgotten order (`table.flash_forgotten`), a bill requested
+(`signal.bill_requested`). It is shown (`show()`) on the first render with a party that has any of them,
 and again only when `party.id` changes; the widget remembers the last party id it judged while
 connected.
 
@@ -3270,9 +3394,9 @@ it("pins the table's status in its colour and shortest word", async () => {
   /* row seated, readyToServe 2 → pin text "2 ready", swatch data-fill "seated", aria-label "Table details: 2 ready" */
 });
 it("paints the pin's swatch from the fill's token", async () => { /* host sets --wt-color-table-seated rgb(1, 2, 3) → swatch background */ });
-it("the pin opens the details sheet, headed with the party's name", async () => { /* click → till-table-details-sheet table.id "t4", heading "4 + 5" */ });
+it("the pin opens the details sheet, headed with the party's name", async () => { /* party { name: null, displayName: "Terrace 4, 5" } (the floor read's displayName is partyDisplayName, apps/server/src/working-order.ts:7330, joining with ", ", packages/shared/src/party-name.ts:3, :18-20) → click → till-table-details-sheet table.id "t4", heading "Terrace 4, 5" */ });
 it("flashes what the waiter must see when the order opens", async () => {
-  /* readyToServe 2 and a bill_requested signal → wt-toast[data-flash-notice] open, message "2 ready to serve · Bill asked" */
+  /* readyToServe 2 and a bill_requested signal → wt-toast[data-flash-notice] open, message "2 ready to serve · Bill requested" */
 });
 it("says a forgotten order", async () => { /* timingBand forgotten → "Forgotten order" */ });
 it("flashes nothing when nothing is urgent", async () => { /* seated, nothing ready → toast not open */ });
@@ -3316,7 +3440,10 @@ handheld at 390 × 844 and the till at 1280 × 800 (`page.viewport`), named
 two 2 × 2 fixed stools, one turned 45°) with every fill and both dots; a merge; the map zoomed in
 and panned; a table held; the list view of a planned zone with the tray; the seat dialog with
 "6 seats" and with "Covers"; the details sheet for a free table, a seated party with everything,
-and a table needing clearing; the order screen with its status pin and the flash notice showing.
+and a table needing clearing; the order screen with its status pin and the flash notice showing,
+and once more with the equipment toast open too (slice 3 decision 15 says the notice is drawn over
+it; the screenshot is the check, from `till-app` mounted whole, since the equipment toast is the
+app's).
 
 - [ ] **Step 1:** Write the throwaway files and run them
   (`pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.look.test.ts`, and the
