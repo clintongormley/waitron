@@ -48,8 +48,8 @@ async function mergeBody(
 ): Promise<{ targetId: string; side: JoinSide; seats: number | null }> {
   const body = asObject(await readRawJsonBody<unknown>(c));
   const target = body.targetId;
-  if (typeof target !== "string" || !isUuid(target))
-    throw new AppError("table.not_found", { tableId: String(target) });
+  if (typeof target !== "string") throw invalid("targetId");
+  if (!isUuid(target)) throw new AppError("table.not_found", { tableId: target });
   const targetId = target.toLowerCase();
   if (targetId === tableId) throw invalid("targetId");
   const side = body.side;

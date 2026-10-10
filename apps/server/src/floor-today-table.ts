@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { diningTables, floorTodayJoinTables, floorTodayTables, partyTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -9,7 +9,7 @@ export interface Today {
   tableId: string;
   zoneId: string | null;
   row: typeof floorTodayTables.$inferSelect;
-  /** Every member's today's row, this table's included; null when the table is in no merge. */
+  /** Every member's today's row, this table's included, by table id; null when the table is in no merge. */
   merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;
 }
 
@@ -35,7 +35,8 @@ export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string)
     .select({ row: floorTodayTables })
     .from(floorTodayJoinTables)
     .innerJoin(floorTodayTables, eq(floorTodayTables.tableId, floorTodayJoinTables.tableId))
-    .where(eq(floorTodayJoinTables.joinId, own.joinId));
+    .where(eq(floorTodayJoinTables.joinId, own.joinId))
+    .orderBy(asc(floorTodayJoinTables.tableId));
   return { ...base, merge: { joinId: own.joinId, members: members.map((m) => m.row) } };
 }
 
