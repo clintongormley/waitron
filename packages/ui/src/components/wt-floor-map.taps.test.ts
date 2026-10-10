@@ -215,7 +215,7 @@ it("a hold on a table marks it, and its release asks for details", async () => {
   vi.advanceTimersByTime(499);
   expect(button(el, "t1").hasAttribute("data-held")).toBe(false);
   vi.advanceTimersByTime(1);
-  expect(button(el, "t1").hasAttribute("data-held")).toBe(true);
+  expect(button(el, "t1").getAttribute("data-held")).toBe("");
   expect(details).toEqual([]);
   up(el, 300, 150);
   expect(details).toEqual([{ tableId: "t1" }]);
@@ -266,6 +266,22 @@ it("Shift+F10 asks for details exactly once, whether or not the platform sends a
   expect(key.defaultPrevented).toBe(true);
   expect(contextMenuOn(button(el, "t1")).defaultPrevented).toBe(true);
   expect(details).toEqual([{ tableId: "t1" }, { tableId: "t1" }]);
+  // Only the one contextmenu after it is ignored.
+  contextMenuOn(button(el, "t1"));
+  expect(details).toHaveLength(3);
+});
+
+it("Shift+F10 off a table asks for nothing", async () => {
+  const el = await map([t1]);
+  const key = shiftF10On(el.shadowRoot!.querySelector('[role="group"]')!);
+  expect(key.defaultPrevented).toBe(false);
+  expect(details).toEqual([]);
+});
+
+it("a contextmenu on a table with nothing before it asks for details", async () => {
+  const el = await map([t1]);
+  contextMenuOn(button(el, "t1"));
+  expect(details).toEqual([{ tableId: "t1" }]);
 });
 
 it("F10 without Shift asks for nothing", async () => {
@@ -334,9 +350,14 @@ it("a contextmenu during a touch hold sends nothing more", async () => {
 
 it("Enter on a focused table asks to open it", async () => {
   const el = await map([t1]);
+  let clickReachedPage = false;
+  const onPage = () => (clickReachedPage = true);
+  document.addEventListener("click", onPage);
   button(el, "t1").focus();
   await userEvent.keyboard("{Enter}");
+  document.removeEventListener("click", onPage);
   expect(taps).toEqual([{ tableId: "t1" }]);
+  expect(clickReachedPage).toBe(false);
 });
 
 it("a click on empty space from the keyboard's way sends nothing", async () => {
@@ -388,10 +409,21 @@ it("a second finger during a hold cancels it", async () => {
 
 it("a click waiting for a second click is dropped when the map is removed", async () => {
   const el = await map([t1]);
+  const heard: Event[] = [];
+  el.addEventListener("wt-table-tap", (e) => heard.push(e));
   tapAt(el, 300, 150, { pointerType: "mouse" });
   el.remove();
   vi.advanceTimersByTime(300);
-  expect(taps).toEqual([]);
+  expect(heard).toEqual([]);
+});
+
+it("a held table is unmarked when the map is removed", async () => {
+  const el = await map([t1]);
+  down(el, 300, 150);
+  vi.advanceTimersByTime(500);
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(true);
+  el.remove();
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(false);
 });
 
 it("a removed and re-added map hears each tap once", async () => {
