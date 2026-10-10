@@ -179,7 +179,8 @@ describe("the Receipts page's fields", () => {
     expect(venueWide!.querySelector("[name=footerMessage]")).not.toBeNull();
     expect(location!.querySelector("h2")!.textContent).toBe("Calle Mayor");
     expect(location!.querySelector("[name=operationDescription]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("select, wt-combobox")).toBeNull();
+    expect(location!.querySelector("select, wt-combobox")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-combobox[name=previewLanguage]")).not.toBeNull();
   });
 });
 

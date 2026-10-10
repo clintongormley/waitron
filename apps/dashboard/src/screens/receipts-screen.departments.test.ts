@@ -368,3 +368,131 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+function previewLanguage(el: ReceiptsScreen) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=previewLanguage]",
+  );
+}
+
+it("starts department previews in the saved receipt language and offers an independent language choice", async () => {
+  url("bar");
+  const { el, api } = await mount();
+  await loadedEditor(el);
+  const language = previewLanguage(el);
+  expect(language).not.toBeNull();
+  expect(language!.value).toBe("es-ES");
+  expect(language!.options.map((option) => option.value)).toEqual(["es-ES", "ca-ES"]);
+  await chooseOption(language!, "ca-ES");
+  await vi.waitFor(() =>
+    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
+      departmentId: "bar",
+      receipt: { phone: "+34 912 345 678" },
+      settings: { headerSubtitle: "Venue subtitle" },
+      language: "ca-ES",
+    }),
+  );
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=receiptLanguage]",
+    )!.value,
+  ).toBe("es-ES");
+  for (const action of [
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!,
+    editor(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=department-save]",
+    )!,
+  ]) {
+    await action.updateComplete;
+    expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+  }
+  expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+  expect(api.putReceipt).not.toHaveBeenCalled();
+  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+});
+
+it("a staged receipt-language setting does not choose the department preview language", async () => {
+  url("bar");
+  const { el, api } = await mount();
+  await loadedEditor(el);
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
+  const savedLanguage = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=receiptLanguage]",
+  )!;
+  await chooseOption(savedLanguage, "ca-ES");
+  await fill(editor(el)!, "email", "bar@example.com");
+  await vi.waitFor(() =>
+    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
+      departmentId: "bar",
+      receipt: { phone: "+34 912 345 678", email: "bar@example.com" },
+      settings: { headerSubtitle: "Venue subtitle" },
+    }),
+  );
+  expect(previewLanguage(el)!.value).toBe("es-ES");
+  expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+});
+
+it("keeps the preview language when selecting another department", async () => {
+  url("bar");
+  const { el, api } = await mount();
+  await loadedEditor(el);
+  expect(previewLanguage(el)).not.toBeNull();
+  await chooseOption(previewLanguage(el)!, "ca-ES");
+  await chooseOption(picker(el), "deli");
+  await vi.waitFor(() => expect(editor(el)?.departmentId).toBe("deli"));
+  await loadedEditor(el);
+  await vi.waitFor(() =>
+    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
+      departmentId: "deli",
+      receipt: { phone: "+34 912 345 679" },
+      settings: { headerSubtitle: "Venue subtitle" },
+      language: "ca-ES",
+    }),
+  );
+  expect(previewLanguage(el)!.value).toBe("ca-ES");
+});
+
+it("keeps a venue-only preview independent of an unsaved receipt language", async () => {
+  url();
+  const { el, api } = await mount(apiFixture([]));
+  await vi.waitFor(() => expect(api.previewReceipt).toHaveBeenCalledOnce());
+  await chooseOption(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=receiptLanguage]",
+    )!,
+    "ca-ES",
+  );
+  await fill(el, "headerSubtitle", "Unsaved default");
+  await vi.waitFor(() =>
+    expect(api.previewReceipt.mock.lastCall).toEqual([{ headerSubtitle: "Unsaved default" }]),
+  );
+  expect(previewLanguage(el)!.value).toBe("es-ES");
+});
+
+it("does not paint an older language response after a new preview language is selected", async () => {
+  url("bar");
+  const api = apiFixture();
+  let resolveOld!: (value: ReceiptPreview) => void;
+  const old = new Promise<ReceiptPreview>((resolve) => {
+    resolveOld = resolve;
+  });
+  let resolveCurrent!: (value: ReceiptPreview) => void;
+  const current = new Promise<ReceiptPreview>((resolve) => {
+    resolveCurrent = resolve;
+  });
+  api.previewReceiptDraft.mockImplementationOnce(() => old).mockImplementationOnce(() => current);
+  const { el } = await mount(api);
+  await loadedEditor(el);
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
+  expect(previewLanguage(el)).not.toBeNull();
+  await chooseOption(previewLanguage(el)!, "ca-ES");
+  resolveOld(preview("Obsolete Spanish"));
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".paper")).toBeNull();
+  expect(api.previewReceiptDraft.mock.lastCall?.[0].language).toBe("ca-ES");
+  resolveCurrent(preview("Current Catalan"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Current Catalan"),
+  );
+});

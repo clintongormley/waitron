@@ -120,6 +120,10 @@ async function mount(api: DashboardApi): Promise<ReceiptsScreen> {
   return el;
 }
 
+function pickPreview(el: ReceiptsScreen, language: string): void {
+  void chooseOption(q(el, "wt-combobox[name=previewLanguage]")!, language);
+}
+
 function pick(el: ReceiptsScreen, language: string): void {
   void chooseOption(select(el)!, language);
 }
@@ -177,7 +181,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     const api = stubApi(madrid());
     const el = await mount(api);
     expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}]]);
-    pick(el, "gl-ES");
+    pickPreview(el, "gl-ES");
     expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, undefined, "gl-ES"]]);
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma gl-ES"));
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
@@ -186,8 +190,8 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
   it("draws in the saved language again, as before, when the saved one is picked back", async () => {
     const api = stubApi(madrid());
     const el = await mount(api);
-    pick(el, "gl-ES");
-    pick(el, "es-ES");
+    pickPreview(el, "gl-ES");
+    pickPreview(el, "es-ES");
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma guardado"));
     expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([
       [{}],
@@ -209,7 +213,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     );
     const api = stubApi(madrid(), undefined, { previewReceipt: twoWidths });
     const el = await mount(api);
-    pick(el, "eu-ES");
+    pickPreview(el, "eu-ES");
     await chooseOption(q(el, "wt-combobox[name=paperWidth]")!, "58mm");
     await vi.waitFor(() => expect(twoWidths.mock.calls.at(-1)).toEqual([{}, "58mm", "eu-ES"]));
     q(el, "wt-input[name=headerSubtitle]")!.dispatchEvent(
@@ -228,7 +232,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
     expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
     expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({});
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, undefined, "gl-ES"]]);
+    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}]]);
     const order = (fn: unknown) => vi.mocked(fn as () => void).mock.invocationCallOrder[0]!;
     expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putReceipt));
     expect(order(api.putReceiptLanguage)).toBeLessThan(order(api.putLocationSettings));

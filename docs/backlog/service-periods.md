@@ -43,7 +43,7 @@ their full text.
   boot no longer carries authored receipt text or address. Invoice-first, recovered-card and
   cash replay checks are built. The department draft/save editor is mounted on the receipt
   branch, with active-default selection, disabled-department maintenance and authored-draft
-  previews. The independent venue defaults editor, remaining page lifecycle checks and caller
+  previews and a separate preview-language picker. The independent venue defaults editor, remaining page lifecycle checks and caller
   retirement remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core

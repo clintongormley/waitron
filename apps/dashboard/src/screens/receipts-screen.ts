@@ -387,6 +387,7 @@ export class ReceiptsScreen extends LitElement {
   @state() private focusedTrim: ReceiptMarkName | null = null;
   /** The paper width the person chose, kept for every later preview; never saved. */
   @state() private chosenWidth: PrintPaperWidth | null = null;
+  @state() private chosenPreviewLanguage: string | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
   #previewAgain = false;
@@ -566,7 +567,6 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
-  /** The picked language when it differs from the saved one, which a preview and a save then send. */
   #changedLanguage(): string | null {
     const picked = this.pickedLanguage;
     return picked !== null && picked !== this.receiptLanguage?.language ? picked : null;
@@ -694,7 +694,7 @@ export class ReceiptsScreen extends LitElement {
       if (contactProblem(field, config[field] ?? "") !== "") delete config[field];
     }
     const width = this.chosenWidth;
-    const language = this.#changedLanguage();
+    const language = this.chosenPreviewLanguage;
     const requested = JSON.stringify([
       config,
       width,
@@ -768,13 +768,19 @@ export class ReceiptsScreen extends LitElement {
     this.#previewActive = true;
   }
 
+  #choosePreviewLanguage(language: string): void {
+    this.chosenPreviewLanguage = language === this.receiptLanguage?.language ? null : language;
+    this.#departmentGeneration++;
+    this.#previewActive = true;
+    void this.#sendPreview();
+  }
+
   #chooseWidth(width: PrintPaperWidth): void {
     this.chosenWidth = width;
     this.#previewActive = true;
     void this.#sendPreview();
   }
 
-  /** The saved language is not part of the preview's key, because no parameter is sent for it. */
   #redrawInSavedLanguage(): void {
     this.#previewRequested = null;
     void this.#sendPreview();
@@ -818,8 +824,7 @@ export class ReceiptsScreen extends LitElement {
     const picked = this.pickedLanguage;
     this.receiptLanguage = { ...this.receiptLanguage!, language };
     this.#languageSaves += 1;
-    // A picked language was already drawn; one saved without a pick (Use Catalan) was not.
-    if (this.pickedLanguage === null) {
+    if (this.chosenPreviewLanguage === null) {
       this.#previewActive = true;
       this.#redrawInSavedLanguage();
     }
@@ -1258,6 +1263,22 @@ export class ReceiptsScreen extends LitElement {
     }
     return html`<div class="preview">
       <h2>${t("receipts.preview")}</h2>
+      ${
+        this.receiptLanguage
+          ? html`<wt-combobox
+              name="previewLanguage"
+              label=${t("receipts.preview_language")}
+              .value=${this.chosenPreviewLanguage ?? this.receiptLanguage.language}
+              .options=${[
+                ...new Set([this.receiptLanguage.language, ...this.receiptLanguage.choices]),
+              ].map((language) => ({ value: language, label: receiptLanguageName(language) }))}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.#choosePreviewLanguage(event.detail.value);
+              }}
+            ></wt-combobox>`
+          : nothing
+      }
       ${preview && preview.paperWidths.length > 1 ? this.#renderWidth(preview) : nothing}
       ${
         this.previewFailed

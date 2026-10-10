@@ -358,6 +358,7 @@ export const en = {
   "receipts.operation_description_hint":
     "Sent to the tax agency with every sale; not printed on the receipt",
   "receipts.preview": "Preview",
+  "receipts.preview_language": "Preview language",
   "receipts.preview_for": "Preview for",
   "receipts.department": "Department",
   "receipts.no_department": "No active department",
@@ -2879,6 +2880,7 @@ export const es: Record<StringKey, string> = {
   "receipts.operation_description_hint":
     "Se envía a Hacienda con cada venta; no se imprime en el recibo",
   "receipts.preview": "Vista previa",
+  "receipts.preview_language": "Idioma de la vista previa",
   "receipts.preview_for": "Vista previa para",
   "receipts.department": "Departamento",
   "receipts.no_department": "Ningún departamento activo",
