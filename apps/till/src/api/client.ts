@@ -1824,16 +1824,6 @@ export interface MoveBillResult {
   merged: boolean;
 }
 
-/**
- * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
- * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
- * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
- * the party's open bills, the total as a two-place decimal string. `status` is the table's MANUAL
- * service status, independent of occupancy. `pendingToServe` counts the lines still to deliver,
- * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
- * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
- * `pendingDeliveries` (uncollected counter deliveries).
- */
 /** Whole grid squares; `x` and `y` name the unrotated table's top-left corner. */
 export interface TodayPlacement {
   x: number;
@@ -1854,6 +1844,16 @@ export interface TableToday {
   joinSeats: number | null;
 }
 
+/**
+ * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
+ * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
+ * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
+ * the party's open bills, the total as a two-place decimal string. `status` is the table's MANUAL
+ * service status, independent of occupancy. `pendingToServe` counts the lines still to deliver,
+ * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
+ * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
+ * `pendingDeliveries` (uncollected counter deliveries).
+ */
 export interface TableState {
   id: string;
   label: string;

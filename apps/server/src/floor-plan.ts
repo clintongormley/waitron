@@ -81,7 +81,6 @@ async function mastersOf(tx: Transaction, planId: string) {
     .orderBy(asc(floorPlanTables.label));
 }
 
-/** Live tables following any of `masterIds`, by master id. */
 /** Each master table's live table, for the masters that have one. */
 export async function followersOf(
   tx: Transaction,

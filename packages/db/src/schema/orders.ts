@@ -54,8 +54,10 @@ export type StagedInvoiceDelivery =
  * stay placed changing its `party_id`, `delivery_table_id` and `revision`,
  * or change its invoice choice and recipient with a revision advance before a sale exists,
  * or only take its handover stamp; `settled` and `abandoned` are terminal,
- * save the handover stamp on a settled order. In any state, an order may once
- * let go of its `delivery_table_id`, keeping the name in `delivery_table_label`.
+ * save the handover stamp on a settled order. In any state, an order holding a
+ * `delivery_table_id` and no `delivery_table_label` may let go of the id,
+ * keeping the name in the label; the label is otherwise free only while the
+ * order is open or as a placed order is settled or abandoned.
  *
  * Each exception names the columns it holds unchanged; a new column must enter
  * those lists, or the trigger will permit it to change on a placed order.
