@@ -1319,9 +1319,7 @@ export class PrepStationsScreen extends LitElement {
           this.#settingsScope?.changed();
         }}
       ></wt-input>
-      <wt-form-actions
-        .error=${invalid || editor.fieldError ? t("prep.settings_fix_fields") : editor.error}
-      >
+      <wt-form-actions .error=${invalid || editor.fieldError ? t("prep.fix_fields") : editor.error}>
         <wt-button
           slot="cancel"
           variant="secondary"

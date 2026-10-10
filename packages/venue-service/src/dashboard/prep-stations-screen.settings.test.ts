@@ -189,7 +189,7 @@ it.each([
   expect(minutesField(el).value).toBe("8");
   expect(!!minutesField(el).error).toBe(field);
   expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
-    field ? "Fix the fields marked above" : "could not be saved",
+    field ? "Correct the highlighted fields to continue." : "could not be saved",
   );
   expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
   q(el, "[data-test=save-settings-cell]")!.click();
@@ -331,6 +331,24 @@ it("focuses the invalid Settings field after submission", async () => {
   await settle(el);
   expect(minutesField(el).shadowRoot!.activeElement).not.toBeNull();
 });
+it.each([
+  ["en", "Correct the highlighted fields to continue."],
+  ["es", "Corrige los campos marcados para continuar."],
+] as const)(
+  "an invalid Settings save shows the shared form message in %s",
+  async (locale, text) => {
+    const el = await mount(api());
+    setLocale(locale);
+    el.requestUpdate();
+    await settle(el);
+    await openWarm(el);
+    typeMinutes(el, "0");
+    await settle(el);
+    q(el, "[data-test=save-settings-cell]")!.click();
+    await settle(el);
+    expect(q(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(text);
+  },
+);
 it("puts a field refusal beside the field and a correction summary above the buttons", async () => {
   const el = await mount(
     api({
@@ -347,7 +365,7 @@ it("puts a field refusal beside the field and a correction summary above the but
   await settle(el);
   expect(minutesField(el).error).toContain("Use whole minutes");
   expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
-    "Fix the fields marked above",
+    "Correct the highlighted fields to continue.",
   );
 });
 
@@ -449,7 +467,7 @@ it("keeps a timing refusal retryable beside its field with a bottom summary", as
   expect((q(el, "[data-test=settings-minutes]") as WtInput).value).toBe("7");
   expect((q(el, "[data-test=settings-minutes]") as WtInput).error).toContain("whole minutes");
   expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
-    "Fix the fields marked above",
+    "Correct the highlighted fields to continue.",
   );
   expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
   q(el, "[data-test=save-settings-cell]")!.click();
@@ -611,7 +629,7 @@ it.each([
     expect(retained.value).toBe("4");
     expect(retained.error).toBe(fieldError);
     expect(q(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
-      fieldError ? "Fix the fields marked above." : "The change could not be saved.",
+      fieldError ? "Correct the highlighted fields to continue." : "The change could not be saved.",
     );
     expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
   },
