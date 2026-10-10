@@ -10,10 +10,10 @@ walkthrough survives a context clear.
 
 **Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
 <http://localhost:5191>, setup <http://localhost:5192>. Those are the default ports; use `wa-wt ls`
-for another worktree's URLs. The default server on `:8080` uses HTTP without a development box
-leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The till enrols
-itself on first load in dev mode, with no code or approval step. Till PIN **5555**; dashboard
-**owner@demo.waitron.local / dashPass123**.
+for another worktree's till and dashboard URLs. The default server on `:8080` uses HTTP without a
+development box leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The
+till enrols itself on first load in dev mode, with no code or approval step. Till PIN **5555**;
+dashboard **owner@demo.waitron.local / dashPass123**.
 
 **Running the stack from a worktree.** Start it with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`
@@ -23,8 +23,8 @@ the first runs; `wa-wt` gives it one of eight port slots, each 100 above the las
 its own state directory. The venue is a directory of SQLite files on the host. `wa-wt ls` names
 every running instance and its URLs. Use `wa-wt logs <name>`, `wa-wt reset demo <name>`, and
 `wa-wt down <name>` to act on one while more than one runs. The first slot's `apps/server/.env` is
-shared with other first-slot checkouts; every other slot keeps its own venue ids and credentials in
-its own `.env`.
+shared with other first-slot checkouts; a checkout on any other slot keeps its own venue ids and
+credentials in its own `.env`.
 
 `docker-compose.yml` declares one service, `mailpit` — the practice email inbox. No container holds
 any part of the dev venue, so Compose has nothing a reset could clear. The reason to keep using
