@@ -59,6 +59,7 @@ import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
+import type { FloorRefreshDetail } from "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
@@ -5018,17 +5019,34 @@ export class TillApp extends LitElement {
     }
   }
 
-  #onFloorRefresh(): void {
-    if (this.#inShell()) void this.#refreshFloor();
+  #onFloorRefresh(poll = false): void {
+    if (!this.#inShell()) return;
+    if (poll) void this.#pollFloor();
+    else void this.#refreshFloor();
+  }
+
+  #floorPollOut = false;
+
+  /** One poll read out at a time, cut off at the till's request limit. */
+  async #pollFloor(): Promise<void> {
+    if (this.#floorPollOut) return;
+    this.#floorPollOut = true;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await this.#refreshFloor({ signal: limit.signal });
+    } finally {
+      limit.done();
+      this.#floorPollOut = false;
+    }
   }
 
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
    * the last-known floor. Answers whether `this.tables` now holds this read's answer or a newer
    * one's. */
-  async #refreshFloor(): Promise<boolean> {
+  async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
     const read = ++this.#tablesRead;
     try {
-      this.#applyTables(read, await this.api.getTablesState());
+      this.#applyTables(read, await this.api.getTablesState(...options));
     } catch {
       // The last-known floor stays.
     }
@@ -9041,7 +9059,8 @@ export class TillApp extends LitElement {
           if (this.drill?.kind === "schedule") return;
           this.#requestLeave(() => this.#onShowSchedule());
         }}
-        @floor-refresh=${() => this.#onFloorRefresh()}
+        @floor-refresh=${(event: CustomEvent<FloorRefreshDetail | null>) =>
+          this.#onFloorRefresh(event.detail?.poll === true)}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}

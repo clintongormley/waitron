@@ -6584,6 +6584,91 @@ describe("till-app", () => {
       expect(floor(el)!.tables).toEqual([tableB]);
     });
 
+    async function floorWithPollOut() {
+      const poll = deferredTables();
+      const getTablesState = vi.fn().mockResolvedValueOnce([freeTable]);
+      const { el } = await mountApp({
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      getTablesState.mockReturnValueOnce(poll.promise).mockResolvedValue([tableB]);
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(2);
+      return { el, getTablesState, poll };
+    }
+
+    it("a poll tick while the last poll's read is still out starts no second read", async () => {
+      const { el, getTablesState, poll } = await floorWithPollOut();
+
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(2);
+
+      poll.resolve([tableA]);
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableA]);
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(3);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    it("an action's floor read starts while a poll's read is still out", async () => {
+      const { el, getTablesState } = await floorWithPollOut();
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(3);
+      expect(getTablesState.mock.calls[2]).toEqual([]);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    it("a poll's read still out at the till's request limit is cancelled, and the next tick reads again", async () => {
+      const getTablesState = vi
+        .fn()
+        .mockResolvedValueOnce([freeTable])
+        .mockImplementationOnce(
+          (options?: { signal?: AbortSignal }) =>
+            new Promise((_, reject) =>
+              options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+            ),
+        )
+        .mockResolvedValue([tableB]);
+      const { el } = await mountApp({
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        emit(floor(el)!, "floor-refresh", { poll: true });
+        await vi.advanceTimersByTimeAsync(0);
+        const [options] = getTablesState.mock.lastCall as [{ signal?: AbortSignal }?];
+
+        // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+        await vi.advanceTimersByTimeAsync(149_999);
+        expect(options?.signal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(options?.signal?.aborted).toBe(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(floor(el)!.tables).toEqual([freeTable]);
+
+        emit(floor(el)!, "floor-refresh", { poll: true });
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+        expect(getTablesState).toHaveBeenCalledTimes(3);
+        expect(floor(el)!.tables).toEqual([tableB]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {
       const seatTable = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
       const { el } = await mountApp({

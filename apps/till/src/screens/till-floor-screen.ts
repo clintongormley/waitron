@@ -54,6 +54,11 @@ function tableChips(table: TableState) {
   return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
 }
 
+/** Sent by the 15-second re-read; an action's `floor-refresh` carries no detail. */
+export interface FloorRefreshDetail {
+  poll: true;
+}
+
 interface ZoneOnScreen {
   tabs: ZoneTab[];
   refusedZone: FloorZone | undefined;
@@ -493,7 +498,10 @@ export class TillFloorScreen extends LitElement {
       this.#rereadTimer = undefined;
       return;
     }
-    this.#rereadTimer ??= setInterval(() => this.#requestFloorRefresh(), 15_000);
+    this.#rereadTimer ??= setInterval(
+      () => this.#emit("floor-refresh", { poll: true } satisfies FloorRefreshDetail),
+      15_000,
+    );
   }
 
   #fireDue(table: TableState): boolean {

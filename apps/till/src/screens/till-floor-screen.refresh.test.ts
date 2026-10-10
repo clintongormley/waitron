@@ -167,6 +167,15 @@ describe("till-floor-screen's seats placeholder and re-read", () => {
     expect(seen.count).toBe(2);
   });
 
+  it("marks the 15-second ask as a poll", async () => {
+    const el = await mount();
+    const details: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => details.push((event as CustomEvent).detail));
+
+    vi.advanceTimersByTime(15_000);
+    expect(details).toEqual([{ poll: true }]);
+  });
+
   it("does not ask while the list shows, or for the old map", async () => {
     const el = await mount({ zones: twoZones, tables: [planned("t1"), oldPlaced("t3")] });
     const seen = countRefreshes(el);
