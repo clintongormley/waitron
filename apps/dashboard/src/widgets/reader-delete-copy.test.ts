@@ -82,7 +82,7 @@ const languages: Language[] = [
     payingUnnamed: "Hay un cobro en curso",
     unknownRefusal: "Ese lector de tarjetas ya no existe: Handheld Ana",
     lines: [
-      [item("provider_pairing", [sumup]), "Se desvinculará de SumUp"],
+      [item("provider_pairing", [sumup]), "Se desvincula de SumUp"],
       [
         item("provider_registration_kept", [sumup]),
         "SumUp no está conectado, así que el lector sigue registrado en SumUp. Elimínalo también allí.",
@@ -101,7 +101,7 @@ const languages: Language[] = [
         "Predeterminado de 2 perfiles: Waiters, Waiters",
       ],
       [item("profile_reader_default", [waiters]), "Predeterminado de 1 perfil: Waiters"],
-      [item("reader_holder"), "Handheld Ana dejará de tenerlo"],
+      [item("reader_holder"), "Handheld Ana deja de tenerlo"],
       [item("future_link", [ana, bar], 2), "Handheld Ana, Bar till (2)"],
       [item("future_count", [], 3), "(3)"],
     ],

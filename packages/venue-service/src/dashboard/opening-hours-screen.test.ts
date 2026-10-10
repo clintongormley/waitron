@@ -415,7 +415,7 @@ describe("deleting a period that routing names", () => {
     host = await mount((async () => structuredClone(data)) as DashboardRequest);
     const dialog = await removePeriod(el());
     expect(dialog.querySelector("[data-test=routing-uses]")!.textContent).toContain(
-      "También se quitará de 2 celdas de asignación:",
+      "También se quita de 2 celdas de asignación:",
     );
     expect(uses().map((item) => item.textContent!.trim())).toEqual([
       "Sin categoría · Todas las zonas",
