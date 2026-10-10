@@ -94,6 +94,7 @@ export function fromDraftLine(
     ...(snapshots.length === 0 ? {} : { optionSnapshots: snapshots }),
     ...(line.note === null ? {} : { note: line.note }),
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
+    ...(line.course?.id === line.courseId ? { course: line.course } : {}),
     ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
     ...(line.noMerge ? { noMerge: true as const } : {}),
     ...(line.unavailable ? { unavailableOnServer: true as const } : {}),

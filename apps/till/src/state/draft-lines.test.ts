@@ -276,6 +276,21 @@ describe("toDraftLineInput", () => {
 });
 
 describe("fromDraftLine", () => {
+  it("keeps matching read course metadata locally and omits it from every save", () => {
+    const input = toDraftLineInput(burgerLine());
+    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const restored = fromDraftLine(
+      { ...input, courseId: course.id, course, unavailable: false },
+      new Map(),
+    );
+    expect(restored.course).toEqual(course);
+    expect(toDraftLineInput(restored)).toEqual({ ...input, courseId: course.id });
+    const working = new WorkingOrderStore();
+    working.loadFrom("draft", [restored]);
+    working.setLineCourse(0, "new-course");
+    expect(working.lines[0]!.course).toBeUndefined();
+  });
+
   it("rebuilds a line with a variant, options and extras from the offer, keeping every id, the quantity and each selection", () => {
     const line = burgerLine();
     const input = toDraftLineInput(line);

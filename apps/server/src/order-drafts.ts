@@ -1,5 +1,12 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { newId, nowIso, orderDraftEvents, orderDraftLines, orderDrafts } from "@waitron/db";
+import {
+  kitchenCourses,
+  newId,
+  nowIso,
+  orderDraftEvents,
+  orderDraftLines,
+  orderDrafts,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
@@ -34,6 +41,7 @@ export interface DraftLine {
   note: string | null;
   quantity: string;
   courseId: string | null;
+  course?: { id: string; name: string; displayOrder: number };
   makeAt?: string | null;
   noMerge: boolean;
   unavailable: boolean;
@@ -53,7 +61,7 @@ export interface Draft {
 export { normaliseDraftLines };
 
 /** A line as the till saves it: without the id a save gives it or the flag a read works out. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable">;
+export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
 
 export interface SaveDraftInput {
   /** Null asks for the operator's new draft on the party. */
@@ -607,11 +615,19 @@ async function storedLines(
   draftIds: readonly string[],
 ): Promise<{ draftId: string; line: DraftLine }[]> {
   const rows = await tx
-    .select()
+    .select({
+      line: orderDraftLines,
+      course: {
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+      },
+    })
     .from(orderDraftLines)
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, orderDraftLines.courseId))
     .where(inArray(orderDraftLines.draftId, [...draftIds]))
     .orderBy(asc(orderDraftLines.position), asc(orderDraftLines.id));
-  return rows.map((row) => ({
+  return rows.map(({ line: row, course }) => ({
     draftId: row.draftId,
     line: {
       id: row.id,
@@ -623,6 +639,7 @@ async function storedLines(
       note: row.note,
       quantity: thousandthsToDecimal(row.quantity),
       courseId: row.courseId,
+      ...(course === null ? {} : { course }),
       makeAt: row.makeAtStationId,
       noMerge: row.noMerge,
       unavailable: false,

@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -494,6 +495,7 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         ...sent,
+        course: { id: v.courseId, name: "Mains", displayOrder: 1 },
         id: draft.lines[0]!.id,
         quantity: "1.500",
         note: "no salt",
@@ -532,6 +534,7 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         ...item(v, "burger", lower),
+        course: { id: v.courseId, name: "Mains", displayOrder: 1 },
         id: draft.lines[0]!.id,
         quantity: "2.000",
         makeAt: null,
@@ -987,6 +990,30 @@ describe("a refused save writes nothing", () => {
     await refusedWritingNothing(
       () => save(v, partyId, ALEX, draft.id, 0, [item(v, "beer", { courseId })]),
       { code: "course.not_found", params: { courseId } },
+    );
+  });
+
+  it("reads authoritative retained course metadata and ignores spoofed read metadata on new selections", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { courseId: v.courseId }),
+    ]);
+    const [course] = await db
+      .select({
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+      })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, v.courseId));
+    await inTx((tx) => deleteCourse(tx, v.cfg, v.courseId));
+    const [retained] = await draftsOf(v, partyId);
+    expect(retained!.lines[0]).toEqual({ ...draft.lines[0], course });
+    await refusedWritingNothing(
+      () =>
+        save(v, partyId, SAM, null, 0, [{ ...item(v, "beer", { courseId: v.courseId }), course }]),
+      { code: "course.not_found", params: { courseId: v.courseId } },
     );
   });
 

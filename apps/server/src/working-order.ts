@@ -3261,6 +3261,7 @@ export interface TabLine {
   listUnitPriceGross?: string;
   servedAt: string | null;
   courseId: string | null;
+  course?: { id: string; name: string; displayOrder: number };
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
@@ -3310,6 +3311,11 @@ export async function readTabLines(
       servedAt: workingOrderLines.servedAt,
       servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
+      course: {
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+      },
       sentAt: workingOrderLines.sentAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
@@ -3324,6 +3330,7 @@ export async function readTabLines(
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
   const menuItemByLine = new Map(
@@ -3352,6 +3359,7 @@ export async function readTabLines(
         : { listUnitPriceGross: centsToDecimal(row.listUnitPriceGross) }),
       servedAt: row.servedAt,
       courseId: row.courseId,
+      ...(row.course === null ? {} : { course: row.course }),
       sentAt: row.sentAt,
       firedAt: row.firedAt,
       state: row.state,

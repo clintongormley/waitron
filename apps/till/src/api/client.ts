@@ -603,7 +603,8 @@ export interface SubmittedGroups {
 
 /**
  * One line of a person's unsent order on a party (`apps/server/src/order-drafts.ts`). A draft line
- * carries ids and no name or price. Every save gives every line a NEW id, so an id names a line of
+ * carries offer ids and no product name or price. Its course metadata is read-only. Every save gives
+ * every line a NEW id, so an id names a line of
  * one revision only. `unavailable` is worked out by the server on each read, never stored.
  */
 export interface DraftLine {
@@ -619,6 +620,8 @@ export interface DraftLine {
   quantity: string;
   /** The waiter's course override; null means the product's default course. */
   courseId: string | null;
+  /** Read-only course identity derived from the stored selection. */
+  course?: TillCourse;
   /** The waiter's chosen making station; null follows the venue route. */
   makeAt?: string | null;
   /** Never merged with another line, either way; Split quantity's rows carry it. */
@@ -627,7 +630,7 @@ export interface DraftLine {
 }
 
 /** A draft line as the till saves it. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable">;
+export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
 
 export interface DeadEndAnswer {
   sends: boolean;
@@ -1994,6 +1997,7 @@ export interface TabLine {
   servedAt: string | null;
   /** The line's RESOLVED kitchen course, or null when it has none. */
   courseId: string | null;
+  course?: TillCourse;
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired; null if it never was. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
