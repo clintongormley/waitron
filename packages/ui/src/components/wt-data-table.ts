@@ -1060,7 +1060,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("rows") || changed.has("columns")) this.#folded = new Map();
     this.#searchMemo = undefined;
     if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
       this.#releaseColumnWidths();
@@ -1662,23 +1661,38 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
-  /** Replaced whenever `rows` or `columns` changes, so typing does not fold every row again. A
-   * `Map`, not a `WeakMap`: `Row` is unconstrained and may be a primitive. */
-  #folded = new Map<Row, readonly string[]>();
+  /** Kept while `rows`, `columns` and `columnOrder` stay the same, so typing does not fold every
+   * row again. A `Map`, not a `WeakMap`: `Row` is unconstrained and may be a primitive. */
+  #folded?: {
+    inputs: readonly unknown[];
+    columns: readonly DataTableColumn<Row>[];
+    parts: Map<Row, readonly string[]>;
+  };
   /** Dropped on every update, so a filter reading something outside the table is asked again on
    * each redraw. Between updates it is reused until one of its `inputs` is replaced, because
    * `sortedSiblings` can be called after a property change and before the update that follows. */
   #searchMemo?: Searched<Row>;
 
-  #searchParts(row: Row): readonly string[] {
-    let parts = this.#folded.get(row);
-    if (parts === undefined) {
-      parts = this.columns.flatMap((column) =>
-        column.searchValue ? [foldForSearch(column.searchValue(row))] : [],
-      );
-      this.#folded.set(row, parts);
-    }
-    return parts;
+  /** A row's parts follow the displayed column order, hidden columns included. */
+  #searchParts(): (row: Row) => readonly string[] {
+    const inputs = [this.rows, this.columns, this.columnOrder];
+    const held = this.#folded;
+    const folded =
+      held && inputs.every((input, index) => input === held.inputs[index])
+        ? held
+        : (this.#folded = {
+            inputs,
+            columns: this.#orderedColumns().filter((column) => column.searchValue),
+            parts: new Map(),
+          });
+    return (row) => {
+      let parts = folded.parts.get(row);
+      if (parts === undefined) {
+        parts = folded.columns.map((column) => foldForSearch(column.searchValue!(row)));
+        folded.parts.set(row, parts);
+      }
+      return parts;
+    };
   }
 
   #search() {
@@ -1710,11 +1724,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.rowKey,
       this.rowParent,
       this.searchOpensPath,
+      this.columnOrder,
     ];
     const held = this.#searchMemo;
     if (held && inputs.every((input, index) => Object.is(input, held.inputs[index]))) return held;
-    if (held && (held.inputs[0] !== this.rows || held.inputs[1] !== this.columns))
-      this.#folded = new Map();
     const active = this.#activeFilters();
     const filtered = this.rows.filter((row) => this.#passesFilters(row, active));
     const search = this.#search();
@@ -1723,8 +1736,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return this.#searchMemo;
     }
     const ranks = new Map<Row, SearchRank>();
+    const partsOf = this.#searchParts();
     for (const row of filtered) {
-      const rank = search.rank(this.#searchParts(row));
+      const rank = search.rank(partsOf(row));
       if (rank !== undefined) ranks.set(row, rank);
     }
     this.#searchMemo = { inputs, visible: filtered.filter((row) => ranks.has(row)), ranks };
@@ -1738,7 +1752,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #treeShown(): TreeShown<Row> {
     const searched = this.#searched();
     if (searched.tree === undefined) {
-      const shown = this.#treeVisible(searched.visible);
+      const shown = this.#treeVisible(searched.visible, searched.ranks !== undefined);
       const byKey = this.#rowsByKey();
       searched.tree = { shown, byKey, ranks: this.#treeRanks(shown.rows, byKey, searched.ranks) };
     }
@@ -1763,7 +1777,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** In tree mode a match's ancestors stay, so it is not shown as a false top-level row. With
    * `searchOpensPath` and a search typed, every ancestor is held open and what passes the filters
    * under a match stays reachable; otherwise only an ancestor kept solely for a match is held open. */
-  #treeVisible(visible: readonly Row[]): TreeShown<Row>["shown"] {
+  #treeVisible(visible: readonly Row[], searchTyped: boolean): TreeShown<Row>["shown"] {
     const parentOf = this.rowParent!;
     const keys = this.rows.map((row, index) => this.rowKey(row, index));
     const keyByRow = new Map<Row, string>();
@@ -1785,7 +1799,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         parentKey = parent ? parentOf(parent) : null;
       }
     });
-    const searching = this.searchOpensPath && this.#search() !== undefined;
+    const searching = this.searchOpensPath && searchTyped;
     const below = new Set<string>();
     if (searching) {
       const active = this.#activeFilters();

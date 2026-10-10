@@ -4952,6 +4952,41 @@ test("search still reads a hidden column", async () => {
   expect(rowText(el)).toEqual(["Ada10"]);
 });
 
+test("a search ranks a match in an earlier-displayed column first, after the person reorders the columns, and with that column hidden", async () => {
+  type Contact = { id: string; name: string; email: string; telephone: string };
+  const el = (await mount(
+    '<wt-data-table aria-label="Contacts"></wt-data-table>',
+  )) as WtDataTable<Contact>;
+  Object.assign(el, {
+    rows: [
+      { id: "email", name: "Bo", email: "123@bar.es", telephone: "700" },
+      { id: "phone", name: "Ana", email: "ana@bar.es", telephone: "600 123" },
+    ],
+    rowKey: (row: Contact) => row.id,
+    columns: (["name", "email", "telephone"] as const).map((key) => ({
+      key,
+      label: key,
+      cell: (row: Contact) => row[key],
+      searchValue: (row: Contact) => row[key],
+      ...(key === "name" ? {} : { choosable: "shown" as const }),
+    })),
+    searchTerm: "123",
+  });
+  await el.updateComplete;
+  const shown = () =>
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-row-key"));
+  expect(shown()).toEqual(["email", "phone"]);
+  await userEvent.click(trigger(el));
+  panel(el).querySelector<HTMLButtonElement>('[data-reorder="telephone"]')!.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["name", "telephone", "email"]);
+  expect(shown()).toEqual(["phone", "email"]);
+  await choose(el, "telephone");
+  expect(headers(el)).toEqual(["name", "email"]);
+  expect(shown()).toEqual(["phone", "email"]);
+});
+
 test("a chooser change reports every shown column's key, in column order, across shadow boundaries", async () => {
   const el = (await mountInShadowRoot(
     '<wt-data-table aria-label="Users"></wt-data-table>',
