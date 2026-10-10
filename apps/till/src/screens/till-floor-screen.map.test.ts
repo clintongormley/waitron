@@ -195,6 +195,16 @@ describe("till-floor-screen on the new map", () => {
     expect(el.shadowRoot!.querySelector("[data-table=t4]")).not.toBeNull();
   });
 
+  it("keeps a held taken-off table reachable under the map and in the list", async () => {
+    const el = await mount({
+      tables: [planned("t1"), planned("t5", { ...seated, today: today({ takenOff: true }) })],
+    });
+    expect(mapOf(el).tables.map((t) => t.id)).toEqual(["t1"]);
+    expect(el.shadowRoot!.querySelector("[data-tray-table=t5]")).not.toBeNull();
+    await click(el, "[data-view-toggle]");
+    expect(el.shadowRoot!.querySelector("[data-table=t5]")).not.toBeNull();
+  });
+
   it("lists a never-planned table of a planned zone", async () => {
     const el = await mount({ tables: [planned("t1"), table({ id: "t7", label: "7" })] });
     expect(el.shadowRoot!.querySelector("[data-tray-table=t7]")).not.toBeNull();

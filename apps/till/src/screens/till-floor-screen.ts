@@ -67,6 +67,14 @@ function partyPaid(table: TableState): boolean {
   );
 }
 
+interface ZoneOnScreen {
+  tabs: ZoneTab[];
+  refusedZone: FloorZone | undefined;
+  activeKey: string | null | undefined;
+  visible: TableState[];
+  planned: boolean;
+}
+
 @customElement("till-floor-screen")
 export class TillFloorScreen extends LitElement {
   static override styles = [
@@ -448,6 +456,9 @@ export class TillFloorScreen extends LitElement {
     tillPath,
   );
 
+  /** The zone on screen, worked out once per update in `willUpdate`. */
+  #zone!: ZoneOnScreen;
+
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
@@ -466,7 +477,8 @@ export class TillFloorScreen extends LitElement {
   override willUpdate(): void {
     this.#drawnAt = this.now ?? Date.now();
     // Edit plan's writes move the old placement columns, which a planned zone's map does not read.
-    if (this.#zoneOnScreen().planned) this.editing = false;
+    this.#zone = this.#zoneOnScreen();
+    if (this.#zone.planned) this.editing = false;
   }
 
   override updated(): void {
@@ -639,7 +651,7 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  #zoneOnScreen() {
+  #zoneOnScreen(): ZoneOnScreen {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
     const tabs = buildZoneTabs(
       this.zones.map((zone) => ({
@@ -659,7 +671,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   override render() {
-    const { tabs, refusedZone, activeKey, visible, planned } = this.#zoneOnScreen();
+    const { tabs, refusedZone, activeKey, visible, planned } = this.#zone;
     const listed = planned ? listedTables(visible) : visible;
     const onMap = planned ? mapTables(visible) : [];
     // The server writes and nulls the four placement columns together, so `posX` alone tells placed
