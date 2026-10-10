@@ -4614,7 +4614,7 @@ it("keeps a reset row in one copied join only once", async () => {
 });
 it("refuses to delete a reset row a copied join names", async () => {
   /* the same rows; deleting the reset row → isRefusal(error, FOREIGN_KEY_VIOLATION) (packages/db/src/unique-violation.ts:15,
-     sql-state.ts:24), and the member row is still there (no cascade) */
+     sql-state.ts:24) */
 });
 // in the it.each of checks:
 ["a copied join with no seats", () => inTx((tx) => tx.insert(floorResetJoins).values({ zoneId: ZONE, seats: 0 })), "floor_reset_joins_seats_ck"],
@@ -4622,7 +4622,9 @@ it("refuses to delete a reset row a copied join names", async () => {
 ```
 
 - [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/db exec vitest run src/schema/floor-plans.test.ts`.
-  Expected: the file fails to load (`floorResetJoins` is not exported).
+  Expected: the new cases fail with a `TypeError` (on Vitest 4.1.11 an import of a name the module
+  does not export arrives as `undefined`, so the file loads; the review ran this);
+  `pnpm --filter @waitron/db typecheck` names the missing exports.
 - [ ] **Step 3: Implement** the two tables, the exports, the two `classify("…", "state", STATE)` rows
   and the `schema-constraints.test.ts` rows; generate the migration and read its SQL as above.
 - [ ] **Step 4: Run the tests and the guards** —
@@ -4713,9 +4715,14 @@ whose master tables two live tables follow is not copied, so a merge of those ta
 makes `dining_tables.plan_table_id` unique (`floor-today-merges.ts:178`), so such a reset has two
 rows for one master table, and today's reader already answers null for that case (`:179-181`).
 
+An implementer past about 150 tool calls with this task unfinished stops at a passing or cleanly red
+point, commits, and hands over (done, left, files, each check's state).
+
 - [ ] **Step 1: Write the helper and the failing tests.** `floor-today-merges.test.ts` uses its
   `threeTables` (`:56-67`, which returns `plannedZone`'s `zoneId`, `table` and `master`), `NOW`, and
-  `resetZone(tx, v.cfg, REMOVALS, zoneId, NOW)` inside `inTx`:
+  `resetZone(tx, v.cfg, REMOVALS, zoneId, NOW)` inside `inTx`. That file has no `REMOVALS` yet: add
+  `const REMOVALS = enabledTableRemovals(ALL_MODULES);` with its import from `./modules.js`, as
+  `floor-today-merge-api.test.ts:9` and `:21` do.
 
 ```ts
 // floor-today-merge-api.test.ts — the owner's example (case a)
@@ -4747,7 +4754,7 @@ it("copies no join whose master table two live tables follow", async () => {
   /* (e) threeTables([{ seats: 6, keys: ["a", "b"] }]); set c's dining_tables.plan_table_id to b's, as "finds no saved join when two
      tables stand on one master table" (:137-153) does; resetZone → no floor_reset_joins row for the zone; savedJoinSeats([a, b]) null */
 });
-it("a reset that removes a table whose master table was deleted copies no join with it", async () => {
+it("a reset after a copied member's master table was deleted replaces the copy without a refusal", async () => {
   /* (f) threeTables([{ seats: 6, keys: ["a", "b"] }]); resaveMaster(zoneId, { joins: [], drop: [master.b] }); resetZone →
      b's dining_tables row is gone (b is free, so the catch-up removes it), no floor_reset_join_tables row for the zone, savedJoinSeats([a, b]) null */
 });
@@ -5383,7 +5390,9 @@ routes behind profile and zone checks are a risk trigger, so the run-it seat run
 on the head (`ui`'s and `shared`'s mutation floors run only weekly, so the per-file Stryker runs above
 are the check); design-system.md describes the map's fixed copy and linked parties; the backlog's
 A429 entry says slice 4 landed and what it left, and A470 loses its two slice 4 notes and the
-drop-after-re-read point, which this slice settles.
+drop-after-re-read point, which this slice settles. The PR description states the owner's override of
+decision 7 (today's plan keeps its own copy of the master's joins, copied at each reset) and that a
+today's plan built before Task 4.3e's migration asks for a merge's seats until its zone's next reset.
 
 ## Slice 5 — removing the old pieces (spec §11)
 
@@ -5407,12 +5416,13 @@ Branch `feat/floor-plan-retire-old`, after slice 4. PR first line: **"venue rese
   `zone_id` required (a rebuild), wrapped by custom migrations that drop and re-create
   `parties_clear_table_status` around it as `0043`/`0045` do. Before shipping: list every foreign
   key pointing at `dining_tables` (today `party_tables`, `working_orders`, `bookings`, and slice 1's
-  `floor_today_tables` and `floor_today_join_tables`) and read the generated SQL; add the step's expected refusal to
+  `floor_today_tables`, `floor_today_join_tables` and `floor_reset_tables` (`floor_reset_tables_table_fk`,
+  `packages/db/src/schema/floor-plans.ts:186-190`, no cascade)) and read the generated SQL; add the step's expected refusal to
   `scripts/migration-upgrade.test.ts` (as `core/0044_drop_table_bill_pointer`, `:279-282`); run
   the guards named in CLAUDE.md §3's regeneration rule. Seeds and test helpers that insert a table
   with no zone get one (`packages/reporting/test/fixtures.ts:496`, `:541`;
   `scripts/behavioural-triggers.test.ts:274`; the configuration fixture
   `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json:199-213`).
 - **Task 5.4: Docs** — `docs/developers/design-system.md` (the editor and the map),
-  `docs/developers/conventions-data.md` (the two plans, the reset and the catch-up; names copied as text; removal), the
+  `docs/developers/conventions-data.md` (the two plans, the reset and the catch-up, each reset copying the master's joins into `floor_reset_joins` and `floor_reset_join_tables`; names copied as text; removal), the
   backlog, and CLAUDE.md if a rule was paid for.

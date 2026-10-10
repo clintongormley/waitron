@@ -154,6 +154,10 @@ undone at the next reset anyway.
   - two seated tables: the existing combine flow runs, where the waiter chooses one bill or keeps
     the bills separate (table-actions design).
   The merge stays after the party leaves, until it is split or reset.
+
+> Owner override, 2026-10-10 (A429 slice 4, plan decision 7): "the saved join" here means today's
+> copy of it. Each reset copies the saved plan's joins into today's plan, and a merge takes its
+> seats from that copy; a join saved during the day waits for the next reset.
 - **A join involving a fixed table** moves nothing. While dragging, a copy of the table follows the
   finger; over a target, a line links the two and the target is highlighted; on release the copy
   springs back. The tables are joined as one party, drawn in one colour with a thin linking line
@@ -239,6 +243,9 @@ on every screen. The commit adding them states this reason.
 - **Saved-plan tables:** plan, name, seats, fixed, and x, y, width, height (whole grid squares),
   shape, rotation (0–345, a multiple of 15); a spare has no position.
 - **Saved joins:** a join of a plan, with its seats, and its member tables.
+  > Owner override, 2026-10-10: each reset also copies the saved joins into today's plan
+  > (`floor_reset_joins`, `floor_reset_join_tables`), and a merge's seats come from that copy (plan
+  > decision 7, Tasks 4.3e and 4.3f).
 - **Today's tables:** one row per live table: seats, fixed, position, size, shape, rotation, taken
   off, and which reset it last caught up with. Each zone records the business day of its today's
   plan and a count of its resets.
