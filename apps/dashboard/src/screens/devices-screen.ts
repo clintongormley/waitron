@@ -12,6 +12,7 @@ import {
   submitOnEnter,
   visuallyHiddenStyles,
   type DataTableColumn,
+  type DeleteDialogCopy,
   type WtModal,
   type DraftScope,
   type LeaveCoordinator,
@@ -40,7 +41,7 @@ import {
   type CardProviderPanel,
   t as tRaw,
 } from "@waitron/dashboard-kit";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { printerLabel } from "../i18n/domain.js";
@@ -541,6 +542,7 @@ export class DevicesScreen extends LitElement {
   @state() private deleteActionError = "";
   #deleteGeneration = 0;
   #deleteOpener: HTMLElement | null = null;
+  #deleteCopy: { locale: string; copy: DeleteDialogCopy } | null = null;
   readonly #impactQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -1702,6 +1704,14 @@ export class DevicesScreen extends LitElement {
     if (refuse && open && !ours) this.#showError("device.not_found");
   }
 
+  /** A new object on every render would redraw the dialog on every live list update. */
+  #deleteDialogCopy(): DeleteDialogCopy {
+    const locale = currentLocale();
+    if (this.#deleteCopy?.locale !== locale)
+      this.#deleteCopy = { locale, copy: deviceDeleteCopy() };
+    return this.#deleteCopy.copy;
+  }
+
   #renderDeleteDialog(): TemplateResult {
     return html`<wt-delete-dialog
       data-test="delete-device-dialog"
@@ -1711,7 +1721,7 @@ export class DevicesScreen extends LitElement {
       .submitting=${this.deleteSubmitting}
       .readError=${this.deleteReadError}
       .actionError=${this.deleteActionError}
-      .copy=${deviceDeleteCopy()}
+      .copy=${this.#deleteDialogCopy()}
       .opener=${this.#deleteOpener}
       @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
         void this.#confirmDelete(event.detail.id)}

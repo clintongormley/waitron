@@ -5795,4 +5795,33 @@ describe("Delete", () => {
       setLocale(before);
     }
   });
+
+  it("a render of the screen hands the closed dialog the same words, so it does not redraw", async () => {
+    const { el } = await mounted();
+    const copy = dialogOf(el)!.copy;
+    expect(copy).toBeDefined();
+
+    el.requestUpdate();
+    await flush(el);
+
+    expect(dialogOf(el)!.copy).toBe(copy);
+  });
+
+  it("a language switch while the dialog is open redraws it in the new language", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("es-ES");
+      const { el } = await mounted();
+      await openDelete(el, "d1");
+      expect(linesOf(el)[0]).toBe("Cierra la sesión de 2 personas");
+
+      setLocale("en");
+      el.requestUpdate();
+      await flush(el);
+
+      expect(linesOf(el)[0]).toBe("Signs out 2 people");
+    } finally {
+      setLocale(before);
+    }
+  });
 });
