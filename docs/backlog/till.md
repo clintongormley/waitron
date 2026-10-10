@@ -252,7 +252,7 @@ screen is designed.
   slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
   routes and columns) needs a venue reset. [Spec](../superpowers/specs/2026-10-08-floor-plan-design.md),
   [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A366-6 rebuilds the Departments
-  and zones screen the editor opens from; A182 (canvases retired) and A414 touch the till's floor
+  and zones screen the editor opens from; A182 (canvases retired) touches the till's floor
   screen that slice 3 replaces.
 
 ## Small floor-plan refusals still missing
@@ -263,24 +263,15 @@ screen is designed.
   - A saved join's seats have no upper bound, and two saved joins of the same tables are accepted.
   - The delivery-release trigger accepts an empty label.
 
-## A414 — device screens on a phone
+## A phone's Chrome drew a white page for the box (watch, not a job yet)
 
-- **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1 lands).**
-  1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
-     411 CSS px wide) on the handheld's Floor tab: the page's body padding is 24px a side
-     (`apps/till/index.html`), and the floor screen adds 16px a side inside it, leaving 331 of 411
-     px before the floor plan's own frame. Cut the body padding on narrow screens and stop screens
-     adding a second layer; check the Order tab and the other device screens too. The floor plan
-     itself is out of scope — the owner will redo it later.
-  2. **No demo bar on device screens.** A venue set up as a demo (or "prepare") shows the
-     Demo / Dashboard / Device / Email inbox bar on the till and handheld too
-     (`apps/till/src/till-app.ts`, `onboardingIntent`). Keep it in the dashboard only.
-  - **Watch, not a job yet:** on 2026-10-08 the phone's Chrome showed a white page for every box
-    address (`/`, `/dashboard`, the box's IP) while the laptop drew it. Read over USB debugging,
-    the page had loaded without errors and the join screen's element measured 679 px tall, while
-    the owner still saw white; quitting and reopening Chrome fixed it. A browser fault or something
-    of ours covering the page — not told apart. If it recurs, attach over USB before restarting
-    Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
+- **A phone's Chrome drew a white page for the box (owner's phone, 2026-10-08; watch, not a job
+  yet).** The phone's Chrome showed a white page for every box address (`/`, `/dashboard`, the
+  box's IP) while the laptop drew it. Read over USB debugging, the page had loaded without errors
+  and the join screen's element measured 679 px tall, while the owner still saw white; quitting
+  and reopening Chrome fixed it. A browser fault or something of ours covering the page — not told
+  apart. If it recurs, attach over USB before restarting Chrome: take a screenshot through the
+  debugger and ask `elementFromPoint` what is on top. Seen while reporting A414.
 
 ## A436 — a kitchen display with someone signed in, logged out only after a long idle time
 
