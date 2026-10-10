@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, onTestFinished } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -58,17 +58,25 @@ function expectInView(target: HTMLElement, body: HTMLElement, label: string): vo
   expect(box.bottom, `${label}: bottom in the body`).toBeLessThanOrEqual(visible.bottom);
 }
 
-/** The top of whatever is drawn below the list: the host's message, the none-chosen message, the
- * count or the buttons, whichever is highest. */
-function belowListTop(picker: SectionAddProducts): number {
+/** The top edge of the block holding the messages, the count and the buttons. */
+function blockTop(picker: SectionAddProducts): number {
+  return picker.shadowRoot!.querySelector<HTMLElement>(".bottom")!.getBoundingClientRect().top;
+}
+
+/** Tabs from the first product down the list, and checks after each press that the focused
+ * checkbox is what is drawn at its centre, not the block over the list's bottom. */
+async function expectTabbedCheckboxesUncovered(picker: SectionAddProducts): Promise<void> {
   const root = picker.shadowRoot!;
-  const parts = [
-    picker.querySelector<HTMLElement>('[slot="message"]'),
-    root.querySelector<HTMLElement>('[data-test="error"]'),
-    root.querySelector<HTMLElement>('[data-test="count"]'),
-    root.querySelector<HTMLElement>("wt-form-actions"),
-  ].filter((part): part is HTMLElement => part !== null);
-  return Math.min(...parts.map((part) => part.getBoundingClientRect().top));
+  root.querySelector<HTMLInputElement>('li input[type="checkbox"]')!.focus();
+  for (let press = 0; press < 40; press++) {
+    await userEvent.keyboard("{Tab}");
+    await frame();
+    const focused = root.activeElement as HTMLElement | null;
+    expect(focused?.closest("li"), `press ${press}: focus left the list`).not.toBeNull();
+    const box = focused!.getBoundingClientRect();
+    const hit = root.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    expect(hit, `press ${press}: ${focused!.getAttribute("value")} is covered`).toBe(focused);
+  }
 }
 
 /** No list row shows below the buttons, in the strip just above the body's visible bottom. */
@@ -119,7 +127,7 @@ describe.each([
     const last = picker.shadowRoot!.querySelector<HTMLElement>(
       'li:last-child input[type="checkbox"]',
     )!;
-    expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(belowListTop(picker));
+    expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
     expect(last.getBoundingClientRect().top).toBeGreaterThanOrEqual(
       body.getBoundingClientRect().top,
     );
@@ -140,8 +148,22 @@ describe.each([
     const last = picker.shadowRoot!.querySelector<HTMLElement>(
       'li:last-child input[type="checkbox"]',
     )!;
-    expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(belowListTop(picker));
+    expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
   });
+
+  it.each(["without", "with"] as const)(
+    "keeps each checkbox reached by Tab clear of the buttons, %s the messages showing",
+    async (messages) => {
+      await at(width, height);
+      const { picker, add, body } = await openWindow(many(200));
+      if (messages === "with") {
+        await withMessages(picker, add);
+        body.scrollTop = 0;
+        await frame();
+      }
+      await expectTabbedCheckboxesUncovered(picker);
+    },
+  );
 
   // With three products the list ends well above the window's bottom, so the buttons sit right
   // after it; no position is pinned.

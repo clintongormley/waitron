@@ -3277,6 +3277,10 @@ it("keeps the picker open and explains a refused product add", async () => {
       codeMessage("menu_section.membership_invalid"),
     ),
   );
+  // It sits with the buttons, in the picker's bottom block.
+  expect(inModal(el, "add-products", '[data-test="add-products-error"]').assignedSlot?.name).toBe(
+    "message",
+  );
   expect(modal(el, "add-products").open).toBe(true);
 });
 

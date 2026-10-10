@@ -95,6 +95,11 @@ export class SectionAddProducts extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
+      /* A checkbox reached by Tab scrolls clear of the bottom block, whose height is measured into
+         --bottom-height because its messages come and go. */
+      li input[type="checkbox"] {
+        scroll-margin-block-end: calc(var(--bottom-height, 0px) + var(--wt-space-2));
+      }
       .name {
         flex: 1;
         overflow-wrap: anywhere;
@@ -154,15 +159,32 @@ export class SectionAddProducts extends LitElement {
   #within: ReadonlySet<string> | null = null;
   #scope?: DraftScope<string[]>;
 
+  readonly #bottomSize = new ResizeObserver(() => this.#fitBottom());
+
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate();
+    if (this.hasUpdated) this.#observeBottom();
   }
 
   override disconnectedCallback(): void {
+    this.#bottomSize.disconnect();
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
+  }
+
+  override firstUpdated(): void {
+    this.#observeBottom();
+  }
+
+  #observeBottom(): void {
+    this.#bottomSize.observe(this.renderRoot.querySelector(".bottom")!);
+  }
+
+  #fitBottom(): void {
+    const height = this.renderRoot.querySelector(".bottom")!.getBoundingClientRect().height;
+    this.style.setProperty("--bottom-height", `${height}px`);
   }
 
   commitSaved(productIds: readonly string[]): void {
