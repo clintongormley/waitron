@@ -387,17 +387,21 @@ export class DepartmentZones extends LitElement {
                   ${row.active === false ? (department.active ? html`<wt-button variant="secondary" align="start" data-test="enable-zone" ?disabled=${this.busy} @click=${() => this.action("enable-zone", { zoneId: row.id })}>${t("venue.enable")}</wt-button>` : nothing) : html`<wt-button variant="danger" align="start" data-test="disable-zone" ?disabled=${this.busy} @click=${() => this.action("disable-zone", { zoneId: row.id })}>${t("venue.disable")}</wt-button>`}
                 </wt-row-actions>
               </div>
-              <div>
-                ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
-                <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
-                <p>
-                  <a
-                    data-test="zone-opening-hours"
-                    href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
-                    >${t("venue.zone_opening_hours")}</a
-                  >
-                </p>
-              </div>
+              ${
+                row.active === false
+                  ? nothing
+                  : html`<div>
+                      ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
+                      <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
+                      <p>
+                        <a
+                          data-test="zone-opening-hours"
+                          href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
+                          >${t("venue.zone_opening_hours")}</a
+                        >
+                      </p>
+                    </div>`
+              }
               <dashboard-service-settings-fields
                 .value=${this.draft}
                 .follows=${follows}

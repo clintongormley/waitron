@@ -17,7 +17,7 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
     for (const locale of ["en", "es"])
       for (const theme of ["light", "dark"] as const)
         for (const width of [1280, 390])
-          for (const state of ["grouped", "open", "count", "failure"] as const) {
+          for (const state of ["grouped", "open", "count", "failure", "disabled"] as const) {
             setLocale(locale);
             await page.viewport(width, 844);
             expect(window.innerWidth).toBe(width);
@@ -33,6 +33,12 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
               theme,
             )) as HTMLElementTagNameMap["department-zones"];
             el.model = structuredClone(zonesModel);
+            if (state === "disabled") {
+              el.model.zones[0]!.active = false;
+              hours.departments[0]!.zones = hours.departments[0]!.zones.filter(
+                (z) => z.id !== "z1",
+              );
+            }
             el.departmentId = "d1";
             el.zone = "z1";
             el.api = new VenueServiceApi((async () => {
@@ -42,7 +48,10 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
             await el.updateComplete;
             if (state === "failure")
               await expect.poll(() => el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-            else
+            else if (state === "disabled") {
+              expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")).toBeNull();
+              expect(el.shadowRoot!.querySelector("[data-test=closed-week-summary]")).toBeNull();
+            } else
               await expect
                 .poll(() =>
                   el
@@ -51,17 +60,19 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
                 )
                 .toBeTruthy();
             await expectNoA11yViolations(host);
-            const summary = el.shadowRoot!.querySelector<HTMLElement>(
-              "[data-test=closed-week-summary]",
-            )!;
-            const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
-              "[data-test=zone-opening-hours]",
-            )!;
-            expect(summary.scrollWidth).toBeLessThanOrEqual(summary.clientWidth);
-            expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-            host.style.setProperty("--wt-color-text-muted", "rgb(100, 110, 120)");
-            expect(getComputedStyle(summary).color).toBe("rgb(100, 110, 120)");
-            host.style.removeProperty("--wt-color-text-muted");
+            if (state !== "disabled") {
+              const summary = el.shadowRoot!.querySelector<HTMLElement>(
+                "[data-test=closed-week-summary]",
+              )!;
+              const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
+                "[data-test=zone-opening-hours]",
+              )!;
+              expect(summary.scrollWidth).toBeLessThanOrEqual(summary.clientWidth);
+              expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+              host.style.setProperty("--wt-color-text-muted", "rgb(100, 110, 120)");
+              expect(getComputedStyle(summary).color).toBe("rgb(100, 110, 120)");
+              host.style.removeProperty("--wt-color-text-muted");
+            }
             await page.screenshot({
               path: `../__screenshots__/a366-6b/${state}-${locale}-${theme}-${width}.png`,
             });

@@ -3486,7 +3486,8 @@ selected zone's settings. The Receipt tab belongs to slice 7; Edit the receipt c
 Venue settings' Receipts tab. The Zones tab shows the selected zone's normal-week closed times under its name, with a link
 that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
 show a day count. A week without closed ranges says the zone opens with its department. Named-day
-exceptions stay in Opening hours. Floor-plan previews remain separate work.
+exceptions stay in Opening hours. Disabled zones have no hours summary or link.
+Floor-plan previews remain separate work.
 
 How orders start chooses Table service or Counter service. Counter service has a separate
 paid-when choice and collection-ticket choice. Print a receipt offers Always (`auto`) or
