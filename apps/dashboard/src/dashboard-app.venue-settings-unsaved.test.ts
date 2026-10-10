@@ -48,6 +48,13 @@ async function mount(
         getBumpMode: async () => ({ mode: "line" }),
         getFireControl: async () => ({ mode: "waiter" }),
         getReceipt: async () => ({ receipt: {}, venueAddress: [] }),
+        getDepartmentReceipt: async () => ({
+          receipt: {},
+          venueDefaults: {},
+          languages: ["es-ES"],
+          warningLanguages: [],
+          venueAddress: [],
+        }),
         getLocationSettings: async () => ({ name: "Venue", operationDescription: "Sale" }),
         getReceiptLanguage: async () => ({ language: "es-ES", choices: ["es-ES"], fixed: null }),
         getVenueDepartments: async () => [],
@@ -411,11 +418,14 @@ for (const locale of ["en-GB", "es-ES"]) {
         const previews: { heading: string | undefined; department: string | undefined }[] = [];
         const { app } = await mount("/manage/venue-settings/view/receipts", locale, theme, {
           getVenueDepartments: async () => [
-            { id: "bar", name: "Bar", active: true },
-            { id: "deli", name: "Deli", active: true },
+            { id: "bar", name: "Bar", active: true, isDefault: true },
+            { id: "deli", name: "Deli", active: true, isDefault: false },
           ],
-          previewReceipt: async (config, _width, _language, department) => {
-            previews.push({ heading: config.headerSubtitle, department });
+          previewReceiptDraft: async (draft) => {
+            previews.push({
+              heading: draft.settings.headerSubtitle,
+              department: draft.departmentId ?? undefined,
+            });
             return {
               preview: {
                 widthDots: 512,
@@ -447,7 +457,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         const input = receipt.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
         await input.updateComplete;
         await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
-        const preview = receipt.shadowRoot!.querySelector("[name=previewDepartment]")!;
+        const preview = receipt.shadowRoot!.querySelector("[name=departmentId]")!;
         preview.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "deli" } }));
         await expect
           .poll(() => new URL(location.href).searchParams.get("departmentId"))

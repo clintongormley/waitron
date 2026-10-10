@@ -302,9 +302,15 @@ export class DepartmentReceiptEditor extends LitElement {
     const settings = this.settings;
     const action = saveActionState(this.#scope);
     const defaults = this.venueDefaults ?? settings?.venueDefaults ?? {};
-    const bottom =
-      this.actionError ||
-      (this.attempted ? this.#contactProblem("phone") || this.#contactProblem("email") : "");
+    const marked = Object.keys(this.errors).length > 0;
+    const invalidContact =
+      this.attempted && (!!this.#contactProblem("phone") || !!this.#contactProblem("email"));
+    const bottom = [
+      marked || invalidContact ? t("form.fix_fields") : "",
+      marked ? "" : this.actionError,
+    ]
+      .filter(Boolean)
+      .join(" ");
     return html`
       ${
         this.loadError

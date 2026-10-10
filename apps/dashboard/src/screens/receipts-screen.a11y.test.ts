@@ -33,6 +33,7 @@ function preview(config: ReceiptConfig): ReceiptPreview {
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
+    getVenueDepartments: vi.fn().mockResolvedValue([]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt }, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi

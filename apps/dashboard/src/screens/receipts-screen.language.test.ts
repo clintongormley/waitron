@@ -67,6 +67,7 @@ function stubApi(
   overrides: Record<string, unknown> = {},
 ): DashboardApi {
   return {
+    getVenueDepartments: vi.fn().mockResolvedValue([]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi

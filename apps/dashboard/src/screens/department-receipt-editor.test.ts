@@ -4,7 +4,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import type { DepartmentReceiptEditor } from "./department-receipt-editor.js";
 import type { DashboardApi, DepartmentReceiptSettings } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./department-receipt-editor.js";
 
 type Editor = DepartmentReceiptEditor;
@@ -315,3 +315,23 @@ it("puts a known language refusal under that locale and never invents a field fo
       .error,
   ).not.toBe("");
 });
+
+it.each(["en-GB", "es-ES"])(
+  "a marked department contact refusal has the generic bottom summary in %s",
+  async (locale) => {
+    setLocale(locale);
+    const api = apiFixture();
+    api.putDepartmentReceipt.mockRejectedValue({
+      code: "receipt.invalid",
+      params: { field: "email", reason: "invalid_email" },
+    });
+    const { el } = await mount(api);
+    await edit(el, "email", "bar@example.com");
+    save(el).click();
+    await vi.waitFor(() => expect(field(el, "email").error).toBe(t("receipts.invalid_email")));
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+        .error,
+    ).toBe(t("form.fix_fields"));
+  },
+);

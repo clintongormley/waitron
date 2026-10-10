@@ -47,6 +47,7 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     }),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
+    getVenueDepartments: vi.fn().mockResolvedValue([]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     previewReceipt: vi.fn().mockResolvedValue(PREVIEW),

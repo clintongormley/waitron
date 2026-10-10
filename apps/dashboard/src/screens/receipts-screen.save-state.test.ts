@@ -71,7 +71,7 @@ function stubApi() {
       language = next;
     }),
     getContentLanguages: vi.fn(async () => ({ defaultLanguage: "es", languages: ["es"] })),
-    getVenueDepartments: vi.fn(async () => [{ id: "deli", name: "Deli", active: true }]),
+    getVenueDepartments: vi.fn(async () => []),
     previewReceipt: vi.fn(async () => preview()),
   };
   return api;

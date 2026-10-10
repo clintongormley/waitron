@@ -2703,9 +2703,11 @@ export class DashboardApi {
     };
   }
 
-  async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {
+  async getVenueDepartments(): Promise<
+    { id: string; name: string; active: boolean; isDefault: boolean }[]
+  > {
     const venue = await this.#request<{
-      departments: { id: string; name: string; active: boolean }[];
+      departments: { id: string; name: string; active: boolean; isDefault: boolean }[];
     }>("/management-api/venue-service/departments-and-zones", "GET");
     return venue.departments;
   }

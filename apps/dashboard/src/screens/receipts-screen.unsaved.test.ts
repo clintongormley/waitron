@@ -52,6 +52,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   const liveData = new LiveData();
   const api = {
     liveData,
+    getVenueDepartments: vi.fn().mockResolvedValue([]),
     getReceipt: async () => ({ receipt: { headerSubtitle: "Welcome" }, venueAddress: [] }),
     getLocationSettings: async () => ({
       name: "Restaurant",

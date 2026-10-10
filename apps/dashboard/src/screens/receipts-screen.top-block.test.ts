@@ -74,7 +74,7 @@ function stubApi(
       .mockResolvedValue({ language: "es-ES", choices: ["es-ES", "ca-ES"], fixed: null }),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    getVenueDepartments: vi.fn().mockResolvedValue([{ id: "deli", name: "Deli", active: true }]),
+    getVenueDepartments: vi.fn().mockResolvedValue([]),
     previewReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
     imageLibraryRequest: vi.fn().mockResolvedValue({ images: [], total: 0 }),
     ...overrides,
