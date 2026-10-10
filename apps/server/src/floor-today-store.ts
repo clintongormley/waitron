@@ -427,14 +427,14 @@ export async function ensureToday(
   }
 }
 
-interface Today {
+export interface Today {
   tableId: string;
   row: typeof floorTodayTables.$inferSelect;
   /** Every member's today's row, this table's included; null when the table is in no merge. */
   merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;
 }
 
-async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string): Promise<Today> {
+export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string): Promise<Today> {
   const [table] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
