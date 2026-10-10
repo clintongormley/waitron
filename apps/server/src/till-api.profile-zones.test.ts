@@ -102,6 +102,14 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/status                             | table                  | refuses POST /api/tables/:id/status                  |
  * | PUT  /api/tables/:id/placement                          | table; body zone       | refuses PUT .../placement (table), (zone)            |
  * | DELETE /api/tables/:id/placement                        | table                  | refuses DELETE /api/tables/:id/placement             |
+ * | POST /api/tables/:id/today/move                         | table                  | refuses POST /api/tables/:id/today/move              |
+ * | POST /api/tables/:id/today/rotate                       | table                  | refuses POST /api/tables/:id/today/rotate            |
+ * | POST /api/tables/:id/today/take-off                     | table                  | refuses POST /api/tables/:id/today/take-off          |
+ * | POST /api/tables/:id/today/put-back                     | table                  | refuses POST /api/tables/:id/today/put-back          |
+ * | POST /api/tables/:id/today/place                        | table                  | refuses POST /api/tables/:id/today/place             |
+ * | POST /api/tables/:id/today/seats                        | table                  | refuses POST /api/tables/:id/today/seats             |
+ * | POST /api/tables/:id/today/back                         | table                  | refuses POST /api/tables/:id/today/back              |
+ * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
  * | PUT  /api/parties/:id/name                              | party                  | refuses PUT /api/parties/:id/name                    |
@@ -687,6 +695,62 @@ const ROUTES: readonly Row[] = [
     "DELETE",
     (x) => `/api/tables/${x.deliTable}/placement`,
     undefined,
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/move",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/move`,
+    () => ({ x: 1, y: 1 }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/rotate",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/rotate`,
+    () => ({}),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/take-off",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/take-off`,
+    () => ({}),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/put-back",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/put-back`,
+    () => ({}),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/place",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/place`,
+    () => ({ x: 1, y: 1 }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/seats",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/seats`,
+    () => ({ seats: 2 }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/back",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/back`,
+    () => ({}),
+    deliTableZone,
+  ],
+  [
+    "POST /api/zones/:id/today/reset",
+    "POST",
+    (x) => `/api/zones/${x.deliTables}/today/reset`,
+    () => ({}),
     deliTableZone,
   ],
   [
