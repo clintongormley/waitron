@@ -84,7 +84,7 @@ const es: Record<keyof typeof en, string> = {
   "image.save_error": "No se pudo guardar la imagen.",
   "image.delete_error": "No se pudo eliminar la imagen.",
   "image.confirm": "¿Eliminar esta imagen?",
-  "image.confirm_help": "La foto y sus traducciones se eliminarán permanentemente.",
+  "image.confirm_help": "La foto y sus traducciones se eliminan permanentemente.",
   "image.in_use": "Esta imagen todavía está en uso. Elimina estos usos antes de borrarla.",
   "image.close": "Cerrar",
   "image.previous": "Anterior",
