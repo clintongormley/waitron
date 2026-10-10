@@ -1,6 +1,14 @@
 import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
 import { tillPath } from "../navigation.js";
-import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import {
+  LitElement,
+  type PropertyValues,
+  type TemplateResult,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
 import { styleMap } from "lit/directives/style-map.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -23,6 +31,7 @@ import {
 } from "@waitron/ui";
 import type {
   FloorCanvasCopy,
+  FloorMapDrop,
   FloorMapTable,
   FloorTable,
   PlacementChange,
@@ -32,10 +41,14 @@ import type {
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
+import "../widgets/today-seats-dialog.js";
+import type { TodaySeatsDetail } from "../widgets/today-seats-dialog.js";
+import { codeMessage } from "../i18n/codes.js";
+import { type DropAction, dropAction, pendingPlaces } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import { isPlannedZone, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
-import type { FloorZone, TableState, TableParty, TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableParty, TillApi, TodayPlacement } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
@@ -63,11 +76,20 @@ export interface FloorRefreshDetail {
 
 type PlacedTable = TableState & { posX: number; posY: number };
 
+function placedAt(table: TableState, pending: Map<string, TodayPlacement>): TableState {
+  const placement = pending.get(table.id);
+  return placement === undefined || table.today === null
+    ? table
+    : { ...table, today: { ...table.today, placement } };
+}
+
 interface ZoneOnScreen {
   tabs: ZoneTab[];
   refusedZone: FloorZone | undefined;
   activeKey: string | null | undefined;
   planned: boolean;
+  /** The active zone's tables as the server last read them, before `#pending` is applied. */
+  visible: TableState[];
   view: "map" | "list";
   listed: TableState[];
   onMap: FloorMapTable[];
@@ -452,6 +474,13 @@ export class TillFloorScreen extends LitElement {
   @state() private clearing: TableState | null = null;
   /** The table whose details sheet is open, read afresh from `tables` on each render. */
   @state() private details: { tableId: string } | null = null;
+  /** The floor's last refusal, in its code's words; cleared by the next drop or a change of zone. */
+  @state() private refusal: string | null = null;
+  /** A merge the server would not size, waiting for the seats prompt. */
+  @state() private askingSeats: {
+    api: TillApi;
+    action: Extract<DropAction, { kind: "merge" }>;
+  } | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -465,6 +494,8 @@ export class TillFloorScreen extends LitElement {
   /** The zone on screen, worked out in `willUpdate` when one of `#zoneInputs` changes. */
   #zone!: ZoneOnScreen;
   #zoneInputs?: readonly unknown[];
+  /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
+  #pending: Map<string, TodayPlacement> | null = null;
   #mapCopy = { locale: "", copy: { label: "" } };
 
   /** The clock the last render judged reminders by. */
@@ -489,7 +520,8 @@ export class TillFloorScreen extends LitElement {
     this.#rereadTimer = undefined;
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("tables")) this.#pending = null;
     this.#drawnAt = this.now ?? Date.now();
     if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
       this.details = null;
@@ -605,6 +637,7 @@ export class TillFloorScreen extends LitElement {
 
   #selectZone(key: string | null): void {
     this.refusedZoneId = null;
+    this.refusal = null;
     this.activeZone = key;
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key ?? "" });
   }
@@ -654,6 +687,95 @@ export class TillFloorScreen extends LitElement {
       // Non-fatal — see #onPlacementChange.
     }
     this.#requestFloorRefresh();
+  }
+
+  #setPending(pending: Map<string, TodayPlacement> | null): void {
+    this.#pending = pending;
+    this.requestUpdate();
+  }
+
+  #onDragEnd(event: Event): void {
+    event.stopPropagation();
+    this.refusal = null;
+    const action = dropAction(this.#zone.visible, (event as CustomEvent<FloorMapDrop>).detail);
+    switch (action.kind) {
+      case "say":
+        this.refusal = action.message;
+        return;
+      case "move": {
+        const api = this.api;
+        if (api === undefined) return;
+        this.#setPending(pendingPlaces(this.#zone.visible, action));
+        void this.#settle(api.moveToday(action.tableId, { x: action.x, y: action.y }));
+        return;
+      }
+      case "merge":
+        if (this.api === undefined) return;
+        this.#setPending(pendingPlaces(this.#zone.visible, action));
+        void this.#merge(this.api, action);
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** Sent without seats, a merge with no saved join is refused so the waiter can be asked. */
+  async #merge(
+    api: TillApi,
+    action: Extract<DropAction, { kind: "merge" }>,
+    seats?: number,
+  ): Promise<void> {
+    await this.#settle(
+      api.mergeToday(action.tableId, {
+        targetId: action.targetId,
+        side: action.side,
+        ...(seats === undefined ? {} : { seats }),
+      }),
+      (refused) => {
+        if (seats !== undefined || refused.code !== "floor_plan.invalid") return false;
+        if (refused.field !== "seats") return false;
+        this.askingSeats = { api, action };
+        return true;
+      },
+    );
+  }
+
+  /** Every floor write: a refusal says its words and drops `#pending`, then the floor is re-read. */
+  async #settle(
+    call: Promise<void>,
+    asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
+  ): Promise<void> {
+    try {
+      await call;
+    } catch (cause) {
+      const refused = (cause ?? {}) as { code?: string; field?: unknown };
+      if (asks(refused)) return;
+      this.refusal = codeMessage(refused.code ?? "server.internal");
+      this.#setPending(null);
+    }
+    this.#requestFloorRefresh();
+  }
+
+  #seatsPrompt(): TemplateResult | typeof nothing {
+    const asking = this.askingSeats;
+    if (asking === null) return nothing;
+    const { api, action } = asking;
+    return html`<till-today-seats-dialog
+      action="join"
+      .heading=${t("floor.seats_title").replace("{table}", () => action.heading)}
+      .seats=${action.seatsGuess}
+      @today-seats-confirm=${(event: Event) => {
+        event.stopPropagation();
+        this.askingSeats = null;
+        const { seats } = (event as CustomEvent<TodaySeatsDetail>).detail;
+        void this.#merge(api, action, seats);
+      }}
+      @today-seats-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.askingSeats = null;
+        this.#setPending(null);
+      }}
+    ></till-today-seats-dialog>`;
   }
 
   #requestFloorRefresh(): void {
@@ -720,6 +842,7 @@ export class TillFloorScreen extends LitElement {
       this.activeZone,
       this.refusedZoneId,
       this.viewOverride,
+      this.#pending,
       currentLocale(),
     ];
     if (this.#zoneInputs?.every((input, i) => input === inputs[i])) return this.#zone;
@@ -741,7 +864,9 @@ export class TillFloorScreen extends LitElement {
     );
     const planned = isPlannedZone(visible);
     const listed = planned ? listedTables(visible) : visible;
-    const onMap = planned ? mapTables(visible) : [];
+    const pending = this.#pending;
+    const drawn = pending === null ? visible : visible.map((table) => placedAt(table, pending));
+    const onMap = planned ? mapTables(drawn) : [];
     // The server writes and nulls the four placement columns together, so `posX` alone tells placed
     // from unplaced.
     const placed = planned
@@ -751,9 +876,20 @@ export class TillFloorScreen extends LitElement {
     const unplaced = planned
       ? listed.filter((table) => !mapIds.has(table.id))
       : visible.filter((table) => table.posX == null);
-    const drawn = planned ? onMap.length : placed.length;
-    const view = this.viewOverride ?? (drawn > 0 ? "map" : "list");
-    return { tabs, refusedZone, activeKey, planned, view, listed, onMap, placed, unplaced };
+    const drawnCount = planned ? onMap.length : placed.length;
+    const view = this.viewOverride ?? (drawnCount > 0 ? "map" : "list");
+    return {
+      tabs,
+      refusedZone,
+      activeKey,
+      planned,
+      visible,
+      view,
+      listed,
+      onMap,
+      placed,
+      unplaced,
+    };
   }
 
   /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
@@ -813,6 +949,7 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
         ${refusedZone === undefined ? nothing : html`<p data-zone-closed role="status">${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}</p>`}
+        ${this.refusal === null ? nothing : html`<p data-floor-refusal role="status">${this.refusal}</p>`}
         ${(() => {
           const zone = this.zones.find((z) => z.id === activeKey);
           return zone?.closesAt
@@ -834,7 +971,7 @@ export class TillFloorScreen extends LitElement {
               ? this.#plannedMap(onMap, unplaced, activeKey)
               : this.#map(placed, unplaced)
         }
-        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()}
+        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
       </section>
     `;
   }
@@ -875,6 +1012,7 @@ export class TillFloorScreen extends LitElement {
           .reducedMotion=${this.reducedMotion}
           @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
           @wt-table-details=${(event: Event) => this.#onDetails(event)}
+          @wt-table-drag-end=${(event: Event) => this.#onDragEnd(event)}
         ></wt-floor-map>
         ${this.#tray(unplaced, [])}
       </div>

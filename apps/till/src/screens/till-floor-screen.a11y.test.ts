@@ -467,6 +467,34 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with a refusal said on the floor", async () => {
+    const merged = { ...todayRow(2), joinId: "j1" };
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      {
+        zones,
+        tables: [
+          { ...tables[2]!, id: "t1", label: "1", today: merged },
+          { ...tables[2]!, today: { ...merged, placement: { ...merged.placement!, x: 4 } } },
+          { ...tables[2]!, id: "t4", label: "4", today: todayRow(10) },
+        ],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+      new CustomEvent("wt-table-drag-end", {
+        detail: { tableId: "t1", x: 9, y: 3, targetId: "t4" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-floor-refusal]")?.textContent).toContain(
+      "Drag the other table onto it",
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations rendering a planned zone's list", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
