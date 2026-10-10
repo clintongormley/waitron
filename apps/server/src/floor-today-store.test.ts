@@ -612,6 +612,39 @@ describe("building today's plan from a zone's master plan", () => {
     expect(await mergeMembersIn(z)).toEqual([]);
   });
 
+  it("ends the merge of a table the master lost, and puts the other table back where it stood", async () => {
+    const z = await zone();
+    const t1 = await v.table("Lost merge 1", z);
+    const u1 = await v.table("Lost merge 2", z);
+    const master = await masterOf(z, [{ label: "Lost merge 1", place: place(0, 0), live: t1 }]);
+    await reset(z);
+    await inTx(v, async (tx) => {
+      await tx
+        .insert(floorTodayTables)
+        .values({ tableId: u1, x: 9, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 });
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId: z, seats: 8 })
+        .returning({ id: floorTodayJoins.id });
+      await tx
+        .insert(floorTodayJoinTables)
+        .values({ joinId: merge!.id, tableId: t1, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+      await tx
+        .insert(floorTodayJoinTables)
+        .values({ joinId: merge!.id, tableId: u1, beforeX: 30, beforeY: 40, beforeRotation: 90 });
+    });
+    await deleteFromMaster(master.get("Lost merge 1")!);
+
+    await reset(z);
+
+    expect((await liveTablesOf(z)).map((t) => t.id)).toEqual([u1]);
+    expect(await mergeMembersIn(z)).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+    ).toEqual([]);
+    expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
+  });
+
   it("does not hand a name to a new table while a hidden table still holds it", async () => {
     const z = await zone();
     const t1 = await v.table("Hold 1", z);
