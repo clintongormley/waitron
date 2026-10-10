@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { floorTodayJoinTables, floorTodayJoins, floorTodayTables, floorZones } from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, type PartyVenue } from "./party-venue.js";
 
@@ -93,6 +93,43 @@ export async function plannedZone(
     ),
   );
   return { zoneId, table, master: ids, revision };
+}
+
+/** Saves the zone's master again as `readZonePlan` reads it, without `drop`, with exactly `joins` (by master table id). Runs no reset (the zone has a today's plan). */
+export async function resaveMaster(
+  v: PartyVenue,
+  zoneId: string,
+  change: { joins: { seats: number; masterIds: string[] }[]; drop?: string[] },
+  now: Date = new Date(),
+): Promise<number> {
+  return inTx(v, async (tx) => {
+    const plan = await readZonePlan(tx, v.cfg, zoneId);
+    const drop = new Set(change.drop ?? []);
+    const tables: ZonePlanSave["tables"] = plan.tables.flatMap((t) =>
+      t.id === null || drop.has(t.id)
+        ? []
+        : [
+            {
+              id: t.id,
+              key: t.id,
+              label: t.label,
+              seats: t.seats,
+              fixed: t.fixed,
+              placement: t.placement,
+            },
+          ],
+    );
+    const joins = change.joins.map((join) => ({ seats: join.seats, tableKeys: join.masterIds }));
+    const saved = await saveZonePlan(
+      tx,
+      v.cfg,
+      REMOVALS,
+      zoneId,
+      { revision: plan.revision, tables, joins },
+      now,
+    );
+    return saved.revision;
+  });
 }
 
 export async function todayRow(

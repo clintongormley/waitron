@@ -1,10 +1,10 @@
 import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
-  diningTables,
-  floorPlanJoins,
+  floorResetJoins,
+  floorResetJoinTables,
+  floorResetTables,
   parties,
   partyTables,
-  floorPlanJoinTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
@@ -162,36 +162,35 @@ export async function partyRevision(tx: Transaction, partyId: string): Promise<n
 }
 
 /**
- * The seats of the master's saved join with exactly these tables' master tables, or null. The
- * master is read as it is now: a reset copies no joins. Reads by id alone: the caller checks the
- * venue first.
+ * The seats of the join the zone's last reset copied with exactly these tables, or null. Reads by id
+ * alone: the caller checks the venue first.
  */
 export async function savedJoinSeats(
   tx: Transaction,
   tableIds: readonly string[],
 ): Promise<number | null> {
   const rows = await tx
-    .select({ planTableId: diningTables.planTableId })
-    .from(diningTables)
-    .where(inArray(diningTables.id, [...tableIds]));
-  const wanted = new Set(rows.map((row) => row.planTableId));
-  // Nothing makes plan_table_id unique, so two tables on one master table must not count as one.
-  if (rows.length !== tableIds.length || wanted.size !== tableIds.length || wanted.has(null)) {
-    return null;
-  }
+    .select({ id: floorResetTables.id })
+    .from(floorResetTables)
+    .where(inArray(floorResetTables.tableId, [...tableIds]));
+  if (rows.length !== tableIds.length || new Set(tableIds).size !== tableIds.length) return null;
+  const wanted = new Set(rows.map((row) => row.id));
   const candidates = await tx
-    .select({ joinId: floorPlanJoinTables.joinId })
-    .from(floorPlanJoinTables)
-    .where(inArray(floorPlanJoinTables.planTableId, [...wanted] as string[]));
+    .select({ joinId: floorResetJoinTables.joinId })
+    .from(floorResetJoinTables)
+    .where(inArray(floorResetJoinTables.resetTableId, [...wanted]));
   const joinIds = [...new Set(candidates.map((c) => c.joinId))];
   if (joinIds.length === 0) return null;
   const members = await tx
-    .select({ joinId: floorPlanJoinTables.joinId, planTableId: floorPlanJoinTables.planTableId })
-    .from(floorPlanJoinTables)
-    .where(inArray(floorPlanJoinTables.joinId, joinIds));
+    .select({
+      joinId: floorResetJoinTables.joinId,
+      resetTableId: floorResetJoinTables.resetTableId,
+    })
+    .from(floorResetJoinTables)
+    .where(inArray(floorResetJoinTables.joinId, joinIds));
   const byJoin = new Map<string, string[]>();
-  for (const { joinId, planTableId } of members) {
-    byJoin.set(joinId, [...(byJoin.get(joinId) ?? []), planTableId]);
+  for (const { joinId, resetTableId } of members) {
+    byJoin.set(joinId, [...(byJoin.get(joinId) ?? []), resetTableId]);
   }
   const match = joinIds.find((joinId) => {
     const ids = byJoin.get(joinId)!;
@@ -199,9 +198,9 @@ export async function savedJoinSeats(
   });
   if (match === undefined) return null;
   const [join] = await tx
-    .select({ seats: floorPlanJoins.seats })
-    .from(floorPlanJoins)
-    .where(eq(floorPlanJoins.id, match));
+    .select({ seats: floorResetJoins.seats })
+    .from(floorResetJoins)
+    .where(eq(floorResetJoins.id, match));
   return join!.seats;
 }
 
