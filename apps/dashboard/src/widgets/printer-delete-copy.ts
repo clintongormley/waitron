@@ -2,7 +2,7 @@ import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 type Counted =
   | "printers.delete_jobs"
@@ -22,18 +22,18 @@ const ROLES = [
 const names = (item: DeleteImpactItem): string => item.targets.map(({ name }) => name).join(", ");
 
 function line(key: Counted, item: DeleteImpactItem, role = ""): string {
-  return t(item.count === 1 ? (`${key}_one` as StringKey) : key)
-    .replace("{role}", () => role)
-    .replace("{count}", String(item.count))
-    .replace("{names}", () => names(item));
+  return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {
+    role,
+    count: String(item.count),
+    names: names(item),
+  });
 }
 
 function itemLine(item: DeleteImpactItem): string {
   const { key } = item;
   if (key === "print_jobs") return line("printers.delete_jobs", item);
   if (key === "invoice_receipts") return line("printers.delete_invoice_receipts", item);
-  if (key === "portable_holder")
-    return t("printers.delete_holder").replace("{names}", () => names(item));
+  if (key === "portable_holder") return fill("printers.delete_holder", { names: names(item) });
   if (key === "station_printers") return line("printers.delete_stations", item);
   for (const [role, word, defaultWord] of ROLES) {
     if (key === `device_${role}`) return line("printers.delete_device_choice", item, t(word));
@@ -43,10 +43,7 @@ function itemLine(item: DeleteImpactItem): string {
     if (key === `profile_${role}_default`)
       return line("printers.delete_profile_default", item, t(defaultWord));
   }
-  return t("printers.delete_unknown")
-    .replace("{names}", () => names(item))
-    .replace("{count}", String(item.count))
-    .trim();
+  return fill("printers.delete_unknown", { names: names(item), count: String(item.count) }).trim();
 }
 
 function refusalLine(refusal: DeleteImpactRefusal): string {
