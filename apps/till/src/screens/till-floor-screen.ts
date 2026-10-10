@@ -488,7 +488,7 @@ export class TillFloorScreen extends LitElement {
 
   /** A planned map shows statuses other tills change, so it asks for the floor every 15 s. */
   #watchFloor(): void {
-    if (!this.#drawsPlannedMap) {
+    if (!this.#drawsPlannedMap || !this.isConnected) {
       clearInterval(this.#rereadTimer);
       this.#rereadTimer = undefined;
       return;

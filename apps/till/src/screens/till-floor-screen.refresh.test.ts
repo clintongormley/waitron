@@ -212,4 +212,14 @@ describe("till-floor-screen's seats placeholder and re-read", () => {
     vi.advanceTimersByTime(15_000);
     expect(seen.count).toBe(2);
   });
+
+  it("an update queued before the screen is removed does not restart its re-read", async () => {
+    const el = await mount();
+    const seen = countRefreshes(el);
+    el.tables = [planned("t1", { seats: 6 })];
+    el.remove();
+    await el.updateComplete;
+    vi.advanceTimersByTime(30_000);
+    expect(seen.count).toBe(0);
+  });
 });
