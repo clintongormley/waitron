@@ -1264,8 +1264,6 @@ export function mountManagementApi(
     }),
   );
 
-  // `getReceipt` does not authorize (the till's unauthenticated boot read shares it), so this route
-  // carries its own gate.
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

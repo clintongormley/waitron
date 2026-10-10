@@ -1,5 +1,10 @@
 # Fiscal records, invoices and the asesor — detail
 
+> **2026-10-10, receipt presentation:** A366 slice 7 supersedes the F1 location-address
+> exclusions below. Thermal and till receipts follow the global current-address switch,
+> independently of filed domicile; A4 omits the optional current-address block. Filed domicile
+> remains. Follow [the slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md).
+
 The open entries are listed in [the backlog](../backlog.md), under "Fiscal records, invoices and the asesor". This file holds
 their full text.
 
@@ -155,6 +160,11 @@ and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the ca
 queue order; this landing does not start another fiscal item.
 
 ## A231d. Full invoices by email as a PDF, and on an office printer — PART 1 LANDED (#1399); PART 2 OPEN
+
+> **2026-10-10, later product decision:** the owner removed the separate email consent step
+> on 2026-10-09. The consent proposals and dated implementation receipts below describe the
+> earlier flow. Follow [the single core rewrite](printers.md#remove-the-consent-step-from-emailed-receipts);
+> A366 slice 7 keeps today’s checker and stored evidence. A448 and the legal research remain open.
 
 The owner asked, approving A231's design, that an F1 can also be emailed to the customer as a PDF and
 printed on an ordinary office printer. The [design](../superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md)

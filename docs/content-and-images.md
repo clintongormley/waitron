@@ -150,3 +150,7 @@ A published menu also holds every photograph its last publish included, even aft
 photograph from a product or section. The library lists that menu by name, followed by
 **(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
 to release it.
+
+A saved receipt logo also keeps a photograph in use. Follow its link to **Venue settings**,
+**Receipts**; a department logo link selects that department, including a switched-off one.
+Clear the saved logo before deleting the photograph.

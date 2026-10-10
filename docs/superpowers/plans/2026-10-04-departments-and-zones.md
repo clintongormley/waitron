@@ -1,8 +1,8 @@
 # Departments and zones: implementation plan (A261 step 2)
 
 > **2026-10-10, A366 slice 7 Part A:** Receipt previews now send authored department and
-> venue drafts through POST. The GET preview, its query parameters and the client
-> `previewReceipt` method below describe the earlier implementation. Follow
+> venue drafts through POST. The GET preview and its query parameters below describe
+> the earlier implementation. Follow
 > [the slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for the current
 > preview and independent editing scopes.
 

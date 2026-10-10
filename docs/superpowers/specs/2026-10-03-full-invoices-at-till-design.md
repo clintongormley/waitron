@@ -1,5 +1,11 @@
 # Full invoices at the till (A231)
 
+> **2026-10-10, later product decision:** the owner removed the separate email consent step
+> on 2026-10-09. The email consent-tracking proposal below is historical; follow
+> [the single core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).
+> A366 slice 7 retains the current checker and stored evidence. A448 and the dated legal
+> research are unchanged.
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to
