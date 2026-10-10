@@ -5646,7 +5646,7 @@ describe("Delete", () => {
     }
   });
 
-  it("a device deleted in another tab closes its dialog and its open edit without asking about drafts", async () => {
+  it("a device deleted in another tab closes its open edit without asking about drafts", async () => {
     const liveData = new LiveData();
     const { el: app } = await mountWidget<DeleteLeaveFixture>("devices-delete-leave-fixture", {});
     const api = stubApi({
@@ -5675,13 +5675,90 @@ describe("Delete", () => {
     expect(app.leave.coordinator.isDirty()).toBe(false);
     expect(pageError(el)).toBe(codeMessage("device.not_found"));
     expect(rowOf(el, "d1")).toBeNull();
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+  });
+
+  it("a confirmation naming another device than the dialog's sends nothing", async () => {
+    const { api, el } = await mounted();
+    await openDelete(el, "d1");
+    dialogOf(el)!.dispatchEvent(
+      new CustomEvent("wt-delete-confirm", {
+        detail: { id: "d2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+    expect(dialogOf(el)!.submitting).toBe(false);
+  });
+
+  it("a delete still out when its dialog was torn down does not touch the next device's dialog", async () => {
+    const liveData = new LiveData();
+    const sent = deferred<DeleteImpact>();
+    const { api, el } = await mounted({
+      liveData,
+      deleteDevice: vi
+        .fn()
+        .mockReturnValueOnce(sent.promise)
+        .mockResolvedValue(impactOf("d2", "Pase revocado")),
+    } as Partial<DashboardApi>);
+    await openDelete(el, "d1");
+    confirmOf(el).click();
+    await flush(el);
+    vi.mocked(api.listDevices).mockResolvedValue([devices[1]!]);
+    liveData.invalidate([{ type: "devices", id: "d1" }]);
+    await vi.waitFor(() => expect(dialogOf(el)?.open ?? false).toBe(false));
+    await flush(el);
+    expect(pageError(el)).toBeUndefined();
 
     await openDelete(el, "d2");
+    sent.reject(coded("connection.failed"));
+    await flush(el);
+    expect(dialogOf(el)!.impact?.target.id).toBe("d2");
+    expect(dialogOf(el)!.actionError).toBe("");
+    expect(dialogOf(el)!.submitting).toBe(false);
+    confirmOf(el).click();
+    await flush(el);
+    expect(api.deleteDevice).toHaveBeenLastCalledWith("d2");
+  });
+
+  it("a live read answering not-found while the delete is out leaves the answer to the delete", async () => {
+    const liveData = new LiveData();
+    const sent = deferred<DeleteImpact>();
+    const getDeviceDeleteImpact = vi.fn().mockResolvedValue(cocinaImpact);
+    const { el } = await mounted({
+      liveData,
+      getDeviceDeleteImpact,
+      deleteDevice: vi.fn(() => sent.promise),
+    } as Partial<DashboardApi>);
+    await openDelete(el, "d1");
+    confirmOf(el).click();
+    await flush(el);
+    getDeviceDeleteImpact.mockRejectedValue(coded("device.not_found"));
+    liveData.invalidate([{ type: "payments", id: "pay9" }]);
+    await vi.waitFor(() => expect(getDeviceDeleteImpact).toHaveBeenCalledTimes(2));
+    await flush(el);
     expect(dialogOf(el)!.open).toBe(true);
-    vi.mocked(api.listDevices).mockResolvedValue([]);
+    expect(dialogOf(el)!.submitting).toBe(true);
+
+    sent.resolve(cocinaImpact);
+    await flush(el);
+    expect(dialogOf(el)?.open ?? false).toBe(false);
+    expect(pageError(el)).toBeUndefined();
+  });
+
+  it("a device deleted in another tab closes the delete dialog open on it and says so", async () => {
+    const liveData = new LiveData();
+    const { api, el } = await mounted({ liveData, deleteDevice: vi.fn() } as Partial<DashboardApi>);
+    await openDelete(el, "d2");
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(pageError(el)).toBeUndefined();
+    vi.mocked(api.listDevices).mockResolvedValue([devices[0]!]);
     liveData.invalidate([{ type: "devices", id: "d2" }]);
     await vi.waitFor(() => expect(dialogOf(el)!.open).toBe(false));
     expect(pageError(el)).toBe(codeMessage("device.not_found"));
+    expect(rowOf(el, "d2")).toBeNull();
     expect(api.deleteDevice).not.toHaveBeenCalled();
   });
 
