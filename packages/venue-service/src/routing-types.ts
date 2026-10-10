@@ -101,8 +101,11 @@ export interface RoutingPeriod {
   departmentInactive?: true;
 }
 
-/** `periods` is present only on a cell with period lines. */
-export type RoutingModelCell = RoutingCell & { periods?: PeriodLine[] };
+/**
+ * `periods` is present only on a cell with period lines. `notOffered`: the line's period's menus
+ * reach none of the row's active products.
+ */
+export type RoutingModelCell = RoutingCell & { periods?: (PeriodLine & { notOffered?: true })[] };
 
 export interface RoutingModel {
   stationTimes: StationTimes[];

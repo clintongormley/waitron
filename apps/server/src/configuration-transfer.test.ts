@@ -112,6 +112,7 @@ import {
   saveSpecialDate,
   saveMenuPeriod,
   replaceMenuWeek,
+  routingModel,
   setProfileServiceAccess,
   setRoutingCell,
   setStationToday,
@@ -3966,7 +3967,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     "a strong passphrase",
   );
   expect(decoded.tables.routing_cell_periods).toHaveLength(2);
-  await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
+  const target = await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx, result) =>
@@ -4018,6 +4019,17 @@ it("carries a cell's period choices with their cell, including a period whose me
   for (const row of choices.rows)
     for (const id of [row.cell_id, row.period_id, row.department_id])
       expect(sourceIds).not.toContain(id);
+  const model = await withTransaction(targetSuite.db, (tx) =>
+    routingModel(
+      tx,
+      { locationId: brandLocationId(target.locationId) },
+      new Date("2026-10-09T10:00:00Z"),
+    ),
+  );
+  expect(model.cells.flatMap((cell) => cell.periods ?? [])).toEqual([
+    expect.objectContaining({ notOffered: true }),
+    expect.objectContaining({ notOffered: true }),
+  ]);
 });
 
 describe("opening hours in a configuration transfer", () => {
