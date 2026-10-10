@@ -358,7 +358,7 @@ export class WtFloorMap extends LitElement {
   /** `undefined` reads `prefers-reduced-motion` on every render; a test sets it. */
   @property({ attribute: false }) reducedMotion?: boolean;
 
-  /** Off, a held table neither moves nor sends `wt-table-drag-end`; a long press still works. */
+  /** Read on each move: off, a held table does not move, though a drag already moved is still sent on release; a long press still works. */
   @property({ attribute: false }) canDrag = true;
 
   #size: { width: number; height: number } | null = null;
