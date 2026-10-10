@@ -1,3 +1,4 @@
+import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
@@ -50,10 +51,11 @@ export class DepartmentPage extends LitElement {
       }
     `,
   ];
+  @property({ attribute: false }) renderPanel?: DashboardPanelRenderer;
   @property({ attribute: false }) api?: VenueServiceApi;
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
-  @property() view: "settings" | "zones" = "settings";
+  @property() view: "settings" | "zones" | "receipt" = "settings";
   private generation = {};
   override disconnectedCallback() {
     this.generation = {};
@@ -62,7 +64,7 @@ export class DepartmentPage extends LitElement {
   private emit(name: string, detail: object) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  private async select(view: "settings" | "zones") {
+  private async select(view: "settings" | "zones" | "receipt") {
     const id = this.departmentId,
       generation = this.generation;
     const proceed = () => {
@@ -91,6 +93,9 @@ export class DepartmentPage extends LitElement {
     const row = this.model?.departments.find((d) => d.id === this.departmentId);
     if (!row) return nothing;
     const setup = this.setup();
+    const receipt =
+      this.renderPanel?.("department-receipt", { id: row.id, name: row.name }) ?? null;
+    const view = this.view === "receipt" && receipt === null ? "settings" : this.view;
     return html`<nav aria-label=${t("venue.departments")}>
         <a href="/manage/venue-operations">${t("venue.departments")}</a> ›
       </nav>
@@ -103,10 +108,11 @@ export class DepartmentPage extends LitElement {
         .items=${[
           { key: "settings", label: t("venue.settings_tab") },
           { key: "zones", label: t("venue.list_zones") },
+          ...(receipt === null ? [] : [{ key: "receipt", label: t("venue.receipt_tab") }]),
         ]}
-        .value=${this.view}
+        .value=${view}
         label=${row.name}
-        @wt-tab-change=${(e: CustomEvent<{ value: "settings" | "zones" }>) => {
+        @wt-tab-change=${(e: CustomEvent<{ value: "settings" | "zones" | "receipt" }>) => {
           e.stopPropagation();
           void this.select(e.detail.value);
         }}
@@ -119,6 +125,7 @@ export class DepartmentPage extends LitElement {
           .showEnable=${false}
         ></department-settings>
         <slot name="zones" slot="zones"></slot>
+        ${view === "receipt" ? html`<section slot="receipt">${receipt}</section>` : nothing}
       </wt-tabs>`;
   }
 }

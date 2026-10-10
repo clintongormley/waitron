@@ -7317,6 +7317,66 @@ describe("mounted public department pages", () => {
       expect(navItem(app, "venue-operations")).toBeNull();
     },
   );
+  it.each(["d1", "d2"])(
+    "Receipt opens the authoritative department %s, including disabled maintenance",
+    async (id) => {
+      const app = await mountDepartments(
+        `/manage/venue-operations/department/${id}/view/receipt?departmentId=d1`,
+        ["venue_service.manage", "layout.configure"],
+      );
+      const screen = find(app, "dashboard-receipts-screen") as HTMLElement & {
+        departmentId: string;
+      };
+      expect(screen).not.toBeNull();
+      expect(screen.departmentId).toBe(id);
+      expect(find(app, 'button[data-key="receipt"]')!.getAttribute("aria-selected")).toBe("true");
+      await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+      expect(
+        (find(app, "dashboard-department-receipt-editor") as HTMLElement & { departmentId: string })
+          .departmentId,
+      ).toBe(id);
+      expect(find(app, 'wt-combobox[name="departmentId"]')).toBeNull();
+      expect(find(app, "dashboard-venue-receipt-defaults-editor")).toBeNull();
+      expect(find(app, '[data-test="receipt-language"]')).toBeNull();
+    },
+  );
+  it("a missing department Receipt URL does not borrow another department", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/gone/view/receipt", [
+      "venue_service.manage",
+      "layout.configure",
+    ]);
+    expect(find(app, "dashboard-receipts-screen")).toBeNull();
+    expect(
+      find(app, "venue-departments-shell")!.shadowRoot!.querySelector('[role="status"]')!
+        .textContent,
+    ).toBe("This department no longer exists.");
+  });
+  it("the Receipt tab navigates to this department without a picker", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d2", [
+      "venue_service.manage",
+      "layout.configure",
+    ]);
+    find(app, 'button[data-key="receipt"]')!.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/d2/view/receipt");
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+    expect(
+      (find(app, "dashboard-department-receipt-editor") as HTMLElement & { departmentId: string })
+        .departmentId,
+    ).toBe("d2");
+  });
+  it.each([["venue_service.manage"], ["layout.configure"], []])(
+    "a Receipt deep link cannot bypass either permission: %j",
+    async (...permissions) => {
+      const app = await mountDepartments(
+        "/manage/venue-operations/department/d1/view/receipt",
+        permissions,
+      );
+      expect(find(app, "dashboard-receipts-screen")).toBeNull();
+      expect(find(app, 'button[data-key="receipt"]')).toBeNull();
+    },
+  );
   it("the real Zones tab asks, keeps the draft, and navigates after Discard", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1");
     const box = await draft(app);

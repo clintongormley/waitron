@@ -1,3 +1,4 @@
+import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 import { QueryController, type LiveData } from "@waitron/dashboard-kit";
@@ -24,6 +25,7 @@ export class VenueOperationsLoader extends LitElement {
       }
     `,
   ];
+  @property({ attribute: false }) renderPanel?: DashboardPanelRenderer;
   @property({ attribute: false }) api!: VenueServiceApi;
   @state() private model?: VenueServiceView;
   @state() private loadError = "";
@@ -95,6 +97,6 @@ export class VenueOperationsLoader extends LitElement {
     this.api.liveData?.invalidate(QUERY_DEPENDENCIES.operations.map((type) => ({ type })));
   }
   override render() {
-    return html`${this.loadError ? html`<p role="alert">${this.loadError}</p>` : nothing}${this.model ? html`<venue-departments-shell .api=${this.api} .model=${this.model} @model-change=${this.#modelChange}></venue-departments-shell>` : nothing}`;
+    return html`${this.loadError ? html`<p role="alert">${this.loadError}</p>` : nothing}${this.model ? html`<venue-departments-shell .renderPanel=${this.renderPanel} .api=${this.api} .model=${this.model} @model-change=${this.#modelChange}></venue-departments-shell>` : nothing}`;
   }
 }

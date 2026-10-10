@@ -189,6 +189,8 @@ export class ReceiptsScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property() departmentId = "";
+  @property() departmentName = "";
 
   #connection = 0;
   #languageScope?: DraftScope<string>;
@@ -332,8 +334,8 @@ export class ReceiptsScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.receiptLanguage !== null) this.#registerLanguage();
-    if (this.locationLoaded) this.#registerDescription();
+    if (!this.departmentId && this.receiptLanguage !== null) this.#registerLanguage();
+    if (!this.departmentId && this.locationLoaded) this.#registerDescription();
     void this.#load();
     void this.#loadDepartments();
     void this.#loadContentLanguages();
@@ -361,7 +363,7 @@ export class ReceiptsScreen extends LitElement {
   }
 
   readonly #restorePreviewDepartment = (): void => {
-    if (!this.#departmentsLoaded) return;
+    if (this.departmentId || !this.#departmentsLoaded) return;
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     if (url.pathname !== "/manage/venue-settings/view/receipts") return;
@@ -392,6 +394,14 @@ export class ReceiptsScreen extends LitElement {
   }
 
   async #loadDepartments(): Promise<void> {
+    if (this.departmentId) {
+      this.departments = [
+        { id: this.departmentId, name: this.departmentName, active: true, isDefault: false },
+      ];
+      this.#departmentsLoaded = true;
+      this.#selectDepartment(this.departmentId);
+      return;
+    }
     const connection = this.#connection;
     try {
       const departments = await (this.api.background ?? this.api).getVenueDepartments();
@@ -508,7 +518,7 @@ export class ReceiptsScreen extends LitElement {
             this.pickedLanguage = null;
             this.languageRefusal = "";
           }
-          this.#registerLanguage();
+          if (!this.departmentId) this.#registerLanguage();
           if (
             (wasClean && previousLanguage !== this.#shownLanguage()) ||
             (value.fixed !== null && this.#languageScope?.isDirty())
@@ -585,7 +595,7 @@ export class ReceiptsScreen extends LitElement {
             this.description = value.operationDescription;
             this.#savedDescription = this.description;
           }
-          this.#registerDescription();
+          if (!this.departmentId) this.#registerDescription();
           if (adopt && wasClean && previousDescription !== this.description)
             this.#descriptionScope?.commit(this.description);
           this.locationLoaded = true;
@@ -1018,13 +1028,17 @@ export class ReceiptsScreen extends LitElement {
       }
       ${
         selected
-          ? html` <wt-combobox
-                name="departmentId"
-                label=${t("receipts.department")}
-                .options=${offered.map((department) => ({ value: department.id, label: department.name }))}
-                .value=${selected.id}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choosePreviewDepartment(event.detail.value)}
-              ></wt-combobox>
+          ? html` ${
+                this.departmentId
+                  ? nothing
+                  : html`<wt-combobox
+                      name="departmentId"
+                      label=${t("receipts.department")}
+                      .options=${offered.map((department) => ({ value: department.id, label: department.name }))}
+                      .value=${selected.id}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choosePreviewDepartment(event.detail.value)}
+                    ></wt-combobox>`
+              }
               <dashboard-department-receipt-editor
                 .api=${this.api}
                 .departmentId=${selected.id}
@@ -1134,14 +1148,18 @@ export class ReceiptsScreen extends LitElement {
       <div class="layout">
         <div class="form-column">
           <section class="department-settings">${this.#renderDepartment()}</section>
-          <dashboard-venue-receipt-defaults-editor
-            .api=${this.api}
-            .draftParent=${this}
-            .venueAddress=${this.venueAddress}
-            @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
-            @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
-          ></dashboard-venue-receipt-defaults-editor>
-          ${this.#renderLocation()}
+          ${
+            this.departmentId
+              ? nothing
+              : html`<dashboard-venue-receipt-defaults-editor
+                    .api=${this.api}
+                    .draftParent=${this}
+                    .venueAddress=${this.venueAddress}
+                    @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
+                    @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
+                  ></dashboard-venue-receipt-defaults-editor>
+                  ${this.#renderLocation()}`
+          }
         </div>
         ${locationReady || this.departmentDraft !== null ? this.#renderPreview() : nothing}
       </div>`;

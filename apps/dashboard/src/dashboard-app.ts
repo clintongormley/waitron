@@ -1209,7 +1209,18 @@ export class DashboardApp extends LitElement {
         panelIds.add(panel.id);
       }
       registerCatalogue(c.strings);
-      const ctx = { request: this.request, liveData: this.api.liveData };
+      const ctx = {
+        request: this.request,
+        liveData: this.api.liveData,
+        renderPanel: (panel: string, subject: { id: string; name: string }) =>
+          panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
+            ? html`<dashboard-receipts-screen
+                .api=${this.api}
+                .departmentId=${subject.id}
+                .departmentName=${subject.name}
+              ></dashboard-receipts-screen>`
+            : null,
+      };
       for (const contributed of screens) {
         const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
