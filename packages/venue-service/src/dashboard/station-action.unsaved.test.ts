@@ -14,6 +14,7 @@ const view: PrepStationsView = {
       { id: "food", name: "Food", parentId: null },
     ],
     products: [{ id: "bread", name: "Bread", categoryId: null }],
+    periods: [],
     cells: [
       {
         row: { kind: "category", categoryId: "cocktails" },
@@ -64,7 +65,6 @@ const view: PrepStationsView = {
   ],
   zones: [],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -118,21 +118,6 @@ async function mount(write?: Promise<void>, refreshFails = false, deactivate?: P
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(model);
     },
-    readStationHealth: async () => ({
-      capturedAt: "2026-10-06T08:00:00Z",
-      stations: model.stations.map(({ id, name }) => ({
-        id,
-        name,
-        hasScreen: false,
-        waiting: 0,
-        preparing: null,
-        ready: null,
-        late: { warm: 0, overdue: 0, forgotten: 0 },
-        oldestMinutes: null,
-        items: [],
-      })),
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     setStationFallback: async (id: string, choice: string | null) => {
       writes.push({ fallback: id, choice });
       await write;
@@ -183,7 +168,7 @@ async function choose(decision: "keep" | "discard") {
 
 async function open(screen: PrepStationsScreen, id = "kitchen") {
   const table = screen
-    .shadowRoot!.querySelector("prep-station-health-table")!
+    .shadowRoot!.querySelector("prep-station-table")!
     .shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>(`[data-test=disable-${id}]`)!.click();

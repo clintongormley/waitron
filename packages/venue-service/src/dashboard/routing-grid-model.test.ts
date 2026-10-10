@@ -8,10 +8,12 @@ import {
   type RouteTarget,
   type RoutingCell,
   type RoutingModel,
+  type RoutingPeriod,
   type RoutingRow,
   type RoutingSelectionRules,
 } from "../routing.js";
 import {
+  cellPeriodLines,
   collapseAll,
   collapseCategory,
   expandAll,
@@ -53,9 +55,10 @@ function model(
 ): RoutingModel {
   return {
     stationTimes: [],
+    periods: [],
     todayEnds: null,
     clockReadable: true,
-    zones: [{ id: "terrace", name: "Terrace" }],
+    zones: [{ id: "terrace", name: "Terrace", departmentId: "dining" }],
     categories,
     products,
     cells,
@@ -681,5 +684,268 @@ describe("rowInModel", () => {
     expect(rowInModel(models[2]!, { kind: "no_category" })).toBe(true);
     expect(rowInModel(models[5]!, { kind: "no_category" })).toBe(true);
     expect(rowInModel(models[4]!, { kind: "no_category" })).toBe(false);
+  });
+});
+
+describe("cellPeriodLines", () => {
+  const period = (id: string, departmentId = "dining", name = id): RoutingPeriod => ({
+    id,
+    departmentId,
+    departmentName: departmentId,
+    name,
+    colour: "red",
+    productIds: [],
+  });
+  // The model's order (decision 15), which is neither the names' nor the ids' order.
+  const PERIODS = [
+    period("p-breakfast", "dining", "Breakfast"),
+    period("p-lunch", "dining", "Lunch"),
+    period("p-afternoon", "dining", "Afternoon"),
+    period("p-dinner", "dining", "Dinner"),
+    period("p-supper", "dining", "Supper"),
+    period("p-aperitivo", "bar", "Aperitivo"),
+  ];
+  const downstairs: RouteTarget = { kind: "station", stationId: "downstairs" };
+  const names: Record<string, string> = {
+    kitchen: "Kitchen",
+    bar: "Bar",
+    downstairs: "Downstairs bar",
+  };
+  const targetText = (target: RouteTarget) =>
+    target.kind === "station" ? names[target.stationId]! : "No preparation";
+  const withLines = (
+    cell: RoutingCell,
+    lines: [string, RouteTarget][],
+  ): RoutingModel["cells"][number] => ({
+    ...cell,
+    periods: lines.map(([periodId, target]) => ({ periodId, target })),
+  });
+  const routing = (cells: RoutingModel["cells"][number][]): RoutingModel => ({
+    ...model([folder("drinks")], [item("mojito", "drinks")]),
+    cells,
+    periods: PERIODS,
+  });
+  const drinks: RoutingRow = { kind: "category", categoryId: "drinks" };
+  const textsAt = (cells: RoutingModel["cells"][number][], row: RoutingRow = drinks) =>
+    cellPeriodLines(routing(cells), targetText)(row, null).lines.map((line) => line.text);
+
+  it("joins one or two periods' names with a comma, in the model's period order", () => {
+    expect(textsAt([withLines(categoryCell("drinks"), [["p-lunch", downstairs]])])).toEqual([
+      "Lunch: Downstairs bar",
+    ]);
+    expect(
+      textsAt([
+        withLines(categoryCell("drinks"), [
+          ["p-afternoon", downstairs],
+          ["p-lunch", downstairs],
+        ]),
+      ]),
+    ).toEqual(["Lunch, Afternoon: Downstairs bar"]);
+  });
+
+  it("writes three or more periods running on in their department's order as first–last", () => {
+    expect(
+      textsAt([
+        withLines(categoryCell("drinks"), [
+          ["p-dinner", downstairs],
+          ["p-breakfast", downstairs],
+          ["p-afternoon", downstairs],
+          ["p-lunch", downstairs],
+        ]),
+      ]),
+    ).toEqual(["Breakfast–Dinner: Downstairs bar"]);
+  });
+
+  it("writes three or more periods with a gap, or from two departments, as the first and a count", () => {
+    expect(
+      textsAt([
+        withLines(categoryCell("drinks"), [
+          ["p-breakfast", downstairs],
+          ["p-lunch", downstairs],
+          ["p-dinner", downstairs],
+          ["p-supper", downstairs],
+        ]),
+      ]),
+    ).toEqual(["Breakfast +3: Downstairs bar"]);
+    expect(
+      textsAt([
+        withLines(categoryCell("drinks"), [
+          ["p-dinner", downstairs],
+          ["p-supper", downstairs],
+          ["p-aperitivo", downstairs],
+        ]),
+      ]),
+    ).toEqual(["Dinner +2: Downstairs bar"]);
+  });
+
+  it("gives each target its own line, ordered by its first period, and its periods and target", () => {
+    const lines = cellPeriodLines(
+      routing([
+        withLines(categoryCell("drinks"), [
+          ["p-dinner", noPreparation],
+          ["p-lunch", downstairs],
+          ["p-breakfast", noPreparation],
+        ]),
+      ]),
+      targetText,
+    )(drinks, null);
+    expect(lines).toEqual({
+      inherited: false,
+      lines: [
+        {
+          periodIds: ["p-breakfast", "p-dinner"],
+          target: noPreparation,
+          text: "Breakfast, Dinner: No preparation",
+        },
+        { periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" },
+      ],
+    });
+  });
+
+  it("gives an inherited zone cell the Every zone cell's lines, marked as inherited", () => {
+    const every = withLines(categoryCell("drinks"), [["p-lunch", downstairs]]);
+    const lines = cellPeriodLines(routing([every]), targetText);
+    expect(lines(drinks, "terrace")).toEqual({
+      inherited: true,
+      lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+    });
+    expect(lines({ kind: "product", productId: "mojito" }, null)).toEqual({
+      inherited: true,
+      lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+    });
+    expect(lines(drinks, null).inherited).toBe(false);
+  });
+
+  it("gives a cell with its own choice and no lines none, even under a parent with lines", () => {
+    const lines = cellPeriodLines(
+      routing([
+        withLines(categoryCell("drinks"), [["p-lunch", downstairs]]),
+        categoryCell("drinks", kitchen, "terrace"),
+      ]),
+      targetText,
+    );
+    expect(lines(drinks, "terrace")).toEqual({ inherited: false, lines: [] });
+    expect(lines({ kind: "all" }, "terrace")).toEqual({ inherited: true, lines: [] });
+  });
+
+  it("gives an inherited zone cell only its department's lines from an Every zone cell", () => {
+    const every = withLines(categoryCell("drinks"), [
+      ["p-lunch", downstairs],
+      ["p-aperitivo", kitchen],
+    ]);
+    const lines = cellPeriodLines(
+      {
+        ...routing([every]),
+        zones: [
+          { id: "terrace", name: "Terrace", departmentId: "dining" },
+          { id: "counter", name: "Counter", departmentId: "bar" },
+          { id: "garden", name: "Garden", departmentId: null },
+        ],
+      },
+      targetText,
+    );
+    const texts = (row: RoutingRow, zoneId: string | null) =>
+      lines(row, zoneId).lines.map((line) => line.text);
+    expect(texts(drinks, null)).toEqual(["Lunch: Downstairs bar", "Aperitivo: Kitchen"]);
+    expect(lines(drinks, "terrace")).toEqual({
+      inherited: true,
+      lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+    });
+    expect(texts({ kind: "product", productId: "mojito" }, "terrace")).toEqual([
+      "Lunch: Downstairs bar",
+    ]);
+    expect(texts(drinks, "counter")).toEqual(["Aperitivo: Kitchen"]);
+    expect(lines(drinks, "garden")).toEqual({ inherited: true, lines: [] });
+  });
+
+  it("names each period's department in brackets only where its name repeats", () => {
+    const named = (id: string, departmentName: string, name: string): RoutingPeriod => ({
+      ...period(id, departmentName.toLowerCase(), name),
+      departmentName,
+    });
+    const lines = cellPeriodLines(
+      {
+        ...routing([
+          withLines(categoryCell("drinks"), [
+            ["dining-lunch", downstairs],
+            ["bar-lunch", downstairs],
+            ["dining-dinner", kitchen],
+            ["bar-aperitivo", kitchen],
+          ]),
+        ]),
+        periods: [
+          named("dining-lunch", "Dining", "Lunch"),
+          named("dining-dinner", "Dining", "Dinner"),
+          named("bar-aperitivo", "Bar", "Aperitivo"),
+          named("bar-lunch", "Bar", "Lunch"),
+        ],
+      },
+      targetText,
+    );
+    expect(lines(drinks, null).lines.map((line) => line.text)).toEqual([
+      "Lunch (Dining), Lunch (Bar): Downstairs bar",
+      "Dinner, Aperitivo: Kitchen",
+    ]);
+  });
+
+  it("names a period's department wherever its name repeats among the cell's lines", () => {
+    const named = (id: string, departmentName: string, name: string): RoutingPeriod => ({
+      ...period(id, departmentName.toLowerCase(), name),
+      departmentName,
+    });
+    const lines = cellPeriodLines(
+      {
+        ...routing([
+          withLines(categoryCell("drinks"), [
+            ["dining-lunch", downstairs],
+            ["bar-lunch", kitchen],
+            ["dining-dinner", kitchen],
+          ]),
+        ]),
+        periods: [
+          named("dining-lunch", "Dining", "Lunch"),
+          named("dining-dinner", "Dining", "Dinner"),
+          named("bar-lunch", "Bar", "Lunch"),
+        ],
+      },
+      targetText,
+    );
+    expect(lines(drinks, null).lines.map((line) => line.text)).toEqual([
+      "Lunch (Dining): Downstairs bar",
+      "Dinner, Lunch (Bar): Kitchen",
+    ]);
+  });
+
+  it("draws a waiting choice's own lines, and for a waiting Clear the lines it would inherit", () => {
+    const parent = withLines(categoryCell("drinks"), [["p-lunch", downstairs]]);
+    const mojito = withLines(
+      { row: { kind: "product", productId: "mojito" }, zoneId: null, target: kitchen },
+      [["p-dinner", kitchen]],
+    );
+    const of = cellPeriodLines(routing([parent, mojito]), targetText);
+    const row: RoutingRow = { kind: "product", productId: "mojito" };
+    expect(of(row, null)).toMatchObject({ inherited: false, lines: [{ text: "Dinner: Kitchen" }] });
+    expect(
+      of(row, null, { target: kitchen, periods: [{ periodId: "p-supper", target: downstairs }] }),
+    ).toEqual({
+      inherited: false,
+      lines: [{ periodIds: ["p-supper"], target: downstairs, text: "Supper: Downstairs bar" }],
+    });
+    expect(of(row, null, { target: kitchen })).toEqual({ inherited: false, lines: [] });
+    expect(of(row, null, { target: null })).toEqual({
+      inherited: true,
+      lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+    });
+  });
+
+  it("leaves out a line whose period the model does not list", () => {
+    expect(
+      textsAt([
+        withLines(categoryCell("drinks"), [
+          ["p-gone", downstairs],
+          ["p-lunch", downstairs],
+        ]),
+      ]),
+    ).toEqual(["Lunch: Downstairs bar"]);
   });
 });

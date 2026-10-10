@@ -93,6 +93,10 @@ declare module "@waitron/shared" {
     "service_zone.not_allowed": { zoneId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
+    "route.period_invalid": {
+      periodId: string;
+      reason: "other_department" | "repeated" | "not_offered";
+    };
     "station.destination_invalid": {
       stationId: string;
       sendsToStationId: string;

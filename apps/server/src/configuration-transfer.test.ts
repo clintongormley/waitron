@@ -3880,6 +3880,146 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   expect(cells.rows).toHaveLength(7);
 });
 
+it("carries a cell's period choices with their cell, including a period whose menu holds none of the cell's products", async () => {
+  const source = await applyVenue(planVenue(venue("B24681361"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, {
+      name: "Comedor de periodos",
+      orderStart: "table",
+    });
+    const terraza = await createServiceZone(tx, scope, {
+      name: "Terraza de periodos",
+      departmentId: department.id,
+    });
+    const [barra, plancha] = await tx
+      .insert(kitchenStations)
+      .values([
+        { locationId: scope.locationId, name: "Barra de periodos" },
+        { locationId: scope.locationId, name: "Plancha de periodos" },
+      ])
+      .returning();
+    const category = await createCategory(tx, { name: "Bebidas de periodos" });
+    const carta = await createCatalogue(tx, { name: "Carta de periodos" });
+    const product = await createProduct(tx, {
+      catalogueId: carta.id,
+      categoryId: category.id,
+      name: "Mojito de periodos",
+      pricingUnit: "each",
+      unitPrice: "7",
+      vatClass: "general",
+    });
+    const vacia = await createCatalogue(tx, { name: "Carta vacía de periodos" });
+    const period = await saveMenuPeriod(tx, scope, department.id, {
+      name: "Comidas de periodos",
+      colour: "red",
+      menuId: vacia.id,
+      staffMenuIds: [],
+    });
+    const atBarra = { kind: "station" as const, stationId: barra!.id };
+    await setRoutingCell(
+      tx,
+      scope,
+      { row: { kind: "product", productId: product.id }, zoneId: null },
+      atBarra,
+    );
+    await setRoutingCell(
+      tx,
+      scope,
+      { row: { kind: "category", categoryId: category.id }, zoneId: terraza.id },
+      atBarra,
+    );
+    const cellIds = await tx.execute<{ id: string; product_id: string | null }>(
+      sql`select id, product_id from routing_cells`,
+    );
+    const productCell = cellIds.rows.find((row) => row.product_id !== null)!.id;
+    const categoryCell = cellIds.rows.find((row) => row.product_id === null)!.id;
+    await tx.execute(sql`insert into routing_cell_periods
+      (id, cell_id, period_id, department_id, station_id, no_preparation)
+      values (${randomUUID()}, ${productCell}, ${period.id}, ${department.id}, ${plancha!.id}, 0),
+        (${randomUUID()}, ${categoryCell}, ${period.id}, ${department.id}, null, 1)`);
+    return [
+      department.id,
+      terraza.id,
+      barra!.id,
+      plancha!.id,
+      period.id,
+      productCell,
+      categoryCell,
+    ];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(
+      await buildConfigurationBundle(
+        suite.db,
+        source,
+        ALL_MODULES,
+        new Date("2026-10-09T10:00:00Z"),
+        versions,
+      ),
+      "a strong passphrase",
+    ),
+    "a strong passphrase",
+  );
+  expect(decoded.tables.routing_cell_periods).toHaveLength(2);
+  await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) =>
+      importConfigurationTables(
+        tx,
+        decoded,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      ),
+  });
+  const choices = await targetSuite.db.execute<Record<string, unknown>>(sql`
+    select x.cell_id, x.period_id, x.department_id, c.product_id is not null as product_cell,
+      z.name as zone, p.name as period, d.name as department, s.name as station, x.no_preparation
+    from routing_cell_periods x
+    join routing_cells c on c.id = x.cell_id
+    left join floor_zones z on z.id = c.zone_id
+    join menu_periods p on p.id = x.period_id and p.department_id = x.department_id
+    join departments d on d.id = x.department_id
+    left join kitchen_stations s on s.id = x.station_id
+    order by product_cell desc`);
+  expect(
+    choices.rows.map((row) => ({
+      product_cell: row.product_cell,
+      zone: row.zone,
+      period: row.period,
+      department: row.department,
+      station: row.station,
+      no_preparation: row.no_preparation,
+    })),
+  ).toEqual([
+    {
+      product_cell: 1,
+      zone: null,
+      period: "Comidas de periodos",
+      department: "Comedor de periodos",
+      station: "Plancha de periodos",
+      no_preparation: 0,
+    },
+    {
+      product_cell: 0,
+      zone: "Terraza de periodos",
+      period: "Comidas de periodos",
+      department: "Comedor de periodos",
+      station: null,
+      no_preparation: 1,
+    },
+  ]);
+  for (const row of choices.rows)
+    for (const id of [row.cell_id, row.period_id, row.department_id])
+      expect(sourceIds).not.toContain(id);
+});
+
 describe("opening hours in a configuration transfer", () => {
   /** Tuesday 6 October 2026, 12:00 in Madrid. */
   const AT = new Date("2026-10-06T10:00:00Z");

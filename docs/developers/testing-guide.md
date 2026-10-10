@@ -1040,8 +1040,8 @@ message.
 A host's `checked` property can report the expected value while its inner checkbox remains visibly
 wrong. The printer follow-up review reproduced that split by preserving the emitted change while
 suppressing the host update; the old assertion passed and the inner-input assertion failed.
-The Tickets assignment check reads the multi-select's rendered `aria-selected` options
-in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “Tickets retains station
+The station printers check reads the multi-select's rendered `aria-selected` options
+in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “the station editor retains
 printer memberships independently for each station”, rather than relying on the host values alone.
 
 ## A reopened polling dialog owns a new in-flight gate.
@@ -1160,14 +1160,22 @@ input and prove the target guard by deletion. Receipt: `packages/ui-core/src/sub
 An inline editor that opens a confirmation from `keydown` must cancel Escape's default action as
 well as its propagation. On 2026-10-06, W69's printer and Settings choice tests could open the
 warning and then observe it closed after the same native Escape. Dispatched events had not exposed
-that browser action. The handlers now call `preventDefault`; the printer regression observes that
-the actual keydown was cancelled and the warning stays open until a subsequent answer.
+that browser action. The handlers then called `preventDefault`, and the printer regression
+observed that the actual keydown was cancelled and the warning stayed open until a subsequent
+answer.
 
-Run `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.printers-unsaved.test.ts src/dashboard/prep-stations-screen.settings-unsaved.test.ts`.
-The pair passed 37 cases. In an independently installed candidate, removing the printer cancellation
-failed its native case while a pristine form still closed directly. A preceding deletion survived
-when the test asserted only the visible warning, so timing alone does not guard the cancellation.
-These cases cover the named editors; they do not audit every inline Escape handler.
+Receipt, 2026-10-10: the two Settings cell editors in
+`packages/venue-service/src/dashboard/prep-stations-screen.ts` (the fallback choice and the minutes
+fields) each call `event.preventDefault()` on Escape, and the case “native Escape keeps the Settings
+%s warning open until the next answer” runs one field of each. With the minutes editor's call
+deleted,
+`pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/prep-stations-screen.settings-unsaved.test.ts -t "native Escape keeps"`
+failed the `warmAfterMinutes` case in 6 runs of 6. With the fallback editor's call deleted instead,
+the `fallback` case failed in 5 runs of 6 and passed once, so a single green run does not prove that
+call is present. Each failure was `AssertionError: expected false to be true`; where the location
+was read, it was line 589, the wait for the warning to be open after the first native Escape. With
+both calls restored, both cases passed. The case covers these two Settings editors; it does not audit
+every inline Escape handler.
 
 ## Position a native popover before its first paint.
 

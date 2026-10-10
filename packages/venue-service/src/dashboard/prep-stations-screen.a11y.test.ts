@@ -4,12 +4,17 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { PrepStationsApi } from "./routing-client.js";
-import type { RouteExplanation } from "../routing-types.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
-afterEach(cleanup);
+// The screen opens on the tab its URL names, so each test starts from the page's own URL.
+const startUrl = location.href;
+afterEach(() => {
+  cleanup();
+  history.replaceState(null, "", startUrl);
+});
 const empty = {
   routing: {
+    periods: [],
     zones: [],
     categories: [],
     products: [],
@@ -25,7 +30,6 @@ const empty = {
   categories: [],
   zones: [],
   products: [],
-  testProducts: [],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -91,11 +95,6 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       ),
       setCell: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
       enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      readStationHealth: vi.fn().mockResolvedValue({
-        capturedAt: "2026-10-05T12:00:00Z",
-        stations: [],
-        outputsDown: { printersDown: [], screensDark: [] },
-      }),
       load: vi.fn().mockResolvedValue(
         state === "empty"
           ? empty
@@ -178,23 +177,19 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     if (state === "station" || state === "station-rest-on") {
-      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
-        new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
-      );
-      await el.updateComplete;
-      const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+      const table = el
+        .shadowRoot!.querySelector("prep-station-table")!
+        .shadowRoot!.querySelector("wt-data-table")!;
       await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-      const button = table.shadowRoot!.querySelector<HTMLElement>(
-        '[data-test="edit-settings-rest-bar"]',
-      )!;
-      expect(button.textContent?.trim()).toBe(state === "station-rest-on" ? "Yes" : "No");
-      button.click();
+      table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
       await el.updateComplete;
-      const choice = table.shadowRoot!.querySelector('[data-test="settings-choice"]')!;
-      await (choice as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-      expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(
-        state === "station-rest-on" ? "Yes" : "No",
-      );
+      const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+      await editor.updateComplete;
+      const rest = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        "wt-switch[name=showsRestOfOrder]",
+      )!;
+      await rest.updateComplete;
+      expect(rest.checked).toBe(state === "station-rest-on");
     }
     if (state === "editor" || state === "invalid") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();
@@ -209,6 +204,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         "venue-routing-grid",
       )!;
       await grid.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
       if (state === "grid-disabled-target")
         expect(grid.shadowRoot!.querySelector('[data-test="disabled-target"]')).not.toBeNull();
       if (state === "grid-preview" || state === "grid-refusal") {
@@ -328,7 +324,6 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
 describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (theme) => {
   it.each([
     "closed",
-    "warnings",
     "fallback",
     "fallback-confirmation",
     "switch-off",
@@ -379,32 +374,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     ];
     el.api = {
       updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      readStationHealth: vi.fn().mockResolvedValue({
-        capturedAt: "2026-10-05T12:00:00Z",
-        stations: stations.map((station) => ({
-          id: station.id,
-          name: station.name,
-          hasScreen: false,
-          waiting: 0,
-          preparing: null,
-          ready: null,
-          late: { warm: 0, overdue: 0, forgotten: 0 },
-          oldestMinutes: null,
-          items: [],
-        })),
-        outputsDown: {
-          printersDown: [
-            {
-              stationId: "bar",
-              stationName: "Upstairs bar",
-              printerId: "epson",
-              printerName: "Epson",
-              since: "2026-10-01T20:14:00",
-            },
-          ],
-          screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
-        },
-      }),
       load: vi.fn().mockResolvedValue({
         ...empty,
         stations,
@@ -465,14 +434,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
       );
       await el.updateComplete;
-      if (state === "warnings") {
-        const table = el.shadowRoot!.querySelector("prep-station-health-table")!;
-        await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-        const summary = table.shadowRoot!.querySelector("wt-data-table")!;
-        await (summary as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-        expect(summary.shadowRoot!.textContent).toContain("Printer Epson");
-        expect(summary.shadowRoot!.textContent).toContain("has ever checked in");
-      }
     }
     if (fallbackState) {
       el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
@@ -496,7 +457,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     if (action) {
       const selector = `[data-test="${action}-bar"]`;
       const summary = el
-        .shadowRoot!.querySelector("prep-station-health-table")!
+        .shadowRoot!.querySelector("prep-station-table")!
         .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
       (el.shadowRoot!.querySelector<HTMLElement>(selector) ??
         summary.querySelector<HTMLElement>(selector))!.click();
@@ -534,162 +495,5 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       }
     }
     await expectNoA11yViolations(host);
-  });
-});
-
-describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
-  describe.each(["light", "dark"] as const)("theme %s", (theme) => {
-    it.each([390, 1280])("keeps controls and fallback answer readable at %s px", async (width) => {
-      const previous = { width: window.innerWidth, height: window.innerHeight };
-      setLocale(locale);
-      try {
-        await page.viewport(width, 900);
-        await mountThemed("<div></div>", theme);
-        host.style.width = `${width}px`;
-        expect(host.getBoundingClientRect().width).toBe(width);
-        host.style.boxSizing = "border-box";
-        const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-        el.api = {
-          updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-          readStationHealth: vi.fn().mockResolvedValue({
-            capturedAt: "2026-10-05T12:00:00Z",
-            stations: [],
-            outputsDown: { printersDown: [], screensDark: [] },
-          }),
-          load: vi.fn().mockResolvedValue({
-            ...empty,
-            testProducts: [
-              { id: "mojito", name: "Mojito" },
-              { id: "chips", name: "Chips" },
-            ],
-            categories: [{ id: "sides", name: "Sides", parentId: null }],
-          }),
-          explain: vi.fn().mockResolvedValue({
-            route: { kind: "station", stationId: "downstairs" },
-            decidedBy: {
-              kind: "cell",
-              address: { row: { kind: "product", productId: "mojito" }, zoneId: null },
-            },
-            fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
-            noReplacement: false,
-            clockReadable: true,
-            stations: [
-              { id: "upstairs", name: "Upstairs bar", active: true },
-              { id: "downstairs", name: "Downstairs bar", active: true },
-            ],
-            extrasWaitOnDish: false,
-            extras: [
-              {
-                productId: "chips",
-                outcome: { kind: "made", stationId: "upstairs" },
-                decidedBy: {
-                  kind: "cell",
-                  address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
-                },
-                fallbacks: [],
-              },
-            ],
-          } satisfies RouteExplanation),
-        } as unknown as PrepStationsApi;
-        host.append(el);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        const root = el.shadowRoot!;
-        const tabs = root.querySelector("wt-tabs")!;
-        await tabs.updateComplete;
-        tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
-        await el.updateComplete;
-        await tabs.updateComplete;
-        root
-          .querySelector('[data-test="test-product"]')!
-          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "mojito" } }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        await expectNoA11yViolations(host);
-        root
-          .querySelector('[data-test="test-extra"]')!
-          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "chips" } }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        expect(root.querySelector('[data-test="remove-extra-chips"]')).not.toBeNull();
-        await expectNoA11yViolations(host);
-        const when = root.querySelector('[data-test="test-when"]')!;
-        when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        for (const selector of [
-          '[data-test="test-when"]',
-          '[data-test="test-weekday"]',
-          '[data-test="test-time"]',
-        ]) {
-          const box = root.querySelector(selector)!.getBoundingClientRect();
-          expect(box.left).toBeGreaterThanOrEqual(host.getBoundingClientRect().left);
-          expect(box.right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
-          expect(box.height).toBeGreaterThanOrEqual(44);
-        }
-        const answer = root.querySelector('[data-test="test-answer"]')!.textContent!;
-        expect(answer).toContain(
-          locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
-        );
-        expect(answer).toContain(
-          locale === "en"
-            ? "Because: Upstairs bar: Mojito, in every zone"
-            : "Porque: Upstairs bar: Mojito, en todas las zonas",
-        );
-        expect(answer).toContain(
-          locale === "en"
-            ? "Chips: made separately at Upstairs bar, as set for Sides, in every zone"
-            : "Chips: se prepara aparte en Upstairs bar, como está indicado para Sides, en todas las zonas",
-        );
-        await expectNoA11yViolations(host);
-        const time = root.querySelector('[data-test="test-time"]')!;
-        time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
-        await el.updateComplete;
-        await expectNoA11yViolations(host);
-
-        // The date-and-time preview: first with no date chosen, then answered, then a time the
-        // clocks skip on that date.
-        when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "date" } }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        expect(root.querySelector("#test-date-error")!.textContent!.trim()).not.toBe("");
-        await expectNoA11yViolations(host);
-        root
-          .querySelector('[data-test="test-date"]')!
-          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2026-10-09" } }));
-        root
-          .querySelector('[data-test="test-time"]')!
-          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        for (const selector of [
-          '[data-test="test-when"]',
-          '[data-test="test-date"]',
-          '[data-test="test-time"]',
-        ]) {
-          const box = root.querySelector(selector)!.getBoundingClientRect();
-          expect(box.left).toBeGreaterThanOrEqual(host.getBoundingClientRect().left);
-          expect(box.right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
-          expect(box.height).toBeGreaterThanOrEqual(44);
-        }
-        expect(root.querySelector('[data-test="test-answer"]')!.textContent).toContain(
-          locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
-        );
-        await expectNoA11yViolations(host);
-        vi.mocked(el.api.explain).mockRejectedValueOnce({
-          code: "management.request_invalid",
-          params: { field: "time" },
-        });
-        root
-          .querySelector('[data-test="test-time"]')!
-          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:30" } }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        expect(root.querySelector("#test-time-error")!.textContent!.trim()).not.toBe("");
-        await expectNoA11yViolations(host);
-      } finally {
-        await page.viewport(previous.width, previous.height);
-      }
-    });
   });
 });

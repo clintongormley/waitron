@@ -567,7 +567,9 @@ calendar.
   department's week. A row with no slots on a special date replaces the week with the all-day menu.
 - A zone's override names a named period, not a slot, so it holds on every day and special date
   that places the period. Deleting a period is refused `menu_period.in_use` while any slot places
-  it, past special dates included; once none does, its zones' overrides cascade with it.
+  it, past special dates included; once none does, its zones' overrides and the routing cells'
+  choices for it (`routing_cell_periods`) cascade with it. The Periods tab's delete dialog lists
+  those routing cells first (`routingWarning`, `packages/venue-service/src/dashboard/opening-hours-screen.ts`).
 - A whole-venue closure does not close menus: the clash checks build their date state with
   `closeWholeVenue: false` (`firstMenuClash`, `packages/venue-service/src/menu-timetable-rules.ts`)
   and the resolver never reads `special_dates.close_whole_venue`.

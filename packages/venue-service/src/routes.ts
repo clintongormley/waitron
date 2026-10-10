@@ -59,19 +59,16 @@ import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/s
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
   clearRoutingCell,
-  explainRoute,
-  type ExplainWhen,
   routingModel,
   previewRoutingChange,
   setRoutingCell,
 } from "./routing-store.js";
 import type { RouteTarget } from "./routing.js";
-import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
 import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
-import type { CellAddress, RoutingChange } from "./routing-types.js";
+import type { CellAddress, PeriodLine, RoutingChange } from "./routing-types.js";
 import { setStationFallback } from "./station-times.js";
 import {
   listDepartmentTransferProfiles,
@@ -113,6 +110,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "catalogue.not_found": 404,
   "route.subject_not_found": 404,
   "route.station_inactive": 409,
+  "route.period_invalid": 409,
   "station.not_found": 404,
   "station.destination_invalid": 400,
   "station.fallback_loop": 409,
@@ -126,7 +124,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "holiday.invalid": 400,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
-const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
 const RECEIPT_PRINT_MODE = new Set(["auto", "on_request"]);
@@ -252,27 +249,51 @@ function requireCellAddress(value: unknown): CellAddress {
   return { row: { kind, productId: requireBodyUuid(row.productId, "address") }, zoneId };
 }
 
+function requireRouteTarget(target: unknown, field: string): RouteTarget {
+  if (isRecord(target)) {
+    if (target.kind === "no_preparation" && hasExactly(target, ["kind"]))
+      return { kind: "no_preparation" };
+    if (target.kind === "station" && hasExactly(target, ["kind", "stationId"]))
+      return { kind: "station", stationId: requireBodyUuid(target.stationId, field) };
+  }
+  throw new AppError("management.request_invalid", { field });
+}
+
 function requireCellTarget(body: Record<string, unknown>): RouteTarget | null {
-  const invalid = () => new AppError("management.request_invalid", { field: "target" });
-  if (!Object.hasOwn(body, "target")) throw invalid();
-  const { target } = body;
-  if (target === null) return null;
-  if (!isRecord(target)) throw invalid();
-  if (target.kind === "no_preparation" && hasExactly(target, ["kind"]))
-    return { kind: "no_preparation" };
-  if (target.kind === "station" && hasExactly(target, ["kind", "stationId"]))
-    return { kind: "station", stationId: requireBodyUuid(target.stationId, "target") };
-  throw invalid();
+  if (!Object.hasOwn(body, "target"))
+    throw new AppError("management.request_invalid", { field: "target" });
+  return body.target === null ? null : requireRouteTarget(body.target, "target");
+}
+
+/** A cell being cleared takes no period lines, not even an empty list. */
+function requireCellPeriods(
+  body: Record<string, unknown>,
+  target: RouteTarget | null,
+): PeriodLine[] | undefined {
+  if (!Object.hasOwn(body, "periods")) return undefined;
+  const invalid = () => new AppError("management.request_invalid", { field: "periods" });
+  const { periods } = body;
+  if (target === null || !Array.isArray(periods)) throw invalid();
+  return periods.map((line: unknown) => {
+    if (!isRecord(line) || !hasExactly(line, ["periodId", "target"])) throw invalid();
+    return {
+      periodId: requireBodyUuid(line.periodId, "periods"),
+      target: requireRouteTarget(line.target, "periods"),
+    };
+  });
+}
+
+function requireCellChange(body: Record<string, unknown>): Omit<RoutingChange, "kind"> {
+  const address = requireCellAddress(body.address);
+  const target = requireCellTarget(body);
+  const periods = requireCellPeriods(body, target);
+  return { address, target, ...(periods === undefined ? {} : { periods }) };
 }
 
 function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
   if (body.kind !== "cell") throw new AppError("management.request_invalid", { field: "kind" });
-  onlyKeys(body, ["kind", "address", "target"]);
-  return {
-    kind: "cell",
-    address: requireCellAddress(body.address),
-    target: requireCellTarget(body),
-  };
+  onlyKeys(body, ["kind", "address", "target", "periods"]);
+  return { kind: "cell", ...requireCellChange(body) };
 }
 
 import { readNamedDaysModel } from "./named-days.js";
@@ -456,44 +477,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.get("/management-api/venue-service/routing/explain", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const productId = requireUuidParam(c.req.query("productId") ?? "", "ProductId");
-        const extraProductIds = (c.req.queries("extraId") ?? []).map((id) =>
-          requireUuidParam(id, "ProductId"),
-        );
-        const zone = c.req.query("zoneId");
-        const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
-        // A weekday previews the standard week; a date previews that date's own hours.
-        const weekday = c.req.query("weekday");
-        const date = c.req.query("date");
-        const time = c.req.query("time");
-        if (
-          (weekday !== undefined && date !== undefined) ||
-          (weekday === undefined && date === undefined) !== (time === undefined) ||
-          (weekday !== undefined && !/^[0-6]$/.test(weekday)) ||
-          (date !== undefined && !isLocalDate(date)) ||
-          (time !== undefined && !CLOCK_TIME.test(time))
-        )
-          throw new AppError("management.request_invalid", { field: "when" });
-        const when: ExplainWhen =
-          time === undefined
-            ? { kind: "now", at: new Date() }
-            : date === undefined
-              ? { kind: "at", moment: { weekday: Number(weekday), timeOfDay: time } }
-              : {
-                  kind: "at",
-                  moment: { civilDate: date, weekday: weekdayOf(date), timeOfDay: time },
-                };
-        return c.json(
-          await gated(sessionId, (tx) =>
-            explainRoute(tx, ctx.cfg, productId, zoneId, when, extraProductIds),
-          ),
-        );
-      }),
-    );
-
     app.post("/management-api/venue-service/routing/preview", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -506,13 +489,12 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["address", "target"]);
-        const address = requireCellAddress(body.address);
-        const target = requireCellTarget(body);
+        onlyKeys(body, ["address", "target", "periods"]);
+        const { address, target, periods } = requireCellChange(body);
         await gated(sessionId, (tx) =>
           target === null
             ? clearRoutingCell(tx, ctx.cfg, address)
-            : setRoutingCell(tx, ctx.cfg, address, target),
+            : setRoutingCell(tx, ctx.cfg, address, target, periods),
         );
         return c.body(null, 204);
       }),

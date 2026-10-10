@@ -19,13 +19,16 @@ import { assertProductWritable, productWithId, type ProductScope } from "@waitro
 import { assertDemotedStationHours } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { replaceStationPrinters } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
 import { assertStationTiming, getKitchenTimingDefaults } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
 
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
-// `venue.configure` (`withVenueAuth` in management-api.ts), and the product editor's save, gated by
-// `CATALOGUE_WRITE_PERMISSION` (catalogue-api.ts). The reads have other callers, not all gated.
+// `venue.configure` (`withVenueAuth` in management-api.ts) and, where a station's printers are
+// sent, `printer.manage` too (`authorizeStationPrinters`), and from the product editor's save,
+// gated by `CATALOGUE_WRITE_PERMISSION` (catalogue-api.ts). The reads have other callers, not all
+// gated.
 
 export interface Station {
   id: string;
@@ -109,6 +112,7 @@ export async function createStation(
     displayOrder?: number;
     isDefault?: boolean;
     thresholds?: StationTimingPatch;
+    printerIds?: readonly string[];
   },
   at: Date = new Date(),
 ): Promise<{ id: string }> {
@@ -133,6 +137,9 @@ export async function createStation(
       .returning({ id: kitchenStations.id });
     if (input.thresholds !== undefined && Object.keys(input.thresholds).length > 0) {
       await tx.insert(kitchenStationTiming).values({ stationId: row!.id, ...input.thresholds });
+    }
+    if (input.printerIds !== undefined) {
+      await replaceStationPrinters(tx, cfg, row!.id, input.printerIds);
     }
     return { id: row!.id };
   } catch (error) {
@@ -228,9 +235,11 @@ export async function updateStation(
     displayOrder?: number;
     active?: boolean;
     showsRestOfOrder?: boolean;
+    printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {
-  const { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes, ...set } = patch;
+  const { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes, printerIds, ...set } =
+    patch;
   const timingPatch: StationTimingPatch = {};
   if (warmAfterMinutes !== undefined) timingPatch.warmAfterMinutes = warmAfterMinutes;
   if (overdueAfterMinutes !== undefined) timingPatch.overdueAfterMinutes = overdueAfterMinutes;
@@ -250,6 +259,9 @@ export async function updateStation(
       { id, name: station.name },
     );
   }
+  // Printers are replaced only on a switched-on station, so they go in before a switch-off.
+  const printersFirst = printerIds !== undefined && set.active === false;
+  if (printersFirst) await replaceStationPrinters(tx, cfg, id, printerIds);
   try {
     if (Object.keys(set).length > 0) {
       await tx.update(kitchenStations).set(set).where(eq(kitchenStations.id, id));
@@ -266,6 +278,8 @@ export async function updateStation(
       .values({ stationId: id, ...timingPatch })
       .onConflictDoUpdate({ target: kitchenStationTiming.stationId, set: timingPatch });
   }
+  if (printerIds !== undefined && !printersFirst)
+    await replaceStationPrinters(tx, cfg, id, printerIds);
 }
 
 /** Deactivate a station — never a hard delete, since a `ticket_items.station_id` snapshot may

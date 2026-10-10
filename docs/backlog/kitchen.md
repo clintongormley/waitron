@@ -5,11 +5,12 @@ their full text.
 
 ## KDS operations — low priority (A9)
 
-Order routing is built (item→station, station→printer, receipt→printer). Gaps: a routing read-back /
-audit view (the station selects are set-only — the most useful to close); no station `type`/`kind`;
-single-target only (no fan-out, no per-modifier or per-time rules). Table and service statuses have
-full CRUD; kitchen statuses are partial — `bump_mode` and `fire_control` are configurable fixed
-enums, but a user-definable kitchen-status list does not exist.
+Order routing is built (item→station, station→printer, receipt→printer). Gaps: a routing audit
+view (a routing cell keeps no record of who changed it or when — the most useful to close); no
+station `type`/`kind`; single-target only (no fan-out or per-modifier rules; period choices came
+with A366 slice 4). Table and service statuses have full CRUD; kitchen statuses are partial —
+`bump_mode` and `fire_control` are configurable fixed enums, but a user-definable kitchen-status
+list does not exist.
 
 ## Task 5 (#750, kitchen, pass and table screen by group; printing problems)
 
@@ -80,22 +81,6 @@ enums, but a user-definable kitchen-status list does not exist.
   `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
   service:** whether that is enough for something a cook must not miss, or whether an options answer
   deserves its own prominent form on the ticket. Nobody has watched a real kitchen read one.
-
-## On the Routing tab, the label above the "Where is this made?" time choice is cut
-
-- **Seen in A323's look at the demo (2026-10-07), in files A323 did not change.** On the
-  Routing tab, the label above the "Where is this made?" time choice is cut to "W…" ("Cuá…" in
-  Spanish) at 1280 and 390 px, in both themes, because the choice is too narrow for it.
-  Screenshots:
-  `~/waitron-campaign-c/a323-shots/`.
-
-## At 390 px the routing grid's fixed first column takes about 140 of the grid's roughly 310 px
-
-- **Seen in A372's look at the demo (2026-10-07), in files A372 did not change.** At 390 px
-  the routing grid's fixed first column takes about 140 of the grid's roughly 310 px, so one
-  zone column shows at a time and a saved choice in a zone column is reached only by scrolling
-  sideways. In a cell at 390 px, "Downstairs bar" fills its field and its last letter touches
-  the dropdown arrow. Screenshots: `~/waitron-campaign-c/a372-shots/`.
 
 ## Prep stations' Settings cell saves have the shape A261-4 changed for routing cells
 

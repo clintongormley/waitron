@@ -6,25 +6,23 @@ beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
 
 it("fills each placeholder from its value", () => {
-  expect(format("prep.test_extra_made", { name: "Cheese", station: "Grill" })).toBe(
-    "Cheese: made separately at Grill",
+  expect(format("prep.station_reordered", { name: "Bar", index: "2", total: "3" })).toBe(
+    "Bar is now 2 of 3.",
   );
 });
 
 it("inserts a value containing $& as written", () => {
-  expect(format("prep.test_extra_made", { name: "Cheese $&", station: "Grill $'" })).toBe(
-    "Cheese $&: made separately at Grill $'",
+  expect(format("prep.station_reordered", { name: "Bar $&", index: "2 $'", total: "3" })).toBe(
+    "Bar $& is now 2 $' of 3.",
   );
 });
 
 it("does not fill a placeholder that arrived inside another value", () => {
-  expect(format("prep.test_extra_made", { name: "Cheese {station}", station: "Grill" })).toBe(
-    "Cheese {station}: made separately at Grill",
+  expect(format("prep.station_reordered", { name: "Bar {index}", index: "2", total: "3" })).toBe(
+    "Bar {index} is now 2 of 3.",
   );
 });
 
 it("leaves a placeholder with no value as it is", () => {
-  expect(format("prep.test_extra_made", { name: "Cheese" })).toBe(
-    "Cheese: made separately at {station}",
-  );
+  expect(format("prep.station_reordered", { name: "Bar" })).toBe("Bar is now {index} of {total}.");
 });

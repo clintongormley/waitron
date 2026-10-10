@@ -63,6 +63,7 @@ async function mount(
             staffMenuIds: [],
             endOffsetMinutes: 0,
             weekdays: [],
+            routingUses: [],
           },
         ],
         week: [],

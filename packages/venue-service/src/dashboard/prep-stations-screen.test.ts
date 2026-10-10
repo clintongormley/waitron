@@ -1,12 +1,11 @@
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
-import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
+import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { WatcherView } from "./watchers-seen.js";
-import type { RouteExplanation, RoutingDecision } from "../routing-types.js";
 import "./prep-stations-screen.js";
 
 registerIcons({
@@ -15,9 +14,12 @@ registerIcons({
   grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",
 });
 const hosts: HTMLElement[] = [];
+// The screen opens on the tab its URL names, so each test starts from the page's own URL.
+const startUrl = location.href;
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
+  history.replaceState(null, "", startUrl);
 });
 const view: PrepStationsView = {
   routing: {
@@ -28,6 +30,7 @@ const view: PrepStationsView = {
       { id: "food", name: "Food", parentId: null },
     ],
     products: [{ id: "bread", name: "Bread", categoryId: null }],
+    periods: [],
     cells: [
       {
         row: { kind: "category", categoryId: "cocktails" },
@@ -78,7 +81,6 @@ const view: PrepStationsView = {
   ],
   zones: [],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -89,32 +91,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   const load = overrides.load ?? vi.fn().mockResolvedValue(view);
   return {
     load,
-    readStationHealth: vi.fn(async () => {
-      const loaded: PrepStationsView = (await vi.mocked(load).mock.results.at(-1)?.value) ?? view;
-      return {
-        capturedAt: "2026-10-05T12:00:00Z",
-        stations: loaded.stations.map((station) => ({
-          id: station.id,
-          name: station.name,
-          hasScreen: false,
-          waiting: 0,
-          preparing: null,
-          ready: null,
-          late: { warm: 0, overdue: 0, forgotten: 0 },
-          oldestMinutes: null,
-          items: [],
-        })),
-        outputsDown: { printersDown: [], screensDark: [] },
-      };
-    }),
     preview: vi.fn().mockResolvedValue([]),
-    explain: vi.fn().mockResolvedValue({
-      route: null,
-      decidedBy: null,
-      fallbacks: [],
-      noReplacement: false,
-      stations: [],
-    }),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     deactivateStation: vi.fn(),
@@ -122,7 +99,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     ...overrides,
   } as unknown as PrepStationsApi;
 }
-it("shows watcher table relationships and Tickets and tester follow lines", async () => {
+it("shows watcher table relationships", async () => {
   setLocale("en");
   const pass = {
     id: "pass",
@@ -164,13 +141,6 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
       ],
       watchers: [pass, runner],
     }),
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "station", stationId: "bar" },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      stations: [],
-    }),
   });
   const el = await mount(a);
   expect(q(el, '[data-test="edit-watcher-follows-pass"]')?.textContent?.trim()).toBe(
@@ -184,18 +154,6 @@ it("shows watcher table relationships and Tickets and tester follow lines", asyn
   expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
   expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
   expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
-  const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
-  await (tickets as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  const follows = tickets.shadowRoot!.querySelector('[data-test="watchers-bar"]')!;
-  expect(follows.textContent).toContain("Pass, Terrace runner");
-  expect(follows.querySelector("a")?.getAttribute("href")).toBe(
-    "/manage/prep-stations/view/watchers",
-  );
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')?.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain("Watched by: Pass");
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
 
@@ -245,42 +203,6 @@ it("edits and confirms removal of a watcher", async () => {
   expect(a.removeWatcher).toHaveBeenCalledWith("pass", { disable: true });
 });
 
-it("names no watcher for a routed dish and says nothing for no preparation", async () => {
-  setLocale("en");
-  const a = api({
-    explain: vi
-      .fn()
-      .mockResolvedValueOnce({
-        route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "default" },
-        fallbacks: [],
-        noReplacement: false,
-        stations: [],
-      })
-      .mockResolvedValueOnce({
-        route: { kind: "no_preparation" },
-        decidedBy: {
-          kind: "cell",
-          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
-        } satisfies RoutingDecision,
-        fallbacks: [],
-        noReplacement: false,
-        stations: [],
-      }),
-  });
-  const el = await mount(a);
-  const select = q(el, '[data-test="test-product"]')!;
-  select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain("No watcher follows it.");
-  select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')?.textContent).not.toContain("watcher follows");
-  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain(
-    "Because: No preparation: Drinks › Cocktails, in every zone",
-  );
-  window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
-});
 async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<PrepStationsScreen> {
   const host = document.createElement("div");
   applyTokens(host);
@@ -308,11 +230,19 @@ async function editSaveField(el: PrepStationsScreen, field: HTMLElement, value: 
 }
 const q = (el: PrepStationsScreen, s: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(s) ??
+  el.shadowRoot!.querySelector("prep-station-editor")?.shadowRoot?.querySelector<HTMLElement>(s) ??
   el
     .shadowRoot!.querySelector('[data-test="watchers-table"]')
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
-  healthSummary(el)?.querySelector<HTMLElement>(s) ??
+  stationTable(el)?.querySelector<HTMLElement>(s) ??
   null;
+/** The station editor's `wt-close`; take it before the click that closes the editor. */
+function editorClosed(el: PrepStationsScreen) {
+  const modal = el
+    .shadowRoot!.querySelector("prep-station-editor")!
+    .shadowRoot!.querySelector("wt-modal")!;
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
 async function routingGrid(el: PrepStationsScreen) {
   const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
     '[slot="routing"] venue-routing-grid',
@@ -320,10 +250,31 @@ async function routingGrid(el: PrepStationsScreen) {
   await grid?.updateComplete;
   return grid;
 }
-const gridCombo = (grid: HTMLElement, row: string, zone: string) =>
-  grid.shadowRoot!.querySelector<WtCombobox>(
-    `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
-  );
+/** What a routing cell draws: its button's target and accessible name, and its refusal. */
+function gridCombo(grid: HTMLElement, row: string, zone: string) {
+  const td = () =>
+    grid.shadowRoot!.querySelector<HTMLElement>(`td[data-row="${row}"][data-zone="${zone}"]`)!;
+  const button = () => td().querySelector<HTMLButtonElement>('button[data-test="routing-cell"]');
+  if (button() === null) return null;
+  return {
+    button: () => button()!,
+    get value() {
+      return button()!.dataset.target!;
+    },
+    get label() {
+      return button()!.getAttribute("aria-label")!;
+    },
+    get error() {
+      return td().querySelector('[data-test="cell-error"]')?.textContent!.trim() ?? "";
+    },
+    get shown() {
+      return button()!.querySelector(".station")!.textContent!.trim();
+    },
+    get updateComplete() {
+      return (grid as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    },
+  };
+}
 
 it.each([
   ['wt-switch[name="showsRestOfOrder"]', ""],
@@ -339,7 +290,6 @@ it.each([
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
     expect(await routingGrid(el)).not.toBeNull();
     expect(routing.querySelector('[data-test="station-bar"]')).not.toBeNull();
-    expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
     if (selector) expect(routing.querySelector(selector)).toBeNull();
     else expect(routing.textContent).not.toContain(text);
   },
@@ -356,7 +306,6 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
     const grid = (await routingGrid(el))!;
     expect(grid).not.toBeNull();
     expect(gridCombo(grid, "c:cocktails", "every")!.value).toBe("station:bar");
-    expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
     expect(routing.querySelector(selector)).toBeNull();
   },
 );
@@ -373,13 +322,12 @@ it.each([
   const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
   expect(await routingGrid(el)).not.toBeNull();
   expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
-  expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
   expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
   const moved = action
     .replace("default-", "make-default-")
     .replace("switch-off-", "disable-")
     .replace("switch-on-", "enable-");
-  expect(healthSummary(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
+  expect(stationTable(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
 });
 
 function settingsQ(el: PrepStationsScreen, selector: string) {
@@ -498,20 +446,6 @@ it.each(
     const el = await mount(
       api({
         load: vi.fn().mockResolvedValue(visualView),
-        readStationHealth: vi.fn().mockResolvedValue(
-          healthFor(visualView, {
-            printersDown: [
-              {
-                stationId: "upstairs",
-                stationName: "Upstairs bar",
-                printerId: "epson",
-                printerName: "Epson",
-                since: "2026-10-01T20:14:00",
-              },
-            ],
-            screensDark: [{ stationId: "retired", stationName: "Retired", lastSeenAt: null }],
-          }),
-        ),
       }),
       theme,
     );
@@ -542,22 +476,6 @@ it.each(
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
-    expect(healthRow(el, "upstairs").querySelector('[part="problem"]')?.textContent).toContain(
-      "Epson",
-    );
-    expect(healthRow(el, "retired").querySelector('[part="problem"]')).not.toBeNull();
-    const problem = healthRow(el, "upstairs").querySelector<HTMLElement>('[part="problem"]')!;
-    const probe = document.createElement("span");
-    probe.style.display = "inline-block";
-    probe.style.width = "var(--wt-cell-name-max-width)";
-    host.append(probe);
-    expect(problem.getBoundingClientRect().width).toBeLessThanOrEqual(
-      probe.getBoundingClientRect().width,
-    );
-    const message = document.createRange();
-    message.selectNodeContents(problem);
-    expect(message.getClientRects().length).toBeGreaterThan(1);
-    probe.remove();
     await expectNoA11yViolations(el);
     await page.screenshot({
       path: `__screenshots__/look/routing-complete-${locale}-${theme}-${width}-stations.png`,
@@ -573,39 +491,32 @@ it.each(
     q(el, "wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
     await settle(el);
     tabs.scrollIntoView();
-    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "tickets" } }));
+    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
-    const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
-    await (tickets as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-    expect(tickets.shadowRoot!.querySelector('[data-test="screens-bar"]')!.textContent).toContain(
-      "Bar screen",
-    );
-    expect(tickets.shadowRoot!.querySelector('[data-test="watchers-bar"]')!.textContent).toContain(
-      "Pass",
-    );
+    expect(q(el, '[data-test="screens-bar"]')!.textContent).toContain("Bar screen");
     await expectNoA11yViolations(el);
     await page.screenshot({
-      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-tickets.png`,
+      path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-shown-on.png`,
     });
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "settings" } }));
     await settle(el);
     const settings = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
     await (settings as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-    const rest = settings.shadowRoot!.querySelector<HTMLElement>(
-      '[data-test="edit-settings-rest-bar"]',
+    expect(settings.shadowRoot!.querySelector('[data-test="edit-settings-rest-bar"]')).toBeNull();
+    const warm = settings.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="edit-settings-warmAfterMinutes-bar"]',
     )!;
-    expect(rest.textContent?.trim()).toBe("No");
-    await page.elementLocator(rest).click();
+    await page.elementLocator(warm).click();
     await settle(el);
-    const choice = settings.shadowRoot!.querySelector('[data-test="settings-choice"]')!;
-    expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe("No");
+    const minutes = settings.shadowRoot!.querySelector<WtInput>('[data-test="settings-minutes"]')!;
+    expect(minutes.value).toBe("");
     await expectNoA11yViolations(el);
     await page.screenshot({
       path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-settings.png`,
     });
     settings.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-settings-cell"]')!.click();
     await settle(el);
-    expect(settings.shadowRoot!.querySelector('[data-test="settings-choice"]')).toBeNull();
+    expect(settings.shadowRoot!.querySelector('[data-test="settings-minutes"]')).toBeNull();
     history.replaceState(null, "", "/manage");
   } finally {
     document.body.style.background = previous.body;
@@ -660,585 +571,134 @@ it.each([
 ] as const)("shows station status %j", async (status, expected) => {
   setLocale("en");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(withUpstairs(status)) }));
-  expect(healthRow(el, "upstairs").textContent).toContain(expected);
-  expect(healthRow(el, "bar").textContent).toContain("Always open");
-  expect(healthRow(el, "bar").querySelector('[part="badge"]')?.textContent).toBe("Default");
+  expect(stationRow(el, "upstairs").textContent).toContain(expected);
+  expect(stationRow(el, "bar").textContent).toContain("Always open");
+  expect(stationRow(el, "bar").querySelector('[part="badge"]')?.textContent).toBe("Default");
   expect(q(el, '[data-test="edit-hours-bar"]')).toBeNull();
   expect(q(el, '[data-test="close-today-bar"]')).toBeNull();
 });
 
 it.each([
-  ["management.request_invalid", { field: "showsRestOfOrder" }, true],
-  ["station.not_found", {}, false],
+  ["management.request_invalid", { field: "showsRestOfOrder" }, "The change could not be saved."],
+  ["station.not_found", {}, "The change could not be saved. This station could not be found."],
 ] as const)(
-  "shows a %s refusal in Settings without changing the saved station choice",
-  async (code, params, fieldError) => {
+  "shows a %s refusal of Show the rest of the order in the station editor without changing the saved choice",
+  async (code, params, message) => {
     setLocale("en");
     const a = api({ updateStation: vi.fn().mockRejectedValue({ code, params }) });
     const el = await mount(a);
-    const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
-    await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-    const cell = (selector: string) => table.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    cell('[data-test="edit-settings-rest-bar"]').click();
+    const rest = () =>
+      el
+        .shadowRoot!.querySelector("prep-station-editor")!
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "wt-switch[name=showsRestOfOrder]",
+        )!;
+    q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
-    cell('[data-test="settings-choice"]').dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "yes" } }),
-    );
+    expect(rest().checked).toBe(false);
+    rest().dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
     await settle(el);
-    cell('[data-test="save-settings-cell"]').click();
+    q(el, '[data-test="save-station-edit"]')!.click();
     await settle(el);
     expect(a.updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
-    const choice = cell('[data-test="settings-choice"]') as WtCombobox;
-    expect(!!choice.error).toBe(fieldError);
-    if (fieldError) expect(choice.error).toContain("could not be saved");
-    else expect(cell("wt-form-actions").shadowRoot!.textContent).toContain("could not be saved");
-    expect(cell('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
-    cell('[data-test="cancel-settings-cell"]').click();
+    await vi.waitFor(() =>
+      expect((q(el, "wt-form-actions") as HTMLElement & { error: string }).error).toBe(message),
+    );
+    expect(rest().checked).toBe(true);
+    expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
+    const closed = editorClosed(el);
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closed;
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
+    q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
-    expect(cell('[data-test="edit-settings-rest-bar"]').textContent?.trim()).toBe("No");
-    cell('[data-test="edit-settings-rest-bar"]').click();
-    await settle(el);
-    expect((cell('[data-test="settings-choice"]') as WtCombobox).value).toBe("no");
+    expect(rest().checked).toBe(false);
   },
 );
 
-it("explains product and category cells, defaults and an unroutable product", async () => {
-  setLocale("en");
-  const a = api({
-    explain: vi
-      .fn()
-      .mockResolvedValueOnce({
-        route: { kind: "station", stationId: "bar" },
-        decidedBy: {
-          kind: "cell",
-          address: { row: { kind: "product", productId: "bread" }, zoneId: null },
-        },
-        fallbacks: [],
-        noReplacement: false,
-        stations: [{ id: "bar", name: "Bar", active: true }],
-      })
-      .mockResolvedValueOnce({
-        route: { kind: "station", stationId: "bar" },
-        decidedBy: {
-          kind: "cell",
-          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
-        },
-        fallbacks: [],
-        noReplacement: false,
-        stations: [{ id: "bar", name: "Bar", active: true }],
-      })
-      .mockResolvedValueOnce({
-        route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "default" },
-        fallbacks: [],
-        noReplacement: false,
-        stations: [{ id: "bar", name: "Bar", active: true }],
-      })
-      .mockResolvedValueOnce({
-        route: null,
-        decidedBy: null,
-        fallbacks: [],
-        noReplacement: false,
-        stations: [],
-      }),
-  });
-  const el = await mount(a);
-  const select = q(el, '[data-test="test-product"]')!;
-  for (const expected of [
-    "Because: Bar: Bread, in every zone",
-    "Because: Bar: Drinks › Cocktails, in every zone",
-    "Because: Bar: All categories, in every zone — the default station",
-    "Nothing can make this: no rule matched and no default station is active.",
-  ]) {
-    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
-    await settle(el);
-    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(expected);
-  }
-});
-
-it.each(["en", "es"])(
-  "shows every extra outcome and rechecks removable picks in %s",
-  async (locale) => {
-    setLocale(locale);
-    const names = ["Chips", "Cheese", "Sauce", "Olives", "Pickles"];
-    const products = names.map((name) => ({ id: name.toLowerCase(), name }));
-    const a = api({
-      load: vi.fn().mockResolvedValue({
-        ...view,
-        testProducts: [...view.testProducts, ...products],
-        categories: [...view.categories, { id: "sides", name: "Sides", parentId: "food" }],
-        routing: {
-          ...view.routing,
-          stations: [
-            ...view.routing.stations,
-            { id: "fryer", name: "Fryer", active: true },
-            { id: "closed", name: "Closed", active: true },
-          ],
-        },
-      }),
-      explain: vi.fn().mockResolvedValue({
-        route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "default" },
-        fallbacks: [],
-        noReplacement: false,
-        clockReadable: true,
-        stations: [
-          { id: "bar", name: "Bar", active: true },
-          { id: "fryer", name: "Fryer", active: true },
-          { id: "closed", name: "Closed", active: true },
-        ],
-        extrasWaitOnDish: false,
-        extras: [
-          {
-            productId: "chips",
-            outcome: { kind: "made", stationId: "fryer" },
-            decidedBy: {
-              kind: "cell",
-              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
-            },
-            fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
-          },
-          {
-            productId: "cheese",
-            outcome: { kind: "follows_dish", why: "no_rule" },
-            decidedBy: { kind: "default" },
-            fallbacks: [],
-          },
-          {
-            productId: "sauce",
-            outcome: { kind: "follows_dish", why: "no_preparation" },
-            decidedBy: {
-              kind: "cell",
-              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
-            },
-            fallbacks: [],
-          },
-          {
-            productId: "olives",
-            outcome: { kind: "follows_dish", why: "no_replacement" },
-            decidedBy: {
-              kind: "cell",
-              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
-            },
-            fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
-          },
-          {
-            productId: "pickles",
-            outcome: { kind: "follows_dish", why: "same_station" },
-            decidedBy: {
-              kind: "cell",
-              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
-            },
-            fallbacks: [],
-          },
-        ],
-      }),
-    });
-    const el = await mount(a);
-    q(el, '[data-test="test-product"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bread" } }),
-    );
-    await settle(el);
-    for (const id of products.map((p) => p.id)) {
-      q(el, '[data-test="test-extra"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: id } }),
-      );
-      await settle(el);
-    }
-    expect(a.explain).toHaveBeenLastCalledWith(
-      "bread",
-      null,
-      undefined,
-      products.map((p) => p.id),
-    );
-    const answer = q(el, '[data-test="test-answer"]')!.textContent!;
-    for (const name of names) expect(answer).toContain(`${name}:`);
-    expect(answer).toContain(
-      locale === "en"
-        ? "Closed is closed by hand today, so its work goes to Fryer. Chips: made separately at Fryer — Food › Sides, in every zone, sends it to Closed"
-        : "Closed se ha cerrado a mano hoy, por lo que su trabajo va a Fryer. Chips: se prepara aparte en Fryer — Food › Sides, en todas las zonas, lo envía a Closed",
-    );
-    expect(answer).toContain(locale === "en" ? "follows the dish" : "sigue al plato");
-    expect(answer).toContain(
-      locale === "en" ? "Closed is closed by hand" : "Closed se ha cerrado a mano",
-    );
-    for (const sentence of locale === "en"
-      ? [
-          "Cheese: follows the dish — only the default station covers it",
-          "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket, as set for Food › Sides, in every zone",
-          "Olives: follows the dish — Food › Sides, in every zone, sends it to Closed, which is closed, and nothing can replace it",
-          "Pickles: follows the dish — it is made at Bar, where the dish is, as set for Food › Sides, in every zone",
-        ]
-      : [
-          "Cheese: sigue al plato — solo lo cubre la estación predeterminada",
-          "Sauce: sigue al plato — lo que lo cubre no necesita preparación, así que queda en el pedido del plato, como está indicado para Food › Sides, en todas las zonas",
-          "Olives: sigue al plato — Food › Sides, en todas las zonas, lo envía a Closed, que está cerrada, y nada puede sustituirla",
-          "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato, como está indicado para Food › Sides, en todas las zonas",
-        ])
-      expect(answer).toContain(sentence);
-    q(el, '[data-test="remove-extra-chips"]')!.click();
-    await settle(el);
-    expect(a.explain).toHaveBeenLastCalledWith("bread", null, undefined, [
-      "cheese",
-      "sauce",
-      "olives",
-      "pickles",
-    ]);
-  },
-);
-
-it.each(["en", "es"])(
-  "waits for the dish before describing picked extras in %s",
-  async (locale) => {
-    setLocale(locale);
-    const a = api({
-      explain: vi.fn().mockResolvedValue({
-        route: null,
-        decidedBy: null,
-        fallbacks: [],
-        noReplacement: false,
-        clockReadable: true,
-        stations: [],
-        extras: [],
-        extrasWaitOnDish: true,
-      }),
-    });
-    const el = await mount(a);
-    q(el, '[data-test="test-product"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bread" } }),
-    );
-    q(el, '[data-test="test-extra"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bread" } }),
-    );
-    await settle(el);
-    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-      locale === "en"
-        ? "Extras: decided once the dish has a station to go to"
-        : "Extras: se deciden cuando el plato tenga una estación de destino",
-    );
-  },
-);
-
-it.each(["en", "es"])(
-  "names the product cell that sends an extra elsewhere in %s",
-  async (locale) => {
-    setLocale(locale);
-    const a = api({
-      load: vi.fn().mockResolvedValue({
-        ...view,
-        products: [...view.products, { id: "chips", name: "Chips" }],
-        testProducts: [...view.testProducts, { id: "chips", name: "Chips" }],
-      }),
-      explain: vi.fn().mockResolvedValue({
-        route: { kind: "no_preparation" },
-        decidedBy: null,
-        fallbacks: [],
-        noReplacement: false,
-        clockReadable: true,
-        stations: [{ id: "bar", name: "Bar", active: true }],
-        extrasWaitOnDish: false,
-        extras: [
-          {
-            productId: "chips",
-            outcome: { kind: "made", stationId: "bar" },
-            decidedBy: {
-              kind: "cell",
-              address: { row: { kind: "product", productId: "chips" }, zoneId: null },
-            },
-            fallbacks: [],
-          },
-        ],
-      }),
-    });
-    const el = await mount(a);
-    q(el, '[data-test="test-product"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bread" } }),
-    );
-    q(el, '[data-test="test-extra"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "chips" } }),
-    );
-    await settle(el);
-    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-      locale === "en"
-        ? "Chips: made separately at Bar, as set for Chips, in every zone"
-        : "Chips: se prepara aparte en Bar, como está indicado para Chips, en todas las zonas",
-    );
-  },
-);
-
-it("opens a product tester link with its product selected", async () => {
-  setLocale("en");
-  const before = location.href;
-  history.replaceState(null, "", "/manage/prep-stations/test/lager");
-  try {
-    const el = await mount(
-      api({
-        load: vi
-          .fn()
-          .mockResolvedValue({ ...view, testProducts: [{ id: "lager", name: "Lager" }] }),
-      }),
-    );
-    expect((q(el, '[data-test="test-product"]') as HTMLElement & { value: string }).value).toBe(
-      "lager",
-    );
-    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Nothing can make this");
-  } finally {
-    history.replaceState(null, "", before);
-  }
-});
-
-it.each([
-  ["en", "Made at: Terrace bar", "Because: Terrace bar: Drinks, on the Terrace"],
-  ["es", "Se prepara en: Terrace bar", "Porque: Terrace bar: Drinks, en la zona Terrace"],
-])("the tester names the winning cell in %s", async (locale, madeAt, because) => {
-  setLocale(locale);
-  const explain = vi.fn().mockResolvedValue({
-    route: { kind: "station", stationId: "terrace" },
-    decidedBy: {
-      kind: "cell",
-      address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
-    },
-    fallbacks: [],
-    noReplacement: false,
-    clockReadable: true,
-    stations: [{ id: "terrace", name: "Terrace bar", active: true }],
-    extras: [],
-    extrasWaitOnDish: false,
-  });
-  const el = await mount(
-    api({
-      load: vi.fn().mockResolvedValue({ ...view, zones: [{ id: "terrace", name: "Terrace" }] }),
-      explain,
-    }),
-  );
-  q(el, '[data-test="test-zone"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-  );
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  expect(explain).toHaveBeenLastCalledWith("bread", "terrace");
-  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
-  expect(answer).toContain(madeAt);
-  expect(answer).toContain(because);
-  expect(answer.indexOf(madeAt)).toBeLessThan(answer.indexOf(because));
-});
-
-it.each([
-  ["lager", "Lager"],
-  ["large", "Lager · Large"],
-])("a product tester link opens Routing with the product or variant selected (%s)", async (id) => {
-  setLocale("en");
-  const before = location.href;
-  history.replaceState(null, "", `/manage/prep-stations/test/${id}`);
-  try {
-    const explain = vi.fn().mockResolvedValue({
-      route: { kind: "station", stationId: "bar" },
-      decidedBy: {
-        kind: "cell",
-        address: { row: { kind: "product", productId: "lager" }, zoneId: null },
-      },
-      fallbacks: [],
-      noReplacement: false,
-      clockReadable: true,
-      stations: [{ id: "bar", name: "Bar", active: true }],
-      extras: [],
-      extrasWaitOnDish: false,
-    });
-    const el = await mount(
-      api({
-        load: vi.fn().mockResolvedValue({
-          ...view,
-          products: [{ id: "lager", name: "Lager" }],
-          testProducts: [
-            { id: "lager", name: "Lager" },
-            { id: "large", name: "Lager · Large" },
-          ],
-        }),
-        explain,
-      }),
-    );
-    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-    await tabs.updateComplete;
-    expect(tabs.value).toBe("routing");
-    expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe(id);
-    expect(explain).toHaveBeenLastCalledWith(id, null);
-    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-      "Because: Bar: Lager, in every zone",
-    );
-  } finally {
-    history.replaceState(null, "", before);
-  }
-});
-
-it("clears a completed tester answer when Back removes the product", async () => {
-  const before = location.href;
-  history.replaceState(null, "", "/manage/prep-stations/test/lager");
-  try {
-    const el = await mount(
-      api({
-        explain: vi.fn().mockResolvedValue({
-          route: { kind: "station", stationId: "bar" },
-          decidedBy: { kind: "default" },
-          fallbacks: [],
-          noReplacement: false,
-          stations: [{ id: "bar", name: "Bar", active: true }],
-        }),
-      }),
-    );
-    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
-    history.replaceState(null, "", "/manage/prep-stations");
-    dispatchEvent(new PopStateEvent("popstate"));
-    await settle(el);
-    expect((q(el, '[data-test="test-product"]') as HTMLElement & { value: string }).value).toBe("");
-    expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
-  } finally {
-    history.replaceState(null, "", before);
-  }
-});
-
-it("ignores a pending tester answer after Back removes the product", async () => {
-  const before = location.href;
-  history.replaceState(null, "", "/manage/prep-stations/test/lager");
-  let complete!: (value: {
-    route: { kind: "station"; stationId: string };
-    decidedBy: { kind: "default" };
-    fallbacks: [];
-    noReplacement: false;
-    stations: { id: string; name: string; active: boolean }[];
-  }) => void;
-  const pending = new Promise<Parameters<typeof complete>[0]>((resolve) => {
-    complete = resolve;
-  });
-  try {
-    const el = await mount(api({ explain: vi.fn().mockReturnValue(pending) }));
-    history.replaceState(null, "", "/manage/prep-stations");
-    dispatchEvent(new PopStateEvent("popstate"));
-    await settle(el);
-    complete({
-      route: { kind: "station", stationId: "bar" },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      stations: [{ id: "bar", name: "Bar", active: true }],
-    });
-    await settle(el);
-    expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
-  } finally {
-    history.replaceState(null, "", before);
-  }
-});
-
-it("explains a No preparation cell as the category's chosen value", async () => {
-  setLocale("en");
-  const el = await mount(
-    api({
-      explain: vi.fn().mockResolvedValue({
-        route: { kind: "no_preparation" },
-        decidedBy: {
-          kind: "cell",
-          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
-        },
-        fallbacks: [],
-        noReplacement: false,
-        stations: [],
-      }),
-    }),
-  );
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "Because: No preparation: Drinks › Cocktails, in every zone",
-  );
-});
-it("the tester names a No category cell for an uncategorised product", async () => {
-  setLocale("en");
-  const el = await mount(
-    api({
-      explain: vi.fn().mockResolvedValue({
-        route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "cell", address: { row: { kind: "no_category" }, zoneId: null } },
-        fallbacks: [],
-        noReplacement: false,
-        stations: [],
-      }),
-    }),
-  );
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "Because: Bar: No category, in every zone",
-  );
-});
-
-it("keeps station status and output problems in Stations instead of repeating them in Routing", async () => {
+it("keeps station status in Stations instead of repeating it in Routing", async () => {
   setLocale("en");
   const next = withUpstairs({ open: false, why: "out_of_hours" });
-  const outputs = {
-    printersDown: [
-      {
-        stationId: "upstairs",
-        stationName: "Upstairs bar",
-        printerId: "epson",
-        printerName: "Epson",
-        since: "2026-10-01T20:14:00",
-      },
-    ],
-    screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-  };
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    readStationHealth: vi.fn().mockResolvedValue(healthFor(next, outputs)),
-    listOutputsDown: vi.fn().mockResolvedValue(outputs),
-  });
-  const el = await mount(a);
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
-  expect(routing.textContent).not.toContain("Printer Epson");
-  expect(routing.textContent).not.toContain("has ever checked in");
-  expect(healthRow(el, "upstairs").textContent).toContain("Printer Epson");
-  expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
-  expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
+  expect(stationRow(el, "upstairs").textContent).toContain("Closed now");
   expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
-it("uses the health snapshot for output problems without a second management read", async () => {
+it("makes no outputs-down read", async () => {
   const a = api({
     listOutputsDown: vi.fn().mockResolvedValue({ printersDown: [], screensDark: [] }),
   });
   const el = await mount(a);
-  expect(healthRow(el, "bar").textContent).toContain("Bar");
-  expect(a.readStationHealth).toHaveBeenCalledTimes(1);
+  expect(stationRow(el, "bar").textContent).toContain("Bar");
   expect(a.listOutputsDown).not.toHaveBeenCalled();
 });
-function healthFor(
-  loaded: PrepStationsView,
-  outputsDown: StationHealthSnapshot["outputsDown"],
-): StationHealthSnapshot {
-  return {
-    capturedAt: "2026-10-05T12:00:00Z",
-    stations: loaded.stations.map((station) => ({
-      id: station.id,
-      name: station.name,
-      hasScreen: false,
-      waiting: 0,
-      preparing: null,
-      ready: null,
-      late: { warm: 0, overdue: 0, forgotten: 0 },
-      oldestMinutes: null,
-      items: [],
-    })),
-    outputsDown,
-  };
+function stationHeadings(el: PrepStationsScreen) {
+  return [...(stationTable(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
+    th.textContent?.trim(),
+  );
 }
-function healthRow(el: PrepStationsScreen, stationId: string) {
-  return healthSummary(el)!
-    .querySelector(`[data-test="station-menu-${stationId}"]`)!
-    .closest("tr")!;
+it("draws the Stations rows from the stations list with no health read and no health subscription", async () => {
+  setLocale("en");
+  const liveData = new LiveData();
+  const a = api({
+    liveData,
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+  });
+  expect("readStationHealth" in a).toBe(false);
+  const el = await mount(a);
+  expect(stationRow(el, "bar").textContent).toContain("Bar");
+  expect(stationRow(el, "upstairs").textContent).toContain("Upstairs bar");
+  expect(stationHeadings(el)).toEqual(["Name", "Printed on", "Shown on", "Today"]);
+  for (const word of ["Waiting", "Being made", "Ready", "Late", "Oldest"])
+    expect(stationTable(el)!.querySelector("thead")!.textContent).not.toContain(word);
+  expect(stationTable(el)!.querySelector('[part~="number"]')).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
+  const watched = liveData.interests.map((interest) => interest.type);
+  for (const type of ["ticket_items", "working_orders", "print_jobs"])
+    expect(watched).not.toContain(type);
+});
+it("without live data, starts no fifteen-second refresh", async () => {
+  const interval = vi.spyOn(window, "setInterval");
+  try {
+    const el = await mount(api());
+    expect(stationRow(el, "bar").textContent).toContain("Bar");
+    expect(interval.mock.calls.map(([, delay]) => delay)).not.toContain(15_000);
+  } finally {
+    interval.mockRestore();
+  }
+});
+it("a manager's drag reorder saves the new order with no health read", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const order = vi.fn().mockResolvedValue(undefined);
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    reorderStations: order,
+  } as Partial<PrepStationsApi>);
+  expect("readStationHealth" in a).toBe(false);
+  const el = await mount(a);
+  const summary = stationTable(el)!;
+  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
+  const target = summary
+    .querySelector('[data-test="station-menu-bar"]')!
+    .closest("tr")!
+    .getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 93,
+      clientY: handle.getBoundingClientRect().top,
+      bubbles: true,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 93, clientY: target.top + target.height / 2 }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 93 }));
+  await settle(el);
+  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
+});
+function stationRow(el: PrepStationsScreen, stationId: string) {
+  return stationTable(el)!.querySelector(`[data-test="station-menu-${stationId}"]`)!.closest("tr")!;
 }
 
 it("keeps whole-station editing out of Routing while showing the grid", async () => {
@@ -1247,7 +707,7 @@ it("keeps whole-station editing out of Routing while showing the grid", async ()
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="edit-bar"]')).toBeNull();
   expect(routing.querySelector("venue-routing-grid")).not.toBeNull();
-  expect(q(el, '[data-test="rename-bar"]')).not.toBeNull();
+  expect(q(el, '[data-test="edit-bar"]')).not.toBeNull();
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="name"]')).not.toBeNull();
@@ -1264,14 +724,14 @@ it("does not rename a station removed while its draft is open", async () => {
     .mockResolvedValue({ ...view, stations: [] });
   const a = api({ liveData, load });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
-  const input = q(el, '[data-test="station-rename"] wt-input') as WtInput;
+  const input = q(el, '[data-test="station-editor"] wt-input') as WtInput;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }));
   await settle(el);
-  const save = q(el, '[data-test="save-station-name"]')!;
+  const save = q(el, '[data-test="save-station-edit"]')!;
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() => expect(q(el, '[data-test="rename-bar"]')).toBeNull());
+  await vi.waitFor(() => expect(q(el, '[data-test="edit-bar"]')).toBeNull());
   save.click();
   await settle(el);
   expect(a.updateStation).not.toHaveBeenCalled();
@@ -1297,7 +757,7 @@ it("rejects unordered thresholds beside overdue in Settings and retains station 
   expect(a.deactivateStation).toHaveBeenCalledWith("bar");
 });
 
-it("shows linked printers and kitchen screens in Tickets", async () => {
+it("shows linked printers and kitchen screens in Stations", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue({
       ...view,
@@ -1315,10 +775,8 @@ it("shows linked printers and kitchen screens in Tickets", async () => {
     }),
   });
   const el = await mount(a);
-  const table = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
-  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  const printers = table.shadowRoot!.querySelector('[data-test="edit-printers-bar"]')!;
-  const screens = table.shadowRoot!.querySelector('[data-test="screens-bar"]')!;
+  const printers = q(el, '[data-test="printed-on-bar"]')!;
+  const screens = q(el, '[data-test="screens-bar"]')!;
   expect(printers.textContent).toContain("Bar printer");
   expect(screens.textContent).toContain("Bar display");
   expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices");
@@ -1430,13 +888,13 @@ it("saves station name, order and thresholds through their individual controls",
   const next = withUpstairs({ open: true, why: "in_hours" });
   const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   q(el, 'wt-input[name="stationName"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
   await settle(el);
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenNthCalledWith(1, "bar", { name: "Terrace bar" });
   q(el, '[data-test="drag-bar"]')!.dispatchEvent(
@@ -1473,6 +931,8 @@ it("places a taken-name refusal below Name", async () => {
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(q(el, '[data-field-error="name"]')?.textContent).toContain("already in use");
+  expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");
+  expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
 });
 it("does not create an unnamed station", async () => {
   const a = api();
@@ -1548,7 +1008,7 @@ it("renames a station when Enter is pressed in its name field", async () => {
     }),
   });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Bar");
   q(el, 'wt-input[name="stationName"]')!
@@ -1588,7 +1048,7 @@ it("does not submit Enter for a rename draft whose station was removed by live r
     .mockResolvedValue({ ...view, stations: [] });
   const a = api({ liveData, load });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
@@ -1614,7 +1074,7 @@ it("guards repeated Enter rename saves while a station write is pending and allo
     }),
   });
   const el = await mount(a);
-  q(el, '[data-test="rename-bar"]')!.click();
+  q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Bar");
   const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
@@ -1629,7 +1089,7 @@ it("guards repeated Enter rename saves while a station write is pending and allo
     );
   enter();
   enter();
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   expect(updateStation).toHaveBeenCalledTimes(1);
   expect(updateStation).toHaveBeenCalledWith("bar", { name: "Bar" });
   reject({ code: "management.request_invalid" });
@@ -1638,55 +1098,6 @@ it("guards repeated Enter rename saves while a station write is pending and allo
   await settle(el);
   expect(updateStation).toHaveBeenCalledTimes(2);
   expect(updateStation).toHaveBeenLastCalledWith("bar", { name: "Bar" });
-});
-
-it("shows a tester failure without inventing an answer", async () => {
-  setLocale("en");
-  const a = api({
-    explain: vi.fn().mockRejectedValue(new Error("offline")),
-  });
-  const el = await mount(a);
-  const select = q(el, '[data-test="test-product"]')!;
-  select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
-  expect(q(el, '[data-test="test-answer"] [role="alert"]')).not.toBeNull();
-});
-
-it("lets the tester change zones and clear the product without retaining a route", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue({
-      ...view,
-      zones: [
-        { id: "terrace", name: "Terrace", active: true },
-        { id: "closed", name: "Closed", active: false },
-      ],
-    }),
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "station", stationId: "bar" },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      stations: [],
-    }),
-  });
-  const el = await mount(a);
-  const zone = q(el, '[data-test="test-zone"]') as HTMLElement & {
-    options: { value: string }[];
-  };
-  expect(zone.options.map((option) => option.value)).toEqual(["", "terrace"]);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  zone.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "terrace" } }));
-  await settle(el);
-  expect(a.explain).toHaveBeenCalledWith("bread", "terrace");
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
 });
 
 it("refuses negative order and invalid warm and forgotten thresholds together when creating", async () => {
@@ -1809,9 +1220,9 @@ it.each(["opened_by_hand", "closed_by_hand"] as const)(
     );
     next.routing.todayEnds = { timeOfDay: "06:00", tomorrow: false };
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    expect(healthRow(el, "upstairs").textContent).toContain("until 06:00 today");
+    expect(stationRow(el, "upstairs").textContent).toContain("until 06:00 today");
     if (why === "closed_by_hand")
-      expect(healthRow(el, "upstairs").textContent).toContain(
+      expect(stationRow(el, "upstairs").textContent).toContain(
         "No replacement: the till will ask where to send its dishes.",
       );
     expect(q(el, '[data-test="change-fallback-bar"]')).toBeNull();
@@ -1822,7 +1233,7 @@ it("reports unreadable venue time on every Stations row", async () => {
   next.routing.clockReadable = false;
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   for (const id of ["bar", "upstairs"])
-    expect(healthRow(el, id).textContent).toContain(
+    expect(stationRow(el, id).textContent).toContain(
       "Opening hours are not applied: the venue's time zone or day cutover cannot be read.",
     );
 });
@@ -2000,7 +1411,7 @@ it.each([
     next.stations[1]!.active = false;
     next.routing.stations[1]!.active = false;
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    const row = healthRow(el, "upstairs");
+    const row = stationRow(el, "upstairs");
     expect(row.querySelector('[part="badge"]')!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(hint);
     const back = q(el, '[data-test="enable-upstairs"]')!;
@@ -2010,102 +1421,24 @@ it.each([
     expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(enable);
   },
 );
-it("switches an inactive station on and keeps its dark-screen warning in its Stations row", async () => {
+it("switches an inactive station on from its Stations row", async () => {
   const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
   next.stations[1]!.active = false;
   next.routing.stations[1]!.active = false;
   const a = api({
     load: vi.fn().mockResolvedValue(next),
     activateStation: vi.fn(),
-    readStationHealth: vi.fn().mockResolvedValue(
-      healthFor(next, {
-        printersDown: [],
-        screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-      }),
-    ),
   });
   const el = await mount(a);
   expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(
     "No replacement: the till asks.",
   );
-  expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
-  expect(healthRow(el, "bar").textContent).not.toContain("has ever checked in");
   q(el, '[data-test="enable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
   expect(a.activateStation).toHaveBeenCalledWith("upstairs");
 });
-it("shows each output warning only on its station", async () => {
-  const next = withUpstairs({ open: true, why: "in_hours" });
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    readStationHealth: vi.fn().mockResolvedValue(
-      healthFor(next, {
-        printersDown: [
-          {
-            stationId: "upstairs",
-            stationName: "Upstairs bar",
-            printerId: "epson",
-            printerName: "Epson",
-            since: "2026-10-01T20:14:00",
-          },
-        ],
-        screensDark: [
-          { stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: "2026-10-01T20:10:00" },
-        ],
-      }),
-    ),
-  });
-  const el = await mount(a);
-  const card = healthRow(el, "upstairs");
-  expect(card.textContent).toContain(
-    "Printer Epson has printed nothing since something sent to it at 20:14 got stuck.",
-  );
-  expect(card.textContent).toContain(
-    "Dishes are waiting, and no kitchen screen here has checked in since 20:10.",
-  );
-  expect(healthRow(el, "bar").textContent).not.toContain("got stuck");
-  expect(healthRow(el, "bar").textContent).not.toContain("Dishes are waiting");
-});
-it("refreshes output warnings every fifteen seconds and clears the timer when removed", async () => {
-  const timers = new Map<ReturnType<typeof setInterval>, TimerHandler>();
-  const original = window.setInterval.bind(window);
-  const interval = vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
-    const id = original(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
-    if (delay === 15_000) timers.set(id, handler);
-    return id;
-  });
-  const clear = vi.spyOn(window, "clearInterval");
-  try {
-    const next = withUpstairs({ open: true, why: "in_hours" });
-    const a = api({
-      load: vi.fn().mockResolvedValue(next),
-      readStationHealth: vi
-        .fn()
-        .mockResolvedValueOnce(healthFor(next, { printersDown: [], screensDark: [] }))
-        .mockResolvedValue(
-          healthFor(next, {
-            printersDown: [],
-            screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-          }),
-        ),
-    });
-    const el = await mount(a);
-    expect(healthRow(el, "upstairs").textContent).not.toContain("has ever checked in");
-    for (const handler of timers.values()) if (typeof handler === "function") handler();
-    await settle(el);
-    expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
-    el.remove();
-    expect(
-      [...timers.keys()].some((id) => clear.mock.calls.some(([cleared]) => cleared === id)),
-    ).toBe(true);
-  } finally {
-    interval.mockRestore();
-    clear.mockRestore();
-  }
-});
-
 it("offers the fallback in Settings and confirms a changed selection", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue(withUpstairs({ open: false, why: "out_of_hours" })),
@@ -2160,7 +1493,7 @@ it("refreshes the saved fallback when the following disable fails", async () => 
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
   expect((await openSettingsFallback(el)).value).toBe("bar");
-  expect(healthRow(el, "upstairs").textContent).toContain("Its work goes to Bar.");
+  expect(stationRow(el, "upstairs").textContent).toContain("Its work goes to Bar.");
   expect(
     q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
   ).toContain("could not be saved");
@@ -2179,249 +1512,16 @@ it("localizes the fallback search field in Spanish", async () => {
   );
 });
 
-it.each([
-  [
-    "out_of_hours",
-    "Upstairs bar is closed outside its opening hours, so its work goes to Downstairs bar.",
-  ],
-  ["closed_by_hand", "Upstairs bar is closed by hand today, so its work goes to Downstairs bar."],
-  ["switched_off", "Upstairs bar is disabled, so its work goes to Downstairs bar."],
-])("explains %s before the destination", async (why, sentence) => {
-  const el = await mount(
-    api({
-      explain: vi.fn().mockResolvedValue({
-        route: { kind: "station", stationId: "downstairs" },
-        decidedBy: {
-          kind: "cell",
-          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
-        },
-        fallbacks: [{ stationId: "upstairs", why }],
-        noReplacement: false,
-        clockReadable: true,
-        stations: [
-          { id: "upstairs", name: "Upstairs bar", active: true },
-          { id: "downstairs", name: "Downstairs bar", active: true },
-        ],
-      }),
-    }),
-  );
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
-  expect(answer).toContain(sentence);
-  expect(answer).toContain("Because: Upstairs bar: Drinks › Cocktails, in every zone");
-  expect(answer.indexOf(sentence)).toBeLessThan(answer.indexOf("Made at:"));
-});
-it("explains each fallback and the final dead end without saying no rule matched", async () => {
-  const el = await mount(
-    api({
-      explain: vi.fn().mockResolvedValue({
-        route: null,
-        decidedBy: {
-          kind: "cell",
-          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
-        } satisfies RoutingDecision,
-        fallbacks: [
-          { stationId: "upstairs", why: "out_of_hours" },
-          { stationId: "bar", why: "closed_by_hand" },
-        ],
-        noReplacement: true,
-        clockReadable: true,
-        stations: [
-          { id: "upstairs", name: "Upstairs bar", active: true },
-          { id: "bar", name: "Downstairs bar", active: true },
-        ],
-      }),
-    }),
-  );
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
-  expect(answer).toContain(
-    "Upstairs bar is closed outside its opening hours, so its work goes to Downstairs bar.",
-  );
-  expect(answer).toContain(
-    "Downstairs bar is closed by hand today, and it has no replacement, so the till asks the waiter where to make this.",
-  );
-  expect(answer).not.toContain("no rule matched");
-  expect(answer).toContain("Because: Upstairs bar: Drinks › Cocktails, in every zone");
-  expect(answer).not.toContain("Made at:");
-});
-it("keeps the no-default explanation and reports unreadable opening hours", async () => {
-  const el = await mount(
-    api({
-      explain: vi.fn().mockResolvedValue({
-        route: null,
-        decidedBy: null,
-        fallbacks: [],
-        noReplacement: false,
-        clockReadable: false,
-        stations: [],
-      }),
-    }),
-  );
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "Nothing can make this: no rule matched and no default station is active.",
-  );
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "The venue's time zone or day cutover cannot be read, so opening hours are not applied.",
-  );
-});
-it("sends both the chosen weekday and time and returns to now", async () => {
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  const when = q(el, '[data-test="test-when"]') as WtCombobox;
-  expect(when.value).toBe("now");
-  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));
-  await settle(el);
-  const day = q(el, '[data-test="test-weekday"]')!;
-  day.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "5" } }));
-  const time = q(el, '[data-test="test-time"]') as WtInput;
-  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
-  await settle(el);
-  expect(a.explain).toHaveBeenLastCalledWith("bread", null, { weekday: 5, timeOfDay: "22:00" });
-  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "now" } }));
-  await settle(el);
-  expect(a.explain).toHaveBeenLastCalledWith("bread", null);
-});
-
-it("previews a chosen date and time, and explains a time the clocks skip on that date", async () => {
-  setLocale("en");
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  const when = q(el, '[data-test="test-when"]') as WtCombobox;
-  expect(when.options.map((option) => option.label)).toEqual([
-    "Now",
-    "Weekday and time",
-    "Date and time",
-  ]);
-  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "date" } }));
-  await settle(el);
-  expect(q(el, '[data-test="test-weekday"]')).toBeNull();
-  const date = q(el, '[data-test="test-date"]') as WtInput;
-  expect(date.getAttribute("name")).toBe("date");
-  expect(date.type).toBe("date");
-  const count = vi.mocked(a.explain).mock.calls.length;
-  expect(q(el, "#test-date-error")!.textContent).toContain("Choose a date.");
-  date.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2026-10-09" } }));
-  const time = q(el, '[data-test="test-time"]') as WtInput;
-  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
-  await settle(el);
-  expect(vi.mocked(a.explain).mock.calls.length).toBeGreaterThan(count);
-  expect(a.explain).toHaveBeenLastCalledWith("bread", null, {
-    civilDate: "2026-10-09",
-    weekday: 5,
-    timeOfDay: "22:00",
-  });
-  expect(q(el, "#test-date-error")!.textContent!.trim()).toBe("");
-
-  vi.mocked(a.explain).mockRejectedValueOnce({
-    code: "management.request_invalid",
-    params: { field: "time" },
-  });
-  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:30" } }));
-  await settle(el);
-  expect(q(el, "#test-time-error")!.textContent).toContain(
-    "The clocks change that night, so this time does not happen on that date.",
-  );
-  expect(time.getAttribute("aria-invalid")).toBe("true");
-  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain(
-    "The route could not be checked.",
-  );
-  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "03:00" } }));
-  await settle(el);
-  expect(q(el, "#test-time-error")!.textContent!.trim()).toBe("");
-  expect(time.getAttribute("aria-invalid")).toBe("false");
-});
-
-it("clears the scheduled answer and shows the required-time problem when time is removed", async () => {
-  setLocale("en");
-  const a = api({
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "station", stationId: "bar" },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      clockReadable: true,
-      stations: view.routing.stations,
-    }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  const when = q(el, '[data-test="test-when"]')!;
-  when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "at" } }));
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
-  const count = vi.mocked(a.explain).mock.calls.length;
-  const time = q(el, '[data-test="test-time"]') as WtInput;
-  time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
-  await settle(el);
-  expect(q(el, "#test-time-error")!.textContent).toContain("Choose a time.");
-  expect(time.getAttribute("aria-invalid")).toBe("true");
-  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
-  expect(vi.mocked(a.explain).mock.calls.length).toBe(count);
-});
-
-const healthSnapshot: StationHealthSnapshot = {
-  capturedAt: "2026-10-05T12:00:00Z",
-  outputsDown: { printersDown: [], screensDark: [] },
-  stations: [
-    {
-      id: "bar",
-      name: "Bar",
-      hasScreen: true,
-      waiting: 1,
-      preparing: 0,
-      ready: 0,
-      late: { warm: 0, overdue: 0, forgotten: 0 },
-      oldestMinutes: 4,
-      items: [
-        {
-          id: "soup",
-          name: "KITCHEN SOUP",
-          orderId: "o1",
-          orderNumber: 7,
-          label: null,
-          tableNames: ["Table 5"],
-          state: "queued",
-          queuedAt: "2026-10-05T11:56:00Z",
-          remainingQuantity: "1.000",
-          band: "fresh",
-        },
-      ],
-    },
-  ],
-};
-function healthSummary(el: PrepStationsScreen) {
+function stationTable(el: PrepStationsScreen) {
   return el.shadowRoot
-    ?.querySelector("prep-station-health-table")
+    ?.querySelector("prep-station-table")
     ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
 }
-it("subscribes dish health to ticket changes and retains an open station draft", async () => {
+it("a live routing refresh keeps an open Add station draft", async () => {
   const liveData = new LiveData();
-  const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
-  const el = await mount(api({ liveData, readStationHealth }));
-  expect(healthSummary(el)?.querySelector('[data-test="waiting-bar"]')?.textContent?.trim()).toBe(
-    "1",
-  );
+  const changed = { ...view, stations: [{ ...view.stations[0]!, name: "Renamed bar" }] };
+  const load = vi.fn().mockResolvedValueOnce(view).mockResolvedValue(changed);
+  const el = await mount(api({ liveData, load }));
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   const name =
@@ -2429,69 +1529,44 @@ it("subscribes dish health to ticket changes and retains an open station draft",
     el.shadowRoot!.querySelector<WtInput>('[name="name"]');
   expect(name).toBeTruthy();
   name!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft station" } }));
-  readStationHealth.mockResolvedValue({
-    ...healthSnapshot,
-    stations: [{ ...healthSnapshot.stations[0]!, waiting: 2 }],
-  });
-  liveData.invalidate([{ type: "ticket_items", id: "new-ticket" }]);
-  await settle(el);
-  expect(healthSummary(el)?.querySelector('[data-test="waiting-bar"]')?.textContent?.trim()).toBe(
-    "2",
-  );
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
+  await vi.waitFor(() => expect(stationRow(el, "bar").textContent).toContain("Renamed bar"));
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(name!.isConnected).toBe(true);
   expect(name!.value).toBe("Draft station");
 });
-it("refreshes elapsed health without a write and releases both interests and clock on detach", async () => {
+it("releases its interests and clock on detach", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   try {
     const liveData = new LiveData();
-    const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
-    const el = await mount(api({ liveData, readStationHealth }));
-    expect(healthSummary(el)?.querySelector('[data-test="oldest-bar"]')?.textContent?.trim()).toBe(
-      "4 min",
-    );
-    readStationHealth.mockResolvedValue({
-      ...healthSnapshot,
-      stations: [
-        {
-          ...healthSnapshot.stations[0]!,
-          oldestMinutes: 5,
-          late: { warm: 1, overdue: 0, forgotten: 0 },
-        },
-      ],
-    });
-    await vi.advanceTimersByTimeAsync(15_000);
-    await settle(el);
-    expect(healthSummary(el)?.querySelector('[data-test="oldest-bar"]')?.textContent?.trim()).toBe(
-      "5 min",
-    );
-    expect(healthSummary(el)?.querySelector('[data-test="warm-bar"]')?.textContent?.trim()).toBe(
-      "1",
-    );
+    const load = vi.fn().mockResolvedValue(view);
+    const el = await mount(api({ liveData, load }));
+    expect(stationRow(el, "bar").textContent).toContain("Bar");
     el.remove();
     expect(liveData.interests).toEqual([]);
-    const count = readStationHealth.mock.calls.length;
+    const count = load.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(readStationHealth).toHaveBeenCalledTimes(count);
+    expect(load).toHaveBeenCalledTimes(count);
   } finally {
     vi.useRealTimers();
   }
 });
-it("a health read failure stays until health recovers, while routing recovery retains an action refusal", async () => {
+it("routing recovery clears a read failure and retains an action refusal", async () => {
   const liveData = new LiveData();
-  const readStationHealth = vi.fn().mockRejectedValue(new Error("offline"));
+  const load = vi.fn().mockResolvedValue(view);
   const el = await mount(
     api({
       liveData,
-      readStationHealth,
+      load,
       createStation: vi.fn().mockRejectedValue(new Error("refused")),
     }),
   );
-  expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded.");
+  load.mockRejectedValue(new Error("offline"));
   liveData.invalidate([{ type: "categories" }]);
   await settle(el);
   expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded.");
-  readStationHealth.mockResolvedValue(healthSnapshot);
-  liveData.invalidate([{ type: "ticket_items" }]);
+  load.mockResolvedValue(view);
+  liveData.invalidate([{ type: "categories" }]);
   await settle(el);
   expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
   q(el, '[data-test="new-station"]')!.click();
@@ -2503,20 +1578,19 @@ it("a health read failure stays until health recovers, while routing recovery re
   await settle(el);
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  liveData.invalidate([{ type: "ticket_items" }, { type: "categories" }]);
+  liveData.invalidate([{ type: "categories" }]);
   await settle(el);
   expect(el.shadowRoot!.textContent).toContain("The change could not be saved.");
 });
-it("a health snapshot ahead of routing metadata leaves Today blank until the station's status arrives", async () => {
+it("a station whose status has not arrived leaves Today blank", async () => {
   const el = await mount(
     api({
-      readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
       load: vi.fn().mockResolvedValue({ ...view, routing: { ...view.routing, stationTimes: [] } }),
     }),
   );
-  const row = healthSummary(el)?.querySelector("tbody tr");
+  const row = stationTable(el)?.querySelector("tbody tr");
   expect(row).toBeTruthy();
-  expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
+  expect(row!.querySelector("td:last-child")?.textContent?.trim()).toBe("");
 });
 
 it("opens the default Stations tab and places Add station, the only create action, beside the tabs", async () => {
@@ -2529,7 +1603,6 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
     { key: "routing", label: "Routing" },
-    { key: "tickets", label: "Tickets" },
     { key: "watchers", label: "Watchers" },
     { key: "settings", label: "Settings" },
   ]);
@@ -2543,40 +1616,56 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(q(el, '[data-test="new-watcher"]')).toBeNull();
 });
 
-it.each(["tickets", "watchers", "settings"])(
-  "opens the %s deep link and selects Routing with its tester retained",
-  async (tab) => {
+it.each([
+  ["tickets", "stations"],
+  ["watchers", "watchers"],
+  ["settings", "settings"],
+])(
+  "opens the %s tab an old tester link names (showing %s), and its next tab change drops the tester's product",
+  async (tab, shown) => {
     history.replaceState(null, "", `/manage/prep-stations/view/${tab}/test/bread`);
     const el = await mount(api());
     const tabs = el.shadowRoot!.querySelector("wt-tabs");
     expect(tabs, "the page owns a tab strip").not.toBeNull();
     await tabs!.updateComplete;
-    expect(tabs!.value).toBe(tab);
+    expect(tabs!.value).toBe(shown);
     tabs!.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
     await settle(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/bread");
-    expect(q(el, '[data-test="test-product"]')!.closest('[slot="routing"]')).not.toBeNull();
-    expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe("bread");
+    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
+    expect(q(el, '[data-test="route-tester"]')).toBeNull();
     expect(await routingGrid(el)).not.toBeNull();
     expect(q(el, '[data-test="station-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
   },
 );
 
-it("keeps old tester links visible and restores panels on Back without adding history entries", async () => {
+it("opens Routing from an old tester link that names it, and its next tab change writes no tester segment", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager");
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.value).toBe("routing");
+  expect(await routingGrid(el)).not.toBeNull();
+  expect(q(el, '[data-test="route-tester"]')).toBeNull();
+  tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="watchers"]')!.click();
+  await settle(el);
+  expect(tabs.value).toBe("watchers");
+  expect(location.pathname).toBe("/manage/prep-stations/view/watchers");
+});
+
+it("opens Stations from an old tester link that names no tab, and restores panels on Back without adding history entries", async () => {
   history.replaceState(null, "", "/manage/prep-stations/test/bread");
   const count = history.length;
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs");
   expect(tabs, "the page owns a tab strip").not.toBeNull();
   await tabs!.updateComplete;
-  expect(tabs!.value).toBe("routing");
-  expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/bread");
+  expect(tabs!.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(history.length).toBe(count);
   history.replaceState(null, "", "/manage/prep-stations/view/watchers");
   dispatchEvent(new PopStateEvent("popstate"));
   await settle(el);
   expect(tabs!.value).toBe("watchers");
-  expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe("");
   expect(history.length).toBe(count);
 });
 
@@ -2611,7 +1700,7 @@ it("has no station hours section, editor or Today actions", async () => {
   for (const id of ["bar", "upstairs"]) expect(q(el, `[data-test="edit-hours-${id}"]`)).toBeNull();
   expect(customElements.get("station-hours-form")).toBeUndefined();
   expect(el.shadowRoot!.textContent).not.toContain("Edit hours");
-  expect(healthRow(el, "upstairs").querySelector('[data-test="close-today-upstairs"]')).toBeNull();
+  expect(stationRow(el, "upstairs").querySelector('[data-test="close-today-upstairs"]')).toBeNull();
   expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
   expect(el.shadowRoot!.querySelector("station-hours-form")).toBeNull();
 });
@@ -2632,7 +1721,7 @@ it("Today redraws the scheduled label when the next background read no longer ca
       background: { load: vi.fn().mockResolvedValue(nextDay) } as unknown as PrepStationsApi,
     });
     const cell = () =>
-      healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelector("td:last-child")!;
     expect(cell().textContent).toContain(
       "Closed now, closed by hand until 06:00 tomorrow. Its work goes to Bar.",
     );
@@ -2651,14 +1740,16 @@ it.each([
   {
     locale: "en",
     heading: "Category or product",
-    field: "All categories, Every zone: Bar, the default station",
+    field:
+      "All categories, Every zone: Bar, the default station. Bar (default) — as an extra, follows its dish",
     disable: "Disable",
     enable: "Enable",
   },
   {
     locale: "es",
     heading: "Categoría o producto",
-    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
+    field:
+      "Todas las categorías, Todas las zonas: Bar, la estación predeterminada. Bar (predeterminada) — como extra, sigue a su plato",
     disable: "Deshabilitar",
     enable: "Habilitar",
   },
@@ -2708,7 +1799,6 @@ it.each([
     const el = await mount(
       api({
         load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-        readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
       }),
     );
     el.parentElement!.style.width = `${width}px`;
@@ -2727,6 +1817,58 @@ it.each([
     expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
   },
 );
+
+it("shows Add station on the Stations tab alone, and no action on the other tabs", async () => {
+  setLocale("en");
+  history.replaceState(null, "", "/manage/prep-stations");
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  for (const [key, actions] of [
+    ["stations", ["new-station"]],
+    ["routing", []],
+    ["watchers", []],
+    ["settings", []],
+    ["stations", ["new-station"]],
+  ] as const) {
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
+    await settle(el);
+    expect(tabs.value).toBe(key);
+    expect(
+      [...tabs.querySelectorAll('[slot="actions"] [data-test]')].map((a) =>
+        a.getAttribute("data-test"),
+      ),
+      key,
+    ).toEqual(actions);
+  }
+});
+
+it("at 390 px in Spanish, the tab row fades its cut end and keeps the selected tab whole", async () => {
+  setLocale("es");
+  history.replaceState(null, "", "/manage/prep-stations");
+  const el = await mount(api());
+  el.parentElement!.style.width = "390px";
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  const strip = tabs.shadowRoot!.querySelector<HTMLElement>("[role=tablist]")!;
+  const bounds = strip.getBoundingClientRect();
+  const selected = tabs
+    .shadowRoot!.querySelector('[aria-selected="true"]')!
+    .getBoundingClientRect();
+  expect(tabs.value).toBe("stations");
+  expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+  expect(tabs.dataset.overflow).toBe("end");
+  expect(getComputedStyle(strip).maskImage).not.toBe("none");
+  expect(selected.left).toBeGreaterThanOrEqual(bounds.left - 1);
+  expect(selected.right).toBeLessThanOrEqual(
+    bounds.right - 2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6")) + 1,
+  );
+  expect(q(el, '[data-test="new-station"]')!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    bounds.right - 1,
+  );
+});
 
 it.each([
   { locale: "en", theme: "light", width: 390 },
@@ -2753,7 +1895,6 @@ it.each([
       const el = await mount(
         api({
           load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-          readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
         }),
         theme,
       );
@@ -2764,7 +1905,7 @@ it.each([
       document.documentElement.style.background = canvas;
       const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
       await tabs.updateComplete;
-      for (const key of ["stations", "routing", "tickets", "watchers", "settings"]) {
+      for (const key of ["stations", "routing", "watchers", "settings"]) {
         const button = tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!;
         await page.elementLocator(button).click();
         await settle(el);
@@ -2794,14 +1935,6 @@ async function mountToday(
   history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(next),
-    readStationHealth: vi.fn().mockResolvedValue({
-      ...healthSnapshot,
-      stations: next.stations.map((station) => ({
-        ...healthSnapshot.stations[0]!,
-        id: station.id,
-        name: station.name,
-      })),
-    }),
     ...overrides,
   });
   return { a, el: await mount(a, theme) };
@@ -2809,10 +1942,10 @@ async function mountToday(
 it("Today leaves default and unscheduled stations always open without a closure action", async () => {
   setLocale("en");
   const { el } = await mountToday(withUpstairs({ open: true, why: "no_hours" }));
-  const rows = healthSummary(el)!.querySelectorAll("tbody tr");
+  const rows = stationTable(el)!.querySelectorAll("tbody tr");
   for (const row of rows) {
-    expect(row.querySelectorAll("td")[1]!.textContent!.trim()).toBe("Always open");
-    expect(row.querySelectorAll("td")[1]!.querySelector("wt-button")).toBeNull();
+    expect(row.querySelector("td:last-child")!.textContent!.trim()).toBe("Always open");
+    expect(row.querySelector("td:last-child")!.querySelector("wt-button")).toBeNull();
   }
 });
 it("Today names the chosen destination without offering a schedule action", async () => {
@@ -2827,7 +1960,7 @@ it("Today names the chosen destination without offering a schedule action", asyn
       },
     ),
   );
-  const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+  const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelector("td:last-child")!;
   expect(cell.textContent).toContain("Its work goes to Bar.");
   expect(cell.querySelector("wt-button")).toBeNull();
   expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
@@ -2838,8 +1971,8 @@ it("Today offers no hours action for disabled stations or an unreadable venue cl
   next.stations[1]!.active = false;
   next.routing.clockReadable = false;
   const { el } = await mountToday(next);
-  const cells = [...healthSummary(el)!.querySelectorAll("tbody tr")].map(
-    (row) => row.querySelectorAll("td")[1]!,
+  const cells = [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
+    row.querySelector("td:last-child")!,
   );
   expect(cells[0]!.textContent).toContain("cannot be read");
   expect(cells[1]!.textContent!.trim()).toBe("Disabled");
@@ -2887,7 +2020,7 @@ it.each([
     const canvas = getComputedStyle(host).backgroundColor;
     document.body.style.background = canvas;
     document.documentElement.style.background = canvas;
-    const summary = healthSummary(el)!;
+    const summary = stationTable(el)!;
     expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
     expect(summary.querySelector('[data-test="schedule-closed"]')).toBeNull();
     expect(summary.textContent).toContain(
@@ -2938,7 +2071,7 @@ it.each([
         },
       }),
     );
-    const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+    const cell = stationTable(el)!.querySelectorAll("tbody tr")[1]!.querySelector("td:last-child")!;
     expect(cell.textContent).toContain(expected);
     expect(
       cell.querySelector(`[data-test="${open ? "close" : "open"}-today-upstairs"]`),
@@ -2971,11 +2104,13 @@ it.each([false, true])(
         ...(live ? { liveData: new LiveData() } : {}),
         background: { load: backgroundLoad } as unknown as PrepStationsApi,
       });
-      expect(healthSummary(el)!.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
-      expect(healthSummary(el)!.textContent).toContain("Opens at 12:00");
+      expect(stationTable(el)!.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
+      expect(stationTable(el)!.textContent).toContain("Opens at 12:00");
       await vi.advanceTimersByTimeAsync(60_000);
       await settle(el);
-      const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      const cell = stationTable(el)!
+        .querySelectorAll("tbody tr")[1]!
+        .querySelector("td:last-child")!;
       expect(cell.textContent).toContain("Open until 01:00 tomorrow");
       expect(cell.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
       expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
@@ -2990,20 +2125,20 @@ it.each([false, true])(
 );
 
 it.each([
-  ["en", "Rename", "Disable", "Enable"],
-  ["es", "Cambiar nombre", "Deshabilitar", "Habilitar"],
+  ["en", "Edit", "Disable", "Enable"],
+  ["es", "Editar", "Deshabilitar", "Habilitar"],
 ])(
   "Stations row menus identify their row and use retained-state wording in %s",
-  async (locale, rename, disable, enable) => {
+  async (locale, edit, disable, enable) => {
     setLocale(locale as "en" | "es");
     const next = withUpstairs({ open: true, why: "in_hours" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
     const { el } = await mountToday(next);
-    const summary = healthSummary(el)!;
+    const summary = stationTable(el)!;
     const menu = summary.querySelector('wt-row-actions[data-test="station-menu-upstairs"]');
     expect(menu).not.toBeNull();
     expect(menu!.getAttribute("label")).toContain("Upstairs bar");
-    expect(menu!.querySelector('[data-test="rename-upstairs"]')!.textContent).toContain(rename);
+    expect(menu!.querySelector('[data-test="edit-upstairs"]')!.textContent).toContain(edit);
     expect(menu!.querySelector('[data-test="disable-upstairs"]')!.textContent).toContain(disable);
     expect(menu!.querySelector('[data-test="make-default-upstairs"]')).not.toBeNull();
     expect(summary.querySelector('[data-test="make-default-bar"]')).toBeNull();
@@ -3016,7 +2151,7 @@ it("renames from Stations without submitting timing settings and closes before a
   const next = withUpstairs({ open: true, why: "in_hours" });
   const load = vi.fn().mockResolvedValueOnce(next).mockRejectedValue({ code: "connection.failed" });
   const { el, a } = await mountToday(next, { load });
-  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]');
+  const action = stationTable(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
@@ -3024,10 +2159,10 @@ it("renames from Stations without submitting timing settings and closes before a
   expect(name).not.toBeNull();
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Cold kitchen" } }));
   await settle(el);
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledWith("upstairs", { name: "Cold kitchen" });
-  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).toBeNull();
   expect(q(el, '[role="alert"]')!.textContent).toContain("could not be loaded");
 });
 it("keeps a refused station name editable, marks duplicates and validates a corrected blank locally", async () => {
@@ -3037,23 +2172,23 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
       .mockRejectedValueOnce({ code: "station.name_taken" })
       .mockResolvedValue(undefined),
   });
-  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]');
+  const action = stationTable(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]');
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
-  expect(q(el, '[data-test="station-rename"]')).not.toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).not.toBeNull();
   expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toContain("already");
-  expect(q(el, '[data-test="save-station-name"]')!.hasAttribute("disabled")).toBe(false);
+  expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
   const name = q(el, 'wt-input[name="stationName"]')!;
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: " " } }));
   await settle(el);
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(1);
-  expect(q(el, '[data-test="save-station-name"]')!.hasAttribute("disabled")).toBe(true);
+  expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(true);
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "New name" } }));
   await settle(el);
   name
@@ -3061,19 +2196,19 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   await settle(el);
   expect(a.updateStation).toHaveBeenLastCalledWith("upstairs", { name: "New name" });
-  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).toBeNull();
 });
 it("Stations row actions reuse default and retained disable/enable writes", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
   const { el, a } = await mountToday(next, { activateStation: vi.fn() });
-  const makeDefault = healthSummary(el)!.querySelector<HTMLElement>(
+  const makeDefault = stationTable(el)!.querySelector<HTMLElement>(
     '[data-test="make-default-upstairs"]',
   );
   expect(makeDefault).not.toBeNull();
   makeDefault!.click();
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("upstairs");
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="disable-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="disable-upstairs"]')!.click();
   await settle(el);
   expect(a.deactivateStation).not.toHaveBeenCalled();
   q(el, '[data-test="confirm-station-action"]')!.click();
@@ -3085,7 +2220,7 @@ it("Stations row actions reuse default and retained disable/enable writes", asyn
   next.stations[1]!.active = false;
   await (el as unknown as { requestUpdate(): void }).requestUpdate();
   await settle(el);
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="enable-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="enable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
@@ -3100,18 +2235,18 @@ it("reorders Stations with the keyboard, retains focus and leaves routing cells 
     });
   });
   const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
   expect(handle).not.toBeNull();
   handle!.focus();
   handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await settle(el);
   expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
   expect(
-    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
   ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
-  expect(healthSummary(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
+  expect(stationTable(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
   expect(next.routing.cells).toEqual(view.routing.cells);
   expect(next.routing.defaultStationId).toBe(view.routing.defaultStationId);
 });
@@ -3120,14 +2255,14 @@ it("restores the Stations order after refusal and never moves disabled rows", as
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
   const order = vi.fn().mockRejectedValue({ code: "connection.failed" });
   const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  expect(healthSummary(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
-  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  expect(stationTable(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
+  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
   expect(handle).not.toBeNull();
   handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await settle(el);
   expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
   expect(
-    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
   ).toEqual(["station-menu-bar", "station-menu-upstairs", "station-menu-retired"]);
@@ -3137,7 +2272,7 @@ it("persists a pointer reorder once on release and releases the drag on disconne
   const next = withUpstairs({ open: true, why: "in_hours" });
   const order = vi.fn().mockResolvedValue(undefined);
   const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const summary = healthSummary(el)!;
+  const summary = stationTable(el)!;
   const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
   expect(handle).not.toBeNull();
   const target = summary
@@ -3159,7 +2294,7 @@ it("persists a pointer reorder once on release and releases the drag on disconne
   document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
   await settle(el);
   expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-  const nextHandle = healthSummary(el)!.querySelector<HTMLButtonElement>(
+  const nextHandle = stationTable(el)!.querySelector<HTMLButtonElement>(
     '[data-test="drag-upstairs"]',
   )!;
   nextHandle.dispatchEvent(
@@ -3182,23 +2317,26 @@ it("keeps a general rename refusal below the field and permits retry", async () 
       .mockRejectedValueOnce({ code: "connection.failed" })
       .mockResolvedValue(undefined),
   });
-  healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="edit-upstairs"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
-  q(el, '[data-test="save-station-name"]')!.click();
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
-  expect(q(el, '[data-test="station-rename"]')!.textContent).toContain("could not be saved");
-  q(el, '[data-test="save-station-name"]')!.click();
+  expect(
+    (q(el, '[data-test="station-editor"] wt-form-actions') as HTMLElement & { error: string })
+      .error,
+  ).toContain("could not be saved");
+  q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(2);
-  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[data-test="station-editor"]')).toBeNull();
 });
 it("announces the reordered station and its position to a screen reader", async () => {
   const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
     reorderStations: vi.fn().mockResolvedValue(undefined),
   });
-  healthSummary(el)!
+  stationTable(el)!
     .querySelector<HTMLElement>('[data-test="drag-upstairs"]')!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await settle(el);
@@ -3217,7 +2355,7 @@ it.each([
   ["es", "light", 1280],
   ["es", "dark", 1280],
 ] as const)(
-  "Stations menus and rename remain accessible in %s %s at %ipx",
+  "Stations menus and the station editor remain accessible in %s %s at %ipx",
   async (locale, theme, width) => {
     const previous = {
       width: window.innerWidth,
@@ -3238,7 +2376,7 @@ it.each([
       host.style.background = "var(--wt-color-bg)";
       document.body.style.background = getComputedStyle(host).backgroundColor;
       document.documentElement.style.background = getComputedStyle(host).backgroundColor;
-      const menu = healthSummary(el)!.querySelector(
+      const menu = stationTable(el)!.querySelector(
         'wt-row-actions[data-test="station-menu-upstairs"]',
       )!;
       await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
@@ -3247,22 +2385,22 @@ it.each([
       await page.screenshot({
         path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-menu.png`,
       });
-      const rename = menu.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!;
-      await page.elementLocator(rename).click();
+      const edit = menu.querySelector<HTMLElement>('[data-test="edit-upstairs"]')!;
+      await page.elementLocator(edit).click();
       await settle(el);
       expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
       expect(
-        q(el, '[data-test="station-rename"]')!.getBoundingClientRect().right,
+        q(el, '[data-test="station-editor"]')!.getBoundingClientRect().right,
       ).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-rename.png`,
+        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-edit.png`,
       });
-      q(el, '[data-test="station-rename"]')!
+      q(el, '[data-test="station-editor"]')!
         .querySelector<HTMLElement>('wt-button[slot="cancel"]')!
         .click();
       await settle(el);
-      const disabledMenu = healthSummary(el)!.querySelector(
+      const disabledMenu = stationTable(el)!.querySelector(
         'wt-row-actions[data-test="station-menu-retired"]',
       )!;
       await page.elementLocator(disabledMenu.shadowRoot!.querySelector("button")!).click();
@@ -3348,41 +2486,62 @@ const ticketView: PrepStationsView = {
     },
   ],
 };
-async function mountTickets(overrides: Partial<PrepStationsApi> = {}) {
-  history.replaceState(null, "", "/manage/prep-stations/view/tickets");
+async function mountStations(overrides: Partial<PrepStationsApi> = {}) {
+  history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(ticketView),
-    setStationPrinters: vi.fn().mockResolvedValue(undefined),
+    updateStation: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   });
   const el = await mount(a);
   await settle(el);
-  const table = el.shadowRoot!.querySelector<HTMLElement>(
-    'wt-data-table[data-test="tickets-table"]',
-  );
-  expect(table, "Tickets lists station outputs").not.toBeNull();
-  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  return { el, a, table: table! };
+  return { el, a };
 }
-const ticketQ = (table: HTMLElement, selector: string) =>
-  table.shadowRoot!.querySelector<HTMLElement>(selector);
+const stationEditor = (el: PrepStationsScreen) =>
+  el.shadowRoot!.querySelector("prep-station-editor");
+const editorQ = <T extends HTMLElement = HTMLElement>(el: PrepStationsScreen, selector: string) =>
+  stationEditor(el)?.shadowRoot?.querySelector<T>(selector) ?? null;
+async function settleEditor(el: PrepStationsScreen) {
+  await settle(el);
+  await stationEditor(el)?.updateComplete;
+}
+const printersOf = (el: PrepStationsScreen) =>
+  editorQ<WtCombobox>(el, 'wt-combobox[name="printerIds"]');
+async function openPrinters(el: PrepStationsScreen, stationId = "bar") {
+  q(el, `[data-test="edit-${stationId}"]`)!.click();
+  await settleEditor(el);
+  const combo = printersOf(el);
+  expect(combo, "the station editor offers the station's printers").not.toBeNull();
+  await combo!.updateComplete;
+  return combo!;
+}
+async function pickPrinters(el: PrepStationsScreen, values: string[]) {
+  printersOf(el)!.dispatchEvent(new CustomEvent("wt-change", { detail: { values } }));
+  await settleEditor(el);
+}
+const editorSave = (el: PrepStationsScreen) =>
+  editorQ<HTMLElement & { disabled: boolean }>(el, '[data-test="save-station-edit"]')!;
+const editorMessage = (el: PrepStationsScreen) =>
+  editorQ<HTMLElement & { error: string }>(el, "wt-form-actions")!.error;
+async function cancelEditor(el: PrepStationsScreen) {
+  const closed = editorClosed(el);
+  editorQ(el, '[data-test="cancel-station-edit"]')!.click();
+  await closed;
+  await vi.waitFor(() => expect(stationEditor(el)).toBeNull());
+  await settle(el);
+}
 
-it("Tickets names each station's printed and current screen outputs with separate relationship links", async () => {
-  const { table } = await mountTickets();
-  expect(table.shadowRoot!.textContent).toContain("Old printer");
-  const bar = ticketQ(table, '[data-test="screens-bar"]')!;
+it("Stations names each station's printers and the screens that show it, with a link to Devices", async () => {
+  const { el } = await mountStations();
+  const printed = q(el, '[data-test="printed-on-bar"]')!;
+  expect(printed.textContent).toContain("Old printer");
+  const bar = q(el, '[data-test="screens-bar"]')!;
   expect(bar.textContent).toContain("Bar screen");
   expect(bar.textContent).not.toContain("Other screen");
   expect(bar.textContent).not.toContain("Disabled screen");
   expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
-  const watchers = ticketQ(table, '[data-test="watchers-bar"]')!;
-  expect(watchers.textContent).toContain("Pass");
-  expect(watchers.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/prep-stations/view/watchers",
-  );
-  expect(ticketQ(table, '[data-test="watchers-upstairs"]')!.textContent).not.toContain("Pass");
+  expect(printed.querySelector("wt-combobox, button")).toBeNull();
   expect(bar.querySelector("wt-combobox")).toBeNull();
-  expect(watchers.querySelector("wt-combobox")).toBeNull();
 });
 
 it.each([
@@ -3405,7 +2564,7 @@ it.each([
     ],
   },
 ])(
-  "Tickets names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
+  "Stations names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
   async ({ locale, bar, upstairs }) => {
     const server = structuredClone(ticketView);
     server.devices.push(
@@ -3440,23 +2599,19 @@ it.each([
       },
     );
     setLocale(locale);
-    const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
+    const { el } = await mountStations({ load: vi.fn().mockResolvedValue(server) });
     const names = (id: string) =>
-      [
-        ...ticketQ(table, `[data-test="screens-${id}"]`)!.querySelectorAll(
-          "[data-test=screen-device]",
-        ),
-      ].map((device) => device.textContent!.trim());
+      [...q(el, `[data-test="screens-${id}"]`)!.querySelectorAll("[data-test=screen-device]")].map(
+        (device) => device.textContent!.trim(),
+      );
     expect(names("bar")).toEqual(bar);
     expect(names("upstairs")).toEqual(upstairs);
   },
 );
 
-it("Tickets opens its printer cell as a multi-select, explains unavailable choices and saves once", async () => {
-  const { el, a, table } = await mountTickets();
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+it("the station editor offers printers as a multi-select, explains unavailable choices and saves once", async () => {
+  const { el, a } = await mountStations();
+  const combo = await openPrinters(el);
   expect(combo.multiple).toBe(true);
   expect(combo.values).toEqual(["old"]);
   expect(combo.options.find((o) => o.value === "watcher")).toMatchObject({
@@ -3467,88 +2622,64 @@ it("Tickets opens its printer cell as a multi-select, explains unavailable choic
     disabled: true,
     description: "Disabled",
   });
-  combo.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { values: ["old", "next"] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await settle(el);
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await pickPrinters(el, ["old", "next"]);
+  expect(a.updateStation).not.toHaveBeenCalled();
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", ["old", "next"]),
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["old", "next"] }),
   );
-  await settle(el);
-  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  await vi.waitFor(() => expect(printersOf(el)).toBeNull());
 });
 
-it("Tickets cancels a pending selection without submitting it", async () => {
-  const { el, a, table } = await mountTickets();
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
-  );
-  await settle(el);
-  ticketQ(table, '[data-test="cancel-printers-bar"]')!.click();
-  await settle(el);
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain("Old printer");
+it("the station editor cancels a pending printer selection without submitting it", async () => {
+  const { el, a } = await mountStations();
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  await cancelEditor(el);
+  expect(a.updateStation).not.toHaveBeenCalled();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
+  expect((await openPrinters(el)).values).toEqual(["old"]);
 });
 
-it("Tickets retains a refused set beside its field and allows correction and retry", async () => {
+it("the station editor retains a refused printer set beside its field and allows correction and retry", async () => {
   const save = vi
     .fn()
     .mockRejectedValueOnce({ code: "printer.makes_and_watches" })
     .mockResolvedValue(undefined);
-  const { el, table } = await mountTickets({ setStationPrinters: save });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
+  const { el } = await mountStations({ updateStation: save });
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
+  await vi.waitFor(() =>
+    expect(printersOf(el)!.error).toBe("Choose active printers that no watcher uses."),
   );
-  await settle(el);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
-  await vi.waitFor(() => expect(ticketQ(table, '[data-field-error="printerIds"]')).not.toBeNull());
-  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual([
-    "next",
-  ]);
-  expect(
-    (ticketQ(table, '[data-test="save-printers-bar"]') as HTMLElement & { disabled: boolean })
-      .disabled,
-  ).toBe(false);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  expect(printersOf(el)!.values).toEqual(["next"]);
+  expect(editorSave(el).disabled).toBe(false);
+  editorSave(el).click();
   await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  await vi.waitFor(() => expect(printersOf(el)).toBeNull());
 });
 
-it("Tickets closes after the write succeeds even if its following refresh fails", async () => {
+it("the station editor closes after the write succeeds even if its following refresh fails", async () => {
   const load = vi.fn().mockResolvedValueOnce(ticketView).mockRejectedValue(new Error("offline"));
-  const { el, table } = await mountTickets({ load });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  await editSaveField(el, ticketQ(table, '[data-test="station-printers-bar"]')!, ["next"]);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  const { el } = await mountStations({ load });
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded."),
   );
-  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  expect(printersOf(el)).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("The change could not be saved.");
 });
 
-it("Tickets lets a retained disabled printer be removed, then refuses to offer it again", async () => {
+it("the station editor lets a retained disabled printer be removed, then refuses to offer it again", async () => {
   const retained = {
     ...ticketView,
     stationPrinters: [{ stationId: "bar", printerId: "disabled" }],
   };
-  const { el, a, table } = await mountTickets({ load: vi.fn().mockResolvedValue(retained) });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-  await combo.updateComplete;
+  const { el, a } = await mountStations({ load: vi.fn().mockResolvedValue(retained) });
+  const combo = await openPrinters(el);
   expect(combo.options.find((o) => o.value === "disabled")!.disabled).toBe(false);
   combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
   await combo.updateComplete;
@@ -3556,53 +2687,46 @@ it("Tickets lets a retained disabled printer be removed, then refuses to offer i
     (option) => option.textContent?.includes("Disabled printer"),
   )!;
   choice.click();
-  await settle(el);
+  await settleEditor(el);
   expect(combo.values).toEqual([]);
   expect(combo.options.find((o) => o.value === "disabled")!.disabled).toBe(true);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
-  await vi.waitFor(() => expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", []));
-});
-
-it("Tickets keeps a failed selection editable while reporting a general refusal at the page", async () => {
-  const { el, table } = await mountTickets({
-    setStationPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
-  });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  await editSaveField(el, ticketQ(table, '[data-test="station-printers-bar"]')!, ["next"]);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain("The change could not be saved."),
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: [] }),
   );
-  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).error).toBe("");
-  expect(
-    (ticketQ(table, '[data-test="save-printers-bar"]') as HTMLElement & { disabled: boolean })
-      .disabled,
-  ).toBe(false);
 });
 
-it("Tickets preserves an open printer draft when mappings refresh live", async () => {
+it("the station editor keeps a failed printer selection editable while reporting a general refusal", async () => {
+  const { el } = await mountStations({
+    updateStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
+  await vi.waitFor(() => expect(editorMessage(el)).toBe("The change could not be saved."));
+  expect(printersOf(el)!.error).toBe("");
+  expect(printersOf(el)!.values).toEqual(["next"]);
+  expect(editorSave(el).disabled).toBe(false);
+});
+
+it("the station editor preserves an open printer draft when mappings refresh live", async () => {
   const liveData = new LiveData();
   const load = vi
     .fn()
     .mockResolvedValueOnce(ticketView)
     .mockResolvedValue({ ...ticketView, stationPrinters: [] });
-  const { el, a, table } = await mountTickets({ liveData, load });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["old", "next"] } }),
-  );
-  await settle(el);
+  const { el, a } = await mountStations({ liveData, load });
+  await openPrinters(el);
+  await pickPrinters(el, ["old", "next"]);
   liveData.invalidate([{ type: "station_printers", id: "bar" }]);
   await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-  await settle(el);
-  const retained = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox | null;
+  await settleEditor(el);
+  const retained = printersOf(el);
   expect(retained, "mapping refresh retains the editable selection").not.toBeNull();
   expect(retained!.values).toEqual(["old", "next"]);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", ["old", "next"]),
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["old", "next"] }),
   );
 });
 
@@ -3616,7 +2740,7 @@ it.each([
   ["es", "light", 1280],
   ["es", "dark", 1280],
 ] as const)(
-  "Tickets picker and refusal are accessible in %s %s at %ipx",
+  "the station editor's printer picker and refusal are accessible in %s %s at %ipx",
   async (locale, theme, width) => {
     const previous = {
       width: window.innerWidth,
@@ -3628,17 +2752,14 @@ it.each([
       await page.viewport(width, 900);
       setLocale(locale);
       const save = vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" });
-      const { el, table } = await mountTickets({ setStationPrinters: save });
+      const { el } = await mountStations({ updateStation: save });
       const host = el.parentElement!;
       host.setAttribute("data-theme", theme);
       host.style.background = "var(--wt-color-bg)";
       document.body.style.background = getComputedStyle(host).backgroundColor;
       document.documentElement.style.background = getComputedStyle(host).backgroundColor;
       await expectNoA11yViolations(host);
-      ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-      await settle(el);
-      const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-      await combo.updateComplete;
+      const combo = await openPrinters(el);
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
       await combo.updateComplete;
       const list = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -3646,8 +2767,8 @@ it.each([
       expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-      await editSaveField(el, combo, ["next"]);
-      ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+      await pickPrinters(el, ["next"]);
+      editorSave(el).click();
       await vi.waitFor(() => expect(combo.error).not.toBe(""));
       expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
@@ -3660,43 +2781,43 @@ it.each([
 );
 
 it.each([
-  ["en", "2 printers", "No results"],
-  ["es", "2 impresoras", "Sin resultados"],
-])("Tickets localises multiple choices and an empty search in %s", async (locale, count, empty) => {
-  setLocale(locale!);
-  const { el, table } = await mountTickets();
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["old", "next"] } }));
-  await settle(el);
-  await combo.updateComplete;
-  expect(combo.shadowRoot!.querySelector(".trigger")!.textContent).toContain(count);
-  combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
-  await combo.updateComplete;
-  const search = combo.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
-  search.value = "missing printer";
-  search.dispatchEvent(new Event("input", { bubbles: true }));
-  await combo.updateComplete;
-  expect(combo.shadowRoot!.querySelector(".empty")!.textContent).toContain(empty);
-});
+  ["en", "No results"],
+  ["es", "Sin resultados"],
+])(
+  "the station editor names its chosen printers and localises an empty search in %s",
+  async (locale, empty) => {
+    setLocale(locale!);
+    const { el } = await mountStations();
+    const combo = await openPrinters(el);
+    await pickPrinters(el, ["old", "next"]);
+    await combo.updateComplete;
+    expect(combo.shadowRoot!.querySelector(".trigger")!.textContent).toContain(
+      "Old printer, Next printer",
+    );
+    combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+    await combo.updateComplete;
+    const search = combo.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+    search.value = "missing printer";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await combo.updateComplete;
+    expect(combo.shadowRoot!.querySelector(".empty")!.textContent).toContain(empty);
+  },
+);
 
-it("Tickets retains station printer memberships independently for each station", async () => {
+it("the station editor retains printer memberships independently for each station", async () => {
   setLocale("en");
-  const { el, a, table } = await mountTickets();
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain("Old printer");
-  expect(ticketQ(table, '[data-test="edit-printers-upstairs"]')!.textContent).toContain("None");
-  for (const [stationId, ids, label] of [
-    ["bar", ["old"], "Bar: Printed on"],
-    ["upstairs", [], "Upstairs bar: Printed on"],
+  const { el, a } = await mountStations();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
+  expect(q(el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe("No printer");
+  for (const [stationId, ids, name] of [
+    ["bar", ["old"], "Bar"],
+    ["upstairs", [], "Upstairs bar"],
   ] as const) {
-    ticketQ(table, `[data-test="edit-printers-${stationId}"]`)!.click();
-    await settle(el);
-    const combo = ticketQ(table, `[data-test="station-printers-${stationId}"]`) as WtCombobox;
+    const combo = await openPrinters(el, stationId);
+    expect(editorQ<WtInput>(el, 'wt-input[name="stationName"]')!.value).toBe(name);
     expect(combo.values).toEqual(ids);
     expect(combo.getAttribute("name")).toBe("printerIds");
-    expect(combo.label).toBe(label);
-    await combo.updateComplete;
+    expect(combo.label).toBe("Printers");
     combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
     await combo.updateComplete;
     expect(combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.name).toBe("printerIds");
@@ -3706,90 +2827,75 @@ it("Tickets retains station printer memberships independently for each station",
     expect(old.getAttribute("aria-selected")).toBe(stationId === "bar" ? "true" : "false");
     expect(next.getAttribute("aria-selected")).toBe("false");
     combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
-    ticketQ(table, `[data-test="cancel-printers-${stationId}"]`)!.click();
-    await settle(el);
+    await cancelEditor(el);
   }
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
+  expect(a.updateStation).not.toHaveBeenCalled();
 });
 
 it.each([true, false])(
-  "Tickets persists a printer membership change and reflects its stored selection (attach=%s)",
+  "the station editor persists a printer membership change and Stations shows the stored set (attach=%s)",
   async (attach) => {
     setLocale("en");
     let stored = [...ticketView.stationPrinters];
     const load = vi.fn(async () => ({ ...ticketView, stationPrinters: stored }));
-    const save = vi.fn(async (stationId: string, ids: string[]) => {
+    const save = vi.fn(async (stationId: string, body: { printerIds?: string[] }) => {
       stored = [
         ...stored.filter((row) => row.stationId !== stationId),
-        ...ids.map((printerId) => ({ stationId, printerId })),
+        ...(body.printerIds ?? []).map((printerId) => ({ stationId, printerId })),
       ];
     });
-    const { el, table } = await mountTickets({ load, setStationPrinters: save });
-    ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-    await settle(el);
-    const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
-    combo.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { values: attach ? ["old", "next"] : [] } }),
-    );
-    await settle(el);
-    ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+    const { el } = await mountStations({ load, updateStation: save });
+    await openPrinters(el);
+    await pickPrinters(el, attach ? ["old", "next"] : []);
+    editorSave(el).click();
     await vi.waitFor(() =>
-      expect(save).toHaveBeenCalledExactlyOnceWith("bar", attach ? ["old", "next"] : []),
+      expect(save).toHaveBeenCalledExactlyOnceWith("bar", {
+        printerIds: attach ? ["old", "next"] : [],
+      }),
     );
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
     await settle(el);
-    const cell = ticketQ(table, '[data-test="edit-printers-bar"]')!;
-    expect(cell.textContent?.trim()).toBe(attach ? "Old printer, Next printer" : "None");
-    expect(load).toHaveBeenCalledTimes(2);
-    cell.click();
-    await settle(el);
-    expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual(
-      attach ? ["old", "next"] : [],
+    expect(q(el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe(
+      attach ? "Old printer, Next printer" : "No printer",
     );
+    expect((await openPrinters(el)).values).toEqual(attach ? ["old", "next"] : []);
   },
 );
 
-it("Tickets keeps the stored membership and editable draft after a station refusal", async () => {
+it("the station editor keeps the stored membership and editable draft after a station refusal", async () => {
   setLocale("en");
-  const { el, a, table } = await mountTickets({
-    setStationPrinters: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+  const { el, a } = await mountStations({
+    updateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
   });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
-  );
-  await settle(el);
-  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await openPrinters(el);
+  await pickPrinters(el, ["next"]);
+  editorSave(el).click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain(
-      "This station is disabled. Choose an active station.",
+    expect(editorMessage(el)).toBe(
+      "The change could not be saved. This station could not be found.",
     ),
   );
-  expect(el.shadowRoot!.textContent).not.toContain("station.not_found");
-  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual([
-    "next",
-  ]);
+  expect(stationEditor(el)!.shadowRoot!.textContent).not.toContain("station.not_found");
+  expect(printersOf(el)!.values).toEqual(["next"]);
   expect(a.load).toHaveBeenCalledTimes(1);
-  ticketQ(table, '[data-test="cancel-printers-bar"]')!.click();
-  await settle(el);
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent?.trim()).toBe(
-    "Old printer",
-  );
+  await cancelEditor(el);
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
 });
 
 it.each([
-  ["en", "No results"],
-  ["es", "Sin resultados"],
+  ["en", "No prep stations yet"],
+  ["es", "No hay estaciones de preparación todavía"],
 ] as const)(
-  "Tickets shows its localised empty state and no printer action with no stations (%s)",
+  "Stations shows its localised empty state and no printer read-out with no stations (%s)",
   async (locale, message) => {
     setLocale(locale);
-    const { a, table } = await mountTickets({
+    const { el, a } = await mountStations({
       load: vi.fn().mockResolvedValue({ ...ticketView, stations: [], stationPrinters: [] }),
     });
-    expect(table.shadowRoot!.textContent).toContain(message);
-    expect(ticketQ(table, '[data-test^="edit-printers-"]')).toBeNull();
-    expect(a.setStationPrinters).not.toHaveBeenCalled();
+    expect(stationTable(el)!.textContent).toContain(message);
+    expect(q(el, '[data-test^="printed-on-"]')).toBeNull();
+    expect(stationTable(el)!.querySelector('[data-test^="edit-"]')).toBeNull();
+    expect(a.updateStation).not.toHaveBeenCalled();
   },
 );
 
@@ -4468,7 +3574,7 @@ it.each([
   },
 );
 
-it("Watchers clears only a resolved printer conflict after Tickets releases every station mapping", async () => {
+it("Watchers clears a printer conflict only once a live update frees the printer from every station", async () => {
   const liveData = new LiveData();
   const server = structuredClone(ticketView);
   server.stationPrinters = [
@@ -4511,7 +3617,6 @@ it("Watchers clears only a resolved printer conflict after Tickets releases ever
 
 it("Watchers restores the saved printer set after cancelling a refused attachment", async () => {
   const { el, a } = await mountWatcherPrinters({
-    setStationPrinters: vi.fn(),
     setWatcherPrinters: vi
       .fn()
       .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
@@ -4541,7 +3646,7 @@ it("Watchers restores the saved printer set after cancelling a refused attachmen
     ),
   ).toEqual(["Pass printer"]);
   expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]);
-  expect(a.setStationPrinters).not.toHaveBeenCalled();
+  expect(a.updateStation).not.toHaveBeenCalled();
 });
 
 it.each([
@@ -4622,20 +3727,13 @@ it("Watchers keeps a conflict while another selected printer still serves a stat
   expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next", "old"]);
 });
 
-it("keeps supervisor numbers and drilldowns live without exposing any configuration controls", async () => {
+it("a supervisor sees the stations read-only", async () => {
   const liveData = new LiveData();
-  const read = vi.fn().mockResolvedValue({
-    ...healthSnapshot,
-    stations: [
-      healthSnapshot.stations[0]!,
-      { ...healthSnapshot.stations[0]!, id: "upstairs", name: "Upstairs bar" },
-    ],
-  });
   const a = api({
     liveData,
     load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-    readStationHealth: read,
   });
+  expect("readStationHealth" in a).toBe(false);
   const host = document.createElement("div");
   applyTokens(host);
   document.body.append(host);
@@ -4651,37 +3749,68 @@ it("keeps supervisor numbers and drilldowns live without exposing any configurat
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.shadowRoot!.querySelectorAll('[role="tab"]')).toHaveLength(1);
-  const summary = healthSummary(el)!;
+  const summary = stationTable(el)!;
   expect(summary.textContent).toContain("Upstairs bar");
   expect(summary.textContent).toContain("Open now");
   expect(summary.querySelector("wt-row-actions")).toBeNull();
   expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
   expect(summary.querySelector("[data-station-id]")).toBeNull();
-  summary.querySelector<HTMLElement>('[data-test="waiting-bar"]')!.click();
-  await settle(el);
-  const health = el.shadowRoot!.querySelector("prep-station-health-table")!;
-  await health.updateComplete;
-  await vi.waitFor(() =>
-    expect(
-      health.shadowRoot!.querySelector('[data-test="health-details"]')?.shadowRoot?.textContent,
-    ).toContain("KITCHEN SOUP"),
-  );
-  read.mockResolvedValue({
-    ...healthSnapshot,
-    stations: [{ ...healthSnapshot.stations[0]!, waiting: 0, items: [] }],
-  });
-  liveData.invalidate([{ type: "ticket_items", id: "soup" }]);
-  await vi.waitFor(() =>
-    expect(healthSummary(el)!.querySelector('[data-test="waiting-bar"]')!.textContent!.trim()).toBe(
-      "0",
-    ),
-  );
+  expect(summary.querySelector('[part~="number"]')).toBeNull();
+  expect(stationHeadings(el)).toEqual(["Name", "Today"]);
   expect(a.updateStation).not.toHaveBeenCalled();
+});
+
+it.each(["en", "es"] as const)(
+  "a manager's Stations table reads Printed on and Shown on, and a supervisor's reads neither (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const manager = await mountStations();
+    expect(stationHeadings(manager.el)).toEqual(
+      locale === "en"
+        ? ["Name", "Printed on", "Shown on", "Today"]
+        : ["Nombre", "Se imprime en", "Se muestra en", "Hoy"],
+    );
+    expect(q(manager.el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
+    expect(q(manager.el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe(
+      locale === "en" ? "No printer" : "Sin impresora",
+    );
+    expect(q(manager.el, '[data-test="screens-bar"]')!.textContent).toContain("Bar screen");
+    expect(q(manager.el, '[data-test="screens-upstairs"]')!.textContent).toContain("Other screen");
+    const host = document.createElement("div");
+    applyTokens(host);
+    document.body.append(host);
+    hosts.push(host);
+    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+    el.api = api({ load: vi.fn().mockResolvedValue(ticketView) });
+    el.readOnly = true;
+    host.append(el);
+    await settle(el);
+    expect(stationTable(el)!.textContent).toContain("Upstairs bar");
+    expect(stationHeadings(el)).toEqual(locale === "en" ? ["Name", "Today"] : ["Nombre", "Hoy"]);
+    expect(q(el, '[data-test^="printed-on-"]')).toBeNull();
+    expect(q(el, '[data-test^="screens-"]')).toBeNull();
+    expect(stationTable(el)!.textContent).not.toContain("Old printer");
+    expect(stationTable(el)!.textContent).not.toContain("Bar screen");
+  },
+);
+
+it("an old Tickets address opens Stations and rewrites the address", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/tickets");
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
+  await settle(el);
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(tabs.shadowRoot!.querySelector('[data-key="tickets"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[slot="tickets"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="tickets-table"]')).toBeNull();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
 });
 
 it("moves a configuration panel back to the overview when the screen becomes read-only", async () => {
   history.replaceState(null, "", "/manage/prep-stations/view/settings/test/bread");
-  const a = api({ readStationHealth: vi.fn().mockResolvedValue(healthSnapshot) });
+  const a = api();
   const el = await mount(a);
   expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
     "settings",
@@ -4817,12 +3946,12 @@ it.each(["ArrowUp", "Enter", "ArrowLeft"])(
     const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
       reorderStations: order,
     });
-    const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
+    const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
     handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     await settle(el);
     expect(order).not.toHaveBeenCalled();
     expect(
-      [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+      [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
         row.querySelector("wt-row-actions")!.getAttribute("data-test"),
       ),
     ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
@@ -4834,10 +3963,8 @@ it("Stations pointer drag ignores another pointer and outside rows, and a no-op 
   const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
     reorderStations: order,
   });
-  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>(
-    '[data-test="drag-upstairs"]',
-  )!;
-  const first = healthSummary(el)!
+  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
+  const first = stationTable(el)!
     .querySelector('[data-test="station-menu-bar"]')!
     .closest("tr")!
     .getBoundingClientRect();
@@ -4860,7 +3987,7 @@ it("Stations pointer drag ignores another pointer and outside rows, and a no-op 
   await settle(el);
   expect(order).not.toHaveBeenCalled();
   expect(
-    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
   ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
@@ -4871,8 +3998,8 @@ it("preserves unknown printer ids on both output surfaces", async () => {
   const server = structuredClone(ticketView);
   server.stationPrinters = [{ stationId: "bar", printerId: "missing-station-printer" }];
   server.watchers[0]!.printerIds = ["missing-watcher-printer"];
-  const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
-  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain(
+  const stations = await mountStations({ load: vi.fn().mockResolvedValue(server) });
+  expect(q(stations.el, '[data-test="printed-on-bar"]')!.textContent).toContain(
     "missing-station-printer",
   );
   const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
@@ -4881,7 +4008,7 @@ it("preserves unknown printer ids on both output surfaces", async () => {
   );
 });
 
-it.each(["tickets", "settings", "stations"])(
+it.each(["settings", "stations"])(
   "%s orders tied station positions by name and keeps disabled stations last",
   async (tab) => {
     const server = structuredClone(ticketView);
@@ -4896,7 +4023,7 @@ it.each(["tickets", "settings", "stations"])(
     const table =
       tab === "stations"
         ? el
-            .shadowRoot!.querySelector("prep-station-health-table")!
+            .shadowRoot!.querySelector("prep-station-table")!
             .shadowRoot!.querySelector("wt-data-table")!
         : el.shadowRoot!.querySelector(`[data-test="${tab}-table"]`)!;
     await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
@@ -4939,65 +4066,6 @@ it("a missing watcher refusal keeps the printer draft retryable", async () => {
     "This watcher could not be found.",
   );
   expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
-});
-
-it("describes extras with default, category-cell and product-cell decisions across fallback hops", async () => {
-  const a = api({
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "no_preparation" },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      stations: [{ id: "bar", name: "Bar", active: true }],
-      extrasWaitOnDish: false,
-      extras: [
-        {
-          productId: "unknown-default",
-          outcome: { kind: "follows_dish", why: "no_rule" },
-          decidedBy: { kind: "default" },
-          fallbacks: [],
-        },
-        {
-          productId: "unknown-category",
-          outcome: { kind: "made", stationId: "bar" },
-          decidedBy: {
-            kind: "cell",
-            address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
-          },
-          fallbacks: [],
-        },
-        {
-          productId: "unknown-product",
-          outcome: { kind: "made", stationId: "bar" },
-          decidedBy: {
-            kind: "cell",
-            address: { row: { kind: "product", productId: "unknown-product" }, zoneId: null },
-          },
-          fallbacks: [
-            { stationId: "closed", why: "out_of_hours" },
-            { stationId: "disabled", why: "switched_off" },
-          ],
-        },
-      ],
-    }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
-  expect(answer).toContain(
-    "unknown-default: follows the dish — only the default station covers it",
-  );
-  expect(answer).toContain(
-    "unknown-category: made separately at Bar, as set for Drinks › Cocktails, in every zone",
-  );
-  expect(answer).toContain("closed is closed outside its opening hours");
-  expect(answer).toContain("disabled is disabled, so its work goes to Bar.");
-  expect(answer).toContain(
-    "closed is closed outside its opening hours, so its work goes to disabled. disabled is disabled, so its work goes to Bar. unknown-product: made separately at Bar — unknown-product, in every zone, sends it to closed",
-  );
 });
 
 it.each(["cancel", "dismiss"])("%s abandons watcher removal without writing", async (how) => {
@@ -5069,15 +4137,13 @@ it("keeps an attempted watcher Rename invalid through whitespace until a name is
   expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
 });
 
-it("Tickets names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
+it("the station editor names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
   setLocale("en");
   const server = structuredClone(ticketView);
   server.watchers = [];
   server.printers.find((row) => row.id === "watcher")!.watcherId = "missing-watcher";
-  const { el, table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const choice = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  const { el } = await mountStations({ load: vi.fn().mockResolvedValue(server) });
+  const choice = await openPrinters(el);
   expect(choice.options.find((row) => row.value === "watcher")).toEqual({
     value: "watcher",
     label: "Pass printer",
@@ -5386,36 +4452,19 @@ it.each(["rename", "remove"] as const)(
   },
 );
 
-it("keeps a disabled watcher out of the stations' watcher lists, the route tester and the printer pickers", async () => {
-  const { el, table } = await mountTickets({
+it("keeps a disabled watcher out of the printer pickers", async () => {
+  const { el } = await mountStations({
     load: vi.fn().mockResolvedValue(retainedWatchersView()),
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "station", stationId: "bar" },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      stations: [],
-    }),
   });
-  const follows = ticketQ(table, '[data-test="watchers-bar"]')!.textContent!;
-  expect(follows).toContain("Pass, Runner");
-  expect(follows).not.toContain("Old pass");
-  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
-  await settle(el);
-  const choice = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  const choice = await openPrinters(el);
   expect(choice.options.find((row) => row.value === "spare-printer")).toEqual({
     value: "spare-printer",
     label: "Spare printer",
     disabled: false,
     description: undefined,
   });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Watched by: Pass, Runner");
-  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Old pass");
   history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  await cancelEditor(el);
   const watcherPicker = await openWatcherPrinters(el);
   expect(watcherPicker.options.find((row) => row.value === "spare-printer")?.description).toBe(
     undefined,
@@ -5439,7 +4488,7 @@ describe("Routing grid", () => {
       ...view,
       routing: {
         ...view.routing,
-        zones: [{ id: "terrace", name: "Terrace" }],
+        zones: [{ id: "terrace", name: "Terrace", departmentId: null }],
         products: [
           { id: "bread", name: "Bread", categoryId: "food" },
           { id: "water", name: "Water", categoryId: null },
@@ -5478,31 +4527,46 @@ describe("Routing grid", () => {
       "venue-routing-grid",
     )!;
   const cellCombo = (el: PrepStationsScreen, row: string, zone: string) =>
-    gridOf(el).shadowRoot!.querySelector<WtCombobox>(
-      `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
-    )!;
-  const shownText = (box: WtCombobox) =>
-    box.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
+    gridCombo(gridOf(el), row, zone)!;
+  const shownText = (box: ReturnType<typeof cellCombo>) => box.shown;
   const formActions = (el: PrepStationsScreen) =>
     gridOf(el).shadowRoot!.querySelector<
       HTMLElement & { error: string; updateComplete: Promise<unknown> }
     >("wt-form-actions")!;
+  const cellEditor = (el: PrepStationsScreen) =>
+    gridOf(el).shadowRoot!.querySelector<HTMLElementTagNameMap["routing-cell-editor"]>(
+      "routing-cell-editor",
+    );
+  /** Opens the cell's editor and saves `label` as its station, or presses Clear setting. */
   async function chooseCell(el: PrepStationsScreen, row: string, zone: string, label: string) {
-    const box = cellCombo(el, row, zone);
-    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-    const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (o) => o.textContent!.trim() === label,
-    )!;
-    await userEvent.click(option);
+    cellCombo(el, row, zone).button().click();
+    await gridOf(el).updateComplete;
+    const editor = cellEditor(el)!;
+    await editor.updateComplete;
+    const press = (test: string) =>
+      editor.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+    if (label === "Clear setting") press("clear-cell");
+    else {
+      const box = editor.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="target"]')!;
+      const option = box.options.find((o) => o.label === label)!;
+      box.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: option.value },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await editor.updateComplete;
+      press("save-cell");
+    }
     await settle(el);
   }
 
-  it("Routing shows the tester above the grid and no claims, exceptions or Unassigned card", async () => {
+  it("Routing shows the grid with no tester, claims, exceptions or Unassigned card", async () => {
     const { el } = await mountGrid();
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-    const tester = routing.querySelector('[data-test="route-tester"]')!;
-    const grid = routing.querySelector("venue-routing-grid")!;
-    expect(tester.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(routing.querySelector("venue-routing-grid")).not.toBeNull();
+    expect(routing.querySelector('[data-test="route-tester"]')).toBeNull();
     for (const old of [
       '[data-test="exceptions"]',
       '[data-test="unassigned"]',
@@ -5716,6 +4780,170 @@ describe("Routing grid", () => {
     expect(a.setCell).not.toHaveBeenCalled();
   });
 
+  describe("period lines", () => {
+    const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
+    const lunch = { id: "lunch", ...dining, name: "Lunch", productIds: ["bread"] };
+    const staff = { id: "staff", ...dining, name: "Staff lunch", productIds: ["bread"] };
+    const foodEvery = { row: { kind: "category", categoryId: "food" }, zoneId: null };
+    const lunchLine = [{ periodId: "lunch", target: kitchenTarget }];
+    function timedView(): PrepStationsView {
+      const next = gridView();
+      next.routing.periods = [lunch, staff];
+      return next;
+    }
+    /** Opens Food × Every zone and adds "Lunch: Kitchen", then saves. */
+    async function saveLunchLine(el: PrepStationsScreen) {
+      cellCombo(el, "c:food", "every").button().click();
+      await gridOf(el).updateComplete;
+      const editor = cellEditor(el)!;
+      await editor.updateComplete;
+      const press = (test: string) =>
+        editor.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
+      press("add-line");
+      await editor.updateComplete;
+      const send = (name: string, detail: object) =>
+        editor
+          .shadowRoot!.querySelector(`wt-combobox[name="${name}"]`)!
+          .dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
+      send("line-periods", { values: ["lunch"] });
+      await editor.updateComplete;
+      send("line-target", { value: "station:kitchen" });
+      await editor.updateComplete;
+      press("save-cell");
+      await settle(el);
+      return editor;
+    }
+
+    it("saving a Lunch line previews it, then writes the periods once confirmed", async () => {
+      const { a, el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(timedView()),
+        preview: vi.fn().mockResolvedValue([{ ...breadMove, periodIds: ["staff", "lunch"] }]),
+      });
+      const editor = await saveLunchLine(el);
+      expect(a.preview).toHaveBeenCalledExactlyOnceWith({
+        kind: "cell",
+        address: foodEvery,
+        target: { kind: "station", stationId: "bar" },
+        periods: lunchLine,
+      });
+      const preview = q(el, '[data-test="routing-preview"]')!;
+      // The move happens only during those periods, named in the model's order.
+      expect(preview.querySelector("tbody td")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        "Bread during Lunch, Staff lunch",
+      );
+      expect(a.setCell).not.toHaveBeenCalled();
+      expect(editor.isConnected).toBe(true);
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(
+        foodEvery,
+        { kind: "station", stationId: "bar" },
+        lunchLine,
+      );
+      await vi.waitFor(() => expect(cellEditor(el)).toBeNull());
+    });
+
+    it("says during in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(timedView()),
+        preview: vi.fn().mockResolvedValue([{ ...breadMove, periodIds: ["lunch"] }]),
+      });
+      await saveLunchLine(el);
+      expect(
+        q(el, '[data-test="routing-preview"]')!
+          .querySelector("tbody td")!
+          .textContent!.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe("Bread durante Lunch");
+    });
+
+    it.each(["preview", "setCell"] as const)(
+      "a route.period_invalid refusal from %s lands under the line its period is in",
+      async (call) => {
+        const refusal = {
+          code: "route.period_invalid",
+          params: { periodId: "lunch", reason: "not_offered" },
+        };
+        const { a, el } = await mountGrid({
+          load: vi.fn().mockResolvedValue(timedView()),
+          preview:
+            call === "preview" ? vi.fn().mockRejectedValue(refusal) : vi.fn().mockResolvedValue([]),
+          setCell: vi.fn().mockRejectedValue(refusal),
+        });
+        const editor = await saveLunchLine(el);
+        await vi.waitFor(() => expect(editor.refusal).toMatchObject(refusal));
+        await editor.updateComplete;
+        const line = editor.shadowRoot!.querySelector<WtCombobox>('[name="line-periods"]')!;
+        expect(line.error).toBe("Lunch offers none of these products.");
+        expect(cellEditor(el)).toBe(editor);
+        expect(a.setCell).toHaveBeenCalledTimes(call === "preview" ? 0 : 1);
+      },
+    );
+
+    it("names a period by its department in the preview where two departments share its name", async () => {
+      const barLunch = {
+        id: "bar-lunch",
+        departmentId: "bar",
+        departmentName: "Bar",
+        colour: "red" as const,
+        name: "Lunch",
+        productIds: ["bread"],
+      };
+      const shared = timedView();
+      shared.routing.periods = [lunch, staff, barLunch];
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(shared),
+        preview: vi.fn().mockResolvedValue([{ ...breadMove, periodIds: ["bar-lunch", "lunch"] }]),
+      });
+      await saveLunchLine(el);
+      expect(
+        q(el, '[data-test="routing-preview"]')!
+          .querySelector("tbody td")!
+          .textContent!.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe("Bread during Lunch (Dining), Lunch (Bar)");
+    });
+
+    it("draws the waiting choice's lines in its cell while its preview is open", async () => {
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(timedView()),
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await saveLunchLine(el);
+      expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+      await gridOf(el).updateComplete;
+      const button = cellCombo(el, "c:food", "every").button();
+      expect([...button.querySelectorAll(".line")].map((line) => line.textContent!.trim())).toEqual(
+        ["Lunch: Kitchen"],
+      );
+    });
+
+    it("closes the default cell's editor once Make default is saved", async () => {
+      const { a, el } = await mountGrid({
+        setDefaultStation: vi.fn().mockResolvedValue(undefined),
+      });
+      await chooseCell(el, "all", "every", "Kitchen");
+      expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("kitchen");
+      await vi.waitFor(() => expect(cellEditor(el)).toBeNull());
+    });
+
+    it("hands a refused Make default to the open editor as well as the page", async () => {
+      const { el } = await mountGrid({
+        setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      });
+      await chooseCell(el, "all", "every", "Kitchen");
+      const editor = cellEditor(el)!;
+      await vi.waitFor(() =>
+        expect(
+          editor.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+            .error,
+        ).toBe("The change could not be saved."),
+      );
+      expect(q(el, '[role="alert"]')!.textContent!.trim()).toBe("The change could not be saved.");
+    });
+  });
+
   it("a preview refused for a disabled station shows beside the cell without opening confirmation or writing", async () => {
     const message = "This station is disabled. Choose an active station.";
     const { a, el } = await mountGrid({
@@ -5875,36 +5103,6 @@ describe("Routing grid", () => {
     const promise = new Promise<T>((r) => (resolve = r));
     return { promise, resolve };
   };
-  const answer = (stationId: string): RouteExplanation => ({
-    route: { kind: "station", stationId },
-    decidedBy: null,
-    fallbacks: [],
-    noReplacement: false,
-    clockReadable: true,
-    stations: [],
-    extras: [],
-    extrasWaitOnDish: false,
-  });
-  /** Mounted from a tester link, so Routing opens with Bread under test. */
-  async function mountTester(overrides: Partial<PrepStationsApi> = {}) {
-    const before = location.href;
-    history.replaceState(null, "", "/manage/prep-stations/test/bread");
-    try {
-      const a = api({
-        load: vi.fn().mockResolvedValue(gridView()),
-        setCell: vi.fn().mockResolvedValue(undefined),
-        ...overrides,
-      });
-      const el = await mount(a);
-      await settle(el);
-      await gridOf(el).updateComplete;
-      return { a, el };
-    } finally {
-      history.replaceState(null, "", before);
-    }
-  }
-  const testAnswer = (el: PrepStationsScreen) =>
-    q(el, '[data-test="test-answer"]')?.textContent?.replace(/\s+/g, " ") ?? "";
   const withCell = (target: { kind: string; stationId?: string }) => {
     const next = gridView();
     next.routing.cells = [
@@ -5923,26 +5121,21 @@ describe("Routing grid", () => {
     "category_details",
     "products",
   ])(
-    "a cell, default, station-active, fallback, zone, category-parent or product-category change refreshes the grid and tester (%s)",
+    "a cell, default, station-active, fallback, zone, category-parent or product-category change refreshes the grid (%s)",
     async (type) => {
       setLocale("en");
       const liveData = new LiveData();
-      let made = "bar";
-      const explain = vi.fn(async () => answer(made));
       const load = vi
         .fn()
         .mockResolvedValueOnce(gridView())
         .mockResolvedValue(withCell(kitchenTarget));
-      const { el } = await mountTester({ liveData, load, explain });
-      await vi.waitFor(() => expect(testAnswer(el)).toContain("Made at: Bar"));
+      const { el } = await mountGrid({ liveData, load });
       expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
-      made = "kitchen";
       liveData.invalidate([{ type }]);
       await vi.waitFor(async () => {
         await gridOf(el).updateComplete;
         expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
       });
-      await vi.waitFor(() => expect(testAnswer(el)).toContain("Made at: Kitchen"));
     },
   );
 
@@ -5952,7 +5145,7 @@ describe("Routing grid", () => {
     const write = deferred<void>();
     const setCell = vi.fn(() => write.promise);
     // A fresh object per read, so each refresh really replaces the screen's view.
-    const background = { load: vi.fn(async () => gridView()), explain: vi.fn() };
+    const background = { load: vi.fn(async () => gridView()) };
     const { a, el } = await mountGrid({
       liveData,
       setCell,
@@ -6113,8 +5306,8 @@ describe("Routing grid", () => {
   };
   const shownTargets = (el: PrepStationsScreen) =>
     [
-      ...gridOf(el).shadowRoot!.querySelectorAll<WtCombobox>('wt-combobox[name="routing-target"]'),
-    ].map((box) => box.value);
+      ...gridOf(el).shadowRoot!.querySelectorAll<HTMLElement>('button[data-test="routing-cell"]'),
+    ].map((box) => box.dataset.target);
   it.each([
     {
       what: "category",
@@ -6226,6 +5419,41 @@ describe("Routing grid", () => {
       expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
     },
   );
+
+  it("an editor whose zone a refresh removed with its changes unsaved says they were not saved", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const removed = gridView();
+    removed.routing.zones = [];
+    removed.zones = [];
+    const load = vi.fn(async () => gridView());
+    const { a, el } = await mountGrid({ liveData, load });
+    cellCombo(el, "c:drinks", "terrace").button().click();
+    await gridOf(el).updateComplete;
+    const editor = cellEditor(el)!;
+    await editor.updateComplete;
+    const box = editor.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="target"]')!;
+    box.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "station:kitchen" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await editor.updateComplete;
+    load.mockImplementation(async () => removed);
+    liveData.invalidate([{ type: "floor_zones" }]);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(cellEditor(el)).toBeNull();
+    });
+    await settle(el);
+    expect(await gridMessage(el)).toBe(
+      "Your choice was not saved: its zone is no longer in the grid.",
+    );
+    expect(a.preview).not.toHaveBeenCalled();
+    expect(pageAlert(el)).toBe("");
+  });
 
   it.each([
     {
@@ -6452,25 +5680,16 @@ describe("Routing grid", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const liveData = new LiveData();
-      const background = {
-        load: vi.fn().mockResolvedValue(gridView()),
-        explain: vi.fn().mockResolvedValue(answer("bar")),
-      };
-      const { a, el } = await mountTester({
+      const background = { load: vi.fn().mockResolvedValue(gridView()) };
+      const { a, el } = await mountGrid({
         liveData,
-        explain: vi.fn().mockResolvedValue(answer("bar")),
         background: background as unknown as PrepStationsApi,
       });
-      const active = {
-        load: vi.mocked(a.load).mock.calls.length,
-        explain: vi.mocked(a.explain).mock.calls.length,
-      };
+      const active = { load: vi.mocked(a.load).mock.calls.length };
       await vi.advanceTimersByTimeAsync(60_000);
       await settle(el);
       expect(background.load).toHaveBeenCalledTimes(1);
-      expect(background.explain).toHaveBeenCalled();
       expect(vi.mocked(a.load).mock.calls.length).toBe(active.load);
-      expect(vi.mocked(a.explain).mock.calls.length).toBe(active.explain);
       el.remove();
       expect(liveData.interests).toEqual([]);
       await vi.advanceTimersByTimeAsync(180_000);
@@ -6490,6 +5709,16 @@ describe("Routing grid", () => {
   });
 });
 
+/**
+ * Edge scroll moves a held row at most 16 px a frame, and this browser can draw fewer than 10
+ * frames a second on a busy machine, so the wait counts frames rather than milliseconds.
+ */
+async function scrollsPast(distance: number, scrolled: () => number) {
+  for (let frame = 0; frame < 90 && scrolled() <= distance; frame++)
+    await new Promise(requestAnimationFrame);
+  expect(scrolled()).toBeGreaterThan(distance);
+}
+
 it("edge scroll carries a held station past the visible summary and persists on release", async () => {
   const next = {
     ...view,
@@ -6507,7 +5736,7 @@ it("edge scroll carries a held station past the visible summary and persists on 
   box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
   el.parentElement!.append(box);
   box.append(el);
-  const handle = healthSummary(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
+  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
   box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
   const start = handle.getBoundingClientRect();
   const bounds = box.getBoundingClientRect();
@@ -6528,7 +5757,7 @@ it("edge scroll carries a held station past the visible summary and persists on 
   );
   const initial = box.scrollTop;
   try {
-    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(initial + 150);
+    await scrollsPast(150, () => box.scrollTop - initial);
     document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
     await settle(el);
     expect(order).toHaveBeenCalledTimes(1);
@@ -6554,7 +5783,7 @@ it("edge scroll Escape stops a held station without another reorder on release",
   box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
   el.parentElement!.append(box);
   box.append(el);
-  const handle = healthSummary(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
+  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
   box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
   const start = handle.getBoundingClientRect();
   const bounds = box.getBoundingClientRect();
@@ -6575,7 +5804,7 @@ it("edge scroll Escape stops a held station without another reorder on release",
   );
   const initial = box.scrollTop;
   try {
-    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(initial + 100);
+    await scrollsPast(100, () => box.scrollTop - initial);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await settle(el);
     await new Promise(requestAnimationFrame);
@@ -6608,7 +5837,7 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
     el.parentElement!.append(box);
     box.append(el);
     const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
-    const handle = healthSummary(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
+    const handle = stationTable(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
     if (action === "up")
       box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
     const start = handle.getBoundingClientRect();
@@ -6630,11 +5859,9 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
     try {
       if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
       else
-        await expect
-          .poll(() => (action === "up" ? initial - box.scrollTop : box.scrollTop - initial), {
-            timeout: 3000,
-          })
-          .toBeGreaterThan(250);
+        await scrollsPast(250, () =>
+          action === "up" ? initial - box.scrollTop : box.scrollTop - initial,
+        );
       if (action === "up") {
         send("pointerup");
         await settle(el);
@@ -6663,7 +5890,6 @@ describe("Save follows changes", () => {
     "watcher-pass",
     "watcher-follows",
     "watcher-zones",
-    "rest",
     "timing",
     "fallback",
   ] as const;
@@ -6676,24 +5902,20 @@ describe("Save follows changes", () => {
         zones: [{ id: "terrace", name: "Terrace", active: true }],
       }),
       updateWatcher: vi.fn(),
-      setStationPrinters: vi.fn(),
       setWatcherPrinters: vi.fn(),
       setStationFallback: vi.fn(),
       ...overrides,
     });
     const el = await mount(a);
     await settle(el);
-    const query = (selector: string) =>
-      q(el, selector) ??
-      ticketQ(q(el, '[data-test="tickets-table"]')!, selector) ??
-      settingsQ(el, selector);
+    const query = (selector: string) => q(el, selector) ?? settingsQ(el, selector);
     const info = {
       create: ["new-station", "save-station", 'wt-input[name="name"]', "", "New station"],
-      rename: ["rename-bar", "save-station-name", 'wt-input[name="stationName"]', "Bar", "New bar"],
+      rename: ["edit-bar", "save-station-edit", 'wt-input[name="stationName"]', "Bar", "New bar"],
       printers: [
-        "edit-printers-bar",
-        "save-printers-bar",
-        '[data-test="station-printers-bar"]',
+        "edit-bar",
+        "save-station-edit",
+        'wt-combobox[name="printerIds"]',
         ["old"],
         ["next"],
       ],
@@ -6731,13 +5953,6 @@ describe("Save follows changes", () => {
         '[data-test="watcher-cell-input"]',
         ["__every__"],
         ["terrace"],
-      ],
-      rest: [
-        "edit-settings-rest-bar",
-        "save-settings-cell",
-        '[data-test="settings-choice"]',
-        "no",
-        "yes",
       ],
       timing: [
         "edit-settings-warmAfterMinutes-bar",
@@ -6792,7 +6007,6 @@ describe("Save follows changes", () => {
         a.createStation,
         a.updateStation,
         a.updateWatcher,
-        a.setStationPrinters,
         a.setWatcherPrinters,
         a.setStationFallback,
       ])
@@ -6888,7 +6102,6 @@ describe("Save follows changes", () => {
     "watcher-name",
     "watcher-printers",
     "watcher-pass",
-    "rest",
     "timing",
   ] as const)("%s stays primary during a write and retryable after refusal", async (mode) => {
     let refuse!: (error: unknown) => void;
@@ -6899,7 +6112,6 @@ describe("Save follows changes", () => {
     const form = await openSave(mode, {
       updateStation: save,
       updateWatcher: save,
-      setStationPrinters: save,
       setWatcherPrinters: save,
     });
     await form.edit(form.changed);
@@ -6928,7 +6140,7 @@ describe("Save follows changes", () => {
     await state(form.button(), false);
     form.button().click();
     await settle(form.el);
-    expect(form.a.setStationPrinters).not.toHaveBeenCalled();
+    expect(form.a.updateStation).not.toHaveBeenCalled();
   });
   it("a standalone station rename preserves newer input after committing the submitted name", async () => {
     let complete!: () => void;
@@ -6966,3 +6178,186 @@ it.each(["en", "es"] as const)(
     );
   },
 );
+
+describe("The station editor", () => {
+  const editorOf = (el: PrepStationsScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "prep-station-editor",
+    );
+  async function openEdit(overrides: Partial<PrepStationsApi> = {}) {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      updateStation: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    });
+    const el = await mount(a);
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settle(el);
+    await editorOf(el)!.updateComplete;
+    return { el, a };
+  }
+  it("saves a station's name, printers and rest of order in one call and closes", async () => {
+    const { el, a } = await openEdit();
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual(["old"]);
+    await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Cocktail bar");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["old", "next"]);
+    q(el, "wt-switch[name=showsRestOfOrder]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true } }),
+    );
+    await settle(el);
+    q(el, '[data-test="save-station-edit"]')!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", {
+      name: "Cocktail bar",
+      printerIds: ["old", "next"],
+      showsRestOfOrder: true,
+    });
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+  });
+  it("puts a refused printer under Printers and keeps the editor open", async () => {
+    const { el, a } = await openEdit({
+      updateStation: vi.fn().mockRejectedValue({
+        code: "printer.makes_and_watches",
+        params: { printerId: "next" },
+      }),
+    });
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["next"]);
+    q(el, '[data-test="save-station-edit"]')!.click();
+    await settle(el);
+    await editorOf(el)!.updateComplete;
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["next"] });
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
+      "Choose active printers that no watcher uses.",
+    );
+    expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
+    expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
+  });
+  it("offers a switched-off station's name for editing and its printers as a read-out", async () => {
+    const { el, a } = await openEdit({
+      load: vi.fn().mockResolvedValue({
+        ...ticketView,
+        stations: [...ticketView.stations, { ...upstairs, id: "retired", active: false }],
+        stationPrinters: [
+          ...ticketView.stationPrinters,
+          { stationId: "retired", printerId: "next" },
+        ],
+      }),
+    });
+    const closed = editorClosed(el);
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closed;
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    q(el, '[data-test="edit-retired"]')!.click();
+    await settle(el);
+    await editorOf(el)!.updateComplete;
+    expect(q(el, "wt-combobox[name=printerIds]")).toBeNull();
+    expect(q(el, '[data-test="station-printers"]')!.textContent).toContain("Next printer");
+    await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Old bar");
+    q(el, '[data-test="save-station-edit"]')!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("retired", { name: "Old bar" });
+  });
+  it("Add station sends the printers chosen with the station", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      createStation: vi.fn().mockResolvedValue({ id: "grill" }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    const printers = q(el, "wt-combobox[name=printerIds]") as WtCombobox;
+    expect(printers.label).toBe("Printers");
+    expect(printers.options.find((option) => option.value === "watcher")!.disabled).toBe(true);
+    expect(printers.options.find((option) => option.value === "disabled")!.disabled).toBe(true);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, printers, ["next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+      name: "Grill",
+      displayOrder: 0,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+      printerIds: ["next"],
+    });
+  });
+  it("ignores a departed editor's cancel and a departed Add station's printers", async () => {
+    const { el, a } = await openEdit({ createStation: vi.fn() });
+    const old = editorOf(el)!;
+    const closed = editorClosed(el);
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closed;
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settle(el);
+    old.dispatchEvent(new CustomEvent("station-close", { bubbles: true, composed: true }));
+    await settle(el);
+    expect(editorOf(el)).not.toBeNull();
+    const closedAgain = editorClosed(el);
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closedAgain;
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    const departed = q(el, "wt-combobox[name=printerIds]")!;
+    const addModal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
+    const addClosed = new Promise((resolve) =>
+      addModal.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await addModal.requestClose("cancel");
+    await addClosed;
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, departed, ["next"]);
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual([]);
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
+    expect(a.createStation).not.toHaveBeenCalled();
+  });
+  it("Add station keeps a printer refusal until the printers change, and names printer.manage", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      createStation: vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        params: { permission: "printer.manage" },
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    const printers = () => q(el, "wt-combobox[name=printerIds]") as WtCombobox;
+    expect(printers().error).toBe("You can't change printers.");
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill two");
+    expect(printers().error).toBe("You can't change printers.");
+    await editSaveField(el, printers(), []);
+    expect(printers().error).toBe("");
+  });
+  it("Add station puts a refused printer under its printers field", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      createStation: vi.fn().mockRejectedValue({ code: "printer.not_found", params: {} }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
+      "Choose active printers that no watcher uses.",
+    );
+    expect(q(el, '[data-field-error="name"]')).toBeNull();
+    expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, []);
+    expect(q(el, "wt-modal")!.textContent).not.toContain(
+      "Correct the highlighted fields to continue.",
+    );
+  });
+});

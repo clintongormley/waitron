@@ -1,12 +1,11 @@
 import type {
-  FallbackStep,
   RouteTarget,
   RoutingRules,
   StationStatus,
   StationTransition,
   WeeklyInterval,
 } from "./routing.js";
-import type { ExtraMakerOutcome } from "@waitron/module";
+import type { CalendarColour } from "./hours-types.js";
 
 export type RoutingRow =
   | { kind: "all" }
@@ -19,13 +18,15 @@ export type CellAddress = { row: RoutingRow; zoneId: string | null };
 
 export type RoutingCell = CellAddress & { target: RouteTarget };
 
-export type RoutingDecision = { kind: "cell"; address: CellAddress } | { kind: "default" };
+/** `periodId`: the running period's line on that cell chose the target. */
+export type RoutingDecision =
+  { kind: "cell"; address: CellAddress; periodId?: string } | { kind: "default" };
 
 export type SelectedCell = { target: RouteTarget | null; decidedBy: RoutingDecision | null };
 
 export type RoutingSelectionRules = Pick<
   RoutingRules,
-  "cells" | "parentOf" | "activeStationIds" | "defaultStationId"
+  "cells" | "parentOf" | "activeStationIds" | "defaultStationId" | "cellPeriods" | "zoneDepartment"
 >;
 
 export type GridProduct = { id: string; name: string; categoryId: string | null };
@@ -60,26 +61,19 @@ export interface StationTimes {
   closedSendsTo: string | null;
 }
 
-export interface RouteExplanation {
-  route: RouteTarget | null;
-  decidedBy: RoutingDecision | null;
-  fallbacks: FallbackStep[];
-  noReplacement: boolean;
-  clockReadable: boolean;
-  stations: { id: string; name: string; active: boolean }[];
-  extras: ExtraExplanation[];
-  extrasWaitOnDish: boolean;
-}
+/** What a cell sends work to while one period runs. */
+export type PeriodLine = { periodId: string; target: RouteTarget };
 
-export interface ExtraExplanation {
-  productId: string;
-  outcome: ExtraMakerOutcome;
-  decidedBy: RoutingDecision | null;
-  fallbacks: FallbackStep[];
-}
-
-/** `target: null` clears the cell; No preparation is an explicit saved value. */
-export type RoutingChange = { kind: "cell"; address: CellAddress; target: RouteTarget | null };
+/**
+ * `target: null` clears the cell; No preparation is an explicit saved value. `periods` replaces
+ * the cell's period lines; omitted, the stored lines stay.
+ */
+export type RoutingChange = {
+  kind: "cell";
+  address: CellAddress;
+  target: RouteTarget | null;
+  periods?: readonly PeriodLine[];
+};
 
 export interface RoutingMove {
   productId: string;
@@ -91,18 +85,37 @@ export interface RoutingMove {
   toNoReplacement: boolean;
   /** Present only on an extra's move: the dish that offers it. */
   dish?: { productId: string; productName: string };
+  /** The periods during which the move happens; null: at any other time. */
+  periodIds: string[] | null;
 }
+
+/** A period a routing line can name, with the products its menus reach, variants by parent. */
+export interface RoutingPeriod {
+  id: string;
+  departmentId: string;
+  departmentName: string;
+  name: string;
+  colour: CalendarColour;
+  productIds: string[];
+  /** Present only while the period's department is switched off. */
+  departmentInactive?: true;
+}
+
+/** `periods` is present only on a cell with period lines. */
+export type RoutingModelCell = RoutingCell & { periods?: PeriodLine[] };
 
 export interface RoutingModel {
   stationTimes: StationTimes[];
   todayEnds: { timeOfDay: string; tomorrow: boolean } | null;
   clockReadable: boolean;
   /** Active zones in display order: the grid's columns. */
-  zones: { id: string; name: string }[];
+  zones: { id: string; name: string; departmentId: string | null }[];
   categories: GridCategory[];
   /** Active top-level products; a disabled product's stored cells are left out of `cells` too. */
   products: GridProduct[];
-  cells: readonly RoutingCell[];
+  cells: readonly RoutingModelCell[];
+  /** Each department's periods in the order its week first runs them; one never placed last. */
+  periods: RoutingPeriod[];
   defaultStationId: string | null;
   /** Includes referenced inactive stations, which the active-station management list omits. */
   stations: { id: string; name: string; active: boolean }[];

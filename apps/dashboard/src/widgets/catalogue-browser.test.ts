@@ -132,6 +132,7 @@ it("marks a category with no cell while the default station is switched off, or 
   setLocale("en-GB");
   const routing: RoutingModel = {
     stationTimes: [],
+    periods: [],
     todayEnds: null,
     clockReadable: true,
     zones: [],
@@ -191,6 +192,7 @@ it("does not mark a folder covered by its own Every zone cell", async () => {
   const el = await mountBrowser({
     routing: {
       stationTimes: [],
+      periods: [],
       todayEnds: null,
       clockReadable: true,
       zones: [],
@@ -228,6 +230,7 @@ async function unroutedMarker(el: CatalogueBrowser, key: string) {
 }
 const routingWith = (overrides: Partial<RoutingModel> = {}): RoutingModel => ({
   stationTimes: [],
+  periods: [],
   todayEnds: null,
   clockReadable: true,
   zones: [],

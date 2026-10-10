@@ -1,14 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { currentLocale } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { ComboboxOption } from "@waitron/ui/src/components/wt-combobox.js";
 import {
   cellKey,
   followFallbacks,
@@ -22,41 +19,55 @@ import {
   type GridProduct,
   type GridRow,
   type RouteTarget,
-  type RoutingCell,
   type RoutingRow,
   type RoutingRules,
   type RoutingSelectionRules,
   type RoutingView,
+  type SelectedCell,
 } from "../routing.js";
 import { format } from "./hours-view.js";
+import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
+import "./routing-cell-editor.js";
+import type { RoutingCellEditorCell, RoutingCellSave } from "./routing-cell-editor.js";
 import {
+  cellPeriodLines,
   collapseAll,
   collapseCategory,
   expandAll,
   expandCategory,
   pruneExpanded,
+  rowInModel,
   visibleRoutingRows,
+  type CellPeriodLines,
 } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
-export type RoutingRefusal = { address: CellAddress; message: string };
-export type RoutingCellChange = { address: CellAddress; target: RouteTarget | null };
+/** A refused write. `code` and `params` reach the cell's editor while it is open. */
+export type RoutingRefusal = {
+  address: CellAddress;
+  message: string;
+  code?: string;
+  params?: Record<string, unknown>;
+};
+/**
+ * `periods` is present when the cell had lines or is saved with some; without it the server keeps
+ * the stored lines, which are then none.
+ */
+export type RoutingCellChange = {
+  address: CellAddress;
+  target: RouteTarget | null;
+  periods?: PeriodLine[];
+};
+/** A refused Make default, for the default cell's editor. */
+export type RoutingDefaultRefusal = {
+  code: string;
+  params?: Record<string, unknown>;
+  message: string;
+};
 /** A choice the host has not saved yet, shown at its address in place of the saved value. */
 export type RoutingPending = RoutingCellChange;
 
-type Zone = { id: string | null; name: string };
-
-const STATION = "station:";
-
-/** Reverses `targetKey`; `undefined` for a value no option carries. */
-function decode(value: string): RouteTarget | null | undefined {
-  if (value === "") return null;
-  if (value === targetKey({ kind: "no_preparation" })) return { kind: "no_preparation" };
-  if (value.startsWith(STATION) && value.length > STATION.length) {
-    return { kind: "station", stationId: value.slice(STATION.length) };
-  }
-  return undefined;
-}
+type Zone = { id: string | null; name: string; departmentId?: string | null };
 
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
@@ -74,7 +85,9 @@ export class RoutingGrid extends LitElement {
       }
       @container (max-width: 40rem) {
         .scroll {
-          --routing-first: var(--wt-cell-name-max-width);
+          --routing-first: calc(var(--wt-space-6) * 3);
+          --routing-zone: calc(var(--wt-space-6) * 3.25);
+          --routing-pad: var(--wt-space-1);
         }
       }
       .toolbar {
@@ -100,7 +113,7 @@ export class RoutingGrid extends LitElement {
       }
       th,
       td {
-        padding: var(--wt-space-2);
+        padding: var(--routing-pad, var(--wt-space-2));
         border-block-end: 1px solid var(--wt-color-border);
         text-align: start;
         vertical-align: top;
@@ -123,7 +136,9 @@ export class RoutingGrid extends LitElement {
       }
       tbody th {
         font-weight: var(--wt-font-weight-normal);
-        padding-inline-start: calc(var(--wt-space-2) + var(--wt-space-4) * var(--routing-depth, 0));
+        padding-inline-start: calc(
+          var(--routing-pad, var(--wt-space-2)) + var(--wt-space-4) * var(--routing-depth, 0)
+        );
       }
       tbody tr.heading th {
         font-weight: var(--wt-font-weight-medium);
@@ -183,6 +198,46 @@ export class RoutingGrid extends LitElement {
       wt-form-actions {
         margin-block-start: var(--wt-space-2);
       }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--wt-space-1);
+        inline-size: 100%;
+        min-block-size: var(--wt-field-height);
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+      .cell:hover {
+        background: var(--wt-color-surface-sunken);
+      }
+      .cell:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .cell .note {
+        margin: 0;
+      }
+      .station.inherited,
+      .line.inherited {
+        color: var(--wt-color-text-muted);
+        font-style: italic;
+      }
+      .line {
+        font-size: var(--wt-font-size-sm);
+      }
+      .cell-error {
+        display: block;
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -191,21 +246,23 @@ export class RoutingGrid extends LitElement {
   @property({ attribute: false }) refusal: RoutingRefusal | null = null;
   /** Set by the host while it previews or saves a choice, and cleared when that settles. */
   @property({ attribute: false }) pending: RoutingPending | null = null;
+  @property({ attribute: false }) defaultRefusal: RoutingDefaultRefusal | null = null;
 
   @state() private expanded: ReadonlySet<string> = new Set();
+  /** The cell whose editor is open. */
+  @state() private editing: CellAddress | null = null;
 
   #rules: RoutingSelectionRules | null = null;
   #fallbackRules: RoutingRules | null = null;
-  #cells = new Map<string, RoutingCell>();
+  #cells = new Map<string, RoutingModelCell>();
   #products = new Map<string, GridProduct>();
   #categories = new Map<string, GridCategory>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
-  /** Reused while the model and language hold, so an unchanged combobox sees the same array. */
-  #options: {
+  /** Rebuilt with the model and the language, which the lines' words are in. */
+  #lines: {
     model: RoutingView;
     locale: string;
-    cell: ComboboxOption[];
-    stations: ComboboxOption[];
+    of: ReturnType<typeof cellPeriodLines>;
   } | null = null;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
@@ -218,28 +275,36 @@ export class RoutingGrid extends LitElement {
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
     this.#allRows = null;
     this.expanded = pruneExpanded(model, this.expanded);
+    const editing = this.editing;
+    if (
+      editing !== null &&
+      ((editing.zoneId !== null && !model.zones.some((zone) => zone.id === editing.zoneId)) ||
+        !rowInModel(model, editing.row))
+    ) {
+      const waiting = this.pending !== null && sameAddress(this.pending.address, editing);
+      if (!waiting && this.shadowRoot?.querySelector("routing-cell-editor")?.dirty) {
+        this.#emit("routing-draft-lost", { address: editing });
+      }
+      this.editing = null;
+    }
   }
 
-  #optionLists() {
+  /** Closes the open editor, as its host does once the editor's choice is saved. */
+  closeEditor(): void {
+    this.editing = null;
+  }
+
+  #periodLines(row: RoutingRow, zoneId: string | null, waiting?: RoutingPending): CellPeriodLines {
     const model = this.model!;
     const locale = currentLocale();
-    if (this.#options?.model !== model || this.#options.locale !== locale) {
-      const stations = this.#activeStations().map((station) => ({
-        value: targetKey({ kind: "station", stationId: station.id }),
-        label: station.name,
-      }));
-      this.#options = {
+    if (this.#lines?.model !== model || this.#lines.locale !== locale) {
+      this.#lines = {
         model,
         locale,
-        stations,
-        cell: [
-          { value: "", label: t("routing.clear") },
-          ...stations,
-          { value: targetKey({ kind: "no_preparation" }), label: t("prep.no_preparation") },
-        ],
+        of: cellPeriodLines(model, (target) => this.#targetText(target)),
       };
     }
-    return this.#options;
+    return this.#lines.of(row, zoneId, waiting);
   }
 
   #station(id: string) {
@@ -260,9 +325,37 @@ export class RoutingGrid extends LitElement {
   }
 
   /** What the coordinate would show with no cell of its own. */
-  #inherited(row: RoutingRow, zoneId: string | null) {
-    return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true })
-      .target;
+  #inherited(row: RoutingRow, zoneId: string | null): SelectedCell {
+    return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true });
+  }
+
+  /**
+   * How an extra is made where the cell's choice is the default station's fall-through or No
+   * preparation: with its dish (`chooseExtraMaker`).
+   */
+  #extraNoteText(shown: RouteTarget | null, inherited: SelectedCell): string | null {
+    const choice = shown ?? inherited.target;
+    if (choice?.kind === "no_preparation") return t("routing.extra_no_preparation");
+    if (shown === null && inherited.decidedBy?.kind === "default") {
+      return format("routing.extra_default", { station: this.#targetText(choice) });
+    }
+    return null;
+  }
+
+  /** The lines and the note are drawn in the cell's button and read as part of its name. */
+  #labelWithNote(label: string, ...notes: (string | null)[]): string {
+    return notes.reduce<string>(
+      (named, note) =>
+        note === null ? named : format("routing.cell_label_note", { label: named, note }),
+      label,
+    );
+  }
+
+  #extraNote(note: string | null, { inName }: { inName: boolean }) {
+    if (note === null) return nothing;
+    return html`<span class="note" data-test="extra-note" aria-hidden=${inName ? "true" : nothing}
+      >${note}</span
+    >`;
   }
 
   /** Where a disabled station's work goes, before any opening hours are applied. */
@@ -316,117 +409,277 @@ export class RoutingGrid extends LitElement {
       : "";
   }
 
-  #activeStations() {
-    return this.model!.stations.filter((station) => station.active);
-  }
-
-  /** The field drew the user's pick; a render puts back what the properties say it shows. */
   #emit<T>(name: string, detail: T): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
-    this.requestUpdate();
   }
 
-  /** A field a refresh has removed can still hold an open list; its pick addresses nothing now. */
-  #fromLiveField(event: Event): boolean {
-    event.stopPropagation();
-    return (event.currentTarget as Element).isConnected;
+  #error(address: CellAddress) {
+    const message = this.#refusalAt(address);
+    return message === ""
+      ? nothing
+      : html`<span class="cell-error" data-test="cell-error">${message}</span>`;
   }
 
-  #editor(entry: GridRow, zone: Zone) {
+  #button(
+    address: CellAddress,
+    label: string,
+    target: RouteTarget | null,
+    station: { text: string; inherited: boolean },
+    lines: { texts: readonly string[]; inherited: boolean },
+    note: string | null,
+  ) {
+    return html`<button
+      type="button"
+      class="cell"
+      data-test="routing-cell"
+      data-target=${targetKey(target)}
+      aria-label=${label}
+      @click=${() => {
+        this.editing = address;
+      }}
+    >
+      <span class=${station.inherited ? "station inherited" : "station"}>${station.text}</span>
+      ${lines.texts.map(
+        (line) => html`<span class=${lines.inherited ? "line inherited" : "line"}>${line}</span>`,
+      )}
+      ${this.#extraNote(note, { inName: true })}
+    </button>`;
+  }
+
+  #cell(entry: GridRow, zone: Zone) {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
-    const own = this.#cells.get(cellKey({ row: entry.row, zoneId: zone.id }));
-    const inherited = this.#inherited(entry.row, zone.id);
-    const pending = this.pending;
-    const shown =
-      pending !== null && sameAddress(pending.address, address)
-        ? pending.target
-        : (own?.target ?? null);
+    const own = this.#cells.get(cellKey(address));
+    const selected = this.#inherited(entry.row, zone.id);
+    const inherited = selected.target;
+    const waiting =
+      this.pending !== null && sameAddress(this.pending.address, address)
+        ? this.pending
+        : undefined;
+    const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
+    const note = this.#extraNoteText(shown, selected);
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
-    const { cell } = this.#optionLists();
-    const options =
+    const periodLines = this.#periodLines(entry.row, zone.id, waiting);
+    const lines = periodLines.lines.map((line) => line.text);
+    const text = this.#targetText(shown ?? inherited);
+    const label = this.#labelWithNote(
+      format("routing.cell_label", {
+        row: this.#rowName(entry),
+        zone: zone.name,
+        value: text,
+        state: t(shown === null ? "routing.inherited" : "routing.set_here"),
+      }),
+      ...lines,
+      note,
+    );
+    return html`${this.#button(
+      address,
+      label,
+      shown,
+      { text, inherited: shown === null },
+      { texts: lines, inherited: periodLines.inherited },
+      note,
+    )}${this.#error(address)}${
       disabled === null
-        ? cell
-        : [
-            ...cell.slice(0, -1),
-            { value: targetKey(disabled), label: this.#targetText(disabled), disabled: true },
-            ...cell.slice(-1),
-          ];
-    const label = format("routing.cell_label", {
-      row: this.#rowName(entry),
-      zone: zone.name,
-      value: this.#targetText(shown ?? inherited),
-      state: t(shown === null ? "routing.inherited" : "routing.set_here"),
-    });
-    return html`<wt-combobox
-        name="routing-target"
-        hide-label
-        label=${label}
-        search="auto"
-        searchPlaceholder=${t("venue.combobox_search")}
-        noResultsLabel=${t("venue.combobox_no_results")}
-        .options=${options}
-        .value=${live(targetKey(shown))}
-        placeholder=${this.#targetText(inherited)}
-        error=${this.#refusalAt(address)}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          if (!this.#fromLiveField(event)) return;
-          const target = decode(event.detail.value);
-          if (target === undefined || targetKey(target) === targetKey(shown)) return;
-          this.#emit<RoutingCellChange>("routing-cell-change", { address, target });
-        }}
-      ></wt-combobox
-      >${
-        disabled === null
-          ? nothing
-          : html`<span class="warning" data-test="disabled-target"
-              >${format("routing.disabled_target", {
-                station: this.#station(disabled.stationId)?.name ?? disabled.stationId,
-              })}
-              ${this.#fallbackSentence(disabled.stationId)}</span
-            >`
-      }`;
+        ? nothing
+        : html`<span class="warning" data-test="disabled-target"
+            >${format("routing.disabled_target", {
+              station: this.#station(disabled.stationId)?.name ?? disabled.stationId,
+            })}
+            ${this.#fallbackSentence(disabled.stationId)}</span
+          >`
+    }`;
+  }
+
+  #defaultTarget(): RouteTarget | null {
+    const model = this.model!;
+    const active = model.stations.find(
+      (station) => station.id === model.defaultStationId && station.active,
+    );
+    return active ? { kind: "station", stationId: active.id } : null;
   }
 
   /** All categories × Every zone is the default station: Make default, never cleared. */
   #defaultCell() {
     const model = this.model!;
     const address: CellAddress = { row: { kind: "all" }, zoneId: null };
-    const active = model.stations.find(
-      (station) => station.id === model.defaultStationId && station.active,
-    );
-    const repair = active
-      ? nothing
-      : html`<span class="repair" data-test="default-repair">${t("routing.default_repair")}</span>`;
+    const target = this.#defaultTarget();
+    const name = target === null ? null : this.#targetText(target);
+    const repair =
+      target !== null
+        ? nothing
+        : html`<span class="repair" data-test="default-repair"
+            >${t("routing.default_repair")}</span
+          >`;
+    const note = name === null ? null : format("routing.extra_default", { station: name });
     if (!model.canMakeDefault) {
-      return html`${active ? html`<span>${active.name}</span> ` : nothing}${repair}
-        <span class="note">${t("routing.default_read_only")}</span>`;
+      return html`${name !== null ? html`<span>${name}</span> ` : nothing}${this.#extraNote(note, {
+          inName: false,
+        })}${repair} <span class="note">${t("routing.default_read_only")}</span>`;
     }
-    const label = format("routing.cell_label", {
-      row: t("routing.all_categories"),
-      zone: t("routing.every_zone"),
-      value: active?.name ?? t("routing.no_station"),
-      state: t("routing.default_state"),
+    const text = name ?? t("routing.no_station");
+    const label = this.#labelWithNote(
+      format("routing.cell_label", {
+        row: t("routing.all_categories"),
+        zone: t("routing.every_zone"),
+        value: text,
+        state: t("routing.default_state"),
+      }),
+      note,
+    );
+    return html`${this.#button(address, label, target, { text, inherited: false }, { texts: [], inherited: false }, note)}${this.#error(address)}${repair}`;
+  }
+
+  /** The row's name as the grid draws it, whether or not the row is shown. */
+  #rowNameOf(row: RoutingRow): string {
+    const model = this.model!;
+    this.#allRows ??= new Map(
+      visibleRoutingRows(model, expandAll(model)).map((entry) => [rowKey(entry.row), entry]),
+    );
+    const entry = this.#allRows.get(rowKey(row));
+    return entry === undefined ? "" : this.#rowName(entry);
+  }
+
+  #zoneName(zoneId: string | null): string {
+    return zoneId === null
+      ? t("routing.every_zone")
+      : (this.model!.zones.find((zone) => zone.id === zoneId)?.name ?? zoneId);
+  }
+
+  /** Where an inherited choice comes from: its own row's column, another cell, or the default. */
+  #source(address: CellAddress, selected: SelectedCell): string {
+    const decidedBy = selected.decidedBy;
+    if (decidedBy?.kind !== "cell") return t("routing.default_state");
+    const zone = this.#zoneName(decidedBy.address.zoneId);
+    return rowKey(decidedBy.address.row) === rowKey(address.row)
+      ? zone
+      : format("routing.cell_place", { row: this.#rowNameOf(decidedBy.address.row), zone });
+  }
+
+  #rowProducts: { model: RoutingView; row: string; ids: string[] } | null = null;
+
+  /** One array per model and row, so the open editor's memo of the row's periods holds. */
+  #rowProductIds(row: RoutingRow): string[] {
+    const model = this.model!;
+    const key = rowKey(row);
+    const memo = this.#rowProducts;
+    if (memo?.model === model && memo.row === key) return memo.ids;
+    const ids = this.#productsOfRow(row);
+    this.#rowProducts = { model, row: key, ids };
+    return ids;
+  }
+
+  /** The active products the row covers: a category's are those of its whole subtree. */
+  #productsOfRow(row: RoutingRow): string[] {
+    const products = this.model!.products;
+    if (row.kind === "all") return products.map((product) => product.id);
+    if (row.kind === "product") return [row.productId];
+    if (row.kind === "no_category") {
+      return products
+        .filter(({ categoryId }) => categoryId === null || !this.#categories.has(categoryId))
+        .map((product) => product.id);
+    }
+    const children = new Map<string, string[]>();
+    for (const category of this.#categories.values()) {
+      if (category.parentId === null) continue;
+      const list = children.get(category.parentId);
+      if (list === undefined) children.set(category.parentId, [category.id]);
+      else list.push(category.id);
+    }
+    const within = new Set([row.categoryId]);
+    for (const id of within) for (const child of children.get(id) ?? []) within.add(child);
+    return products
+      .filter(({ categoryId }) => categoryId !== null && within.has(categoryId))
+      .map((product) => product.id);
+  }
+
+  #editorCell(address: CellAddress, isDefault: boolean): RoutingCellEditorCell {
+    const label = format("routing.cell_place", {
+      row: this.#rowNameOf(address.row),
+      zone: this.#zoneName(address.zoneId),
     });
-    return html`<wt-combobox
-        name="routing-target"
-        hide-label
-        label=${label}
-        search="auto"
-        searchPlaceholder=${t("venue.combobox_search")}
-        noResultsLabel=${t("venue.combobox_no_results")}
-        .options=${this.#optionLists().stations}
-        .value=${live(targetKey(active ? { kind: "station", stationId: active.id } : null))}
-        placeholder=${t("routing.no_station")}
-        error=${this.#refusalAt(address)}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          if (!this.#fromLiveField(event)) return;
-          const target = decode(event.detail.value);
-          if (target?.kind !== "station" || target.stationId === active?.id) return;
-          this.#emit("routing-make-default", { stationId: target.stationId });
-        }}
-      ></wt-combobox
-      >${repair}`;
+    if (isDefault) return { address, label, target: this.#defaultTarget() };
+    const own = this.#cells.get(cellKey(address));
+    if (own !== undefined) return { address, label, target: own.target, periods: own.periods };
+    const selected = this.#inherited(address.row, address.zoneId);
+    const deciding =
+      selected.decidedBy?.kind === "cell"
+        ? this.#cells.get(cellKey(selected.decidedBy.address))
+        : undefined;
+    return {
+      address,
+      label,
+      target: selected.target,
+      periods: deciding?.periods ?? [],
+      inheritedFrom: this.#source(address, selected),
+    };
+  }
+
+  #refusalFor(address: CellAddress, isDefault: boolean) {
+    if (isDefault && this.defaultRefusal !== null) return this.defaultRefusal;
+    const refusal = this.refusal;
+    return refusal?.code !== undefined && sameAddress(refusal.address, address)
+      ? (refusal as RoutingRefusal & { code: string })
+      : undefined;
+  }
+
+  #save(address: CellAddress, isDefault: boolean, { target, periods }: RoutingCellSave): void {
+    if (isDefault) {
+      if (target.kind === "station") {
+        this.#emit("routing-make-default", { stationId: target.stationId });
+      }
+      return;
+    }
+    const stored = this.#cells.get(cellKey(address))?.periods ?? [];
+    this.#emit<RoutingCellChange>(
+      "routing-cell-change",
+      periods.length > 0 || stored.length > 0 ? { address, target, periods } : { address, target },
+    );
+  }
+
+  #editorDialog() {
+    const address = this.editing;
+    if (address === null) return nothing;
+    const model = this.model!;
+    const isDefault = address.row.kind === "all" && address.zoneId === null;
+    const pending = this.pending;
+    const zoneDepartmentId =
+      address.zoneId === null
+        ? null
+        : (model.zones.find((zone) => zone.id === address.zoneId)?.departmentId ?? null);
+    return html`<routing-cell-editor
+      .open=${true}
+      .busy=${pending !== null && sameAddress(pending.address, address)}
+      .cell=${this.#editorCell(address, isDefault)}
+      .periods=${model.periods}
+      .stations=${model.stations}
+      .rowProductIds=${this.#rowProductIds(address.row)}
+      .zoneDepartmentId=${zoneDepartmentId}
+      .zoneWithoutDepartment=${address.zoneId !== null && zoneDepartmentId === null}
+      .isDefaultCell=${isDefault}
+      .refusal=${this.#refusalFor(address, isDefault)}
+      @routing-cell-save=${(event: CustomEvent<RoutingCellSave>) => {
+        event.stopPropagation();
+        this.#save(address, isDefault, event.detail);
+      }}
+      @routing-cell-clear=${(event: Event) => {
+        event.stopPropagation();
+        this.#emit<RoutingCellChange>("routing-cell-change", { address, target: null });
+      }}
+      @routing-cell-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.editing === address) this.editing = null;
+      }}
+    ></routing-cell-editor>`;
+  }
+
+  /** A closed editor hands focus back to its cell's button, when the cell is still drawn. */
+  protected override updated(changed: Map<PropertyKey, unknown>): void {
+    const closed = changed.get("editing") as CellAddress | null | undefined;
+    if (!changed.has("editing") || this.editing !== null || !closed) return;
+    this.shadowRoot!.querySelector<HTMLElement>(
+      `td[data-row="${rowKey(closed.row)}"][data-zone="${zoneKey(closed.zoneId)}"] button`,
+    )?.focus();
   }
 
   #hiddenText(entry: GridRow): string {
@@ -495,7 +748,7 @@ export class RoutingGrid extends LitElement {
             ${
               entry.row.kind === "all" && zone.id === null
                 ? this.#defaultCell()
-                : this.#editor(entry, zone)
+                : this.#cell(entry, zone)
             }
           </td>`,
       )}
@@ -568,7 +821,8 @@ export class RoutingGrid extends LitElement {
       </div>
       <wt-form-actions
         .error=${this.refusal === null ? "" : this.#refusalText(this.refusal)}
-      ></wt-form-actions>`;
+      ></wt-form-actions>
+      ${this.#editorDialog()}`;
   }
 }
 

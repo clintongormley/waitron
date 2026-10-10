@@ -422,6 +422,7 @@ export class OpeningHoursWeek extends LitElement {
           staffMenuIds: [...input.staffMenuIds],
           endOffsetMinutes: input.endOffsetMinutes ?? 0,
           weekdays: [],
+          routingUses: [],
         },
       ];
       if (component.commitSubmitted(input)) this.periodOpening = undefined;

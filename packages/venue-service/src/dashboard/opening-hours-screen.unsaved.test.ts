@@ -91,6 +91,7 @@ class OpeningLeaveApp extends LitElement {
               staffMenuIds: [],
               endOffsetMinutes: 0,
               weekdays: [1],
+              routingUses: [],
             },
           ],
         },

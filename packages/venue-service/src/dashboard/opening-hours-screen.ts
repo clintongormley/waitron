@@ -28,7 +28,12 @@ import type { NamedCalendarAction } from "./hours-calendar.js";
 import type { NamedDayEditor, NamedDayInput } from "./named-day-editor.js";
 import type { NamedDayCopy } from "./named-day-copy.js";
 import type { PeriodEditor } from "./period-editor.js";
-import type { MenuPeriodInput, MenuPeriodUse, OpeningHoursModel } from "../menu-timetable-types.js";
+import type {
+  MenuPeriodInput,
+  MenuPeriodUse,
+  OpeningHoursModel,
+  PeriodRoutingUse,
+} from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import { businessDateToday } from "./opening-hours-day.js";
 import { addDays, isLocalDate, weekdayOf } from "../hours-rules.js";
@@ -367,6 +372,34 @@ export class OpeningHoursScreen extends LitElement {
     if (this.readOnly || this.busy || !this.isConnected || this.editor || this.deleting) return;
     this.deleteError = "";
     this.deleting = { period };
+  }
+  /** The period's routing uses as last read, so the warning follows a re-read while it is open. */
+  private routingWarning(period: Period) {
+    const current =
+      this.model?.departments
+        .flatMap((department) => department.periods)
+        .find((candidate) => candidate.id === period.id) ?? period;
+    const uses = current.routingUses;
+    if (uses.length === 0) return nothing;
+    const label = (use: PeriodRoutingUse) =>
+      format("opening.routing_use", {
+        row:
+          use.rowLabel ??
+          t(use.rowKind === "all" ? "routing.all_categories" : "routing.no_category"),
+        zone: use.zoneName ?? t("routing.every_zone"),
+      });
+    return html`<div data-test="routing-uses">
+      <p>
+        ${
+          uses.length === 1
+            ? t("opening.delete_routing_one")
+            : format("opening.delete_routing", { count: String(uses.length) })
+        }
+      </p>
+      <ul>
+        ${uses.map((use) => html`<li>${label(use)}</li>`)}
+      </ul>
+    </div>`;
   }
   private async deletePeriod(deletion: Deletion) {
     const period = deletion.period;
@@ -822,6 +855,7 @@ export class OpeningHoursScreen extends LitElement {
                 }}
               >
                 <p>${format("opening.delete_confirm", { name: this.deleting.period.name })}</p>
+                ${this.routingWarning(this.deleting.period)}
                 ${this.deleteError ? html`<p role="alert" data-test="delete-error">${this.deleteError}</p>` : nothing}
                 <wt-form-actions slot="footer"
                   ><wt-button

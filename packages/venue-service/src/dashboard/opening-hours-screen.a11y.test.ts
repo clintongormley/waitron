@@ -19,6 +19,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     "empty",
     "viewer",
     "delete",
+    "delete-routing",
     "delete-refused",
     "load-failed",
     "unreadable-viewer",
@@ -57,6 +58,13 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
                       staffMenuIds: [],
                       endOffsetMinutes: 0,
                       weekdays: [1, 3],
+                      routingUses:
+                        state === "delete-routing"
+                          ? [
+                              { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+                              { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
+                            ]
+                          : [],
                     },
                   ],
           },
@@ -82,6 +90,8 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     if (state.startsWith("delete")) {
       table.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-period]")!.click();
       await screen.updateComplete;
+      if (state === "delete-routing")
+        expect(screen.shadowRoot!.querySelectorAll("[data-test=routing-uses] li")).toHaveLength(2);
       if (state === "delete-refused") {
         screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
         await expect
@@ -125,6 +135,7 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
                 staffMenuIds: [],
                 endOffsetMinutes: offset,
                 weekdays: [1],
+                routingUses: [],
               })),
             },
           ],

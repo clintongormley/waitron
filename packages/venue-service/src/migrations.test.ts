@@ -47,6 +47,7 @@ const TABLES = [
   "station_day_states",
   "period_extensions",
   "routing_cells",
+  "routing_cell_periods",
   "order_service_contexts",
   "working_line_contexts",
   "service_settings",
@@ -267,6 +268,14 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(product_id) -> products(id)",
           "(station_id) -> kitchen_stations(id)",
           "(zone_id) -> floor_zones(id)",
+        ],
+      },
+      routing_cell_periods: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(cell_id) -> routing_cells(id) on delete cascade",
+          "(period_id, department_id) -> menu_periods(id, department_id) on delete cascade",
+          "(station_id) -> kitchen_stations(id)",
         ],
       },
       order_service_contexts: {
@@ -778,6 +787,94 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
     expect(isRefusal(self, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(self)).toContain("station_day_states_sends_to_not_self_ck");
+  });
+
+  async function routedPeriod() {
+    const v = await venue();
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId: brandLocationId(v.locationId), name: "Grill" })
+      .returning({ id: kitchenStations.id });
+    const cellId = randomUUID();
+    await db.execute(sql`insert into routing_cells (id, location_id, zone_id, station_id)
+      values (${cellId}, ${v.locationId}, ${v.zoneId}, ${station!.id})`);
+    const periodId = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    const choice = (
+      over: { cell?: string; period?: string; department?: string; station?: string | null } = {},
+      noPreparation = 0,
+    ) => sql`insert into routing_cell_periods
+      (id, cell_id, period_id, department_id, station_id, no_preparation)
+      values (${randomUUID()}, ${over.cell ?? cellId}, ${over.period ?? periodId},
+        ${over.department ?? v.departmentId},
+        ${over.station === undefined ? station!.id : over.station}, ${noPreparation})`;
+    const choices = async (where: ReturnType<typeof sql>) =>
+      (
+        await db.execute<{ station_id: string | null; no_preparation: number }>(
+          sql`select station_id, no_preparation from routing_cell_periods where ${where}`,
+        )
+      ).rows;
+    return { ...v, stationId: station!.id, cellId, periodId, choice, choices };
+  }
+
+  it("keeps one choice per routing cell and period, with a station or No preparation", async () => {
+    const r = await routedPeriod();
+    const evening = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${evening}, ${r.departmentId}, 'Evening', ${r.menuId})`);
+    await db.execute(r.choice());
+    await db.execute(r.choice({ period: evening, station: null }, 1));
+    expect(await r.choices(sql`cell_id = ${r.cellId} order by no_preparation`)).toEqual([
+      { station_id: r.stationId, no_preparation: 0 },
+      { station_id: null, no_preparation: 1 },
+    ]);
+    const second = await captureError(() =>
+      db.transaction((tx) => tx.execute(r.choice({ station: null }, 1))),
+    );
+    expect(isRefusal(second, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(second)).toContain(
+      "routing_cell_periods.cell_id, routing_cell_periods.period_id",
+    );
+  });
+
+  it.each([
+    ["both a station and No preparation", "station", 1],
+    ["neither a station nor No preparation", null, 0],
+  ] as const)("refuses a period choice with %s", async (_, target, noPreparation) => {
+    const r = await routedPeriod();
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(r.choice({ station: target === null ? null : r.stationId }, noPreparation)),
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("routing_cell_periods_target_ck");
+  });
+
+  it("ties a period choice to its cell, its period's own department and a station", async () => {
+    const r = await routedPeriod();
+    const other = await venue();
+    await refusal(r.choice({ department: other.departmentId }), "routing_cell_periods_period_fk");
+    await refusal(r.choice({ period: randomUUID() }), "routing_cell_periods_period_fk");
+    await refusal(r.choice({ cell: randomUUID() }), "routing_cell_periods_cell_fk");
+    await refusal(r.choice({ station: randomUUID() }), "routing_cell_periods_station_fk");
+    expect(await r.choices(sql`cell_id = ${r.cellId}`)).toEqual([]);
+  });
+
+  it("deletes a cell's period choices with the cell, and a period's with the period", async () => {
+    const r = await routedPeriod();
+    const kept = await routedPeriod();
+    await db.execute(r.choice());
+    await db.execute(kept.choice());
+    await db.execute(sql`delete from routing_cells where id = ${r.cellId}`);
+    expect(await r.choices(sql`cell_id = ${r.cellId}`)).toEqual([]);
+    expect(await kept.choices(sql`cell_id = ${kept.cellId}`)).toHaveLength(1);
+    const again = await routedPeriod();
+    await db.execute(again.choice());
+    await db.execute(sql`delete from menu_periods where id = ${again.periodId}`);
+    expect(await again.choices(sql`period_id = ${again.periodId}`)).toEqual([]);
+    expect(await kept.choices(sql`cell_id = ${kept.cellId}`)).toHaveLength(1);
   });
 
   async function namedDayZone() {

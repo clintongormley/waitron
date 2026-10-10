@@ -21,6 +21,7 @@ const view: PrepStationsView = {
       { id: "food", name: "Food", parentId: null },
     ],
     products: [{ id: "bread", name: "Bread", categoryId: null }],
+    periods: [],
     cells: [
       {
         row: { kind: "category", categoryId: "cocktails" },
@@ -71,7 +72,6 @@ const view: PrepStationsView = {
   ],
   zones: [],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -81,19 +81,7 @@ const view: PrepStationsView = {
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   return {
     load: vi.fn().mockResolvedValue(view),
-    readStationHealth: vi.fn().mockResolvedValue({
-      capturedAt: "2026-10-05T12:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     preview: vi.fn().mockResolvedValue([]),
-    explain: vi.fn().mockResolvedValue({
-      route: null,
-      decidedBy: null,
-      fallbacks: [],
-      noReplacement: false,
-      stations: [],
-    }),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     deactivateStation: vi.fn(),
@@ -131,63 +119,77 @@ function q(el: PrepStationsScreen, selector: string): HTMLElement | null {
       ?.shadowRoot?.querySelector<HTMLElement>(selector) ?? null
   );
 }
-async function openRest(el: PrepStationsScreen) {
-  expect(q(el, "[data-test=edit-settings-rest-bar]")).not.toBeNull();
-  q(el, "[data-test=edit-settings-rest-bar]")!.click();
+async function openWarm(el: PrepStationsScreen) {
+  expect(q(el, "[data-test=edit-settings-warmAfterMinutes-bar]")).not.toBeNull();
+  q(el, "[data-test=edit-settings-warmAfterMinutes-bar]")!.click();
   await settle(el);
 }
+function typeMinutes(el: PrepStationsScreen, value: string) {
+  q(el, "[data-test=settings-minutes]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value } }),
+  );
+}
+const minutesField = (el: PrepStationsScreen) => q(el, "[data-test=settings-minutes]") as WtInput;
 function choose(el: PrepStationsScreen, value: string) {
   q(el, "[data-test=settings-choice]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value } }),
   );
 }
 
-it("edits Show the rest of the order in its own Settings cell and saves only that field", async () => {
+it("edits Show the rest of the order in the station editor, not in Settings, and saves only that field", async () => {
   const a = api();
   const el = await mount(a);
-  await openRest(el);
-  expect(el.shadowRoot!.querySelector("[data-test=station-modal]")).toBeNull();
-  const input = q(el, "[data-test=settings-choice]") as WtCombobox;
-  expect(input.name).toBe("showsRestOfOrder");
-  expect(input.value).toBe("no");
-  choose(el, "yes");
+  expect(q(el, "[data-test=edit-settings-rest-bar]")).toBeNull();
+  expect(q(el, "thead")!.textContent).not.toContain("Show the rest of the order");
+  el.shadowRoot!.querySelector("prep-station-table")!
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!
+    .click();
   await settle(el);
-  q(el, "[data-test=save-settings-cell]")!.click();
+  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+  await editor.updateComplete;
+  const rest = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=showsRestOfOrder]",
+  )!;
+  expect(rest.checked).toBe(false);
+  rest.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
-  expect(q(el, "[data-test=settings-choice]")).toBeNull();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
 });
 it.each(["cancel", "escape"])("%s discards a Settings draft without writing", async (how) => {
   const a = api();
   const el = await mount(a);
-  await openRest(el);
-  choose(el, "yes");
+  await openWarm(el);
+  typeMinutes(el, "8");
   await settle(el);
   if (how === "cancel") q(el, "[data-test=cancel-settings-cell]")!.click();
   else
-    q(el, "[data-test=settings-choice]")!.dispatchEvent(
+    q(el, "[data-test=settings-minutes]")!.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
     );
   await settle(el);
   expect(a.updateStation).not.toHaveBeenCalled();
-  await openRest(el);
-  expect((q(el, "[data-test=settings-choice]") as WtCombobox).value).toBe("no");
+  await openWarm(el);
+  expect(minutesField(el).value).toBe("");
 });
 it.each([
-  ["management.request_invalid", { field: "showsRestOfOrder" }, true],
+  ["management.request_invalid", { field: "warmAfterMinutes" }, true],
   ["station.not_found", {}, false],
 ] as const)("retains a retryable Settings draft after %s", async (code, params, field) => {
   const a = api({
     updateStation: vi.fn().mockRejectedValueOnce({ code, params }).mockResolvedValue(undefined),
   });
   const el = await mount(a);
-  await openRest(el);
-  choose(el, "yes");
+  await openWarm(el);
+  typeMinutes(el, "8");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
-  expect((q(el, "[data-test=settings-choice]") as WtCombobox).value).toBe("yes");
-  expect(!!(q(el, "[data-test=settings-choice]") as WtCombobox).error).toBe(field);
+  expect(minutesField(el).value).toBe("8");
+  expect(!!minutesField(el).error).toBe(field);
   expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
     field ? "Fix the fields marked above" : "could not be saved",
   );
@@ -195,20 +197,20 @@ it.each([
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(2);
-  expect(q(el, "[data-test=settings-choice]")).toBeNull();
+  expect(q(el, "[data-test=settings-minutes]")).toBeNull();
 });
 it("keeps the cell closed when refresh fails after a successful write", async () => {
   const a = api({
     load: vi.fn().mockResolvedValueOnce(view).mockRejectedValue(new Error("offline")),
   });
   const el = await mount(a);
-  await openRest(el);
-  choose(el, "yes");
+  await openWarm(el);
+  typeMinutes(el, "8");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(1);
-  expect(q(el, "[data-test=settings-choice]")).toBeNull();
+  expect(q(el, "[data-test=settings-minutes]")).toBeNull();
   expect(el.shadowRoot!.textContent).toContain("could not be loaded");
 });
 it("shows Never closes for the default station without a fallback editor", async () => {
@@ -314,23 +316,23 @@ it.each([
   expect(a.setStationFallback).toHaveBeenCalledTimes(2);
 });
 
-it("refuses a missing Settings yes/no choice before a write and recovers after choosing", async () => {
+it("refuses an invalid Settings timing before a write and recovers after correcting it", async () => {
   const a = api();
   const el = await mount(a);
-  await openRest(el);
-  choose(el, "");
+  await openWarm(el);
+  typeMinutes(el, "0");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
   expect(a.updateStation).not.toHaveBeenCalled();
-  expect((q(el, "[data-test=settings-choice]") as WtCombobox).error).not.toBe("");
+  expect(minutesField(el).error).not.toBe("");
   expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(true);
-  choose(el, "yes");
+  typeMinutes(el, "4");
   await settle(el);
   expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
-  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { warmAfterMinutes: 4 });
 });
 it("locks an in-flight Settings save against repeated writes and discard", async () => {
   let resolve!: () => void;
@@ -343,37 +345,37 @@ it("locks an in-flight Settings save against repeated writes and discard", async
     ),
   });
   const el = await mount(a);
-  await openRest(el);
-  choose(el, "yes");
+  await openWarm(el);
+  typeMinutes(el, "8");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
   expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(true);
   expect(q(el, "[data-test=cancel-settings-cell]")!.hasAttribute("disabled")).toBe(true);
-  q(el, "[data-test=settings-choice]")!.dispatchEvent(
+  q(el, "[data-test=settings-minutes]")!.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
   );
   await settle(el);
-  expect(q(el, "[data-test=settings-choice]")).not.toBeNull();
+  expect(q(el, "[data-test=settings-minutes]")).not.toBeNull();
   expect(a.updateStation).toHaveBeenCalledTimes(1);
   resolve();
   await settle(el);
-  expect(q(el, "[data-test=settings-choice]")).toBeNull();
+  expect(q(el, "[data-test=settings-minutes]")).toBeNull();
 });
 
 it("rechecks a previously submitted Settings draft on every change and focuses its invalid field", async () => {
   const el = await mount(api());
-  await openRest(el);
-  choose(el, "");
+  await openWarm(el);
+  typeMinutes(el, "0");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
-  choose(el, "yes");
+  typeMinutes(el, "4");
   await settle(el);
-  choose(el, "");
+  typeMinutes(el, "0");
   await settle(el);
   expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(true);
-  expect((q(el, "[data-test=settings-choice]") as WtCombobox).error).toContain("Choose Yes or No");
+  expect(minutesField(el).error).toContain("Use whole minutes");
 });
 it("live Settings reads retain its draft and save refusal", async () => {
   const liveData = new LiveData();
@@ -382,8 +384,8 @@ it("live Settings reads retain its draft and save refusal", async () => {
   const el = await mount(
     api({ liveData, load, updateStation: vi.fn().mockRejectedValue(new Error("offline")) }),
   );
-  await openRest(el);
-  choose(el, "yes");
+  await openWarm(el);
+  typeMinutes(el, "8");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
@@ -391,37 +393,35 @@ it("live Settings reads retain its draft and save refusal", async () => {
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
   await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   await settle(el);
-  expect((q(el, "[data-test=settings-choice]") as WtCombobox).value).toBe("yes");
+  expect(minutesField(el).value).toBe("8");
   expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain("could not be saved");
-  expect(q(el, "[data-test=settings-choice]")!.getAttribute("label")).toContain("Main bar");
+  expect(minutesField(el).getAttribute("label")).toContain("Main bar");
 });
 
 it("focuses the invalid Settings field after submission", async () => {
   const el = await mount(api());
-  await openRest(el);
-  choose(el, "");
+  await openWarm(el);
+  typeMinutes(el, "0");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
-  expect(q(el, "[data-test=settings-choice]")!.shadowRoot!.activeElement).not.toBeNull();
+  expect(minutesField(el).shadowRoot!.activeElement).not.toBeNull();
 });
-it("puts a field refusal beside the choice and a correction summary above the buttons", async () => {
+it("puts a field refusal beside the field and a correction summary above the buttons", async () => {
   const el = await mount(
     api({
       updateStation: vi.fn().mockRejectedValue({
         code: "management.request_invalid",
-        params: { field: "showsRestOfOrder" },
+        params: { field: "warmAfterMinutes" },
       }),
     }),
   );
-  await openRest(el);
-  choose(el, "yes");
+  await openWarm(el);
+  typeMinutes(el, "8");
   await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
-  expect((q(el, "[data-test=settings-choice]") as WtCombobox).error).toContain(
-    "could not be saved",
-  );
+  expect(minutesField(el).error).toContain("Use whole minutes");
   expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
     "Fix the fields marked above",
   );
@@ -451,7 +451,7 @@ it.each([
           load: vi.fn().mockResolvedValue(saved),
           updateStation: vi.fn().mockRejectedValue({
             code: "management.request_invalid",
-            params: { field: "showsRestOfOrder" },
+            params: { field: "warmAfterMinutes" },
           }),
           setStationFallback: vi.fn().mockRejectedValue({ code: "station.fallback_loop" }),
         }),
@@ -472,7 +472,7 @@ it.each([
       await page.screenshot({
         path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-saved.png`,
       });
-      await page.elementLocator(q(el, "[data-test=edit-settings-rest-bar]")!).click();
+      await page.elementLocator(q(el, "[data-test=edit-settings-fallback-grill]")!).click();
       await settle(el);
       const combo = q(el, "[data-test=settings-choice]") as WtCombobox;
       await combo.updateComplete;
@@ -487,11 +487,17 @@ it.each([
         path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-picker.png`,
       });
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-      choose(el, "yes");
+      q(el, "[data-test=cancel-settings-cell]")!.click();
+      await settle(el);
+      await page.elementLocator(q(el, "[data-test=edit-settings-warmAfterMinutes-bar]")!).click();
+      await settle(el);
+      typeMinutes(el, "8");
       await settle(el);
       await page.elementLocator(q(el, "[data-test=save-settings-cell]")!).click();
       await settle(el);
-      expect(combo.error).toContain(locale === "en" ? "could not be saved" : "No se pudo guardar");
+      expect(minutesField(el).error).toContain(
+        locale === "en" ? "Use whole minutes" : "Usa minutos enteros",
+      );
       await expectNoA11yViolations(host);
       await page.screenshot({
         path: `__screenshots__/look/settings-choice-${locale}-${theme}-${width}-refused.png`,
@@ -822,9 +828,11 @@ it("fallback cell retains a confirmed destination after an unrelated request ref
 
 it("choice-cell Enter on the combobox does not save until its explicit Save action", async () => {
   const save = vi.fn();
-  const el = await mount(api({ updateStation: save }));
-  await openRest(el);
-  choose(el, "yes");
+  const el = await mount(
+    api({ load: vi.fn().mockResolvedValue(fallbackView()), setStationFallback: save }),
+  );
+  await openFallback(el);
+  choose(el, "");
   await settle(el);
   q(el, "[data-test=settings-choice]")!.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
@@ -833,5 +841,7 @@ it("choice-cell Enter on the combobox does not save until its explicit Save acti
   expect(save).not.toHaveBeenCalled();
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
-  expect(save).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  expect(save).toHaveBeenCalledExactlyOnceWith("grill", null);
 });

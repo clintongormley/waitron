@@ -14,6 +14,7 @@ const view: PrepStationsView = {
       { id: "food", name: "Food", parentId: null },
     ],
     products: [{ id: "bread", name: "Bread", categoryId: null }],
+    periods: [],
     cells: [
       {
         row: { kind: "category", categoryId: "cocktails" },
@@ -64,7 +65,6 @@ const view: PrepStationsView = {
   ],
   zones: [{ id: "terrace", name: "Terrace", active: true }],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -116,11 +116,6 @@ async function mount(write?: Promise<void>, refreshFails = false, initial = view
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(initial);
     },
-    readStationHealth: async () => ({
-      capturedAt: "2026-10-06T08:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     setWatcherPrinters: async (id: string, ids: string[]) => {
       writes.push({ id, ids: [...ids] });
       await write;

@@ -14,7 +14,7 @@ import {
 } from "./service.js";
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
-import { routingCells } from "./routing.js";
+import { routingCellPeriods, routingCells } from "./routing.js";
 import { stationDayStates, stationFallbacks } from "./station-times.js";
 
 /**
@@ -150,6 +150,18 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: [],
   },
+  routing_cell_periods: {
+    table: routingCellPeriods,
+    foreignKeys: [
+      "routing_cell_periods_cell_fk",
+      "routing_cell_periods_period_fk",
+      "routing_cell_periods_station_fk",
+    ],
+    checks: ["routing_cell_periods_target_ck"],
+    indexes: ["routing_cell_periods_cell_period_key"],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
   order_service_contexts: {
     table: orderServiceContexts,
     foreignKeys: [
@@ -207,7 +219,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(14);
+    expect(Object.keys(EXPECTED)).toHaveLength(15);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

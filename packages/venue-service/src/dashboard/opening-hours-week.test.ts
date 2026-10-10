@@ -39,6 +39,7 @@ export function fixture(): OpeningHoursModel {
             staffMenuIds: [],
             endOffsetMinutes: 0,
             weekdays: [1],
+            routingUses: [],
           },
         ],
         week: Array.from({ length: 7 }, (_, weekday) => ({

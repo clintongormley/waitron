@@ -85,6 +85,13 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ),
     ).toEqual(kitchenScreens.map((table) => [table, "state"]));
   });
+  it("classifies a routing cell's period choices as replicated state", () => {
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "routing_cell_periods").map(
+        (entry) => [entry.table, entry.class],
+      ),
+    ).toEqual([["routing_cell_periods", "state"]]);
+  });
   it("classifies the service settings and kitchen notices as replicated state", () => {
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) =>

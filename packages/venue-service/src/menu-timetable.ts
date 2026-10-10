@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { catalogues, newId, type Transaction } from "@waitron/db";
-import { directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
+import { catalogues, categories, floorZones, newId, products, type Transaction } from "@waitron/db";
+import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, createLabelComparator } from "@waitron/shared";
 
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
@@ -26,6 +26,7 @@ import type {
   MenuPeriodInput,
   MenuPeriodUse,
   MenuSlot,
+  PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates, specialDateHours } from "./schema/hours.js";
@@ -33,6 +34,7 @@ import { namedDaysOn } from "./named-days.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
+import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -837,6 +839,133 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   async beforeDelete() {},
 };
 
+type Folder = { id: string; name: string; parentId: string | null };
+
+/**
+ * The Routing tab's row order and each category's path, as `visibleRoutingRows` lays the rows out:
+ * a category, then its child categories, then its products; No category and its products last.
+ * `productSlot` is where a category's products sit, `null` keyed for the uncategorised.
+ */
+function routingRowPlaces(folders: readonly Folder[]) {
+  const known = new Map(folders.map((folder) => [folder.id, folder]));
+  const compare = createLabelComparator();
+  const children = new Map<string, Folder[]>();
+  const roots: Folder[] = [];
+  for (const folder of folders) {
+    const parent = folder.parentId;
+    if (parent === null || parent === folder.id || !known.has(parent)) roots.push(folder);
+    else children.set(parent, [...(children.get(parent) ?? []), folder]);
+  }
+  const byName = (a: Folder, b: Folder) => compare(a.name, b.name);
+  roots.sort(byName);
+  for (const list of children.values()) list.sort(byName);
+  const categorySlot = new Map<string, number>();
+  const productSlot = new Map<string | null, number>();
+  const path = new Map<string, string[]>();
+  let next = 1;
+  const place = (folder: Folder, above: string[]) => {
+    const own = [...above, folder.name];
+    categorySlot.set(folder.id, next++);
+    path.set(folder.id, own);
+    for (const child of children.get(folder.id) ?? [])
+      if (!categorySlot.has(child.id)) place(child, own);
+    productSlot.set(folder.id, next++);
+  };
+  for (const root of roots) place(root, []);
+  // What is left sits on or below a parent cycle; a cycle member is placed as a root.
+  for (const folder of folders) {
+    if (categorySlot.has(folder.id)) continue;
+    const seen = new Set<string>();
+    let member = folder;
+    while (!seen.has(member.id)) {
+      seen.add(member.id);
+      member = known.get(member.parentId!)!;
+    }
+    place(member, []);
+  }
+  const noCategorySlot = next++;
+  productSlot.set(null, next);
+  return { categorySlot, productSlot, noCategorySlot, path, compare };
+}
+
+/** Each period's routing cells that hold a line for it, in the Routing tab's row order, then by
+ * zone (Every zone first). */
+async function readRoutingUses(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<Map<string, PeriodRoutingUse[]>> {
+  const rows = await tx
+    .select({
+      periodId: routingCellPeriods.periodId,
+      noCategory: routingCells.noCategory,
+      categoryId: routingCells.categoryId,
+      productId: routingCells.productId,
+      productName: products.name,
+      productCategoryId: products.categoryId,
+      zoneName: floorZones.name,
+      zoneOrder: floorZones.displayOrder,
+    })
+    .from(routingCellPeriods)
+    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
+    .leftJoin(products, eq(products.id, routingCells.productId))
+    .leftJoin(floorZones, eq(floorZones.id, routingCells.zoneId))
+    .where(eq(routingCells.locationId, cfg.locationId));
+  if (rows.length === 0) return new Map();
+  const folders = await tx
+    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
+    .from(categories)
+    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+    .orderBy(asc(categories.name), asc(categories.id));
+  const { categorySlot, productSlot, noCategorySlot, path, compare } = routingRowPlaces(folders);
+  const placed = rows.map((row) => {
+    let use: PeriodRoutingUse;
+    let slot: number;
+    if (row.categoryId !== null) {
+      use = {
+        rowKind: "category",
+        rowLabel: path.get(row.categoryId)!.join(" › "),
+        zoneName: row.zoneName,
+      };
+      slot = categorySlot.get(row.categoryId)!;
+    } else if (row.productId !== null) {
+      const folder =
+        row.productCategoryId !== null && path.has(row.productCategoryId)
+          ? row.productCategoryId
+          : null;
+      use = {
+        rowKind: "product",
+        rowLabel: [...(folder === null ? [] : path.get(folder)!), row.productName!].join(" › "),
+        zoneName: row.zoneName,
+      };
+      slot = productSlot.get(folder)!;
+    } else {
+      use = {
+        rowKind: row.noCategory ? "no_category" : "all",
+        rowLabel: null,
+        zoneName: row.zoneName,
+      };
+      slot = row.noCategory ? noCategorySlot : 0;
+    }
+    return {
+      periodId: row.periodId,
+      use,
+      slot,
+      name: row.productName ?? "",
+      zoneOrder: row.zoneOrder,
+    };
+  });
+  placed.sort(
+    (a, b) =>
+      a.slot - b.slot ||
+      compare(a.name, b.name) ||
+      (a.zoneOrder ?? -1) - (b.zoneOrder ?? -1) ||
+      (a.use.zoneName ?? "").localeCompare(b.use.zoneName ?? ""),
+  );
+  const uses = new Map<string, PeriodRoutingUse[]>();
+  for (const { periodId, use } of placed) uses.set(periodId, [...(uses.get(periodId) ?? []), use]);
+  return uses;
+}
+
 export async function readOpeningHoursModel(
   tx: Transaction,
   cfg: VenueScope,
@@ -938,6 +1067,7 @@ export async function readOpeningHoursModel(
     .from(catalogues)
     .orderBy(asc(catalogues.name), asc(catalogues.id));
   const graph = await loadSectionGraph(tx);
+  const routingUses = await readRoutingUses(tx, cfg);
   const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
   return {
     timeZone: clock.timeZone,
@@ -972,6 +1102,7 @@ export async function readOpeningHoursModel(
                   day.weekday !== null && ranges(day.id).some((range) => range.periodId === id),
               )
               .map((day) => day.weekday!),
+            routingUses: routingUses.get(id) ?? [],
           })),
         week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
           const day = days.find((row) => row.weekday === weekday);

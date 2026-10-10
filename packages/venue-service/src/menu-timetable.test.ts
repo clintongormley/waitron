@@ -8,6 +8,7 @@ import {
   requireMenuRoot,
   buildMenuDocument,
   createCatalogue,
+  createCategory,
   createProduct,
   menuDocumentHash,
   publishMenu,
@@ -15,6 +16,7 @@ import {
 import {
   CORE_MIGRATIONS,
   catalogues,
+  categories,
   floorZones,
   kitchenStations,
   locations,
@@ -64,6 +66,7 @@ import {
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
 import { periodExtensions } from "./schema/period-extensions.js";
+import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import type { VenueScope } from "./operations.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
@@ -1963,6 +1966,7 @@ describe("the editor's model", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: [],
+          routingUses: [],
         },
         {
           id: periods.madrugada,
@@ -1972,6 +1976,7 @@ describe("the editor's model", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(5),
+          routingUses: [],
         },
         {
           id: periods.mananas,
@@ -1981,6 +1986,7 @@ describe("the editor's model", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(1, 2, 3, 4, 5),
+          routingUses: [],
         },
         {
           id: periods.mediodia,
@@ -1990,6 +1996,7 @@ describe("the editor's model", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(0, 1, 2, 3, 4, 5, 6),
+          routingUses: [],
         },
         {
           id: periods.noches,
@@ -1999,6 +2006,7 @@ describe("the editor's model", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(1, 2, 3, 4, 5),
+          routingUses: [],
         },
       ],
       week: restaurantWeek(periods),
@@ -2727,6 +2735,7 @@ describe("department service periods", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: [5],
+          routingUses: [],
         },
         {
           id: v.lunch,
@@ -2736,6 +2745,7 @@ describe("department service periods", () => {
           staffMenuIds: [v.menus.Bebidas, v.menus.Café],
           endOffsetMinutes: 0,
           weekdays: [5],
+          routingUses: [],
         },
         {
           id: v.night,
@@ -2745,6 +2755,7 @@ describe("department service periods", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: [5],
+          routingUses: [],
         },
       ],
       week: weekOf((weekday) =>
@@ -3497,5 +3508,164 @@ describe("named-day timetable writes", () => {
     expect(
       await db.select().from(menuDayTimetables).where(eq(menuDayTimetables.specialDateId, day.id)),
     ).toEqual([]);
+  });
+});
+
+describe("the routing that names a period", () => {
+  it("lists each cell with a line for the period, and deleting the period takes only those lines", async () => {
+    const v = await timed();
+    const { periods } = v;
+    const [cocina] = await db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, v.locationId));
+    const [cocktails] = await db
+      .insert(categories)
+      .values({ name: "Cocktails" })
+      .returning({ id: categories.id });
+    const mojito = await scoped((tx) =>
+      createProduct(tx, {
+        catalogueId: v.menus.Copas,
+        categoryId: cocktails!.id,
+        name: "Mojito",
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+      }),
+    );
+    const cell = async (values: Partial<typeof routingCells.$inferInsert>) =>
+      (
+        await db
+          .insert(routingCells)
+          .values({ locationId: v.locationId, stationId: cocina!.id, ...values })
+          .returning({ id: routingCells.id })
+      )[0]!.id;
+    const line = (cellId: string, periodId: string, noPreparation = false) =>
+      db.insert(routingCellPeriods).values({
+        cellId,
+        periodId,
+        departmentId: v.restaurant,
+        stationId: noPreparation ? null : cocina!.id,
+        noPreparation,
+      });
+    const cocktailsEverywhere = await cell({ categoryId: cocktails!.id });
+    await line(cocktailsEverywhere, periods.noches);
+    await line(cocktailsEverywhere, periods.mediodia, true);
+    await line(await cell({ productId: mojito!.id, zoneId: v.terraza }), periods.noches, true);
+    await line(await cell({ categoryId: cocktails!.id, zoneId: v.sala }), periods.noches);
+    await line(await cell({ zoneId: v.sala }), periods.noches);
+    await line(await cell({ noCategory: true }), periods.mananas);
+    await cell({ categoryId: cocktails!.id, zoneId: v.barra });
+
+    const uses = async () => {
+      const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+      const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
+      return new Map(restaurant.periods.map((period) => [period.id, period.routingUses]));
+    };
+    const before = await uses();
+    expect(before.get(periods.noches)).toEqual([
+      { rowKind: "all", rowLabel: null, zoneName: "Sala" },
+      { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+      { rowKind: "category", rowLabel: "Cocktails", zoneName: "Sala" },
+      { rowKind: "product", rowLabel: "Cocktails › Mojito", zoneName: "Terraza" },
+    ]);
+    expect(before.get(periods.mediodia)).toEqual([
+      { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+    ]);
+    expect(before.get(periods.mananas)).toEqual([
+      { rowKind: "no_category", rowLabel: null, zoneName: null },
+    ]);
+    expect(before.get(periods.madrugada)).toEqual([]);
+
+    await scoped(async (tx) => {
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => [slot(periods.mediodia, "12:00", "16:00")]),
+        AT,
+      );
+      await deleteMenuPeriod(tx, v.cfg, periods.noches);
+    });
+    expect(
+      await db
+        .select({ periodId: routingCellPeriods.periodId })
+        .from(routingCellPeriods)
+        .where(eq(routingCellPeriods.cellId, cocktailsEverywhere)),
+    ).toEqual([{ periodId: periods.mediodia }]);
+    expect(
+      await db.select().from(routingCells).where(eq(routingCells.locationId, v.locationId)),
+    ).toHaveLength(6);
+    expect((await uses()).get(periods.mediodia)).toEqual([
+      { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+    ]);
+  });
+
+  it("names each row by its path and lists the cells in the Routing tab's order", async () => {
+    const v = await timed();
+    const { periods } = v;
+    await db.update(floorZones).set({ displayOrder: 5 }).where(eq(floorZones.id, v.sala));
+    const [cocina] = await db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, v.locationId));
+    const { drinksCocktails, brunchCocktails, mojito, bread } = await scoped(async (tx) => {
+      const drinks = (await createCategory(tx, { name: "Drinks" })).id;
+      const brunch = (await createCategory(tx, { name: "Brunch" })).id;
+      const product = async (name: string, categoryId: string | null) =>
+        (
+          await createProduct(tx, {
+            catalogueId: v.menus.Copas,
+            categoryId,
+            name,
+            pricingUnit: "each",
+            unitPrice: "9.00",
+            vatClass: "general",
+          })
+        ).id;
+      const drinksCocktails = (await createCategory(tx, { name: "Cocktails", parentId: drinks }))
+        .id;
+      return {
+        drinksCocktails,
+        brunchCocktails: (await createCategory(tx, { name: "Cocktails", parentId: brunch })).id,
+        mojito: await product("Mojito", drinksCocktails),
+        bread: await product("Bread", null),
+      };
+    });
+    for (const values of [
+      { productId: bread },
+      { noCategory: true },
+      { productId: mojito, zoneId: v.terraza },
+      { categoryId: drinksCocktails, zoneId: v.sala },
+      { categoryId: drinksCocktails, zoneId: v.terraza },
+      { categoryId: drinksCocktails },
+      { categoryId: brunchCocktails },
+      { zoneId: v.sala },
+    ]) {
+      const [cell] = await db
+        .insert(routingCells)
+        .values({ locationId: v.locationId, stationId: cocina!.id, ...values })
+        .returning({ id: routingCells.id });
+      await db.insert(routingCellPeriods).values({
+        cellId: cell!.id,
+        periodId: periods.noches,
+        departmentId: v.restaurant,
+        stationId: cocina!.id,
+      });
+    }
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    const noches = model.departments
+      .find((department) => department.id === v.restaurant)!
+      .periods.find((period) => period.id === periods.noches)!;
+    expect(noches.routingUses).toEqual([
+      { rowKind: "all", rowLabel: null, zoneName: "Sala" },
+      { rowKind: "category", rowLabel: "Brunch › Cocktails", zoneName: null },
+      { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: null },
+      { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: "Terraza" },
+      { rowKind: "category", rowLabel: "Drinks › Cocktails", zoneName: "Sala" },
+      { rowKind: "product", rowLabel: "Drinks › Cocktails › Mojito", zoneName: "Terraza" },
+      { rowKind: "no_category", rowLabel: null, zoneName: null },
+      { rowKind: "product", rowLabel: "Bread", zoneName: null },
+    ]);
   });
 });

@@ -163,13 +163,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
                   stations: [],
                   canMakeDefault: true,
                 }
-              : path === "/management-api/stations/health"
-                ? {
-                    capturedAt: "2026-10-05T12:00:00Z",
-                    stations: [],
-                    outputsDown: { printersDown: [], screensDark: [] },
-                  }
-                : [],
+              : [],
           ),
       } as Response),
     );
@@ -194,7 +188,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     const screen = container.querySelector<PrepStationsScreen>("dashboard-prep-stations-screen")!;
     expect(screen.api.liveData).toBe(liveData);
     await vi.waitFor(() =>
-      expect(screen.shadowRoot!.querySelector('[data-test="route-tester"]')).not.toBeNull(),
+      expect(
+        screen.shadowRoot!.querySelector('[slot="routing"] venue-routing-grid'),
+      ).not.toBeNull(),
     );
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/venue-service/routing",

@@ -39,6 +39,7 @@ import {
   crossRefText,
   formatCorrectionSlip,
   formatKitchenTicket,
+  joinKitchenTickets,
 } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
@@ -410,16 +411,17 @@ async function readOrderHeader(
   return (await readOrderHeaders(tx, cfg, [orderId])).get(orderId)!;
 }
 
-/** A kitchen ticket's printers, all of one layout so they share its bytes. */
+/**
+ * A kitchen ticket's printers, all of one layout and each listed by exactly `stationIds` among the
+ * send's stations, so they share its bytes.
+ */
 interface KitchenRoute {
-  station: string;
   stationIds: string[];
   printers: PrinterMapping[];
 }
 
 /** One kitchen print job: its printer, the stations and lines its paper carries, and its bytes. */
-type KitchenJob = Omit<KitchenRoute, "printers" | "station"> & {
-  station: string | null;
+type KitchenJob = Omit<KitchenRoute, "printers"> & {
   printerId: string;
   watcherId?: string;
   lineIds: string[];
@@ -440,27 +442,61 @@ function mappingsByStation(mappings: readonly PrinterMapping[]): MappingsByStati
 }
 
 /**
- * Each involved station's printers, grouped by layout in station order.
+ * One ticket per printer: each printer carries the involved stations that list it, in
+ * `stationIds`' order. Printers carrying the same stations are grouped by layout, and a group is
+ * placed at its first station's turn.
  */
 function routeKitchenTickets(
   stationIds: readonly string[],
   mappings: MappingsByStation,
 ): KitchenRoute[] {
-  if (stationIds.length === 0) return [];
+  const carried = new Map<string, { stationIds: string[]; printer: PrinterMapping }>();
+  for (const stationId of stationIds) {
+    for (const printer of mappings.get(stationId) ?? []) {
+      const seen = carried.get(printer.printerId);
+      if (seen === undefined) carried.set(printer.printerId, { stationIds: [stationId], printer });
+      else seen.stationIds.push(stationId);
+    }
+  }
   const routes: KitchenRoute[] = [];
   for (const stationId of stationIds) {
-    const attached = mappings.get(stationId) ?? [];
-    for (const printers of groupByLayout(attached)) {
-      routes.push({ station: stationId, stationIds: [stationId], printers });
+    const bySet = new Map<string, { stationIds: string[]; printers: PrinterMapping[] }>();
+    for (const { printerId } of mappings.get(stationId) ?? []) {
+      const { stationIds: set, printer } = carried.get(printerId)!;
+      if (set[0] !== stationId) continue;
+      const key = set.join("|");
+      const group = bySet.get(key);
+      if (group === undefined) bySet.set(key, { stationIds: set, printers: [printer] });
+      else group.printers.push(printer);
+    }
+    for (const { stationIds: set, printers } of bySet.values()) {
+      for (const layout of groupByLayout(printers))
+        routes.push({ stationIds: set, printers: layout });
     }
   }
   return routes;
 }
 
 /**
+ * What one printer's whole paper prints of the rest of the order when the paper joins more than one
+ * planned ticket: nothing, or the dishes at stations other than `stationIds`.
+ */
+interface PaperRest {
+  stationIds: readonly string[];
+  shows: boolean;
+}
+
+/** Live station printer assignments and stations already read for a superset of a plan's stations. */
+interface KnownStations {
+  mappings: readonly PrinterMapping[];
+  stations: Awaited<ReturnType<typeof readStations>>;
+}
+
+/**
  * The kitchen tickets for a set of just-fired lines, routed by {@link routeKitchenTickets} over the
  * involved stations in name order. A `HOLD` ticket's `firedItems` are the held items printed in
- * advance.
+ * advance. A printer in `papers` prints the rest of the order as its entry says, in place of what
+ * its route alone would decide.
  */
 async function planKitchenTickets(
   tx: Transaction,
@@ -474,7 +510,8 @@ async function planKitchenTickets(
     makers = true,
     watchers: copies = "all",
     rerouted,
-    restOfOrderExcept,
+    papers,
+    known,
   }: {
     reprint: boolean;
     mark?: "HOLD" | "FIRE";
@@ -482,21 +519,29 @@ async function planKitchenTickets(
     makers?: boolean;
     watchers?: WatcherCopies;
     rerouted?: ReadonlyMap<string, { stationId: string; stationName: string }>;
-    restOfOrderExcept?: ReadonlySet<string>;
+    papers?: ReadonlyMap<string, PaperRest>;
+    known?: KnownStations;
   },
 ): Promise<KitchenJob[]> {
   if (firedItems.length === 0) return [];
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  const mappingRows = makers ? await printerMappings(tx, stationIds) : [];
+  const mappingRows = !makers
+    ? []
+    : known === undefined
+      ? await printerMappings(tx, stationIds)
+      : known.mappings.filter((mapping) => stationIds.includes(mapping.stationId));
   const watcherRows = copies === "none" ? [] : await readWatcherPrinters(tx, cfg);
   if (mappingRows.length === 0 && watcherRows.length === 0) return [];
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStations(tx, stationIds);
+  const stationNames =
+    known === undefined
+      ? await readStations(tx, stationIds)
+      : new Map(stationIds.map((id) => [id, known.stations.get(id)!]));
   const order = await readOrderHeader(tx, cfg, orderId);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
@@ -536,17 +581,31 @@ async function planKitchenTickets(
     stations.map((station) => station.id),
     mappingsByStation(mappingRows),
   );
-  const restRoutes = routes.filter(
-    (route) =>
-      stationById.get(route.station)?.showsRestOfOrder && !restOfOrderExcept?.has(route.station),
-  );
-  const rest = restRoutes.length === 0 ? [] : (await readRestOfOrder(tx, [orderId])).get(orderId)!;
-  const eachByIdentity =
-    restRoutes.length === 0
-      ? new Set<string>()
-      : await VENUE_SERVICE.readLinesSoldInEach(tx, [
-          ...new Set(rest.map((item) => item.workingOrderLineId)),
-        ]);
+  // Each printer's rest of the order: null for none, else the stations whose dishes it leaves out.
+  const restLeavesOut = new Map<string, readonly string[] | null>();
+  for (const route of routes) {
+    const shows = route.stationIds.some((id) => stationById.get(id)!.showsRestOfOrder);
+    for (const { printerId } of route.printers) {
+      const paper = papers?.get(printerId);
+      restLeavesOut.set(
+        printerId,
+        paper === undefined
+          ? shows
+            ? route.stationIds
+            : null
+          : paper.shows
+            ? paper.stationIds
+            : null,
+      );
+    }
+  }
+  const anyRest = [...restLeavesOut.values()].some((leavesOut) => leavesOut !== null);
+  const rest = anyRest ? (await readRestOfOrder(tx, [orderId])).get(orderId)! : [];
+  const eachByIdentity = !anyRest
+    ? new Set<string>()
+    : await VENUE_SERVICE.readLinesSoldInEach(tx, [
+        ...new Set(rest.map((item) => item.workingOrderLineId)),
+      ]);
   const head = {
     reprint,
     mark,
@@ -556,35 +615,43 @@ async function planKitchenTickets(
     firedAt: new Date(),
   };
   for (const route of routes) {
-    const station = stationById.get(route.station)!;
-    const bytes = formatKitchenTicket(
-      {
-        ...head,
-        scope: "station",
-        stationName: station.name,
-        items: station.items,
-        ...(restRoutes.includes(route)
-          ? {
-              alsoOnOrder: {
-                locale: cfg.locale,
-                items: rest
-                  .filter((item) => item.stationId !== route.station)
-                  .map((item) => ({
-                    qty: item.quantity,
-                    unit:
-                      item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
-                        ? undefined
-                        : ticketName(item.unitName, cfg.locale),
-                    name: item.name,
-                    stationName: item.stationName,
-                    held: item.held,
-                  })),
-              },
-            }
-          : {}),
-      },
-      route.printers[0]!,
-    );
+    const onTicket = route.stationIds.map((id) => stationById.get(id)!);
+    const render = (leavesOut: readonly string[] | null) =>
+      formatKitchenTicket(
+        {
+          ...head,
+          ...(onTicket.length === 1
+            ? { scope: "station", stationName: onTicket[0]!.name, items: onTicket[0]!.items }
+            : {
+                scope: "stations",
+                stations: onTicket.map((station) => ({
+                  stationName: station.name,
+                  items: station.items,
+                })),
+              }),
+          ...(leavesOut !== null
+            ? {
+                alsoOnOrder: {
+                  locale: cfg.locale,
+                  items: rest
+                    .filter((item) => !leavesOut.includes(item.stationId))
+                    .map((item) => ({
+                      qty: item.quantity,
+                      unit:
+                        item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
+                          ? undefined
+                          : ticketName(item.unitName, cfg.locale),
+                      name: item.name,
+                      stationName: item.stationName,
+                      held: item.held,
+                    })),
+                },
+              }
+            : {}),
+        },
+        route.printers[0]!,
+      );
+    const bytesByRest = new Map<string, Uint8Array>();
     const lineIds = [
       ...new Set(
         firedItems
@@ -593,9 +660,15 @@ async function planKitchenTickets(
       ),
     ];
     for (const printer of route.printers) {
+      const leavesOut = restLeavesOut.get(printer.printerId)!;
+      const key = leavesOut === null ? "" : [...leavesOut].sort().join("|");
+      let bytes = bytesByRest.get(key);
+      if (bytes === undefined) {
+        bytes = render(leavesOut);
+        bytesByRest.set(key, bytes);
+      }
       jobs.push({
         printerId: printer.printerId,
-        station: route.station,
         stationIds: route.stationIds,
         lineIds,
         bytes,
@@ -674,7 +747,6 @@ async function planKitchenTickets(
             jobs.push({
               printerId: printer.printerId,
               watcherId: watcher.watcherId,
-              station: null,
               stationIds: [],
               lineIds,
               bytes,
@@ -1451,9 +1523,10 @@ async function readReprintTargets(
 /**
  * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
  * stamped with the reprint time, not the original fire time. Fired and HOLD sections for one
- * printer go as one job; for a station printer, separate jobs could clear an earlier failure for
- * dishes the later section does not carry ({@link readPrintProblems}). It changes no line, ticket
- * item or group event. An order with nothing to print is a no-op.
+ * printer go as one job, cut once, linked to every station either carries, whatever stations each
+ * covers; for a station printer, separate jobs could clear an earlier failure for dishes the later
+ * section does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An
+ * order with nothing to print is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -1461,36 +1534,75 @@ export async function reprintOrderTickets(
   orderId: string,
 ): Promise<void> {
   const [fired, held] = (await readReprintParts(tx, [orderId])).get(orderId)!;
+  const firedStations = new Set(fired.items.map((item) => item.stationId));
+  const heldStations = new Set(held.items.map((item) => item.stationId));
+  const stationIds = [...new Set([...firedStations, ...heldStations])];
+  if (stationIds.length === 0) return;
+  const known: KnownStations = {
+    mappings: await printerMappings(tx, stationIds),
+    stations: await readStations(tx, stationIds),
+  };
+  const papers = joinedPapers(firedStations, heldStations, known);
   const jobs = await planKitchenTickets(tx, cfg, orderId, fired.items, {
     reprint: true,
     watchers: "all",
+    papers,
+    known,
   });
   const holdJobs = await planKitchenTickets(tx, cfg, orderId, held.items, {
     reprint: true,
     mark: held.mark,
     watchers: "all",
-    restOfOrderExcept: new Set(fired.items.map((item) => item.stationId)),
+    known,
+    papers: new Map(
+      [...papers].map(([printerId, paper]) => [printerId, { ...paper, shows: false }]),
+    ),
   });
   for (const hold of holdJobs) {
     const same = jobs.find(
-      (job) => job.printerId === hold.printerId && job.station === hold.station,
+      (job) => job.printerId === hold.printerId && job.watcherId === hold.watcherId,
     );
     if (same === undefined) {
       jobs.push(hold);
       continue;
     }
-    same.bytes = concatBytes(same.bytes, hold.bytes);
+    same.bytes = joinKitchenTickets(same.bytes, hold.bytes);
     same.stationIds = [...new Set([...same.stationIds, ...hold.stationIds])];
     same.lineIds = [...new Set([...same.lineIds, ...hold.lineIds])];
   }
   await enqueueKitchenJobs(tx, cfg, orderId, jobs, true);
 }
 
-function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const joined = new Uint8Array(a.length + b.length);
-  joined.set(a);
-  joined.set(b, a.length);
-  return joined;
+/**
+ * Each station printer a reprint gives both fired and held work, as one paper: the rest of the order
+ * prints once, on its fired part, and lists dishes at stations on neither part. It prints when a
+ * station of the fired part shows it, or a station of the held part does and no held station there
+ * has fired work.
+ * Decisions 3 and 5 of docs/superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md.
+ */
+function joinedPapers(
+  firedStations: ReadonlySet<string>,
+  heldStations: ReadonlySet<string>,
+  { mappings, stations }: KnownStations,
+): Map<string, PaperRest> {
+  const papers = new Map<string, PaperRest>();
+  if (firedStations.size === 0 || heldStations.size === 0) return papers;
+  const shows = (id: string) => stations.get(id)!.showsRestOfOrder;
+  const byPrinter = new Map<string, { fired: string[]; held: string[] }>();
+  for (const { printerId, stationId } of mappings) {
+    const paper = byPrinter.get(printerId) ?? { fired: [], held: [] };
+    if (firedStations.has(stationId)) paper.fired.push(stationId);
+    if (heldStations.has(stationId)) paper.held.push(stationId);
+    byPrinter.set(printerId, paper);
+  }
+  for (const [printerId, { fired, held }] of byPrinter) {
+    if (fired.length === 0 || held.length === 0) continue;
+    papers.set(printerId, {
+      stationIds: [...new Set([...fired, ...held])],
+      shows: fired.some(shows) || (held.some(shows) && !held.some((id) => firedStations.has(id))),
+    });
+  }
+  return papers;
 }
 
 /** A kitchen ticket for a bill and station not printed after `JOBS_WAITING_MS`, or given up on. */

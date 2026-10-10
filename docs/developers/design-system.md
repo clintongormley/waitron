@@ -1813,6 +1813,8 @@ These open already savable:
   with, and pressing Pair approves the device;
 - each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
 - the canvas Duplicate dialog, holding `<name> (copy)`;
+- the routing cell editor on an inherited cell: Save pins the inherited choice as the cell's own
+  (`savableAtOpen`, `packages/venue-service/src/dashboard/routing-cell-editor.ts`);
 - the option window when it opens showing a refusal the options list handed it: pressing Save
   untouched gives the option back to the list, which clears that option's refusal (`#refusedAtOpen`
   in `apps/dashboard/src/widgets/option-label-form.ts`; owner, 2026-10-08, A410). Opened by Add
@@ -1825,12 +1827,10 @@ their existing validation and retry behavior. See the
 [Batch 4a classifications](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a)
 for each provider call path.
 
-Preparation stations' screen-owned Save editors follow the rule too (A331 batch 4d): Add and
-Rename station, station printers, watcher Rename/follows/zones/pass/printers, and Settings
-rest/fallback/timing. An unchanged Settings fallback opens no confirmation; an edited fallback
-keeps its two presses. Routing Confirm and station service operations remain actions;
-[the inventory](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d)
-names their handlers.
+Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
+station and routing cell editors): Add station, the station editor, the routing cell editor,
+watcher Rename/follows/zones/pass/printers, and Settings fallback/timing. An unchanged Settings
+fallback opens no confirmation; an edited fallback keeps its two presses. Routing Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
@@ -2783,8 +2783,7 @@ rather than assuming this composition applies unchanged.
 ### Wording
 
 - **Keep text as short as its meaning allows** (owner, 2026-10-09, A443). Leave out what the reader
-  can infer: the kitchen ticket's heading is to become just "Also on this order", without "(not for
-  this station)" (A366-4A).
+  can infer: the kitchen ticket's rest-of-order heading reads just "Also on this order" (A366-4A).
 - **An action label starts with a verb** (owner, 2026-10-09, A443): Add, Delete, Move, Remove, Save. A
   button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
   — "Add" is a verb like "Delete"; "New" is an adjective. A create action never says "Create" /
@@ -3107,13 +3106,24 @@ The component updates its own selection, while your screen records it with `UrlS
 An unknown or omitted value shows the first tab. Arrow keys wrap between tabs; Home and End
 select the first and last tab. The tab strip scrolls on narrow screens and brings the selected tab
 into view when a page opens directly on it and whenever the strip changes width (a tab wider than
-the strip shows its start). Hidden panels remain
-mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
+the strip shows its start). When the tabs overflow, the strip fades each cut end over twice
+`--wt-space-6`, so a person sees that it scrolls: `wt-tabs` sets `data-overflow` (`start`, `end`
+or `both`) from the scroll position, and a mask draws the fade. A selected tab stops clear of a
+faded end that has another tab beyond it, and where the room beside the selected tab is short the
+fade narrows to at most half of it, so that tab is not drawn faint after the strip brings it into
+view. A scroll by hand only redraws the fades (`wt-tabs` handles `scroll` with its overflow check
+alone), so it can leave the selected tab under one (the
+"fades only the cut end", "a selected middle tab stops clear of the fade" and "the fade narrows to
+leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hidden panels
+remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
-Prep stations uses `stations`, `routing`, `tickets`, `watchers` and `settings` at
-`/manage/prep-stations/view/<key>`. Stations shows live health and opens read-only dish drilldowns.
-Its Today column reports the station's status and destination without close/open controls.
+Prep stations uses `stations`, `routing`, `watchers` and `settings` at
+`/manage/prep-stations/view/<key>`; an old `tickets` address opens Stations. Stations shows no
+live kitchen numbers: each station's name with its Default or Disabled mark, Printed on (its
+printers, or "No printer"), Shown on (the devices whose kitchen screens show it, and a link to
+Devices) and Today (`packages/venue-service/src/dashboard/station-table.ts`). Its Today column
+reports the station's status and destination without close/open controls.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
 Closing asks where new work goes and offers the default station first; a manager PIN step
 keeps the destination draft after a refused PIN. The counter and table order screens show the
@@ -3121,18 +3131,33 @@ period's end beside Keep open later. Its dialog offers server-provided times, ex
 period's delay and allows ending an existing extension. Both destination and endpoint dialogs
 use the shared draft scope and save-action state, with reconnect cases in their
 `*.unsaved.test.ts` suites under `apps/till/src/widgets/`.
-Routing shows the route tester above the routing grid
-(`packages/venue-service/src/dashboard/routing-grid.ts`): a row for All categories, each category,
-each top-level product and, while a product has no category or the row holds a saved choice, No
-category; a column for Every
-zone and each active service zone. A choice that moves products opens a preview listing each one
-with its old and new destination before anything is saved; a choice that moves nothing saves at
-once. Tickets and Watchers own their printer selections. Settings edits each station value in its own
-cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured fallback
-field reads "Outside its hours, work goes to". Station Rename,
-Make default and Disable/Enable actions belong to the Stations row menu; Routing's All categories ×
-Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
-Stations.
+Routing shows the routing grid (`packages/venue-service/src/dashboard/routing-grid.ts`): a row for
+All categories, each category, each top-level product and, while a product has no category or the
+row holds a saved choice, No category; a column for Every zone and each active service zone. Below
+40rem the row-label column is at most 96 px and table cells pad by `--wt-space-1`, so a 390 px
+window shows the labels, Every zone and one zone column without scrolling (the "at phone width"
+cases in `routing-grid.test.ts`). Each cell is a button showing its station (an inherited one muted
+and in italics), one line per period choice ("Lunch, Afternoon: Downstairs bar") and, where its
+choice is No preparation or it falls through to the default station, how extras are made ("No
+preparation — as an extra, follows its dish"). It opens the routing cell editor
+(`routing-cell-editor.ts`): "Any other time" holds the cell's own station, and "+ Different station
+during some periods" adds a line of periods with a station. A zone column offers only its
+department's periods, and none when the zone has no department; a line offers only periods whose
+menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
+what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not
+copy. The default cell (All categories × Every zone) takes no period lines. A choice that moves
+products opens a preview listing each one with its old and new destination ("… during Lunch" for a
+period's move) before anything is saved; a choice that moves nothing saves at once. Edit, in a
+Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers and "Show the
+rest of the order", saved in one request. Printers offers a printer a watcher uses as disabled,
+unless the station already has it, and is a read-out for a switched-off station; the editor also has
+a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
+also sets Printers. Watchers keeps its own printer selections. Settings edits each station value in
+its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured
+fallback field reads "Outside its hours, work goes to". Station Edit, Make default and
+Disable/Enable actions belong to the Stations row menu; Routing's All categories × Every zone cell
+also sets the default station, for someone with `venue.configure`. A supervisor sees only Stations,
+with no row menus and no Printed on or Shown on.
 
 Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
 at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
@@ -3252,8 +3277,9 @@ strip shows its start: in Spanish at a 390 px window (a 310 px screen), Printers
 impresión" tab is cut that way beside "Añadir un agente" (the "shows the selected tab whole at
 every window width except the Spanish Agents tab on a phone" case in
 `apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations shows its one add button,
-Add station, on every tab rather than only on its own, and caps its action area at half the row
-through the `tab-actions` part so its tabs keep that half whatever the font (the "keeps half of a … px tab row for the tabs" cases in
+Add station, on Stations alone, and caps its action area at half the row through the
+`tab-actions` part so its tabs keep that half whatever the font (the "shows Add station on the
+Stations tab alone" and "keeps half of a … px tab row for the tabs" cases in
 `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.
 A tab whose list is a tree puts its adds in the tree rather than the tab's `actions` slot: the Products tree in its All products row's ⋮, and a menu's

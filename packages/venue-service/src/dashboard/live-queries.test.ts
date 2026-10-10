@@ -1,21 +1,8 @@
 import { expect, it } from "vitest";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
-it("declares the health sources for counts, names, context, thresholds and output problems", () => {
-  expect(QUERY_DEPENDENCIES.health).toEqual([
-    "kitchen_stations",
-    "kitchen_timing_defaults",
-    "kitchen_station_timing",
-    "ticket_items",
-    "working_order_lines",
-    "working_orders",
-    "party_tables",
-    "dining_tables",
-    "devices",
-    "station_printers",
-    "printers",
-    "print_jobs",
-  ]);
+it("declares no health query: Prep stations reads no live kitchen numbers", () => {
+  expect(Object.keys(QUERY_DEPENDENCIES)).not.toContain("health");
 });
 
 it("refreshes the routing grid and the operations screen on a routing cell change", () => {
@@ -50,6 +37,16 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "special_date_hours",
     "special_date_hours_periods",
     "locations",
+    "routing_cell_periods",
+    "menu_periods",
+    "menu_period_staff_menus",
+    "menu_slots",
+    "menu_day_timetables",
+    "departments",
+    "zone_service_policies",
+    "sections",
+    "section_members",
+    "catalogues",
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "departments",
@@ -75,7 +72,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
   ]);
 });
 
-it("refreshes Opening hours from its periods, ranges, dates and menu names", () => {
+it("refreshes Opening hours from its periods, ranges, dates, menu names and the routing that names a period", () => {
   expect(QUERY_DEPENDENCIES["opening-hours"]).toEqual([
     "menu_periods",
     "menu_period_staff_menus",
@@ -89,5 +86,10 @@ it("refreshes Opening hours from its periods, ranges, dates and menu names", () 
     "zone_closed_times",
     "zone_service_policies",
     "floor_zones",
+    "routing_cells",
+    "routing_cell_periods",
+    "categories",
+    "category_details",
+    "products",
   ]);
 });

@@ -80,6 +80,7 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                     staffMenuIds: [],
                     endOffsetMinutes: 0,
                     weekdays: [1],
+                    routingUses: [],
                   },
                 ],
                 week: [

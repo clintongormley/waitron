@@ -13,25 +13,3 @@ export interface WatcherView {
   /** Something refers to it, so removing it disables it rather than deleting it. */
   inUse: boolean;
 }
-
-/** Keep this rule aligned with watcherSees in apps/server/src/watchers.ts. */
-export function watchersSeeing(
-  watchers: readonly WatcherView[],
-  stationId: string,
-  zoneId: string | null,
-): WatcherView[] {
-  return watchers.filter(
-    (watcher) =>
-      (watcher.everyStation || watcher.stationIds.includes(stationId)) &&
-      (watcher.everyZone || (zoneId !== null && watcher.zoneIds.includes(zoneId))),
-  );
-}
-
-export function watchersOfStation(
-  watchers: readonly WatcherView[],
-  stationId: string,
-): WatcherView[] {
-  return watchers.filter(
-    (watcher) => watcher.everyStation || watcher.stationIds.includes(stationId),
-  );
-}

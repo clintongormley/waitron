@@ -12,6 +12,9 @@ export interface TabItem {
   marked?: string;
 }
 
+/** The fade spans this many `--wt-space-6`: wider than the padding and gap between two labels. */
+const FADE_SPACES = 2;
+
 @customElement("wt-tabs")
 export class WtTabs extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -35,6 +38,30 @@ export class WtTabs extends LitElement {
         overflow-x: auto;
         gap: var(--wt-space-1);
         padding: var(--wt-space-1);
+        --fade-start: 0px;
+        --fade-end: 0px;
+        --fade-towards: to right;
+      }
+      [role="tablist"]:dir(rtl) {
+        --fade-towards: to left;
+      }
+      :host([data-overflow="start"]) [role="tablist"],
+      :host([data-overflow="both"]) [role="tablist"] {
+        --fade-start: var(--fade-width);
+      }
+      :host([data-overflow="end"]) [role="tablist"],
+      :host([data-overflow="both"]) [role="tablist"] {
+        --fade-end: var(--fade-width);
+      }
+      /* A mask reads only alpha, and the background token is opaque in every theme. */
+      :host([data-overflow]) [role="tablist"] {
+        mask-image: linear-gradient(
+          var(--fade-towards),
+          transparent 0,
+          var(--wt-color-bg) var(--fade-start),
+          var(--wt-color-bg) calc(100% - var(--fade-end)),
+          transparent 100%
+        );
       }
       .tab-actions {
         flex: 0 0 auto;
@@ -129,6 +156,7 @@ export class WtTabs extends LitElement {
     if (width === this.#observedWidth) return;
     this.#observedWidth = width;
     this.#showSelected();
+    this.#showOverflow();
   });
   #observedStrip: Element | null = null;
   #observedWidth: number | null = null;
@@ -143,23 +171,61 @@ export class WtTabs extends LitElement {
     this.#observedWidth = null;
   }
 
+  #selectedTab(): { tabs: HTMLButtonElement[]; index: number } {
+    const tabs = [...this.renderRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    return { tabs, index: tabs.findIndex((button) => button.dataset.key === this.#selected) };
+  }
+
+  // Never wider than half the room beside the selected tab, so the tab itself is never faded.
+  #fadeWidth(bar: HTMLElement, tab: HTMLElement): number {
+    const room = bar.getBoundingClientRect().width - tab.getBoundingClientRect().width;
+    const full = parseFloat(getComputedStyle(bar).getPropertyValue("--wt-space-6")) * FADE_SPACES;
+    return Math.max(0, Math.min(full, room / 2));
+  }
+
   #showSelected(): void {
     const bar = this.renderRoot.querySelector<HTMLElement>('[role="tablist"]');
-    const selected = [...this.renderRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-      (button) => button.dataset.key === this.#selected,
-    );
+    const { tabs, index } = this.#selectedTab();
+    const selected = tabs[index];
     if (!bar || !selected) return;
 
     // Move only the tab strip; scrolling the selected button into view can move the whole page.
     const barBounds = bar.getBoundingClientRect();
     const tabBounds = selected.getBoundingClientRect();
     const rtl = getComputedStyle(bar).direction === "rtl";
-    const toLeft = tabBounds.left - barBounds.left;
-    const toRight = tabBounds.right - barBounds.right;
     // A tab wider than the strip shows its start, so its label reads from the beginning.
-    if (tabBounds.width > barBounds.width || (rtl ? toRight > 0 : toLeft < 0))
-      bar.scrollLeft += rtl ? toRight : toLeft;
+    if (tabBounds.width > barBounds.width) {
+      bar.scrollLeft += rtl ? tabBounds.right - barBounds.right : tabBounds.left - barBounds.left;
+      return;
+    }
+    // Stop short of a faded end wherever another tab lies beyond it, so that tab is the faint one.
+    const fade = this.#fadeWidth(bar, selected);
+    const before = index > 0 ? fade : 0;
+    const after = index < tabs.length - 1 ? fade : 0;
+    const toLeft = tabBounds.left - barBounds.left - (rtl ? after : before);
+    const toRight = tabBounds.right - barBounds.right + (rtl ? before : after);
+    if (rtl ? toRight > 0 : toLeft < 0) bar.scrollLeft += rtl ? toRight : toLeft;
     else if (rtl ? toLeft < 0 : toRight > 0) bar.scrollLeft += rtl ? toLeft : toRight;
+  }
+
+  // Scroll offsets are negative right to left, so the distance from the start is their size. The
+  // strip's own padding hides no tab, so scrolling past only that is no cut.
+  #showOverflow(): void {
+    const bar = this.renderRoot.querySelector<HTMLElement>('[role="tablist"]');
+    if (!bar) {
+      delete this.dataset.overflow;
+      return;
+    }
+    const style = getComputedStyle(bar);
+    const fromStart = Math.abs(bar.scrollLeft);
+    const start = fromStart - parseFloat(style.paddingInlineStart) >= 1;
+    const end =
+      bar.scrollWidth - bar.clientWidth - fromStart - parseFloat(style.paddingInlineEnd) >= 1;
+    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
+    const { tabs, index } = this.#selectedTab();
+    bar.style.setProperty("--fade-width", `${this.#fadeWidth(bar, tabs[index]!)}px`);
+    if (overflow) this.dataset.overflow = overflow;
+    else delete this.dataset.overflow;
   }
 
   override connectedCallback(): void {
@@ -176,13 +242,19 @@ export class WtTabs extends LitElement {
   override updated(changed: PropertyValues<this>): void {
     this.#observeStrip();
     if (changed.has("items") || changed.has("value")) this.#showSelected();
+    this.#showOverflow();
   }
 
   override render() {
     if (this.items.length === 0) return nothing;
     return html`
       <div class="tab-row" part="tab-row">
-        <div role="tablist" part="tablist" aria-label=${this.label}>
+        <div
+          role="tablist"
+          part="tablist"
+          aria-label=${this.label}
+          @scroll=${() => this.#showOverflow()}
+        >
           ${repeat(
             this.items,
             (item) => item.key,

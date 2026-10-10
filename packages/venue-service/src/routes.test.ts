@@ -1,13 +1,9 @@
 import { eq, sql } from "drizzle-orm";
-import { setRoutingCell } from "./routing-store.js";
-import { setStationToday } from "./station-times.js";
-import { seedStationWeek } from "./testing/station-week.js";
-import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
-import { saveSpecialDate } from "./hours.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
+  addProductToMenu,
   createCatalogue,
   createCategory,
   createProduct,
@@ -41,6 +37,7 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import { configureZone, createDepartment, listServiceZones } from "./operations.js";
+import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -2871,23 +2868,9 @@ describe("routing cell route", () => {
       expect(await response.text()).toBe("404 Not Found");
     }
   });
-});
 
-describe("routing explanation route", () => {
-  it("requires a manager and explains a product in its service zone", async () => {
+  it("no longer serves the routing explanation", async () => {
     const fx = await fixture();
-    await withTransaction(db, async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId: fx.locationId },
-        { name: "Dining", orderStart: "table" },
-      );
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        { zoneId: fx.zoneId, departmentId: department.id },
-      );
-    });
     const product = await withTransaction(db, (tx) =>
       createProduct(tx, {
         catalogueId: fx.menuId,
@@ -2898,206 +2881,206 @@ describe("routing explanation route", () => {
         vatClass: "general",
       }),
     );
-    const path = `/management-api/venue-service/routing/explain?productId=${product.id}&zoneId=${fx.zoneId}`;
-    expect((await send(fx.app, "GET", path)).status).toBe(401);
-    expect((await send(fx.app, "GET", path, fx.staffCookie)).status).toBe(403);
-    const response = await send(fx.app, "GET", path, fx.managerCookie);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      route: { kind: "station", stationId: fx.stationId },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-      stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
-    });
-    const second = await withTransaction(db, (tx) =>
-      createProduct(tx, {
+    const path = `${base}/explain?productId=${product.id}`;
+    for (const query of ["", "&weekday=5&time=22:00", "&date=2026-10-09&time=20:00"]) {
+      const response = await send(fx.app, "GET", `${path}${query}`, fx.managerCookie);
+      expect(response.status, query).toBe(404);
+      expect(await response.text()).toBe("404 Not Found");
+    }
+  });
+});
+
+describe("a routing cell's period choices on the routes", () => {
+  const base = "/management-api/venue-service/routing";
+  const lunchFixture = async () => {
+    const fx = await fixture();
+    const { lunch, lager, downstairs, department } = await withTransaction(db, async (tx) => {
+      const cfg = { locationId: fx.locationId };
+      const dining = await createDepartment(tx, cfg, {
+        name: "Dining",
+        orderStart: "table",
+      });
+      await configureZone(tx, cfg, { zoneId: fx.zoneId, departmentId: dining.id });
+      const product = await createProduct(tx, {
         catalogueId: fx.menuId,
-        name: "Olives",
-        customerName: { en: "Marinated olives" },
-        kitchenName: "OLV",
+        name: "Lager",
         categoryId: fx.categoryId,
         pricingUnit: "each",
-        unitPrice: "2.00",
+        unitPrice: "3.00",
         vatClass: "general",
-      }),
-    );
-    const withExtras = await send(
-      fx.app,
-      "GET",
-      `${path}&extraId=${product.id}&extraId=${second.id}`,
-      fx.managerCookie,
-    );
-    expect(withExtras.status).toBe(200);
-    expect(await withExtras.json()).toMatchObject({
-      extras: [{ productId: product.id }, { productId: second.id }],
-      extrasWaitOnDish: false,
+      });
+      await addProductToMenu(tx, { menuId: fx.menuId, productId: product.id });
+      const period = await saveMenuPeriod(tx, cfg, dining.id, {
+        name: "Lunch",
+        menuId: fx.menuId,
+        staffMenuIds: [],
+        colour: "green",
+      });
+      const [station] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: fx.locationId, name: "Downstairs bar" })
+        .returning({ id: kitchenStations.id });
+      return {
+        lunch: period.id,
+        lager: product.id,
+        downstairs: station!.id,
+        department: dining.id,
+      };
     });
-    const unknown = await send(
-      fx.app,
-      "GET",
-      `${path}&extraId=00000000-0000-4000-8000-000000000000`,
-      fx.managerCookie,
-    );
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({
-      error: { code: "route.subject_not_found", params: { subject: "product" } },
+    return { ...fx, lunch, lager, downstairs, department };
+  };
+  const address = (fx: { categoryId: string }) => ({
+    row: { kind: "category", categoryId: fx.categoryId },
+    zoneId: null,
+  });
+  const at = (stationId: string) => ({ kind: "station", stationId });
+
+  it("saves a cell's Lunch line and the model shows it, with Lunch's department and products", async () => {
+    const fx = await lunchFixture();
+    const periods = [{ periodId: fx.lunch, target: at(fx.downstairs) }];
+    const saved = await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, {
+      address: address(fx),
+      target: at(fx.stationId),
+      periods,
     });
-    expect(
-      (
-        await send(
-          fx.app,
-          "GET",
-          "/management-api/venue-service/routing/explain?productId=bad",
-          fx.managerCookie,
-        )
-      ).status,
-    ).toBe(400);
-  });
-});
-
-it.each([
-  "weekday=5",
-  "time=22:00",
-  "weekday=7&time=22:00",
-  "weekday=5&time=24:00",
-  "weekday=&time=22:00",
-  "weekday=1.5&time=22:00",
-  "weekday=5&time=2:00",
-  "date=2026-10-09",
-  "date=2026-02-30&time=20:00",
-  "date=09-10-2026&time=20:00",
-  "date=2026-10-09&weekday=5&time=20:00",
-])("refuses invalid explanation time: %s", async (query) => {
-  const fx = await fixture();
-  const response = await send(
-    fx.app,
-    "GET",
-    `/management-api/venue-service/routing/explain?productId=${fx.categoryId}&${query}`,
-    fx.managerCookie,
-  );
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "when" } },
-  });
-});
-
-it("applies scheduled hours through the explain route and honors manual open only for now", async () => {
-  const fx = await fixture();
-  const product = await withTransaction(db, async (tx) => {
-    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, fx.locationId));
-    const cfg = { locationId: fx.locationId };
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ ...cfg, name: "Upstairs" })
-      .returning();
-    await setRoutingCell(
-      tx,
-      cfg,
-      { row: { kind: "category", categoryId: fx.categoryId }, zoneId: null },
-      { kind: "station", stationId: station!.id },
-    );
-    await seedStationWeek(tx, cfg, station!.id, [
-      { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-    ]);
-    await setStationToday(tx, cfg, station!.id, "open", new Date());
-    return {
-      id: (
-        await createProduct(tx, {
-          catalogueId: fx.menuId,
-          name: "Lager",
-          categoryId: fx.categoryId,
-          pricingUnit: "each",
-          unitPrice: "3.00",
-          vatClass: "general",
-        })
-      ).id,
-      stationId: station!.id,
+    expect(saved.status).toBe(204);
+    const model = (await (await send(fx.app, "GET", base, fx.managerCookie)).json()) as {
+      cells: unknown[];
+      periods: unknown[];
     };
-  });
-  const path = `/management-api/venue-service/routing/explain?productId=${product.id}`;
-  const now = await send(fx.app, "GET", path, fx.managerCookie);
-  expect(now.status).toBe(200);
-  expect(await now.json()).toMatchObject({
-    route: { kind: "station", stationId: product.stationId },
-    fallbacks: [],
-    clockReadable: true,
-  });
-  const scheduled = await send(fx.app, "GET", `${path}&weekday=5&time=22:00`, fx.managerCookie);
-  expect(scheduled.status).toBe(200);
-  expect(await scheduled.json()).toMatchObject({
-    route: null,
-    noReplacement: true,
-    clockReadable: true,
-    fallbacks: [{ stationId: product.stationId, why: "out_of_hours" }],
-  });
-});
-
-it("previews a date and local time with that date's special hours through the explain route", async () => {
-  const fx = await fixture();
-  const product = await withTransaction(db, async (tx) => {
-    await tx
-      .update(locations)
-      .set({ timeZone: "Europe/Madrid" })
-      .where(eq(locations.id, fx.locationId));
-    const cfg = { locationId: fx.locationId };
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ ...cfg, name: "Upstairs" })
-      .returning();
-    await setRoutingCell(
-      tx,
-      cfg,
-      { row: { kind: "category", categoryId: fx.categoryId }, zoneId: null },
-      { kind: "station", stationId: station!.id },
-    );
-    await saveSpecialDate(
-      tx,
-      cfg,
-      null,
+    expect(model.cells).toEqual([{ ...address(fx), target: at(fx.stationId), periods }]);
+    expect(model.periods).toEqual([
       {
-        date: "2026-10-09",
-        name: "Staff party",
-        closeWholeVenue: true,
-        cells: [],
+        id: fx.lunch,
+        departmentId: fx.department,
+        departmentName: "Dining",
+        name: "Lunch",
+        colour: "green",
+        productIds: [fx.lager],
       },
-      new Date("2026-09-01T10:00:00Z"),
-    );
-    return {
-      id: (
-        await createProduct(tx, {
-          catalogueId: fx.menuId,
-          name: "Shandy",
-          categoryId: fx.categoryId,
-          pricingUnit: "each",
-          unitPrice: "3.00",
-          vatClass: "general",
-        })
-      ).id,
-      stationId: station!.id,
+    ]);
+  });
+
+  it("answers a refused line with its status: 409 route.period_invalid, 404 for an unknown period", async () => {
+    const fx = await lunchFixture();
+    const unknown = crypto.randomUUID();
+    for (const [periods, status, error] of [
+      [
+        [
+          { periodId: fx.lunch, target: at(fx.downstairs) },
+          { periodId: fx.lunch, target: { kind: "no_preparation" } },
+        ],
+        409,
+        { code: "route.period_invalid", params: { periodId: fx.lunch, reason: "repeated" } },
+      ],
+      [
+        [{ periodId: unknown, target: at(fx.downstairs) }],
+        404,
+        { code: "route.subject_not_found", params: { subject: "period", id: unknown } },
+      ],
+    ] as const) {
+      const response = await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, {
+        address: address(fx),
+        target: at(fx.stationId),
+        periods,
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toEqual({ error });
+    }
+  });
+
+  it("refuses periods on the default cell by its address, on a cleared cell and in a malformed list by field periods", async () => {
+    const fx = await lunchFixture();
+    const lunchLine = { periodId: fx.lunch, target: at(fx.downstairs) };
+    const refusals: [Record<string, unknown>, string][] = [
+      [
+        {
+          address: { row: { kind: "all" }, zoneId: null },
+          target: at(fx.stationId),
+          periods: [lunchLine],
+        },
+        "address",
+      ],
+      [{ address: address(fx), target: null, periods: [lunchLine] }, "periods"],
+      [{ address: address(fx), target: null, periods: [] }, "periods"],
+      [{ address: address(fx), target: at(fx.stationId), periods: lunchLine }, "periods"],
+      [{ address: address(fx), target: at(fx.stationId), periods: [null] }, "periods"],
+      [
+        { address: address(fx), target: at(fx.stationId), periods: [{ periodId: fx.lunch }] },
+        "periods",
+      ],
+      [
+        {
+          address: address(fx),
+          target: at(fx.stationId),
+          periods: [{ periodId: fx.lunch, target: null }],
+        },
+        "periods",
+      ],
+      [
+        { address: address(fx), target: at(fx.stationId), periods: [{ ...lunchLine, extra: 1 }] },
+        "periods",
+      ],
+      [
+        {
+          address: address(fx),
+          target: at(fx.stationId),
+          periods: [{ ...lunchLine, periodId: "lunch" }],
+        },
+        "periods",
+      ],
+      [
+        {
+          address: address(fx),
+          target: at(fx.stationId),
+          periods: [{ periodId: fx.lunch, target: { kind: "station" } }],
+        },
+        "periods",
+      ],
+    ];
+    for (const [body, field] of refusals) {
+      for (const [method, path, sent] of [
+        ["PUT", `${base}/cell`, body],
+        ["POST", `${base}/preview`, { kind: "cell", ...body }],
+      ] as const) {
+        const response = await send(fx.app, method, path, fx.managerCookie, sent);
+        expect(response.status, `${method} ${JSON.stringify(body)}`).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "management.request_invalid", params: { field } },
+        });
+      }
+    }
+    const model = (await (await send(fx.app, "GET", base, fx.managerCookie)).json()) as {
+      cells: unknown[];
     };
+    expect(model.cells).toEqual([]);
   });
-  const path = `/management-api/venue-service/routing/explain?productId=${product.id}`;
-  const special = await send(fx.app, "GET", `${path}&date=2026-10-09&time=20:00`, fx.managerCookie);
-  expect(special.status).toBe(200);
-  expect(await special.json()).toMatchObject({
-    fallbacks: [{ stationId: product.stationId, why: "out_of_hours" }],
-  });
-  const weekday = await send(fx.app, "GET", `${path}&weekday=5&time=20:00`, fx.managerCookie);
-  expect(await weekday.json()).toMatchObject({
-    route: { kind: "station", stationId: product.stationId },
-    fallbacks: [],
-  });
-  const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
-  const skipped = await send(
-    fx.app,
-    "GET",
-    `${path}&date=${forward.date}&time=${minutesAfter(forward.before, 1)}`,
-    fx.managerCookie,
-  );
-  expect(skipped.status).toBe(400);
-  expect(await skipped.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "time" } },
+
+  it("previews adding a Lunch line as the cell's products moving during Lunch alone", async () => {
+    const fx = await lunchFixture();
+    await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, {
+      address: address(fx),
+      target: at(fx.stationId),
+    });
+    const response = await send(fx.app, "POST", `${base}/preview`, fx.managerCookie, {
+      kind: "cell",
+      address: address(fx),
+      target: at(fx.stationId),
+      periods: [{ periodId: fx.lunch, target: at(fx.downstairs) }],
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        productId: fx.lager,
+        productName: "Lager",
+        zoneId: fx.zoneId,
+        zoneName: "Terrace",
+        from: at(fx.stationId),
+        to: at(fx.downstairs),
+        toNoReplacement: false,
+        periodIds: [fx.lunch],
+      },
+    ]);
   });
 });
 

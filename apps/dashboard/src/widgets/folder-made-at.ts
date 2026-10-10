@@ -1,10 +1,13 @@
 import {
+  cellKey,
   chooseMaker,
   folderAncestors,
   followFallbacks,
   selectionRulesFromModel,
   selectRoutingCell,
+  targetKey,
   type MakerChoice,
+  type RouteTarget,
   type RoutingModel,
   type RoutingRules,
 } from "@waitron/venue-service/routing";
@@ -51,10 +54,17 @@ function categoryChoice(
   const { target, decidedBy } = selectRoutingCell(rules, { kind: "category", categoryId }, zoneId);
   if (target?.kind !== "station" || decidedBy?.kind !== "cell")
     return { route: target, decidedBy, fallbacks: [], noReplacement: false };
+  return { ...targetChoice(rules, target), decidedBy };
+}
+
+/** Where a cell's target sends work, its station's fallbacks followed. */
+function targetChoice(rules: RoutingRules, target: RouteTarget): MakerChoice {
+  if (target.kind !== "station")
+    return { route: target, decidedBy: null, fallbacks: [], noReplacement: false };
   const { stationId, steps } = followFallbacks(rules, target.stationId, null);
   return {
     route: stationId === null ? null : { kind: "station", stationId },
-    decidedBy,
+    decidedBy: null,
     fallbacks: steps,
     noReplacement: stationId === null,
   };
@@ -63,7 +73,8 @@ function categoryChoice(
 /** Each category's baseline route, worked out with the shared routing rules the way the server
  * works out a product row's (`describeMakers`): Every zone, and the time of day not applied, though
  * a switched-off station's fallback is followed. The baseline varies when an active zone's outcome,
- * or an active product's inside, differs from it. */
+ * or an active product's inside, differs from it, plainly or by a period line, and when its
+ * deciding cell has period lines. */
 export function folderMadeAt(
   routing: RoutingModel,
   categories: readonly CategorySummary[],
@@ -95,6 +106,21 @@ export function folderMadeAt(
       if (baseline !== undefined && outcomeOf(baseline) !== outcome) elsewhere.add(id);
     }
   };
+  const linesOf = new Map(routing.cells.map((cell) => [cellKey(cell), cell.periods ?? []]));
+  const periodDepartment = new Map(
+    routing.periods.map(({ id, departmentId }) => [id, departmentId]),
+  );
+  const zoneDepartment = new Map(routing.zones.map(({ id, departmentId }) => [id, departmentId]));
+  /** Compares a choice and its deciding cell's period lines; in a zone, only the lines of that
+   * zone's department, the only ones routing applies there. */
+  const compareChoice = (categoryId: string | null, zone: string | null, choice: MakerChoice) => {
+    compare(categoryId, outcomeOf(choice));
+    if (choice.decidedBy?.kind !== "cell") return;
+    for (const { periodId, target } of linesOf.get(cellKey(choice.decidedBy.address)) ?? []) {
+      if (zone !== null && periodDepartment.get(periodId) !== zoneDepartment.get(zone)) continue;
+      compare(categoryId, outcomeOf(targetChoice(rules, target)));
+    }
+  };
   // A variant routes by its product's id and category, so its product's answer is its own.
   for (const product of products) {
     if (!product.active) continue;
@@ -104,10 +130,10 @@ export function folderMadeAt(
       categoryId: product.primaryCategoryId,
     };
     for (const zone of zones)
-      compare(facts.categoryId, outcomeOf(chooseMaker(rules, facts, zone, null)));
+      compareChoice(facts.categoryId, zone, chooseMaker(rules, facts, zone, null));
   }
   for (const { id } of categories)
-    for (const zone of zones) compare(id, outcomeOf(categoryChoice(rules, id, zone)));
+    for (const zone of zones) compareChoice(id, zone, categoryChoice(rules, id, zone));
   const restrictedByDate = new Set(
     routing.stationTimes
       .filter(({ specialDateRestricts }) => specialDateRestricts === true)
@@ -123,6 +149,14 @@ export function folderMadeAt(
         restrictedByDate.has(stationId))
     );
   };
+
+  const linesAt = new Set(
+    routing.cells
+      .filter(({ target, periods }) =>
+        (periods ?? []).some((line) => targetKey(line.target) !== targetKey(target)),
+      )
+      .map(cellKey),
+  );
 
   const result = new Map<string, FolderMadeAt>();
   for (const [id, choice] of baselines) {
@@ -154,7 +188,10 @@ export function folderMadeAt(
     result.set(id, {
       maker,
       source,
-      someElsewhere: elsewhere.has(id) || (route?.kind === "station" && timed(route.stationId)),
+      someElsewhere:
+        elsewhere.has(id) ||
+        (route?.kind === "station" && timed(route.stationId)) ||
+        (decidedBy?.kind === "cell" && linesAt.has(cellKey(decidedBy.address))),
     });
   }
   return result;

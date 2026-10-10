@@ -72,7 +72,9 @@ Moving a product or renaming a category does not rewrite recorded sale lines. Se
 
 The routing grid walks a product's category ancestors. After the product's own row, the first
 category row up the chain with a cell for the order's service zone, or for Every zone, decides, and
-All categories comes last (`selectRoutingCell`, `packages/venue-service/src/routing.ts`). See
+All categories comes last (`selectRoutingCell`, `packages/venue-service/src/routing.ts`). In the
+deciding cell, a period choice for the period running in the zone's department replaces the cell's
+own choice; an order with no zone, and Made at above, use the cell's own choice. See
 [the routing grid plan](../superpowers/plans/2026-10-05-routing-grid.md), which replaced the
 claims and ordered exceptions of
 [the earlier design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
@@ -443,7 +445,7 @@ keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
 cascades. The dialog counts the routing rules each answer
 removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
-Prep Stations' tester after changing the category tree. A variant is routed by its product's
+Prep stations' Routing tab after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
 
 ## API

@@ -37,6 +37,26 @@ describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => 
     await expectNoA11yViolations(host);
   });
 
+  test("a strip faded at both ends, with a marked tab under a fade, stays accessible", async () => {
+    const el = (await mountThemed(
+      '<wt-tabs label="Puestos de preparación"><p slot="routing">Enrutamiento</p></wt-tabs>',
+      theme,
+    )) as WtTabs;
+    el.items = [
+      { key: "stations", label: "Estaciones" },
+      { key: "routing", label: "Enrutamiento" },
+      { key: "watchers", label: "Puntos de seguimiento", marked: "cambios sin publicar" },
+      { key: "settings", label: "Ajustes" },
+    ];
+    el.value = "routing";
+    host.style.width = "260px";
+    await el.updateComplete;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    expect(el.dataset.overflow).toBe("both");
+    await expectNoA11yViolations(host);
+  });
+
   test("a marked tab, selected and not, stays accessible", async () => {
     const el = (await mountThemed(
       '<wt-tabs label="Lunch Menu"><p slot="structure">Structure</p><p slot="preview">Preview</p></wt-tabs>',

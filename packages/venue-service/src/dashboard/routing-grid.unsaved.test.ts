@@ -7,12 +7,13 @@ import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import { PrepStationsScreen } from "./prep-stations-screen.js";
 const view: PrepStationsView = {
   routing: {
-    zones: [{ id: "terrace", name: "Terrace" }],
+    zones: [{ id: "terrace", name: "Terrace", departmentId: null }],
     categories: [
       { id: "drinks", name: "Drinks", parentId: null },
       { id: "food", name: "Food", parentId: null },
     ],
     products: [{ id: "bread", name: "Bread", categoryId: "food" }],
+    periods: [],
     cells: [
       {
         row: { kind: "category", categoryId: "drinks" },
@@ -65,7 +66,6 @@ const view: PrepStationsView = {
   ],
   zones: [{ id: "terrace", name: "Terrace" }],
   products: [{ id: "bread", name: "Bread" }],
-  testProducts: [{ id: "bread", name: "Bread" }],
   printers: [],
   stationPrinters: [],
   devices: [],
@@ -115,11 +115,6 @@ async function mount(write?: Promise<void>, refresh?: Promise<void>) {
       if (++reads > 1 && refresh) await refresh;
       return structuredClone(view);
     },
-    readStationHealth: async () => ({
-      capturedAt: "2026-10-07T08:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
-    }),
     preview: async () => [move],
     setCell: async (address: unknown, target: unknown) => {
       writes.push({ address, target });
@@ -139,25 +134,42 @@ async function mount(write?: Promise<void>, refresh?: Promise<void>) {
 type Grid = HTMLElement & { updateComplete: Promise<unknown> };
 const grid = (screen: PrepStationsScreen) =>
   screen.shadowRoot!.querySelector<Grid>("venue-routing-grid")!;
-const combo = (screen: PrepStationsScreen, row: string, zone: string) =>
-  grid(screen).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
+const cellOf = (screen: PrepStationsScreen, row: string, zone: string) =>
+  grid(screen).shadowRoot!.querySelector<HTMLElement>(
+    `td[data-row="${row}"][data-zone="${zone}"]`,
   )!;
+const cellError = (screen: PrepStationsScreen, row: string, zone: string) =>
+  cellOf(screen, row, zone).querySelector('[data-test="cell-error"]')?.textContent!.trim() ?? "";
+const editorOf = (screen: PrepStationsScreen) =>
+  grid(screen).shadowRoot!.querySelector<HTMLElementTagNameMap["routing-cell-editor"]>(
+    "routing-cell-editor",
+  );
 async function shown(screen: PrepStationsScreen, row: string, zone: string) {
   await screen.updateComplete;
   await grid(screen).updateComplete;
-  const box = combo(screen, row, zone);
-  await box.updateComplete;
-  return box.value;
+  return cellOf(screen, row, zone).querySelector<HTMLElement>('button[data-test="routing-cell"]')!
+    .dataset.target;
 }
+/** Opens the cell's editor, picks `label` for any other time and saves. */
 async function choose(screen: PrepStationsScreen, row: string, zone: string, label: string) {
   await grid(screen).updateComplete;
-  const box = combo(screen, row, zone);
-  await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-  const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (o) => o.textContent!.trim() === label,
+  cellOf(screen, row, zone).querySelector<HTMLElement>('button[data-test="routing-cell"]')!.click();
+  await grid(screen).updateComplete;
+  const editor = editorOf(screen)!;
+  await editor.updateComplete;
+  const box = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="target"]',
   )!;
-  await userEvent.click(option);
+  const option = box.options.find((o) => o.label === label)!;
+  box.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: option.value },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>('[data-test="save-cell"]')!.click();
 }
 async function preview(screen: PrepStationsScreen) {
   await expect
@@ -260,6 +272,18 @@ describe("a pending routing cell choice", () => {
         .toBeNull();
       expect((await question()).open).toBe(false);
       expect(await shown(screen, "c:drinks", "every")).toBe("station:bar");
+      // The editor is still open and still holds the choice, so leaving asks until it is closed.
+      const editor = editorOf(screen)!;
+      expect(editor.open).toBe(true);
+      expect(unload()).toBe(true);
+      const modal = editor.shadowRoot!.querySelector("wt-modal")!;
+      const closed = new Promise((resolve) =>
+        modal.addEventListener("wt-close", resolve, { once: true }),
+      );
+      editor.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-cell"]')!.click();
+      await answer("discard");
+      await closed;
+      await expect.poll(() => editorOf(screen)).toBeNull();
       expect(unload()).toBe(false);
       expect(writes).toEqual([]);
     });
@@ -280,6 +304,7 @@ describe("a pending routing cell choice", () => {
     ]);
     // The refresh is still open: the written choice is saved, so nothing asks.
     expect(screen.shadowRoot!.querySelector("[data-test=routing-preview]")).toBeNull();
+    await expect.poll(() => editorOf(screen)).toBeNull();
     expect(unload()).toBe(false);
     let left = false;
     await app.leave.coordinator.request({
@@ -340,7 +365,7 @@ describe("a pending routing cell choice", () => {
       await screen.updateComplete;
       expect(screen.shadowRoot!.querySelector("[data-test=routing-preview]")).not.toBeNull();
       expect(await shown(screen, "c:food", "every")).toBe("station:kitchen");
-      expect(combo(screen, "c:drinks", "terrace").error).toBe("");
+      expect(cellError(screen, "c:drinks", "terrace")).toBe("");
       expect(grid(screen).shadowRoot!.textContent).not.toContain("This station is disabled");
       expect(unload()).toBe(true);
       changeTab(screen, "stations");

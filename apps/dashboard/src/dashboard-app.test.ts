@@ -3763,7 +3763,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
 describe("dashboard URL navigation", () => {
   it.each([
-    ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/tickets"],
+    ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/stations"],
     ["supervisor", ["venue.view"], ["venue-service"], "/manage/prep-stations/view/stations"],
     ["manager", [], [], "/manage/overview"],
   ] as const)(
@@ -3792,12 +3792,6 @@ describe("dashboard URL navigation", () => {
               products: [],
               cells: [],
               canMakeDefault: false,
-            } as never;
-          if (path === "/management-api/stations/health")
-            return {
-              capturedAt: "2026-10-06T10:00:00Z",
-              stations: [],
-              outputsDown: { printersDown: [], screensDark: [] },
             } as never;
           if (path === "/management-api/stations/outputs-down")
             return { printersDown: [], screensDark: [] } as never;
@@ -3853,12 +3847,6 @@ describe("dashboard URL navigation", () => {
             clockReadable: true,
           } as never;
         if (path === "/management-api/stations?includeDisabled=true") return [] as never;
-        if (path === "/management-api/stations/health")
-          return {
-            capturedAt: "2026-10-05T12:00:00Z",
-            stations: [],
-            outputsDown: { printersDown: [], screensDark: [] },
-          } as never;
         if (path === "/management-api/stations/outputs-down")
           return { printersDown: [], screensDark: [] } as never;
         return [] as never;
@@ -3882,8 +3870,8 @@ describe("dashboard URL navigation", () => {
       expect(reads).not.toContain(path);
   });
 
-  it("preserves a prep station tester product when the dashboard restores the screen", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/test/lager");
+  it("an old tester link opens the Routing tab", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -3911,18 +3899,15 @@ describe("dashboard URL navigation", () => {
               stations: [],
               canMakeDefault: false,
             } as never)
-          : path === "/management-api/stations/health"
-            ? ({
-                capturedAt: "2026-10-05T12:00:00Z",
-                stations: [],
-                outputsDown: { printersDown: [], screensDark: [] },
-              } as never)
-            : path.startsWith("/management-api/venue-service/routing/explain?")
-              ? ({ route: null, decidedBy: null, fallbacks: [], clockReadable: true } as never)
-              : stubRequest(path, method, body, options),
+          : stubRequest(path, method, body, options),
     });
     await flush(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/lager");
+    const screen = el.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;
+    await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
+    const tabs = screen.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!;
+    expect(tabs.value).toBe("routing");
+    expect(screen.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
+    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
   });
   it.each([
     { modules: ["venue-service"], permissions: [] },

@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4 and 7, slice 5 Part B and slice 6 Parts B/C, each planned
+  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Parts B/C, each planned
   then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -33,11 +33,11 @@ their full text.
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
-  requests that can both start now that slices 1, 2 and 3 Part A have landed: Part A — combined
-  tickets on shared printers, period choices in routing cells, the station editor, and the
-  "Where is this made?" tester and the Stations tab's live kitchen numbers removed; Part B —
-  station hours and fallbacks removed, closing a station with open dishes asks what to do with
-  them, and each station's worked-out times. Its new decisions 29–37 wait for the owner.
+  requests. Part A is built: combined tickets on shared printers, period choices in routing cells,
+  the station editor, and the "Where is this made?" tester and the Stations tab's live kitchen
+  numbers removed. Part B, still to build and re-grounded on main first: station hours and
+  fallbacks removed, closing a station with open dishes asks what to do with them, and each
+  station's worked-out times. Its new decisions 29–37 wait for the owner.
   Slice 6's remaining work is Part B's closed-times summary and Part C's floor-plan entry,
   in Lane D after slice 2/A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
 

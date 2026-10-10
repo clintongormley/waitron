@@ -479,6 +479,9 @@ function validateDepartmentTransfers(tables: Tables): void {
  * not hold, and a zone that is switched off or has no service configuration. A zone whose
  * department is switched off is refused with the grid's own `service_zone.not_found`, its params
  * carrying the zone and department ids, the row, and each name the export holds as non-empty text.
+ * A cell's period choice is refused (`routing_cell_periods.<column>`) for a cell, period or station
+ * the bundle does not hold, a department that is not the period's, a zone cell's period of any
+ * department but its zone's, a second choice for one cell and period, and a bad target.
  */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);
@@ -545,6 +548,43 @@ export function validateRoutingConfiguration(tables: Tables): void {
           ? { row: "product" as const, ...nameOf("name", productRows.get(product)) }
           : { row: noCategory ? ("no_category" as const) : ("all" as const) }),
     });
+  }
+  validateRoutingCellPeriods(tables, stations, zoneDepartment);
+}
+
+/**
+ * Does not ask whether the period's menus hold any of the cell's products: a line saved before its
+ * period's menus changed stays valid, so refusing it would make a good export unimportable.
+ */
+function validateRoutingCellPeriods(
+  tables: Tables,
+  stations: Set<unknown>,
+  zoneDepartment: Map<unknown, unknown>,
+): void {
+  const cellZone = new Map(
+    (tables.routing_cells ?? []).map((row) => [row.id, row.zone_id ?? null]),
+  );
+  const periodDepartment = new Map(
+    (tables.menu_periods ?? []).map((row) => [row.id, row.department_id]),
+  );
+  const taken = new Set<string>();
+  for (const row of tables.routing_cell_periods ?? []) {
+    if (!cellZone.has(row.cell_id)) refuse("routing_cell_periods.cell_id");
+    if (!periodDepartment.has(row.period_id)) refuse("routing_cell_periods.period_id");
+    const department = periodDepartment.get(row.period_id);
+    if (row.department_id !== department) refuse("routing_cell_periods.department_id");
+    const zone = cellZone.get(row.cell_id);
+    if (zone !== null && zoneDepartment.get(zone) !== department)
+      refuse("routing_cell_periods.period_id");
+    const key = JSON.stringify([row.cell_id, row.period_id]);
+    if (taken.has(key)) refuse("routing_cell_periods.period_id");
+    taken.add(key);
+    if (row.no_preparation !== 0 && row.no_preparation !== 1)
+      refuse("routing_cell_periods.no_preparation");
+    const station = row.station_id ?? null;
+    if ((station === null) !== (row.no_preparation === 1))
+      refuse("routing_cell_periods.station_id");
+    if (station !== null && !stations.has(station)) refuse("routing_cell_periods.station_id");
   }
 }
 
@@ -670,6 +710,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "menu_period_staff_menus" },
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
+    { name: "routing_cell_periods" },
     { name: "special_date_hours" },
     { name: "zone_closed_times" },
     { name: "special_date_hours_periods" },

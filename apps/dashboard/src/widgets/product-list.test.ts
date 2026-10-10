@@ -206,7 +206,7 @@ describe("product-list", () => {
       "No replacement (Cocktail bar is disabled)",
     );
   });
-  it("shows the made-at station, zone variation, and tester link", async () => {
+  it("shows the made-at station, zone variation, and Routing link", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "lager" }), product({ id: "mojito" })],
@@ -231,7 +231,9 @@ describe("product-list", () => {
     expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
     const cell = cellUnder(root, "mojito", "Made at");
     expect(cell.textContent).toContain("Cocktail bar · varies by service zone");
-    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/mojito");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe(
+      "/manage/prep-stations/view/routing",
+    );
   });
   it("leaves a product's cell blank, without a link, when the made-at read has no entry for it", async () => {
     setLocale("en");
@@ -254,7 +256,7 @@ describe("product-list", () => {
     expect(cell.querySelector("a")).toBeNull();
     expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
   });
-  it("says nowhere, with the tester link, for a product the made-at read routes to no station", async () => {
+  it("says nowhere, with the Routing link, for a product the made-at read routes to no station", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bread" })],
@@ -271,7 +273,9 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     const cell = cellUnder(root, "bread", "Made at");
     expect(cell.textContent!.trim()).toBe("Nowhere");
-    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/bread");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe(
+      "/manage/prep-stations/view/routing",
+    );
   });
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
@@ -4170,7 +4174,7 @@ describe("a category's Made at", () => {
     }
   });
 
-  it("keeps a product row's own value and its tester link beside the categories'", async () => {
+  it("keeps a product row's own value and its Routing link beside the categories'", async () => {
     const { root } = await mountMadeAt(
       [["d", { maker: { kind: "no_preparation" }, source: { kind: "own" }, someElsewhere: true }]],
       {
@@ -4187,7 +4191,9 @@ describe("a category's Made at", () => {
     );
     const cell = madeAtCell(root, "cola");
     expect(cell.textContent!.trim()).toBe("Kitchen · varies by service zone");
-    expect(cell.querySelector("a")!.getAttribute("href")).toBe("/manage/prep-stations/test/cola");
+    expect(cell.querySelector("a")!.getAttribute("href")).toBe(
+      "/manage/prep-stations/view/routing",
+    );
   });
 
   it("speaks Spanish", async () => {

@@ -22,7 +22,6 @@ import {
   pointerElementsAt,
 } from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
-import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -40,40 +39,46 @@ import {
   targetKey,
   type CellAddress,
   type RouteTarget,
-  type RouteExplanation,
   type RoutingModel,
   type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { format, formatDate } from "./hours-view.js";
-import {
-  decisionSentence,
-  extraSentence,
-  fallbackSentences,
-  type ExplanationNames,
-} from "./routing-explanation.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
   PrepStationsApi,
   PrepStationsView,
   StationInput,
-  StationHealthSnapshot,
   WatcherInput,
 } from "./routing-client.js";
-import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
+import { type WatcherView } from "./watchers-seen.js";
 import "./routing-grid.js";
 import { rowInModel } from "./routing-grid-model.js";
-import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
+import type {
+  RoutingCellChange,
+  RoutingDefaultRefusal,
+  RoutingPending,
+  RoutingRefusal,
+} from "./routing-grid.js";
 import { t } from "./strings.js";
-import "./station-health-table.js";
+import "./station-table.js";
+import "./station-editor.js";
+import {
+  refusalOf,
+  stationPrinterOptions,
+  stationRefusalField,
+  type StationEditorSave,
+  type StationRefusal,
+} from "./station-editor.js";
 
 type StationAction =
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
 
 type Editor = { kind: "station" };
-const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
+type NewStation = StationInput & { printerIds: string[] };
+const PREP_TABS = ["stations", "routing", "watchers", "settings"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
@@ -87,7 +92,7 @@ const EVERY_MEMBER = "__every__";
 
 type SettingsDraft = {
   stationId: string;
-  field: "rest" | "fallback" | TimingField;
+  field: "fallback" | TimingField;
   value: string;
   fieldError: string;
   error: string;
@@ -139,33 +144,15 @@ export class PrepStationsScreen extends LitElement {
       wt-tabs::part(tab-actions) {
         max-width: 50%;
       }
-      wt-data-table::part(watcher-cell),
-      wt-data-table::part(printer-cell),
-      wt-data-table::part(screens-cell) {
+      wt-data-table::part(watcher-cell) {
         display: grid;
         gap: var(--wt-space-2);
         max-width: calc(var(--wt-tap-min) * 5);
         white-space: normal;
       }
-      wt-data-table::part(cell-actions) {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-      wt-data-table::part(edit-printers) {
-        border: 0;
-        background: transparent;
-        color: var(--wt-color-primary-text);
-        font: inherit;
-        cursor: pointer;
-        min-height: var(--wt-tap-min);
-        padding: 0;
-        text-decoration: underline;
-      }
       wt-data-table::part(inherited) {
         --wt-color-text: var(--wt-color-text-muted);
       }
-      wt-data-table::part(disabled-station),
       wt-data-table::part(disabled-watcher-cell) {
         color: var(--wt-color-text-muted);
       }
@@ -194,28 +181,6 @@ export class PrepStationsScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      .tester-when {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: end;
-        gap: var(--wt-space-2);
-      }
-      .tester-when label {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      .tester-when wt-combobox {
-        min-height: var(--wt-tap-min);
-      }
-      .tester-when wt-input {
-        min-height: var(--wt-tap-min);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        padding-inline: var(--wt-space-2);
-        font: inherit;
-      }
       .cards {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-field-max-width)), 1fr));
       }
@@ -238,8 +203,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private view?: PrepStationsView;
   @state() private settingsEditor?: SettingsDraft;
   @state() private settingsBusy = false;
-  @state() private printerEditor?: { stationId: string; ids: string[]; error: string };
-  @state() private printerBusy = false;
   @state() private watcherPrinterEditor?: {
     watcherId: string;
     ids: string[];
@@ -267,12 +230,13 @@ export class PrepStationsScreen extends LitElement {
   };
   @state() private watcherRemoval?: WatcherView;
   @state() private watcherRemoveError = "";
-  @state() private draft: StationInput = {
+  @state() private draft: NewStation = {
     name: "",
     displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    printerIds: [],
   };
   @state() private fieldError: Record<string, string> = {};
   @state() private error = "";
@@ -280,17 +244,6 @@ export class PrepStationsScreen extends LitElement {
   #readErrorShown = false;
   @state() private busy = false;
   @state() private stationAttempted = false;
-  @state() private testProduct = "";
-  @state() private testExtras: string[] = [];
-  @state() private testZone = "";
-  @state() private testWhen = "now";
-  @state() private testWeekday = 0;
-  @state() private testTime = "12:00";
-  @state() private testDate = "";
-  /** The server refused the chosen time because the clocks skip it on the chosen date. */
-  @state() private testTimeSkipped = false;
-  @state() private explanation?: RouteExplanation;
-  @state() private testError = "";
   @state() private stationAction?: StationAction;
   @state() private stationActionError = "";
   @state() private stationFieldError = "";
@@ -298,37 +251,26 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationOrder?: string[];
   @state() private stationAnnouncement = "";
   #stationDrag?: { id: string; pointerId: number; changed: boolean };
-  @state() private rename?: {
-    id: string;
-    name: string;
-    error: string;
-    invalid: boolean;
-    fieldError: boolean;
-  };
-  @state() private health?: StationHealthSnapshot;
-  #healthTimer?: ReturnType<typeof setInterval>;
+  /** The station the editor opened for; `token` tells one opening from the next. */
+  @state() private stationEdit?: { token: object; station: PrepStation };
+  @state() private stationEditBusy = false;
+  @state() private stationEditRefusal?: StationRefusal;
   #routingTimer?: ReturnType<typeof setInterval>;
-  #testRequest = 0;
   readonly #url = new UrlStateController(
     this,
     () => {
       if (this.#url.read("dashboard") !== "prep-stations") return;
-      this.testProduct = this.readOnly ? "" : (this.#url.read("test") ?? "");
       const requested = this.#url.read("view");
       this.tab =
         (this.readOnly ? (["stations"] as const) : PREP_TABS).find((tab) => tab === requested) ??
-        (requested === null && this.testProduct ? "routing" : "stations");
+        "stations";
       if (this.tab !== requested)
-        this.#url.write(
-          { dashboard: "prep-stations", view: this.tab, ...(this.readOnly ? { test: null } : {}) },
-          true,
-        );
-      void this.#explain();
+        this.#url.write({ dashboard: "prep-stations", view: this.tab }, true);
     },
     {
       basePath: "/manage",
       primary: "dashboard",
-      children: { "*": { view: "view", test: "test" } },
+      children: { "*": { view: "view" } },
     },
   );
   /** A cell choice whose route-change preview is open. */
@@ -341,6 +283,8 @@ export class PrepStationsScreen extends LitElement {
   /** The grid shows this choice at its address until the preview or save settles. */
   @state() private cellChoice: RoutingPending | null = null;
   @state() private cellRefusal: RoutingRefusal | null = null;
+  /** A refused Make default: shown on the page, as every station action's is, and in the editor. */
+  @state() private defaultRefusal: RoutingDefaultRefusal | null = null;
   /**
    * The refusal `#dropChoice` set, which a refresh that puts its row and zone back in the grid
    * clears.
@@ -361,12 +305,10 @@ export class PrepStationsScreen extends LitElement {
   /** A written choice the grid keeps showing until a read replaces the model. */
   #writtenChoice?: RoutingPending;
   #cellRun = 0;
-  #stationScope?: DraftScope<StationInput>;
-  #stationBaseline?: StationInput;
-  #renameScope?: DraftScope<{ name: string }>;
-  #renameBaseline?: { name: string };
+  #stationEditRun = 0;
+  #stationScope?: DraftScope<NewStation>;
+  #stationBaseline?: NewStation;
   #stationIdentity?: object;
-  #renameIdentity?: object;
   #watcherRenameScope?: DraftScope<{ name: string }>;
   #watcherRenameIdentity?: object;
   #watcherCellScope?: DraftScope<string[]>;
@@ -376,67 +318,15 @@ export class PrepStationsScreen extends LitElement {
   #stationActionScope?: DraftScope<string>;
   #stationActionIdentity?: object;
   #stationActionBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
-  #printerScope?: DraftScope<string[]>;
-  #printerIdentity?: object;
   #settingsScope?: DraftScope<string>;
   #settingsIdentity?: object;
   #leave?: LeaveCoordinator;
-
-  #printerCurrent(identity: object | undefined): boolean {
-    return this.isConnected && identity === this.#printerIdentity;
-  }
-  #syncPrinterDraft(): void {
-    if (!this.printerEditor) {
-      this.#printerScope?.dispose();
-      this.#printerScope = undefined;
-      this.#printerIdentity = undefined;
-    } else if (!this.#printerIdentity) {
-      const id = (this.#printerIdentity = {});
-      this.#leave ??= leaveCoordinatorFor(this);
-      this.#printerScope = draftScopeFor(this, {
-        id,
-        current: () => this.printerEditor!.ids,
-        snapshot: (ids) => [...ids],
-        equal: (a, b) => a.length === b.length && a.every((value) => b.includes(value)),
-        restore: (ids) => {
-          if (this.printerEditor)
-            this.printerEditor = { ...this.printerEditor, ids: [...ids], error: "" };
-        },
-      }).scope;
-    }
-  }
-  #leavePrinters(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
-    if (!this.#printerCurrent(identity) || this.printerBusy) return;
-    if (!this.#printerScope || !this.#leave) proceed();
-    else
-      void this.#leave!.request({
-        scopes: [this.#printerScope.id],
-        reason,
-        proceed: () => {
-          if (this.#printerCurrent(identity) && !this.printerBusy) proceed();
-        },
-      });
-  }
-  #openPrinters(stationId: string, ids: string[]): void {
-    this.#leavePrinters("navigation", this.#printerIdentity, () => {
-      this.printerEditor = undefined;
-      this.#syncPrinterDraft();
-      this.printerEditor = { stationId, ids: [...ids], error: "" };
-      this.#syncPrinterDraft();
-    });
-  }
-  #cancelPrinters(reason: LeaveReason, identity: object | undefined): void {
-    this.#leavePrinters(reason, identity, () => {
-      this.printerEditor = undefined;
-      this.#syncPrinterDraft();
-    });
-  }
 
   #settingsCurrent(identity: object | undefined): boolean {
     return this.isConnected && identity === this.#settingsIdentity;
   }
   #settingsValue(editor: SettingsDraft): string {
-    if (editor.field === "rest" || editor.field === "fallback") return editor.value;
+    if (editor.field === "fallback") return editor.value;
     const value = editor.value.trim();
     return value === "" ? "" : Number.isFinite(Number(value)) ? String(Number(value)) : value;
   }
@@ -530,36 +420,19 @@ export class PrepStationsScreen extends LitElement {
       this.#stationScope = draftScopeFor(this, {
         id,
         current: () => this.draft,
-        snapshot: (value) => ({ ...value }),
+        snapshot: (value) => ({ ...value, printerIds: [...value.printerIds] }),
         equal: (a, b) =>
-          Object.keys(a).every((key) =>
-            Object.is(a[key as keyof StationInput], b[key as keyof StationInput]),
+          (Object.keys(a) as (keyof NewStation)[]).every((key) =>
+            key === "printerIds"
+              ? a.printerIds.length === b.printerIds.length &&
+                a.printerIds.every((printerId) => b.printerIds.includes(printerId))
+              : Object.is(a[key], b[key]),
           ),
         restore: (value) => {
-          this.draft = { ...value };
+          this.draft = { ...value, printerIds: [...value.printerIds] };
         },
       }).scope;
       this.#stationScope.commit(this.#stationBaseline);
-    }
-    if (!this.rename) {
-      this.#renameBaseline = undefined;
-      this.#renameScope?.dispose();
-      this.#renameScope = undefined;
-      this.#renameIdentity = undefined;
-    } else if (!this.#renameIdentity) {
-      const id = (this.#renameIdentity = {});
-      this.#renameBaseline ??= { name: this.rename.name };
-      this.#leave ??= leaveCoordinatorFor(this);
-      this.#renameScope = draftScopeFor(this, {
-        id,
-        current: () => ({ name: this.rename!.name }),
-        snapshot: (value) => ({ ...value }),
-        equal: (a, b) => a.name.trim() === b.name.trim(),
-        restore: (value) => {
-          if (this.rename) this.rename = { ...this.rename, name: value.name };
-        },
-      }).scope;
-      this.#renameScope.commit(this.#renameBaseline);
     }
     if (!this.watcherRename) {
       this.#watcherRenameScope?.dispose();
@@ -688,25 +561,14 @@ export class PrepStationsScreen extends LitElement {
     });
   }
 
-  async #beforeStationClose(
-    reason: LeaveReason,
-    rename: boolean,
-    identity: object | undefined,
-  ): Promise<boolean> {
+  readonly #beforeAddClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy) return false;
-    const scope = rename ? this.#renameScope : this.#stationScope;
+    const identity = this.#stationIdentity;
+    const scope = this.#stationScope;
     if (!scope || !this.#leave) return true;
-    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
-    return (
-      identity === (rename ? this.#renameIdentity : this.#stationIdentity) &&
-      outcome === "proceeded"
-    );
-  }
-
-  readonly #beforeAddClose = (reason: LeaveReason) =>
-    this.#beforeStationClose(reason, false, this.#stationIdentity);
-  readonly #beforeRenameClose = (reason: LeaveReason) =>
-    this.#beforeStationClose(reason, true, this.#renameIdentity);
+    const outcome = await this.#leave.request({ scopes: [scope.id], reason, proceed() {} });
+    return identity === this.#stationIdentity && outcome === "proceeded";
+  };
 
   /** Dirty from the moment a choice's preview opens until Confirm saves it or Cancel drops it. */
   #syncCellDraft(): void {
@@ -781,28 +643,28 @@ export class PrepStationsScreen extends LitElement {
     this.#syncStationDrafts();
     this.#syncWatcherInlineDrafts();
     this.#syncSettingsDraft();
-    this.#syncPrinterDraft();
     this.#syncCellDraft();
     const changedState = changed as Map<PropertyKey, unknown>;
     if (changedState.has("view") && this.#writtenChoice !== undefined) {
       if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
       this.#writtenChoice = undefined;
     }
-    if (changedState.has("tab")) this.cellRefusal = null;
+    if (changedState.has("tab")) {
+      this.cellRefusal = null;
+      this.defaultRefusal = null;
+      this.#closeCellEditor();
+    }
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
-      this.testProduct = "";
       if (this.#url.read("dashboard") === "prep-stations")
-        this.#url.write({ dashboard: "prep-stations", view: "stations", test: null }, true);
+        this.#url.write({ dashboard: "prep-stations", view: "stations" }, true);
     }
   }
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
     void this.#load();
-    void this.#loadHealth();
     if (!this.api.liveData) {
-      this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
       this.#routingTimer = setInterval(() => void this.#load(), 60_000);
     }
   }
@@ -810,7 +672,6 @@ export class PrepStationsScreen extends LitElement {
     this.#cellRun++;
     if (
       this.#stationIdentity ||
-      this.#renameIdentity ||
       this.pending !== undefined ||
       this.cellChoice !== null ||
       this.stationAction !== undefined ||
@@ -825,9 +686,6 @@ export class PrepStationsScreen extends LitElement {
     this.watcherPrinterEditor = undefined;
     this.watcherCellBusy = false;
     this.watcherPrinterBusy = false;
-    this.printerEditor = undefined;
-    this.printerBusy = false;
-    this.#syncPrinterDraft();
     this.settingsEditor = undefined;
     this.settingsBusy = false;
     this.#settingsScope?.dispose();
@@ -844,40 +702,20 @@ export class PrepStationsScreen extends LitElement {
     this.#watcherRenameScope = undefined;
     this.#watcherRenameIdentity = undefined;
     this.#stationScope?.dispose();
-    this.#renameScope?.dispose();
+    this.stationEditBusy = false;
     this.pending = undefined;
     this.cellChoice = null;
     this.cellRefusal = null;
+    this.defaultRefusal = null;
     this.#writtenChoice = undefined;
     this.#cellRefreshing = undefined;
     this.#releaseCellScope();
     this.#stationScope = undefined;
-    this.#renameScope = undefined;
     this.#stationIdentity = undefined;
-    this.#renameIdentity = undefined;
     this.#leave = undefined;
-    if (this.#healthTimer) clearInterval(this.#healthTimer);
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
     this.#endStationDrag();
-  }
-  async #loadHealth() {
-    try {
-      await this.#queries.watch(
-        "health",
-        {
-          key: "venue-service:station-health",
-          dependencies: QUERY_DEPENDENCIES.health.map((type) => ({ type })),
-          refreshMs: 15_000,
-          read: () => this.api.readStationHealth(),
-        },
-        (value) => {
-          this.health = value;
-        },
-      );
-    } catch {
-      this.#showReadError(t("prep.load_error"));
-    }
   }
   async #load() {
     try {
@@ -910,7 +748,6 @@ export class PrepStationsScreen extends LitElement {
           ) {
             this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
           }
-          if (this.testProduct) void this.#explain(true);
         },
       );
     } catch {
@@ -973,12 +810,38 @@ export class PrepStationsScreen extends LitElement {
       { name, date: formatDate(params.date) },
     );
   }
+  /** The grid's open editor closes once its choice is written. */
+  #closeCellEditor(): void {
+    this.renderRoot.querySelector("venue-routing-grid")?.closeEditor();
+  }
   async #makeDefault(stationId: string) {
-    const saved = await this.#act(
-      () => this.api.setDefaultStation(stationId),
-      (error) => this.#defaultRefusal(error),
-    );
-    if (saved && this.isConnected) this.cellRefusal = null;
+    if (this.busy || this.pending) return;
+    const address: CellAddress = { row: { kind: "all" }, zoneId: null };
+    const run = ++this.#cellRun;
+    this.busy = true;
+    this.#showError("");
+    this.defaultRefusal = null;
+    this.cellChoice = { address, target: { kind: "station", stationId } };
+    try {
+      await this.api.setDefaultStation(stationId);
+    } catch (error) {
+      if (this.#cellRun !== run || !this.isConnected) return;
+      const message = this.#defaultRefusal(error);
+      this.cellChoice = null;
+      this.#showError(message);
+      this.defaultRefusal = { ...refusalOf(error), message };
+      this.busy = false;
+      return;
+    }
+    if (this.#cellRun !== run || !this.isConnected) return;
+    this.cellChoice = null;
+    this.cellRefusal = null;
+    this.#closeCellEditor();
+    try {
+      await this.#load();
+    } finally {
+      if (this.#cellRun === run) this.busy = false;
+    }
   }
   /** Whether the grid still draws this coordinate: a refresh can remove its zone or its row. */
   #addressShown({ row, zoneId }: CellAddress): boolean {
@@ -990,15 +853,20 @@ export class PrepStationsScreen extends LitElement {
   #savedCell(address: CellAddress): RouteTarget | null {
     return this.view?.routing.cells.find((cell) => sameAddress(cell, address))?.target ?? null;
   }
-  async #chooseCell({ address, target }: RoutingCellChange) {
+  async #chooseCell({ address, target, periods }: RoutingCellChange) {
     if (this.busy || this.pending) return;
     const run = ++this.#cellRun;
     const isCurrent = () => this.isConnected && this.#cellRun === run;
-    this.cellChoice = { address, target };
+    this.cellChoice = periods === undefined ? { address, target } : { address, target, periods };
     this.cellRefusal = null;
     await this.#preview(
-      { kind: "cell", address, target },
-      () => this.api.setCell(address, target),
+      periods === undefined
+        ? { kind: "cell", address, target }
+        : { kind: "cell", address, target, periods },
+      () =>
+        periods === undefined
+          ? this.api.setCell(address, target)
+          : this.api.setCell(address, target, periods),
       isCurrent,
     );
   }
@@ -1022,13 +890,17 @@ export class PrepStationsScreen extends LitElement {
     else if (this.#addressShown(change.address)) await this.#saveCell(pending);
     else this.#dropChoice(change.address);
   }
-  /**
-   * A refresh removed the choice's row or zone before it could be saved. The All categories row
-   * is always drawn, so only its zone can be gone.
-   */
+  /** A refresh removed the choice's row or zone before it could be saved. */
   #dropChoice(address: CellAddress): void {
-    const { row, zoneId } = address;
     this.cellChoice = null;
+    this.#dropDraft(address);
+  }
+  /**
+   * A refresh removed the row or zone of a choice, or of the open editor's unsaved changes. The All
+   * categories row is always drawn, so only its zone can be gone.
+   */
+  #dropDraft(address: CellAddress): void {
+    const { row, zoneId } = address;
     const zoneGone =
       zoneId !== null && !this.view?.routing.zones.some((zone) => zone.id === zoneId);
     this.cellRefusal = this.#droppedRefusal = {
@@ -1051,6 +923,7 @@ export class PrepStationsScreen extends LitElement {
       message: t(
         codeOf(error) === "route.station_inactive" ? "prep.station_disabled" : "prep.save_error",
       ),
+      ...refusalOf(error),
     };
   }
   async #saveCell(pending: NonNullable<PrepStationsScreen["pending"]>) {
@@ -1066,6 +939,7 @@ export class PrepStationsScreen extends LitElement {
       return;
     }
     if (!pending.isCurrent()) return;
+    this.#closeCellEditor();
     if (this.#cellScopeOwner === pending) this.#cellScope?.commit(targetKey(pending.change.target));
     this.#cellRefreshing = pending;
     this.pending = undefined;
@@ -1099,9 +973,9 @@ export class PrepStationsScreen extends LitElement {
         .map((station) => station.id)
     );
   }
-  #healthTable() {
+  #stationTable() {
     return this.renderRoot
-      .querySelector("prep-station-health-table")
+      .querySelector("prep-station-table")
       ?.shadowRoot?.querySelector("wt-data-table");
   }
   #moveStation(id: string, to: number) {
@@ -1122,9 +996,9 @@ export class PrepStationsScreen extends LitElement {
     await this.#act(() => this.api.reorderStations(ids));
     this.stationOrder = undefined;
     await this.updateComplete;
-    const health = this.renderRoot.querySelector("prep-station-health-table");
-    if (health) await health.updateComplete;
-    const table = this.#healthTable();
+    const stations = this.renderRoot.querySelector("prep-station-table");
+    if (stations) await stations.updateComplete;
+    const table = this.#stationTable();
     if (table) await table.updateComplete;
     table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
   }
@@ -1137,7 +1011,7 @@ export class PrepStationsScreen extends LitElement {
     this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
     this.#stationPoint = { x: event.clientX, y: event.clientY };
     this.#stationScroll.start(event.currentTarget as Element, this.#stationPoint, () => {
-      const root = this.#healthTable()?.shadowRoot;
+      const root = this.#stationTable()?.shadowRoot;
       const row = pointerElementsAt(this.#stationPoint.x, this.#stationPoint.y).find(
         (element) => element.matches("tbody tr") && root?.contains(element),
       );
@@ -1157,7 +1031,7 @@ export class PrepStationsScreen extends LitElement {
     this.#trackStationDrag();
   };
   #trackStationDrag(
-    rows: Iterable<Element> = this.#healthTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
+    rows: Iterable<Element> = this.#stationTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
   ): void {
     const drag = this.#stationDrag;
     if (!drag) return;
@@ -1226,19 +1100,14 @@ export class PrepStationsScreen extends LitElement {
       >
         <wt-button
           align="start"
-          data-test=${`rename-${station.id}`}
+          data-test=${`edit-${station.id}`}
           ?disabled=${this.busy}
           @click=${() => {
-            this.#renameBaseline = undefined;
-            this.rename = {
-              id: station.id,
-              name: station.name,
-              error: "",
-              invalid: false,
-              fieldError: false,
-            };
+            this.stationEditBusy = false;
+            this.stationEditRefusal = undefined;
+            this.stationEdit = { token: {}, station };
           }}
-          >${t("venue.rename")}</wt-button
+          >${t("venue.edit")}</wt-button
         >
         ${
           station.active && !station.isDefault
@@ -1264,99 +1133,103 @@ export class PrepStationsScreen extends LitElement {
         >
       </wt-row-actions>`;
   }
-  async #saveStationName() {
-    if (saveActionState(this.#renameScope).unchanged) return;
-    const draft = this.rename;
-    if (!draft || this.busy || !this.view?.stations.some((station) => station.id === draft.id))
-      return;
-    if (!draft.name.trim()) {
-      this.rename = { ...draft, error: t("prep.name_required"), invalid: true, fieldError: true };
-      return;
-    }
-    const identity = this.#renameIdentity;
-    const scope = this.#renameScope;
-    this.busy = true;
-    this.rename = { ...draft, error: "", invalid: false, fieldError: false };
-    try {
-      await this.api.updateStation(draft.id, { name: draft.name.trim() });
-    } catch (error) {
-      if (!this.isConnected || identity !== this.#renameIdentity) return;
-      this.rename = {
-        ...this.rename!,
-        error: t(codeOf(error) === "station.name_taken" ? "prep.name_taken" : "prep.save_error"),
-        invalid: false,
-        fieldError: codeOf(error) === "station.name_taken",
-      };
-      this.busy = false;
-      return;
-    }
-    if (!this.isConnected || identity !== this.#renameIdentity) return;
-    this.#renameBaseline = { name: draft.name };
-    scope?.commit(this.#renameBaseline);
-    if (!scope?.isDirty()) {
-      this.renderRoot
-        .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=station-rename]")
-        ?.closeAfter("saved");
-      this.rename = undefined;
-    }
-    await this.#load();
-    this.busy = false;
+  #stationOutputs(view: PrepStationsView) {
+    return Object.fromEntries(
+      view.stations.map((station) => {
+        const printers = this.#printersOf(station.id).map(
+          (id) => view.printers.find((printer) => printer.id === id)?.name ?? id,
+        );
+        return [
+          station.id,
+          {
+            printedOn: printers.join(", ") || t("prep.no_printer"),
+            shownOn: html`${screenDevices(view.devices, station.id)}
+              <a href="/manage/devices">${t("prep.devices")}</a>`,
+          },
+        ];
+      }),
+    );
   }
-  #renameDialog() {
-    const draft = this.rename;
-    if (!draft) return nothing;
-    const identity = this.#renameIdentity;
+  #printersOf(stationId: string): string[] {
+    return this.view!.stationPrinters.filter((row) => row.stationId === stationId).map(
+      (row) => row.printerId,
+    );
+  }
+  async #saveStationEdit(
+    token: object,
+    sender: HTMLElementTagNameMap["prep-station-editor"],
+    detail: StationEditorSave,
+  ) {
+    const edit = this.stationEdit;
+    if (
+      !edit ||
+      !this.isConnected ||
+      edit.token !== token ||
+      this.stationEditBusy ||
+      !this.view?.stations.some((station) => station.id === edit.station.id)
+    )
+      return;
+    const run = ++this.#stationEditRun;
+    const current = () =>
+      this.isConnected && this.stationEdit?.token === token && this.#stationEditRun === run;
+    this.stationEditBusy = true;
+    this.stationEditRefusal = undefined;
+    try {
+      await this.api.updateStation(edit.station.id, detail);
+    } catch (error) {
+      if (!current()) return;
+      this.stationEditRefusal = refusalOf(error);
+      this.stationEditBusy = false;
+      return;
+    }
+    if (!current()) return;
+    this.stationEditBusy = false;
+    await this.updateComplete;
+    const shown = this.renderRoot.querySelector("prep-station-editor");
+    // A render while the screen was away removes the editor, so its return draws a new one that
+    // never sent this save and cannot answer saved(); that one closes unless the person has
+    // changed it since.
+    if (shown === sender ? shown.saved() : shown?.dirty === false) this.stationEdit = undefined;
+    await this.#load();
+  }
+  #stationEditor() {
+    const edit = this.stationEdit;
+    if (!edit || !this.view) return nothing;
+    const station =
+      this.view.stations.find((candidate) => candidate.id === edit.station.id) ?? edit.station;
+    const { token } = edit;
+    // The load reads the printers through a route that needs printer.manage, so a loaded editable
+    // screen's person holds it; a refusal of it still lands under Printers.
+    const canManagePrinters = true;
     return keyed(
-      identity,
-      html`<wt-modal
-        open
-        size="compact"
-        data-test="station-rename"
-        .dismissible=${!this.busy}
-        .beforeClose=${this.#beforeRenameClose}
-        heading=${t("venue.rename")}
-        @wt-close=${(event: Event) => {
-          event.stopPropagation();
-          if (identity === this.#renameIdentity) this.rename = undefined;
+      token,
+      html`<prep-station-editor
+        .open=${true}
+        .busy=${this.stationEditBusy}
+        .station=${{
+          id: station.id,
+          name: station.name,
+          active: station.active,
+          showsRestOfOrder: station.showsRestOfOrder,
+          printerIds: this.#printersOf(station.id),
         }}
-      >
-        <wt-input
-          name="stationName"
-          label=${t("prep.name")}
-          required
-          .value=${draft.name}
-          .error=${draft.fieldError ? draft.error : ""}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            if (!this.isConnected || identity !== this.#renameIdentity) return;
-            this.rename = {
-              ...draft,
-              name: event.detail.value,
-              error: "",
-              invalid: false,
-              fieldError: false,
-            };
-            this.#renameScope?.changed();
-          }}
-          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-station-name"]'))}
-        ></wt-input>
-        ${draft.error ? html`<p class="error" role="alert">${draft.invalid ? t("prep.fix_fields") : draft.error}</p>` : nothing}
-        <wt-form-actions slot="footer">
-          <wt-button
-            slot="cancel"
-            variant="secondary"
-            @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
-            >${t("prep.cancel")}</wt-button
-          >
-          <wt-button
-            data-test="save-station-name"
-            variant=${saveActionState(this.#renameScope).variant}
-            ?disabled=${saveActionState(this.#renameScope).unchanged || this.busy || draft.invalid}
-            @click=${() => void this.#saveStationName()}
-            >${t("prep.save")}</wt-button
-          >
-        </wt-form-actions>
-      </wt-modal>`,
+        .printers=${this.view.printers}
+        .watchers=${this.view.watchers}
+        .canManagePrinters=${canManagePrinters}
+        .refusal=${this.stationEditRefusal}
+        @station-save=${(event: CustomEvent<StationEditorSave>) => {
+          event.stopPropagation();
+          void this.#saveStationEdit(
+            token,
+            event.currentTarget as HTMLElementTagNameMap["prep-station-editor"],
+            event.detail,
+          );
+        }}
+        @station-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.stationEdit?.token === token) this.stationEdit = undefined;
+        }}
+      ></prep-station-editor>`,
     );
   }
   #openStation() {
@@ -1369,18 +1242,27 @@ export class PrepStationsScreen extends LitElement {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      printerIds: [],
     };
     this.fieldError = {};
     this.#showError("");
   }
-  #change(field: keyof StationInput, value: string) {
-    this.draft = { ...this.draft, [field]: field === "name" ? value : Number(value) };
+  #change(field: keyof StationInput | "printerIds", value: string | string[]) {
+    this.draft = {
+      ...this.draft,
+      [field]: field === "name" || field === "printerIds" ? value : Number(value),
+    };
     this.#stationScope?.changed();
-    this.fieldError = this.stationAttempted
-      ? this.#stationErrors()
-      : { ...this.fieldError, [field]: "" };
+    const refused = field === "printerIds" ? undefined : this.fieldError.printerIds;
+    this.fieldError = {
+      ...(this.stationAttempted ? this.#stationErrors() : { ...this.fieldError, [field]: "" }),
+      ...(refused ? { printerIds: refused } : {}),
+    };
+    if (!refused) delete this.fieldError.printerIds;
     this.#showError(
-      this.stationAttempted && Object.keys(this.fieldError).length ? t("prep.fix_fields") : "",
+      this.stationAttempted && Object.values(this.fieldError).some(Boolean)
+        ? t("prep.fix_fields")
+        : "",
     );
   }
   #stationErrors(): Record<string, string> {
@@ -1416,7 +1298,8 @@ export class PrepStationsScreen extends LitElement {
     this.busy = true;
     this.#showError("");
     try {
-      await this.api.createStation(d);
+      const { printerIds, ...station } = d;
+      await this.api.createStation(printerIds.length > 0 ? d : station);
       if (!this.isConnected || identity !== this.#stationIdentity) return;
       this.#stationBaseline = { ...d };
       scope?.commit(d);
@@ -1430,253 +1313,22 @@ export class PrepStationsScreen extends LitElement {
       await this.#load();
     } catch (e) {
       if (!this.isConnected || identity !== this.#stationIdentity) return;
-      if (codeOf(e) === "station.name_taken") this.fieldError = { name: t("prep.name_taken") };
-      else this.#showError(t("prep.save_error"));
+      const refusal = refusalOf(e);
+      const field = stationRefusalField(refusal);
+      if (field === "name") this.fieldError = { name: t("prep.name_taken") };
+      else if (field === "printers")
+        this.fieldError = {
+          printerIds: t(
+            refusal.code === "authorization.not_permitted"
+              ? "prep.printers_not_permitted"
+              : "prep.printers_refused",
+          ),
+        };
+      this.#showError(t(field === undefined ? "prep.save_error" : "prep.fix_fields"));
     } finally {
       if (this.isConnected && (identity === this.#stationIdentity || !this.editor))
         this.busy = false;
     }
-  }
-  /** `passive` when a read, not the person, asked: an unattended tester must not keep a session. */
-  async #explain(passive = false) {
-    const api = passive ? (this.api.background ?? this.api) : this.api;
-    const request = ++this.#testRequest;
-    this.explanation = undefined;
-    this.testError = "";
-    this.testTimeSkipped = false;
-    if (
-      !this.testProduct ||
-      (this.testWhen !== "now" && !this.testTime) ||
-      (this.testWhen === "date" && !this.testDate)
-    )
-      return;
-    const moment =
-      this.testWhen === "now"
-        ? undefined
-        : this.testWhen === "date"
-          ? {
-              civilDate: this.testDate,
-              weekday: new Date(`${this.testDate}T00:00:00Z`).getUTCDay(),
-              timeOfDay: this.testTime,
-            }
-          : { weekday: this.testWeekday, timeOfDay: this.testTime };
-    try {
-      const explanation = this.testExtras.length
-        ? await api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
-        : moment
-          ? await api.explain(this.testProduct, this.testZone || null, moment)
-          : await api.explain(this.testProduct, this.testZone || null);
-      if (request === this.#testRequest) this.explanation = explanation;
-    } catch (error) {
-      if (request !== this.#testRequest) return;
-      const field = (error as { params?: { field?: string } } | undefined)?.params?.field;
-      if (codeOf(error) === "management.request_invalid" && field === "time")
-        this.testTimeSkipped = true;
-      else this.testError = t("prep.test_error");
-    }
-  }
-  #testStationName(id: string): string {
-    return (
-      this.explanation?.stations.find((station) => station.id === id)?.name ?? this.#stationName(id)
-    );
-  }
-  #testNames(): ExplanationNames {
-    const named = (rows: readonly { id: string; name: string }[] | undefined, id: string) =>
-      rows?.find((row) => row.id === id)?.name ?? id;
-    return {
-      station: (id) => this.#testStationName(id),
-      product: (id) =>
-        named([...(this.view?.testProducts ?? []), ...(this.view?.products ?? [])], id),
-      category: (id) => this.#path(id),
-      zone: (id) => named(this.view?.zones, id),
-    };
-  }
-  #tester() {
-    const explanation = this.explanation;
-    return html`<wt-card data-test="route-tester">
-      <h2>${t("prep.test_title")}</h2>
-      <div class="form">
-        <wt-combobox
-          data-test="test-product"
-          name="product"
-          label=${t("prep.test_product")}
-          placeholder=${t("prep.test_choose_product")}
-          .value=${this.testProduct}
-          .options=${this.view?.testProducts.map((product) => ({ value: product.id, label: product.name })) ?? []}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.testProduct = event.detail.value;
-            this.#url.write({ dashboard: "prep-stations", test: this.testProduct || null });
-            void this.#explain();
-          }}
-        ></wt-combobox>
-        <div>
-          <wt-combobox
-            data-test="test-extra"
-            name="extra"
-            label=${t("prep.test_extras_chosen")}
-            placeholder=${t("prep.test_choose_extra")}
-            .value=${""}
-            .options=${this.view?.testProducts.filter((product) => !this.testExtras.includes(product.id)).map((product) => ({ value: product.id, label: product.name })) ?? []}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              const id = event.detail.value;
-              if (id && !this.testExtras.includes(id)) {
-                this.testExtras = [...this.testExtras, id];
-                void this.#explain();
-              }
-            }}
-          ></wt-combobox>
-          <div class="item">
-            ${this.testExtras.map(
-              (id) =>
-                html`<span class="chip"
-                  >${this.view?.testProducts.find((product) => product.id === id)?.name ?? id}
-                  <wt-button
-                    size="sm"
-                    variant="secondary"
-                    data-test=${`remove-extra-${id}`}
-                    aria-label=${format("prep.test_remove_extra", { name: this.view?.testProducts.find((product) => product.id === id)?.name ?? id })}
-                    @click=${() => {
-                      this.testExtras = this.testExtras.filter((extraId) => extraId !== id);
-                      void this.#explain();
-                    }}
-                    >×</wt-button
-                  ></span
-                >`,
-            )}
-          </div>
-        </div>
-        <wt-combobox
-          data-test="test-zone"
-          name="zone"
-          label=${t("prep.service_zone")}
-          placeholder=${t("prep.test_no_zone")}
-          .value=${this.testZone}
-          .options=${[{ value: "", label: t("prep.test_no_zone") }, ...(this.view?.zones.filter((zone) => zone.active !== false).map((zone) => ({ value: zone.id, label: zone.name })) ?? [])]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.testZone = event.detail.value;
-            void this.#explain();
-          }}
-        ></wt-combobox>
-      </div>
-      <div class="tester-when">
-        <wt-combobox
-          name="when"
-          data-test="test-when"
-          label=${t("prep.test_when")}
-          .value=${this.testWhen}
-          .options=${[
-            { value: "now", label: t("prep.test_now") },
-            { value: "at", label: t("prep.test_at") },
-            { value: "date", label: t("prep.test_on_date") },
-          ]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.testWhen = event.detail.value;
-            void this.#explain();
-          }}
-        >
-        </wt-combobox>
-        ${
-          this.testWhen === "at"
-            ? html`
-                <wt-combobox
-                  name="weekday"
-                  data-test="test-weekday"
-                  label=${t("prep.weekday")}
-                  .value=${String(this.testWeekday)}
-                  .options=${[0, 1, 2, 3, 4, 5, 6].map((day) => ({ value: String(day), label: t(`venue.day.${day}` as "venue.day.0") }))}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    this.testWeekday = Number(event.detail.value);
-                    void this.#explain();
-                  }}
-                >
-                </wt-combobox>
-              `
-            : nothing
-        }
-        ${
-          this.testWhen === "date"
-            ? html`
-                <div>
-                  <wt-input
-                    name="date"
-                    data-test="test-date"
-                    type="date"
-                    label=${t("prep.test_date")}
-                    required
-                    .value=${live(this.testDate)}
-                    aria-invalid=${!this.testDate}
-                    .invalid=${!this.testDate}
-                    aria-describedby="test-date-error"
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      this.testDate = event.detail.value;
-                      void this.#explain();
-                    }}
-                  ></wt-input>
-                  <span id="test-date-error" class="error"
-                    >${!this.testDate ? t("prep.test_date_required") : nothing}</span
-                  >
-                </div>
-              `
-            : nothing
-        }
-        ${
-          this.testWhen !== "now"
-            ? html`
-                <div>
-                  <wt-input
-                    name="time"
-                    data-test="test-time"
-                    type="time"
-                    label=${t("prep.test_time")}
-                    required
-                    .value=${live(this.testTime)}
-                    aria-invalid=${!this.testTime || this.testTimeSkipped}
-                    .invalid=${!this.testTime || this.testTimeSkipped}
-                    aria-describedby="test-time-error"
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      this.testTime = event.detail.value;
-                      void this.#explain();
-                    }}
-                  ></wt-input>
-                  <span id="test-time-error" class="error"
-                    >${
-                      !this.testTime
-                        ? t("prep.test_time_required")
-                        : this.testTimeSkipped
-                          ? t("prep.test_time_skipped")
-                          : nothing
-                    }</span
-                  >
-                </div>
-              `
-            : nothing
-        }
-      </div>
-      <div data-test="test-answer" aria-live="polite">
-        ${this.testError ? html`<p class="error" role="alert">${this.testError}</p>` : nothing}
-        ${explanation?.clockReadable === false ? html`<p>${t("prep.test_clock_unreadable")}</p>` : nothing}
-        ${explanation ? fallbackSentences(explanation, this.#testNames()).map((sentence) => html`<p>${sentence}</p>`) : nothing}
-        ${explanation?.route === null && explanation.decidedBy === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
-        ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
-        ${
-          explanation?.route?.kind === "station"
-            ? (() => {
-                const watching = watchersSeeing(
-                  this.view?.watchers ?? [],
-                  explanation.route.stationId,
-                  this.testZone || null,
-                );
-                return html`<p>
-                  ${watching.length ? format("watchers.watched_by", { list: watching.map((watcher) => watcher.name).join(", ") }) : t("watchers.none_follow")}
-                </p>`;
-              })()
-            : nothing
-        }
-        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${decisionSentence(explanation, this.#testNames())}</p>` : nothing}
-        ${explanation?.extrasWaitOnDish && this.testExtras.length ? html`<p>${t("prep.test_extras_wait")}</p>` : nothing}
-        ${explanation?.extras?.map((extra) => html`<p>${extraSentence(extra, explanation, this.#testNames())}</p>`)}
-      </div>
-    </wt-card>`;
   }
   #times(id: string): StationTimes | undefined {
     return this.view?.routing.stationTimes.find((row) => row.stationId === id);
@@ -1847,191 +1499,6 @@ export class PrepStationsScreen extends LitElement {
         ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
       </h2>
     </wt-card>`;
-  }
-  async #saveStationPrinters(identity: object | undefined) {
-    if (saveActionState(this.#printerScope).unchanged) return;
-    const editor = this.printerEditor;
-    if (!editor || !this.#printerCurrent(identity) || this.printerBusy) return;
-    const scope = this.#printerScope;
-    const submitted = [...editor.ids];
-    this.printerBusy = true;
-    this.printerEditor = { ...editor, error: "" };
-    this.#showError("");
-    try {
-      await this.api.setStationPrinters(editor.stationId, submitted);
-    } catch (error) {
-      if (!this.#printerCurrent(identity)) return;
-      const code = codeOf(error);
-      if (
-        code === "printer.not_found" ||
-        code === "printer.makes_and_watches" ||
-        code === "management.request_invalid"
-      ) {
-        this.printerEditor = { ...this.printerEditor!, error: t("prep.tickets.printer_refused") };
-      } else {
-        this.#showError(
-          code === "station.not_found" ? t("prep.station_disabled") : t("prep.save_error"),
-        );
-      }
-      this.printerBusy = false;
-      return;
-    }
-    if (!this.#printerCurrent(identity)) return;
-    scope?.commit(submitted);
-    if (!scope?.isDirty()) {
-      this.printerEditor = undefined;
-      this.#syncPrinterDraft();
-    }
-    this.printerBusy = false;
-    await this.#load();
-  }
-  #printerCell(station: PrepStation) {
-    const view = this.view!;
-    const selected = view.stationPrinters
-      .filter((row) => row.stationId === station.id)
-      .map((row) => row.printerId);
-    const names =
-      selected.map((id) => view.printers.find((row) => row.id === id)?.name ?? id).join(", ") ||
-      t("prep.none");
-    if (!station.active) return html`<span part="disabled-station">${names}</span>`;
-    const editor = this.printerEditor?.stationId === station.id ? this.printerEditor : undefined;
-    const identity = this.#printerIdentity;
-    if (!editor)
-      return html`<button
-        type="button"
-        part="edit-printers"
-        data-test=${`edit-printers-${station.id}`}
-        aria-label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
-        ?disabled=${this.printerBusy}
-        @click=${() => {
-          this.#openPrinters(station.id, selected);
-        }}
-      >
-        ${names}
-      </button>`;
-    const options = view.printers.map((printer) => {
-      const watcher = view.watchers.find(
-        (row) => row.printerIds.includes(printer.id) || row.id === printer.watcherId,
-      );
-      const disabled =
-        (printer.active === false || !!watcher || !!printer.watcherId) &&
-        !editor.ids.includes(printer.id);
-      return {
-        value: printer.id,
-        label: printer.name,
-        disabled,
-        description:
-          printer.active === false
-            ? t("prep.health.disabled")
-            : watcher || printer.watcherId
-              ? format("prep.tickets.watcher_printer", {
-                  name: watcher?.name ?? printer.watcherId!,
-                })
-              : undefined,
-      };
-    });
-    return html`<div part="printer-cell">
-      <wt-combobox
-        multiple
-        hide-label
-        name="printerIds"
-        data-test=${`station-printers-${station.id}`}
-        label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
-        .options=${options}
-        .values=${editor.ids}
-        .disabled=${this.printerBusy}
-        .error=${editor.error}
-        data-field-error=${editor.error ? "printerIds" : nothing}
-        .searchPlaceholder=${t("prep.printers")}
-        .noResultsLabel=${t("venue.combobox_no_results")}
-        .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
-        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
-          event.stopPropagation();
-          if (!this.#printerCurrent(identity)) return;
-          this.printerEditor = { ...editor, ids: [...event.detail.values], error: "" };
-          this.#printerScope?.changed();
-        }}
-        @keydown=${(event: KeyboardEvent) => {
-          if (event.key === "Escape" && !this.printerBusy) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.#cancelPrinters("escape", identity);
-          }
-        }}
-      ></wt-combobox>
-      <div part="cell-actions">
-        <wt-button
-          variant="secondary"
-          data-test=${`cancel-printers-${station.id}`}
-          ?disabled=${this.printerBusy}
-          @click=${() => {
-            this.#cancelPrinters("cancel", identity);
-          }}
-          >${t("venue.cancel")}</wt-button
-        >
-        <wt-button
-          data-test=${`save-printers-${station.id}`}
-          variant=${saveActionState(this.#printerScope).variant}
-          ?disabled=${saveActionState(this.#printerScope).unchanged || this.printerBusy}
-          @click=${() => void this.#saveStationPrinters(identity)}
-          >${t("venue.save")}</wt-button
-        >
-      </div>
-    </div>`;
-  }
-  #tickets() {
-    const view = this.view!;
-    const rows = [...view.stations].sort(
-      (a, b) =>
-        Number(b.active) - Number(a.active) ||
-        a.displayOrder - b.displayOrder ||
-        a.name.localeCompare(b.name),
-    );
-    const columns: DataTableColumn<PrepStation>[] = [
-      {
-        key: "name",
-        label: t("prep.name"),
-        cell: (station) =>
-          html`<span part=${station.active ? "station-name" : "disabled-station"}
-            >${station.name}${station.active ? "" : ` (${t("prep.health.disabled")})`}</span
-          >`,
-      },
-      {
-        key: "printers",
-        label: t("prep.tickets.printed_on"),
-        cell: (station) => this.#printerCell(station),
-      },
-      {
-        key: "screens",
-        label: t("prep.tickets.screens"),
-        cell: (station) =>
-          html`<span part="screens-cell" data-test=${`screens-${station.id}`}>
-            ${screenDevices(view.devices, station.id)}
-            <a href="/manage/devices">${t("prep.devices")}</a></span
-          >`,
-      },
-      {
-        key: "watchers",
-        label: t("prep.tickets.watchers"),
-        cell: (station) =>
-          html`<span data-test=${`watchers-${station.id}`}>
-            ${
-              watchersOfStation(view.watchers, station.id)
-                .map((watcher) => watcher.name)
-                .join(", ") || t("prep.none")
-            }
-            <a href="/manage/prep-stations/view/watchers">${t("watchers.title")}</a></span
-          >`,
-      },
-    ];
-    return html`<wt-data-table
-      data-test="tickets-table"
-      .emptyMessage=${t("venue.combobox_no_results")}
-      aria-label=${t("prep.tab.tickets")}
-      .rows=${rows}
-      .columns=${columns}
-      rowKey="id"
-    ></wt-data-table>`;
   }
   async #saveWatcherPrinters(identity: object | undefined) {
     if (saveActionState(this.#watcherPrinterScope).unchanged) return;
@@ -2415,11 +1882,7 @@ export class PrepStationsScreen extends LitElement {
     this.settingsBusy = true;
     this.settingsEditor = { ...editor, fieldError: "", error: "" };
     try {
-      if (editor.field === "rest")
-        await this.api.updateStation(editor.stationId, {
-          showsRestOfOrder: editor.value === "yes",
-        });
-      else if (editor.field === "fallback") {
+      if (editor.field === "fallback") {
         const choice = editor.value || null;
         if (choice !== this.#times(editor.stationId)?.fallbackStationId)
           await this.api.setStationFallback(editor.stationId, choice);
@@ -2436,15 +1899,11 @@ export class PrepStationsScreen extends LitElement {
           (code === "management.request_invalid" && field === editor.field)
           ? t("prep.threshold_invalid")
           : ""
-        : editor.field === "rest"
-          ? code === "management.request_invalid" && field === "showsRestOfOrder"
-            ? t("prep.save_error")
-            : ""
-          : code === "station.fallback_loop"
-            ? t("prep.fallback_loop")
-            : code === "route.station_inactive"
-              ? t("prep.station_disabled")
-              : "";
+        : code === "station.fallback_loop"
+          ? t("prep.fallback_loop")
+          : code === "route.station_inactive"
+            ? t("prep.station_disabled")
+            : "";
       this.settingsEditor = {
         ...editor,
         fieldError,
@@ -2463,8 +1922,6 @@ export class PrepStationsScreen extends LitElement {
   #settingsInvalid() {
     const editor = this.settingsEditor;
     if (!editor?.attempted) return "";
-    if (editor.field === "rest")
-      return ["yes", "no"].includes(editor.value) ? "" : t("prep.choose_yes_no");
     if (editor.field === "fallback") return "";
     const station = this.view?.stations.find((s) => s.id === editor.stationId);
     if (!station) return t("prep.save_error");
@@ -2484,38 +1941,28 @@ export class PrepStationsScreen extends LitElement {
       ? t("prep.threshold_invalid")
       : "";
   }
-  #settingsCell(station: PrepStation, field: "rest" | "fallback") {
-    const label = t(field === "rest" ? "prep.shows_rest_of_order" : "prep.when_closed");
-    if (field === "fallback" && station.isDefault)
+  #fallbackCell(station: PrepStation) {
+    const label = t("prep.when_closed");
+    if (station.isDefault)
       return html`<span data-test=${`settings-fallback-${station.id}`}
         >${t("prep.never_closes")}</span
       >`;
-    const value =
-      field === "rest"
-        ? station.showsRestOfOrder
-          ? "yes"
-          : "no"
-        : (this.#times(station.id)?.fallbackStationId ?? "");
-    const text =
-      field === "rest"
-        ? t(station.showsRestOfOrder ? "venue.yes" : "venue.no")
-        : value
-          ? this.#stationName(value)
-          : t("prep.no_replacement_choice");
+    const value = this.#times(station.id)?.fallbackStationId ?? "";
+    const text = value ? this.#stationName(value) : t("prep.no_replacement_choice");
     const editor =
-      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
+      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === "fallback"
         ? this.settingsEditor
         : undefined;
     if (!editor)
       return html`<wt-button
         variant="secondary"
-        data-test=${`edit-settings-${field}-${station.id}`}
+        data-test=${`edit-settings-fallback-${station.id}`}
         aria-label=${`${station.name}: ${label}`}
         ?disabled=${this.settingsBusy}
         @click=${() => {
           this.#openSettings({
             stationId: station.id,
-            field,
+            field: "fallback",
             value,
             fieldError: "",
             error: "",
@@ -2548,22 +1995,14 @@ export class PrepStationsScreen extends LitElement {
     >
       <wt-combobox
         data-test="settings-choice"
-        name=${field === "rest" ? "showsRestOfOrder" : "fallbackStationId"}
+        name="fallbackStationId"
         label=${`${station.name}: ${label}`}
-        .options=${
-          field === "rest"
-            ? [
-                { value: "yes", label: t("venue.yes") },
-                { value: "no", label: t("venue.no") },
-              ]
-            : this.#fallbackOptions(station.id)
-        }
+        .options=${this.#fallbackOptions(station.id)}
         .value=${editor.value}
         .error=${invalid || editor.fieldError}
         .disabled=${this.settingsBusy}
-        .required=${field === "rest"}
-        .placeholder=${field === "fallback" ? t("prep.no_replacement_choice") : ""}
-        .searchPlaceholder=${field === "fallback" ? t("prep.search_stations") : label}
+        .placeholder=${t("prep.no_replacement_choice")}
+        .searchPlaceholder=${t("prep.search_stations")}
         .noResultsLabel=${t("venue.combobox_no_results")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
@@ -2598,8 +2037,7 @@ export class PrepStationsScreen extends LitElement {
           @click=${() => {
             if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
             if (saveActionState(this.#settingsScope).unchanged) return;
-            if (field === "fallback" && !editor.confirming)
-              this.settingsEditor = { ...editor, confirming: true };
+            if (!editor.confirming) this.settingsEditor = { ...editor, confirming: true };
             else void this.#saveSettingsCell(identity);
           }}
           >${t("venue.save")}</wt-button
@@ -2709,14 +2147,9 @@ export class PrepStationsScreen extends LitElement {
         cell: (station: PrepStation) => this.#timingCell(station, field),
       })),
       {
-        key: "rest",
-        label: t("prep.shows_rest_of_order"),
-        cell: (station) => this.#settingsCell(station, "rest"),
-      },
-      {
         key: "fallback",
         label: t("prep.when_closed"),
-        cell: (station) => this.#settingsCell(station, "fallback"),
+        cell: (station) => this.#fallbackCell(station),
       },
     ];
     return html`<wt-data-table
@@ -3054,6 +2487,31 @@ export class PrepStationsScreen extends LitElement {
       >${this.fieldError[field] ? html`<p class="error" data-field-error=${field} role="alert">${this.fieldError[field]}</p>` : nothing}
     </div>`;
   }
+  #newStationPrinters() {
+    const identity = this.#stationIdentity;
+    const printerIds = this.draft.printerIds;
+    const view = this.view!;
+    return html`<wt-combobox
+      name="printerIds"
+      label=${t("prep.printers")}
+      multiple
+      .values=${printerIds}
+      .options=${stationPrinterOptions(view.printers, view.watchers, printerIds)}
+      .error=${this.fieldError.printerIds ?? ""}
+      .countLabel=${() =>
+        printerIds
+          .map((id) => view.printers.find((printer) => printer.id === id)?.name ?? id)
+          .join(", ")}
+      .searchPlaceholder=${t("prep.printers")}
+      .noResultsLabel=${t("venue.combobox_no_results")}
+      ?disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+        event.stopPropagation();
+        if (this.isConnected && identity === this.#stationIdentity)
+          this.#change("printerIds", [...event.detail.values]);
+      }}
+    ></wt-combobox>`;
+  }
   #dialog() {
     if (!this.editor || this.pending) return nothing;
     const editor = this.editor;
@@ -3071,7 +2529,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}
+          ${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">
@@ -3128,6 +2586,29 @@ export class PrepStationsScreen extends LitElement {
       to: name(after),
     });
   }
+  /** The moved product, its dish for an extra, and the periods during which it moves. */
+  #moveName(move: RoutingMove): string {
+    const name = move.dish
+      ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName })
+      : move.productName;
+    if (move.periodIds === null || move.periodIds === undefined) return name;
+    const during = new Set(move.periodIds);
+    const periods = this.view!.routing.periods.filter((period) => during.has(period.id));
+    const names = periods.map((period) => period.name);
+    return format("prep.preview_during", {
+      move: name,
+      periods: periods
+        .map((period) =>
+          names.indexOf(period.name) === names.lastIndexOf(period.name)
+            ? period.name
+            : format("routing.period_in_department", {
+                period: period.name,
+                department: period.departmentName,
+              }),
+        )
+        .join(", "),
+    });
+  }
   #previewDialog() {
     const pending = this.pending;
     if (!pending) return nothing;
@@ -3158,9 +2639,7 @@ export class PrepStationsScreen extends LitElement {
                     ${pending.moves.map(
                       (move) =>
                         html`<tr>
-                          <td>
-                            ${move.dish ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName }) : move.productName}
-                          </td>
+                          <td>${this.#moveName(move)}</td>
                           <td>${move.zoneName ?? t("prep.any_zone")}</td>
                           <td>${move.from ? this.#targetName(move.from) : t("prep.no_station")}</td>
                           <td>
@@ -3313,17 +2792,11 @@ export class PrepStationsScreen extends LitElement {
                 if (this.pending) this.#leaveCell("navigation", proceed);
                 else if (this.tab === "settings" && this.settingsEditor)
                   this.#leaveSettings("navigation", this.#settingsIdentity, proceed);
-                else if (this.printerEditor)
-                  this.#leavePrinters("navigation", this.#printerIdentity, () => {
-                    this.printerEditor = undefined;
-                    this.#syncPrinterDraft();
-                    proceed();
-                  });
                 else proceed();
               }}
             >
               ${
-                this.readOnly
+                this.readOnly || this.tab !== "stations"
                   ? nothing
                   : html`<div slot="actions">
                       <wt-button @click=${() => this.#openStation()} data-test="new-station"
@@ -3340,31 +2813,33 @@ export class PrepStationsScreen extends LitElement {
                 >
                   ${this.stationAnnouncement}
                 </div>
-                <prep-station-health-table
-                  .snapshot=${this.health}
+                <prep-station-table
                   .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
                   .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
+                  .outputs=${this.readOnly ? undefined : this.#stationOutputs(view)}
                   .today=${Object.fromEntries(
                     view.stations.map((station) => {
                       const status = this.#todayCell(station);
                       return [station.id, status === nothing ? "" : status];
                     }),
                   )}
-                ></prep-station-health-table>
+                ></prep-station-table>
               </div>
               ${
                 this.readOnly
                   ? nothing
                   : html`<div slot="routing">
-                        ${this.#tester()}
                         <venue-routing-grid
                           .model=${view.routing}
                           .pending=${this.cellChoice}
                           .refusal=${this.cellRefusal}
+                          .defaultRefusal=${this.defaultRefusal}
                           @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
                             void this.#chooseCell(event.detail)}
                           @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
                             void this.#makeDefault(event.detail.stationId)}
+                          @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
+                            this.#dropDraft(event.detail.address)}
                         ></venue-routing-grid>
                         <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
                         ${
@@ -3387,12 +2862,11 @@ export class PrepStationsScreen extends LitElement {
                             : nothing
                         }
                       </div>
-                      <div slot="tickets">${this.#tickets()}</div>
                       <div slot="watchers">${this.#watchers()}</div>
                       <div slot="settings">${this.#settings()}</div>`
               }
             </wt-tabs>`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#renameDialog()}`}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#stationEditor()}`}`;
   }
 }

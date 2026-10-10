@@ -1064,7 +1064,7 @@ export class ProductList extends LitElement {
                   maker.stationName ?? t("product.nowhere"),
                 )
               : (maker.stationName ?? t("product.nowhere"));
-          return html`<a part="maker-link" href=${`/manage/prep-stations/test/${id}`}
+          return html`<a part="maker-link" href="/manage/prep-stations/view/routing"
             >${name}${maker.variesByZone ? html` · ${t("product.varies_by_zone")}` : nothing}</a
           >`;
         },

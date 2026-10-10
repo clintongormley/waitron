@@ -7,9 +7,15 @@ import {
   crossRefText,
   formatCorrectionSlip,
   formatKitchenTicket,
+  joinKitchenTickets,
 } from "./kitchen-ticket.js";
 import type { KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
-import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
+import {
+  commandNames,
+  decodeTicket,
+  printedCommands,
+  printedLines,
+} from "./testing/decode-ticket.js";
 
 // Reads the printed text back from the images each line is drawn as; the final three bytes are always
 // the full cut, GS V 0 (0x1D 0x56 0x00).
@@ -352,6 +358,91 @@ describe("formatKitchenTicket", () => {
   });
 });
 
+describe("one ticket for several stations sharing a printer", () => {
+  it("names the stations in the header and prints a section per station, then the rest of the order", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          scope: "stations",
+          stations: [
+            { stationName: "Grill", items: [{ qty: 2, name: "Steak" }] },
+            { stationName: "Pastry", items: [{ qty: 1, name: "Tart" }] },
+          ],
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          alsoOnOrder: {
+            locale: "en-GB",
+            items: [{ qty: 1, name: "Salad", stationName: "Cold", held: false }],
+          },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "Grill · Pastry",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "Grill",
+      "2 x Steak",
+      "Pastry",
+      "1 x Tart",
+      "-- Also on this order --",
+      "1 x Salad — Cold",
+      "",
+    ]);
+  });
+});
+
+describe("joinKitchenTickets", () => {
+  const ticket = (mark: "HOLD" | undefined, name: string): Uint8Array =>
+    formatKitchenTicket(
+      {
+        reprint: true,
+        mark,
+        scope: "station",
+        stationName: "Grill",
+        tableLabel: "Mesa 4",
+        orderNumber: "A-17",
+        firedAt: new Date(2026, 7, 17, 14, 30),
+        items: [{ qty: 1, name }],
+      },
+      KITCHEN_80,
+    );
+
+  it("prints both tickets on one paper, with one start and one feed and cut at its end", () => {
+    const joined = joinKitchenTickets(ticket(undefined, "Steak"), ticket("HOLD", "Tart"));
+    const commands = commandNames(joined);
+    expect(commands.filter((name) => name === "ESC @")).toHaveLength(1);
+    expect(commands.filter((name) => name === "ESC d")).toHaveLength(1);
+    expect(commands.filter((name) => name === "GS V")).toHaveLength(1);
+    expect([...joined.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
+    expect(printedLines(joined)).toEqual([
+      "*** REPRINT ***",
+      "Grill",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "1 x Steak",
+      "*** REPRINT ***",
+      "*** HOLD ***",
+      "Grill",
+      "Mesa 4",
+      "A-17",
+      "14:30",
+      "1 x Tart",
+      "",
+    ]);
+  });
+
+  it("refuses bytes that are not two whole tickets", () => {
+    const whole = ticket(undefined, "Steak");
+    expect(() => joinKitchenTickets(whole.slice(0, -1), whole)).toThrow(RangeError);
+    expect(() => joinKitchenTickets(whole, whole.slice(2))).toThrow(RangeError);
+  });
+});
+
 describe("the rest of the order on a station's ticket", () => {
   const stationTicket = {
     scope: "station" as const,
@@ -380,15 +471,13 @@ describe("the rest of the order on a station's ticket", () => {
     );
     const own = lines.indexOf("1 x Fish");
     const burger = lines.indexOf("2 x Burger — Grill");
-    expect(lines.slice(own + 1, burger).join(" ")).toBe(
-      "-- Also on this order (not for this station) --",
-    );
+    expect(lines.slice(own + 1, burger).join(" ")).toBe("-- Also on this order --");
     expect(lines.slice(burger)).toEqual(["2 x Burger — Grill", "1 x Chips — Fryer (on hold)", ""]);
   });
 
   it.each([
-    ["es-ES", "-- También en este pedido (no para esta estación) --", "(en espera)"],
-    ["fr-FR", "-- Also on this order (not for this station) --", "(on hold)"],
+    ["es-ES", "-- También en este pedido --", "(en espera)"],
+    ["fr-FR", "-- Also on this order --", "(on hold)"],
   ])("uses the expected wording for %s", (locale, heading, held) => {
     const lines = printedLines(
       formatKitchenTicket(

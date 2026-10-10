@@ -24,11 +24,12 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
         closedSendsTo: "kitchen",
       },
     ],
+    periods: [],
     todayEnds: null,
     clockReadable: true,
     zones: [
-      { id: "terrace", name: "Terrace" },
-      { id: "inside", name: "Inside" },
+      { id: "terrace", name: "Terrace", departmentId: null },
+      { id: "inside", name: "Inside", departmentId: null },
     ],
     categories: [
       { id: "drinks", name: "Drinks", parentId: null },
@@ -79,10 +80,44 @@ const storedOnlyNoCategory = routing({
   ],
 });
 
+/** Bread × Every zone falls through to the default; Bread × Terrace inherits No preparation;
+ * Mojito × Every zone names the default station itself. */
+const extrasNotes = routing({
+  cells: [
+    ...routing().cells,
+    {
+      row: { kind: "product", productId: "mojito" },
+      zoneId: null,
+      target: { kind: "station", stationId: "kitchen" },
+    },
+  ],
+});
+
 const states: Record<
   string,
-  { model: RoutingView; expand?: boolean; open?: string; refusal?: RoutingGrid["refusal"] }
+  {
+    model: RoutingView;
+    expand?: boolean;
+    open?: string;
+    refusal?: RoutingGrid["refusal"];
+    /** Cells and whether each must carry the extras note before the scan. */
+    notes?: Record<string, boolean>;
+  }
 > = {
+  "extras notes": {
+    model: extrasNotes,
+    expand: true,
+    notes: {
+      'td[data-row="p:bread"][data-zone="every"]': true,
+      'td[data-row="all"][data-zone="every"]': true,
+      'td[data-row="p:bread"][data-zone="terrace"]': true,
+      'td[data-row="p:mojito"][data-zone="every"]': false,
+    },
+  },
+  "extras notes, read-only default": {
+    model: routing({ canMakeDefault: false }),
+    notes: { 'td[data-row="all"][data-zone="every"]': true },
+  },
   collapsed: { model: routing() },
   expanded: { model: routing(), expand: true },
   "editor open": { model: routing(), open: 'td[data-row="all"][data-zone="every"]' },
@@ -125,12 +160,19 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       await el.updateComplete;
     }
     if (state.open) {
-      const box = el.shadowRoot!.querySelector(`${state.open} wt-combobox[name="routing-target"]`)!;
-      const popup = box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-      box.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+      el.shadowRoot!.querySelector<HTMLButtonElement>(
+        `${state.open} button[data-test="routing-cell"]`,
+      )!.click();
       await vi.waitFor(() => {
-        if (!popup.matches(":popover-open")) throw new Error("the editor did not open");
+        if (!el.shadowRoot!.querySelector("routing-cell-editor")?.open)
+          throw new Error("the editor did not open");
       });
+      await el.shadowRoot!.querySelector("routing-cell-editor")!.updateComplete;
+    }
+    for (const [selector, carries] of Object.entries(state.notes ?? {})) {
+      const note = el.shadowRoot!.querySelector(`${selector} [data-test="extra-note"]`);
+      if ((note !== null) !== carries)
+        throw new Error(`${selector}: extras note ${carries ? "missing" : "unexpected"}`);
     }
     await expectNoA11yViolations(host);
   });

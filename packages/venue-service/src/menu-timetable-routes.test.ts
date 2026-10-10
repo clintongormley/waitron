@@ -513,6 +513,7 @@ describe("the opening-hours period API", () => {
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: [],
+          routingUses: [],
         },
       ],
     );
@@ -541,6 +542,7 @@ describe("the opening-hours period API", () => {
       staffMenuIds: [r.cafe, r.deliParaLlevar],
       endOffsetMinutes: 0,
       weekdays: [],
+      routingUses: [],
     });
     await answers(
       await r.send("PATCH", `/menu-periods/${id}`, r.manager, { colour: "green" }),
@@ -554,6 +556,7 @@ describe("the opening-hours period API", () => {
       staffMenuIds: [r.cafe, r.deliParaLlevar],
       endOffsetMinutes: 0,
       weekdays: [],
+      routingUses: [],
     });
     await answers(
       await r.send("PATCH", `/menu-periods/${id}`, r.manager, {
@@ -569,6 +572,7 @@ describe("the opening-hours period API", () => {
       staffMenuIds: [r.deliParaLlevar, r.cafe],
       endOffsetMinutes: 0,
       weekdays: [],
+      routingUses: [],
     });
     await answers(
       await r.send("PATCH", `/menu-periods/${id}`, r.manager, { staffMenuIds: [] }),

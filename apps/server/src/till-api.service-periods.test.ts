@@ -7,6 +7,8 @@ import {
   deviceProfiles,
   locations,
   parties,
+  printJobs,
+  ticketItems,
   workingOrderLines,
   workingOrders,
   withTransaction,
@@ -17,6 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
   createCatalogue,
+  createCategory,
   createProduct,
   createExtraList,
   writeProductModifiers,
@@ -39,14 +42,21 @@ import {
   menuPeriods,
   orderServiceContexts,
   replaceMenuWeek,
+  routingCellPeriods,
+  routingCells,
   saveMenuPeriod,
+  setRoutingCell,
   updateMenuPeriod,
   setProfileServiceAccess,
   workingLineContexts,
   type MenuSlot,
 } from "@waitron/venue-service";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { createPrinter } from "@waitron/printing";
+import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { attachPrinterToStation } from "./station-printers.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { createTable } from "./tables.js";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -526,6 +536,9 @@ async function mealVenue(weekdays: readonly number[] = [1]): Promise<Venue> {
 }
 
 const mondayAt = (time: string) => new Date(`2026-10-05T${time}:00+02:00`);
+/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
+const ticketClock = (at: Date) =>
+  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 
 async function editMealLine(v: Venue, id: string, patch: { quantity?: string; note?: string }) {
   const read = await send(v, "GET", `/api/working-orders/${id}`);
@@ -1399,5 +1412,175 @@ describe("menu-state follows department service periods", () => {
       defaultMenuId: null,
       service: { open: true, zoneOpen: true, periodName: null },
     });
+  });
+});
+
+describe("kitchen routing follows the period running when a dish goes on the order", () => {
+  /** Cocktails' Every zone cell: Upstairs bar; Lunch (12:00–14:00) → Downstairs bar; Afternoon
+   * (14:00–19:00) has no line. Each station has its own printer. */
+  async function cocktailVenue() {
+    const v = await mealVenue();
+    await suite.db
+      .update(departmentSalePolicies)
+      .set({ orderStart: "table" })
+      .where(eq(departmentSalePolicies.departmentId, v.restaurant));
+    const setup = await withTransaction(suite.db, async (tx) => {
+      const periods = await tx
+        .select()
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, v.restaurant));
+      const lunch = periods.find((period) => period.name === "Lunch")!;
+      const dinner = periods.find((period) => period.name === "Dinner")!;
+      const afternoon = (
+        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          name: "Afternoon",
+          menuId: v.menus.Bebidas,
+          staffMenuIds: [],
+        })
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots:
+            weekday === 1
+              ? [
+                  slot(lunch.id, "12:00", "14:00"),
+                  slot(afternoon, "14:00", "19:00"),
+                  slot(dinner.id, "19:00", "23:00"),
+                ]
+              : [],
+        })),
+        MONDAY_10_00,
+      );
+      const cocktails = (await createCategory(tx, { name: "Cocktails" })).id;
+      const mojito = await createProduct(tx, {
+        catalogueId: v.menus.Almuerzo,
+        categoryId: cocktails,
+        name: "Mojito",
+        pricingUnit: "each",
+        unitPrice: "8.00",
+        vatClass: "general",
+      });
+      const offer = (await addProductToMenu(tx, { menuId: v.menus.Almuerzo, productId: mojito.id }))
+        .id;
+      await publishWorkingMenu(tx, v.menus.Almuerzo);
+      const stationWithPrinter = async (name: string) => {
+        const stationId = (await createStation(tx, v.cfg, { name })).id;
+        const printerId = (
+          await createPrinter(
+            tx,
+            { locationId: v.cfg.locationId },
+            { name: `${name} printer`, transport: "cloud_poll", pollId: randomUUID() },
+          )
+        ).id;
+        await attachPrinterToStation(tx, { stationId, printerId });
+        return { stationId, printerId };
+      };
+      const upstairs = await stationWithPrinter("Upstairs bar");
+      const downstairs = await stationWithPrinter("Downstairs bar");
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "category", categoryId: cocktails }, zoneId: null },
+        { kind: "station", stationId: upstairs.stationId },
+      );
+      const [cell] = await tx
+        .select({ id: routingCells.id })
+        .from(routingCells)
+        .where(eq(routingCells.categoryId, cocktails));
+      await tx.insert(routingCellPeriods).values({
+        cellId: cell!.id,
+        periodId: lunch.id,
+        departmentId: v.restaurant,
+        stationId: downstairs.stationId,
+      });
+      const table = await createTable(tx, v.cfg, { label: "Cocktail table", zoneId: v.sala });
+      return { offer, upstairs, downstairs, tableId: table.id };
+    });
+    const seated = await send(v, "POST", `/api/tables/${setup.tableId}/seat`, { guestCount: 2 });
+    expect(seated.status).toBe(200);
+    const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
+    return { v, ...setup, partyId, tabId };
+  }
+
+  const partyRevision = async (partyId: string) =>
+    (
+      await suite.db
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, partyId))
+    )[0]!.revision;
+
+  const stationOf = async (lineId: string) =>
+    (
+      await suite.db
+        .select({ stationId: ticketItems.stationId, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, lineId))
+    )[0];
+
+  const printed = async (printerId: string) =>
+    (
+      await suite.db
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printerId))
+    ).map((job) => decodeTicket(job.payload));
+
+  it("makes a cocktail sent during Lunch Downstairs, and keeps one sent held in Lunch there when released after Lunch", async () => {
+    at(mondayAt("13:00"));
+    const c = await cocktailVenue();
+    const submit = async (release: "fire" | "hold") => {
+      const answer = await send(c.v, "POST", `/api/parties/${c.partyId}/groups`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(c.partyId),
+        groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release }],
+      });
+      expect(answer.status).toBe(200);
+      return (answer.body as { groups: { id: string; lineIds: string[] }[] }).groups[0]!;
+    };
+
+    const fired = await submit("fire");
+    expect(await stationOf(fired.lineIds[0]!)).toMatchObject({
+      stationId: c.downstairs.stationId,
+    });
+
+    expect(await printed(c.downstairs.printerId)).toEqual([
+      expect.stringMatching(
+        new RegExp(
+          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("13:00"))}\\nGROUP 1\\n1\\.000 x Mojito\\n$`,
+        ),
+      ),
+    ]);
+
+    at(mondayAt("13:55"));
+    const held = await submit("hold");
+    expect(await stationOf(held.lineIds[0]!)).toEqual({
+      stationId: c.downstairs.stationId,
+      firedAt: null,
+    });
+
+    at(mondayAt("14:10"));
+    const before = (await printed(c.downstairs.printerId)).length;
+    const released = await send(c.v, "POST", `/api/parties/${c.partyId}/groups/${held.id}/fire`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(c.partyId),
+    });
+    expect(released.status).toBe(200);
+    expect(await stationOf(held.lineIds[0]!)).toEqual({
+      stationId: c.downstairs.stationId,
+      firedAt: mondayAt("14:10").toISOString(),
+    });
+    expect((await printed(c.downstairs.printerId)).slice(before)).toEqual([
+      expect.stringMatching(
+        new RegExp(
+          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("14:10"))}\\nGROUP 2\\n1\\.000 x Mojito\\n$`,
+        ),
+      ),
+    ]);
+    expect(await printed(c.upstairs.printerId)).toEqual([]);
   });
 });
