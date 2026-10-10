@@ -2122,7 +2122,6 @@ describe("catalogue-screen", () => {
         );
       return stubApi({
         listCourses: vi.fn(() => read(false)),
-        listCoursesWithDisabled: vi.fn(() => read(true)),
         createCourse: vi.fn(
           async ({ name, displayOrder }: { name: string; displayOrder: number }) => {
             if (slowCreate) await slowly(null);
@@ -2131,9 +2130,22 @@ describe("catalogue-screen", () => {
           },
         ),
         updateCourse: vi.fn().mockResolvedValue(undefined),
-        removeCourse: vi.fn((id: string) => {
+        getCourseDeleteImpact: vi.fn((id: string) =>
+          Promise.resolve({
+            target: { id, name: rows.find((c) => c.id === id)!.name },
+            refusals: [],
+            ends: [],
+            removes: [],
+          }),
+        ),
+        deleteCourse: vi.fn((id: string) => {
           rows = rows.filter((course) => course.id !== id);
-          return Promise.resolve();
+          return Promise.resolve({
+            target: { id, name: initial.find((c) => c.id === id)?.name ?? id },
+            refusals: [],
+            ends: [],
+            removes: [],
+          });
         }),
         moveCourse: vi.fn(() => read(false)),
         ...overrides,
@@ -2145,6 +2157,11 @@ describe("catalogue-screen", () => {
       el.shadowRoot!.querySelector<LitElement>("dashboard-course-list");
     const inList = (el: CatalogueScreen, selector: string) =>
       courseList(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    const deleteConfirm = (el: CatalogueScreen) =>
+      courseList(el)!
+        .shadowRoot!.querySelector("wt-delete-dialog")
+        ?.shadowRoot?.querySelector('wt-button[data-test="delete-confirm"]')
+        ?.shadowRoot?.querySelector("button") ?? null;
     const courseBox = (el: CatalogueScreen) =>
       editor(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
         'wt-combobox[name="product-course"]',
@@ -2186,12 +2203,8 @@ describe("catalogue-screen", () => {
     /** Deletes a course nothing refers to from the window: its Delete, then the confirmation. */
     async function deleteInWindow(el: CatalogueScreen, id: string): Promise<void> {
       inList(el, `[data-test="remove-${id}"]`).click();
-      await vi.waitFor(() =>
-        expect(
-          courseList(el)!.shadowRoot!.querySelector('[data-test="confirm-delete-course"]'),
-        ).not.toBeNull(),
-      );
-      inList(el, '[data-test="confirm-delete-course"]').click();
+      await vi.waitFor(() => expect(deleteConfirm(el)).not.toBeNull());
+      deleteConfirm(el)!.click();
     }
     /** Opens the list's new row and types a name into it, leaving focus in the field. */
     async function typeNewCourse(el: CatalogueScreen, name: string): Promise<void> {
@@ -2280,12 +2293,10 @@ describe("catalogue-screen", () => {
             }),
         ),
         listCourses: vi.fn(courses),
-        listCoursesWithDisabled: vi.fn(courses),
       });
       const el = await openCourses(api, "k1");
       await typeNewCourse(el, "Postres");
       const reads = vi.mocked(api.listCourses).mock.calls.length;
-      const listReads = vi.mocked(api.listCoursesWithDisabled).mock.calls.length;
       const doneButton = el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!;
       await userEvent.click(doneButton);
       await userEvent.click(doneButton);
@@ -2296,8 +2307,7 @@ describe("catalogue-screen", () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
       // The list's own read after the add, then the window's one on closing.
-      expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(listReads + 1);
-      expect(api.listCourses).toHaveBeenCalledTimes(reads + 1);
+      expect(api.listCourses).toHaveBeenCalledTimes(reads + 2);
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
       expect(await shownCourse(el)).toBe("Postres");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
@@ -2307,7 +2317,19 @@ describe("catalogue-screen", () => {
       let answerRemoval!: () => void;
       const api = courseApi(
         {
-          removeCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
+          deleteCourse: vi.fn(
+            (id: string) =>
+              new Promise<Awaited<ReturnType<DashboardApi["deleteCourse"]>>>(
+                (resolve) =>
+                  (answerRemoval = () =>
+                    resolve({
+                      target: { id, name: "Principales" },
+                      refusals: [],
+                      ends: [],
+                      removes: [],
+                    })),
+              ),
+          ),
         },
         true,
       );
@@ -2318,7 +2340,7 @@ describe("catalogue-screen", () => {
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
-      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["k2", { disable: false }]]);
+      expect(vi.mocked(api.deleteCourse).mock.calls).toEqual([["k2"]]);
       expect([coursesWindow(el).open, editor(el).currentValue.courseId]).toEqual([true, "k1"]);
       answerRemoval();
       await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
@@ -2340,18 +2362,17 @@ describe("catalogue-screen", () => {
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       inList(el, '[data-test="remove-k2"]').click();
-      const confirmation = () =>
-        courseList(el)!.shadowRoot!.querySelector('[data-test="confirm-delete-course"]');
+      const confirmation = () => deleteConfirm(el);
       await vi.waitFor(() => expect(confirmation()).not.toBeNull());
       answerCreate();
       await vi.waitFor(() => expect(created).toBe(true));
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
       expect([coursesWindow(el).open, confirmation() !== null]).toEqual([true, true]);
-      expect(api.removeCourse).not.toHaveBeenCalled();
-      inList(el, '[data-test="confirm-delete-course"]').click();
+      expect(api.deleteCourse).not.toHaveBeenCalled();
+      deleteConfirm(el)!.click();
       await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
-      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["k2", { disable: false }]]);
+      expect(vi.mocked(api.deleteCourse).mock.calls).toEqual([["k2"]]);
       await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
     });
 
@@ -2360,7 +2381,7 @@ describe("catalogue-screen", () => {
       const el = await openCourses(api, "k1");
       inList(el, '[data-test="remove-k2"]').click();
       const confirmation = () =>
-        courseList(el)!.shadowRoot!.querySelector('[data-test="delete-course-modal"]');
+        courseList(el)!.shadowRoot!.querySelector('[data-test="delete-course-dialog"]');
       await vi.waitFor(() => expect(confirmation()).not.toBeNull());
       const closed = dialogClosed(confirmation()!);
       await userEvent.keyboard("{Escape}");
@@ -2369,7 +2390,7 @@ describe("catalogue-screen", () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
       await flush(el);
       expect(coursesWindow(el).open).toBe(true);
-      expect(api.removeCourse).not.toHaveBeenCalled();
+      expect(api.deleteCourse).not.toHaveBeenCalled();
     });
 
     it("stays open when a course left by pressing Done is refused, showing why beside its name", async () => {
@@ -2440,7 +2461,7 @@ describe("catalogue-screen", () => {
       expect(editor(el).currentValue.courseId).toBe("k1");
     });
 
-    it("offers only active courses in the product's course box, though the window lists a disabled one", async () => {
+    it("omits deleted courses from both the product box and the courses window", async () => {
       const brunch: Course = {
         id: "k3",
         name: "Brunch",
@@ -2450,7 +2471,8 @@ describe("catalogue-screen", () => {
       };
       const api = courseApi({}, false, [...venueCourses, brunch]);
       const el = await openCourses(api, "k1");
-      expect(inList(el, '[data-test="status-k3"]')).not.toBeNull();
+      expect(inList(el, '[data-test="status-k3"]')).toBeNull();
+      expect(inList(el, 'tr[data-course="k3"]')).toBeNull();
       await done(el);
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2"]);
       const box = courseBox(el) as unknown as LitElement;

@@ -39,7 +39,7 @@ async function mount(
         ],
         updateStatus: async () => {},
         listStations: async () => [],
-        listCoursesWithDisabled: async () => [],
+        listCourses: async () => [],
         getKitchenTimingDefaults: async () => ({
           warmAfterMinutes: 5,
           overdueAfterMinutes: 10,

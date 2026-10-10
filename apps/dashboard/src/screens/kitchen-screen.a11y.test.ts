@@ -43,10 +43,25 @@ function stubApi(stations: Station[], courses: Course[] = COURSES): DashboardApi
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-    listCoursesWithDisabled: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
+    listCourses: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    removeCourse: vi.fn().mockResolvedValue(undefined),
+    getCourseDeleteImpact: vi.fn((id: string) =>
+      Promise.resolve({
+        target: { id, name: courses.find((c) => c.id === id)?.name ?? id },
+        refusals: [],
+        ends: [],
+        removes: [],
+      }),
+    ),
+    deleteCourse: vi.fn((id: string) =>
+      Promise.resolve({
+        target: { id, name: courses.find((c) => c.id === id)?.name ?? id },
+        refusals: [],
+        ends: [],
+        removes: [],
+      }),
+    ),
     getKitchenTimingDefaults: vi.fn().mockResolvedValue({
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,

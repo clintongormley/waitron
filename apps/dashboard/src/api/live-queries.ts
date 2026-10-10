@@ -380,7 +380,6 @@ export const QUERY_DEPENDENCIES = {
   getCourseDeleteImpact: ["kitchen_courses", "products"],
   listStations: ["kitchen_stations"],
   listCourses: ["kitchen_courses"],
-  listCoursesWithDisabled: ["kitchen_courses"],
   listTables: ["dining_tables", "floor_zones", "working_orders", "table_service_statuses"],
   listZones: ["floor_zones"],
   getFloorPlan: [

@@ -37,7 +37,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   const liveData = new LiveData();
   const api = {
     liveData,
-    listCoursesWithDisabled: async () => [],
+    listCourses: async () => [],
     getBumpMode: async () => ({ mode: "line" }),
     getFireControl: async () => ({ mode: "waiter" }),
     setBumpMode: async () => {},

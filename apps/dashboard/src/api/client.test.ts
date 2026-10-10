@@ -1866,21 +1866,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("temporary course list declaration reads the active-only list", async () => {
-    const rows = [
-      { id: "k1", name: "Entrantes", displayOrder: 0, active: true },
-      { id: "k2", name: "Brunch", displayOrder: 1, active: true },
-    ];
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.listCoursesWithDisabled()).toEqual(rows);
-    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
-  });
-
   it("createCourse POSTs { name } and returns the id (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "k1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -1919,35 +1904,19 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("removeCourse DELETEs the course and resolves undefined on an empty 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+  it("deleteCourse returns its complete impact without a disable query", async () => {
+    const impact = {
+      target: { id: "k1", name: "Entrantes" },
+      refusals: [],
+      ends: [],
+      removes: [{ key: "course_products", count: 2, targets: [] }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.removeCourse("k1", { disable: false })).resolves.toBeUndefined();
+    await expect(api.deleteCourse("k1")).resolves.toEqual(impact);
     expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1", {
       method: "DELETE",
       credentials: "include",
-    });
-  });
-
-  it("removeCourse asks the server only to disable the course when the screen offered Disable", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.removeCourse("k1", { disable: true })).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1?disable=true", {
-      method: "DELETE",
-      credentials: "include",
-    });
-  });
-
-  it("enableCourse PATCHes { active: true } to the course and resolves undefined on an empty 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.enableCourse("k1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/courses/k1", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ active: true }),
     });
   });
 

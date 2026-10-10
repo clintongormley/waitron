@@ -361,7 +361,7 @@ it("refreshes the bucket copy's settings every ten seconds, and depends on `back
 });
 
 it("reads the active course list on course changes alone", () => {
-  const query = dashboardQuery(new DashboardApi("", vi.fn()), "listCoursesWithDisabled", []);
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "listCourses", []);
   expect(query.dependencies).toEqual([{ type: "kitchen_courses" }]);
 });
 

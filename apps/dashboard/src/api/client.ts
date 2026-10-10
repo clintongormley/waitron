@@ -667,8 +667,6 @@ export interface Course {
   name: string;
   displayOrder: number;
   active: boolean;
-  /** Something names it, so removing it disables it rather than deleting it. Only the read with the
-   *  disabled courses and a move's answer carry it. */
   inUse?: boolean;
 }
 
@@ -2920,10 +2918,6 @@ export class DashboardApi {
     return this.#request<Course[]>("/management-api/courses", "GET");
   }
 
-  listCoursesWithDisabled(): Promise<Course[]> {
-    return this.#request<Course[]>("/management-api/courses", "GET");
-  }
-
   getCourseDeleteImpact(id: string): Promise<DeleteImpact> {
     return this.#request<DeleteImpact>(
       `/management-api/courses/${encodeURIComponent(id)}/delete-impact`,
@@ -2942,22 +2936,8 @@ export class DashboardApi {
     return this.#request<{ id: string }>("/management-api/courses", "POST", input);
   }
 
-  updateCourse(
-    id: string,
-    patch: { name?: string; displayOrder?: number; active?: boolean },
-  ): Promise<void> {
+  updateCourse(id: string, patch: { name?: string; displayOrder?: number }): Promise<void> {
     return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
-  }
-
-  removeCourse(id: string, { disable }: { disable: boolean }): Promise<void> {
-    return this.#request<void>(
-      `/management-api/courses/${id}${disable ? "?disable=true" : ""}`,
-      "DELETE",
-    );
-  }
-
-  enableCourse(id: string): Promise<void> {
-    return this.updateCourse(id, { active: true });
   }
 
   moveCourse(id: string, to: number): Promise<Course[]> {

@@ -14,30 +14,38 @@ const COURSES: Course[] = [
   { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
   { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
 ];
-const WITH_DISABLED: Course[] = [
-  ...COURSES,
-  { id: "d1", name: "Brunch", displayOrder: 2, active: false, inUse: false },
-];
-
 function stubApi(state: State): DashboardApi {
   return {
-    listCoursesWithDisabled:
+    listCourses:
       state === "load failed"
         ? vi.fn().mockRejectedValue({ code: "connection.failed" })
         : vi.fn().mockResolvedValue(
             state === "empty"
               ? []
-              : (state.includes("disabled course") ? WITH_DISABLED : COURSES).map((c) => ({
+              : COURSES.map((c) => ({
                   ...c,
                 })),
           ),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    removeCourse:
+    deleteCourse:
       state === "Delete dialog, refused"
         ? vi.fn().mockRejectedValue({ code: "connection.failed" })
         : vi.fn().mockResolvedValue(undefined),
-    enableCourse: vi.fn().mockResolvedValue(undefined),
+    getCourseDeleteImpact:
+      state === "Delete dialog, loading"
+        ? vi.fn(() => new Promise(() => {}))
+        : state === "Delete dialog, read failed"
+          ? vi.fn().mockRejectedValue({ code: "connection.failed" })
+          : vi.fn().mockResolvedValue({
+              target: { id: "c1", name: "Starters" },
+              refusals: [],
+              ends: [],
+              removes:
+                state === "Delete dialog, products"
+                  ? [{ key: "course_products", count: 3, targets: [] }]
+                  : [],
+            }),
     moveCourse: vi.fn().mockResolvedValue(COURSES),
   } as unknown as DashboardApi;
 }
@@ -49,8 +57,9 @@ const states = [
   "renaming, refused blank",
   "adding",
   "menu open at phone width",
-  "with a disabled course",
-  "disabled course's menu open at phone width",
+  "Delete dialog, products",
+  "Delete dialog, loading",
+  "Delete dialog, read failed",
   "Delete dialog at phone width",
   "Delete dialog, refused",
 ] as const;
@@ -92,26 +101,28 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
       (q('tr[data-course="c2"] wt-row-actions') as unknown as WtRowActions).show();
       await settle(el);
     }
-    if (state.includes("disabled course")) expect(q('[data-test="status-d1"]')).not.toBeNull();
-    if (state === "disabled course's menu open at phone width") {
-      (q('tr[data-course="d1"] wt-row-actions') as unknown as WtRowActions).show();
-      await settle(el);
-      expect(q('[data-test="enable-d1"]')).not.toBeNull();
-    }
     if (state.startsWith("Delete dialog")) {
       q('[data-test="remove-c1"]').click();
       await settle(el);
-      expect(q('[data-test="delete-course-modal"]')).not.toBeNull();
+      expect(q('[data-test="delete-course-dialog"]')).not.toBeNull();
     }
     if (state === "Delete dialog, refused") {
-      q('[data-test="confirm-delete-course"]').click();
+      const dialog = q("wt-delete-dialog");
       await vi.waitFor(() =>
         expect(
-          (
-            q('[data-test="delete-course-modal"] wt-form-actions') as HTMLElement & {
-              error: string;
-            }
-          ).error,
+          dialog.shadowRoot
+            ?.querySelector('wt-button[data-test="delete-confirm"]')
+            ?.shadowRoot?.querySelector("button")?.disabled,
+        ).toBe(false),
+      );
+      dialog
+        .shadowRoot!.querySelector('wt-button[data-test="delete-confirm"]')!
+        .shadowRoot!.querySelector("button")!
+        .click();
+      await vi.waitFor(() =>
+        expect(
+          (dialog.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+            .error,
         ).not.toBe(""),
       );
     }

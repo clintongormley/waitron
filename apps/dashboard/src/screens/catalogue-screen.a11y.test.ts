@@ -136,7 +136,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     }),
     listStations: vi.fn().mockResolvedValue(stations),
     listCourses: vi.fn().mockResolvedValue(courses),
-    listCoursesWithDisabled: vi.fn().mockResolvedValue(courses),
     listUnits: vi
       .fn()
       .mockResolvedValue([
