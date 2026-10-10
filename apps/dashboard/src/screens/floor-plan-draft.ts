@@ -216,6 +216,7 @@ export function placeTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
     t.placement === null || t.key === key ? [] : [t.placement],
   );
   const spot = firstFreeSpot(placed);
+  if (spot === null) return draft;
   return patchTable(draft, key, {
     placement: {
       x: clampToGrid(spot.x),

@@ -402,6 +402,12 @@ describe("floor plan draft", () => {
     expect(table(p, "m1").placement?.x).toBe(9);
   });
 
+  it("leaves a table unplaced when the plan has no free spot for it", () => {
+    const floor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+    const d = patchTable(open(), "m1", { placement: floor });
+    expect(placeTable(d, "m2")).toBe(d);
+  });
+
   it("returns the same draft when placing a table that already has a place", () => {
     const d = open();
     expect(placeTable(d, "m1")).toBe(d);

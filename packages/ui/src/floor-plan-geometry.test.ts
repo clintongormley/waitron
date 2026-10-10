@@ -166,11 +166,11 @@ describe("floor plan geometry", () => {
     });
   });
 
-  it("answers the top-left corner when nothing inside the range is free", () => {
+  it("answers null when nothing inside the range is free", () => {
     const full = Array.from({ length: 11 }, (_, i) =>
       Array.from({ length: 11 }, (_, j) => table(i * 99, j * 99, 99, 99)),
     ).flat();
-    expect(firstFreeSpot(full)).toEqual({ x: 0, y: 0 });
+    expect(firstFreeSpot(full)).toBeNull();
   });
 
   it("shows a name at 28 px and hides it below", () => {

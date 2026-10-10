@@ -118,22 +118,19 @@ function overlaps(a: PlanRect, b: PlanRect): boolean {
 /**
  * The first spot, row by row, where a `size` box keeps a square's gap from every table and lies
  * wholly inside the coordinate range. Rows are searched `columns` wide (or as wide as the tables
- * reach) before the rest of the range; a plan with no such spot answers (0, 0).
+ * reach) before the rest of the range; a plan with no such spot answers null.
  */
 export function firstFreeSpot(
   placed: readonly PlanPlacement[],
   size: { width: number; height: number } = { width: NEW_TABLE_SIZE, height: NEW_TABLE_SIZE },
   columns: number = FREE_SPOT_COLUMNS,
-): { x: number; y: number } {
+): { x: number; y: number } | null {
   const boxes = placed.map(rotatedRect);
   const box = bounds(placed);
   const lastX = GRID_MAX - size.width;
   const lastY = GRID_MAX - size.height;
   const band = Math.max(0, Math.max(columns, Math.ceil(box ? box.x + box.width : 0)) - size.width);
-  return (
-    scanFree(boxes, size, Math.min(band, lastX), lastY) ??
-    scanFree(boxes, size, lastX, lastY) ?? { x: 0, y: 0 }
-  );
+  return scanFree(boxes, size, Math.min(band, lastX), lastY) ?? scanFree(boxes, size, lastX, lastY);
 }
 
 function scanFree(
