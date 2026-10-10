@@ -4255,7 +4255,7 @@ async function mountInRealPage(
   document.head.append(style);
   const app = document.createElement("div");
   app.id = "app";
-  applyTokens(app);
+  applyTokens(document.documentElement);
   document.body.append(app);
   await page.viewport(width, height);
   const el = document.createElement("dashboard-app") as DashboardApp;
@@ -4268,6 +4268,7 @@ async function mountInRealPage(
     unmount: async () => {
       app.remove();
       style.remove();
+      document.documentElement.removeAttribute("data-wt-theme-root");
       document.scrollingElement!.scrollTop = 0;
       await page.viewport(before.width, before.height);
     },
@@ -4405,6 +4406,112 @@ it("keeps the desktop sidebar in the page beside the content", async () => {
   } finally {
     await unmount();
   }
+});
+
+describe("the floor plan editor inside the real page", () => {
+  const floorPlanApi = (locale: string) =>
+    stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        locale,
+        permissions: ["venue.configure"],
+      }),
+      getFloorPlan: vi.fn().mockResolvedValue({
+        zoneId: "z1",
+        revision: 3,
+        savedAt: "2026-10-01T10:00:00.000Z",
+        tables: [
+          {
+            id: "m1",
+            liveTableId: "l1",
+            label: "T1",
+            seats: 4,
+            fixed: false,
+            placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
+          },
+          { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
+        ],
+        joins: [],
+      }),
+      listZones: vi
+        .fn()
+        .mockResolvedValue([{ id: "z1", name: "Terrace", displayOrder: 0, active: true }]),
+      listTables: vi.fn().mockResolvedValue([]),
+    });
+
+  const openEditor = async (locale: string, width: number) => {
+    history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+    const mounted = await mountInRealPage(floorPlanApi(locale), width, 844);
+    const editor = mounted.el.shadowRoot!.querySelector<HTMLElement>(
+      "dashboard-floor-plan-editor",
+    )!;
+    await expect.poll(() => editor.shadowRoot?.querySelector("[data-action=save]")).not.toBeNull();
+    return { ...mounted, editor };
+  };
+
+  const headerTops = (editor: HTMLElement) =>
+    ["[data-action=close]", "[data-action=undo]", "[data-action=redo]", "[data-action=save]"].map(
+      (selector) =>
+        Math.round(editor.shadowRoot!.querySelector(selector)!.getBoundingClientRect().top),
+    );
+
+  // A wider font than macOS's system one, as CI's Linux Chromium draws.
+  it.each([
+    ["en-GB", "the system font", ""],
+    ["es-ES", "the system font", ""],
+    ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
+  ])(
+    "keeps Close, Undo, Redo and Save on one row at 390 px, 4 px inside the main column's clipping edge (%s, %s)",
+    async (locale, _name, font) => {
+      const { el, editor, unmount } = await openEditor(locale, 390);
+      try {
+        await expect.poll(() => editor.shadowRoot!.querySelector("wt-sheet")).not.toBeNull();
+        if (font !== "") {
+          editor.style.setProperty("--wt-font-family", font);
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        }
+        expect(new Set(headerTops(editor)).size).toBe(1);
+        const main = el.shadowRoot!.querySelector(".main")!.getBoundingClientRect();
+        expect(main.left).toBe(0);
+        expect(main.right).toBe(window.innerWidth);
+        const box = editor.getBoundingClientRect();
+        expect(box.left).toBe(4);
+        expect(box.right).toBe(window.innerWidth - 4);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      } finally {
+        await unmount();
+      }
+    },
+  );
+
+  it("keeps the page's usual inset around the editor at desktop width", async () => {
+    const { el, editor, unmount } = await openEditor("en-GB", 1280);
+    try {
+      const main = el.shadowRoot!.querySelector(".main")!.getBoundingClientRect();
+      const box = editor.getBoundingClientRect();
+      expect(box.left).toBe(main.left + 16);
+      expect(box.right).toBe(main.right - 16);
+      expect(window.innerWidth - el.getBoundingClientRect().right).toBe(24);
+    } finally {
+      await unmount();
+    }
+  });
+
+  it("keeps another screen's padding at 390 px", async () => {
+    history.replaceState(null, "", "/manage/overview");
+    const { el, unmount } = await mountInRealPage(floorPlanApi("en-GB"), 390, 844);
+    try {
+      expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
+      const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const style = getComputedStyle(body);
+      expect(body.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft)).toBe(40);
+      expect(body.getBoundingClientRect().right - Number.parseFloat(style.paddingRight)).toBe(
+        window.innerWidth - 40,
+      );
+    } finally {
+      await unmount();
+    }
+  });
 });
 
 const signedOut = () =>
