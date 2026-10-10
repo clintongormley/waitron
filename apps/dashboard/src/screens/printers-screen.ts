@@ -2356,8 +2356,7 @@ export class PrintersScreen extends LitElement {
         data-test=${`delete-printer-${p.id}`}
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
-          const menu = button.closest("dashboard-row-actions");
-          this.#openDelete(p, menu?.shadowRoot?.querySelector<HTMLElement>("button") ?? button);
+          this.#openDelete(p, this.#rowMenuButton(button) ?? button);
         }}
         >${t("action.delete")}</wt-button
       >
@@ -3172,12 +3171,20 @@ export class PrintersScreen extends LitElement {
     }
   }
 
+  /** The button that opens the row menu `action` sits in. */
+  #rowMenuButton(action: HTMLElement): HTMLButtonElement | undefined {
+    return (
+      action
+        .closest("dashboard-row-actions")
+        ?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? undefined
+    );
+  }
+
   #rememberEditTrigger(event: Event): void {
-    const menu = (event.currentTarget as HTMLElement).closest("dashboard-row-actions");
-    this.#editTrigger = menu?.shadowRoot
-      ?.querySelector<HTMLElement>("[popover]")
-      ?.matches(":popover-open")
-      ? menu.shadowRoot.querySelector<HTMLButtonElement>("button")!
+    const trigger = this.#rowMenuButton(event.currentTarget as HTMLElement);
+    const menu = trigger?.getRootNode() as ShadowRoot | undefined;
+    this.#editTrigger = menu?.querySelector("[popover]")?.matches(":popover-open")
+      ? trigger
       : undefined;
   }
 
