@@ -114,6 +114,16 @@ function expectSave(el: FloorPlanEditor, look: "quiet" | "awake"): void {
   expect(button(el, "save")!.disabled).toBe(look === "quiet");
 }
 
+const afterFirstSave: FloorPlan = {
+  ...plan(),
+  revision: 4,
+  tables: [
+    ...plan().tables.slice(0, 2),
+    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    { id: "m5", liveTableId: "l5", label: "T5", seats: 2, fixed: false, placement: t5Placement },
+  ],
+};
+
 function withT5(label = "T5"): FloorPlanDraft {
   let n = 0;
   const added = addTables(
@@ -178,15 +188,13 @@ it("an edit made while the save is pending is kept, and Save stays active", asyn
 it("a selected new table keeps its selection under its master id", async () => {
   const api = stubApi({
     saveFloorPlan: vi.fn().mockResolvedValue({ revision: 4, ids: { ...savedIds, "new:1": "m5" } }),
-    getFloorPlan: vi
-      .fn()
-      .mockResolvedValueOnce(plan())
-      .mockReturnValueOnce(new Promise(() => {})),
+    getFloorPlan: vi.fn().mockResolvedValueOnce(plan()).mockResolvedValueOnce(afterFirstSave),
   });
   const el = await open(api);
   await fromCanvas(el, "floor-plan-change", { draft: withT5() });
   await fromCanvas(el, "floor-plan-select", { key: "new:1" });
   await press(el, "save");
+  expect(api.getFloorPlan).toHaveBeenCalledTimes(2);
   expect(canvas(el).selected).toBe("m5");
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1", "m5"]);
 });
@@ -346,7 +354,113 @@ it("Load newer plan replaces the draft and writes nothing", async () => {
   expect(saveFloorPlan.mock.calls[1]![1].revision).toBe(4);
 });
 
-it("a save's answer that lands after Load newer plan began is ignored, and Save still sends", async () => {
+it("an accepted save whose answer lands after another zone opened changes nothing there", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const saveFloorPlan = vi
+    .fn()
+    .mockReturnValueOnce(write.promise)
+    .mockReturnValue(new Promise(() => {}));
+  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!], joins: [] };
+  const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  await move(el, "m1", 9);
+  write.resolve({ revision: 9, ids: savedIds });
+  await flush(el);
+  expect(placed(el, "m1").x).toBe(9);
+  expectSave(el, "awake");
+  expect(getFloorPlan).toHaveBeenCalledTimes(2);
+  await press(el, "save");
+  expect(saveFloorPlan).toHaveBeenCalledTimes(2);
+  expect(saveFloorPlan.mock.calls[1]![1].revision).toBe(3);
+});
+
+it("a refused save whose answer lands after the page left shows nothing", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const saveFloorPlan = vi.fn().mockReturnValueOnce(write.promise);
+  const el = await open(stubApi({ saveFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  const parent = el.parentNode!;
+  el.remove();
+  parent.append(el);
+  await el.updateComplete;
+  write.reject({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+  await flush(el);
+  expect(message(el)).toBe("");
+  expect(button(el, "load-newer")).toBeNull();
+  expectSave(el, "awake");
+});
+
+it("a refused save whose answer lands after another zone opened shows nothing, and Save still sends", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const saveFloorPlan = vi
+    .fn()
+    .mockReturnValueOnce(write.promise)
+    .mockReturnValue(new Promise(() => {}));
+  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!], joins: [] };
+  const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  write.reject({ code: "server.internal" });
+  await flush(el);
+  expect(message(el)).toBe("");
+  await move(el, "m1", 9);
+  await press(el, "save");
+  expect(saveFloorPlan).toHaveBeenCalledTimes(2);
+  expect(saveFloorPlan.mock.calls[1]![0]).toBe("z2");
+});
+
+it("a refresh's answer that lands after a later save's refresh is dropped", async () => {
+  const first = deferred<FloorPlan>();
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(plan())
+    .mockReturnValueOnce(first.promise)
+    .mockResolvedValueOnce(plan(9));
+  const el = await open(stubApi({ getFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  await move(el, "m1", 9);
+  await press(el, "save");
+  expect(getFloorPlan).toHaveBeenCalledTimes(3);
+  first.resolve(plan(5));
+  await flush(el);
+  expect(placed(el, "m1").x).toBe(9);
+  expectSave(el, "quiet");
+});
+
+it("a successful Load newer plan clears every message", async () => {
+  const saveFloorPlan = vi
+    .fn()
+    .mockRejectedValueOnce({
+      code: "floor_plan.out_of_date",
+      params: { zoneId: "z1", revision: 4 },
+    })
+    .mockRejectedValueOnce({ code: "server.internal" });
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(plan())
+    .mockResolvedValueOnce({ ...plan(7), revision: 4 });
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  await press(el, "save");
+  expect(message(el)).toBe("Something went wrong, try again");
+  await press(el, "load-newer");
+  expect(message(el)).toBe("");
+  expect(button(el, "load-newer")).toBeNull();
+});
+
+it("Save pressed again after an older copy hides Load newer plan while it is sent", async () => {
   const write = deferred<{ revision: number; ids: Record<string, string> }>();
   const saveFloorPlan = vi
     .fn()
@@ -354,24 +468,29 @@ it("a save's answer that lands after Load newer plan began is ignored, and Save 
       code: "floor_plan.out_of_date",
       params: { zoneId: "z1", revision: 4 },
     })
-    .mockReturnValueOnce(write.promise)
-    .mockResolvedValue({ revision: 5, ids: savedIds });
-  const getFloorPlan = vi
-    .fn()
-    .mockResolvedValueOnce(plan())
-    .mockResolvedValueOnce({ ...plan(7), revision: 4 })
-    .mockReturnValue(new Promise(() => {}));
-  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+    .mockReturnValueOnce(write.promise);
+  const el = await open(stubApi({ saveFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
+  expect(button(el, "load-newer")).not.toBeNull();
+  await press(el, "save");
+  expect(message(el)).toBe("");
+  expect(button(el, "load-newer")).toBeNull();
+  write.reject({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+  await flush(el);
+  expect(button(el, "load-newer")).not.toBeNull();
+});
+
+it("Load newer plan drops the selection of a table the newer plan no longer has", async () => {
+  const saveFloorPlan = vi
+    .fn()
+    .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+  const newer: FloorPlan = { ...plan(), revision: 4, tables: plan().tables.slice(1), joins: [] };
+  const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockResolvedValueOnce(newer);
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await move(el, "m1", 5);
   await press(el, "save");
   await press(el, "load-newer");
-  write.resolve({ revision: 9, ids: savedIds });
-  await flush(el);
-  expect(placed(el, "m1").x).toBe(7);
-  expectSave(el, "quiet");
-  await move(el, "m1", 9);
-  await press(el, "save");
-  expect(saveFloorPlan).toHaveBeenCalledTimes(3);
-  expect(saveFloorPlan.mock.calls[2]![1].revision).toBe(4);
+  expect(canvas(el).selected).toBeNull();
 });

@@ -233,6 +233,27 @@ it("a departed save's answer cannot change a reconnected editor", async () => {
   close(el);
   await expect.poll(() => question(app).open).toBe(true);
   expect(location.pathname).toBe("/manage/floor-plan/zone/z1");
+  await choose(app, "keep");
+  button(el, "save").click();
+  await expect.poll(() => api.saveFloorPlan.mock.calls.length).toBe(2);
+});
+
+it("an edit made while a save is sent still asks on Close once the save is accepted", async () => {
+  const { app, api } = await mount();
+  let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
+  api.saveFloorPlan.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+  const el = editor(app);
+  await move(el);
+  button(el, "save").click();
+  await expect.poll(() => api.saveFloorPlan.mock.calls.length).toBe(1);
+  await move(el, 7);
+  answer({ revision: 4, ids: { m1: "m1" } });
+  await expect.poll(() => api.getFloorPlan.mock.calls.length).toBe(2);
+  await el.updateComplete;
+  expect(placed(el, "m1").x).toBe(7);
+  close(el);
+  await expect.poll(() => question(app).open).toBe(true);
+  expect(location.pathname).toBe("/manage/floor-plan/zone/z1");
 });
 
 it("an accepted save leaves without asking", async () => {

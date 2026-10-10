@@ -150,6 +150,7 @@ export class FloorPlanEditor extends LitElement {
   @state() private revision = 0;
   @state() private message: EditorMessage | null = null;
   @state() private outOfDate = false;
+  @state() private saving = false;
 
   /** The body of the last save sent, so a refusal naming `tables.<i>` finds the key it meant. */
   protected sent: FloorPlanSave | null = null;
@@ -160,7 +161,6 @@ export class FloorPlanEditor extends LitElement {
   #zoneId: string | null = null;
   #request = 0;
   #saveRequest = 0;
-  #saving = false;
   #history: UndoHistory<FloorPlanDraft> | null = null;
   #opened: FloorPlanDraft | null = null;
   #scope?: DraftScope<FloorPlanDraft>;
@@ -187,7 +187,7 @@ export class FloorPlanEditor extends LitElement {
 
   override disconnectedCallback(): void {
     this.#saveRequest++;
-    this.#saving = false;
+    this.saving = false;
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -287,23 +287,23 @@ export class FloorPlanEditor extends LitElement {
   }
 
   readonly #save = async (): Promise<void> => {
-    const zoneId = this.#zoneId;
-    if (this.#saving || saveActionState(this.#scope).unchanged) return;
-    if (zoneId === null || this.draft === null) return;
-    const draft = this.draft;
+    if (this.saving || saveActionState(this.#scope).unchanged) return;
+    // A scope exists only once a zone's plan is loaded, so both are set here.
+    const zoneId = this.#zoneId!;
+    const draft = this.draft!;
     const sentDraft = trimLabels(draft);
     const body = saveFromDraft(this.revision, sentDraft);
     const request = this.#request;
     const saveRequest = ++this.#saveRequest;
     this.sent = body;
-    this.#saving = true;
+    this.saving = true;
     this.message = null;
     let answer: { revision: number; ids: Record<string, string> };
     try {
       answer = await this.api.saveFloorPlan(zoneId, body);
     } catch (error) {
       if (saveRequest !== this.#saveRequest) return;
-      this.#saving = false;
+      this.saving = false;
       if (request !== this.#request) return;
       const code = codeOf(error);
       if (code === "floor_plan.out_of_date") this.outOfDate = true;
@@ -311,7 +311,7 @@ export class FloorPlanEditor extends LitElement {
       return;
     }
     if (saveRequest !== this.#saveRequest) return;
-    this.#saving = false;
+    this.saving = false;
     if (request !== this.#request) return;
     const { ids } = answer;
     const saved = rekeyDraft(sentDraft, ids);
@@ -329,8 +329,7 @@ export class FloorPlanEditor extends LitElement {
   };
 
   readonly #loadNewer = (): void => {
-    if (this.#zoneId === null) return;
-    void this.#reread(this.#zoneId, ++this.#request, true);
+    void this.#reread(this.#zoneId!, ++this.#request, true);
   };
 
   /** A refresh replaces only an unchanged draft; Load newer plan replaces it whatever it holds. */
@@ -346,7 +345,7 @@ export class FloorPlanEditor extends LitElement {
     this.#clearReadMessage();
     if (replace) {
       this.outOfDate = false;
-      if (this.message?.code === "floor_plan.out_of_date") this.message = null;
+      this.message = null;
     } else if (!saveActionState(this.#scope).unchanged) {
       return;
     }
@@ -427,7 +426,7 @@ export class FloorPlanEditor extends LitElement {
             >${t("action.close")}</a
           >
           ${
-            this.outOfDate
+            this.outOfDate && !this.saving
               ? html`<wt-button
                   slot="secondary"
                   data-action="load-newer"
