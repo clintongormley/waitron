@@ -653,9 +653,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch
   closes everything in it (owner, 2026-10-10; open).** Every table's Customise columns button moves
   to the right-hand end of its toolbar (seen on Products, a menu's Price overrides and Modifiers →
-  Extras). Products and a menu's Structure tab lose Expand all; their top row ("All products", the
-  menu's own name) opens and closes everything instead. Closing a branch on Products closes every
-  branch inside it. The Structure tab's Reorder and Select buttons become one, as on Products.
+  Extras), last at every width. Products and a menu's Structure tab lose Expand all; their top row
+  ("All products", the menu's own name) opens its own level and, closed, closes everything. Closing
+  a branch closes every branch inside it. The Structure tab's Reorder and Select buttons become one,
+  as on Products. Every table's Select all checkbox lines up with the rows' checkboxes.
   [Detail](backlog/catalogue.md#a462--dashboard-table-toolbars-column-chooser-at-the-end-no-expand-all-closing-a-branch-closes-everything-in-it)
 
 - **A463 — Products list filters: Made at, Modifiers, Allergens and Dietary info; "Show archived"

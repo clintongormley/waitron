@@ -61,7 +61,8 @@ them as today.
 ## A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch closes everything in it
 
 Owner, 2026-10-10, from screenshots of Products, a menu's Structure and Price overrides tabs, and
-Modifiers → Extras. Four changes.
+Modifiers → Extras. Five changes; the owner's answers of 2026-10-10 to the first draft's open
+points are folded in.
 
 **1. The Customise columns button sits at the right-hand end of every table's toolbar**, after the
 search field. Today `wt-data-table` draws Filters, `toolbar-start`, Expand all, `toolbar-end`,
@@ -70,29 +71,34 @@ on purpose, so Tab crosses the buttons on the first line before reaching search 
 when the table is narrow. Moving Customise after search changes that rule: at each width, the order
 Tab follows must still match what is drawn, and the "Tab follows" cases in
 `packages/ui/src/components/wt-data-table.test.ts` and
-`apps/dashboard/src/widgets/catalogue-browser.test.ts` change with it. Not decided: where Customise
-goes when search takes its own line (at the end of the button line, or after search on the line
-below).
+`apps/dashboard/src/widgets/catalogue-browser.test.ts` change with it. Owner, 2026-10-10: "we'll
+almost never use this button, so it goes on the right" — at every width it is the last control,
+drawn and reached by Tab after search; where search takes its own line, Customise ends that line.
 
 **2. No Expand all or Collapse all on Products or a menu's Structure tab.** The top row ("All
 products"; the menu's own name on Structure) opens and closes everything instead. Today that row
 cannot be closed at all: both tables pass `rowCollapsible` returning false for the root row
 (`apps/dashboard/src/widgets/product-list.ts`, `apps/dashboard/src/widgets/menu-structure-table.ts`),
-so the top row needs a chevron. Assumed, not asked: opening the top row opens every level, as Expand
-all does today, and closing it closes every level. A menu's Preview tab
-(`apps/dashboard/src/widgets/menu-document-tree.ts`) also shows Expand all; the owner was asked on
-2026-10-10 whether it goes too and has not answered, so leave it until they do. If Preview loses it
-too, nothing passes `expandAllLabel` to `wt-data-table` any more, and the table's Expand all can be
-removed. The entry "The Menus Structure tree notices Collapse all only by watching its table
+so the top row needs a chevron. Owner, 2026-10-10: opening the top row opens only its own level,
+like any other branch. Closing it closes every level, by point 3, so on both tables it is how to
+collapse everything. A menu's Preview tab (`apps/dashboard/src/widgets/menu-document-tree.ts`) keeps
+its Expand all (owner, 2026-10-10), so `wt-data-table` keeps the feature. The entry "The Menus Structure tree notices Collapse all only by watching its table
 redraw" below then needs revisiting: closing the top row still closes many branches at once.
 
-**3. Closing a branch on Products closes every branch inside it**, so opening it again shows its
-categories closed rather than as they were left.
+**3. Closing a branch closes every branch inside it**, on Products and on a menu's Structure tab,
+so opening it again shows its categories or sections closed rather than as they were left.
 
 **4. A menu's Structure tab has one button for Reorder and Select.** Pressing it shows the
 checkboxes and the drag handles together, as Products already does (`catalogue-browser.ts` passes
 one `selecting` state to both `.selecting` and `.reordering`); today `menus-screen.ts` keeps
 `structureReordering` and `structureSelecting` apart.
+
+**5. The header's Select all checkbox lines up with the rows' checkboxes, on every table** (owner,
+2026-10-10: "do this everywhere"). Seen on Products at phone width with select mode on: the rows'
+checkboxes sit at the start of the controls column with the drag handle after them, while the
+header's checkbox sits further right, over the gap between them. The header and the rows are drawn
+by `wt-data-table` (the select-all cell and the row-controls cell), so fix it there, with and
+without drag handles, and pin the alignment in a test that measures both boxes.
 
 ## A463 — Products list filters: Made at, Modifiers, Allergens and Dietary info; "Show archived" replaces Status
 
@@ -108,8 +114,8 @@ filter there is a column's `filter`.
   states (`allergenState`, `apps/dashboard/src/i18n/domain.ts`). The owner first asked for one
   "nutritional info" filter (has dietary info / has allergens / has none) and chose this split on
   2026-10-10, so that a product never checked stays apart from one checked and allergen-free.
-- **Dietary info**: Has / None. Assumed, not asked: "has" means a dietary origin other than Not
-  categorised, or any diet override (Vegan, Vegetarian, Halal, Kosher) set.
+- **Dietary info**: Has / None. "Has" means a dietary origin other than Not categorised, or any diet
+  override (Vegan, Vegetarian, Halal, Kosher) set (owner confirmed, 2026-10-10).
 
 **2. The filters appear in the order of the default columns**: Made at, Modifiers, Standalone
 ordering, Allergens, Dietary info. Pin it in a test.
