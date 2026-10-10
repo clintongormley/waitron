@@ -2339,6 +2339,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         </button>
       </div>
       <div class="table-filters">
+        <slot name="filters-start"></slot>
         ${this.columns.map((column) => {
           const active = this.#activeValues(column);
           const multiple = column.filter?.multiple;
