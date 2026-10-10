@@ -7,6 +7,7 @@ import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-button.js";
 import "./wt-data-table.js";
+import "./wt-switch.js";
 
 afterEach(cleanup);
 
@@ -702,6 +703,47 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
       expect(panel.hasAttribute("data-side")).toBe(true);
       expect(getComputedStyle(panel).display).not.toBe("none");
       expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  test("an open Filters panel with a switch the screen put in the filters-start slot", async () => {
+    const width = innerWidth,
+      height = innerHeight;
+    await page.viewport(1280, 900);
+    try {
+      const el = (await mountThemed(
+        `<wt-data-table aria-label="Users" style="width: 900px"
+          ><wt-switch slot="filters-start" label="Show archived"></wt-switch
+        ></wt-data-table>`,
+        theme,
+      )) as WtDataTable<Row>;
+      el.columns = [
+        { key: "name", label: "Name", cell: (row) => row.name },
+        {
+          key: "status",
+          label: "Status",
+          cell: (row) => row.status,
+          filter: {
+            label: "Filter by status",
+            allLabel: "Any status",
+            value: (row) => row.status,
+            options: [{ value: "Active", label: "Active" }],
+          },
+        },
+      ] satisfies DataTableColumn<Row>[];
+      el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+      el.rowKey = (row) => row.id;
+      await el.updateComplete;
+      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+      await userEvent.click(trigger);
+      await el.updateComplete;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+      expect(getComputedStyle(panel).display).not.toBe("none");
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(el.querySelector("wt-switch")!.assignedSlot!.closest(".filters-panel")).toBe(panel);
       await expectNoA11yViolations(host);
     } finally {
       await page.viewport(width, height);

@@ -14,12 +14,13 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
 import {
   allergenState,
   allergenStateName,
-  productStatusName,
+  productArchivedName,
   vatClassName,
 } from "../i18n/domain.js";
 import { categoryWithDescendants } from "./category-form.js";
@@ -50,7 +51,13 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, MadeAt, Product } from "../api/client.js";
+import {
+  DIETARY_ORIGINS,
+  type CategorySummary,
+  type DietaryOrigin,
+  type MadeAt,
+  type Product,
+} from "../api/client.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import {
@@ -87,6 +94,37 @@ function orderingName(ordering: ProductOrdering): string {
 /** The till sells a variant only while it AND its product are Active, so that is its status. */
 function rowActive({ product, variant }: ProductRow): boolean {
   return product.active && (variant?.active ?? true);
+}
+
+const OVERRIDE_DIETS = ["vegan", "vegetarian", "halal", "kosher"] as const;
+
+function recipeOrigins(product: Product): DietaryOrigin[] {
+  const origins = product.dietDerivation?.origins ?? [];
+  return DIETARY_ORIGINS.filter((origin) => origins.includes(origin));
+}
+
+function hasDietaryInfo(product: Product): boolean {
+  return (
+    recipeOrigins(product).length > 0 ||
+    product.dietaryDeclarations.length > 0 ||
+    OVERRIDE_DIETS.some((diet) => product.dietOverride?.[diet] !== undefined)
+  );
+}
+
+function dietaryInfoText(product: Product): string {
+  const origins = recipeOrigins(product).map((origin) => t(`origin.${origin}`));
+  const declared = product.dietaryDeclarations.map((label) => t(`editor.diet.${label}`));
+  const overridden = OVERRIDE_DIETS.flatMap((diet) => {
+    const answer = product.dietOverride?.[diet];
+    return answer === undefined ? [] : [`${t(`diet.${diet}`)}: ${t(`diet.${answer}`)}`];
+  });
+  return [...origins, ...declared, ...overridden].join(", ");
+}
+
+/** The station the Made at column names for a product, or null where it names none. */
+function madeAtStation(maker: MadeAt | undefined): string | null {
+  if (maker === undefined || maker.noPreparation) return null;
+  return maker.noReplacement ? maker.unavailableStationId : maker.stationId;
 }
 
 export function acceptsCatalogueDrop(
@@ -308,6 +346,12 @@ export class ProductList extends LitElement {
         grid-row: 2;
         grid-column: 1 / -1;
       }
+      /* Drawn as one more section of the Filters panel, above the column filters. */
+      wt-switch[slot="filters-start"] {
+        display: flex;
+        padding-block: var(--wt-space-2);
+        border-bottom: 1px solid var(--wt-color-border);
+      }
       wt-data-table::part(maker-link) {
         display: block;
         max-inline-size: 12rem;
@@ -361,6 +405,8 @@ export class ProductList extends LitElement {
   @property({ type: Boolean }) choosingColor = false;
   /** Whether the catalogue has loaded, so that an empty one is known to be empty. */
   @property({ type: Boolean }) loaded = false;
+  /** Off, archived products and variants are left out of the rows the table is given. */
+  @state() private showArchived = false;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #nameValue = "";
@@ -644,6 +690,8 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
+    // The Made at filter offers the stations the read names.
+    if (changed.has("madeAt")) this.#columnLocale = "";
     if (changed.has("categories")) {
       this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
     }
@@ -851,28 +899,30 @@ export class ProductList extends LitElement {
             } satisfies DraftRow,
           ]
         : []),
-      ...this.products.flatMap((product): ProductRow[] => [
-        {
-          kind: "product",
-          key: product.id,
-          parentKey: keyOf(product.primaryCategoryId),
-          product,
-          variant: null,
-        },
-        ...product.variants.map((variant): ProductRow => ({
-          kind: "product",
-          key: `${product.id}:${variant.id}`,
-          parentKey: product.id,
-          product,
-          variant,
-        })),
-      ]),
+      ...this.products.flatMap((product): ProductRow[] =>
+        [
+          {
+            kind: "product" as const,
+            key: product.id,
+            parentKey: keyOf(product.primaryCategoryId),
+            product,
+            variant: null,
+          },
+          ...product.variants.map((variant): ProductRow => ({
+            kind: "product",
+            key: `${product.id}:${variant.id}`,
+            parentKey: product.id,
+            product,
+            variant,
+          })),
+        ].filter((row) => this.showArchived || rowActive(row)),
+      ),
     ];
   }
 
   /** What each category holds directly, and under `null` the whole catalogue, counted once per change
-   * of the lists rather than once per row drawn. Inactive products are left out, as the default
-   * Status filter hides them. */
+   * of the lists rather than once per row drawn. Archived products are left out, as Show archived
+   * starts off. */
   #count(): Map<string | null, { categories: number; products: number }> {
     const counts = new Map<string | null, { categories: number; products: number }>([
       [null, { categories: this.categories.length, products: 0 }],
@@ -900,7 +950,7 @@ export class ProductList extends LitElement {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
 
-  /** Removed variants are kept but not counted: the default Status filter hides them. */
+  /** Removed variants are kept but not counted: Show archived starts off. */
   #variantCount(product: Product) {
     const count = product.variants.filter(({ active }) => active).length;
     return count === 0
@@ -908,12 +958,6 @@ export class ProductList extends LitElement {
       : html`<span part="variant-count" data-test="variant-count"
           >${countOf("product.variant_count", count)}</span
         >`;
-  }
-
-  #unavailableBadge() {
-    return html`<span part="badge" data-test="unavailable-badge"
-      >${t("product.unavailable_badge")}</span
-    >`;
   }
 
   /** A product with an Active variant is sold only as one of them, and one with none sells as
@@ -1045,6 +1089,16 @@ export class ProductList extends LitElement {
             >${name}${maker.variesByZone ? html` · ${t("product.varies_by_zone")}` : nothing}</a
           >`;
         },
+        filter: {
+          label: t("product.made_at"),
+          allLabel: t("product.filter_made_at_all"),
+          multiple: {
+            countLabel: (count) =>
+              t("product.filter_made_at_count").replace("{count}", String(count)),
+          },
+          value: ({ product }) => madeAtStation(this.madeAt[product.id]) ?? "",
+          options: this.#stationOptions(),
+        },
       },
       {
         key: "price",
@@ -1071,6 +1125,15 @@ export class ProductList extends LitElement {
         choosable: "shown",
         label: t("editor.modifiers"),
         cell: ({ product, variant }) => (variant ? nothing : this.#modifierNames(product)),
+        filter: {
+          label: t("editor.modifiers"),
+          allLabel: t("product.filter_any"),
+          value: ({ product }) => (product.modifiers.length ? "has" : "none"),
+          options: [
+            { value: "has", label: t("product.has_modifiers") },
+            { value: "none", label: t("product.no_modifiers") },
+          ],
+        },
       },
       {
         key: "ordering",
@@ -1103,31 +1166,22 @@ export class ProductList extends LitElement {
         },
       },
       {
-        key: "active",
+        key: "availability",
         choosable: "shown",
-        label: t("product.status"),
+        label: t("product.availability"),
         cell: (row) => {
           const { product, variant } = row;
-          const active = rowActive(row);
-          return html`<span
-              part="badge"
-              data-test="active-badge"
-              data-active=${active ? "true" : "false"}
-              >${productStatusName(active, variant !== null)}</span
-            >
-            ${(variant ?? product).available ? nothing : this.#unavailableBadge()}`;
+          if (!rowActive(row))
+            return html`<span part="badge" data-test="availability-badge" data-state="archived"
+              >${productArchivedName(variant !== null)}</span
+            >`;
+          return (variant ?? product).available
+            ? nothing
+            : html`<span part="badge" data-test="availability-badge" data-state="unavailable"
+                >${t("product.unavailable_badge")}</span
+              >`;
         },
-        sortValue: (row) => (rowActive(row) ? 0 : 1),
-        filter: {
-          label: t("product.status"),
-          allLabel: t("product.filter_status_all"),
-          value: (row) => (rowActive(row) ? "active" : "inactive"),
-          options: [
-            { value: "active", label: t("product.active_badge") },
-            { value: "inactive", label: t("product.archived_badge") },
-          ],
-          initial: "active",
-        },
+        sortValue: (row) => (!rowActive(row) ? 2 : (row.variant ?? row.product).available ? 0 : 1),
       },
       {
         key: "allergens",
@@ -1142,6 +1196,30 @@ export class ProductList extends LitElement {
         },
         sortValue: ({ product, variant }) =>
           variant ? "" : allergenStateName(allergenState(product.allergens)),
+        filter: {
+          label: t("product.allergens"),
+          allLabel: t("product.filter_any"),
+          value: ({ product }) => allergenState(product.allergens),
+          options: (["pending", "none", "declared"] as const).map((state) => ({
+            value: state,
+            label: allergenStateName(state),
+          })),
+        },
+      },
+      {
+        key: "dietary",
+        choosable: "shown",
+        label: t("product.dietary_info"),
+        cell: ({ product, variant }) => (variant ? nothing : dietaryInfoText(product)),
+        filter: {
+          label: t("product.dietary_info"),
+          allLabel: t("product.filter_any"),
+          value: ({ product }) => (hasDietaryInfo(product) ? "has" : "none"),
+          options: [
+            { value: "has", label: t("product.dietary_has") },
+            { value: "none", label: t("product.dietary_none") },
+          ],
+        },
       },
       {
         key: "actions",
@@ -1227,6 +1305,17 @@ export class ProductList extends LitElement {
   }
 
   #columnLocale = "";
+
+  #stationOptions(): { value: string; label: string }[] {
+    const names = new Map<string, string>();
+    for (const maker of Object.values(this.madeAt)) {
+      const id = madeAtStation(maker);
+      if (id !== null) names.set(id, maker.stationName ?? id);
+    }
+    return [...names]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, currentLocale()));
+  }
   #columnList: DataTableColumn<ListRow>[] = [];
 
   #columns(): DataTableColumn<ListRow>[] {
@@ -1542,6 +1631,17 @@ export class ProductList extends LitElement {
         @pointerdown=${this.#pointerDown}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
+        ><wt-switch
+          slot="filters-start"
+          name="show-archived"
+          label=${t("product.show_archived")}
+          .checked=${this.showArchived}
+          @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+            event.stopPropagation();
+            this.showArchived = event.detail.checked;
+            this.#send("show-archived-change", { showArchived: this.showArchived });
+          }}
+        ></wt-switch
         ><slot name="toolbar-search" slot="toolbar-search"></slot
         ><slot name="toolbar-end" slot="toolbar-end"></slot
         ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot></wt-data-table

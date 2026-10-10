@@ -57,6 +57,7 @@ const product = (
   ordering: "public",
   allergens: null,
   dietOverride: null,
+  dietDerivation: null,
   manualAllergens: null,
   image: null,
   color: null,
@@ -971,6 +972,17 @@ export async function chooseFilter(el: CatalogueBrowser, column: string, value: 
   else await chooseOptions(select, value);
   await table.updateComplete;
 }
+/** Turns the Products list's Show archived switch on. */
+export async function showArchived(el: CatalogueBrowser) {
+  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+  const toggle = list.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
+  toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+  await list.updateComplete;
+  await (
+    await tableOf(el)
+  ).updateComplete;
+  await el.updateComplete;
+}
 it("shows top-level folders before unfiled products", async () => {
   expect(await rowKeys(await mountBrowser())).toEqual(["folder:d", "folder:f", "bread"]);
 });
@@ -995,7 +1007,7 @@ it("nests each category's subcategories, then its products, under it once it is 
 it("keeps every category through both product filters", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
-  await chooseFilter(el, "active", "inactive");
+  await chooseFilter(el, "modifiers", "has");
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
   await chooseFilter(el, "ordering", ["staff_only"]);
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
@@ -1702,20 +1714,21 @@ it.each(["en-GB", "es"])(
 it("keeps the All products row and every category when a column filter hides every product", async () => {
   setLocale("es");
   const el = await mountBrowser();
-  await chooseFilter(el, "active", "inactive");
+  await chooseFilter(el, "modifiers", "has");
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f"]);
   expect(
     (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${ROOT_KEY}"]`),
   ).not.toBeNull();
   expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
 });
-it.each(["search", "filter"])(
+it.each(["search", "filter", "show archived"])(
   "clears selection on %s and keeps selection mode on",
   async (trigger) => {
     const el = await mountBrowser();
     await selectKeys(el, ["bread"]);
     if (trigger === "search") await typeSearch(el, "bread");
-    if (trigger === "filter") await chooseFilter(el, "active", "inactive");
+    if (trigger === "filter") await chooseFilter(el, "modifiers", "has");
+    if (trigger === "show archived") await showArchived(el);
     await el.updateComplete;
     expect(count(el)).toBe("0 selected");
     expect((await tableOf(el)).selectable).toBe(true);
@@ -3326,7 +3339,7 @@ it("offers no Archive for a selection of products that are all disabled already,
     product("gone", "Gone", null, false),
   ];
   const el = await mountBrowser({ products: withArchived });
-  await chooseFilter(el, "active", "");
+  await showArchived(el);
   await selectKeys(el, ["old", "gone"]);
   expect(el.shadowRoot!.querySelector('[data-test="selected-count"]')).not.toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="delete"]')).toBeNull();
@@ -3340,7 +3353,7 @@ it("keeps Archive for a selection mixing active and disabled products, and sends
     product("gone", "Gone", null, false),
   ];
   const el = await mountBrowser({ products: withArchived });
-  await chooseFilter(el, "active", "");
+  await showArchived(el);
   await selectKeys(el, ["bread", "old"]);
   expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Archive");
   await press(el, "delete");
@@ -3357,7 +3370,7 @@ it("offers Archive again once a refresh of the products makes one of a held all-
   const el = await mountBrowser({
     products: [product("old", "Old", null, false), product("gone", "Gone", null, false)],
   });
-  await chooseFilter(el, "active", "");
+  await showArchived(el);
   await selectKeys(el, ["old", "gone"]);
   expect(el.shadowRoot!.querySelector('[data-test="delete"]')).toBeNull();
   el.products = [product("old", "Old", null), product("gone", "Gone", null, false)];
@@ -3889,10 +3902,10 @@ it("clears the selection when a filter is chosen in the panel beside the rows", 
     await table.updateComplete;
     const panel = table.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
     expect(panel.hasAttribute("data-side")).toBe(true);
-    const filter = panel.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!;
+    const filter = panel.querySelector<HTMLElement>('wt-combobox[data-filter="modifiers"]')!;
     await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     const option = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (row) => row.textContent!.trim() === en["product.archived_badge"],
+      (row) => row.textContent!.trim() === en["product.has_modifiers"],
     )!;
     await userEvent.click(option);
     await el.updateComplete;

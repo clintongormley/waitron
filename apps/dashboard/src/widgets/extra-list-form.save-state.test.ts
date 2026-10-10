@@ -53,6 +53,7 @@ function product(id: string, name: string, unitPrice: string, unit = EACH): Prod
     ordering: "not_sold_separately",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,

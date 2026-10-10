@@ -124,6 +124,15 @@ async function choose(el: ProductList, column: string, value: string | string[])
   await table.updateComplete;
 }
 
+/** Turns the Show archived switch at the top of the Filters panel on or off. */
+async function showArchived(el: ProductList, on = true): Promise<void> {
+  const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
+  const input = toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  if (input.checked !== on) input.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+}
+
 /** A Spanish price, which the suite's default language writes with a no-break space before the
  * sign. */
 const euros = (amount: string) => `${amount}\u00a0€`;
@@ -168,6 +177,7 @@ function product(
     ordering: "public",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,
@@ -243,6 +253,7 @@ describe("product-list", () => {
           stationName: "Cocktail bar",
           noPreparation: false,
           noReplacement: true,
+          unavailableStationId: "cocktail",
           variesByZone: false,
         },
       },
@@ -262,6 +273,7 @@ describe("product-list", () => {
           stationName: "Bar",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
         mojito: {
@@ -269,6 +281,7 @@ describe("product-list", () => {
           stationName: "Cocktail bar",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: true,
         },
       },
@@ -291,12 +304,13 @@ describe("product-list", () => {
           stationName: "Bar",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
       },
     });
     const root = await tableRoot(el);
-    await choose(el, "active", "");
+    await showArchived(el);
     const cell = cellUnder(root, "ale", "Made at");
     expect(cell.textContent!.trim()).toBe("");
     expect(cell.querySelector("a")).toBeNull();
@@ -312,6 +326,7 @@ describe("product-list", () => {
           stationName: null,
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
       },
@@ -365,8 +380,9 @@ describe("product-list", () => {
       ["price", true],
       ["modifiers", true],
       ["ordering", true],
-      ["active", true],
+      ["availability", true],
       ["allergens", true],
+      ["dietary", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>
@@ -744,14 +760,14 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish"]);
   });
 
-  it("lets Ordering hold several choices and keeps Status a single one, naming two orderings by their count", async () => {
+  it("lets Ordering hold several choices and keeps Modifiers a single one, naming two orderings by their count", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: orderings(),
     });
     const root = await tableRoot(el);
     const select = (key: string) =>
       root.querySelector<WtCombobox>(`wt-combobox[data-filter="${key}"]`)!;
-    expect([select("ordering").multiple, select("active").multiple]).toEqual([true, false]);
+    expect([select("ordering").multiple, select("modifiers").multiple]).toEqual([true, false]);
     await choose(el, "ordering", ["public", "staff_only"]);
     expect(select("ordering").shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
       "2 opciones de pedido",
@@ -821,24 +837,30 @@ describe("product-list", () => {
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
   });
 
-  it("shows an active/inactive badge carrying text, not colour alone", async () => {
+  it("shows an unavailable/archived badge carrying text, not colour alone", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "on", active: true }), product({ id: "off", active: false })],
+      products: [
+        product({ id: "a-on", name: "A", active: true }),
+        product({ id: "b-sold-out", name: "B", available: false }),
+        product({ id: "c-off", name: "C", active: false }),
+      ],
     });
-    // An Inactive product is behind the status filter, so both are shown with "any".
-    await choose(el, "active", "");
-    const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=active-badge]");
+    // An archived product is hidden until Show archived is on.
+    await showArchived(el);
+    const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>(
+      "[data-test=availability-badge]",
+    );
     expect(badges.length).toBe(2);
-    expect(badges[0]!.getAttribute("data-active")).toBe("true");
+    expect(badges[0]!.getAttribute("data-state")).toBe("unavailable");
     expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
-    expect(badges[1]!.getAttribute("data-active")).toBe("false");
+    expect(badges[1]!.getAttribute("data-state")).toBe("archived");
     expect(badges[1]!.textContent!.trim().length).toBeGreaterThan(0);
     expect(badges[0]!.textContent).not.toBe(badges[1]!.textContent);
   });
 
   // The fixtures give Active and Available DIFFERENT values, so a column or filter reading the wrong
   // flag fails.
-  it("starts the status filter on Active, so an Inactive product is hidden until it is changed", async () => {
+  it("starts with Show archived off, so an archived product is hidden until it is turned on", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "gone", name: "Anchoas", active: false, available: true }),
@@ -846,45 +868,42 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
-    const select = root.querySelector<WtCombobox>('wt-combobox[data-filter="active"]')!;
-    expect(select.options.map((option) => option.value)).toEqual(["", "active", "inactive"]);
-    expect(select.options.map((option) => option.label)).toEqual([
-      t("product.filter_status_all"),
-      t("product.active_badge"),
-      t("product.archived_badge"),
-    ]);
-    expect(select.value).toBe("active");
+    expect(root.querySelector('wt-combobox[data-filter="active"]')).toBeNull();
+    const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      'wt-switch[name="show-archived"]',
+    )!;
+    expect(toggle.label).toBe(t("product.show_archived"));
+    expect(toggle.checked).toBe(false);
     expect(rowKeys(root)).toEqual(["sold-out"]);
-    await choose(el, "active", "inactive");
-    expect(rowKeys(root)).toEqual(["gone"]);
-    await choose(el, "active", "");
+    await showArchived(el);
     expect(rowKeys(root)).toEqual(["gone", "sold-out"]);
+    await showArchived(el, false);
+    expect(rowKeys(root)).toEqual(["sold-out"]);
   });
 
-  it("reads the Active column from active, and badges an Unavailable product that stays listed", async () => {
+  it("reads Availability's Archived from active and Unavailable from available, keeping an Unavailable product listed", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "gone", name: "Anchoas", active: false, available: true }),
         product({ id: "sold-out", name: "Boquerones", active: true, available: false }),
       ],
     });
-    await choose(el, "active", "");
+    await showArchived(el);
     const root = await tableRoot(el);
-    const gone = cellUnder(root, "gone", t("product.status"));
-    const soldOut = cellUnder(root, "sold-out", t("product.status"));
-    expect(gone.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
-      "false",
+    const gone = cellUnder(root, "gone", t("product.availability"));
+    const soldOut = cellUnder(root, "sold-out", t("product.availability"));
+    expect(gone.querySelectorAll("[data-test=availability-badge]")).toHaveLength(1);
+    expect(gone.querySelector("[data-test=availability-badge]")!.getAttribute("data-state")).toBe(
+      "archived",
     );
-    expect(gone.querySelector("[data-test=unavailable-badge]")).toBeNull();
-    expect(soldOut.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
-      "true",
-    );
-    expect(soldOut.querySelector("[data-test=unavailable-badge]")!.textContent!.trim()).toBe(
-      t("product.unavailable_badge"),
-    );
+    expect(soldOut.querySelectorAll("[data-test=availability-badge]")).toHaveLength(1);
+    expect(
+      soldOut.querySelector("[data-test=availability-badge]")!.getAttribute("data-state"),
+    ).toBe("unavailable");
+    expect(soldOut.textContent!.trim()).toBe(t("product.unavailable_badge"));
   });
 
-  it("applies the status filter to variant rows, keeping an Active product as a removed variant's context", async () => {
+  it("applies Show archived to variant rows, and reads each variant's own Availability", async () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -903,32 +922,23 @@ describe("product-list", () => {
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium"]);
-    const small = cellUnder(root, "bun:small", t("product.status"));
-    expect(small.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
-      "true",
+    const small = cellUnder(root, "bun:small", t("product.availability"));
+    expect(small.textContent!.trim()).toBe("");
+    expect(small.querySelector("[data-test=availability-badge]")).toBeNull();
+    const medium = cellUnder(root, "bun:medium", t("product.availability"));
+    expect(medium.querySelector("[data-test=availability-badge]")!.getAttribute("data-state")).toBe(
+      "unavailable",
     );
-    expect(small.querySelector("[data-test=unavailable-badge]")).toBeNull();
-    const medium = cellUnder(root, "bun:medium", t("product.status"));
-    expect(medium.querySelector("[data-test=unavailable-badge]")).not.toBeNull();
 
-    await choose(el, "active", "inactive");
-    expect(rowKeys(root)).toEqual(["bun", "bun:large", "roll"]);
+    await showArchived(el);
+    expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium", "bun:large", "roll"]);
     expect(
-      cellUnder(root, "bun:large", t("product.status"))
-        .querySelector("[data-test=active-badge]")!
-        .getAttribute("data-active"),
-    ).toBe("false");
-    expect(
-      cellUnder(root, "bun", t("product.name")).querySelector('[part~="context"]'),
-    ).not.toBeNull();
-    expect(
-      cellUnder(root, "roll", t("product.name")).querySelector('[part~="context"]'),
-    ).toBeNull();
+      cellUnder(root, "bun:large", t("product.availability"))
+        .querySelector("[data-test=availability-badge]")!
+        .getAttribute("data-state"),
+    ).toBe("archived");
     root.querySelector<HTMLElement>(`tr[data-row-key="roll"] .tree-toggle`)!.click();
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["bun", "bun:large", "roll", "roll:r1"]);
-
-    await choose(el, "active", "");
     expect(rowKeys(root)).toEqual([
       "bun",
       "bun:small",
@@ -937,6 +947,14 @@ describe("product-list", () => {
       "roll",
       "roll:r1",
     ]);
+    expect(
+      cellUnder(root, "roll:r1", t("product.availability"))
+        .querySelector("[data-test=availability-badge]")!
+        .getAttribute("data-state"),
+    ).toBe("archived");
+
+    await showArchived(el, false);
+    expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium"]);
   });
 
   it("prices a product across its Active variants only, or at its own price when it has none", async () => {
@@ -1086,9 +1104,9 @@ describe("product-list", () => {
       {
         disable: "Archive",
         enable: "View",
-        products: ["Active", "Archived"],
-        variants: ["Active", "Archived"],
-        filter: ["Any status", "Active", "Archived"],
+        products: ["", "Archived"],
+        variants: ["", "Archived"],
+        toggle: "Show archived",
       },
     ],
     [
@@ -1096,13 +1114,13 @@ describe("product-list", () => {
       {
         disable: "Archivar",
         enable: "Ver",
-        products: ["Activo", "Archivado"],
-        variants: ["Activa", "Archivada"],
-        filter: ["Cualquier estado", "Activo", "Archivado"],
+        products: ["", "Archivado"],
+        variants: ["", "Archivada"],
+        toggle: "Mostrar archivados",
       },
     ],
   ])(
-    "in %s, offers Archive and View and shows Active or Archived, agreeing with the noun",
+    "in %s, offers Archive and View and shows Archived, agreeing with the noun",
     async (locale, words) => {
       setLocale(locale);
       const removed = { ...bunVariant, id: "large", name: "Large", active: false };
@@ -1112,7 +1130,7 @@ describe("product-list", () => {
           product({ id: "off", name: "Anchoas", active: false }),
         ],
       });
-      await choose(el, "active", "");
+      await showArchived(el);
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       const root = await tableRoot(el);
       root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
@@ -1124,13 +1142,14 @@ describe("product-list", () => {
       expect(label("view-large")).toBe(words.enable);
       expect(label("view-off")).toBe(words.enable);
       const badge = (key: string) =>
-        root
-          .querySelector<HTMLElement>(`tr[data-row-key="${key}"] [data-test=active-badge]`)!
-          .textContent!.trim();
+        cellUnder(root, key, t("product.availability")).textContent!.trim();
       expect([badge("bun"), badge("off")]).toEqual(words.products);
       expect([badge("bun:small"), badge("bun:large")]).toEqual(words.variants);
-      const select = root.querySelector<WtCombobox>('wt-combobox[data-filter="active"]')!;
-      expect(select.options.map((option) => option.label)).toEqual(words.filter);
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          'wt-switch[name="show-archived"]',
+        )!.label,
+      ).toBe(words.toggle);
     },
   );
 
@@ -1139,7 +1158,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", variants: [bunVariant, removed] })],
     });
-    await choose(el, "active", "");
+    await showArchived(el);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
@@ -1183,7 +1202,7 @@ describe("product-list", () => {
         product({ id: "off", name: "Anchoas", active: false, variants: [bunVariant, removed] }),
       ],
     });
-    await choose(el, "active", "");
+    await showArchived(el);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>('tr[data-row-key="off"] .tree-toggle')!.click();
@@ -1197,10 +1216,10 @@ describe("product-list", () => {
       expect(
         root
           .querySelector(
-            `tr[data-row-key="${id === "off" ? id : `off:${id}`}"] [data-test=active-badge]`,
+            `tr[data-row-key="${id === "off" ? id : `off:${id}`}"] [data-test=availability-badge]`,
           )
-          ?.getAttribute("data-active"),
-      ).toBe("false");
+          ?.getAttribute("data-state"),
+      ).toBe("archived");
     }
   });
 
@@ -1208,7 +1227,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun" }), product({ id: "off", name: "Anchoas", active: false })],
     });
-    await choose(el, "active", "");
+    await showArchived(el);
     const root = await tableRoot(el);
     const off = root.querySelector<HTMLElement>('[data-test="actions-off"]')!;
     expect(off.querySelector('[data-test="delete-off"]')).toBeNull();
@@ -1304,8 +1323,12 @@ describe("product-list", () => {
   // spans while every attribute assertion above still passed.
   it("paints the thumbnail frame and the badges through ::part, not a class", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ image: null, available: false })],
+      products: [
+        product({ image: null, available: false }),
+        product({ id: "off", name: "Anchoas", active: false }),
+      ],
     });
+    await showArchived(el);
     const root = await tableRoot(el);
     const frame = getComputedStyle(
       root.querySelector<HTMLElement>("[data-test=thumb-placeholder]")!,
@@ -1314,8 +1337,13 @@ describe("product-list", () => {
     expect(parseFloat(frame.width)).toBeGreaterThan(0);
     expect(frame.width).toBe(frame.height);
     expect(parseFloat(frame.borderTopWidth)).toBeGreaterThan(0);
-    for (const test of ["active-badge", "unavailable-badge", "ordering-badge", "allergen-state"]) {
-      const badge = getComputedStyle(root.querySelector<HTMLElement>(`[data-test=${test}]`)!);
+    for (const test of [
+      '[data-test=availability-badge][data-state="unavailable"]',
+      '[data-test=availability-badge][data-state="archived"]',
+      "[data-test=ordering-badge]",
+      "[data-test=allergen-state]",
+    ]) {
+      const badge = getComputedStyle(root.querySelector<HTMLElement>(test)!);
       expect(badge.display, test).toBe("inline-flex");
       expect(parseFloat(badge.borderTopWidth), test).toBeGreaterThan(0);
       expect(parseFloat(badge.paddingLeft), test).toBeGreaterThan(0);
@@ -1371,19 +1399,16 @@ describe("product-list", () => {
   it.each([
     ["en-GB", "Any ordering"],
     ["es-ES", "Cualquier pedido por separado"],
-  ])(
-    "names the ordering filter's empty choice like the status filter's (%s)",
-    async (locale, label) => {
-      setLocale(locale);
-      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-        products: [product()],
-      });
-      const select = (await tableRoot(el)).querySelector<WtCombobox>(
-        'wt-combobox[data-filter="ordering"]',
-      )!;
-      expect(select.options[0]).toEqual({ value: "", label });
-    },
-  );
+  ])("names the ordering filter's empty choice (%s)", async (locale, label) => {
+    setLocale(locale);
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product()],
+    });
+    const select = (await tableRoot(el)).querySelector<WtCombobox>(
+      'wt-combobox[data-filter="ordering"]',
+    )!;
+    expect(select.options[0]).toEqual({ value: "", label });
+  });
 
   const kilo: Unit = {
     id: "kg",
@@ -1683,6 +1708,7 @@ describe("the product list at phone width", () => {
               stationName: "Downstairs bar",
               noPreparation: false,
               noReplacement: false,
+              unavailableStationId: null,
               variesByZone: true,
             },
           },
@@ -3160,7 +3186,7 @@ describe("the product list as a tree", () => {
       const { el } = await mountWidget<ProductList>("dashboard-product-list", {
         products: [product({ id: "bun", variants: [bunVariant, removed] })],
       });
-      await choose(el, "active", "");
+      await showArchived(el);
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       const root = await tableRoot(el);
       root.querySelector<HTMLElement>(".tree-toggle")!.click();
@@ -3195,7 +3221,7 @@ describe("the product list as a tree", () => {
           product({ id: "stale", name: "Stale", primaryCategoryId: null, active: false }),
         ],
       });
-      await choose(el, "active", "");
+      await showArchived(el);
       const seen: [string, string][] = [];
       for (const name of ["edit-product", "delete-product", "view-product"])
         el.addEventListener(name, (event) =>
@@ -3309,6 +3335,7 @@ describe("a product's variants in the list", () => {
           stationName: "Deli counter",
           noPreparation: false,
           noReplacement: false,
+          unavailableStationId: null,
           variesByZone: false,
         },
       },
@@ -3451,22 +3478,32 @@ describe("a product's variants in the list", () => {
     },
   );
 
-  it("shows only a variant's price, status and menu, leaving its other cells empty", async () => {
+  it("shows only a variant's price, availability and menu, leaving its other cells empty", async () => {
     setLocale("en");
     const route = {
       stationId: "deli",
       stationName: "Deli counter",
       noPreparation: false,
       noReplacement: false,
+      unavailableStationId: null,
       variesByZone: false,
     };
-    const { table, root } = await mountDeli({ madeAt: { thin: route, cecina: route } });
+    // Thin cut is sold out while its product is not, so its Availability cell is its own.
+    const soldOutThin = cecina();
+    soldOutThin.variants = soldOutThin.variants.map((variant) =>
+      variant.id === "thin" ? { ...variant, available: false } : variant,
+    );
+    const { table, root } = await mountDeli({
+      products: [soldOutThin],
+      madeAt: { thin: route, cecina: route },
+    });
     await openVariants(root, table, "cecina");
     for (const header of [
       t("product.made_at"),
       t("editor.modifiers"),
       t("product.ordering"),
       t("product.allergens"),
+      t("product.dietary_info"),
     ]) {
       const cell = cellUnder(root, "cecina:thin", header);
       expect(cell.textContent!.trim(), header).toBe("");
@@ -3477,8 +3514,11 @@ describe("a product's variants in the list", () => {
         .textContent,
     ).toContain("38.00");
     expect(
-      cellUnder(root, "cecina:thin", t("product.status")).querySelector("[data-test=active-badge]"),
-    ).not.toBeNull();
+      cellUnder(root, "cecina:thin", t("product.availability"))
+        .querySelector("[data-test=availability-badge]")!
+        .getAttribute("data-state"),
+    ).toBe("unavailable");
+    expect(cellUnder(root, "cecina", t("product.availability")).textContent!.trim()).toBe("");
     expect(root.querySelector('[data-test="actions-thin"]')).not.toBeNull();
     expect(cellUnder(root, "cecina", t("product.made_at")).textContent!.trim()).not.toBe("");
   });
@@ -4204,6 +4244,7 @@ describe("a category's Made at", () => {
             stationName: "Kitchen",
             noPreparation: false,
             noReplacement: false,
+            unavailableStationId: null,
             variesByZone: true,
           },
         },
@@ -5430,7 +5471,7 @@ describe("stable column inputs", () => {
     root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     await table.updateComplete;
     const filters = [...root.querySelectorAll<WtCombobox>("wt-combobox")];
-    expect(filters.length).toBe(2);
+    expect(filters.length).toBe(5);
     await Promise.all(filters.map((filter) => filter.updateComplete));
     const widths = filters.map((filter) =>
       vi.spyOn(filter as unknown as { widthTexts(): string[] }, "widthTexts"),
@@ -5439,16 +5480,16 @@ describe("stable column inputs", () => {
     await el.updateComplete;
     await table.updateComplete;
     await Promise.all(filters.map((filter) => filter.updateComplete));
-    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0]);
+    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0, 0]);
     expect(table.columns).toBe(columns);
     setLocale("es");
     el.requestUpdate();
     await el.updateComplete;
     await table.updateComplete;
     expect(table.columns[0]!.label).toBe("Nombre");
-    expect(table.columns.find((column) => column.key === "active")!.filter!.options[0]!.label).toBe(
-      "Activo",
-    );
+    expect(
+      table.columns.find((column) => column.key === "modifiers")!.filter!.options[0]!.label,
+    ).toBe("Con modificadores");
   });
 
   it("keeps a no-match search through desktop and phone resizing without an uncaught error", async () => {
@@ -5597,3 +5638,330 @@ it.each(["leave", "cancel", "Escape", "disconnect", "fits"])(
     }
   },
 );
+
+describe("product-list filters (A463)", () => {
+  const station = (stationId: string | null, stationName: string | null, more = {}) => ({
+    stationId,
+    stationName,
+    noPreparation: false,
+    noReplacement: false,
+    unavailableStationId: null,
+    variesByZone: false,
+    ...more,
+  });
+
+  /** Every filter section in the panel, in the order the panel draws them. */
+  async function filterKeys(el: ProductList): Promise<string[]> {
+    const root = await tableRoot(el);
+    return [...root.querySelectorAll<HTMLElement>(".filter-section")].map(
+      (section) => section.dataset.section!,
+    );
+  }
+
+  function filterOptions(root: ShadowRoot, key: string): [string, string][] {
+    const select = root.querySelector<WtCombobox>(`wt-combobox[data-filter="${key}"]`)!;
+    return select.options.map((option) => [option.value, option.label]);
+  }
+
+  it("draws the filters in the order of the default columns", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "a" })],
+      madeAt: { a: station("bar", "Bar") },
+    });
+    expect(await filterKeys(el)).toEqual([
+      "made-at",
+      "modifiers",
+      "ordering",
+      "allergens",
+      "dietary",
+    ]);
+  });
+
+  it("offers one Made at choice per station and keeps the products the column shows there", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-beer", name: "A beer", variants: [bunVariant] }),
+        product({ id: "b-soup", name: "B soup" }),
+        product({ id: "c-stew", name: "C stew" }),
+        product({ id: "d-bread", name: "D bread" }),
+        product({ id: "e-water", name: "E water" }),
+      ],
+      madeAt: {
+        "a-beer": station("bar", "Bar"),
+        "b-soup": station("kitchen", "Kitchen"),
+        "c-stew": station(null, "Grill", {
+          noReplacement: true,
+          unavailableStationId: "grill",
+        }),
+        "d-bread": station(null, null),
+        "e-water": station(null, null, { noPreparation: true }),
+      },
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    expect(filterOptions(root, "made-at")).toEqual([
+      ["", "Any station"],
+      ["bar", "Bar"],
+      ["grill", "Grill"],
+      ["kitchen", "Kitchen"],
+    ]);
+    await choose(el, "made-at", ["kitchen"]);
+    expect(rowKeys(root)).toEqual(["b-soup"]);
+    await choose(el, "made-at", ["grill"]);
+    expect(rowKeys(root)).toEqual(["c-stew"]);
+    await choose(el, "made-at", ["bar"]);
+    expect(rowKeys(root)).toEqual(["a-beer"]);
+    // A variant shows no station of its own and goes with its product.
+    root.querySelector<HTMLElement>('tr[data-row-key="a-beer"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["a-beer", "a-beer:small"]);
+    await choose(el, "made-at", ["bar", "grill", "kitchen"]);
+    expect(rowKeys(root)).toEqual(["a-beer", "a-beer:small", "b-soup", "c-stew"]);
+    await choose(el, "made-at", []);
+    expect(rowKeys(root)).toEqual([
+      "a-beer",
+      "a-beer:small",
+      "b-soup",
+      "c-stew",
+      "d-bread",
+      "e-water",
+    ]);
+  });
+
+  it("offers a switched-off station that only products with no replacement name", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-beer", name: "A beer" }),
+        product({ id: "b-stew", name: "B stew" }),
+      ],
+      madeAt: {
+        "a-beer": station("bar", "Bar"),
+        "b-stew": station(null, "Kitchen", {
+          noReplacement: true,
+          unavailableStationId: "kitchen",
+        }),
+      },
+    });
+    const root = await tableRoot(el);
+    expect(filterOptions(root, "made-at")).toEqual([
+      ["", "Any station"],
+      ["bar", "Bar"],
+      ["kitchen", "Kitchen"],
+    ]);
+    await choose(el, "made-at", ["kitchen"]);
+    expect(rowKeys(root)).toEqual(["b-stew"]);
+  });
+
+  it("offers the stations a live routing update names, not the ones it replaced", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "a", name: "A" })],
+      madeAt: { a: station("bar", "Bar") },
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    await choose(el, "made-at", ["bar"]);
+    el.madeAt = { a: station("kitchen", "Kitchen") };
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(filterOptions(root, "made-at")).toEqual([
+      ["", "Any station"],
+      ["kitchen", "Kitchen"],
+    ]);
+    await choose(el, "made-at", ["kitchen"]);
+    expect(rowKeys(root)).toEqual(["a"]);
+  });
+
+  it("keeps products with or without modifiers", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-plain", name: "A plain" }),
+        product({
+          id: "b-dressed",
+          name: "B dressed",
+          modifiers: [{ kind: "extras", id: "ex-1" }],
+          variants: [bunVariant],
+        }),
+      ],
+      extraLists: [{ id: "ex-1", name: "Tapas" }],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    expect(filterOptions(root, "modifiers")).toEqual([
+      ["", "Any"],
+      ["has", "Has modifiers"],
+      ["none", "No modifiers"],
+    ]);
+    await choose(el, "modifiers", "has");
+    root.querySelector<HTMLElement>('tr[data-row-key="b-dressed"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["b-dressed", "b-dressed:small"]);
+    await choose(el, "modifiers", "none");
+    expect(rowKeys(root)).toEqual(["a-plain"]);
+  });
+
+  it("keeps products by allergen state, a never-checked one apart from a checked allergen-free one", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-pending", name: "A", allergens: null }),
+        product({ id: "b-none", name: "B", allergens: {} }),
+        product({ id: "c-declared", name: "C", allergens: { gluten: { presence: "contains" } } }),
+      ],
+    });
+    const root = await tableRoot(el);
+    expect(filterOptions(root, "allergens")).toEqual([
+      ["", "Any"],
+      ["pending", allergenStateName("pending")],
+      ["none", allergenStateName("none")],
+      ["declared", allergenStateName("declared")],
+    ]);
+    await choose(el, "allergens", "pending");
+    expect(rowKeys(root)).toEqual(["a-pending"]);
+    await choose(el, "allergens", "none");
+    expect(rowKeys(root)).toEqual(["b-none"]);
+    await choose(el, "allergens", "declared");
+    expect(rowKeys(root)).toEqual(["c-declared"]);
+  });
+
+  it("keeps products with dietary info, from their declarations or a diet override, or with none", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-declared", name: "A", dietaryDeclarations: ["vegan"] }),
+        product({ id: "b-override", name: "B", dietOverride: { halal: "no" } }),
+        product({ id: "c-contains", name: "C", dietOverride: { addContains: ["meat"] } }),
+        product({ id: "d-nothing", name: "D" }),
+      ],
+    });
+    const root = await tableRoot(el);
+    expect(filterOptions(root, "dietary")).toEqual([
+      ["", "Any"],
+      ["has", "Has"],
+      ["none", "None"],
+    ]);
+    await choose(el, "dietary", "has");
+    expect(rowKeys(root)).toEqual(["a-declared", "b-override"]);
+    await choose(el, "dietary", "none");
+    expect(rowKeys(root)).toEqual(["c-contains", "d-nothing"]);
+    expect(cellUnder(root, "d-nothing", "Dietary info").textContent!.trim()).toBe("");
+    await choose(el, "dietary", "has");
+    expect(cellUnder(root, "a-declared", "Dietary info").textContent!.trim()).toBe("Vegan");
+    expect(cellUnder(root, "b-override", "Dietary info").textContent!.trim()).toBe("Halal: No");
+  });
+
+  it("counts a recipe's categorised ingredient origins as dietary info, and an uncategorised one as none", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "a-recipe",
+          name: "A",
+          dietDerivation: { origins: ["meat", "plant", "meat"], pending: true },
+        }),
+        product({
+          id: "b-uncategorised",
+          name: "B",
+          dietDerivation: { origins: [], pending: true },
+        }),
+      ],
+    });
+    const root = await tableRoot(el);
+    await choose(el, "dietary", "has");
+    expect(rowKeys(root)).toEqual(["a-recipe"]);
+    expect(cellUnder(root, "a-recipe", "Dietary info").textContent!.trim()).toBe("Plant, Meat");
+    await choose(el, "dietary", "none");
+    expect(rowKeys(root)).toEqual(["b-uncategorised"]);
+    expect(cellUnder(root, "b-uncategorised", "Dietary info").textContent!.trim()).toBe("");
+  });
+
+  it("offers no Status filter: Show archived, off at first, lists archived products and variants read-only", async () => {
+    setLocale("en");
+    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-bun", name: "A bun", variants: [bunVariant, removed] }),
+        product({ id: "b-gone", name: "B gone", active: false, available: true }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    expect(root.querySelector('wt-combobox[data-filter="active"]')).toBeNull();
+    const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      'wt-switch[name="show-archived"]',
+    )!;
+    expect(toggle.label).toBe("Show archived");
+    expect(toggle.checked).toBe(false);
+    expect(toggle.assignedSlot).toBe(
+      root.querySelector('.filters-panel slot[name="filters-start"]'),
+    );
+    root.querySelector<HTMLElement>('tr[data-row-key="a-bun"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small"]);
+    await showArchived(el);
+    expect(toggle.checked).toBe(true);
+    expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small", "a-bun:large", "b-gone"]);
+    for (const id of ["large", "b-gone"])
+      expect(
+        [...root.querySelectorAll<HTMLElement>(`[data-test="actions-${id}"] wt-button`)].map(
+          (button) => button.textContent!.trim(),
+        ),
+      ).toEqual([t("product.view")]);
+    await showArchived(el, false);
+    expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small"]);
+  });
+
+  it("sorts Availability as ordinary, then Unavailable, then Archived", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-gone", name: "A", active: false }),
+        product({ id: "b-sold-out", name: "B", available: false }),
+        product({ id: "c-ok", name: "C" }),
+      ],
+    });
+    await showArchived(el);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('button[data-sort="availability"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["c-ok", "b-sold-out", "a-gone"]);
+  });
+
+  it.each([
+    ["en", { unavailable: "Unavailable", archived: "Archived", variantArchived: "Archived" }],
+    ["es", { unavailable: "No disponible", archived: "Archivado", variantArchived: "Archivada" }],
+  ])(
+    "in %s, shows Availability blank, Unavailable or Archived, Archived winning",
+    async (locale, words) => {
+      setLocale(locale);
+      const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+      const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: [
+          product({ id: "a-ok", name: "A ok", variants: [bunVariant, soldOut, removed] }),
+          product({ id: "b-sold-out", name: "B sold out", available: false }),
+          product({ id: "c-gone", name: "C gone", active: false, available: true }),
+          product({ id: "d-both", name: "D both", active: false, available: false }),
+        ],
+      });
+      await showArchived(el);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      const root = await tableRoot(el);
+      root.querySelector<HTMLElement>('tr[data-row-key="a-ok"] .tree-toggle')!.click();
+      await table.updateComplete;
+      const heading = t("product.availability");
+      expect(heading).toBe(locale === "en" ? "Availability" : "Disponibilidad");
+      const shown = (key: string) => cellUnder(root, key, heading).textContent!.trim();
+      expect(shown("a-ok")).toBe("");
+      expect(shown("a-ok:small")).toBe("");
+      expect(shown("a-ok:medium")).toBe(words.unavailable);
+      expect(shown("a-ok:large")).toBe(words.variantArchived);
+      expect(shown("b-sold-out")).toBe(words.unavailable);
+      expect(shown("c-gone")).toBe(words.archived);
+      expect(shown("d-both")).toBe(words.archived);
+    },
+  );
+});

@@ -1154,6 +1154,27 @@ describe("catalogue operations", () => {
     expect(result.diet.diet).toMatchObject({ vegan: "no", vegetarian: "yes" });
   });
 
+  it("listProducts carries each product's recipe diet derivation, null where it has none", async () => {
+    const listed = await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const input = {
+        catalogueId: cat.id,
+        categoryId: null,
+        unitId: eachUnitId,
+        unitPrice: "6.00",
+        vatClass: "general" as const,
+      };
+      const withRecipe = await createProduct(tx, { ...input, name: "stew" });
+      await createProduct(tx, { ...input, name: "plain" });
+      await applyDietDerivation(tx, withRecipe.id, { origins: ["meat", "plant"], pending: true });
+      return listProducts(tx, cat.id);
+    });
+    expect(listed.map(({ name, dietDerivation }) => ({ name, dietDerivation }))).toEqual([
+      { name: "stew", dietDerivation: { origins: ["meat", "plant"], pending: true } },
+      { name: "plain", dietDerivation: null },
+    ]);
+  });
+
   it("updateProduct rejects a conflicting diet override", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });

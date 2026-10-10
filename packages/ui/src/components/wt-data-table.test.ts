@@ -2537,6 +2537,26 @@ test("a filter on its initial choice counts in the panel badge and can be cleare
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
+test("a control slotted into filters-start shows in the open panel, above the first filter", async () => {
+  const el = await tableS({ columns: withStatus });
+  const control = document.createElement("button");
+  control.slot = "filters-start";
+  control.textContent = "Show archived";
+  el.append(control);
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  const slot = root.querySelector<HTMLSlotElement>('.filters-panel slot[name="filters-start"]')!;
+  expect(slot.assignedElements()).toEqual([control]);
+  const section = root.querySelector<HTMLElement>('.filters-panel [data-section="status"]')!;
+  expect(slot.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(control.getBoundingClientRect().height).toBe(0);
+  root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  await el.updateComplete;
+  const shown = control.getBoundingClientRect();
+  expect(shown.height).toBeGreaterThan(0);
+  expect(shown.bottom).toBeLessThanOrEqual(section.getBoundingClientRect().top);
+});
+
 test("Filters shows plain named sections with choices always available and no per-filter Clear", async () => {
   const el = await tableS({ columns: withStatus });
   const root = el.shadowRoot!;
@@ -3715,7 +3735,7 @@ test("choosing the all option again removes the stored filter choice", async () 
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
-/** The status filter starting on "active" before anyone chooses: the products list's shape. */
+/** The status filter starting on "active" before anyone chooses. */
 const initiallyActive = statusOffering(statusFilter.options).map((column) =>
   column.filter ? { ...column, filter: { ...column.filter, initial: "active" } } : column,
 );

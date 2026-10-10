@@ -889,6 +889,10 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           this.selected = [];
         }}
+        @show-archived-change=${(event: Event) => {
+          event.stopPropagation();
+          this.selected = [];
+        }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
           void this.#openDelete([`folder:${event.detail.folderId}`]);

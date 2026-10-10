@@ -74,6 +74,7 @@ describe("DashboardApi", () => {
         stationName: "Bar",
         noPreparation: false,
         noReplacement: false,
+        unavailableStationId: null,
         variesByZone: false,
       },
     };

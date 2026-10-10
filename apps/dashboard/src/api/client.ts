@@ -98,6 +98,8 @@ export interface MadeAt {
   stationName: string | null;
   noPreparation: boolean;
   noReplacement: boolean;
+  /** The switched-off station the routing names for a product with no replacement; null otherwise. */
+  unavailableStationId: string | null;
   variesByZone: boolean;
 }
 import type {

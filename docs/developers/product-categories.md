@@ -12,7 +12,7 @@ filed in none; each category opens in place, with its subcategories above its pr
 Enter on a category's row opens or closes it, and the categories a person opens are remembered in
 that browser. Search finds a product by its name or a variant's name, and a category by its own
 name, and opens every category on the way to a match; a category that matches but holds no match
-stays open or closed as it was. Clearing the search restores what was open. Status and ordering filters affect
+stays open or closed as it was. Clearing the search restores what was open. Column filters and Show archived affect
 products; categories stay. The address names the category last opened, as
 `/manage/catalogue/category/<id>`; closing that category, or one above it, names the closed
 category's parent.

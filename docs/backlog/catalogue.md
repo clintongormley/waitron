@@ -100,36 +100,6 @@ header's checkbox sits further right, over the gap between them. The header and 
 by `wt-data-table` (the select-all cell and the row-controls cell), so fix it there, with and
 without drag handles, and pin the alignment in a test that measures both boxes.
 
-## A463 — Products list filters: Made at, Modifiers, Allergens and Dietary info; "Show archived" replaces Status
-
-Owner, 2026-10-10. Products list only (`apps/dashboard/src/widgets/product-list.ts`); every
-filter there is a column's `filter`.
-
-**1. New filters**, each on its own column:
-
-- **Made at**: one choice per kitchen station. Assumed, not asked: it matches the station the
-  column shows for the row.
-- **Modifiers**: Has modifiers / No modifiers.
-- **Allergens**, on the existing Allergens column: Pending / None / Declared, the column's own three
-  states (`allergenState`, `apps/dashboard/src/i18n/domain.ts`). The owner first asked for one
-  "nutritional info" filter (has dietary info / has allergens / has none) and chose this split on
-  2026-10-10, so that a product never checked stays apart from one checked and allergen-free.
-- **Dietary info**: Has / None. "Has" means a dietary origin other than Not categorised, or any diet
-  override (Vegan, Vegetarian, Halal, Kosher) set (owner confirmed, 2026-10-10).
-
-**2. The filters appear in the order of the default columns**: Made at, Modifiers, Standalone
-ordering, Allergens, Dietary info. Pin it in a test.
-
-**3. "Show archived" replaces the Status filter.** Off by default, which lists active products as
-the Status filter's `initial: "active"` does today. On, it lists the archived ones too, read-only as
-now. This changes the delete-and-archive spec's decision 4 ("a read-only Archived filter";
-`docs/superpowers/specs/2026-10-08-delete-and-archive-design.md`).
-
-**4. The Status column becomes "Availability"**, showing only Unavailable (the sold-out switch is
-off) or Archived, and blank for an ordinary product. Today the Status cell shows Active or Archived
-and carries the Unavailable badge beside it; the owner chose this column over badges beside the
-name on 2026-10-10.
-
 ## A464 — a menu's Price overrides tab: a "Section" column, and Main category without the department
 
 Owner, 2026-10-10. A menu's Price overrides tab (`apps/dashboard/src/widgets/menu-prices-table.ts`).
@@ -926,6 +896,17 @@ so this is expected only while the dashboard's category list is behind.
 **Products: the Move dialog's destination categories (W82, #1210).** Two sibling categories with the same name are left as they are (owner: "leave it"): they still show as two identical entries, in the tree and in a search.
 
 **Products: a category's Made at (W86, #1203).** The "some items made elsewhere" note does not look at whether the categories involved hold any products, so it can claim items that do not exist yet; the owner chose to keep these words (2026-10-05).
+
+**Products: Show archived replaces the Status filter, and the Status column becomes Availability (A463, owner
+2026-10-10).** Show archived starts off; on, archived products and variants are listed too, with View in place of Edit and Archive.
+Availability is blank for an ordinary product, Unavailable when sold out, and Archived when archived,
+also when it is sold out; the owner chose this column over badges beside the name. The Allergens filter
+offers the column's three states (Pending / None / Declared) rather than one "nutritional info" filter,
+so a product never checked stays apart from one checked and allergen-free. Dietary info's "Has" means a
+categorised dietary origin from the product's recipe, or a Vegan, Vegetarian, Halal or Kosher override (owner); the list also counts a
+ticked dietary declaration. Made at offers only the stations the column names for some product, not
+every kitchen station, and matches the station the column shows, including a switched-off station a
+product has no replacement for; the backlog entry marked that matching "assumed, not asked".
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.

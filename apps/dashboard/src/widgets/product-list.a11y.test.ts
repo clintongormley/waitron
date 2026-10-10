@@ -3,13 +3,19 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./product-list.js";
 import type { ProductList } from "./product-list.js";
 import type { Product } from "../api/client.js";
 
 registerIcons(DASHBOARD_ICONS);
+
+async function showArchived(el: ProductList): Promise<void> {
+  const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
+  toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+}
 
 const products: Product[] = [
   {
@@ -33,6 +39,7 @@ const products: Product[] = [
     ordering: "public",
     allergens: null,
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: null,
     image: "abc123.webp",
     color: null,
@@ -59,6 +66,7 @@ const products: Product[] = [
     ordering: "public",
     allergens: {},
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: {},
     image: null,
     color: null,
@@ -88,6 +96,7 @@ const products: Product[] = [
       milk: { presence: "contains" },
     },
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: {
       gluten: { presence: "contains", source: "trigo" },
       milk: { presence: "contains" },
@@ -117,6 +126,7 @@ const products: Product[] = [
     ordering: "public",
     allergens: {},
     dietOverride: null,
+    dietDerivation: null,
     manualAllergens: {},
     image: null,
     color: null,
@@ -207,18 +217,35 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector<HTMLElement>(
-      'wt-combobox[data-filter="active"]',
-    )!;
-    await chooseOption(select, "");
-    await table.updateComplete;
+    await showArchived(el);
     table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelectorAll("[data-test=active-badge]")).toHaveLength(6);
+    expect(
+      [...table.shadowRoot!.querySelectorAll("[data-test=availability-badge]")]
+        .map((badge) => badge.getAttribute("data-state"))
+        .sort(),
+    ).toEqual(["archived", "archived", "unavailable", "unavailable"]);
     expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).not.toBeNull();
     expect(
       table.shadowRoot!.querySelector('[data-test="color-v2"] [data-test="thumb-placeholder"]'),
     ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with the Filters panel open and Show archived on", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await table.updateComplete;
+    await showArchived(el);
+    const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
+    expect(toggle.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(5);
     await expectNoA11yViolations(host);
   });
 
@@ -246,13 +273,14 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector<HTMLElement>(
-      'wt-combobox[data-filter="active"]',
-    )!;
-    await chooseOption(select, "inactive");
+    await showArchived(el);
+    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelector('[part~="context"]')).not.toBeNull();
-    expect(table.shadowRoot!.querySelector('tr[data-row-key="p4:v2"]')).not.toBeNull();
+    expect(
+      table.shadowRoot!.querySelector(
+        'tr[data-row-key="p4:v2"] [data-test=availability-badge][data-state="archived"]',
+      ),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -423,6 +451,7 @@ describe.each(["light", "dark"] as const)("product made-at link a11y (%s)", (the
             stationName: "Cocina",
             noPreparation: false,
             noReplacement: false,
+            unavailableStationId: null,
             variesByZone: false,
           },
         },
@@ -513,11 +542,7 @@ describe.each(["light", "dark"] as const)("archive row actions a11y (%s)", (them
           );
           const table = el.shadowRoot!.querySelector("wt-data-table")!;
           await table.updateComplete;
-          await chooseOption(
-            table.shadowRoot!.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!,
-            "",
-          );
-          await table.updateComplete;
+          await showArchived(el);
           for (const id of ["p1", "archived"]) {
             const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
               `[data-test="actions-${id}"]`,
