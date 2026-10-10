@@ -32,7 +32,7 @@ import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import {
   claimInvoicePrintJobs,
-  endDeletedInvoicePrintDeliveries,
+  endInvoicePrintDeliveries,
   reportInvoicePrintJob,
 } from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
@@ -1147,7 +1147,7 @@ describe("receipt delivery reservation", () => {
         where j.printer_id = ${printerId} and d.medium = 'receipt'
           and d.status in ('queued', 'sending')`);
       await endDeletedPrinterJobs(tx, printerId);
-      await endDeletedInvoicePrintDeliveries(
+      await endInvoicePrintDeliveries(
         tx,
         live.rows.map((row) => row.print_job_id),
         now,

@@ -142,19 +142,6 @@ export async function endInvoicePrintDeliveries(
     );
 }
 
-/**
- * Ends the live receipts of the jobs a printer delete chose before it ended them. Unlike
- * {@link endDeactivatedInvoicePrintDeliveries} it writes no print job, so a job the delete ended
- * keeps its `printer.deleted` reason and a job already finished stays as it was.
- */
-export async function endDeletedInvoicePrintDeliveries(
-  tx: Transaction,
-  jobIds: string[],
-  now = new Date(),
-): Promise<void> {
-  await endInvoicePrintDeliveries(tx, jobIds, now);
-}
-
 export async function endDeactivatedInvoicePrintDeliveries(
   tx: Transaction,
   printerId: string,

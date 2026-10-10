@@ -48,7 +48,7 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
 } from "./invoice-delivery.js";
-import { endDeletedInvoicePrintDeliveries } from "./invoice-print.js";
+import { endInvoicePrintDeliveries } from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
@@ -1147,7 +1147,7 @@ async function deletePrinterNow(
       where j.printer_id = ${printerId} and d.medium = 'receipt'
         and d.status in ('queued', 'sending')`);
     await endDeletedPrinterJobs(tx, printerId);
-    await endDeletedInvoicePrintDeliveries(
+    await endInvoicePrintDeliveries(
       tx,
       live.rows.map((row) => row.print_job_id),
       ctx.now(),

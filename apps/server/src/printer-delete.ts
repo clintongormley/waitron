@@ -1,7 +1,8 @@
 import "./errors.js";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   AppError,
+  createLabelComparator,
   type DeleteImpact,
   type DeleteImpactItem,
   type DeleteTarget,
@@ -24,7 +25,7 @@ import {
   type PrintConfig,
 } from "@waitron/printing";
 import { readPrinterEquipment } from "@waitron/layouts";
-import { endDeletedInvoicePrintDeliveries } from "./invoice-print.js";
+import { endInvoicePrintDeliveries } from "./invoice-print.js";
 
 const ROLES = [
   { role: "receipt", column: "receiptPrinterId" },
@@ -34,15 +35,12 @@ const ROLES = [
 
 type Rules = { impact: DeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
 
-function byNameThenId(a: DeleteTarget, b: DeleteTarget): number {
-  if (a.name !== b.name) return a.name < b.name ? -1 : 1;
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
-
 /** One item naming each distinct target once; its count is how many distinct rows it affects. */
 function named(key: string, targets: DeleteTarget[]): DeleteImpactItem {
   const unique = [...new Map(targets.map((target) => [target.id, target])).values()];
-  return { key, count: unique.length, targets: unique.sort(byNameThenId) };
+  const compare = createLabelComparator();
+  unique.sort((a, b) => compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return { key, count: unique.length, targets: unique };
 }
 
 /** The impact read and the delete both call this, so the delete acts on exactly what it reports. */
@@ -54,9 +52,9 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
     .where(and(eq(printers.id, id), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id });
 
-  const jobIds = [...new Set(await readPrinterDeleteJobIds(tx, id))];
+  const jobIds = await readPrinterDeleteJobIds(tx, id);
   const deliveries = await tx
-    .select({ id: invoiceDeliveries.id, printJobId: printJobs.id })
+    .select({ printJobId: printJobs.id })
     .from(invoiceDeliveries)
     .innerJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
     .where(
@@ -73,14 +71,24 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
     .innerJoin(devices, eq(devices.id, printerHolders.deviceId))
     .where(eq(printerHolders.printerId, id));
 
-  const deviceChoices: DeleteImpactItem[] = [];
-  for (const { role, column } of ROLES) {
-    const chose = await tx
-      .select({ id: devices.id, name: devices.label })
-      .from(devices)
-      .where(eq(devices[column], id));
-    deviceChoices.push(named(`device_${role}`, chose));
-  }
+  const choosing = await tx
+    .select({
+      id: devices.id,
+      name: devices.label,
+      receiptPrinterId: devices.receiptPrinterId,
+      paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      cashDrawerPrinterId: devices.cashDrawerPrinterId,
+    })
+    .from(devices)
+    .where(or(...ROLES.map(({ column }) => eq(devices[column], id))));
+  const deviceChoices = ROLES.map(({ role, column }) =>
+    named(
+      `device_${role}`,
+      choosing
+        .filter((device) => device[column] === id)
+        .map((device) => ({ id: device.id, name: device.name })),
+    ),
+  );
 
   const listed = await tx
     .select({
@@ -133,7 +141,7 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
 
   const ends: DeleteImpactItem[] = [
     { key: "print_jobs", count: jobIds.length, targets: [] },
-    { key: "invoice_receipts", count: new Set(deliveries.map((row) => row.id)).size, targets: [] },
+    { key: "invoice_receipts", count: deliveries.length, targets: [] },
     named("portable_holder", holders),
   ];
   const removes: DeleteImpactItem[] = [
@@ -177,7 +185,7 @@ export async function deletePrinter(
 ): Promise<DeleteImpact> {
   const rules = await printerDeleteRules(tx, cfg, id);
   await endDeletedPrinterJobs(tx, id);
-  await endDeletedInvoicePrintDeliveries(tx, rules.invoiceJobIds, now);
+  await endInvoicePrintDeliveries(tx, rules.invoiceJobIds, now);
   for (const { column } of ROLES) {
     await tx
       .update(devices)

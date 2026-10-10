@@ -550,6 +550,24 @@ describe("the printer delete impact", () => {
     });
   });
 
+  it("lists each item's targets in label order: numbers by value, letters ignoring case", async () => {
+    const v = await seedVenue();
+    for (const label of ["Till 10", "till 3", "Till 2"])
+      await suite.db.insert(devices).values({
+        locationId: v.cfg.locationId,
+        deviceProfileId: v.bar,
+        label,
+        tokenHash: randomUUID(),
+        receiptPrinterId: v.Z,
+      });
+
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z));
+
+    expect(impact.removes.map((item) => item.targets.map((target) => target.name))).toEqual([
+      ["Till 2", "till 3", "Till 10"],
+    ]);
+  });
+
   it("answers printer.not_found for a deleted or unknown printer", async () => {
     const v = await seedVenue();
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
