@@ -1357,11 +1357,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) —
-  remaining work is slice 7 Part B and slice 6 Part C.**
-  Add the department page's Receipt tab, and the zone panel's floor-plan preview and "Add a floor
-  plan". Department receipt
-  storage, translated text, live venue defaults, independent saves and previews,
-  thermal/A4 composition, till presentation and email contacts are built.
+  remaining work is slice 6 Part C.**
+  Add the zone panel's floor-plan preview and "Add a floor plan".
   Core email consent removal stays separate.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 

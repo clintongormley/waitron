@@ -99,13 +99,15 @@ function stubApi() {
   return api;
 }
 
+const contactScreens = new WeakMap<ReceiptsScreen, ReceiptsScreen>();
 const q = <T extends HTMLElement = HTMLElement>(el: ReceiptsScreen, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector) ??
   el
     .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")
     ?.shadowRoot?.querySelector<T>(selector) ??
-  el
-    .shadowRoot!.querySelector("dashboard-department-receipt-editor")
+  contactScreens
+    .get(el)
+    ?.shadowRoot!.querySelector("dashboard-department-receipt-editor")
     ?.shadowRoot?.querySelector<T>(selector);
 
 async function mount() {
@@ -113,7 +115,14 @@ async function mount() {
   const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
     api: api as unknown as DashboardApi,
   });
-  await vi.waitFor(() => expect(q(el, "[data-test=defaults-save]")).not.toBeNull());
+  const paired = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
+    api: api as unknown as DashboardApi,
+    departmentId: "bar",
+    departmentName: "Bar",
+  });
+  contactScreens.set(el, paired.el);
+  await vi.waitFor(() => expect(q(el, "[data-test=defaults-save]")).toBeTruthy());
+  await vi.waitFor(() => expect(q(el, "wt-input[name=phone]")).toBeTruthy());
   return { el, api };
 }
 

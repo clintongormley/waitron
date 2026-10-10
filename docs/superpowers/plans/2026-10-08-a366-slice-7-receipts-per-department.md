@@ -1,5 +1,10 @@
 # Receipts per department, slice 7 — implementation plan (A366)
 
+> 2026-10-10, Part B: department receipt links now open
+> `/manage/venue-operations/department/:id/view/receipt`. Venue settings is global-only;
+> Part A's picker and same-page department navigation below describe its intermediate host.
+
+
 > **Owner overrides, 2026-10-10 (A366-7A STEP 0).** The completed later answers in
 > `/Users/clintongormley/waitron-campaign-e/questions.md:1976–1985` override the earlier
 > answers in `/Users/clintongormley/waitron-campaign-b/questions.md:2143–2164`: keep venue

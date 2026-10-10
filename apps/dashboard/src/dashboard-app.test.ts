@@ -7296,6 +7296,7 @@ describe("mounted public department pages", () => {
       "venue_service.manage",
       "venue.view",
       "venue.configure",
+      "layout.configure",
     ]);
     const box = await draft(app);
     find(app, '[data-test="edit-receipt"]')!.click();
@@ -7304,9 +7305,12 @@ describe("mounted public department pages", () => {
     expect(location.pathname).toBe("/manage/venue-operations/department/d1");
     find(app, '[data-test="edit-receipt"]')!.click();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-settings/view/receipts");
-    expect(new URL(location.href).searchParams.get("departmentId")).toBe("d1");
-    expect(box.isConnected).toBe(false);
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/d1/view/receipt");
+    expect(box.isConnected).toBe(true);
+    expect(box.value).toBe("Restaurant");
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
   });
   it.each([{ permissions: [] }, { permissions: ["venue.view"] }])(
     "a department deep link still requires its own permission: %j",

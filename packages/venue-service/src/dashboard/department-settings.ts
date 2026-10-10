@@ -572,7 +572,7 @@ export class DepartmentSettings extends LitElement {
         </div>
         <a
           data-test="edit-receipt"
-          href=${`/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(row.id)}`}
+          href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
           >${t("venue.edit_receipt")}</a
         >
       </section>

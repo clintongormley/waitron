@@ -1,5 +1,10 @@
 # Departments, slice 6 — the department list and page, "How orders start", one set of service settings (A366)
 
+> 2026-10-10, A366 slice 7 Part B: the receipt link below now opens the department's
+> `/manage/venue-operations/department/:id/view/receipt` tab.
+> [Current host plan](2026-10-08-a366-slice-7-receipts-per-department.md#part-b--department--receipt-host-second-pr-after-slice-6)
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Each task is test-first: write the failing behavioural test, run it,

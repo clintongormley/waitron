@@ -270,7 +270,7 @@ it("links to the receipt editor for this department", async () => {
     el
       .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=edit-receipt]")!
       .getAttribute("href"),
-  ).toBe("/manage/venue-settings/view/receipts?departmentId=d1");
+  ).toBe("/manage/venue-operations/department/d1/view/receipt");
 });
 it("hides transfers with one active department and excludes them from Save", async () => {
   const view = structuredClone(model);
@@ -922,7 +922,7 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   expect(zones).toEqual([{ zoneId: "z1" }]);
   expect(shell).toEqual([]);
   el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=edit-receipt]")!.click();
-  expect(shell).toEqual(["/manage/venue-settings/view/receipts?departmentId=d1"]);
+  expect(shell).toEqual(["/manage/venue-operations/department/d1/view/receipt"]);
   const observed: boolean[] = [];
   const cancelBrowserDefault = (event: MouseEvent) => {
     observed.push(event.defaultPrevented);

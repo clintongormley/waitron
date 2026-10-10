@@ -414,7 +414,7 @@ for (const locale of ["en-GB", "es-ES"]) {
 for (const locale of ["en-GB", "es-ES"]) {
   for (const theme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
-      it(`receipt preview department navigation retains edited appearance in ${locale}/${theme}/${width}`, async () => {
+      it(`venue receipt preview retains edited appearance in ${locale}/${theme}/${width}`, async () => {
         await page.viewport(width, 900);
         const previews: { heading: string | undefined; department: string | undefined }[] = [];
         const { app } = await mount("/manage/venue-settings/view/receipts", locale, theme, {
@@ -452,36 +452,20 @@ for (const locale of ["en-GB", "es-ES"]) {
           },
         });
         const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
-        await expect
-          .poll(() => new URL(location.href).searchParams.get("departmentId"))
-          .toBe("bar");
+        expect(receipt.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
+        expect(receipt.shadowRoot!.querySelector("dashboard-department-receipt-editor")).toBeNull();
         const input = receipt
           .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
           .shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
         await input.updateComplete;
         await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
-        const preview = receipt.shadowRoot!.querySelector("[name=departmentId]")!;
-        preview.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "deli" } }));
-        await expect
-          .poll(() => new URL(location.href).searchParams.get("departmentId"))
-          .toBe("deli");
-        expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
         expect(input.value).toBe("Edited heading");
-        await expect
-          .poll(() => previews.at(-1))
-          .toEqual({ heading: "Edited heading", department: "deli" });
-        history.back();
-        await expect
-          .poll(() => new URL(location.href).searchParams.get("departmentId"))
-          .toBe("bar");
-        expect(input.value).toBe("Edited heading");
-        expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
         const event = new Event("beforeunload", { cancelable: true });
         window.dispatchEvent(event);
         expect(event.defaultPrevented).toBe(true);
         await expect
           .poll(() => previews.at(-1))
-          .toEqual({ heading: "Edited heading", department: "bar" });
+          .toEqual({ heading: "Edited heading", department: undefined });
         await select(app, "kitchen");
         const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
         await expect.poll(() => warning.open).toBe(true);
@@ -530,28 +514,15 @@ it("the real Receipts department-management link protects the appearance before 
   expect(receipt.isConnected).toBe(false);
 });
 
-it("A10 URL department navigation asks once for its own draft and cross-panel leave asks for all", async () => {
+it("an obsolete department query cannot bypass a venue draft leave decision", async () => {
   const { app } = await mount(
     "/manage/venue-settings/view/receipts?departmentId=bar",
     "en-GB",
     "light",
-    {
-      getVenueDepartments: async () => [
-        { id: "bar", name: "Bar", active: true, isDefault: true },
-        { id: "deli", name: "Deli", active: true, isDefault: false },
-      ],
-      getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Venue" } }),
-    },
+    { getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Venue" } }) },
   );
   const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
-  const editor = receipt.shadowRoot!.querySelector("dashboard-department-receipt-editor")!;
-  await expect.poll(() => editor.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
-  const email = editor.shadowRoot!.querySelector<WtInput>("[name=email]")!;
-  await email.updateComplete;
-  await userEvent.fill(
-    page.elementLocator(email.shadowRoot!.querySelector("input")!),
-    "bar@example.com",
-  );
+  expect(receipt.shadowRoot!.querySelector("dashboard-department-receipt-editor")).toBeNull();
   const defaults = receipt.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!;
   await expect.poll(() => defaults.shadowRoot?.querySelector("[name=headerSubtitle]")).toBeTruthy();
   const subtitle = defaults.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
@@ -560,22 +531,6 @@ it("A10 URL department navigation asks once for its own draft and cross-panel le
     page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
     "Draft venue",
   );
-  const { navigationGuardFor } = await import("@waitron/ui");
-  const guard = navigationGuardFor(window)!;
-  const next = new URL(guard.href);
-  next.searchParams.set("departmentId", "deli");
-  const kept = guard.write(next);
-  await choose(app, "keep");
-  expect(await kept).toBe("kept");
-  expect(editor.departmentId).toBe("bar");
-  expect(email.value).toBe("bar@example.com");
-  expect(subtitle.value).toBe("Draft venue");
-  const discarded = guard.write(next);
-  await choose(app, "discard");
-  expect(await discarded).toBe("proceeded");
-  await expect.poll(() => editor.departmentId).toBe("deli");
-  expect(subtitle.value).toBe("Draft venue");
-  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await select(app, "tables");
   await choose(app, "keep");
   expect(selected(app)).toBe("receipts");

@@ -14,6 +14,12 @@ class ReceiptLeaveApp extends LitElement {
   api!: DashboardApi;
   override render() {
     return html`<dashboard-receipts-screen .api=${this.api}></dashboard-receipts-screen>
+      <dashboard-department-receipt-editor
+        .api=${this.api}
+        departmentId="bar"
+        departmentName="Bar"
+        .draftParent=${this}
+      ></dashboard-department-receipt-editor>
       ${this.leave.render({
         heading: t("unsaved.heading"),
         message: t("unsaved.message"),
@@ -172,6 +178,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   await expect
     .poll(() => screen.shadowRoot?.querySelector("[data-test=description-save]"))
     .toBeTruthy();
+  await expect.poll(() => departmentRoot(screen)?.querySelector("[name=email]")).toBeTruthy();
   return { app, screen, liveData };
 }
 function unload() {
@@ -183,7 +190,8 @@ function defaultsRoot(screen: Screen) {
   return screen.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
 }
 function departmentRoot(screen: Screen) {
-  return screen.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.shadowRoot!;
+  return (screen.getRootNode() as ShadowRoot).querySelector("dashboard-department-receipt-editor")!
+    .shadowRoot!;
 }
 function field(screen: Screen, name: string) {
   const root = ["phone", "email"].includes(name)
@@ -361,10 +369,10 @@ it("commits the submitted snapshot and keeps later input dirty", async () => {
   expect(unload()).toBe(false);
 });
 it("disconnect releases appearance protection", async () => {
-  const { screen } = await mount();
+  const { app, screen } = await mount();
   await change(screen, "email", "hello@example.com");
   expect(unload()).toBe(true);
-  screen.remove();
+  app.remove();
   expect(unload()).toBe(false);
 });
 it("clean receipt appearance leaves directly", async () => {
@@ -1045,46 +1053,6 @@ for (const [name, typed, saved] of [
     expect(unload()).toBe(false);
   });
 }
-it("A10 department Keep retains every draft and Discard switches only the department", async () => {
-  history.replaceState(null, "", "/manage/venue-settings/view/receipts?departmentId=bar");
-  const { app, screen } = await mount({
-    getVenueDepartments: async () => [
-      { id: "bar", name: "Bar", active: true, isDefault: true },
-      { id: "deli", name: "Deli", active: true, isDefault: false },
-    ],
-  });
-  await expect.poll(() => departmentRoot(screen)?.querySelector("[name=email]")).toBeTruthy();
-  await typeReceiptField(screen, "email", "bar@example.com");
-  await typeReceiptField(screen, "headerSubtitle", "Unsaved venue");
-  await typeReceiptField(screen, "operationDescription", "Dinner service");
-  await pickA10(
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      "[name=receiptLanguage]",
-    )!,
-    "ca-ES",
-  );
-  const picker =
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
-  await pickA10(picker, "deli");
-  await chooseA10(app, "keep");
-  expect(picker.value).toBe("bar");
-  expect(field(screen, "email").value).toBe("bar@example.com");
-  expect(field(screen, "headerSubtitle").value).toBe("Unsaved venue");
-  expect(field(screen, "operationDescription").value).toBe("Dinner service");
-  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
-  await pickA10(picker, "deli");
-  await chooseA10(app, "discard");
-  await expect
-    .poll(
-      () => screen.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.departmentId,
-    )
-    .toBe("deli");
-  await expect.poll(() => field(screen, "email")?.value).toBe("");
-  expect(field(screen, "headerSubtitle").value).toBe("Unsaved venue");
-  expect(field(screen, "operationDescription").value).toBe("Dinner service");
-  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
-  expect(unload()).toBe(true);
-});
 
 it("A10 reconnect keeps department and defaults alongside independent location drafts", async () => {
   const { app, screen } = await mount();

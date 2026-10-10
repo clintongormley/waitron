@@ -30,7 +30,7 @@ import { t } from "./strings.js";
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
   if (use.kind === "department_receipt")
-    return `/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(use.id)}`;
+    return `/manage/venue-operations/department/${encodeURIComponent(use.id)}/view/receipt`;
   if (use.kind === "receipt") return "/manage/venue-settings/view/receipts";
   if (use.kind === "section")
     return `/manage/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;

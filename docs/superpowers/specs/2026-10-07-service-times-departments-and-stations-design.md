@@ -1,5 +1,11 @@
 # Service times, departments, zones and prep stations
 
+> 2026-10-10, A366 slice 7 Part B: Edit the receipt and image usage links now open
+> `/manage/venue-operations/department/:id/view/receipt`. Venue settings keeps global
+> defaults, language and sales description; the intermediate picker below is retired.
+> [Current host plan](../plans/2026-10-08-a366-slice-7-receipts-per-department.md#part-b--department--receipt-host-second-pr-after-slice-6)
+
+
 > **2026-10-09, A366 slice 2:** this earlier account of address-owned local entries, their cap
 > or individually coloured special dates is historical. Local holidays are now own named days
 > without an entry cap; named-day kinds and public facts determine Calendar fills. See

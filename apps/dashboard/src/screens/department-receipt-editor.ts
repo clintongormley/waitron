@@ -185,7 +185,11 @@ export class DepartmentReceiptEditor extends LitElement {
   #publish(): void {
     this.dispatchEvent(
       new CustomEvent("receipt-draft-changed", {
-        detail: { departmentId: this.departmentId, receipt: structuredClone(this.draft) },
+        detail: {
+          departmentId: this.departmentId,
+          receipt: structuredClone(this.draft),
+          venueDefaults: structuredClone(this.settings?.venueDefaults ?? {}),
+        },
         bubbles: true,
         composed: true,
       }),

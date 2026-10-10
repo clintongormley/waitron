@@ -1988,7 +1988,7 @@ it.each([
     "Logotipo del recibo de Dining",
   ],
 ])(
-  "in %s, names each department logo and links its explicit picker",
+  "in %s, names each department logo and links its explicit Receipt tab",
   async (locale, disabled, active) => {
     setLocale(locale);
     const client = api();
@@ -2013,8 +2013,8 @@ it.each([
     ]);
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/manage/venue-settings/view/receipts",
-      "/manage/venue-settings/view/receipts?departmentId=bar%2Fa%26b",
-      "/manage/venue-settings/view/receipts?departmentId=dining",
+      "/manage/venue-operations/department/bar%2Fa%26b/view/receipt",
+      "/manage/venue-operations/department/dining/view/receipt",
     ]);
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   },
