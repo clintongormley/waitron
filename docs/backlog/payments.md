@@ -167,23 +167,25 @@ their full text.
   Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
   because if the reader owns the whole step there may be nothing for us to build.
 
-## Re-check the device inside payment write transactions
+## The counter sale, `/api/pay`, collecting a placed order and bill refunds do not re-check the device inside their write
 
-A till's sign-in is checked in its own transaction (`requireSession`,
-`apps/server/src/till-session.ts:92`) and the payment is written in a later one.
-`beginBillPayment` (`apps/server/src/bill-payments.ts:1002`), which `takeBillPayment` (cash or a
-hand-keyed card) and `takeReaderBillPayment` (a card on a reader) both call first, reads nothing
-about the device, so a device disabled or deleted between the two can still have a cash or
-hand-keyed payment recorded on it. A card on a reader also has its bill payment row written by
-`beginBillPayment`; the SumUp and Stripe terminal providers then call `insertAttempting`
-(`packages/payments/src/store.ts:146`), which reads only the device's profile and, when a reader is
-named, refuses one the device no longer holds (`assertReaderStartable`, `reader.not_held`), and
-`takeReaderBillPayment` then fails the bill payment. Disable and Delete both release the device's
-reader holds (`releaseDevice`, `apps/server/src/device-equipment.ts:105`). A start that names no
-reader passes that check. Re-read the device's `active` and the operator's open session inside
-`beginBillPayment`, as `PUT /api/device/equipment` does (`apps/server/src/device-api.ts`): an `active`
-check alone misses a sign-out, or a Disable followed by a re-pair, landing between the two
-transactions. Left open by A435 step 4.
+Since A471 a bill payment re-checks, first inside the transaction that writes it, that the
+operator's session is still open on the device and the device is still active and not deleted
+(`assertStillSignedIn`, `apps/server/src/till-session.ts`). Four neighbouring money paths do not.
+A471's throwaway probe (2026-10-10, real database, each function called directly as its route
+calls it once `requireSession` has passed, after `update devices set active = false` with the
+session left open, or after the session was ended) printed:
+
+| Function | Route | Till switched off | Session ended |
+| --- | --- | --- | --- |
+| `recordTillSale` (`apps/server/src/till-sale.ts`), cash | `POST /api/sales` | sale written, invoice issued | the same |
+| `payWorkingOrderIntegrated` (`till-sale.ts`), fake reader | `POST /api/pay` | reader asked once, payment captured, sale written | the same |
+| `collectOrder` (`till-sale.ts`), cash on a placed order | `POST /api/working-orders/:id/collect` | invoice issued, order settled | the same |
+| `refundBillPayment` (`apps/server/src/bill-refunds.ts`), cash | `POST /api/working-orders/:id/payments/:paymentId/refunds` | refund completed | refused `session.not_open` by `authorize` (`packages/identity/src/authorize.ts`), nothing written |
+
+The first three take only the operator's person id, not the session id, so they have nothing to
+check a sign-out against; the fix is A471's: pass `{ personId, sessionId }` and call
+`assertStillSignedIn` first in the write's transaction. Found by A471.
 
 ## Decisions and deliberate limits
 
