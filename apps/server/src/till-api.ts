@@ -8,6 +8,8 @@ import {
   deviceOrigin,
   isAppError,
   isValidGuestCount,
+  JOIN_SIDES,
+  type JoinSide,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
   tillProviderForReader,
@@ -144,6 +146,7 @@ import { listCourses, listStationsToday } from "./kitchen.js";
 import {
   finishTable,
   markTableCleared,
+  memberTables,
   readPartyBills,
   seatTable,
   setPartyName,
@@ -155,7 +158,13 @@ import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
-import { holderOf, joinMergeMembers, partyRevision } from "./floor-today-merges.js";
+import {
+  holderOf,
+  joinMergeMembers,
+  leaveMergesRestoring,
+  partyRevision,
+  writeMerge,
+} from "./floor-today-merges.js";
 import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
@@ -833,6 +842,37 @@ function requireOtherTables(value: unknown, pathId: string): string[] {
   const ids = value.map((item: unknown) => requireTargetTable(item, "withTableIds"));
   if (ids.includes(pathId.toLowerCase())) throw invalid("withTableIds");
   return [...new Set(ids)];
+}
+
+interface JoinMerge {
+  moving: string;
+  target: string;
+  side: JoinSide;
+  seats: number | null;
+}
+
+/** A join's merge, absent for none: `moving` or `target` is the joined table, the other one the party must hold. */
+function requireMerge(value: unknown, tableId: string): JoinMerge | null {
+  if (value === undefined) return null;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("merge");
+  const { moving, target, side, seats } = value as Record<string, unknown>;
+  if (typeof moving !== "string" || !isUuid(moving)) throw invalid("merge");
+  if (typeof target !== "string" || !isUuid(target)) throw invalid("merge");
+  if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("merge");
+  if (
+    seats !== undefined &&
+    (typeof seats !== "number" || !Number.isInteger(seats) || seats < 1 || seats > 999)
+  ) {
+    throw invalid("merge");
+  }
+  const merge = {
+    moving: moving.toLowerCase(),
+    target: target.toLowerCase(),
+    side: side as JoinSide,
+    seats: seats ?? null,
+  };
+  if ((merge.moving === tableId) === (merge.target === tableId)) throw invalid("merge");
+  return merge;
 }
 
 /**
@@ -2375,11 +2415,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const body = asObject(await readRawJsonBody<unknown>(c));
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
+        const merge = path === "join" ? requireMerge(body.merge, tableId) : null;
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
-          return act(tx, sendCfg, partyId, tableId, command);
+          if (merge !== null) {
+            const held = merge.moving === tableId ? merge.target : merge.moving;
+            if (!(await memberTables(tx, partyId)).includes(held)) throw invalid("merge");
+          }
+          const acted = await act(tx, sendCfg, partyId, tableId, command);
+          await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
+          if (merge !== null) {
+            await writeMerge(tx, cfg, {
+              movingId: merge.moving,
+              targetId: merge.target,
+              side: merge.side,
+              seats: merge.seats,
+              free: false,
+            });
+          }
+          return acted;
         });
         return c.json(result);
       }),
@@ -2409,10 +2465,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+        const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,
           operatorId: personId,
         });
+        await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
+        return split;
       });
       return c.json(result);
     }),
