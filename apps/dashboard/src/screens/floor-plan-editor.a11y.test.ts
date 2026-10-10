@@ -195,6 +195,56 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  async function selectTable(el: FloorPlanEditor, key: string) {
+    el.shadowRoot!.querySelector("wt-floor-plan-canvas")!.dispatchEvent(
+      new CustomEvent("wt-table-select", { detail: { key }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
+    await panel.updateComplete;
+    return panel;
+  }
+
+  it("shows a placed table's panel accessibly", async () => {
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    const panel = await selectTable(el, "m2");
+    expect(panel.shadowRoot!.querySelector("[name=shape]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows an unplaced table's panel accessibly", async () => {
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    const panel = await selectTable(el, "m2");
+    panel.shadowRoot!.querySelector<HTMLElement>("[data-test=remove]")!.click();
+    await el.updateComplete;
+    await panel.updateComplete;
+    expect(panel.shadowRoot!.querySelector("[data-test=place]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows a refusal under a field accessibly", async () => {
+    const { el, host } = await open(
+      stubApi(
+        vi.fn().mockResolvedValue(plan),
+        vi
+          .fn()
+          .mockRejectedValue({ code: "floor_plan.invalid", params: { field: "tables.0.seats" } }),
+      ),
+      theme,
+    );
+    const panel = await selectTable(el, "m1");
+    await chooseOption(panel.shadowRoot!.querySelector("[name=seats]")!, "5");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=save]")!.click();
+    await expect
+      .poll(
+        () =>
+          panel.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=seats]")!.error,
+      )
+      .not.toBe("");
+    await expectNoA11yViolations(host);
+  });
+
   it("shows a load failure accessibly", async () => {
     const { host } = await open(
       stubApi(vi.fn().mockRejectedValue({ code: "zone.not_found" })),

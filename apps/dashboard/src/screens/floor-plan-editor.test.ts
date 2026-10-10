@@ -590,3 +590,61 @@ for (const [from, to] of sizes) {
     expect(addField(el, "table-count").value).toBe("2");
   });
 }
+
+const tablePanel = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-table-panel"]>(
+    "floor-plan-table-panel",
+  );
+
+it("Undo of a Delete brings back the table and its join", async () => {
+  const joined: FloorPlan = {
+    ...terrace(),
+    joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
+  };
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joined) }));
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  tablePanel(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=delete]")!.click();
+  await el.updateComplete;
+  expect(canvas(el).tables.map((t) => t.key)).toEqual([]);
+  expect(canvas(el).selected).toBeNull();
+  expect(tablePanel(el)).toBeNull();
+  await press(el, "undo");
+  expectSaveQuiet(el);
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
+  const panel = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  expect(panel.draft.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
+});
+
+it("puts the selected table's panel above the tables list, beside the canvas and in the sheet", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  expect(tablePanel(el)).toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  const side = el.shadowRoot!.querySelector(".side")!;
+  expect([...side.children].map((c) => c.localName)).toEqual([
+    "floor-plan-table-panel",
+    "floor-plan-tables-panel",
+  ]);
+  expect(tablePanel(el)!.tableKey).toBe("m1");
+  await page.viewport(390, 844);
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  expect([...sheet(el)!.children].map((c) => c.localName)).toEqual([
+    "floor-plan-table-panel",
+    "floor-plan-tables-panel",
+  ]);
+});
+
+it("a panel's typed name goes into the draft and Undo takes the whole typing back", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  const name = tablePanel(el)!.shadowRoot!.querySelector("[name=table-name]")!;
+  await chooseOption(name, "T1a");
+  await el.updateComplete;
+  await chooseOption(name, "T1ab");
+  await el.updateComplete;
+  expect(canvas(el).tables[0]!.label).toBe("T1ab");
+  await press(el, "undo");
+  expect(canvas(el).tables[0]!.label).toBe("T1");
+  expect(button(el, "undo").disabled).toBe(true);
+});

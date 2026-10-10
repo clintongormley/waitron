@@ -672,3 +672,38 @@ it("at 390 px the editor's own name check opens the sheet on the table it select
   expect(canvas(el).selected).toBe("m2");
   expect(sheet()!.expanded).toBe(true);
 });
+
+const tablePanel = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-table-panel"]>(
+    "floor-plan-table-panel",
+  )!;
+const panelField = (el: FloorPlanEditor, name: string) =>
+  tablePanel(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(`[name=${name}]`)!;
+
+it("a taken name from Save shows under the table's name field", async () => {
+  const el = await open(refusing(taken));
+  await change(el, renamed(opened(), "m2", "Patio 1"));
+  await press(el, "save");
+  expect(tablePanel(el).tableKey).toBe("m2");
+  expect(panelField(el, "table-name").error).toBe("A table with that name already exists");
+  expect(panelField(el, "seats").error).toBe("");
+});
+
+it("a refusal shows only on the table it names, and comes back with it", async () => {
+  const el = await open(refusing(invalid("tables.1.seats")));
+  await change(el, patchTable(opened(), "m2", { seats: 5 }));
+  await press(el, "save");
+  expect(panelField(el, "seats").error).toBe("Check the floor plan's tables and try again");
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(tablePanel(el).tableKey).toBe("m1");
+  expect(tablePanel(el).fieldError).toBeNull();
+  expect(panelField(el, "seats").error).toBe("");
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m2" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(panelField(el, "seats").error).toBe("Check the floor plan's tables and try again");
+});

@@ -19,6 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-sheet.js";
 import "./floor-plan-add-tables.js";
+import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
 import { bookedReason } from "./floor-plan-booked.js";
 import { dashboardPath } from "../navigation.js";
@@ -256,6 +257,8 @@ export class FloorPlanEditor extends LitElement {
   #newKeys = 0;
   /** Monotonic, so a key never returns: not after a save turns `new:<n>` into an id, nor on undo. */
   readonly #nextKey = (): string => `new:${++this.#newKeys}`;
+  #joinKeys = 0;
+  readonly #nextJoinKey = (): string => `join:${++this.#joinKeys}`;
   #request = 0;
   #saveRequest = 0;
   /** The refused field's value when the refusal arrived. */
@@ -682,6 +685,25 @@ export class FloorPlanEditor extends LitElement {
     return this.#panelRefused;
   }
 
+  #errorFor: FieldMark | null = null;
+  #errorKey: string | null = null;
+  #errorLocale: string | null = null;
+  #panelErrorValue: { field: string; message: string } | null = null;
+
+  /** The mark for the selected table only; the same object while it, the key and the language stay. */
+  #panelError(key: string): { field: string; message: string } | null {
+    const mark = this.mark;
+    const locale = currentLocale();
+    if (mark !== this.#errorFor || key !== this.#errorKey || locale !== this.#errorLocale) {
+      this.#errorFor = mark;
+      this.#errorKey = key;
+      this.#errorLocale = locale;
+      this.#panelErrorValue =
+        mark === null || mark.key !== key ? null : { field: mark.field, message: mark.text() };
+    }
+    return this.#panelErrorValue;
+  }
+
   #copyLocale: string | null = null;
   #copy!: FloorPlanCanvasCopy;
 
@@ -713,8 +735,18 @@ export class FloorPlanEditor extends LitElement {
       .refused=${this.#refusedForPanel()}
       .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
+    const tablePanel =
+      this.selected !== null && draft.tables.some((table) => table.key === this.selected)
+        ? html`<floor-plan-table-panel
+            .draft=${draft}
+            .tableKey=${this.selected}
+            .fieldError=${this.#panelError(this.selected)}
+            .nextJoinKey=${this.#nextJoinKey}
+          ></floor-plan-table-panel>`
+        : nothing;
+    const panels = html`${tablePanel}${panel}`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">
-        ${canvas}${this.narrow ? this.#sheet(draft, panel) : html`<div class="side">${panel}</div>`}
+        ${canvas}${this.narrow ? this.#sheet(draft, panels) : html`<div class="side">${panels}</div>`}
       </div>
       <floor-plan-add-tables
         .draft=${draft}
