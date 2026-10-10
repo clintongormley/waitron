@@ -797,7 +797,7 @@ export class MenuStructureTable extends LitElement {
   /** A search draws closest matches first, not the menu's order, so nothing is reordered during
    * one. */
   get #reorderable(): boolean {
-    return this.reordering && this.#compiledSearch().search === undefined;
+    return this.reordering && this.search.trim() === "";
   }
 
   #grip(row: Row) {
