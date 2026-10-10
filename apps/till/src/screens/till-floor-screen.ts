@@ -1,6 +1,7 @@
 import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
 import { tillPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { styleMap } from "lit/directives/style-map.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
@@ -9,6 +10,7 @@ import type { TimingBand } from "@waitron/shared";
 // `<wt-table-token>`, which the map views and the tray use by tag.
 import {
   baseStyles,
+  cropToTables,
   UrlStateController,
   buildZoneTabs,
   defaultTraySlot,
@@ -137,8 +139,9 @@ export class TillFloorScreen extends LitElement {
       }
 
       wt-floor-map {
-        height: 65dvh;
-        min-height: calc(var(--wt-tap-min) * 6);
+        align-self: center;
+        width: min(100%, calc((100dvh - var(--wt-tap-min) * 8) * var(--floor-map-ratio)));
+        aspect-ratio: var(--floor-map-ratio);
       }
 
       /* A token's unsent-order mark hangs below it, into the row gap and the tray's padding. */
@@ -565,7 +568,8 @@ export class TillFloorScreen extends LitElement {
     const joinId = table.today?.joinId ?? null;
     const members =
       joinId === null ? [] : this.#zone.onMap.filter((drawn) => drawn.joinId === joinId);
-    if (!members.some((drawn) => drawn.id === table.id)) return table.label;
+    if (!members.some((drawn) => drawn.id === table.id))
+      return t("floor.table_title").replace("{table}", () => table.label);
     return mergeLabel(members.map((drawn) => drawn.label));
   }
 
@@ -856,9 +860,12 @@ export class TillFloorScreen extends LitElement {
     unplaced: TableState[],
     activeKey: string | null | undefined,
   ): TemplateResult {
+    const crop = cropToTables(onMap.map((table) => table.placement));
+    const ratio = crop === null ? 1 : crop.width / crop.height;
     return html`
       <div class="map">
         <wt-floor-map
+          style=${styleMap({ "--floor-map-ratio": String(ratio) })}
           data-floor-map
           .tables=${onMap}
           .fitKey=${activeKey ?? ""}

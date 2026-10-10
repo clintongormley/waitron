@@ -158,7 +158,7 @@ describe("device screens at phone width", () => {
     [411, 8, 403],
     [1280, 40, 1240],
   ] as const) {
-    it(`a planned zone's map fills the floor screen's content box at ${width}px`, async () => {
+    it(`a planned zone's map fits its shape within the floor screen's content box at ${width}px`, async () => {
       await onPage(width);
       const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
         embedded: true,
@@ -175,7 +175,11 @@ describe("device screens at phone width", () => {
         tables: [plannedTable],
       });
       const rect = el.shadowRoot!.querySelector("wt-floor-map")!.getBoundingClientRect();
-      expect({ left: rect.left, right: rect.right }).toEqual({ left, right });
+      expect(rect.left).toBeGreaterThanOrEqual(left);
+      expect(rect.right).toBeLessThanOrEqual(right);
+      expect(rect.width).toBeCloseTo(rect.height, 2);
+      expect(rect.left + rect.width / 2).toBe((left + right) / 2);
+      if (width < 600) expect({ left: rect.left, right: rect.right }).toEqual({ left, right });
     });
   }
 });

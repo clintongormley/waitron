@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cropToTables } from "@waitron/ui";
 import type { WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { mapTables } from "../state/floor-map.js";
@@ -359,3 +360,51 @@ describe("till-floor-screen on the new map", () => {
     expect(el.shadowRoot!.querySelector("[data-table=t4]")).not.toBeNull();
   });
 });
+
+for (const [width, height] of [
+  [30, 4],
+  [4, 30],
+]) {
+  it(`sizes the map to a ${width} by ${height} zone`, async () => {
+    const el = await mount({
+      tables: [
+        planned("t1", {
+          today: today({
+            placement: { x: 0, y: 0, width: width!, height: height!, shape: "rect", rotation: 0 },
+          }),
+        }),
+      ],
+    });
+    const map = mapOf(el);
+    await map.updateComplete;
+    const crop = cropToTables(map.tables.map((t) => t.placement))!;
+    const box = map.getBoundingClientRect();
+    expect(box.width / box.height).toBeCloseTo(crop.width / crop.height, 2);
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  it(`paints the list's Bill requested chip purple in ${theme}`, async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      {
+        zones: [zone()],
+        tables: [
+          planned("t1", {
+            signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
+          }),
+        ],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    const chip = el.shadowRoot!.querySelector("[data-chip='bill-requested']")!;
+    const control = document.createElement("span");
+    control.style.backgroundColor = "var(--wt-color-table-bill)";
+    host.appendChild(control);
+    expect(getComputedStyle(chip).backgroundColor).toBe(getComputedStyle(control).backgroundColor);
+    control.style.color = "var(--wt-color-on-table-bill)";
+    expect(getComputedStyle(chip).color).toBe(getComputedStyle(control).color);
+  });
+}

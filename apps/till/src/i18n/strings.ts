@@ -537,6 +537,7 @@ export const en = {
   "floor.open_station": "Open {station}",
   "floor.status_seated": "Seated",
   "floor.map_label": "Tables",
+  "floor.table_title": "Table {table}",
   "floor.seats": "{n} seats",
   "floor.seats_one": "1 seat",
   // What wants attention at a table or on a counter order, shown as chips side by side.
@@ -550,7 +551,6 @@ export const en = {
   "signal.bill_requested": "Bill requested",
   "seat.title": "Seat table {table}",
   "seat.guest_count": "Guests",
-  "seat.covers": "Covers",
   "seat.guest_count_invalid": "Enter a whole number of guests from 1 to 999, or leave it empty",
   "seat.confirm": "Seat",
   // Table-ordering screen
@@ -1683,6 +1683,7 @@ export const es: Record<StringKey, string> = {
   "floor.open_station": "Abrir {station}",
   "floor.status_seated": "Ocupada",
   "floor.map_label": "Mesas",
+  "floor.table_title": "Mesa {table}",
   "floor.seats": "{n} plazas",
   "floor.seats_one": "1 plaza",
   "signal.take_order": "Tomar nota",
@@ -1695,7 +1696,6 @@ export const es: Record<StringKey, string> = {
   "signal.bill_requested": "Cuenta pedida",
   "seat.title": "Sentar en la mesa {table}",
   "seat.guest_count": "Comensales",
-  "seat.covers": "Cubiertos",
   "seat.guest_count_invalid":
     "Escribe un número entero de comensales entre 1 y 999, o déjalo vacío",
   "seat.confirm": "Sentar",

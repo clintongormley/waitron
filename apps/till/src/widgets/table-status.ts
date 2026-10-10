@@ -63,6 +63,14 @@ export class TillTableStatus extends LitElement {
         border-radius: var(--wt-radius-sm);
       }
 
+      .swatch[data-dot="ready"] {
+        background-color: var(--wt-color-success);
+      }
+
+      .swatch[data-dot="forgotten"] {
+        background-color: var(--wt-color-danger);
+      }
+
       /* The equipment toast's place (till-app.ts): over the page, so it moves nothing. */
       .flash-notice {
         position: fixed;
@@ -118,7 +126,7 @@ export class TillTableStatus extends LitElement {
     const party = this.party;
     const rows = this.#partyRows;
     if (party === null || rows.length === 0) return nothing;
-    const { fill, text } = statusPin(rows);
+    const { fill, dot, text } = statusPin(rows);
     return html`<button
         type="button"
         class="status-pin"
@@ -126,7 +134,7 @@ export class TillTableStatus extends LitElement {
         aria-label=${t("table.status_pin").replace("{status}", () => text)}
         @click=${() => this.#setOpen(party.id)}
       >
-        <span class="swatch" data-fill=${fill} aria-hidden="true"></span>
+        <span class="swatch" data-fill=${fill} data-dot=${dot ?? nothing} aria-hidden="true"></span>
         ${text}
       </button>
       <wt-toast
@@ -139,7 +147,11 @@ export class TillTableStatus extends LitElement {
       ></wt-toast>
       <till-table-details-sheet
         .table=${this.#openFor === null ? null : rows[0]!}
-        .heading=${party.displayName}
+        .heading=${
+          party.name === null && rows.length === 1
+            ? t("floor.table_title").replace("{table}", () => rows[0]!.label)
+            : party.displayName
+        }
         @details-close=${(event: Event) => {
           event.stopPropagation();
           this.#setOpen(null);

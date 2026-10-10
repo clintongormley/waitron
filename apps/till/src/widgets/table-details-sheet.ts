@@ -83,7 +83,7 @@ export class TillTableDetailsSheet extends LitElement {
 
   /** `null` keeps the dialog closed. */
   @property({ attribute: false }) table: TableState | null = null;
-  /** The name as drawn: "Terrace 4+5" on the floor, or the party's name on the order screen. */
+  /** The caller supplies the table, merge or party heading. */
   @property() heading = "";
   /** Injectable clock for Time to fire; unset reads `Date.now()` on each render. */
   @property({ attribute: false }) now?: number;

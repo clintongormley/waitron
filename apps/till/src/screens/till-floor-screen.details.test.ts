@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
@@ -174,7 +175,7 @@ describe("till-floor-screen's details sheet", () => {
   it("a re-read that merges the open sheet's table renames the sheet", async () => {
     const el = await mount([table("t4"), table("t5")]);
     const sheet = await askDetails(el, "t4");
-    expect(sheet.heading).toBe("Terrace 4");
+    expect(sheet.heading).toBe("Table Terrace 4");
 
     el.tables = [
       table("t4", { today: today({ joinId: "j1", joinSeats: 6 }) }),
@@ -199,7 +200,7 @@ describe("till-floor-screen's details sheet", () => {
     ];
     await el.updateComplete;
     await sheet.updateComplete;
-    expect(sheet.heading).toBe("Terrace 4");
+    expect(sheet.heading).toBe("Table Terrace 4");
   });
 
   it("after a re-read removes the open sheet, the rest of the page takes a real click", async () => {
@@ -265,3 +266,18 @@ describe("till-floor-screen's details sheet", () => {
     expect(sheetOf(el)).toBeNull();
   });
 });
+
+for (const [locale, heading] of [
+  ["en", "Table 9"],
+  ["es", "Mesa 9"],
+]) {
+  it(`names a single table in ${locale}`, async () => {
+    setLocale(locale!);
+    try {
+      const el = await mount([table("t9", { label: "9" })]);
+      expect((await askDetails(el, "t9")).heading).toBe(heading);
+    } finally {
+      setLocale("en");
+    }
+  });
+}

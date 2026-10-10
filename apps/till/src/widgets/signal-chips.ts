@@ -62,6 +62,12 @@ export function signalChips(
 export const signalChipStyles = [
   floorChipStyles,
   css`
+    .chip[data-chip="bill-requested"] {
+      border-color: var(--wt-color-table-bill);
+      background: var(--wt-color-table-bill);
+      color: var(--wt-color-on-table-bill);
+    }
+
     .chip {
       max-width: 100%;
       overflow-wrap: anywhere;

@@ -2439,6 +2439,13 @@ check); design-system.md names both primitives and the editor; the backlog's A42
 
 ## Slice 3 — the till's map (spec §5)
 
+> Owner overrides, 2026-10-10 (A472): the floor screen sizes the map to the zone's cropped
+> proportions, with a viewport height cap; Bill requested chips use the map's purple; the pin's
+> swatch follows its displayed signal; a single-table sheet says "Table 9" / "Mesa 9"; Guests has
+> no placeholder. The 4-second notice stays as built. These supersede the corresponding slice 3
+> defaults below.
+
+
 Branch `feat/floor-plan-till-map`, after slice 2 (landed as #1506). Expanded to step level on
 2026-10-10, unattended, and revised the same day on a fresh-context review's findings; every
 `file:line` in this slice was read at `main` `28f150197` and checked again at `f18ff0767` (#1507,
