@@ -306,8 +306,8 @@ importers:
         specifier: 0.35.4
         version: 0.35.4(@types/node@26.6.2)
       stripe:
-        specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.2)
+        specifier: ^23.0.0
+        version: 23.0.0(@types/node@26.6.2)
       undici:
         specifier: ^8.11.2
         version: 8.11.2
@@ -1420,8 +1420,8 @@ importers:
         specifier: ^3.2.0
         version: 3.3.3
       stripe:
-        specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.2)
+        specifier: ^23.0.0
+        version: 23.0.0(@types/node@26.6.2)
     devDependencies:
       '@types/node':
         specifier: ^26.0.0
@@ -5463,11 +5463,11 @@ packages:
     resolution: {integrity: sha512-aulFJcD6YK8V1G7iRB5tigAP4TsHBZZrOV8pjV++zdUwmeV8uzbY7yn6h9MswN62adStNZFuCIx4haBnRuMDaw==}
     engines: {node: '>=18'}
 
-  stripe@22.6.2:
-    resolution: {integrity: sha512-PwRE2scocvXqDKPiskMa5vRJEAEkq46W69XyUYmAwrNSLr675lQnfqLwnsndAWizwgihOWw/irLmoFRo3ez7ew==}
-    engines: {node: '>=18'}
+  stripe@23.0.0:
+    resolution: {integrity: sha512-MDE2A5ZVVluYURORaZEVghSmnLJc3w6aHAlZSxDQMsOjOb3V0O6ro/CiaeFlJS4N7uIVmsg98ocRsPmUK6YfyA==}
+    engines: {node: '>=20'}
     peerDependencies:
-      '@types/node': '>=18'
+      '@types/node': '>=20'
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -9129,7 +9129,7 @@ snapshots:
 
   strip-final-newline@4.0.0: {}
 
-  stripe@22.6.2(@types/node@26.6.2):
+  stripe@23.0.0(@types/node@26.6.2):
     optionalDependencies:
       '@types/node': 26.6.2
 

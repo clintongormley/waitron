@@ -27,7 +27,7 @@
     "@waitron/ui": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "lit": "^3.2.0",
-    "stripe": "^22.6.2"
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
