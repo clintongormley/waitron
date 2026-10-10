@@ -501,6 +501,12 @@ it("Edit keeps a redrawn editor open when a lone save written after reconnect fi
   app.api.updateStation = (async () => {
     await write.promise;
   }) as PrepStationsApi["updateStation"];
+  const load = app.api.load.bind(app.api);
+  let loads = 0;
+  app.api.load = (async () => {
+    loads++;
+    return load();
+  }) as PrepStationsApi["load"];
   const first = await open(screen, true);
   await field(first, "First");
   first.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
@@ -510,8 +516,9 @@ it("Edit keeps a redrawn editor open when a lone save written after reconnect fi
   await screen.updateComplete;
   const modal = modalIn(screen)!;
   await field(modal, "Typed while it was sent");
+  await expect.poll(() => loads).toBe(1);
   write.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await expect.poll(() => loads).toBe(2);
   await screen.updateComplete;
   expect(modalIn(screen)).toBe(modal);
   expect(modal.querySelector("wt-input")!.value).toBe("Typed while it was sent");

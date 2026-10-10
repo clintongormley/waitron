@@ -3143,7 +3143,7 @@ preparation — as an extra, follows its dish"). It opens the routing cell edito
 (`routing-cell-editor.ts`): "Any other time" holds the cell's own station, and "+ Different station
 during some periods" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose
-menus include the row's products, or one the cell already stores with that line's station or No preparation. An inherited cell opens holding
+menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
 what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not
 copy. The default cell (All categories × Every zone) takes no period lines. A choice that moves
 products opens a preview listing each one with its old and new destination ("… during Lunch" for a

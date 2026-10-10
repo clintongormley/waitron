@@ -1186,8 +1186,9 @@ export class PrepStationsScreen extends LitElement {
     this.stationEditBusy = false;
     await this.updateComplete;
     const shown = this.renderRoot.querySelector("prep-station-editor");
-    // A render while the screen was away draws a new editor, which never sent this save and so
-    // cannot answer saved(); it closes unless the person has changed it since.
+    // A render while the screen was away removes the editor, so its return draws a new one that
+    // never sent this save and cannot answer saved(); that one closes unless the person has
+    // changed it since.
     if (shown === sender ? shown.saved() : shown?.dirty === false) this.stationEdit = undefined;
     await this.#load();
   }
