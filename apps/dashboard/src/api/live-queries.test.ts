@@ -587,3 +587,38 @@ it.each(["getFolderRouting", "listMadeAt"] as const)(
     }
   },
 );
+
+it("scopes department receipt subscriptions by department and refreshes passively", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          receipt: {},
+          venueDefaults: {},
+          languages: ["es-ES"],
+          warningLanguages: [],
+          venueAddress: [],
+        }),
+      ),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  // The runtime boundary also makes a missing registry entry fail on its undefined dependencies.
+  const query = dashboardQuery(api, "getDepartmentReceipt", ["bar"]);
+  expect(query.dependencies).toEqual([
+    { type: "department_receipts" },
+    { type: "tenant_receipts" },
+    { type: "departments" },
+    { type: "locations" },
+  ]);
+  const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
+  expect(other.key).not.toBe(query.key);
+  await query.read();
+  await query.read();
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+    "/management-api/venue-service/departments/bar/receipt",
+    "/management-api/venue-service/departments/bar/receipt",
+  ]);
+  expect(active).toHaveBeenCalledOnce();
+});
+

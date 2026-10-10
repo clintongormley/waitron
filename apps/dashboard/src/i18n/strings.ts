@@ -337,6 +337,7 @@ export const en = {
   "extras.has_variants_remove": "Has variants, so it can't be an extra. Remove it from this list.",
 
   "nav.venue_settings": "Venue settings",
+  "receipts.subtitle": "Subtitle",
   "receipts.venue_wide": "Every location",
   "receipts.header_subtitle_hint": "Printed under the legal name, e.g. a tagline",
   "receipts.logo": "Logo",
@@ -2854,6 +2855,7 @@ export const es: Record<StringKey, string> = {
     "Tiene variantes, así que no puede ser un extra. Quítalo de esta lista.",
 
   "nav.venue_settings": "Ajustes del local",
+  "receipts.subtitle": "Subtítulo",
   "receipts.venue_wide": "Todos los locales",
   "receipts.header_subtitle_hint": "Se imprime bajo la razón social; p. ej., un lema",
   "receipts.logo": "Logotipo",
