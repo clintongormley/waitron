@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, exists, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   diningTables,
   floorPlans,
@@ -328,7 +328,7 @@ async function mergedWithAny(
   return new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId));
 }
 
-/** For each zone with a master plan: resetZone when its today's plan is for an earlier business day (or it has none), else catchUpZone when it has pending rows. */
+/** For each zone with a master plan: resetZone when its today's plan is for an earlier business day (or it has none), else catchUpZone when it has pending rows; one query finds those zones. */
 export async function ensureToday(
   tx: Transaction,
   cfg: TillConfig,
@@ -342,7 +342,26 @@ export async function ensureToday(
     .from(floorPlans)
     .innerJoin(floorZones, eq(floorZones.id, floorPlans.zoneId))
     .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, floorPlans.zoneId))
-    .where(eq(floorZones.locationId, cfg.locationId));
+    .where(
+      and(
+        eq(floorZones.locationId, cfg.locationId),
+        or(
+          isNull(floorTodayZones.businessDay),
+          lt(floorTodayZones.businessDay, day),
+          exists(
+            tx
+              .select({ id: floorResetTables.id })
+              .from(floorResetTables)
+              .where(
+                and(
+                  eq(floorResetTables.zoneId, floorPlans.zoneId),
+                  eq(floorResetTables.pending, true),
+                ),
+              ),
+          ),
+        ),
+      ),
+    );
   for (const { zoneId, businessDay } of zones) {
     if (businessDay === null || businessDay < day) {
       await resetZoneFor(tx, cfg, removals, zoneId, day, now);

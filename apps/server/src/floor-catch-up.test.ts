@@ -279,36 +279,100 @@ describe("the till's floor routes catch today's plan up", () => {
     expect(await todayRow(tableId)).toMatchObject({ x: 30 });
     expect(await generationOf(zoneId)).toBe(generation);
   });
+});
 
-  // Last: it moves every zone of the shared venue to the next business day.
-  it("resets before seating on a new business day", async () => {
-    const label = fresh("Day");
-    const renamed = fresh("Day b");
-    const { zoneId, tableId, masterId, revision } = await plannedTable(label);
-    await save(zoneId, revision, [entry("t", renamed, { id: masterId })]);
-    const generation = (await generationOf(zoneId))!;
-    const [{ cutover }] = (await inTx(v, (tx) =>
-      tx
-        .select({ cutover: locations.dayCutover })
-        .from(locations)
-        .where(eq(locations.id, v.cfg.locationId)),
-    )) as [{ cutover: string }];
-    await inTx(v, (tx) =>
-      tx.update(locations).set({ dayCutover: "04:00" }).where(eq(locations.id, v.cfg.locationId)),
-    );
-    // 05:00 in Europe/Madrid, two hours ahead of UTC on this date.
-    clockAt = new Date("2026-10-11T03:00:00Z");
+/**
+ * Runs `act` at 05:00 Madrid on the next business day (cutover 04:00), then puts the venue's
+ * cutover and every zone's day back, so later cases start on NOW's business day again.
+ */
+async function onNextDay(act: () => Promise<void>): Promise<void> {
+  const [{ cutover }] = (await inTx(v, (tx) =>
+    tx
+      .select({ cutover: locations.dayCutover })
+      .from(locations)
+      .where(eq(locations.id, v.cfg.locationId)),
+  )) as [{ cutover: string }];
+  await inTx(v, (tx) =>
+    tx.update(locations).set({ dayCutover: "04:00" }).where(eq(locations.id, v.cfg.locationId)),
+  );
+  // Two hours ahead of UTC on this date.
+  clockAt = new Date("2026-10-11T03:00:00Z");
+  try {
+    await act();
+  } finally {
+    clockAt = NOW;
+    await withTransaction(v.db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ dayCutover: cutover })
+        .where(eq(locations.id, v.cfg.locationId));
+      await tx
+        .update(floorTodayZones)
+        .set({ businessDay: "2026-10-10" })
+        .where(eq(floorTodayZones.businessDay, "2026-10-11"));
+    });
+  }
+}
 
-    try {
+/** A zone whose master renames its one live table; answers the ids and both names. */
+async function renamedInMaster() {
+  const label = fresh("Day");
+  const renamed = fresh("Day b");
+  const planned = await plannedTable(label);
+  await save(planned.zoneId, planned.revision, [entry("t", renamed, { id: planned.masterId })]);
+  return { ...planned, label, renamed, generation: (await generationOf(planned.zoneId))! };
+}
+
+/** Seats `tableId`'s party at a second free table of the venue's tables zone too. */
+async function joinSecond(partyId: string): Promise<string> {
+  const second = await v.table(fresh("Second"));
+  const answer = await send("POST", `/api/parties/${partyId}/join`, {
+    tableId: second,
+    expectedPartyRevision: await revisionOf(v, partyId),
+  });
+  expect(answer.status).toBe(200);
+  return second;
+}
+
+describe("on a new business day, the till's floor routes reset today's plan before acting", () => {
+  it("resets before seating", async () => {
+    const { zoneId, tableId, renamed, generation } = await renamedInMaster();
+
+    await onNextDay(async () => {
       await seatAt(tableId);
 
       expect(await generationOf(zoneId)).toBe(generation + 1);
       expect((await tableRow(v, tableId)).label).toBe(renamed);
-    } finally {
-      clockAt = NOW;
-      await withTransaction(v.db, (tx) =>
-        tx.update(locations).set({ dayCutover: cutover }).where(eq(locations.id, v.cfg.locationId)),
-      );
-    }
+    });
+  });
+
+  // The party sits outside the planned zone; the planned zone shows whether the reset ran. Each
+  // body is built on the old day, so split's join runs before the reset is due.
+  const routes: [string, string, (partyId: string) => Promise<Record<string, unknown>>][] = [
+    ["finish", "finish", async () => ({})],
+    ["move", "move", async () => ({ toTableId: await v.table(fresh("Move to")) })],
+    ["join", "join", async () => ({ tableId: await v.table(fresh("Join to")) })],
+    [
+      "split",
+      "split-table",
+      async (partyId) => ({ tableId: await joinSecond(partyId), billId: null }),
+    ],
+  ];
+
+  it.each(routes)("resets before %s", async (_, path, bodyFor) => {
+    const { zoneId, tableId, renamed, generation } = await renamedInMaster();
+    const partyId = await seatAt(await v.table(fresh("Seated")));
+    const body = await bodyFor(partyId);
+
+    await onNextDay(async () => {
+      const answer = await send("POST", `/api/parties/${partyId}/${path}`, {
+        ...body,
+        expectedPartyRevision: await revisionOf(v, partyId),
+      });
+
+      expect(answer.status).toBe(200);
+      expect(await generationOf(zoneId)).toBe(generation + 1);
+      expect((await tableRow(v, tableId)).label).toBe(renamed);
+    });
   });
 });
