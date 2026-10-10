@@ -219,7 +219,9 @@ describe("party table labels", () => {
       const deliveryTableId = await table("Bar 1");
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [{ id: "bill", partyId, deliveryTableId, label: "Ana" }]),
+          orderTableLabels(tx, LOCATION, [
+            { id: "bill", partyId, deliveryTableId, deliveryTableLabel: null, label: "Ana" },
+          ]),
         ),
       ).toEqual(new Map([["bill", "Table 21, 22"]]));
     });
@@ -229,7 +231,7 @@ describe("party table labels", () => {
       expect(
         await inTx((tx) =>
           orderTableLabels(tx, LOCATION, [
-            { id: "bill", partyId, deliveryTableId: null, label: "Ana" },
+            { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Ana" },
           ]),
         ),
       ).toEqual(new Map([["bill", "Ana"]]));
@@ -242,7 +244,13 @@ describe("party table labels", () => {
       expect(
         await inTx((tx) =>
           orderTableLabels(tx, LOCATION, [
-            { id: "bill", partyId: merged, deliveryTableId: null, label: "Ana" },
+            {
+              id: "bill",
+              partyId: merged,
+              deliveryTableId: null,
+              deliveryTableLabel: null,
+              label: "Ana",
+            },
           ]),
         ),
       ).toEqual(new Map([["bill", "Table 24"]]));
@@ -254,10 +262,34 @@ describe("party table labels", () => {
       expect(
         await inTx((tx) =>
           orderTableLabels(tx, LOCATION, [
-            { id: "delivered", partyId: null, deliveryTableId, label: "Luis" },
-            { id: "labelled", partyId: null, deliveryTableId: null, label: "Marta" },
-            { id: "walk-up", partyId: null, deliveryTableId: null, label: null },
-            { id: "elsewhere", partyId: null, deliveryTableId: elsewhere, label: "Pepe" },
+            {
+              id: "delivered",
+              partyId: null,
+              deliveryTableId,
+              deliveryTableLabel: null,
+              label: "Luis",
+            },
+            {
+              id: "labelled",
+              partyId: null,
+              deliveryTableId: null,
+              deliveryTableLabel: null,
+              label: "Marta",
+            },
+            {
+              id: "walk-up",
+              partyId: null,
+              deliveryTableId: null,
+              deliveryTableLabel: null,
+              label: null,
+            },
+            {
+              id: "elsewhere",
+              partyId: null,
+              deliveryTableId: elsewhere,
+              deliveryTableLabel: null,
+              label: "Pepe",
+            },
           ]),
         ),
       ).toEqual(
@@ -268,6 +300,22 @@ describe("party table labels", () => {
           ["elsewhere", "Pepe"],
         ]),
       );
+    });
+
+    it("names an order whose delivery table was let go after the name kept for it", async () => {
+      expect(
+        await inTx((tx) =>
+          orderTableLabels(tx, LOCATION, [
+            {
+              id: "released",
+              partyId: null,
+              deliveryTableId: null,
+              deliveryTableLabel: "Terrace 9",
+              label: "Luis",
+            },
+          ]),
+        ),
+      ).toEqual(new Map([["released", "Terrace 9"]]));
     });
 
     it("answers an empty map when asked about no order", async () => {

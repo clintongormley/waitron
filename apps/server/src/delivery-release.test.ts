@@ -5,9 +5,18 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { releaseDeliveries } from "./delivery-release.js";
-import { billRow, inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { payWorkingOrder } from "./till-sale.js";
-import { abandonHeldOrder, createOpenOrder, handOverOrder } from "./working-order.js";
+import { orderTableLabel } from "./kitchen-print.js";
+import { listOrders } from "./orders-list.js";
+import { readReceiptOrder } from "./receipt-order.js";
+import {
+  billRow,
+  inTx,
+  OPERATOR,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
+import { collectOrder, payWorkingOrder } from "./till-sale.js";
+import { abandonHeldOrder, createOpenOrder, handOverOrder, placeOrder } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -120,5 +129,63 @@ describe("releaseDeliveries", () => {
     const row = await billRow(v, id);
     expect(row.deliveryTableId).not.toBeNull();
     expect(row.deliveryTableLabel).toBeNull();
+  });
+});
+
+describe("an order whose delivery table was let go", () => {
+  it("is still listed at the table, not as a counter order", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const t4 = await deliveryTable(v, "Terrace 4");
+    const id = await settledDelivery(v, t4);
+    await inTx(v, (tx) => handOverOrder(tx, v.cfg, id));
+
+    await inTx(v, (tx) => releaseDeliveries(tx, t4, "Terrace 4"));
+
+    const page = await inTx(v, (tx) =>
+      listOrders(tx, { status: "all", dates: "any", credited: false, limit: 50, scope: "all" }),
+    );
+    expect(page.rows.find((order) => order.id === id)).toMatchObject({
+      tables: ["Terrace 4"],
+      counter: false,
+    });
+  });
+
+  it("is named after the table on kitchen paper and its receipt, and keeps the name once paid", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await inTx(v, async (tx) => {
+      await tx.execute(sql`
+        update zone_sale_policies set paid_when = 'ticket_then_pay'
+        where zone_id = ${v.counter.zoneId}`);
+    });
+    const t7 = await deliveryTable(v, "Terrace 7");
+    const id = randomUUID();
+    await inTx(v, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        null,
+        {
+          deliveryTableId: t7,
+          zoneId: v.counter.zoneId,
+        },
+      ),
+    );
+    const deps = { db: v.db, backend: v.backend, clock: v.clock };
+    await placeOrder(deps, v.cfg, id, OPERATOR);
+    await inTx(v, (tx) => handOverOrder(tx, v.cfg, id));
+    await inTx(v, (tx) => releaseDeliveries(tx, t7, "Terrace 7"));
+
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, id))).toBe("Terrace 7");
+    expect((await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, id))).orderLabel).toBe("Terrace 7");
+
+    await collectOrder(deps, v.cfg, { id, lines: [], tender: { method: "cash", amount: "12.00" } });
+
+    expect(await billRow(v, id)).toMatchObject({
+      status: "settled",
+      deliveryTableId: null,
+      label: "Terrace 7",
+    });
   });
 });

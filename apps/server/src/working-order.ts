@@ -6774,6 +6774,7 @@ export async function readPassBoard(
       groupCreatedAt: orderGroups.createdAt,
       // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       label: workingOrders.label,
     })
     .from(ticketItems)
@@ -6812,6 +6813,7 @@ export async function readPassBoard(
       id: row.orderId,
       partyId: row.partyId,
       deliveryTableId: row.deliveryTableId,
+      deliveryTableLabel: row.deliveryTableLabel,
       label: row.label,
     })),
   );

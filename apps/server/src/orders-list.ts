@@ -150,7 +150,7 @@ function billScope(filter: OrderListFilter): SQL {
 function rowsSql(filter: OrderListFilter): SQL {
   return sql`
   select 'bill' as kind, wo.id as id, wo.opened_at as at, wo.order_number as order_number, wo.label as label,
-         wo.party_id as party_id, p.name as party_name, dd.label as delivery_label,
+         wo.party_id as party_id, p.name as party_name, coalesce(dd.label, wo.delivery_table_label) as delivery_label,
          s.id as sale_id, sr.code as series_code, s.invoice_number as invoice_number,
          s.counterparty_tax_id as counterparty_tax_id,
          cast(s.total as text) as sale_total,
