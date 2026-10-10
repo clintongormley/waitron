@@ -164,6 +164,56 @@ test("renders names as text, never as markup, and wraps a long one inside the di
   );
 });
 
+test("names the record it deletes, so two empty impacts read differently", async () => {
+  const empty = (name: string): DeleteImpact => ({
+    target: { id: "printer-p", name },
+    refusals: [],
+    ends: [],
+    removes: [],
+  });
+  const el = await openDialog({ impact: empty("Bar printer") });
+  const bar = modalOf(el).innerText;
+  el.impact = empty("Kitchen printer");
+  await settle(el);
+  const kitchen = modalOf(el).innerText;
+
+  expect(bar).toContain("Bar printer");
+  expect(bar).not.toContain("Kitchen printer");
+  expect(kitchen).toContain("Kitchen printer");
+  expect(kitchen).not.toContain("Bar printer");
+  const name = el.shadowRoot!.querySelector("[data-target]")!;
+  expect(
+    name.compareDocumentPosition(el.shadowRoot!.querySelector("[data-irreversible]")!) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+test("draws the record's name as text, never as markup, wrapped inside the dialog", async () => {
+  const el = await openDialog({
+    impact: { ...readyImpact(), target: { id: "p", name: SCRIPT_NAME } },
+  });
+  const name = el.shadowRoot!.querySelector("[data-target]")!;
+  expect(name.textContent).toBe(SCRIPT_NAME);
+  expect(el.shadowRoot!.querySelector("script")).toBeNull();
+  expect((window as { __deleteDialogRan?: boolean }).__deleteDialogRan).toBeUndefined();
+
+  el.impact = { ...readyImpact(), target: { id: "p", name: LONG_NAME } };
+  await settle(el);
+  expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+  expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+    nativeDialog(el).getBoundingClientRect().right,
+  );
+});
+
+test("names nothing while the impact is still unread", async () => {
+  const el = await openDialog({ impact: null, loading: true });
+  expect(el.shadowRoot!.querySelector("[data-target]")).toBeNull();
+  expect(inner(el, "confirm").disabled).toBe(true);
+  el.impact = readyImpact();
+  await settle(el);
+  expect(el.shadowRoot!.querySelector("[data-target]")!.textContent).toBe("Printer P");
+});
+
 test("draws no heading for an empty group, and an empty impact still says it can't be undone", async () => {
   const el = await openDialog({
     impact: { ...readyImpact(), ends: [], refusals: [] },

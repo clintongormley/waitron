@@ -3416,10 +3416,11 @@ words.
 Where a screen has both, the action follows what the code does: a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then.
 
 **A confirmed Delete asks with `wt-delete-dialog`.** The screen reads the record's `DeleteImpact`
-and hands it over with its own `DeleteDialogCopy`. The dialog lists what refuses the delete, then
-the work it ends, then the settings it removes, one line each written by the copy's `refusal` or
-`item` (names are drawn as text), leaves out an empty group, and ends with the copy's
-`irreversible` sentence. Its Delete is `secondary` and disabled while `impact` is null, while
+and hands it over with its own `DeleteDialogCopy`. The dialog first names the record, in bold,
+from the impact's `target.name`, so it names nothing while `impact` is null. It then lists what
+refuses the delete, then the work it ends, then the settings it removes, one line each written by
+the copy's `refusal` or `item` (names are drawn as text), leaves out an empty group, and ends with
+the copy's `irreversible` sentence. Its Delete is `secondary` and disabled while `impact` is null, while
 `loading`, while `readError` is set or while the impact has any refusal; otherwise it is `danger`
 and enabled. While its own delete is sent (`submitting`) it stays `danger`, disabled and busy, and
 Cancel and Escape do nothing. The screen owns the requests: it sets `submitting` inside its
