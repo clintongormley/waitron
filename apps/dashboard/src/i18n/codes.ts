@@ -526,9 +526,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This table has an upcoming booking. Move the booking first",
     es: "Esta mesa tiene una reserva próxima. Mueve primero la reserva",
   },
-  "floor_plan.changed": {
-    en: "This floor plan was changed elsewhere. Reload it and try again",
-    es: "Este plano de sala se cambió en otro sitio. Recárgalo y vuelve a intentarlo",
+  "floor_plan.out_of_date": {
+    en: "Someone else changed this floor plan. Reload it and try again",
+    es: "Otra persona ha cambiado este plano de sala. Vuelve a cargarlo e inténtalo de nuevo",
   },
   "floor_plan.invalid": {
     en: "Check the floor plan's tables and try again",

@@ -848,8 +848,8 @@ it("leaves a table something unknown still names, hidden and pending, without fa
 
 **Files:**
 - Create: `apps/server/src/floor-plan.ts`, `apps/server/src/floor-plan.test.ts`
-- Modify: `apps/server/src/errors.ts` (`floor_plan.changed { zoneId }`, `floor_plan.invalid
-  { field }`)
+- Modify: `apps/server/src/errors.ts` (`floor_plan.out_of_date { zoneId, revision }`, the plan's
+  current revision, `floor_plan.invalid { field }`)
 
 **Interfaces:**
 - Consumes: `Placement`, `PlanShape` (Task 1.2).
@@ -875,8 +875,8 @@ to adopt (`id` null, `liveTableId` set, seats from `capacity`, unplaced). A zone
 plan reads `revision: 0, savedAt: null` and only those (decision 16).
 
 `checkZonePlanSave`, in order: zone exists (`zone.not_found`); `input.revision` equals the stored
-revision (else `floor_plan.changed`); each entry, naming the field as `tables.<index>.<name>` or
-`joins.<index>.<name>` (`floor_plan.invalid`): label trimmed and non-empty, seats null or a whole
+revision (else `floor_plan.out_of_date`); each entry, naming the field as `tables.<index>.<name>`
+or `joins.<index>.<name>` (`floor_plan.invalid`): label trimmed and non-empty, seats null or a whole
 number 0–999, placement ranges as Task 1.1's checks, not both `id` and `liveTableId`, a join has
 two or more distinct keys all in `tables` and seats ≥ 1; an `id` that is not a master table of
 this zone, or a `liveTableId` that is not an adoptable live table of this zone, is
@@ -891,7 +891,7 @@ input is a delete, and when its live table exists each removal's `refuse` is ask
 ```ts
 it("offers a zone's live tables as the first draft", async () => { /* revision 0, liveTableId set, ids null */ });
 it("offers a table the old screen added to a planned zone for adoption", async () => { /* … */ });
-it("refuses a save from an older copy", async () => { /* floor_plan.changed */ });
+it("refuses a save from an older copy", async () => { /* floor_plan.out_of_date */ });
 it("refuses a name a master table of another zone uses, naming it", async () => { /* table.label_taken {label} */ });
 it("refuses a name a live table outside the plan uses", async () => { /* … */ });
 it.each([
@@ -1032,13 +1032,13 @@ table never planned, all four succeed as today.
 **Files:**
 - Modify: `apps/server/src/management-api.ts` (deps type, `:167`, gains `tableRemovals?:
   readonly TableRemoval[]`, read as `deps.tableRemovals ?? []`; two routes beside the zone routes,
-  `:1663-1720`; `STATUS` at `:251`: `floor_plan.changed: 409`, `floor_plan.invalid: 400`,
+  `:1663-1720`; `STATUS` at `:251`: `floor_plan.out_of_date: 409`, `floor_plan.invalid: 400`,
   `table.booked: 409`), `apps/server/src/boot.ts` (the management API mount, `:1541`, passes
   `tableRemovals`), `apps/dashboard/src/api/client.ts` (types `FloorPlan`, `FloorPlanSave` mirroring
   Task 1.10's, and `getFloorPlan(zoneId)`, `saveFloorPlan(zoneId, body)`),
   `apps/dashboard/src/api/live-queries.ts` (`getFloorPlan: ["floor_plans", "floor_plan_tables",
   "floor_plan_joins", "floor_plan_join_tables", "dining_tables"]`), `apps/dashboard/src/i18n/codes.ts`
-  (`floor_plan.changed`, `floor_plan.invalid`, `table.booked`, EN and ES)
+  (`floor_plan.out_of_date`, `floor_plan.invalid`, `table.booked`, EN and ES)
 - Test: `apps/server/src/management-api.test.ts` (a new `describe("floor plans")`), the dashboard
   client test file
 
@@ -1056,7 +1056,7 @@ table never planned, all four succeed as today.
   `tableKeys` first (slice 2's editor does this).
 
 - [ ] **Step 1: Write the failing tests**: manager reads a first draft (200, revision 0); saves
-(200, revision 1) and reads it back; an older copy is 409 `floor_plan.changed`; a bad rotation is
+(200, revision 1) and reads it back; an older copy is 409 `floor_plan.out_of_date`; a bad rotation is
 400 `floor_plan.invalid {field: "tables.0.placement.rotation"}`; `tables` not an array is 400
 `management.request_invalid {field: "tables"}`; a refusing removal is 409 `table.booked`; staff is
 403; no session is 401; an unknown zone is 404 `zone.not_found`. Use the file's `req`,
@@ -1161,7 +1161,7 @@ branch.
   screen `floor-plan` (URL `/manage/floor-plan/<zoneId>`, in `UNLISTED_SCREENS`,
   `dashboard-app.ts:238`, drawn full height like the catalogue's `.body.fill`, `:1410`): header
   with the zone's name, Close, Undo, Redo, Save; `draftScopeFor` + `saveActionState`; Save sends
-  `saveFloorPlan`; on `floor_plan.changed` a message offers to load the newer plan (nothing is
+  `saveFloorPlan`; on `floor_plan.out_of_date` a message offers to load the newer plan (nothing is
   overwritten); a zone with no master plan opens on its live tables as the draft (decision 16); a
   line under the header says the till changes at the next reset, with Reset on the till for
   sooner; `floor-plan-editor.unsaved.test.ts`.

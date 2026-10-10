@@ -625,8 +625,11 @@ declare module "@waitron/shared" {
     "status.label_taken": { label: string };
     /** No floor-plan zone with this id. */
     "zone.not_found": { zoneId: string };
-    /** The zone's master plan was saved since the editor's copy was read. */
-    "floor_plan.changed": { zoneId: string };
+    /**
+     * The zone's master plan was saved since the editor's copy was read. `revision` is the plan's
+     * current one; the caller reloads the plan and saves again.
+     */
+    "floor_plan.out_of_date": { zoneId: string; revision: number };
     /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
     "floor_plan.invalid": { field: string };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */

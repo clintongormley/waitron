@@ -309,7 +309,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.zone_inactive": 409,
   "table.in_floor_plan": 409,
   "table.booked": 409,
-  "floor_plan.changed": 409,
+  "floor_plan.out_of_date": 409,
   "floor_plan.invalid": 400,
   "placement.invalid": 400,
   "station.not_found": 404,

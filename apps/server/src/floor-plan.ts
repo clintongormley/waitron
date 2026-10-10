@@ -275,8 +275,9 @@ export async function checkZonePlanSave(
 ): Promise<void> {
   await requireZone(tx, cfg, zoneId);
   const plan = await planOf(tx, zoneId);
-  if (input.revision !== (plan?.revision ?? 0)) {
-    throw new AppError("floor_plan.changed", { zoneId });
+  const revision = plan?.revision ?? 0;
+  if (input.revision !== revision) {
+    throw new AppError("floor_plan.out_of_date", { zoneId, revision });
   }
   checkEntries(input);
 

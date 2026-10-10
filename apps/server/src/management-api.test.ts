@@ -3961,7 +3961,7 @@ describe("floor plans", () => {
     const stale = await put(zoneId, { revision: 0, tables: [], joins: [] });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({
-      error: { code: "floor_plan.changed", params: { zoneId } },
+      error: { code: "floor_plan.out_of_date", params: { zoneId, revision: 1 } },
     });
   });
 

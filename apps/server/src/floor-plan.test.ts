@@ -243,8 +243,8 @@ describe("checkZonePlanSave", () => {
   it("refuses a save from an older copy", async () => {
     const { z, input } = await planned();
     const error = await refusal(check(z, { ...input, revision: 0 }));
-    expect(error.code).toBe("floor_plan.changed");
-    expect(error.params).toEqual({ zoneId: z });
+    expect(error.code).toBe("floor_plan.out_of_date");
+    expect(error.params).toEqual({ zoneId: z, revision: 1 });
   });
 
   it("accepts a first save that adopts the zone's live tables", async () => {
@@ -262,7 +262,8 @@ describe("checkZonePlanSave", () => {
   it("refuses a first save that is not at revision 0", async () => {
     const z = await zone();
     const error = await refusal(check(z, { revision: 1, tables: [], joins: [] }));
-    expect(error.code).toBe("floor_plan.changed");
+    expect(error.code).toBe("floor_plan.out_of_date");
+    expect(error.params).toEqual({ zoneId: z, revision: 0 });
   });
 
   it("refuses a name a master table of another zone uses, naming it", async () => {
@@ -902,7 +903,7 @@ describe("saveZonePlan", () => {
       save(z, { revision: 0, tables: [entry("t1", fresh("X"), { id: result.ids.t1 })], joins: [] }),
     );
 
-    expect(error.code).toBe("floor_plan.changed");
+    expect(error.code).toBe("floor_plan.out_of_date");
     expect(await inTx(v, (tx) => readZonePlan(tx, v.cfg, z))).toEqual(before);
   });
 
