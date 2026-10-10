@@ -1559,6 +1559,57 @@ export class MenusScreen extends LitElement {
     });
   }
 
+  #dropSelected(keys: readonly string[], to: string[], position: number | undefined): void {
+    if (this.busy || keys.length === 0) return;
+    const menuId = this.menuId;
+    const canonical = this.#sentKeys(this.#inTreeOrder(keys));
+    if (keys.some((key) => !ownedKeys(this.structure?.nodes ?? []).includes(key))) return;
+    const captured = this.#selectedMembers(canonical);
+    const destinationId = this.#targetAt(to).listId;
+    this.memberError = null;
+    this.busy = true;
+    this.#writes.run(destinationId, async () => {
+      const current = this.#sentKeys(this.#inTreeOrder(keys));
+      const members = this.#selectedMembers(current).map(({ listId, memberId }) => ({
+        listId,
+        memberId,
+      }));
+      const resolves = trailOf(this.structure, to).length === to.length;
+      const destination = this.#targetAt(to);
+      if (
+        this.menuId !== menuId ||
+        !resolves ||
+        destination.listId !== destinationId ||
+        current.length !== canonical.length ||
+        current.some((key, index) => key !== canonical[index]) ||
+        members.some(
+          (member, index) =>
+            member.listId !== captured[index]?.listId ||
+            member.memberId !== captured[index]?.memberId,
+        ) ||
+        !this.#moveDestinations(current).some(({ value }) => value === destinationId)
+      ) {
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      try {
+        await this.api.moveSectionMembersInto(destinationId, members, position);
+      } catch (error) {
+        if (!this.#reportRefusedElsewhere(destination, error))
+          this.memberError = codeMessage(codeOf(error));
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      this.structureSelected = [];
+      await this.#refresh();
+      if (destination.menuId === this.menuId && this.#holds(destination)) this.#edit(to);
+      else this.#reportSavedToLost(destination);
+      this.busy = false;
+    });
+  }
+
   #edit(path: string[]): void {
     this.path = path;
     this.memberError = null;
@@ -2381,6 +2432,10 @@ export class MenusScreen extends LitElement {
         .search=${this.structureSearch}
         .selecting=${this.structureSelecting}
         .selected=${this.structureSelected}
+        .dragSelection=${(key: string) =>
+          this.structureSelected.includes(key)
+            ? this.#sentKeys(this.#inTreeOrder(this.structureSelected))
+            : [key]}
         menuName=${this.#menuName()}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
           event.stopPropagation();
@@ -2420,6 +2475,13 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           const { path, memberId, to } = event.detail;
           this.#move(path, memberId, to);
+        }}
+        @wt-members-drop=${(
+          event: CustomEvent<{ keys: string[]; to: string[]; position?: number }>,
+        ) => {
+          event.stopPropagation();
+          const { keys, to, position } = event.detail;
+          this.#dropSelected(keys, to, position);
         }}
         @wt-member-move-into=${(
           event: CustomEvent<{

@@ -3863,3 +3863,153 @@ describe("the menu's own row", () => {
     expect(rootNameLeft(el)).toBeCloseTo(coloured, 0);
   });
 });
+
+describe("A461 selected pointer drag", () => {
+  async function gathered(selected = ["m-drinks/m-lager", "m-burger"]) {
+    return mount({
+      reordering: false,
+      selecting: true,
+      selected,
+      dragSelection: (key: string) => (selected.includes(key) ? selected : [key]),
+    });
+  }
+
+  it("A461 drag carries hidden selected rows and one full-count ghost", async () => {
+    const el = await gathered();
+    const batches = listen(el, "wt-members-drop");
+    const singles = listen(el, "wt-member-move-into");
+    expect(row(el, "m-drinks/m-lager")).toBeNull();
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    expect(ghost(el)!.textContent).toContain("2");
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([{ keys: ["m-drinks/m-lager", "m-burger"], to: ["m-fav"] }]);
+    expect(singles).toEqual([]);
+  });
+
+  it("A461 drop refuses a target cyclic for a hidden selected section", async () => {
+    const el = await gathered(["m-fav", "m-burger"]);
+    await toggle(el, "m-drinks");
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-beer", "middle");
+    expect(drops(el)).toEqual(noDrop);
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-beer"));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 drop rejects a duplicate ref carried by a hidden tick", async () => {
+    const el = await gathered(["m-drinks/m-lemonade", "m-burger"]);
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    expect(drops(el)).toEqual(noDrop);
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 drop removes the moving set before the same-list insertion index", async () => {
+    const el = await gathered(["m-burger", "m-drinks"]);
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "bottom");
+    pointer(from, "pointerup", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
+    expect(batches).toEqual([{ keys: ["m-burger", "m-drinks"], to: [], position: 1 }]);
+  });
+
+  it("A461 drop sends nothing when a dragged hidden key disappears", async () => {
+    const el = await gathered();
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    el.nodes = [productNode("m-burger", "p-burger"), favourites()];
+    await settle(el);
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 drag stays unavailable during search and cancels on a new query", async () => {
+    const el = await gathered();
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    el.search = "Burger";
+    await settle(el);
+    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
+    expect(ghost(el)).toBeNull();
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    expect(batches).toEqual([]);
+  });
+});
+
+it("A461 drag restores focus to a pressed descendant carried by its selected section", async () => {
+  const empty: MenuStructureNode = {
+    memberId: "m-empty",
+    ref: { kind: "section", sectionId: "s-empty" },
+    internalName: "Storage",
+    names: {},
+    image: null,
+    color: null,
+    ownerMenuId: "menu-lunch",
+    children: [],
+  };
+  const selected = ["m-drinks", "m-drinks/m-lager"];
+  const el = await mount({
+    nodes: [...lunchNodes(), empty],
+    reordering: false,
+    selecting: true,
+    selected,
+    dragSelection: () => ["m-drinks"],
+  });
+  await toggle(el, "m-drinks");
+  const from = grip(el, "m-drinks/m-lager");
+  from.focus();
+  pointer(from, "pointerdown");
+  await dragOver(el, from, "m-empty", "middle");
+  pointer(from, "pointerup", nameAt(el, "m-empty"));
+  el.nodes = [
+    productNode("m-burger", "p-burger"),
+    { ...empty, children: [drinksNode("m-drinks")] },
+  ];
+  el.current = ["m-empty"];
+  await settle(el);
+  expect(focusedInTable(el)).toBe("drag-m-empty/m-drinks/m-lager");
+});
+
+it("A461 drop rejects a destination hidden by a collapsed branch while dragging", async () => {
+  const el = await mount({
+    reordering: false,
+    selecting: true,
+    selected: ["m-burger"],
+    dragSelection: () => ["m-burger"],
+  });
+  await toggle(el, "m-drinks");
+  const batches = listen(el, "wt-members-drop");
+  const errors: string[] = [];
+  const capture = (event: ErrorEvent) => {
+    errors.push(event.message);
+    event.preventDefault();
+  };
+  window.addEventListener("error", capture);
+  onTestFinished(() => window.removeEventListener("error", capture));
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  await dragOver(el, from, "m-drinks/m-beer", "middle");
+  await toggle(el, "m-drinks");
+  expect(row(el, "m-drinks/m-beer")).toBeNull();
+  pointer(from, "pointerup");
+  expect(errors).toEqual([]);
+  expect(batches).toEqual([]);
+});

@@ -6075,3 +6075,44 @@ describe("product-list filters (A463)", () => {
     },
   );
 });
+
+it("A461 pointer drop payload includes a selected product inside a collapsed category", async () => {
+  const { el, root } = await mountTree({
+    selecting: true,
+    selected: ["iced", "cake"],
+    categories: [
+      drinks,
+      food,
+      { id: "storage", name: "Cake storage", parentId: null, color: null },
+    ],
+    products: [
+      product({ id: "iced", name: "Iced coffee", primaryCategoryId: "d" }),
+      product({ id: "cake", name: "Coffee cake", primaryCategoryId: "f" }),
+    ],
+    search: "cake",
+  });
+  const drops: unknown[] = [];
+  el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+  expect(root.querySelector('tr[data-row-key="iced"]')).toBeNull();
+  const from = root.querySelector<HTMLElement>('tr[data-row-key="cake"] [part~="product-cell"]')!;
+  const to = root.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:storage"] [part~="folder-cell"]',
+  )!;
+  const send = (type: string, over: Element) => {
+    const box = over.getBoundingClientRect();
+    from.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 51,
+        clientX: box.left + 8,
+        clientY: box.top + 8,
+      }),
+    );
+  };
+  send("pointerdown", from);
+  send("pointermove", to);
+  send("pointerup", to);
+  expect(drops).toEqual([{ keys: ["iced", "cake"], folderId: "storage" }]);
+});

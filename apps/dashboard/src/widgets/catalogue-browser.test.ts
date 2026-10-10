@@ -4589,3 +4589,34 @@ it("A461 deleting a selected category during its summary read keeps the operatio
   expect(dialog(el)?.open ?? false).toBe(false);
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
 });
+
+it.each([false, true])(
+  "A461 pointer drag carries the hidden Products tick (clear search: %s)",
+  async (clear) => {
+    const el = await mountBrowser({
+      products: [product("iced", "Iced coffee", "d"), product("cake", "Coffee cake", "f")],
+      categories: [...CATEGORIES, folder("storage", "Cake storage", null)],
+    });
+    await typeSearch(el, "iced");
+    await selectKeys(el, ["iced"]);
+    await typeSearch(el, "cake");
+    const table = await tableOf(el);
+    table.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+    await tableOf(el);
+    if (clear) {
+      await typeSearch(el, "");
+      await toggleCategory(el, "f");
+    }
+    expect(await rowKeys(el)).not.toContain("iced");
+    const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+    const drops: unknown[] = [];
+    list.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+    drag(await nameCell(el, "cake"), await nameCell(el, "folder:storage"));
+    await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
+    expect(drops).toEqual([{ keys: ["iced", "cake"], folderId: "storage" }]);
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["iced", "cake"], categoryIds: [] },
+      "storage",
+    );
+  },
+);
