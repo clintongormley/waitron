@@ -382,4 +382,80 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("6");
   });
+
+  it("a re-read while the bills are asked still joins the party the question named", async () => {
+    const api = stubApi();
+    const el = await mount([planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)], api);
+    await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+    const R = party("R", 11, ["t1"]);
+    el.tables = [planned("t1", 2, {}, "1", R), planned("t2", 20, {}, "2", Q)];
+    await el.updateComplete;
+    send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
+      bills: "merge",
+    });
+    await settle(el);
+
+    expect(api.joinTables).toHaveBeenCalledExactlyOnceWith(
+      "Q",
+      "t1",
+      "merge",
+      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      { moving: "t1", target: "t2", side: "left" },
+    );
+  });
+
+  it("a re-read that removes the dragged table while the bills are asked still sends the join", async () => {
+    const api = stubApi();
+    api.joinTables.mockRejectedValueOnce(seatsRefusal);
+    const el = await mount([planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)], api);
+    await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+    el.tables = [planned("t2", 20, {}, "2", Q)];
+    await el.updateComplete;
+    send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
+      bills: "merge",
+    });
+    await settle(el);
+    expect(api.joinTables).toHaveBeenCalledTimes(1);
+
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
+    await settle(el);
+    expect(api.joinTables).toHaveBeenCalledTimes(2);
+    expect(api.joinTables).toHaveBeenLastCalledWith(
+      "Q",
+      "t1",
+      "merge",
+      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      { moving: "t1", target: "t2", side: "left", seats: 6 },
+    );
+  });
+
+  it("two fixed tables dropped in a closed zone say it is closed and seat no one", async () => {
+    const api = stubApi();
+    const el = await mount(
+      [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
+      api,
+      [zone({ closed: true })],
+    );
+    await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+  });
+
+  it("a fixed table needing clearing dropped on a free one offers to clear it", async () => {
+    const api = stubApi();
+    const dirty = {
+      ...planned("F1", 2, { fixed: true }, "Bar 1"),
+      condition: "needs_clearing" as const,
+    };
+    const el = await mount([dirty, planned("F2", 20, { fixed: true }, "Bar 2")], api);
+    await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
+
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).not.toBeNull();
+  });
 });

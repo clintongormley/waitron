@@ -44,7 +44,7 @@ import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
-import { otherPartyRead, partyScope, seatedRead } from "../widgets/table-targets.js";
+import { otherPartyRead, partyScope } from "../widgets/table-targets.js";
 import type { TodaySeatsDetail } from "../widgets/today-seats-dialog.js";
 import { codeMessage } from "../i18n/codes.js";
 import { type DropAction, dropAction, pendingPlaces } from "../state/floor-today.js";
@@ -579,8 +579,14 @@ export class TillFloorScreen extends LitElement {
     this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(next));
   }
 
-  /** A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests. */
-  #openTable(table: TableState): void {
+  /**
+   * A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests,
+   * headed and seated beside the other tables `seat` names when a drop gives them.
+   */
+  #openTable(
+    table: TableState,
+    seat: { heading: string; withTableIds: string[] } | null = null,
+  ): void {
     if (needsClearing(table)) {
       this.clearing = table;
       return;
@@ -592,7 +598,10 @@ export class TillFloorScreen extends LitElement {
         return;
       }
       this.refusedZoneId = null;
-      this.seating = { table, heading: this.#mergeName(table) ?? table.label };
+      this.seating =
+        seat === null
+          ? { table, heading: this.#mergeName(table) ?? table.label }
+          : { table, ...seat };
       return;
     }
     this.#emit("open-table", { tableId: table.id, seated: true });
@@ -739,7 +748,7 @@ export class TillFloorScreen extends LitElement {
         return;
       case "seat": {
         const table = this.#zone.visible.find((each) => each.id === action.tableId)!;
-        this.seating = { table, heading: action.heading, withTableIds: action.withTableIds };
+        this.#openTable(table, { heading: action.heading, withTableIds: action.withTableIds });
         return;
       }
       case "join":
@@ -760,11 +769,14 @@ export class TillFloorScreen extends LitElement {
     bills: BillChoiceDetail["bills"],
     seats?: number,
   ): Promise<void> {
-    const { party, tableId, merge } = action;
-    const at = this.#zone.visible.find((each) => each.id === tableId)!;
+    const { party, tableId, merge, other } = action;
+    // Who the drop read at `tableId`, as the bill question named them, never a later read.
     const revisions = {
       expectedPartyRevision: party.revision,
-      ...otherPartyRead(seatedRead(at), party.id),
+      ...otherPartyRead(
+        other === null ? null : { id: other.id, revision: other.revision },
+        party.id,
+      ),
     };
     const call =
       merge === null
