@@ -20,7 +20,7 @@ import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { catchUpZone, ensureToday, resetZone, todayBusinessDay } from "./floor-today-store.js";
 import { finishTable } from "./parties.js";
-import { deactivateZone } from "./tables.js";
+import { deactivateZone, updateZone } from "./tables.js";
 import {
   commandFor,
   inTx,
@@ -30,6 +30,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -763,5 +764,33 @@ describe("a disabled zone", () => {
     expect((await tableRow(v, offTable)).active).toBe(false);
     expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", generation: 1 });
     expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
+  });
+
+  it("switches its tables on today's plan back on when it is enabled again the same day", async () => {
+    const z = await zone();
+    const planned = await v.table("Reopen 1", z);
+    const hidden = await v.table("Reopen 2", z);
+    const never = await v.table("Reopen 3", z);
+    const master = await masterOf(z, [
+      { label: "Reopen 1", live: planned },
+      { label: "Reopen 2", live: hidden },
+    ]);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    // The state a removal waiting on its table leaves: off, and off today's plan.
+    await deleteFromMaster(master.get("Reopen 2")!);
+    await inTx(v, async (tx) => {
+      await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, hidden));
+      await tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, hidden));
+    });
+    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
+
+    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+
+    expect((await tableRow(v, planned)).active).toBe(true);
+    expect((await tableRow(v, hidden)).active).toBe(false);
+    expect((await tableRow(v, never)).active).toBe(false);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
+    expect(floor.map((t) => t.id)).toContain(planned);
   });
 });

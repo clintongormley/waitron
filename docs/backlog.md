@@ -1287,7 +1287,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
   way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
-  disabled, and its routing exceptions and watcher zones stay gone (a profile's starting zone is
+  disabled (except a floor-plan zone's tables on today's plan, which come back since A429 slice 1),
+  and its routing exceptions and watcher zones stay gone (a profile's starting zone is
   kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
   it is disabled).
 
@@ -1818,9 +1819,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1.
 
-- **A zone switched off and back on in the same business day keeps its planned tables off until the
-  next day's reset, and the old floor screen cannot switch them on** (reasoned from the code, not
-  run). Should switching a planned zone back on rebuild today's plan? Left open by A429 slice 1.
+- **Should switching a planned zone back on rebuild today's plan from the master?** Today it
+  switches back on the tables still on today's plan, as today's plan has them (`updateZone`,
+  `apps/server/src/tables.ts`); a table waiting for its removal stays off, and master edits wait
+  for the next day's reset. Left open by A429 slice 1.
 
 - **A stray row that blocks a table's final delete keeps that table's reset row waiting forever**,
   and each catch-up quietly re-runs the release (reasoned, not run). Left open by A429 slice 1.

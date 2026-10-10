@@ -1,13 +1,14 @@
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { deactivateServiceZone, departments, zoneServicePolicies } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
 import {
   diningTables,
   floorTableShape,
+  floorTodayTables,
   floorZones,
   isStatusColor,
   isUniqueViolation,
@@ -331,9 +332,10 @@ export async function updateZone(
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
   if (patch.active !== undefined) set.active = patch.active;
 
+  let reopening = false;
   if (patch.active === true) {
     const [zone] = await tx
-      .select({ departmentActive: departments.active })
+      .select({ active: floorZones.active, departmentActive: departments.active })
       .from(floorZones)
       .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
       .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
@@ -342,6 +344,7 @@ export async function updateZone(
     if (zone.departmentActive !== true) {
       throw new AppError("zone.department_inactive", { zoneId: id });
     }
+    reopening = !zone.active;
   }
 
   if (patch.active === false) {
@@ -381,6 +384,30 @@ export async function updateZone(
   if (updated.length === 0) {
     throw new AppError("zone.not_found", { zoneId: id });
   }
+  if (reopening) await reopenTodaysTables(tx, id);
+}
+
+/**
+ * Disabling a zone switched all its tables off, and staff cannot switch a planned one back on by
+ * hand, while today's reset has already run. So the tables still on today's plan come back as
+ * today's plan has them; one with no today's row is waiting for its removal and stays off.
+ */
+async function reopenTodaysTables(tx: Transaction, zoneId: string): Promise<void> {
+  await tx
+    .update(diningTables)
+    .set({ active: true })
+    .where(
+      and(
+        eq(diningTables.zoneId, zoneId),
+        eq(diningTables.planned, true),
+        exists(
+          tx
+            .select({ id: floorTodayTables.id })
+            .from(floorTodayTables)
+            .where(eq(floorTodayTables.tableId, diningTables.id)),
+        ),
+      ),
+    );
 }
 
 /** Never a hard delete: a `dining_tables.zone_id` may reference it. */
