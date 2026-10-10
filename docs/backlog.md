@@ -151,6 +151,12 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
+- **Find an invoice does not find a bare number as an invoice number** — owner question left by
+  A454 (#1491). The search spec says a bare number "still finds that number exactly, as today", but
+  before #1491 too, "12" searched customer names; `A/12` (series and number) finds invoice 12
+  exactly. **Next action:** the owner decides whether "12" alone should also match invoice
+  number 12.
+
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
   the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
@@ -632,6 +638,17 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   was the separate A434 ruling.
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
+
+- **The Products list builds a new list of rows on every redraw, so its table prepares every
+  product's search text again on each keystroke.** Found by A454's review (#1491); I believe it
+  predates that branch (not checked with `git blame`). **Next action:** keep the rows array stable
+  between redraws that do not change the products (`apps/dashboard/src/widgets/product-list.ts`), so
+  `wt-data-table`'s per-rows cache holds.
+
+- **Owner question left by A454 (#1491): rows that tie on closeness in a searched table follow the
+  table's chosen sort**, as the owner's decision 3 ("ahead of a table's own sort") and the plan say;
+  the spec's rule section says "caller order". Built as the table's sort. **Next action:** the owner
+  confirms, or asks for caller order.
 
 - **Menu-root default fallback when content languages are unset (A420 review).**
   `updateMenuDetails` validates against English; section and include-folder writers use
@@ -4605,6 +4622,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - **The payments test "refreshes only active reader statuses" failed once locally beside another
   coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
   (#1332).
+
+- **The server holds two separate 100-character limits for text a request sends**: `SEARCH_MAX`
+  (`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
+  Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
+  the same limit and, if so, share one constant.
 
 - **Two browser tests failed once each during A454's work (search everywhere), and neither was
   reproduced or checked on `main`**: "edge scroll reaches hidden column choices during a stationary
