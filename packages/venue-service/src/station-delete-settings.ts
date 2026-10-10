@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { deviceProfiles, devices, kitchenStations, type Transaction } from "@waitron/db";
 import {
   AppError,
@@ -82,7 +82,13 @@ async function settings(tx: Transaction, cfg: VenueScope, id: string) {
     .select({ id: devices.id, name: devices.label })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(and(eq(devices.locationId, cfg.locationId), eq(deviceProfiles.formFactor, "kds")));
+    .where(
+      and(
+        eq(devices.locationId, cfg.locationId),
+        isNull(devices.deletedAt),
+        eq(deviceProfiles.formFactor, "kds"),
+      ),
+    );
   const bound: DeleteTarget[] = [];
   const resolved = await readDevicesKitchenScreens(
     tx,

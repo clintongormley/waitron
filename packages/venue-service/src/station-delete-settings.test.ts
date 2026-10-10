@@ -256,6 +256,31 @@ it("clears owned daily dates and incoming destinations without reopening their o
   });
 });
 
+it("ignores deleted KDS rows while an off retained display still binds the station", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    const pid = await profile(tx, "Every");
+    await setProfileKitchenScreens(tx, f.cfg, pid, {
+      station: { stationIds: null, zoneIds: null },
+    });
+    const deleted = await device(tx, f, pid, "Deleted display", false);
+    const off = await device(tx, f, pid, "Off display", false);
+    for (const id of [deleted, off])
+      await setDeviceKitchenScreens(tx, f.cfg, {
+        deviceId: id,
+        profileId: pid,
+        screens: [{ kind: "station", stationIds: [f.gone], zoneIds: null }],
+      });
+    await tx
+      .update(devices)
+      .set({ deletedAt: at.toISOString(), tokenHash: "" })
+      .where(eq(devices.id, deleted));
+    expect((await module.readStationDeleteSettings(tx, f.cfg, f.gone)).boundScreens).toEqual([
+      { id: off, name: "Off display" },
+    ]);
+  });
+});
+
 it("finds explicitly bound KDS choices including switched-off devices and deduplicates affected settings owners", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);

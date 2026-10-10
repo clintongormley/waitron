@@ -812,7 +812,7 @@ export interface VenueServiceContribution {
   ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]>;
   /** Replaces all of a profile's kitchen screens. Refused `device_profile.access_invalid`, naming
    *  the field, for zones on a station screen, an explicit empty list, a deleted station,
-   *  or an unknown zone or an off zone not already stored for that screen. Narrows every device on the profile, switched off or not, at
+   *  or an unknown zone or an off zone not already stored for that screen. Narrows nondeleted devices on the profile, switched off or not, at
    *  every location, in the same transaction, recording what each lost, and gives each back what
    *  the profile allows again of what it had lost; answers the devices it narrowed. */
   setProfileKitchenScreens(
