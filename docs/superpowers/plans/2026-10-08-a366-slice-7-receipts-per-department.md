@@ -637,21 +637,21 @@ suites are boundary controls, not a consent rewrite.
 **Files:** server till-sale/bill-payments/till-api and relevant receipt/source tests;
 till layout/API/client/app/ticket-view/tests.
 
-- [ ] Failing wire/view cases for every ticket constructor and `readSettledTicket`, direct bill
+- [x] Failing wire/view cases for every ticket constructor and `readSettledTicket`, direct bill
   ticket plus `resultOf`'s replay branch. Distinct departments, a later text/address/global-switch
   edit, null/absent header and cleared global defaults after a rich previous receipt expose wrong
   caching. Pin inherited
   current defaults and no department phone/email inheritance on each constructor.
   Keep original transaction values, drawer side-effect gating, recorded names and replays.
-- [ ] Add `ReceiptPresentation` to each invoice answer: `receiptTrim`, current `venueAddress`
+- [x] Add `ReceiptPresentation` to each invoice answer: `receiptTrim`, current `venueAddress`
   and separate `venueReceiptSettings`. Reuse one assembly helper at all constructors so
   settlement/invoice-first/card/bill branches cannot silently omit it. Optional source failures
   compose surviving fields under decision 19; required facts are not replaced with defaults.
-- [ ] Remove authored `receipt` from boot and the till's boot-owned authored state; retain global
+- [x] Remove authored `receipt` from boot and the till's boot-owned authored state; retain global
   boot settings only where used for venue UI. Render each answer's presentation in ticket-view;
   apply global switch, current address, subtitle-before-legal order and existing filed F1 domicile
   rules. Do not take department trim from device profile, current zone, another answer or boot.
-- [ ] Assert a receipt-only replay resolves current authored text but returns original fiscal,
+- [x] Assert a receipt-only replay resolves current authored text but returns original fiscal,
   tender/change and trading facts and performs no repeat drawer/filing action. Run focused
   server wire + till client/view/app cases and types; LOOK once at task end on phone/desktop,
   both themes, with two departments and a null-sale venue-only receipt.

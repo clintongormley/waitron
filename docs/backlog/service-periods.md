@@ -40,8 +40,8 @@ their full text.
   Draft previews now compose department translations and unsaved venue defaults through POST,
   with an independent language. Server ticket constructors now attach current receipt trim,
   address and separate venue settings. The till now renders that answer's presentation and
-  boot no longer carries authored receipt text or address; remaining A7 path qualification,
-  editors and caller retirement remain.
+  boot no longer carries authored receipt text or address. Invoice-first, recovered-card and
+  cash replay checks are built; editors and caller retirement remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).

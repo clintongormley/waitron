@@ -3020,6 +3020,62 @@ describe("department receipt presentation on thermal jobs", () => {
     }
   });
 
+  it("refreshes a cash replay's text and address without another drawer or fiscal record", async () => {
+    const { cfg, departmentId, sell } = await setupReceipt();
+    await suite.db.insert(departmentReceipts).values({
+      departmentId,
+      receipt: { headerSubtitle: { "es-ES": "Original subtitle" } },
+    });
+    const first = await sell();
+    expect(first.receiptTrim).toEqual({
+      headerSubtitle: "Original subtitle",
+      footerMessage: "Venue footer",
+    });
+    const [sale] = await suite.db.select().from(sales);
+    const before = {
+      drawer: await suite.db.select().from(drawerOpens),
+      jobs: await suite.db.select().from(printJobs),
+      tenders: await suite.db.select().from(tenders),
+      series: await suite.db.select().from(invoiceSeries),
+    };
+    expect(before.drawer).toHaveLength(1);
+    await suite.db
+      .update(departmentReceipts)
+      .set({ receipt: { headerSubtitle: { "es-ES": "Current subtitle" } } })
+      .where(eq(departmentReceipts.departmentId, departmentId));
+    await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
+    await suite.db
+      .update(locations)
+      .set({ addressLine1: "Current street" })
+      .where(eq(locations.id, cfg.locationId));
+    const replay = await recordTillSale(
+      deps(),
+      cfg,
+      {
+        workingOrderId: sale!.workingOrderId!,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+    expect(replay.receiptTrim).toEqual({ headerSubtitle: "Current subtitle" });
+    expect(replay.venueAddress).toEqual(["Current street", "28013 Madrid"]);
+    expect(replay.venueReceiptSettings).toEqual({ printAddress: false });
+    expect({
+      ...replay,
+      receiptTrim: first.receiptTrim,
+      venueAddress: first.venueAddress,
+      venueReceiptSettings: first.venueReceiptSettings,
+    }).toEqual(first);
+    expect(await registroCount(cfg)).toBe(1);
+    expect({
+      drawer: await suite.db.select().from(drawerOpens),
+      jobs: await suite.db.select().from(printJobs),
+      tenders: await suite.db.select().from(tenders),
+      series: await suite.db.select().from(invoiceSeries),
+    }).toEqual(before);
+  });
+
   it("uses two recorded departments on one printer without inheriting venue contact", async () => {
     const { cfg, departmentId, zoneId, sell, documents } = await setupReceipt();
     await suite.db.insert(departmentReceipts).values({
