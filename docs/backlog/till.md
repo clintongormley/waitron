@@ -284,6 +284,12 @@ screen is designed.
     after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
     scrollbar, since headless Chromium's scrollbars take none).
   - Place on a plan with no free spot does nothing and says nothing.
+  - On a phone the header's buttons do not stay on one row. Inside the dashboard's page padding a
+    390 px phone leaves the editor about 310 px, while Close, Undo, Redo and Save need about 346 px
+    in Spanish with the Mac's font. When they wrap, Undo and Redo sit on a row above Close and Save,
+    because `wt-form-actions`' outer row never wraps. The editor's own tests mount it at 390 px
+    without the page padding, so they do not see this. A fix needs a decision: less page padding on
+    phones, or Close on its own row by design.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
     `super.disconnectedCallback` and `preventScroll`.
 
