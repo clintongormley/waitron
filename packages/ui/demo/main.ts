@@ -28,6 +28,7 @@ import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
+import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-relative-time.js";
@@ -123,6 +124,9 @@ const panel = (theme: "light" | "dark") => `
       </div>
     </wt-card>
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
+    <wt-sheet heading="Mesas" style="margin-top: 16px">
+      <p>Mesa 1 · Mesa 2 · Mesa 3</p>
+    </wt-sheet>
     <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
       <wt-disclosure heading="Cocina" summary="Sin opciones">
         <wt-input label="Nota para cocina"></wt-input>
