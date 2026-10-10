@@ -1596,7 +1596,7 @@ answers `switched_off`, `default`, `closed_by_hand` or `open`. The walk from a c
 switched-off station goes to `todaySendsTo` when recorded, else to the default station; it ends at
 `noReplacement` only when no active default exists.
 
-- [ ] **Step 1: Changed test checks commit**, listed with
+- [x] **Step 1: Changed test checks commit**, listed with
   `grep -rn "fallbackId\|stationFallbacks\|setStationFallback\|setStationToday\|hours:\|out_of_hours\|in_hours\|no_hours\|opened_by_hand\|time_not_applied\|nextTransition\|no_replacement\|noReplacement\|switched_off" <file>`
   over `routing.test.ts` here and, for Task B1b, `routing-store.test.ts`, `station-times.test.ts`,
   `hours-routes.test.ts`, `apps/server/src/catalogue-api.test.ts` (`:1508-1520`, M),
@@ -1606,9 +1606,9 @@ switched-off station goes to `todaySendsTo` when recorded, else to the default s
   else the default station; a case expecting `noReplacement` for a switched-off station or a
   closed loop now expects the default station (decision 22); a case whose whole subject was hours
   is deleted and listed.
-- [ ] **Step 2: Failing tests:** review focus 8's pure cases.
-- [ ] **Step 3: Run; watch them fail;** implement; the venue-service node project; typecheck.
-- [ ] **Step 4: Commit** — `feat(venue-service): a station is open unless closed for today (A366)`.
+- [x] **Step 2: Failing tests:** review focus 8's pure cases.
+- [x] **Step 3: Run; watch them fail;** implement; the venue-service node project; typecheck.
+- [x] **Step 4: Commit** — `feat(venue-service): a station is open unless closed for today (A366)`.
 
 ---
 
@@ -1628,7 +1628,7 @@ switched-off station goes to `todaySendsTo` when recorded, else to the default s
 `fallbackStationId` and `nextTransition`; opening a station closed for today deletes its row; a
 slice 3 row with no destination lands at the default station; review focus 8's server cases.
 
-- [ ] Steps: failing tests; watch them fail; implement; the venue-service node project, the server
+- [x] Steps: failing tests; watch them fail; implement; the venue-service node project, the server
   package, the dashboard's folder read-out file, and the till's suite (Chromium, headroom first);
   typecheck every package the typecheck names; commit
   `feat(venue-service): routing reads no station hours (A366)`.
@@ -1651,7 +1651,7 @@ and says whether the open dishes go there or stay to finish. NEW dishes after cl
 picked station, else the default station. With no open dishes it closes as slice 3 built it. The pull request lists each
 slice 3 check this changes.
 
-- [ ] Steps: failing tests (the kitchen display's status line never reads "outside its hours"; a
+- [x] Steps: failing tests (the kitchen display's status line never reads "outside its hours"; a
   printer-down alert for a station closed for today is suppressed and for an open one is raised;
   closing a station with an open dish asks about it, sending moves it, leaving keeps it there
   until done — fails today on the removed `why` values and on closing without asking); watch them
@@ -1693,7 +1693,7 @@ dishes asks once, in its one confirmation, what happens to them (send to a stati
 picks, or leave them to finish), beside the cells that name the station; NEW dishes then go to
 the default station (decisions 24 and 37). With no open dishes it confirms as decision 24 says.
 
-- [ ] Steps: the changed-checks commit (each Today, fallback and Disable-asks case, with
+- [x] Steps: the changed-checks commit (each Today, fallback and Disable-asks case, with
   `file:line`, before and after); failing tests (no Today column; the note beside a closed
   station; Disable with an open dish asks about it; Disable lists the naming cells and sends no
   fallback; the Settings tab has no fallback column); watch them fail; implement; LOOK in EN and
@@ -1719,7 +1719,7 @@ S1), `apps/dashboard/src/navigation.ts` (`hours`, `:10`, S1) and its test,
 `dashboard/strings.ts` (`nav.hours`, `hours.*` once unused); every link to `/manage/hours` (`grep -rn
 "manage/hours\|dashboard: \"hours\"" packages apps docs`).
 
-- [ ] Steps: the changed-checks commit (the deleted suites, by file; `navigation.test.ts`'s `hours`
+- [x] Steps: the changed-checks commit (the deleted suites, by file; `navigation.test.ts`'s `hours`
   case); failing tests (the dashboard registers no `hours` screen; navigation has no `hours` key;
   `scripts/live-subscriptions.test.ts` passes); watch them fail; implement; commit
   `feat(venue-service): the Station hours screen goes (A366)`.
@@ -1937,7 +1937,7 @@ sentence instead of a grid.
 **Files:** `apps/server/scripts/demo-seed/seed-floor.ts` (`:154-161`, S1), `seed.test.ts`
 (`:301-311`, S1).
 
-- [ ] Steps: the changed check (the seed test's hours and fallback assertions become the period
+- [x] Steps: the changed check (the seed test's hours and fallback assertions become the period
   line's); failing test (the demo's drinks cell has the evening line, decision 27); watch it fail;
   implement; `pnpm --filter @waitron/server exec vitest run scripts/demo-seed`; commit
   `feat(demo): the demo routes drinks upstairs in the evening (A366)`.
@@ -1949,7 +1949,7 @@ sentence instead of a grid.
 **Files:** `dashboard/prep-stations-screen.ts` (the Stations table), `dashboard/strings.ts`; test
 `prep-stations-screen.test.ts`.
 
-- [ ] Steps: failing test (each active, non-default station's row links "When it gets orders" to
+- [x] Steps: failing test (each active, non-default station's row links "When it gets orders" to
   `/manage/opening-hours?view=week&station=<id>`); watch it fail; implement; commit
   `feat(venue-service): a station links to when it gets orders (A366)`.
 
@@ -2152,3 +2152,35 @@ these captures. Lane D keeps the command logs and image inventory locally under
 
 Two whole-branch Claude run-it reviews, accepted fixes, the normal push hook, current-head CI
 and authorised landing remain. No CI or branch-readiness claim follows from local qualification.
+
+
+### Review qualification note — 2026-10-10
+
+The earlier B7/B8 checkpoints name migrations before regeneration; their current replacements
+are venue-service `0047_retire_station_hours_fallbacks.sql` and core
+`0131_station_retention_and_dashboard_moves.sql`. Their reset-warning instructions are superseded:
+the populated upgrade walk passes without a reset entry, so Tasks B7/B12's conditional rule
+selects "no venue reset needed — station hours and fallbacks are deleted" for the PR's first line.
+That result counts surviving synthetic rows; it does not compare every stored value or promise
+that deleted settings can be recovered.
+
+
+### Part B review outcomes — 2026-10-10
+
+Both required Claude run-it reviews completed in independent installed candidates (565 and
+560 seconds). Review qualification corrected the remaining import/seed checks that queried
+retired tables, added device/person move-audit and passive-read assertions, and removed the
+remaining fallback wire field and unused status text. The wire absence test failed before the
+field removal. Adversarial retired inputs remain in test-only fixture types.
+
+A browser test reproduced the read-only station view retaining old times after a same-element
+reattach with unchanged properties. Requesting an update on connection restarts its read.
+Affected server cases pass 145, node cases 315, view/client/accessibility cases 27, and the final
+client/view files 22. Removing actor identities, passive activity or menu-table subscriptions in
+a disposable candidate fails the added checks. A two-order Disable probe with a trigger refusing
+the second audit insert rolled back the station change, both ticket changes and the first audit
+row; a migrated-schema probe found no foreign key into the rebuilt audit table.
+
+The upgrade walk still compares row counts rather than every stored value. The backlog keeps a
+specific comparison to run between the planning reader and live routing for an own-hours named
+day without a zone override. Normal push-hook validation, current-head CI and landing remain.

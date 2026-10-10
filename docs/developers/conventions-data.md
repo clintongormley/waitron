@@ -457,8 +457,9 @@ Named days retain their calendar facts and department/zone schedules; they no lo
 validate or return station cells. The Calendar uses `NamedDaysApi` and its own dependencies.
 
 Core migration `0131_station_retention_and_dashboard_moves.sql` adds held-dish retention and
-permits a person-only move, refusing a move with neither person nor device. The deployment warning
-for this branch is "venue reset needed"; station-hours and fallback settings are deleted.
+permits a person-only move, refusing a move with neither person nor device. The populated upgrade
+walk passed on this branch; station-hours and fallback settings are deleted. The slice 4 plan
+requires a reset warning only if that walk reports a casualty.
 The earlier hours accounts below describe their dated implementations.
 
 ### Earlier A261 hours storage

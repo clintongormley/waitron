@@ -1324,18 +1324,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Part C.**
+  APPROVED 2026-10-07; remaining work is slice 7, slice 5 Part B and slice 6 Part C.**
   Slice 4 Part A is built: combined tickets on shared printers, which retiring watchers (slice 5
   Part B) waited for, period choices in routing cells and the station editor. Station-hours and
-  fallback retirement (slice 4 Part B) and department receipts (slice 7) remain. Slice 6's
+  fallback retirement and the read-only station Week view are built. Department receipts (slice 7) remain. Slice 6's
   remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
-  Part B is in progress on its unlanded branch: station-hours and fallback retirement,
-  daily closure notes, Disable and the worked-out station-times reader are implemented; their
-  Opening hours station view and prose audit are implemented; final qualification and branch
-  review remain.
-  The owner approved person-only dashboard move audits on 2026-10-10.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
@@ -1359,6 +1354,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   `edge scroll carries a held station past the visible summary and persists on release`
   failure. The isolated case, earlier checkpoint's full file and final candidate's full file
   passed; the cause is unverified. Keep its scroll-distance and saved-order assertions.
+
+- **Compare computed station weeks with live routing on an own-hours named day without a zone override.**
+  The slice 4 review read the planning and zone-week paths but did not compare the real sale
+  resolver. Add a real-database comparison before claiming they agree on that case.
 
 - **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
   own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
