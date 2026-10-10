@@ -384,6 +384,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       posY: null,
       shape: null,
       rotation: null,
+      today: null,
       party,
       signals: [{ kind: "bill_requested", requestedAt: "2026-09-30T20:00:00.000Z" }],
     };
@@ -707,6 +708,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       posY: null,
       shape: null,
       rotation: null,
+      today: null,
       signals: [],
       party: null,
       ...over,

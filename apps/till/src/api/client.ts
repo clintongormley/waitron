@@ -1834,6 +1834,26 @@ export interface MoveBillResult {
  * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
  * `pendingDeliveries` (uncollected counter deliveries).
  */
+/** Whole grid squares; `x` and `y` name the unrotated table's top-left corner. */
+export interface TodayPlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  shape: "rect" | "round";
+  rotation: number;
+}
+
+export interface TableToday {
+  /** `null` for an unplaced spare, or a table taken off. */
+  placement: TodayPlacement | null;
+  seats: number | null;
+  fixed: boolean;
+  takenOff: boolean;
+  joinId: string | null;
+  joinSeats: number | null;
+}
+
 export interface TableState {
   id: string;
   label: string;
@@ -1872,6 +1892,8 @@ export interface TableState {
   posY: number | null;
   shape: TableShape | null;
   rotation: number | null;
+  /** `null` when the table has no today's row: its zone has no master plan yet. */
+  today: TableToday | null;
   party: TableParty | null;
   /** What wants attention at the table; several at once. */
   signals: TableSignal[];

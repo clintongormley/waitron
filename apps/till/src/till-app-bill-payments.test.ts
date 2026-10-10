@@ -106,6 +106,7 @@ function mesa(partyOver: Partial<TableParty> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     signals: [],
     party: partyOf(partyOver),
   };

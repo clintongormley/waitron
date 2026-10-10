@@ -20,6 +20,8 @@ import type {
   SaleLineClassification,
   TableSignal,
 } from "@waitron/shared";
+import type { Placement } from "./floor-reset-plan.js";
+import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
@@ -73,6 +75,9 @@ import {
   billPaymentRefunds,
   billPayments,
   diningTables,
+  floorTodayJoins,
+  floorTodayJoinTables,
+  floorTodayTables,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -6967,6 +6972,16 @@ export function tableCondition(row: {
   return row.needsClearingSince === null ? "free" : "needs_clearing";
 }
 
+export interface TableToday {
+  /** `null` for an unplaced spare, or a table taken off. */
+  placement: Placement | null;
+  seats: number | null;
+  fixed: boolean;
+  takenOff: boolean;
+  joinId: string | null;
+  joinSeats: number | null;
+}
+
 /** One row of the occupancy read-model. */
 export interface TableState {
   id: string;
@@ -7001,6 +7016,8 @@ export interface TableState {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
+  /** `null` when the table has no today's row: its zone has no master plan yet. */
+  today: TableToday | null;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
   party: TableParty | null;
@@ -7147,6 +7164,7 @@ export async function listTablesWithState(
     order by dt.label
   `);
 
+  const today = await readTodayTables(tx, loc);
   const { seated, facts } = await readSeatedParties(tx, loc);
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
@@ -7191,6 +7209,7 @@ export async function listTablesWithState(
       posY: r.pos_y,
       shape: r.shape,
       rotation: r.rotation,
+      today: today.get(r.id) ?? null,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
       signals: tableSignals(
@@ -7218,6 +7237,46 @@ export async function listTablesWithState(
     }
   }
   return states;
+}
+
+/** Today's plan for each of the location's tables that has a today's row, keyed by table. */
+async function readTodayTables(
+  tx: Transaction,
+  locationId: string,
+): Promise<Map<string, TableToday>> {
+  const rows = await tx
+    .select({
+      tableId: floorTodayTables.tableId,
+      seats: floorTodayTables.seats,
+      fixed: floorTodayTables.fixed,
+      takenOff: floorTodayTables.takenOff,
+      x: floorTodayTables.x,
+      y: floorTodayTables.y,
+      width: floorTodayTables.width,
+      height: floorTodayTables.height,
+      shape: floorTodayTables.shape,
+      rotation: floorTodayTables.rotation,
+      joinId: floorTodayJoins.id,
+      joinSeats: floorTodayJoins.seats,
+    })
+    .from(floorTodayTables)
+    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
+    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
+    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .where(eq(diningTables.locationId, locationId));
+  return new Map(
+    rows.map((row) => [
+      row.tableId,
+      {
+        placement: row.takenOff ? null : placementOf(row),
+        seats: row.seats,
+        fixed: row.fixed,
+        takenOff: row.takenOff,
+        joinId: row.joinId,
+        joinSeats: row.joinSeats,
+      },
+    ]),
+  );
 }
 
 /**

@@ -246,6 +246,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     signals: [],
     party: null,
     ...over,

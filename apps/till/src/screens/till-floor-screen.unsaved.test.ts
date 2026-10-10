@@ -26,6 +26,7 @@ const freeTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  today: null,
   signals: [],
   party: null,
 };

@@ -73,6 +73,7 @@ const table: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  today: null,
   party: null,
   signals: [],
 };

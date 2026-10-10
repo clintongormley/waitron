@@ -84,6 +84,7 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     signals: [],
     party: null,
     ...over,
