@@ -4968,6 +4968,12 @@ describe("the Structure tree", () => {
       await openRemove(el);
       const nodes = lunchNodes();
       nodes[1] = { ...nodes[1]!, includedMenuId: "other-menu" };
+      nodes[2] = {
+        ...nodes[2]!,
+        children: nodes[2]!.children!.map((node) =>
+          node.memberId === "m-fav-drinks" ? { ...node, includedMenuId: "other-menu" } : node,
+        ),
+      };
       client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
       live.invalidate([{ type: "section_members" }]);
       await vi.waitFor(() =>
@@ -4982,6 +4988,34 @@ describe("the Structure tree", () => {
       await vi.waitFor(() =>
         expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
           { listId: "root-lunch", memberId: "m-burger" },
+        ]),
+      );
+    });
+
+    it("A461 keeps the member tick and Remove snapshot when one repeated path is removed live", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      type(q(el, 'wt-input[name="structure-search"]')!, "Lager");
+      await settleStructure(el);
+      await pressSelect(el);
+      await tick(el, "m-drinks/m-lager");
+      await openRemove(el);
+      const nodes = lunchNodes().filter((node) => node.memberId !== "m-drinks");
+      client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() => expect(rowOf(el, "m-drinks/m-lager")).toBeNull());
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-fav/m-fav-drinks/m-lager"]);
+      expect(
+        (inStructure(el, '[data-test="select-m-fav/m-fav-drinks/m-lager"]') as HTMLInputElement)
+          .checked,
+      ).toBe(true);
+      expect(modal(el, "remove-selected").open).toBe(true);
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "s-drinks", memberId: "m-lager" },
         ]),
       );
     });

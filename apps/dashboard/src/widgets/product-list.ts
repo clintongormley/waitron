@@ -557,7 +557,7 @@ export class ProductList extends LitElement {
     const changed = target !== this.#target;
     this.#target = target;
     this.#hoverOpen(over);
-    if (changed) this.#paint();
+    if (changed || target !== undefined) this.#paint();
   }
 
   readonly #endDrag = (event: PointerEvent): void => {
@@ -659,7 +659,7 @@ export class ProductList extends LitElement {
     if (!this.#pointerDrag?.active) return;
     for (const key of this.#dragged) markDragging(shownRow(root, key));
     if (this.#target === undefined) return;
-    markInto(shownRow(root, this.#target));
+    markInto(shownRow(root, this.#target, this.#pointer));
     const gap = this.#gap(this.#target);
     if (gap) markGap(root, gap);
   }
@@ -680,8 +680,10 @@ export class ProductList extends LitElement {
     const next = order[order.indexOf(moving) + 1];
     if (next) return { key: next.key, side: "before" };
     // With nothing drawn under the target, a gap after it would sit on the row the drop goes into.
-    const last = lastShownRow(root, target);
-    return last === target ? undefined : { key: last, side: "after" };
+    const last = lastShownRow(root, target, this.#pointer);
+    return !last || last.dataset.rowKey === target
+      ? undefined
+      : { key: last.dataset.rowKey!, side: "after", row: last };
   }
 
   #ghostOf(keys: readonly string[]): DragGhost {

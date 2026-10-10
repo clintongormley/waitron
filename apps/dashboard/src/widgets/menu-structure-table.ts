@@ -286,8 +286,7 @@ export class MenuStructureTable extends LitElement {
   /** Each list's order after moves the host has not answered yet, keyed by list, so every place a
    * section is shown agrees. */
   #order = new Map<string, string[]>();
-  /** The rows are not keyed, so a move leaves focus on whichever grip now sits where it was. */
-  #refocus: string | null = null;
+  #refocus: { key: string; copy: number } | null = null;
   /** A move into another list, answered by the host reading the menu again: the grip to focus
    * then, the one it left if the move did not happen, and whether new nodes have arrived. */
   #movedFocus: { key: string; fallback: string; read: boolean } | null = null;
@@ -453,12 +452,12 @@ export class MenuStructureTable extends LitElement {
   };
 
   #restoreFocus(): void {
-    const key = this.#refocus;
-    if (key === null) return;
+    const pending = this.#refocus;
+    if (pending === null) return;
     this.#refocus = null;
     this.#table()
-      ?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${CSS.escape(key)}"]`)
-      ?.focus();
+      ?.shadowRoot?.querySelectorAll<HTMLElement>(`[data-test="drag-${CSS.escape(pending.key)}"]`)
+      [pending.copy]?.focus();
   }
 
   /** Waits for the menu read again and for the host to stop being busy, which disables every grip,
@@ -596,7 +595,10 @@ export class MenuStructureTable extends LitElement {
         item instanceof HTMLElement && item.matches("tr[data-row-key]"),
     )?.dataset.rowKey;
     const target = over === undefined ? undefined : this.#dropFor(this.#drag!, over);
-    if (sameDrop(target, this.#target)) return;
+    if (sameDrop(target, this.#target)) {
+      this.#paint();
+      return;
+    }
     this.#target = target;
     this.#paint();
   }
@@ -689,7 +691,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #dropFor(drag: { key: string; keys?: string[] }, over: string): Drop | undefined {
-    if (!shownRow(this.#table()!.shadowRoot!, over)) return undefined;
+    if (!shownRow(this.#table()!.shadowRoot!, over, this.#pointer)) return undefined;
     if (!drag.keys) return this.#targetFor(drag.key, over);
     const rows = this.#dragRows(drag.keys);
     const at = this.#rowByKey.get(over);
@@ -708,7 +710,8 @@ export class MenuStructureTable extends LitElement {
     const height = this.#heightIn(over);
     const into =
       this.#ownedSection(at) &&
-      shownRow(this.#table()!.shadowRoot!, over)?.getAttribute("aria-expanded") !== "true" &&
+      shownRow(this.#table()!.shadowRoot!, over, this.#pointer)?.getAttribute("aria-expanded") !==
+        "true" &&
       height >= 0.25 &&
       height < 0.75;
     const destination = into && at.node.ref.kind === "section" ? at.node.ref.sectionId : at.list;
@@ -747,7 +750,8 @@ export class MenuStructureTable extends LitElement {
     const height = this.#heightIn(over);
     if (
       this.#canHold(at, row) &&
-      shownRow(this.#table()!.shadowRoot!, over)!.getAttribute("aria-expanded") !== "true" &&
+      shownRow(this.#table()!.shadowRoot!, over, this.#pointer)!.getAttribute("aria-expanded") !==
+        "true" &&
       height >= 0.25 &&
       height < 0.75
     )
@@ -775,7 +779,7 @@ export class MenuStructureTable extends LitElement {
   /** How far down the row's content the pointer is, from 0 to 1. A drawn gap pads the row's cells,
    * so the content box, not the row, keeps a pointer in the same band once the gap appears. */
   #heightIn(key: string): number {
-    const cell = shownRow(this.#table()!.shadowRoot!, key)!.querySelector("td")!;
+    const cell = shownRow(this.#table()!.shadowRoot!, key, this.#pointer)!.querySelector("td")!;
     const box = cell.getBoundingClientRect();
     const style = getComputedStyle(cell);
     const top = box.top + parseFloat(style.paddingTop);
@@ -789,7 +793,7 @@ export class MenuStructureTable extends LitElement {
     const drag = this.#drag;
     if (!drag?.active) return;
     for (const key of drag.keys ?? [drag.key]) markDragging(shownRow(root, key));
-    if (this.#target?.kind === "into") markInto(shownRow(root, this.#target.key));
+    if (this.#target?.kind === "into") markInto(shownRow(root, this.#target.key, this.#pointer));
     const gap = this.#gap(drag.key);
     if (gap) markGap(root, gap);
   }
@@ -799,14 +803,18 @@ export class MenuStructureTable extends LitElement {
     const target = this.#target;
     if (target === undefined || target.kind === "into" || !row) return undefined;
     const root = this.#table()!.shadowRoot!;
-    if (target.kind === "beside")
-      return target.side === "before"
-        ? { key: target.key, side: "before" }
-        : { key: lastShownRow(root, target.key), side: "after" };
+    const before = () => ({
+      key: target.key,
+      side: "before" as const,
+      row: shownRow(root, target.key, this.#pointer),
+    });
+    const after = () => {
+      const row = lastShownRow(root, target.key, this.#pointer);
+      return { key: row?.dataset.rowKey ?? target.key, side: "after" as const, row };
+    };
+    if (target.kind === "beside") return target.side === "before" ? before() : after();
     const keys = this.#siblingRows(row).map((sibling) => sibling.key);
-    if (keys.indexOf(target.key) < keys.indexOf(dragged))
-      return { key: target.key, side: "before" };
-    return { key: lastShownRow(root, target.key), side: "after" };
+    return keys.indexOf(target.key) < keys.indexOf(dragged) ? before() : after();
   }
 
   #move(row: Row, to: number): void {
@@ -837,7 +845,12 @@ export class MenuStructureTable extends LitElement {
     const target = shown[at];
     if (target === undefined) return;
     this.#move(row, this.#siblings(row).indexOf(target.node.memberId));
-    this.#refocus = row.key;
+    const grips = [
+      ...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>(
+        `[data-test="drag-${CSS.escape(row.key)}"]`,
+      ),
+    ];
+    this.#refocus = { key: row.key, copy: grips.indexOf(event.currentTarget as HTMLElement) };
     this.announcement = t("action.reordered")
       .replace("{item}", row.name)
       .replace("{index}", String(at + 1))
@@ -1018,6 +1031,11 @@ export class MenuStructureTable extends LitElement {
     };
     const rows = members.length === 0 ? [] : [root, ...members];
     this.#rowsMemo = { inputs, rows };
+    const previousSelections = this.selected.flatMap((key) => {
+      const prior =
+        this.#rowByKey.get(key) ?? this.#rowByKey.get(this.#selectionKeys.get(key) ?? "");
+      return prior ? [[key, JSON.stringify([prior.list, prior.node.memberId])] as const] : [];
+    });
     this.#rowByKey = new Map(members.map((row) => [row.key, row]));
     const identities = new Map<string, string>();
     this.#selectionKeys = new Map(
@@ -1030,6 +1048,10 @@ export class MenuStructureTable extends LitElement {
           return [row.key, key];
         }),
     );
+    for (const [key, identity] of previousSelections) {
+      const current = identities.get(identity);
+      if (current && !this.#selectionKeys.has(key)) this.#selectionKeys.set(key, current);
+    }
     return rows;
   }
 

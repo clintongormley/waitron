@@ -949,6 +949,11 @@ keep their ordinary tree cells. Menu Structure shows every member path; repeated
 list/member share a tick through `rowSelectionKey`, while distinct memberships stay separate.
 Products has one category placement per product. Filters alone keep the ordinary tree rules.
 
+Repeated search copies share a row key. Pointer geometry and insertion marks use the rendered copy
+under the pointer; keyboard reordering returns focus to the grip copy that received the key.
+A menu member's tick follows its list/member identity when a live update removes one owned path
+but leaves another. The open Move or Remove snapshot follows the surviving path too.
+
 A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpanded(key, expanded)`
 (no event), reports the order it would draw a set of siblings in with `sortedSiblings(rows)`, and
 `revealRow(key)` opens every closed branch above a row and scrolls the row into view. Under

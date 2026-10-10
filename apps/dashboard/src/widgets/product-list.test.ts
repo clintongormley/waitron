@@ -6185,3 +6185,49 @@ it("A461 path colour font and gap follow host tokens", async () => {
   expect(getComputedStyle(path).fontSize).toBe("19px");
   expect(getComputedStyle(line).columnGap).toBe("17px");
 });
+
+it.each([0, 1])("A461 highlights the hovered Products copy %i", async (copy) => {
+  const { el, table, root } = await mountTree({
+    reordering: true,
+    search: "coffee",
+    categories: [
+      { id: "bar", name: "Coffee bar", parentId: null, color: null },
+      { id: "coffee", name: "Coffee", parentId: "bar", color: null },
+    ],
+    products: [
+      product({ id: "iced", name: "Iced coffee", primaryCategoryId: "coffee" }),
+      product({ id: "cake", name: "Coffee cake", primaryCategoryId: "bar" }),
+    ],
+  });
+  await openRow(el, "folder:bar");
+  const copies = () => [...root.querySelectorAll<HTMLElement>('tr[data-row-key="folder:coffee"]')];
+  expect(copies()).toHaveLength(2);
+  const from = root.querySelector<HTMLElement>('tr[data-row-key="cake"] .drag-grip')!;
+  const send = (type: string, over: Element) => {
+    const box = over.getBoundingClientRect();
+    from.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 91,
+        clientX: box.left + 8,
+        clientY: box.top + box.height / 2,
+      }),
+    );
+  };
+  const drops: unknown[] = [];
+  el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+  send("pointerdown", from);
+  send(
+    "pointermove",
+    copies()[copy]!.querySelector('td[data-col="name"]') ?? copies()[copy]!.querySelector("td")!,
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(copies().map((row) => row.querySelector('[part~="drop-target"]') !== null)).toEqual(
+    copy === 0 ? [true, false] : [false, true],
+  );
+  send("pointerup", copies()[copy]!);
+  expect(drops).toEqual([{ keys: ["cake"], folderId: "coffee" }]);
+});

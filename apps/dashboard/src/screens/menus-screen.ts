@@ -852,7 +852,8 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
-    if (changed.has("structure")) this.#keepSelectionOwned();
+    if (changed.has("structure"))
+      this.#keepSelectionOwned(changed.get("structure") as MenuStructure | null | undefined);
     this.#trackMoveDraft();
     if (changed.has("structure") || changed.has("path")) {
       this.#resolvePath();
@@ -2642,7 +2643,7 @@ export class MenusScreen extends LitElement {
 
   /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the menu still
    * owns. */
-  #keepSelectionOwned(): void {
+  #keepSelectionOwned(previous?: MenuStructure | null): void {
     // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
     if (this.structure?.nodes.length === 0) {
       this.structureReordering = false;
@@ -2650,6 +2651,21 @@ export class MenusScreen extends LitElement {
       this.structureSearch = "";
     }
     const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
+    const identity = (structure: MenuStructure | null | undefined, key: string) => {
+      const path = key.split("/");
+      return JSON.stringify([
+        listIdOf(structure ?? null, trailOf(structure ?? null, path.slice(0, -1))),
+        path.at(-1),
+      ]);
+    };
+    const replacements = new Map([...owned].map((key) => [identity(this.structure, key), key]));
+    const remap = (keys: string[]) =>
+      keys.map((key) =>
+        owned.has(key) ? key : (replacements.get(identity(previous, key)) ?? key),
+      );
+    this.structureSelected = remap(this.structureSelected);
+    if (this.removingSelected) this.removingSelected = remap(this.removingSelected);
+    if (this.movingSelected) this.movingSelected = remap(this.movingSelected);
     this.#keepSelection((key) => owned.has(key));
   }
 

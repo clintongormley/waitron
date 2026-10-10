@@ -4214,3 +4214,89 @@ it("A461 reordering repeated parents keeps the existing member tick", async () =
   await settle(el);
   expect(el.selected).toEqual([]);
 });
+
+it("A461 keeps a shared tick when its first owned path disappears", async () => {
+  const el = await mount({ selecting: true, search: "lager", selected: ["m-drinks/m-lager"] });
+  expect((item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement).checked).toBe(true);
+  el.nodes = [favourites()];
+  await settle(el);
+  const remaining = item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement;
+  expect(remaining.checked).toBe(true);
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+  });
+  remaining.click();
+  await settle(el);
+  expect(el.selected).toEqual([]);
+});
+
+it.each([
+  [0, "middle"],
+  [1, "middle"],
+  [0, "top"],
+  [1, "top"],
+] as const)("A461 drops at the hovered section copy %i (%s)", async (copy, band) => {
+  const section: MenuStructureNode = {
+    memberId: "m-lb",
+    ref: { kind: "section", sectionId: "s-lb" },
+    internalName: "Lager bar",
+    ownerMenuId: "menu-lunch",
+    children: [
+      {
+        memberId: "m-ls",
+        ref: { kind: "section", sectionId: "s-ls" },
+        internalName: "Lager",
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
+      productNode("m-lem", "p-lemonade"),
+    ],
+  };
+  const el = await mount({ nodes: [section], search: "lager", reordering: true });
+  await toggle(el, "m-lb");
+  const copies = () => all<HTMLElement>(el, 'tr[data-row-key="m-lb/m-ls"]');
+  expect(copies()).toHaveLength(2);
+  const from = grip(el, "m-lb/m-lem");
+  const sent = listen(el, band === "middle" ? "wt-member-move-into" : "wt-member-move");
+  pointer(from, "pointerdown");
+  const box = copies()[copy]!.getBoundingClientRect();
+  pointer(from, "pointermove", copies()[copy]!.querySelector('[data-test="name"]')!, {
+    clientY: box.top + box.height * (band === "middle" ? 0.5 : 0.125),
+  });
+  await settle(el);
+  expect(
+    copies().map(
+      (row) =>
+        row.querySelector(
+          band === "middle" ? '[part~="drop-target"]' : '[part~="drop-gap-before"]',
+        ) !== null,
+    ),
+  ).toEqual(copy === 0 ? [true, false] : [false, true]);
+  pointer(from, "pointerup", copies()[copy]!.querySelector('[data-test="name"]')!);
+  expect(sent).toEqual(
+    band === "middle"
+      ? [{ from: ["m-lb"], memberId: "m-lem", to: ["m-lb", "m-ls"] }]
+      : [{ path: ["m-lb"], memberId: "m-lem", to: 0 }],
+  );
+});
+
+it("A461 returns arrow-move focus to the indented search copy", async () => {
+  const el = await mount({ search: "lager", reordering: true });
+  el.nodes = [
+    {
+      ...drinksNode("m-drinks"),
+      internalName: "Lager bar",
+      children: [productNode("m-lager", "p-lager"), productNode("m-lemonade", "p-lemonade")],
+    },
+  ];
+  await settle(el);
+  await toggle(el, "m-drinks");
+  const copies = () => all<HTMLElement>(el, '[data-test="drag-m-drinks/m-lager"]');
+  expect(copies()).toHaveLength(2);
+  copies()[1]!.focus();
+  copies()[1]!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(table(el).shadowRoot!.activeElement).toBe(copies()[1]);
+});
