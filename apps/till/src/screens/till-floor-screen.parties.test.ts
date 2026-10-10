@@ -738,6 +738,18 @@ describe("till-floor-screen: a party's release reminder", () => {
       expect(chip(el, "t4")).not.toBeNull();
     });
 
+    it("an update queued before the screen is removed does not restart its reminder timer", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const el = await mountAt([], "real");
+      el.tables = [seated({}, { reminder: { groupId: "g2", dueAt: at(60_000) } })];
+      el.remove();
+      await el.updateComplete;
+      const redraws = vi.spyOn(el, "requestUpdate");
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(redraws).not.toHaveBeenCalled();
+    });
+
     it("arms no timer when the screen is given its clock", async () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
       vi.setSystemTime(now);

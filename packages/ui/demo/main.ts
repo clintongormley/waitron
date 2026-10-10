@@ -3,6 +3,8 @@ import {
   DROPDOWN_ICONS,
   applyTokens,
   registerIcons,
+  type FloorMapFill,
+  type FloorMapTable,
   type TableSelect,
   type WtDataTable,
 } from "../src/index.js";
@@ -29,6 +31,7 @@ import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
 import "../src/components/wt-floor-plan-preview.js";
+import "../src/components/wt-floor-map.js";
 import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
@@ -126,6 +129,7 @@ const panel = (theme: "light" | "dark") => `
     </wt-card>
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
     <wt-floor-plan-preview label="Floor plan: Terrace" style="width: 240px; margin-top: 16px"></wt-floor-plan-preview>
+    <wt-floor-map style="height: 240px; margin-top: 16px"></wt-floor-map>
     <wt-sheet heading="Mesas" style="margin-top: 16px">
       <p>Mesa 1 · Mesa 2 · Mesa 3</p>
     </wt-sheet>
@@ -276,6 +280,35 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     plan.selected = (e as CustomEvent<TableSelect>).detail.key;
   });
   el.querySelector("wt-floor-plan-preview")!.tables = plan.tables;
+  const floorMap = el.querySelector("wt-floor-map")!;
+  const mapTable = (
+    id: string,
+    x: number,
+    fill: FloorMapFill,
+    over: Partial<FloorMapTable> = {},
+  ): FloorMapTable => ({
+    id,
+    label: id,
+    placement: { x, y: 2, width: 6, height: 6, shape: "rect", rotation: 0 },
+    fill,
+    dot: null,
+    joinId: null,
+    description: fill,
+    ...over,
+  });
+  floorMap.tables = [
+    mapTable("1", 0, "free"),
+    mapTable("2", 8, "seated", { dot: "ready" }),
+    mapTable("3", 16, "bill", { dot: "forgotten" }),
+    mapTable("4", 24, "clearing"),
+    mapTable("5", 32, "reserved"),
+    mapTable("Terrace 6", 40, "seated", { joinId: "j1" }),
+    mapTable("Terrace 7", 46, "seated", { joinId: "j1" }),
+    {
+      ...mapTable("8", 4, "free"),
+      placement: { x: 4, y: 12, width: 6, height: 6, shape: "round", rotation: 0 },
+    },
+  ];
   const tabs = el.querySelector("wt-tabs")!;
   tabs.items = [
     { key: "status", label: "Status" },

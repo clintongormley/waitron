@@ -731,6 +731,16 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
 });
 
+/** A promise the test answers when it chooses. */
+function deferredTables(): {
+  promise: Promise<TableState[]>;
+  resolve: (value: TableState[]) => void;
+} {
+  let resolve!: (value: TableState[]) => void;
+  const promise = new Promise<TableState[]>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
 describe("till-app", () => {
   it("asks before counter Pay, saves a chosen station, then takes payment", async () => {
     const order: string[] = [];
@@ -6523,6 +6533,246 @@ describe("till-app", () => {
       await flush(el);
 
       expect(floor(el)).not.toBeNull();
+      expect(floor(el)!.tables).toEqual([freeTable]);
+    });
+
+    async function twoDeferredRefreshes() {
+      const answerA = deferredTables();
+      const answerB = deferredTables();
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockReturnValueOnce(answerA.promise)
+          .mockReturnValueOnce(answerB.promise),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      emit(floor(el)!, "floor-refresh");
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      return { el, answerA, answerB };
+    }
+
+    const tableA: TableState = { ...freeTable, id: "tA", label: "A" };
+    const tableB: TableState = { ...freeTable, id: "tB", label: "B" };
+
+    it("an older poll that answers after the action's refresh began does not replace it", async () => {
+      const { el, answerA, answerB } = await twoDeferredRefreshes();
+
+      answerB.resolve([tableB]);
+      await flush(el);
+      answerA.resolve([tableA]);
+      await flush(el);
+
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    // Passes on a rule that applies every answer too; it fails a rule that drops an answer once a
+    // newer read has started.
+    it("an older poll that answers first is shown, then the action's refresh replaces it", async () => {
+      const { el, answerA, answerB } = await twoDeferredRefreshes();
+
+      answerA.resolve([tableA]);
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableA]);
+      answerB.resolve([tableB]);
+      await flush(el);
+
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    it("a floor read that answers what the floor already shows keeps the same tables list", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockResolvedValueOnce([{ ...freeTable }])
+          .mockResolvedValueOnce([tableB]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      const shown = floor(el)!.tables;
+      expect(shown).toEqual([freeTable]);
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      expect(currentApi.getTablesState).toHaveBeenCalledTimes(2);
+      expect(floor(el)!.tables).toBe(shown);
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    async function floorWithPollOut() {
+      const poll = deferredTables();
+      const getTablesState = vi.fn().mockResolvedValueOnce([freeTable]);
+      const { el } = await mountApp({
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      getTablesState.mockReturnValueOnce(poll.promise).mockResolvedValue([tableB]);
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(2);
+      return { el, getTablesState, poll };
+    }
+
+    it("a poll tick while the last poll's read is still out starts no second read", async () => {
+      const { el, getTablesState, poll } = await floorWithPollOut();
+
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(2);
+
+      poll.resolve([tableA]);
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableA]);
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(3);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    it("an action's floor read starts while a poll's read is still out", async () => {
+      const { el, getTablesState } = await floorWithPollOut();
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(3);
+      expect(getTablesState.mock.calls[2]).toEqual([]);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    it("a poll's read still out at the poll's read limit is cancelled, and the next tick reads again", async () => {
+      const getTablesState = vi
+        .fn()
+        .mockResolvedValueOnce([freeTable])
+        .mockImplementationOnce(
+          (options?: { signal?: AbortSignal }) =>
+            new Promise((_, reject) =>
+              options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+            ),
+        )
+        .mockResolvedValue([tableB]);
+      const { el } = await mountApp({
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        emit(floor(el)!, "floor-refresh", { poll: true });
+        await vi.advanceTimersByTimeAsync(0);
+        const [options] = getTablesState.mock.lastCall as [{ signal?: AbortSignal }?];
+
+        // FLOOR_POLL_LIMIT_MS in till-app.ts.
+        await vi.advanceTimersByTimeAsync(24_999);
+        expect(options?.signal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(options?.signal?.aborted).toBe(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(floor(el)!.tables).toEqual([freeTable]);
+
+        emit(floor(el)!, "floor-refresh", { poll: true });
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+        expect(getTablesState).toHaveBeenCalledTimes(3);
+        expect(floor(el)!.tables).toEqual([tableB]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    /** The floor shows `freeTable` and a poll's read is out on a read that ignores its signal, so
+     * only the till's own check can keep its late answer off the floor. */
+    async function floorWithDeafPollOut() {
+      const poll = deferredTables();
+      const getTablesState = vi.fn().mockResolvedValueOnce([freeTable]);
+      const { el } = await mountApp({
+        getTablesState,
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      getTablesState.mockReturnValueOnce(poll.promise);
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      const [options] = getTablesState.mock.lastCall as [{ signal?: AbortSignal }?];
+      expect(options?.signal?.aborted).toBe(false);
+      return { el, getTablesState, poll, signal: options!.signal! };
+    }
+
+    /** Signs out and back in, landing on the floor, whose own load fails so the floor keeps the
+     * tables it last applied. */
+    async function signOutAndBackToFloor(el: TillApp, getTablesState: ReturnType<typeof vi.fn>) {
+      emit(shell(el)!, "logout");
+      await flush(el);
+      getTablesState.mockRejectedValueOnce(new Error("offline"));
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      selectTab(el, "floor");
+      await flush(el);
+    }
+
+    it("a poll's read out at sign-out is cancelled, and its late answer is not shown", async () => {
+      const { el, getTablesState, poll, signal } = await floorWithDeafPollOut();
+
+      await signOutAndBackToFloor(el, getTablesState);
+      expect(signal.aborted).toBe(true);
+      poll.resolve([tableA]);
+      await flush(el);
+
+      expect(floor(el)!.tables).toEqual([freeTable]);
+    });
+
+    it("after signing back in, a poll tick reads at once though the last session's poll never answered", async () => {
+      const { el, getTablesState, poll } = await floorWithDeafPollOut();
+      await signOutAndBackToFloor(el, getTablesState);
+      const calls = getTablesState.mock.calls.length;
+      const next = deferredTables();
+      getTablesState.mockReturnValueOnce(next.promise).mockResolvedValue([tableB]);
+
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(calls + 1);
+
+      // The old read settling must not free the new one's slot.
+      poll.resolve([tableA]);
+      await flush(el);
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState).toHaveBeenCalledTimes(calls + 1);
+      expect(floor(el)!.tables).toEqual([freeTable]);
+
+      next.resolve([tableB]);
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    it("a poll's read out when the api is replaced is cancelled, and its late answer is not shown", async () => {
+      const { el, poll, signal } = await floorWithDeafPollOut();
+
+      el.api = stubApi({
+        getTablesState: vi.fn().mockResolvedValue([tableB]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await flush(el);
+      expect(signal.aborted).toBe(true);
+      poll.resolve([tableA]);
+      await flush(el);
+
       expect(floor(el)!.tables).toEqual([freeTable]);
     });
 

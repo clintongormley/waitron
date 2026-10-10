@@ -1825,10 +1825,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493) and 2 (#1506) built; slices 3–5 open).** Slice 1 is the
+  1 (#1493), 2 (#1506) and 3 built; slices 4–5 open).** Slice 1 is the
   storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
   the till works from), kept table names, the till's table-state answer, the dashboard's read and
-  save routes, and the demo seed. Slice 2 is the dashboard editor. Left: the till's map, today's
+  save routes, and the demo seed. Slice 2 is the dashboard editor. Slice 3 is the till's map: a
+  planned zone drawn on a new map with status colours and dots, a details sheet, the seat dialog's
+  seats hint, a 15-second re-read, and the order screen's status pin and notice. Left: today's
   changes on the till, and removing the old pieces.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
 
@@ -1836,6 +1838,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   left: a preview not heard on focus, an ungated link, a duplicated address template, list and
   canvas details and surviving mutants. Left open by A429 slice 2.
   [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
+
+- **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
+  unmeasured screen-reader activation, a drop after a re-read, two wordings, two notes for slice 4
+  and six look-pass choices built with defaults. Left open by A429 slice 3.
+  [Detail](backlog/till.md#a470--the-tills-floor-map-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
@@ -2324,7 +2331,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
-- **A four-digit total does not fit a small round table on the till's floor map** (found 2026-10-03
+- **A four-digit total does not fit a small round table on the till's floor map** (the old map,
+  `wt-floor-canvas`, drawn for a zone with no floor plan; a planned zone's map shows no totals since
+  A429 slice 3) (found 2026-10-03
   by looking at the map while making its amounts follow the locale, lane C's W15). **Next action:**
   the owner decides whether this changes "wait on this"; a fix that lets a small token hold what it
   shows would cover both.
@@ -2525,10 +2534,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   product folders work. The plan has no such count; adding one needs another value from
   `listTablesWithState`.
 
-- **Refresh the floor without a staff action — OPEN (3d, W16).** — left open by the product folders
-  work. `till-floor-screen.ts` reads on events handled by `till-app.ts`'s `floor-refresh`, not on a
-  timer. Polling would read `listTablesWithState` every few seconds on every till; choose the
-  interval and cost first.
+- **Refresh the floor without a staff action, for a zone with no floor plan or a planned zone's
+  list view — OPEN (3d, W16).** — left open by the product folders work. Since A429 slice 3 the
+  floor screen re-reads the floor every 15 seconds while a planned zone's map is on screen
+  (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
+  events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
+  few seconds on every till; choose the interval and cost first.
 
 - **The station dialog's own guard has no test** — left open by A438 (#1472).
   `till-station-choice-dialog` refuses to send a choice while busy, with no station chosen, or with

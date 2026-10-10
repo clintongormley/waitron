@@ -961,6 +961,7 @@ const table = {
   posY: null,
   shape: null,
   rotation: null,
+  today: null,
   signals: [],
   party: party as typeof party | null,
 };

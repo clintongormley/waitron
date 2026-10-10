@@ -122,7 +122,8 @@ at Waitron's red. Set each one too, with a light and a dark value (see Tokens �
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, each with an `--wt-color-on-…` text colour
+`--wt-color-day-closed`, and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+each with an `--wt-color-on-…` text colour
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -205,6 +206,24 @@ each other and from both reserved fills, that the standard and Closed fills are 
 and that the `prefers-color-scheme` blocks give the same values as the explicit themes. They do not
 hold that two palette colours are told apart by eye: the light standard fill, for one, is only
 about 1.2:1 against `--wt-color-surface`, which is why the words carry the meaning.
+
+The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
+`--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
+Lit stylesheet that styles an element carrying `data-fill="<fill>"` inside a shadow root whose
+styles include it, as `wt-floor-map`'s do:
+
+| Fill                        | Light     | Text on it | Dark      | Text on it |
+| --------------------------- | --------- | ---------- | --------- | ---------- |
+| `--wt-color-table-free`     | `#dff3e8` | `#16181d`  | `#183626` | `#eceef2`  |
+| `--wt-color-table-seated`   | `#1f6feb` | `#ffffff`  | `#4c8dff` | `#06101f`  |
+| `--wt-color-table-bill`     | `#7e3fb8` | `#ffffff`  | `#c39bf0` | `#1d0b33`  |
+| `--wt-color-table-clearing` | `#f5a623` | `#241500`  | `#f5b34a` | `#241500`  |
+| `--wt-color-table-reserved` | `#fde7c8` | `#16181d`  | `#4a3a1c` | `#eceef2`  |
+
+The "table fill colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both
+themes, that each text colour is 4.5:1 or more on its fill, that the five fills differ, that
+`--wt-color-success` and `--wt-color-danger` are 3:1 or more on `--wt-color-surface`, and that the
+`prefers-color-scheme` blocks give the same values as the explicit themes.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
@@ -572,6 +591,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-floor-plan-canvas`  | `tables` (property; `{ key, label, fixed, placement, refused? }[]`, the placed tables only, `placement` in grid squares), `selected` (the selected table's key, or null; set by the parent), `copy` (property; `{ label, fixed, rotate }`, English by default); parts: `viewport`, `grid`, `table`, `fixed-marker`, `rotate-handle`, `refused-reason`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `wt-table-select` (`{ key }`, `null` for a click on empty grid), `wt-table-move` (`{ key, x, y }`), `wt-table-rotate` (`{ key, rotation }`)                                                                                                                                                                                         |
 | `wt-floor-plan-preview` | A zone's floor plan drawn small and read-only, fitted to its width and capped at `--wt-floor-plan-preview-max-height` (four `--wt-tap-min` at the theme root; a page or panel may set its own): `tables` (property; `{ key, fixed, placement }[]`, as the canvas takes them), `label` (the drawing's accessible name, default "Floor plan"); draws nothing for no tables; parts: `plan`, `table`, `fixed-marker` | — |
 | `wt-sheet`              | `heading` (the toggle's text), `expanded` (reflected; the page may set it); default slot (body); parts: `toggle`, `body` | `wt-sheet-toggle` (`{ expanded }`) |
+| `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, joinId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null), `fitKey` (a change fits the view again), `copy` (property; `{ label }`, the tables' group name, "Tables" by default), `reducedMotion` (property; unset reads `prefers-reduced-motion`); parts: `table`, `shape`, `name`, `dot` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid of 12 px squares that fills its
 box and reaches at least 8 squares past the furthest table. A turned table reaching past the top or
@@ -601,6 +621,57 @@ tall, with `aria-expanded` and `aria-controls` naming the body) shows `heading`.
 `60dvh`. Where it docks is its parent's choice; the floor-plan editor docks it at the bottom below
 600 px of the page's own width. The heading is the toggle's accessible name, so `heading` must be
 set. The consuming app registers the `chevron-down` icon.
+
+`wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
+past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice. It fits
+when it first draws tables, when `fitKey` changes and on a double tap on empty space (both taps
+there), whatever the view; it fits when it is resized only if there has been no pan, pinch or
+wheel event since its last fit, even one at a limit that moved nothing; a new `tables` alone keeps
+the view. A press that moves 8 px before the hold pans, wherever it started; two fingers zoom about
+their midpoint; the wheel pans and Ctrl+wheel zooms ×2 per 100 px of `deltaY`
+about the pointer, the wheel event always prevented. A wheel reporting lines counts 16 px a line,
+and one reporting pages the map's width (`deltaX`) or height (`deltaY`) a page. Zoom runs from half to four times the fitted
+scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by `mergeLabel`
+(its tables in number order, "Terrace 4+5", "4+10"), whose `data-table-id` is its first member's in number order; each table is
+drawn at its true size and angle, so a small one is below `--wt-tap-min`. Each shape is painted from
+its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line` with `--wt-radius-sm`
+corners (a round one is a circle), and the name in the fill's
+`--wt-color-on-table-*`. A name is drawn only when the table's own shorter side, before turning (a
+merge's whole box), is at least 28 px, and is always the start of the button's accessible name,
+followed by ", " and `description`. A dot is a `--wt-space-3` circle on the button's top-right corner,
+`--wt-color-success` for ready and `--wt-color-danger` for forgotten, ringed in the surface colour and
+drawn above every table; it flashes once a second unless motion is reduced. The host isolates its
+stacking (`isolation: isolate`), so the dot is drawn above the map's tables but not above what follows
+the map. A table's id in an event is its button's `data-table-id`, so a merge sends its first
+member's. A touch or pen tap on a table, and Enter or Space on a focused one, send `wt-table-tap` at
+once; a mouse click waits 300 ms and sends it unless a second click on the same table makes a
+double-click, which sends `wt-table-details`. A second tap on a different table counts as a tap on
+it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`,
+plus `--wt-selected-ring` outside a single table's edge, or once around a merge's whole box, which
+is then raised above a table touching it) and its release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
+nothing. A held table that is dragged is drawn moved by whole squares, its first member kept at 0 or
+more, and its release clears the mark and sends `wt-table-drag-end` instead: that member's new `x`
+and `y` and `targetId`, the `data-table-id` of the first other table under the release point, else
+null; the table is then drawn back where `tables` puts it. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
+`contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is
+handled on its `keydown`, which the map prevents, and the next `contextmenu` is ignored unless a
+`keydown` or `pointerdown` comes first. On a table, a repeated `keydown` of Shift+F10 or of the
+ContextMenu key (the key held down) is prevented and sends nothing. The map stops the `click` or `contextmenu` it turns into one
+of its events and never stops a `pointerdown` or `keydown`. One table is in the Tab order
+(`tabindex="0"`, every other `-1`): the one last focused, by key or by press, while the map still
+draws it (a merge it has joined is the tab stop then), else the first in reading order (by the top of its box, then its left). On a focused
+table, ArrowRight and ArrowDown move to the next table in reading order, ArrowLeft and ArrowUp to
+the previous, Home and End to the first and last, stopping at the ends, unless Alt, Ctrl or Meta is held, which the map leaves to the browser; each
+is prevented, pans the target into view by the least distance (a table wider than the map is
+moved only to close a gap at one edge; within the pan limit, and counting as a pan, so a resize then
+keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
+cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
+table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above the
+tables beside it, so its ring is not covered, and a dot above that. The host has no
+`delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
+rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
+host focused its first button, and with `overflow: hidden` the browser scrolled the host when an
+off-screen table took focus.
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
 Alt+ArrowDown, Enter and Space open the list with the chosen row active (the first row when nothing

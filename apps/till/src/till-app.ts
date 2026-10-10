@@ -59,6 +59,7 @@ import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
+import type { FloorRefreshDetail } from "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
@@ -285,6 +286,10 @@ interface RefreshRetry {
 }
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
+
+/** How long a floor poll's read may stay out before it is cancelled: longer than the floor screen's
+ * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. */
+const FLOOR_POLL_LIMIT_MS = 25_000;
 
 // Icons shared primitives draw and their consuming app registers: wt-toast's `close`,
 // wt-combobox's, wt-row-actions' `kebab`, and the top bar's More menu's `hamburger`.
@@ -1169,6 +1174,10 @@ export class TillApp extends LitElement {
   #departmentTransfers?: DepartmentTransferMonitor;
   #transferApi?: TillApi;
   #transferViewRead = 0;
+  /** Each table read takes the next number as it starts; see {@link #applyTables}. */
+  #tablesRead = 0;
+  #tablesApplied = 0;
+  #tablesJson = "[]";
   #counterRetrievals = new Map<object, string>();
   @state() private transferSnapshot?: TransferSnapshot;
   @state() private transferQueueOpen = false;
@@ -1317,10 +1326,11 @@ export class TillApp extends LitElement {
     const replaced = () =>
       read !== this.#transferViewRead || session !== this.#operatorSession || api !== this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const tablesRead = ++this.#tablesRead;
     try {
       const tables = await api.getTablesState({ signal: limit.signal });
       if (replaced()) return;
-      this.tables = tables;
+      this.#applyTables(tablesRead, tables);
     } catch {
       if (replaced()) return;
     } finally {
@@ -1420,6 +1430,7 @@ export class TillApp extends LitElement {
     this.#battery?.stop();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#stopFloorPoll();
     this.#draftSync?.drop();
     this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
@@ -2253,7 +2264,10 @@ export class TillApp extends LitElement {
     }
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
-    if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
+    if (changed.has("api")) {
+      this.api.onMadeHere?.(this.#onMadeHere);
+      this.#stopFloorPoll();
+    }
     if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
       this.#syncDepartmentTransfers();
     if (changed.has("canvas") || changed.has("capabilities"))
@@ -4931,6 +4945,7 @@ export class TillApp extends LitElement {
    */
   async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
     const zonesRead = ++this.#floorZonesRead;
+    const tablesRead = ++this.#tablesRead;
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
@@ -4938,7 +4953,7 @@ export class TillApp extends LitElement {
         this.api.listStatuses(),
       ]);
       if (replaced()) return;
-      this.tables = tables;
+      this.#applyTables(tablesRead, tables);
       if (zonesRead === this.#floorZonesRead) this.zones = zones;
       this.statuses = statuses;
       this.#floorLoaded = true;
@@ -5013,19 +5028,60 @@ export class TillApp extends LitElement {
     }
   }
 
-  #onFloorRefresh(): void {
-    if (this.#inShell()) void this.#refreshFloor();
+  #onFloorRefresh(poll = false): void {
+    if (!this.#inShell()) return;
+    if (poll) void this.#pollFloor();
+    else void this.#refreshFloor();
+  }
+
+  /** The floor poll's read now out, cancelled when the operator's session ends or the api is
+   * replaced. */
+  #floorPoll?: AbortController;
+
+  /** One uncancelled poll read out at a time, cut off at {@link FLOOR_POLL_LIMIT_MS}. */
+  async #pollFloor(): Promise<void> {
+    if (this.#floorPoll !== undefined) return;
+    const poll = new AbortController();
+    this.#floorPoll = poll;
+    const limit = limited(FLOOR_POLL_LIMIT_MS, poll.signal);
+    try {
+      await this.#refreshFloor({ signal: limit.signal });
+    } finally {
+      limit.done();
+      if (this.#floorPoll === poll) this.#floorPoll = undefined;
+    }
+  }
+
+  #stopFloorPoll(): void {
+    this.#floorPoll?.abort();
+    this.#floorPoll = undefined;
   }
 
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
-   * the last-known floor. */
-  async #refreshFloor(): Promise<boolean> {
+   * the last-known floor, and so does one whose signal aborted before it answered. Answers whether
+   * this read's answer, or a newer one's, has been applied; `this.tables` then holds it or a list
+   * equal to it. */
+  async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
+    const read = ++this.#tablesRead;
     try {
-      this.tables = await this.api.getTablesState();
-      return true;
+      const tables = await this.api.getTablesState(...options);
+      if (options[0]?.signal?.aborted !== true) this.#applyTables(read, tables);
     } catch {
-      return false;
+      // The last-known floor stays.
     }
+    return this.#tablesApplied >= read;
+  }
+
+  /** A read's answer replaces the tables unless a read that started after it was applied first, so
+   * a poll answering late never undoes an action's newer read. An answer equal to the tables shown
+   * still counts as applied, but keeps the list shown. */
+  #applyTables(read: number, tables: TableState[]): void {
+    if (read <= this.#tablesApplied) return;
+    this.#tablesApplied = read;
+    const json = JSON.stringify(tables);
+    if (json === this.#tablesJson) return;
+    this.#tablesJson = json;
+    this.tables = tables;
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
@@ -6978,10 +7034,11 @@ export class TillApp extends LitElement {
   /** Re-reads occupancy without leaving the screen. Unlike {@link #refreshFloor}, a failed read
    * empties the floor. */
   async #reloadTables(): Promise<void> {
+    const read = ++this.#tablesRead;
     try {
-      this.tables = await this.api.getTablesState();
+      this.#applyTables(read, await this.api.getTablesState());
     } catch {
-      this.tables = [];
+      this.#applyTables(read, []);
     }
   }
 
@@ -7989,6 +8046,7 @@ export class TillApp extends LitElement {
     this.#endReloadLock();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#stopFloorPoll();
     this.#polledDefaults.clear();
     this.#tableZoneId = undefined;
     this.#markedRounds.clear();
@@ -9025,7 +9083,8 @@ export class TillApp extends LitElement {
           if (this.drill?.kind === "schedule") return;
           this.#requestLeave(() => this.#onShowSchedule());
         }}
-        @floor-refresh=${() => this.#onFloorRefresh()}
+        @floor-refresh=${(event: CustomEvent<FloorRefreshDetail | null>) =>
+          this.#onFloorRefresh(event.detail?.poll === true)}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
