@@ -191,18 +191,23 @@ never with a bare `pnpm dev*`. The first port slot uses
 venue directory is derived from that state directory by
 `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). The gitignored `apps/server/.env`
 describes that venue (venue ids, credentials key), so `wa-wt` copies its newest copy into another
-worktree that takes the first slot. Starting a second worktree while the first runs gives it ports
-5290, 5291, 5292, 8180 and 9210 for till, dashboard, setup, server and print agent. Its own
-`$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and `.env` are provisioned separately.
-`WAITRON_MANAGEMENT_ORIGIN` points at `http://localhost:5291`, so passkeys and account links stay
-with that venue. Provisioning writes its shifted server port to that checkout's `.env`.
-The two venues are directories of SQLite files on the host, not containers.
+worktree that takes the first slot. There are eight slots: slot _k_ serves the till, dashboard,
+setup, server and print agent on 5190, 5191, 5192, 8080 and 9110 plus 100 × _k_, so the second slot
+is 5290, 5291, 5292, 8180 and 9210. A start keeps its saved slot while that slot is free, and
+otherwise takes the first free one; a slot is not free while another running instance holds it or
+an unrecognised process listens on one of its ports, so a listener on one slot never stops a start
+on another.
+Every slot but the first has its own `$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and
+`.env`, provisioned separately, and its `WAITRON_MANAGEMENT_ORIGIN` points at its own dashboard
+port, so passkeys and account links stay with that venue. Provisioning writes its shifted server
+port to that checkout's `.env`. Every venue is a directory of SQLite files on the host, not a
+container.
 
-For side-by-side visual checks, start the first worktree, then start the second without taking the
-first down. `wa-wt ls` shows which name owns each URL. While both run, name the instance in
+For side-by-side visual checks, start one worktree, then start another without taking the first
+down. `wa-wt ls` shows which name owns each URL. While more than one runs, name the instance in
 `wa-wt logs <name>`, `wa-wt down <name>`, and `wa-wt reset demo <name>`; a bare command refuses to
-guess. Stopping one leaves the other's listeners and venue open. A third start refuses until a port
-slot is free.
+guess. Stopping one leaves the others' listeners and venues open. A start refuses only when all
+eight slots are busy, and lists what holds each.
 
 **Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
 `mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.

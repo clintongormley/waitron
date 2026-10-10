@@ -10,7 +10,7 @@ walkthrough survives a context clear.
 
 **Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
 <http://localhost:5191>, setup <http://localhost:5192>. Those are the default ports; use `wa-wt ls`
-for a second worktree's URLs. The default server on `:8080` uses HTTP without a development box
+for another worktree's URLs. The default server on `:8080` uses HTTP without a development box
 leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The till enrols
 itself on first load in dev mode, with no code or approval step. Till PIN **5555**; dashboard
 **owner@demo.waitron.local / dashPass123**.
@@ -19,11 +19,12 @@ itself on first load in dev mode, with no code or approval step. Till PIN **5555
 `wa-wt onboarding <worktree-name>`
 (`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The first port slot
 uses `$HOME/workspace/.waitron-dev/box`. Start another worktree with the same command while
-the first runs; `wa-wt` gives it shifted ports and a venue under its own state directory. The venue
-is a directory of SQLite files on the host. `wa-wt ls` names both instances and their URLs. Use
-`wa-wt logs <name>`, `wa-wt reset demo <name>`, and `wa-wt down <name>` to act on one while two run.
-The first stack's `apps/server/.env` is shared with other first-slot checkouts; the second keeps
-its own venue ids and credentials in its own `.env`.
+the first runs; `wa-wt` gives it one of eight port slots, each 100 above the last, and a venue under
+its own state directory. The venue is a directory of SQLite files on the host. `wa-wt ls` names
+every running instance and its URLs. Use `wa-wt logs <name>`, `wa-wt reset demo <name>`, and
+`wa-wt down <name>` to act on one while more than one runs. The first slot's `apps/server/.env` is
+shared with other first-slot checkouts; every other slot keeps its own venue ids and credentials in
+its own `.env`.
 
 `docker-compose.yml` declares one service, `mailpit` — the practice email inbox. No container holds
 any part of the dev venue, so Compose has nothing a reset could clear. The reason to keep using
@@ -46,7 +47,8 @@ the public CA from its box state, so you do not need a working port 80 listener.
 configuration live in that box state's `print-agent/` directory; restarting the instance retains
 them, while resetting the target clears them with the database. Once the box is provisioned as
 the primary, the agent enrols automatically. You can check its status at <http://localhost:9110>
-for the first stack or <http://localhost:9210> for the second.
+for the first slot, and 100 higher for each slot after it (9210, 9310, …); `wa-wt ls` names the
+slot's till, dashboard and server ports, not this one.
 
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.

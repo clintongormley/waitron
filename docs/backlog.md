@@ -5220,7 +5220,7 @@ already paid for:
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
-:8080. `wa-wt ls` shows the shifted ports if a second stack runs. The till enrols itself on first
+:8080. `wa-wt ls` shows the shifted ports if another stack runs. The till enrols itself on first
 load in dev mode. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 `dev:setup` seeds three menus (~44 products with images), a floor plan (5 zones / ~16 tables),
 staff on PIN 5555, and ~28 days of back-dated preproduction sales — seeded in English by default,
