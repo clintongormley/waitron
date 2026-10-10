@@ -4769,48 +4769,4 @@ describe("a printer deleted elsewhere while a form holds it", () => {
     await vi.waitFor(() => expect(createStation).toHaveBeenCalledTimes(2));
     expect(createStation.mock.calls[1]![0]).toMatchObject({ name: "Grill", printerIds: ["old"] });
   });
-
-  it("Watchers re-reads after printer.not_found and no longer holds or offers it", async () => {
-    const load = vi.fn().mockResolvedValueOnce(ticketView).mockResolvedValue(withoutNext);
-    const save = vi.fn().mockRejectedValueOnce(deleted).mockResolvedValue(undefined);
-    const { el } = await mountWatcherPrinters({ load, setWatcherPrinters: save });
-    const combo = await openWatcherPrinters(el);
-    combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["watcher", "next"] } }));
-    await settle(el);
-    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-    await settle(el);
-    const retained = q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
-    expect(offered(retained)).not.toContain("next");
-    expect(retained.values).toEqual(["watcher"]);
-    expect(retained.countLabel(2)).not.toContain("next");
-    expect(retained.error).toBe("");
-    expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
-      DROPPED,
-    );
-  });
-
-  it.each([
-    ["a printer it already had is deleted", true],
-    ["a printer is deleted that it never had (control)", false],
-  ] as const)("Watchers' printer editor stays unchanged when %s", async (_label, dropped) => {
-    const liveData = new LiveData();
-    const reloaded: PrepStationsView = {
-      ...ticketView,
-      printers: ticketView.printers.filter(
-        (printer) => printer.id !== (dropped ? "watcher" : "next"),
-      ),
-      watchers: [{ ...ticketView.watchers[0]!, printerIds: dropped ? [] : ["watcher"] }],
-    };
-    const load = vi.fn().mockResolvedValueOnce(ticketView).mockResolvedValue(reloaded);
-    const { el, a } = await mountWatcherPrinters({ liveData, load });
-    await openWatcherPrinters(el);
-    liveData.invalidate([{ type: "printers", id: dropped ? "watcher" : "next" }]);
-    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-    await settle(el);
-    const combo = q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
-    expect(combo.values).toEqual(dropped ? [] : ["watcher"]);
-    expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(true);
-    expect(a.setWatcherPrinters).not.toHaveBeenCalled();
-  });
 });

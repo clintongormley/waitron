@@ -1161,8 +1161,6 @@ export const en = {
   "printers.delete_profile_default_one": "{role} of 1 profile: {names}",
   "printers.delete_stations": "Prints for {count} stations: {names}",
   "printers.delete_stations_one": "Prints for 1 station: {names}",
-  "printers.delete_watchers": "Prints for {count} watchers: {names}",
-  "printers.delete_watchers_one": "Prints for 1 watcher: {names}",
   "printers.delete_unknown": "{names} ({count})",
   "printers.scan_agents": "Scan for print agents",
   "printers.agent_setup_hint":
@@ -3769,8 +3767,6 @@ export const es: Record<StringKey, string> = {
   "printers.delete_profile_default_one": "{role} de 1 perfil: {names}",
   "printers.delete_stations": "Imprime para {count} estaciones: {names}",
   "printers.delete_stations_one": "Imprime para 1 estación: {names}",
-  "printers.delete_watchers": "Imprime para {count} puntos de seguimiento: {names}",
-  "printers.delete_watchers_one": "Imprime para 1 punto de seguimiento: {names}",
   "printers.delete_unknown": "{names} ({count})",
   "printers.scan_agents": "Buscar agentes de impresión",
   "printers.agent_setup_hint":

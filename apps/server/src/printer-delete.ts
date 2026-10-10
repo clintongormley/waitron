@@ -16,8 +16,6 @@ import {
   printers,
   printJobs,
   stationPrinters,
-  watcherPrinters,
-  watchers,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -132,11 +130,6 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
     .from(stationPrinters)
     .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
     .where(eq(stationPrinters.printerId, id));
-  const watching = await tx
-    .select({ id: watchers.id, name: watchers.name })
-    .from(watcherPrinters)
-    .innerJoin(watchers, eq(watchers.id, watcherPrinters.watcherId))
-    .where(eq(watcherPrinters.printerId, id));
 
   const ends: DeleteImpactItem[] = [
     { key: "print_jobs", count: jobIds.length, targets: [] },
@@ -149,7 +142,6 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
     ...ROLES.map(({ role }) => named(`profile_${role}_default`, profileTargets(role, true))),
     ...ROLES.map(({ role }) => named(`device_${role}_default`, inheritingTargets(role))),
     named("station_printers", stations),
-    named("watcher_printers", watching),
   ];
   return {
     impact: {
@@ -194,7 +186,6 @@ export async function deletePrinter(
   }
   await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, id));
   await tx.delete(stationPrinters).where(eq(stationPrinters.printerId, id));
-  await tx.delete(watcherPrinters).where(eq(watcherPrinters.printerId, id));
   await tx.delete(printerHolders).where(eq(printerHolders.printerId, id));
   await tx
     .update(printers)

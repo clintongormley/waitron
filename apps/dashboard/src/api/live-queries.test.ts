@@ -149,7 +149,7 @@ it.each([
   ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
   // `printerDeleteRules` (apps/server/src/printer-delete.ts): the printer, its live jobs and
   // invoice receipts, its holder, the devices choosing or inheriting it and the profile rows they
-  // inherit through, and the stations and watchers it prints for, each named.
+  // inherit through, and the stations it prints for, each named.
   [
     "getPrinterDeleteImpact",
     ["p1"],
@@ -163,8 +163,6 @@ it.each([
       "device_profile_printers",
       "kitchen_stations",
       "station_printers",
-      "watchers",
-      "watcher_printers",
     ],
   ],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's

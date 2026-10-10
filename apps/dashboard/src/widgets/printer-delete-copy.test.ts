@@ -70,13 +70,6 @@ describe("a printer's delete dialog copy, in English", () => {
     ],
     [item("device_cash_drawer_default", [bar]), "Default cash drawer used by 1 device: Bar till"],
     [item("station_printers", [{ id: "s-grill", name: "Grill" }]), "Prints for 1 station: Grill"],
-    [
-      item("watcher_printers", [
-        { id: "w-pass", name: "Pass" },
-        { id: "w-expo", name: "Expo" },
-      ]),
-      "Prints for 2 watchers: Pass, Expo",
-    ],
   ])("words the setting %j removes, naming each target", (removed, line) => {
     setLocale("en");
     expect(printerDeleteCopy().item(removed)).toBe(line);
@@ -129,10 +122,6 @@ describe("a printer's delete dialog copy, in Spanish", () => {
       item("station_printers", [{ id: "s-grill", name: "Grill" }]),
       "Imprime para 1 estación: Grill",
     ],
-    [
-      item("watcher_printers", [{ id: "w-pass", name: "Pass" }]),
-      "Imprime para 1 punto de seguimiento: Pass",
-    ],
   ])("words %j", (each, line) => {
     setLocale("es");
     expect(printerDeleteCopy().item(each)).toBe(line);
@@ -151,7 +140,6 @@ describe.each(["en", "es"])("every fixed item key has its own wording (%s)", (lo
       `device_${role}_default`,
     ]),
     "station_printers",
-    "watcher_printers",
   ];
 
   it("no line shows a key or a target's id, and no two keys share a line", () => {

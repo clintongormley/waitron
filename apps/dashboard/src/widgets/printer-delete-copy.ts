@@ -11,8 +11,7 @@ type Counted =
   | "printers.delete_device_default"
   | "printers.delete_profile_role"
   | "printers.delete_profile_default"
-  | "printers.delete_stations"
-  | "printers.delete_watchers";
+  | "printers.delete_stations";
 
 const ROLES = [
   ["receipt", "printers.delete_role_receipt", "printers.delete_default_receipt"],
@@ -36,7 +35,6 @@ function itemLine(item: DeleteImpactItem): string {
   if (key === "portable_holder")
     return t("printers.delete_holder").replace("{names}", () => names(item));
   if (key === "station_printers") return line("printers.delete_stations", item);
-  if (key === "watcher_printers") return line("printers.delete_watchers", item);
   for (const [role, word, defaultWord] of ROLES) {
     if (key === `device_${role}`) return line("printers.delete_device_choice", item, t(word));
     if (key === `device_${role}_default`)

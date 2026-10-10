@@ -70,8 +70,6 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_printers",
     "kitchen_stations",
     "station_printers",
-    "watchers",
-    "watcher_printers",
   ],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],

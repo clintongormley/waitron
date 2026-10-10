@@ -20,8 +20,6 @@ import {
   receiptReprints,
   stationPrinters,
   subscribeToChanges,
-  watcherPrinters,
-  watchers,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
@@ -151,7 +149,6 @@ function afterDelete(
     ),
     device_profile_printers: withoutPrinter(before.device_profile_printers!),
     station_printers: withoutPrinter(before.station_printers!),
-    watcher_printers: withoutPrinter(before.watcher_printers!),
     printer_holders: withoutPrinter(before.printer_holders!),
   };
 }
@@ -321,11 +318,6 @@ async function seedVenue() {
     { stationId: grill!.id, printerId: P },
     { stationId: drinks!.id, printerId: Q },
   ]);
-  const [pass] = await suite.db
-    .insert(watchers)
-    .values({ locationId, name: "Pass" })
-    .returning({ id: watchers.id });
-  await suite.db.insert(watcherPrinters).values({ printerId: Q, watcherId: pass!.id });
 
   const sales = [] as string[];
   for (let i = 0; i < 5; i++) sales.push(await newSale());
@@ -425,7 +417,6 @@ async function seedVenue() {
     barTill2,
     terraceTill,
     grill: grill!.id,
-    pass: pass!.id,
     jobs: {
       queued,
       printing,
@@ -556,24 +547,6 @@ describe("the printer delete impact", () => {
       refusals: [],
       ends: [{ key: "print_jobs", count: 1, targets: [] }],
       removes: [],
-    });
-  });
-
-  it("names the watcher a printer serves", async () => {
-    const v = await seedVenue();
-    const [expo] = await suite.db
-      .insert(watchers)
-      .values({ locationId: v.cfg.locationId, name: "Expo" })
-      .returning({ id: watchers.id });
-    await suite.db.insert(watcherPrinters).values({ printerId: v.Z, watcherId: expo!.id });
-
-    expect(
-      await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z)),
-    ).toEqual({
-      target: { id: v.Z, name: "Spare printer" },
-      refusals: [],
-      ends: [],
-      removes: [{ key: "watcher_printers", count: 1, targets: [{ id: expo!.id, name: "Expo" }] }],
     });
   });
 
@@ -767,21 +740,6 @@ describe("deleting a printer", () => {
     expect(await snapshot()).toEqual(afterDelete(afterZ, v.D, [v.jobs.dJob], later));
   });
 
-  it("removes a watcher's printer link and keeps the watcher", async () => {
-    const v = await seedVenue();
-    const [expo] = await suite.db
-      .insert(watchers)
-      .values({ locationId: v.cfg.locationId, name: "Expo" })
-      .returning({ id: watchers.id });
-    await suite.db.insert(watcherPrinters).values({ printerId: v.Z, watcherId: expo!.id });
-    const before = await snapshot();
-
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
-
-    expect(await snapshot()).toEqual(afterDelete(before, v.Z, [], NOW));
-    expect(before.watcher_printers).toContainEqual({ printer_id: v.Z, watcher_id: expo!.id });
-  });
-
   it("answers printer.not_found to a second delete and writes nothing", async () => {
     const v = await seedVenue();
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
@@ -838,7 +796,6 @@ describe("deleting a printer", () => {
       "devices",
       "device_profile_printers",
       "station_printers",
-      "watcher_printers",
       "printer_holders",
     ]) {
       expect(after[table], table).toEqual(before[table]);
