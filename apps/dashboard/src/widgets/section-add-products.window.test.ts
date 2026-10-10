@@ -157,6 +157,9 @@ describe.each([
       await at(width, height);
       const { picker, add, body } = await openWindow(many(200));
       if (messages === "with") {
+        // The block is measured first without the messages, so the check needs it to grow.
+        await frame();
+        await frame();
         await withMessages(picker, add);
         body.scrollTop = 0;
         await frame();

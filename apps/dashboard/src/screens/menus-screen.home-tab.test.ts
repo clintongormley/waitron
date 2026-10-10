@@ -1078,3 +1078,49 @@ describe("adding shortcuts on the Home page tab", () => {
     expect(counted.home).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("the add-shortcut window on a phone", () => {
+  const offered = Array.from({ length: 200 }, (_, index) => {
+    const n = String(index).padStart(3, "0");
+    return product(`p-${n}`, `Product ${n}`);
+  });
+
+  it("keeps Add and Cancel inside the window at 390×700 with 200 products offered and 50 chosen", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(390, 700);
+    onTestFinished(() => page.viewport(...before));
+    const client = api({
+      listLibraryProducts: vi.fn().mockResolvedValue(offered),
+      getMenuStructure: vi.fn(async (id: string) => ({
+        ...structureOf(id),
+        nodes: offered.map(({ id: productId }) => productNode(`m-${productId}`, productId)),
+      })),
+      getMenuHome: vi.fn(async () => homeWith()),
+    });
+    const el = await mountHome(client);
+    expect((await openAdd(el, "product")).options).toHaveLength(200);
+    await choose(
+      el,
+      offered.slice(0, 50).map(({ id }) => id),
+    );
+    expect(combobox(el).values).toHaveLength(50);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const body = addWindow(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(body.scrollTop).toBe(0);
+    const visible = body.getBoundingClientRect();
+    const buttons = {
+      Add: picker(el).shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!,
+      Cancel: picker(el).querySelector<HTMLElement>('[data-test="add-shortcut-cancel"]')!,
+    };
+    for (const [label, button] of Object.entries(buttons)) {
+      const box = button.getBoundingClientRect();
+      expect(box.height, `${label} is drawn`).toBeGreaterThan(0);
+      expect(box.top, `${label}: top in the window`).toBeGreaterThanOrEqual(0);
+      expect(box.bottom, `${label}: bottom in the window`).toBeLessThanOrEqual(700);
+      expect(box.left, `${label}: left in the window`).toBeGreaterThanOrEqual(0);
+      expect(box.right, `${label}: right in the window`).toBeLessThanOrEqual(390);
+      expect(box.bottom, `${label}: bottom in the body`).toBeLessThanOrEqual(visible.bottom);
+    }
+  });
+});
