@@ -144,9 +144,9 @@ write lock) stays open.
 - Find a bill (`bill-lookup-api.ts`), which shares that clause;
 - Find an invoice (`invoice-lookup-api.ts`), searching the customer's legal name.
 
-SQLite cannot fold accents in SQL. The venue store registers two scalar functions on every
-connection it opens, read and write: one answers whether a text (in parts) matches a query, the other
-gives its match order as a sortable value. Both run the shared matcher. The three lookups filter and
+SQLite cannot fold accents in SQL. The venue store registers one scalar function on every
+connection it opens, read and write, `waitron_search_rank(query, part…)`: NULL when the parts do not
+match, otherwise a sortable key from the shared matcher. The three lookups filter and
 order with them inside SQL, so paging, counting and the existing `limit` stay in the database. The
 invoice-number and bare-number forms keep their exact match and are checked first, as today. With a
 search typed, rows come in match order, then newest first; with none, newest first as today.
@@ -169,7 +169,7 @@ Test-first at every site, each with examples that tell the new rule from the old
 - results arrive in match order, with fixtures whose old order differs from the new.
 
 The matcher's own suite moves to `@waitron/shared` with it and gains the several-parts cases. The
-store's functions are tested through real SQL on a real venue database (`useVenueDb`). Tests that pin
+store's function is tested through real SQL on a store opened with `openVenueStore`, on each of its connections. Tests that pin
 the removed image-search grammar (phrases, exclusion, `or`) are deleted with it, and the PR lists
 them. Tests elsewhere that assert the old order or the old substring rule are updated to the new
 rule, keeping what each checks.

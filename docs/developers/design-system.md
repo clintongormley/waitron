@@ -2445,7 +2445,7 @@ when orders match. Floor plan uses this order in Venue operations.
 A search box sits at the top of the sidebar, above the groups: a `wt-input type="search"` with
 `hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
 **Search pages**. A staff session sees My schedule and Orders in its sidebar, without a search box.
-While the box holds a term (spaces trimmed), the nav
+While the box holds anything but spaces (a trailing space finishes the last word), the nav
 shows only the pages whose label in the current language matches it by the one search rule (see
 Remembered, searchable, filterable tables), so "categorias" finds "Categorías", plus each page that
 matches only with its group's header read beside its label. Within a group the pages whose own label

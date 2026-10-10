@@ -4909,8 +4909,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   2026-09-23, task F1's review wave). The identifier validator is in
   `packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
   `packages/store/src/append-only.ts` — the first two are in the SAME package. **Next action:**
-  export one validator from `@waitron/shared`; `packages/store` depends on nothing today, and
-  `@waitron/shared` depends on nothing either, so that edge closes no loop.
+  export one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
+  which depends on nothing, so that edge closes no loop.
   [Detail](backlog/architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
 
 - **`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one

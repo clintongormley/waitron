@@ -286,8 +286,8 @@ all.
 in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and
 that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
 local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
-one validator from `@waitron/shared`; `packages/store` depends on nothing today, and
-`@waitron/shared` depends on nothing either, so that edge closes no loop.
+one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
+which depends on nothing, so that edge closes no loop.
 
 ## `resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch table
 

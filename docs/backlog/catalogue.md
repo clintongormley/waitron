@@ -480,9 +480,8 @@ flow replaces §2's copy.
   makes its scratch folder with `tmpdir()` rather than `scratchParent()` (`scripts/scratch-dir.mjs`),
   unmeasured either way; the list of hand-written migrations in
   `docs/developers/conventions-data.md` leaves out core `0036` and `0047`, catalogue `0013` and
-  media `0004`, and A157's media `0005`; and the photo search's "a phrase cannot straddle two
-  translations of a name" is untested. **Next action:** fill the list when next touching that
-  file; the other two need a decision whether they are worth a change at all.
+  media `0004`, and A157's media `0005`. **Next action:** fill the list when next touching that
+  file; the other needs a decision whether it is worth a change at all.
 
 ## Extras and Options — deliberate limits, and what is left open
 
