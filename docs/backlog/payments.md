@@ -189,6 +189,15 @@ check a sign-out against; the fix is A471's: pass `{ personId, sessionId }` and 
 
 ## Decisions and deliberate limits
 
+- **A reader still paired at its provider is deleted in Waitron only while that provider's account
+  is not connected** (owner, 2026-10-10), after the confirmation says it stays registered there.
+  While the account is connected, a SumUp unpair call that fails, a rejected key included, still
+  answers `reader.unpair_failed` and leaves the reader switched off: a rejected key is found only
+  when Delete is pressed, because the impact read calls no provider, so the confirmation could not
+  say so beforehand; re-entering the key fixes it and the delete then unpairs; and today's code does
+  not tell a rejected key from an outage (backlog: "A failed SumUp unpair is logged with reason
+  `unknown`"). Plan: `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`.
+
 - **SumUp's card-present price is a plan choice, not a rate** (owner supplied the table, 2026-09-18).
   Tarifa Plana (€25/month, 0 % up to €2 500/month of Spanish debit/credit, then 0,79 %) is the plan to
   assume and beats Stripe Terminal on a Spanish card, so SumUp is **confirmed for the card-present

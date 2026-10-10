@@ -4907,10 +4907,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` in several
   files; one named check would keep a new query from forgetting it. Left open by A435
   step 4 (#1519).
-- **Owner question: may a reader still paired at SumUp be deleted while SumUp cannot be reached?**
-  Today its delete is refused "Connect SumUp first" while the account is disconnected, and answers
-  `reader.unpair_failed`, leaving it disabled, while SumUp rejects the stored key. Deleting it
-  locally would leave it paired at SumUp. Left open by A435 step 3 (its plan's decision 18).
+- **A Stripe reader's delete confirmation does not say the reader stays registered at Stripe**,
+  which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b.
 - **A failed SumUp unpair is logged with reason `unknown`**: `deleteReader`
   (`packages/payments-sumup/src/sumup-client.ts`) throws a plain `Error` carrying the HTTP status
   only in its message, which the log never reads, so a refused key, an outage and a dropped

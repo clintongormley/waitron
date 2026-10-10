@@ -162,6 +162,10 @@ re-checks its kind's list against the schema before building on it.
   _2026-10-10 (A435 step 3): the delete switches the reader off before calling the provider, so a
   failed unpair leaves it disabled, not deleted, and a Delete is refused `reader.unpair_in_progress`
   while another Delete or an Unpair of the reader is running._
+  _2026-10-10 (A435 step 3b, owner): while the provider's account is not connected, a
+  still-paired reader is deleted in Waitron only, once the confirmation has said it stays
+  registered there; while it is connected, a SumUp unpair call that fails still answers
+  `reader.unpair_failed`. See [the step 3b plan](../plans/2026-10-10-a435-3b-reader-delete-disconnected.md)._
 - **Removed:** its rows in `device_card_readers`, `device_profile_card_readers` and
   `card_reader_holders`.
 - **Not deletable:** the seeded demo reader, which management routes already hide.
