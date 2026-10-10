@@ -153,7 +153,6 @@ export class PrepStationsScreen extends LitElement {
       wt-data-table::part(inherited) {
         --wt-color-text: var(--wt-color-text-muted);
       }
-      wt-data-table::part(disabled-station),
       wt-data-table::part(disabled-watcher-cell) {
         color: var(--wt-color-text-muted);
       }

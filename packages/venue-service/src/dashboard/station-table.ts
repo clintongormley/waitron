@@ -27,12 +27,6 @@ export class StationTable extends LitElement {
         cursor: var(--reorder-drag-cursor, grab);
         touch-action: none;
       }
-      wt-data-table::part(today) {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        align-items: flex-start;
-      }
       wt-data-table::part(disabled) {
         color: var(--wt-color-text-muted);
       }
