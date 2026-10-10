@@ -10,6 +10,14 @@ import "./till-floor-screen.js";
 import "./till-expo-screen.js";
 import "./till-station-screen.js";
 import "./till-counter-screen.js";
+import "./till-schedule-screen.js";
+import "./till-allergen-screen.js";
+import type { TillFloorScreen } from "./till-floor-screen.js";
+import type { TillExpoScreen } from "./till-expo-screen.js";
+import type { TillStationScreen } from "./till-station-screen.js";
+import type { TillCounterScreen } from "./till-counter-screen.js";
+import type { TillScheduleScreen } from "./till-schedule-screen.js";
+import type { TillAllergenScreen } from "./till-allergen-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
 
@@ -58,37 +66,71 @@ const counterTab: TabDef = {
   cards: [{ type: "basket", colSpan: 12, rowSpan: 1, config: {} }],
 };
 
-const screens: [string, () => Promise<HTMLElement>, string][] = [
+const TILL_SPACING = { left: 40, width: 1200 };
+/** A screen drawn as one card: the page's 24px, then the card's 1px border and 16px padding. */
+const CARD_SPACING = { left: 41, width: 1198 };
+
+const screens: [string, () => Promise<HTMLElement>, string, { left: number; width: number }][] = [
   [
     "floor",
     async () =>
-      (await mountWidget("till-floor-screen", { embedded: true, zones: [], tables: [] } as never))
-        .el,
+      (
+        await mountWidget<TillFloorScreen>("till-floor-screen", {
+          embedded: true,
+          zones: [],
+          tables: [],
+        })
+      ).el,
     ".screen",
+    TILL_SPACING,
   ],
-  ["table order", async () => (await mountTableOrder({ embedded: true })).el, ".screen"],
+  [
+    "table order",
+    async () => (await mountTableOrder({ embedded: true })).el,
+    ".screen",
+    TILL_SPACING,
+  ],
   [
     "expo",
     async () =>
-      (await mountWidget("till-expo-screen", { embedded: true, api: pendingApi } as never)).el,
+      (await mountWidget<TillExpoScreen>("till-expo-screen", { embedded: true, api: pendingApi }))
+        .el,
     ".screen",
+    TILL_SPACING,
   ],
   [
     "station",
-    async () => (await mountWidget("till-station-screen", { api: pendingApi } as never)).el,
+    async () =>
+      (await mountWidget<TillStationScreen>("till-station-screen", { api: pendingApi })).el,
     ".screen",
+    TILL_SPACING,
   ],
   [
     "counter",
     async () =>
       (
-        await mountWidget("till-counter-screen", {
+        await mountWidget<TillCounterScreen>("till-counter-screen", {
           counterTab,
           store: new WorkingOrderStore(),
           operatorName: "Ana",
-        } as never)
+        })
       ).el,
     ".body.grid-body",
+    TILL_SPACING,
+  ],
+  [
+    "schedule",
+    async () =>
+      (await mountWidget<TillScheduleScreen>("till-schedule-screen", { api: pendingApi })).el,
+    ".head",
+    CARD_SPACING,
+  ],
+  [
+    "allergens",
+    async () =>
+      (await mountWidget<TillAllergenScreen>("till-allergen-screen", { products: [] })).el,
+    ".head",
+    CARD_SPACING,
   ],
 ];
 
@@ -97,7 +139,7 @@ describe("device screens at phone width", () => {
     expect(pageStyleText).toContain(`@media ${PHONE_WIDTH}`);
   });
 
-  for (const [name, mount, selector] of screens) {
+  for (const [name, mount, selector, wide] of screens) {
     it(`the ${name} screen's content starts 8px from the edge of a 411px phone`, async () => {
       await onPage(411);
       const el = await mount();
@@ -107,7 +149,7 @@ describe("device screens at phone width", () => {
     it(`the ${name} screen keeps its 1280px till spacing`, async () => {
       await onPage(1280);
       const el = await mount();
-      expect(contentBox(el, selector)).toEqual({ left: 40, width: 1200 });
+      expect(contentBox(el, selector)).toEqual(wide);
     });
   }
 });

@@ -9,6 +9,7 @@ import { t } from "../i18n/t.js";
 import { catalogues } from "../i18n/strings.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
+import { screenCardStyles } from "../widgets/screen-card-styles.js";
 import { customerProductName, productName } from "../widgets/product-name.js";
 import type { TillProduct } from "../api/client.js";
 import type { AllergenCode } from "@waitron/catalogue/src/allergens.js";
@@ -63,6 +64,7 @@ export class TillAllergenScreen extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    screenCardStyles,
     css`
       :host {
         display: block;
@@ -336,7 +338,7 @@ export class TillAllergenScreen extends LitElement {
   override render() {
     const activeLocale = this.#activeLocale();
     return html`
-      <wt-card class="screen">
+      <div class="screen">
         <header class="head">
           <div class="titles">
             <h1 class="title">${this.#t("title")}</h1>
@@ -367,7 +369,7 @@ export class TillAllergenScreen extends LitElement {
             </tbody>
           </table>
         </div>
-      </wt-card>
+      </div>
       ${this.#detail()}
     `;
   }
