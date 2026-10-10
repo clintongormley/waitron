@@ -10041,6 +10041,41 @@ describe("Deleting a printer", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
+  it("a device change re-reads the impact in the background, leaving Delete usable and a refused delete's message shown", async () => {
+    const liveData = new LiveData();
+    const getPrinterDeleteImpact = vi.fn().mockResolvedValue(cocinaImpact);
+    const { el } = await mounted({
+      liveData,
+      getPrinterDeleteImpact,
+      deletePrinter: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error("x"), { code: "connection.failed" })),
+    } as Partial<DashboardApi>);
+    await openDelete(el, "p1");
+    confirmOf(el).click();
+    await flush(el);
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("connection.failed"));
+    const reads = getPrinterDeleteImpact.mock.calls.length;
+
+    const reread = deferred<DeleteImpact>();
+    getPrinterDeleteImpact.mockReturnValueOnce(reread.promise);
+    liveData.invalidate([{ type: "devices", id: "d-bar" }]);
+    await vi.waitFor(() => expect(getPrinterDeleteImpact).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    expect(dialogOf(el)!.loading).toBe(false);
+    expect(dialogOf(el)!.impact).toBe(cocinaImpact);
+    expect(confirmOf(el).getAttribute("variant")).toBe("danger");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("connection.failed"));
+
+    const moved = { ...cocinaImpact, removes: cocinaImpact.removes.slice(0, -2) };
+    reread.resolve(moved);
+    await vi.waitFor(() => expect(dialogOf(el)!.impact).toBe(moved));
+    await flush(el);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("connection.failed"));
+  });
+
   it("a live read after a refused delete clears only a read's failure", async () => {
     const liveData = new LiveData();
     const getPrinterDeleteImpact = vi.fn().mockResolvedValue(cocinaImpact);

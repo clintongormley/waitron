@@ -65,6 +65,7 @@ export const QUERY_DEPENDENCIES = {
     "print_jobs",
     "invoice_deliveries",
     "printer_holders",
+    // The impact names devices; the open dialog keeps Delete and its message while a change re-reads.
     "devices",
     "device_profiles",
     "device_profile_printers",
