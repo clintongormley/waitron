@@ -6584,6 +6584,31 @@ describe("till-app", () => {
       expect(floor(el)!.tables).toEqual([tableB]);
     });
 
+    it("a floor read that answers what the floor already shows keeps the same tables list", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockResolvedValueOnce([{ ...freeTable }])
+          .mockResolvedValueOnce([tableB]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      const shown = floor(el)!.tables;
+      expect(shown).toEqual([freeTable]);
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      expect(currentApi.getTablesState).toHaveBeenCalledTimes(2);
+      expect(floor(el)!.tables).toBe(shown);
+
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
     async function floorWithPollOut() {
       const poll = deferredTables();
       const getTablesState = vi.fn().mockResolvedValueOnce([freeTable]);

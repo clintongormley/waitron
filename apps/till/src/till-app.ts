@@ -1173,6 +1173,7 @@ export class TillApp extends LitElement {
   /** Each table read takes the next number as it starts; see {@link #applyTables}. */
   #tablesRead = 0;
   #tablesApplied = 0;
+  #tablesJson = "[]";
   #counterRetrievals = new Map<object, string>();
   @state() private transferSnapshot?: TransferSnapshot;
   @state() private transferQueueOpen = false;
@@ -5054,11 +5055,15 @@ export class TillApp extends LitElement {
   }
 
   /** A read's answer replaces the tables unless a read that started after it was applied first, so
-   * a poll answering late never undoes an action's newer read. */
+   * a poll answering late never undoes an action's newer read. An answer equal to the tables shown
+   * still counts as applied, but keeps the list shown. */
   #applyTables(read: number, tables: TableState[]): void {
     if (read <= this.#tablesApplied) return;
-    this.tables = tables;
     this.#tablesApplied = read;
+    const json = JSON.stringify(tables);
+    if (json === this.#tablesJson) return;
+    this.#tablesJson = json;
+    this.tables = tables;
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
