@@ -2740,6 +2740,16 @@ export class DashboardApi {
     return this.#request<void>("/management-api/receipt-language", "PUT", { language });
   }
 
+  previewReceiptDraft(draft: {
+    departmentId: string | null;
+    receipt: DepartmentReceiptConfig;
+    settings: VenueReceiptSettings;
+    language?: string;
+    paperWidth?: PrintPaperWidth;
+  }): Promise<ReceiptPreview> {
+    return this.#request("/management-api/receipt-preview", "POST", draft);
+  }
+
   /** Draws a sample receipt with this trim, at the given paper width and in the given receipt
    * language if any; saves and prints nothing. */
   previewReceipt(

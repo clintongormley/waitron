@@ -1,5 +1,5 @@
 import "./errors.js";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   devices,
@@ -17,6 +17,8 @@ import {
   getPrintedReceipt,
   resolveDevicePrinterIds,
   validateReceiptConfig,
+  validateDepartmentReceipt,
+  validateVenueReceiptSettings,
   type ReceiptConfig,
 } from "@waitron/layouts";
 import { imageExists, readImageBytes } from "@waitron/media";
@@ -28,7 +30,8 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { ReceiptQrText } from "@waitron/fiscal";
-import { AppError } from "@waitron/shared";
+import { AppError, resolveReceiptTrim, type DepartmentReceiptConfig } from "@waitron/shared";
+import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import {
   previewPrintJob,
@@ -174,13 +177,50 @@ function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): E
   return settings.find((setting) => setting.paperWidth === width) ?? DEFAULT_PRINTER;
 }
 
-/**
- * A sample receipt drawn by the formatter a sale's receipt prints from, with unsaved trim. It
- * files, saves and enqueues nothing. A GET, so a dashboard refresh can ask for it passively; the
- * `receipt` parameter holds the JSON object a save sends as `receipt`, an optional `paperWidth`
- * picks one of the widths an answer offers, and an optional `language` draws in another of the
- * receipt languages the venue may choose.
- */
+async function draftBody(c: Context): Promise<Record<string, unknown>> {
+  const invalid = () => new AppError("management.request_invalid", { field: "body" });
+  const reader = c.req.raw.body?.getReader();
+  if (!reader) throw invalid();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      // Enforce the bound on bytes received, including requests without Content-Length.
+      if (size > 32768) {
+        await reader.cancel();
+        throw invalid();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
+  } catch {
+    throw invalid();
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) throw invalid();
+  const result = body as Record<string, unknown>;
+  if (
+    !Object.hasOwn(result, "departmentId") ||
+    !Object.hasOwn(result, "receipt") ||
+    !Object.hasOwn(result, "settings")
+  )
+    throw invalid();
+  if (
+    Object.keys(result).some(
+      (key) => !["departmentId", "receipt", "settings", "language", "paperWidth"].includes(key),
+    )
+  )
+    throw invalid();
+  return result;
+}
+
 export function mountReceiptPreviewApi(
   app: Hono,
   deps: { db: Database; cfg: TillConfig; receiptQrText?: ReceiptQrText },
@@ -188,6 +228,166 @@ export function mountReceiptPreviewApi(
 ): void {
   const sample = sampleSale(deps.receiptQrText);
   const logoCache = createLogoCache();
+  app.post("/management-api/receipt-preview", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      // Refuse unauthorised bodies without holding the write queue while their bytes arrive.
+      await withTransaction(deps.db, (tx) =>
+        authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "layout.configure",
+          touch: false,
+        }),
+      );
+      const body = await draftBody(c);
+      const departmentId =
+        body.departmentId === null
+          ? null
+          : requireUuidParam(body.departmentId as string, "departmentId");
+      const requestedWidth =
+        body.paperWidth === undefined
+          ? undefined
+          : requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
+      const snapshot = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "layout.configure",
+        });
+        const rules = await readVenueReceiptLanguageRules(tx, deps.cfg);
+        const current = await readReceiptLanguage(tx, deps.cfg.locationId);
+        const locale =
+          body.language === undefined
+            ? current.locale
+            : requireEnum(body.language, "language", rules.choices);
+        const settings = validateVenueReceiptSettings(body.settings);
+        const department = validateDepartmentReceipt(body.receipt, rules.choices);
+        if (departmentId === null && Object.keys(department).length !== 0)
+          throw new AppError("management.request_invalid", { field: "receipt" });
+        const scope = { ...deps.cfg, receiptLanguages: rules.choices };
+        let receiptHeader: { tradingName: string | null; printTradingName: boolean } | undefined;
+        let authored: DepartmentReceiptConfig | null = null;
+        let storedDepartment: DepartmentReceiptConfig | null = null;
+        if (departmentId !== null) {
+          storedDepartment = await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
+          const [row] = await tx
+            .select({
+              tradingName: departments.tradingName,
+              printTradingName: departmentSalePolicies.printTradingName,
+            })
+            .from(departments)
+            .leftJoin(
+              departmentSalePolicies,
+              eq(departmentSalePolicies.departmentId, departments.id),
+            )
+            .where(
+              and(
+                eq(departments.id, departmentId),
+                eq(departments.locationId, deps.cfg.locationId),
+              ),
+            );
+          receiptHeader = {
+            tradingName: row!.tradingName,
+            printTradingName: row!.printTradingName ?? true,
+          };
+          authored = department;
+        }
+        const venueContacts =
+          departmentId === null
+            ? (await getPrintedReceipt(tx, requestedWidth ?? "80mm")).receipt
+            : {};
+        const receipt = resolveReceiptTrim(
+          authored,
+          { phone: venueContacts.phone, email: venueContacts.email, ...settings },
+          locale,
+          current.locale,
+        );
+        const available = await activeReceiptSettings(tx, deps.cfg.locationId);
+        const printer =
+          requestedWidth === undefined
+            ? chooseSetting(available, undefined)
+            : (available.find((setting) => setting.paperWidth === requestedWidth) ?? {
+                ...DEFAULT_PRINTER,
+                paperWidth: requestedWidth,
+              });
+        const taxpayer = (await readTenant(tx))!;
+        let savedLogo: MonoRaster | null = null;
+        if (receipt.logo !== undefined) {
+          if (authored?.logo) {
+            if (storedDepartment?.logo === authored.logo) {
+              savedLogo = (
+                await VENUE_SERVICE.readPrintedDepartmentReceipt(
+                  tx,
+                  scope,
+                  departmentId!,
+                  printer.paperWidth,
+                )
+              ).logo;
+            }
+          } else {
+            const stored = await getPrintedReceipt(tx, printer.paperWidth);
+            if (stored.receipt.logo === receipt.logo) savedLogo = stored.logo;
+          }
+        }
+        return {
+          receipt,
+          printer,
+          available,
+          locale,
+          receiptHeader,
+          issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+          address: await readReceiptAddress(tx, deps.cfg.locationId, settings),
+          savedLogo,
+        };
+      });
+      const { receipt, printer, available, locale, receiptHeader, issuer, address, savedLogo } =
+        snapshot;
+      const filename = receipt.logo;
+      const logo =
+        filename === undefined
+          ? null
+          : (savedLogo ??
+            (await drawPreviewLogo(logoCache, filename, printer.paperWidth, {
+              exists: () => imageExists(deps.db, filename),
+              bytes: async () => (await readImageBytes(deps.db, filename))?.bytes ?? null,
+            })));
+      const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
+      const draw = (trim: ReceiptConfig, venueAddress = address, picture = logo) =>
+        previewPrintJob(
+          formatReceipt({
+            result: sample,
+            receipt: trim,
+            printer,
+            invoiceLocale: locale,
+            receiptHeader,
+            issuer,
+            venueAddress,
+            logo: picture,
+            simulated: deps.cfg.practiceMode,
+          }),
+          { widthDots },
+        );
+      const preview = draw(receipt);
+      const without = (other: PrintJobPreview) => addedBlocks(other.blocks, preview.blocks);
+      const markOf = (field: "headerSubtitle" | "footerMessage" | "phone" | "email") =>
+        receipt[field] ? without(draw({ ...receipt, [field]: undefined })) : null;
+      const response: ReceiptPreviewResponse = {
+        preview,
+        paperWidth: printer.paperWidth,
+        paperWidths: printPaperWidth.enumValues.filter((width) =>
+          available.some((setting) => setting.paperWidth === width),
+        ),
+        marks: {
+          headerSubtitle: markOf("headerSubtitle"),
+          footerMessage: markOf("footerMessage"),
+          phone: markOf("phone"),
+          email: markOf("email"),
+          address: address.length ? without(draw(receipt, [])) : null,
+          logo: logo === null ? null : without(draw(receipt, address, null)),
+        },
+      };
+      return c.json(response);
+    }),
+  );
   app.get("/management-api/receipt-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

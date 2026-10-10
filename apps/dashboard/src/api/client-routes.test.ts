@@ -1185,3 +1185,20 @@ it("saves the venue default colour through its own catalogue settings route", as
     ["/management-api/catalogue-settings/default-color", "PUT", { color: null }],
   ]);
 });
+
+describe("department draft preview request", () => {
+  it("posts both unsaved drafts and independent preview choices", async () => {
+    const answer = { preview: { text: "Draft" }, marks: {} };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+    const draft = {
+      departmentId: null,
+      receipt: {},
+      settings: { headerSubtitle: "Unsaved" },
+      language: "ca-ES",
+      paperWidth: "58mm" as const,
+    };
+    await expect(api.previewReceiptDraft(draft)).resolves.toEqual(answer);
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
+  });
+});

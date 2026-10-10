@@ -36,7 +36,9 @@ their full text.
   receipt branch, together with department/defaults routes and bounded global reads.
   Thermal receipts now resolve the saved department and current venue defaults; automatic
   document failures use a savepoint while the sale and drawer keep their own failure rules.
-  A4/PDF presentation and delivery contacts, sale answers, previews and editors remain.
+  A4/PDF presentation and delivery contacts are also built on the receipt branch.
+  Draft previews now compose department translations and unsaved venue defaults through POST,
+  with an independent language; sale answers, editors and caller retirement remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
