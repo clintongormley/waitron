@@ -531,6 +531,11 @@ describe("the menu editor's heading", () => {
     const el = await onPhone(name);
     const heading = q(el, "h1")!;
     expect(text(heading)).toBe(name);
+    // The tree turns narrow a frame after it is drawn, and the page is measured as the person sees it.
+    const tree = q(el, "dashboard-menu-structure-table")!.shadowRoot!.querySelector(
+      "wt-data-table",
+    )!;
+    await vi.waitFor(() => expect(tree.hasAttribute("narrow")).toBe(true));
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const h1 = heading.getBoundingClientRect();
     const path = trail(el).getBoundingClientRect();

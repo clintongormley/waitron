@@ -3575,6 +3575,24 @@ describe("the menu's own row", () => {
     }
   });
 
+  // On a narrow table the counts are taken out of the flow, after a name that runs past the
+  // screen; held outside the table's scroll box, they would make the whole page scroll sideways.
+  it("keeps a long menu name's hidden counts inside the table's scroll box on a phone", async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(390, 844);
+      const el = await mount({ menuName: LONG_MENU_NAME });
+      await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
+      const count = inTable(el, '[data-test="count-root"]')!;
+      expect(count.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
+      const scroll = table(el).shadowRoot!.querySelector(".scroll")!;
+      expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
   const section = (
     memberId: string,
     sectionId: string,

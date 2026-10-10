@@ -200,6 +200,11 @@ export class MenuStructureTable extends LitElement {
         ${visuallyHiddenStyles}
         clip-path: inset(50%);
       }
+      /* The narrow table's hidden count is placed against this, inside the table's scroll box, not
+         against the page, which a long name would then widen. */
+      wt-data-table::part(root-label) {
+        position: relative;
+      }
       wt-data-table::part(menu-divider) {
         align-self: stretch;
         margin: var(--wt-space-1) 0;
@@ -1055,7 +1060,7 @@ export class MenuStructureTable extends LitElement {
             >${swatchChip(row.color)}</span
           >`;
     return html`<span part="folder-cell"
-      >${folderFrame(swatch)}<span
+      >${folderFrame(swatch)}<span part="root-label"
         ><strong part="root-name" data-test="root-name">${row.name}</strong
         ><span part="count" data-test="count-root">${row.counts}</span></span
       ></span
