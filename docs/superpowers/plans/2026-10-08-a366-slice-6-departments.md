@@ -164,7 +164,7 @@ migration: "no venue reset needed".
 
 **Part C (Task C1).** `department-zones.ts` and its tests, `strings.ts`; `packages/venue-service/src/dashboard/venue-operations-screen.ts`
 only if A429 Task 2.7 put the floor plan action there; A429's canvas primitive (a read-only
-property, if it has none).
+property, if it has none). (Corrected 2026-10-10: a separate primitive instead; see Task C1.)
 
 ### 2. Does this slice need slice 2, 3, 4 or 5?
 

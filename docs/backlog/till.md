@@ -253,8 +253,7 @@ screen is designed.
   and bookings when a table is removed, so a table the master no longer has can really go. Five
   slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
   routes and columns) needs a venue reset. [Spec](../superpowers/specs/2026-10-08-floor-plan-design.md),
-  [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A366-6 rebuilds the Departments
-  and zones screen the editor opens from; A182 (canvases retired) touches the till's floor
+  [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A182 (canvases retired) touches the till's floor
   screen that slice 3 replaces.
 
 ## A466 — floor plan editor follow-ups
