@@ -44,7 +44,6 @@ export type { DataTableColumn } from "./components/wt-data-table.js";
 export { WtFloorCanvas } from "./components/wt-floor-canvas.js";
 export type { FloorCanvasCopy } from "./components/wt-floor-canvas.js";
 export { WtFloorPlanCanvas } from "./components/wt-floor-plan-canvas.js";
-export { WtSheet } from "./components/wt-sheet.js";
 export type {
   FloorPlanCanvasCopy,
   PlanCanvasTable,
@@ -52,6 +51,7 @@ export type {
   TableRotate,
   TableSelect,
 } from "./components/wt-floor-plan-canvas.js";
+export { WtSheet } from "./components/wt-sheet.js";
 export {
   FLOOR_ASPECT,
   GRID_STEP,

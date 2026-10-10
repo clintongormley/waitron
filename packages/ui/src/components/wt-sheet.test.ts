@@ -88,6 +88,8 @@ it("scrolls a long body within 60% of the viewport's height", async () => {
     const { body } = parts(el);
     expect(body.clientHeight).toBe(480);
     expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    body.scrollTop = 100;
+    expect(body.scrollTop).toBe(100);
   } finally {
     await page.viewport(width, height);
   }
@@ -95,7 +97,9 @@ it("scrolls a long body within 60% of the viewport's height", async () => {
 
 it("its toggle is at least the tap size", async () => {
   const el = await mount('<wt-sheet heading="Tables"></wt-sheet>');
-  expect(parts(el).toggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  const tap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+  expect(tap).toBeGreaterThan(0);
+  expect(parts(el).toggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(tap);
 });
 
 it("paints from tokens", async () => {
