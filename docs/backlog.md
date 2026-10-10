@@ -2628,6 +2628,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   quantities** — left open by W69 (#1325). Cause and real-venue reproduction remain unverified.
   Inspect the real till before attributing them to W69 or changing quantity/money handling.
 
+- **A retained-course phone fixture clips the Back button's outline at the right edge.**
+  A435 step 5's 390 px captures show it with the real till app and icons. Reproduce it through
+  a normal till boot before changing layout; the fixture's cause and the base version are
+  unverified. The retained course label and active-only picker are visible in the same captures.
+
 - **The canvas Add and Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow
   to show "A331 look canvas (copy)" whole** — seen and not changed. Left open by A331 batch 3b
   (#1415).
