@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
@@ -463,7 +463,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       expect((await access(profiles.pass)).departmentId).toBeNull();
     });
 
-    it("keeps the kitchen screens of a profile it gives a scope, switched-off stations included", async () => {
+    it("keeps stored kitchen screen bindings while hiding deleted stations from scoped profile choices", async () => {
       const { locationId, profiles, runSeed } = await venue();
       const [grill] = await db
         .insert(kitchenStations)
@@ -481,12 +481,22 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         { deviceProfileId: profiles.till, screen: "pass", stationId: bar!.id },
       ]);
 
+      const bindings = () =>
+        db
+          .select()
+          .from(deviceProfileKitchenScreenStations)
+          .where(eq(deviceProfileKitchenScreenStations.deviceProfileId, profiles.till))
+          .orderBy(deviceProfileKitchenScreenStations.stationId);
+      const before = await bindings();
+      expect(before.map((row) => row.stationId)).toEqual([grill!.id, bar!.id].sort());
+
       await runSeed();
 
+      expect(await bindings()).toEqual(before);
       const screens = await db.transaction((tx) => readProfileKitchenScreens(tx, { locationId }));
       const till = screens.find((entry) => entry.profileId === profiles.till)?.screens;
       expect({ ...till?.pass, stationIds: [...(till?.pass?.stationIds ?? [])].sort() }).toEqual({
-        stationIds: [grill!.id, bar!.id].sort(),
+        stationIds: [bar!.id],
         zoneIds: null,
       });
     });
