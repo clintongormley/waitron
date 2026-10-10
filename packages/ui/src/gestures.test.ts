@@ -372,9 +372,84 @@ describe("Gestures", () => {
     up(2, 300, 150);
     down(3, 50, 50);
     up(1, 200, 150);
-    expect(gestures.active).toBe(false);
+    expect(gestures.active).toBe(true);
     up(3, 50, 50);
+    expect(gestures.active).toBe(false);
     expect(called([])).toEqual([]);
+  });
+
+  it("a third finger keeps a finished pinch spent until it lifts", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(3, 400, 150);
+    up(1, 200, 150);
+    up(2, 300, 150);
+    down(4, 250, 150);
+    up(4, 250, 150);
+    expect(handlers.tap.mock.calls).toEqual([]);
+    expect(gestures.active).toBe(true);
+    up(3, 400, 150);
+    expect(gestures.active).toBe(false);
+    expect(called([])).toEqual([]);
+  });
+
+  it("a third finger's cancel ends a spent pinch once it is the last, and cancels nothing", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(3, 400, 150);
+    up(1, 200, 150);
+    up(2, 300, 150);
+    expect(gestures.active).toBe(true);
+    dispatch(window, "pointercancel", 3, 400, 150);
+    expect(gestures.active).toBe(false);
+    expect(called([])).toEqual([]);
+    tapAt(250, 150, 4);
+    expect(handlers.tap).toHaveBeenCalledTimes(1);
+  });
+
+  it("a third finger's moves after a pinch neither pinch nor let it end", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(3, 400, 150);
+    up(1, 200, 150);
+    up(2, 300, 150);
+    move(3, 500, 150);
+    expect(gestures.active).toBe(true);
+    expect(called([])).toEqual([]);
+  });
+
+  it("a third finger's cancel during a pinch leaves the pinch going", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(3, 400, 150);
+    dispatch(window, "pointercancel", 3, 400, 150);
+    move(2, 400, 150);
+    expect(handlers.pinch).toHaveBeenCalledWith({ ratio: 2, x: 300, y: 150, dx: 50, dy: 0 });
+    expect(handlers.cancel).not.toHaveBeenCalled();
+  });
+
+  it("a third finger lifting during a pinch leaves the pinch going", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(3, 400, 150);
+    up(3, 400, 150);
+    move(2, 400, 150);
+    expect(handlers.pinch).toHaveBeenCalledWith({ ratio: 2, x: 300, y: 150, dx: 50, dy: 0 });
+    up(1, 200, 150);
+    up(2, 400, 150);
+    expect(gestures.active).toBe(false);
+  });
+
+  it("a reused id of a third finger starts afresh", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(3, 400, 150);
+    up(1, 200, 150);
+    up(2, 300, 150);
+    down(3, 10, 10);
+    up(3, 10, 10);
+    expect(handlers.tap).toHaveBeenCalledTimes(1);
+    expect(gestures.active).toBe(false);
   });
 
   it("a third pointer is ignored", () => {

@@ -26,7 +26,7 @@ export interface GestureHandlers {
   pan?(by: { dx: number; dy: number }): void;
   /** Two pointers: their distance's ratio since the last call, their midpoint now (client px), and how far it moved. */
   pinch?(change: { ratio: number; x: number; y: number; dx: number; dy: number }): void;
-  /** The gesture ended without its own end: a pointercancel at any point, a second pointer
+  /** The gesture ended without its own end: a pointercancel of a pointer it uses, a second pointer
    * arriving during a hold or a hold's drag, or a pointerdown reusing a pointer id the gesture
    * still tracks. Not sent once a pinch has lost a pointer. */
   cancel?(): void;
@@ -51,6 +51,8 @@ export class Gestures {
   readonly #handlers: GestureHandlers;
   #state: State = "idle";
   readonly #pointers = new Map<number, Spot>();
+  /** Pointers pressed during a pinch or once it is spent: they take no part, but keep it active. */
+  readonly #extras = new Set<number>();
   #pressId!: number;
   #target!: EventTarget | null;
   #pointerType!: string;
@@ -82,10 +84,11 @@ export class Gestures {
   readonly #onDown = (e: PointerEvent): void => {
     if (e.button !== 0 || (e.pointerType === "mouse" && e.ctrlKey)) return;
     // A pointerup that never arrived leaves its id tracked, and a mouse always reuses id 1.
-    if (this.#pointers.has(e.pointerId)) {
+    if (this.#pointers.has(e.pointerId) || this.#extras.has(e.pointerId)) {
       if (this.#state !== "spent") this.#handlers.cancel?.();
       this.#closeTapWindow();
       this.#pointers.clear();
+      this.#extras.clear();
       this.#end();
     }
     const spot = { x: e.clientX, y: e.clientY };
@@ -100,7 +103,10 @@ export class Gestures {
       this.#holdTimer = setTimeout(this.#onHold, LONG_PRESS_MS);
       return;
     }
-    if (this.#state === "pinching" || this.#state === "spent") return;
+    if (this.#state === "pinching" || this.#state === "spent") {
+      this.#extras.add(e.pointerId);
+      return;
+    }
     if (this.#state === "held" || this.#state === "dragging") this.#handlers.cancel?.();
     this.#clearHold();
     this.#closeTapWindow();
@@ -111,6 +117,13 @@ export class Gestures {
 
   readonly #onWindow = (e: Event): void => {
     const event = e as PointerEvent;
+    if (this.#extras.has(event.pointerId)) {
+      if (e.type !== "pointermove") {
+        this.#extras.delete(event.pointerId);
+        this.#endIfLifted();
+      }
+      return;
+    }
     const spot = this.#pointers.get(event.pointerId);
     if (!spot) return;
     spot.x = event.clientX;
@@ -181,7 +194,7 @@ export class Gestures {
         this.#state = "spent";
         break;
     }
-    if (this.#pointers.size === 0) this.#end();
+    this.#endIfLifted();
   }
 
   #onCancel(pointerId: number): void {
@@ -189,7 +202,7 @@ export class Gestures {
     if (this.#state !== "spent") this.#handlers.cancel?.();
     this.#closeTapWindow();
     this.#state = "spent";
-    if (this.#pointers.size === 0) this.#end();
+    this.#endIfLifted();
   }
 
   readonly #onHold = (): void => {
@@ -235,6 +248,10 @@ export class Gestures {
     clearTimeout(this.#tapTimer);
     this.#tapTimer = undefined;
   };
+
+  #endIfLifted(): void {
+    if (this.#pointers.size === 0 && this.#extras.size === 0) this.#end();
+  }
 
   #end(): void {
     this.#state = "idle";
