@@ -414,13 +414,13 @@ it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 
   await viewport(1280, 800);
   const el = await open();
   await expect
-    .poll(() => el.shadowRoot!.querySelector("aside floor-plan-tables-panel"))
+    .poll(() => el.shadowRoot!.querySelector(".side floor-plan-tables-panel"))
     .not.toBeNull();
   expect(sheet(el)).toBeNull();
   await page.viewport(390, 844);
   await expect.poll(() => sheet(el)).not.toBeNull();
   expect(sheet(el)!.querySelector("floor-plan-tables-panel")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("aside")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".side")).toBeNull();
   expect(sheet(el)!.expanded).toBe(false);
   expect(sheet(el)!.heading).toBe("Tables");
 });
@@ -431,4 +431,24 @@ it("the sheet's heading names the selected table", async () => {
   await expect.poll(() => sheet(el)).not.toBeNull();
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   expect(sheet(el)!.heading).toBe("T1");
+});
+
+it("keeps the same canvas when the page narrows past 600 px", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector("floor-plan-tables-panel")).not.toBeNull();
+  const before = canvas(el);
+  await page.viewport(390, 844);
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  expect(canvas(el)).toBe(before);
+});
+
+it("tells the panel when it sits in the sheet", async () => {
+  await viewport(390, 844);
+  const el = await open();
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  expect(
+    sheet(el)!.querySelector<HTMLElement & { inSheet: boolean }>("floor-plan-tables-panel")!
+      .inSheet,
+  ).toBe(true);
 });

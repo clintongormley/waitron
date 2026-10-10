@@ -172,9 +172,12 @@ export class FloorPlanEditor extends LitElement {
       }
       .layout {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem);
+        grid-template-columns: minmax(0, 1fr) minmax(192px, 288px);
         gap: var(--wt-space-4);
         align-items: start;
+      }
+      .layout.narrow {
+        display: block;
       }
       .width-probe {
         height: 0;
@@ -628,24 +631,23 @@ export class FloorPlanEditor extends LitElement {
     const panel = html`<floor-plan-tables-panel
       .draft=${draft}
       .selected=${this.selected}
+      .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
-    if (!this.narrow)
-      return html`<div class="layout">
-        ${canvas}
-        <aside>${panel}</aside>
-      </div>`;
-    const heading =
-      draft.tables.find((table) => table.key === this.selected)?.label ??
-      t("floor_plan_editor.tables");
-    return html`${canvas}
-      <wt-sheet
-        .heading=${heading}
-        .expanded=${this.sheetOpen}
-        @wt-sheet-toggle=${(event: CustomEvent<{ expanded: boolean }>) => {
-          this.sheetOpen = event.detail.expanded;
-        }}
-        >${panel}</wt-sheet
-      >`;
+    return html`<div class="layout ${this.narrow ? "narrow" : ""}">
+      ${canvas}${this.narrow ? this.#sheet(draft, panel) : html`<div class="side">${panel}</div>`}
+    </div>`;
+  }
+
+  #sheet(draft: FloorPlanDraft, panel: unknown) {
+    const label = draft.tables.find((table) => table.key === this.selected)?.label.trim();
+    return html`<wt-sheet
+      .heading=${label || t("floor_plan_editor.tables")}
+      .expanded=${this.sheetOpen}
+      @wt-sheet-toggle=${(event: CustomEvent<{ expanded: boolean }>) => {
+        this.sheetOpen = event.detail.expanded;
+      }}
+      >${panel}</wt-sheet
+    >`;
   }
 
   override render() {

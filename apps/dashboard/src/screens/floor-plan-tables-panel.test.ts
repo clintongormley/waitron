@@ -35,10 +35,17 @@ const draft: FloorPlanDraft = {
   joins: [],
 };
 
-async function open(): Promise<FloorPlanTablesPanel> {
-  const { el } = await mountWidget<FloorPlanTablesPanel>("floor-plan-tables-panel", { draft });
-  await el.updateComplete;
-  return el;
+async function mount(props: Partial<FloorPlanTablesPanel> = {}) {
+  const mounted = await mountWidget<FloorPlanTablesPanel>("floor-plan-tables-panel", {
+    draft,
+    ...props,
+  });
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+async function open(props: Partial<FloorPlanTablesPanel> = {}): Promise<FloorPlanTablesPanel> {
+  return (await mount(props)).el;
 }
 
 const rows = (el: FloorPlanTablesPanel) => [
@@ -97,4 +104,25 @@ it("pressing a placed table selects it and changes nothing", async () => {
   row(el, "Terrace 1").click();
   expect(selects).toEqual(["m1"]);
   expect(changes).toEqual([]);
+});
+
+it("paints a placed table's row in the muted text colour", async () => {
+  const { el, host } = await mount();
+  host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
+  host.style.setProperty("--wt-color-text", "rgb(11, 12, 13)");
+  const inner = (label: string) => row(el, label).shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(inner("Terrace 1")).color).toBe("rgb(41, 42, 43)");
+  expect(getComputedStyle(inner("Terrace 2")).color).toBe("rgb(11, 12, 13)");
+});
+
+it("names a table with a blank name Unnamed", async () => {
+  const el = await open({
+    draft: { tables: [table("m1", "  "), table("m2", "Terrace 1")], joins: [] },
+  });
+  expect(rows(el).map((r) => r.textContent!.trim())).toEqual(["Unnamed", "Terrace 1"]);
+});
+
+it("leaves out its heading inside a sheet, whose toggle already names it", async () => {
+  const el = await open({ inSheet: true });
+  expect(el.shadowRoot!.querySelector("h2")).toBeNull();
 });

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtSheet } from "@waitron/ui";
+import { draftFromPlan, patchTable } from "./floor-plan-draft.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -103,7 +105,7 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     onTestFinished(() => page.viewport(...before));
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
     await expect
-      .poll(() => el.shadowRoot!.querySelector("aside floor-plan-tables-panel"))
+      .poll(() => el.shadowRoot!.querySelector(".side floor-plan-tables-panel"))
       .not.toBeNull();
     await expectNoA11yViolations(host);
   });
@@ -120,6 +122,32 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await sheet()!.updateComplete;
     await el.updateComplete;
     expect(sheet()!.expanded).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("heads the sheet Tables when the selected table has no name, accessibly", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(...before));
+    const locale = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(locale));
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    const sheet = () => el.shadowRoot!.querySelector<WtSheet>("wt-sheet");
+    await expect.poll(sheet).not.toBeNull();
+    el.shadowRoot!.querySelector("wt-floor-plan-canvas")!.dispatchEvent(
+      new CustomEvent("floor-plan-change", {
+        detail: { draft: patchTable(draftFromPlan(plan), "m2", { label: " " }) },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=save]")!.click();
+    await el.updateComplete;
+    expect(sheet()!.expanded).toBe(true);
+    expect(sheet()!.heading).toBe("Tables");
+    await sheet()!.updateComplete;
     await expectNoA11yViolations(host);
   });
 

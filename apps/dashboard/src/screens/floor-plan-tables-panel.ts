@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -37,6 +37,8 @@ export class FloorPlanTablesPanel extends LitElement {
 
   @property({ attribute: false }) draft!: FloorPlanDraft;
   @property() selected: string | null = null;
+  /** Inside a `wt-sheet` the toggle names the list, so the panel drops its own heading. */
+  @property({ type: Boolean }) inSheet = false;
   @property() zoneName = "";
   @property({ attribute: false }) takenElsewhere: ReadonlySet<string> = new Set();
   @property({ attribute: false }) nextKey!: () => string;
@@ -44,6 +46,18 @@ export class FloorPlanTablesPanel extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+  }
+
+  #collatorLocale: string | null = null;
+  #collator!: Intl.Collator;
+
+  #sorter(): Intl.Collator {
+    const locale = currentLocale();
+    if (locale !== this.#collatorLocale) {
+      this.#collatorLocale = locale;
+      this.#collator = new Intl.Collator(locale, { numeric: true });
+    }
+    return this.#collator;
   }
 
   #send<T>(type: string, detail: T): void {
@@ -60,10 +74,10 @@ export class FloorPlanTablesPanel extends LitElement {
   }
 
   override render() {
-    const collator = new Intl.Collator(currentLocale(), { numeric: true });
+    const collator = this.#sorter();
     const tables = [...this.draft.tables].sort((a, b) => collator.compare(a.label, b.label));
     return html`
-      <h2>${t("floor_plan_editor.tables")}</h2>
+      ${this.inSheet ? nothing : html`<h2>${t("floor_plan_editor.tables")}</h2>`}
       <ul>
         ${tables.map(
           (table) =>
@@ -74,7 +88,7 @@ export class FloorPlanTablesPanel extends LitElement {
                 data-table=${table.key}
                 ?data-placed=${table.placement !== null}
                 @click=${() => this.#press(table)}
-                >${table.label}</wt-button
+                >${table.label.trim() || t("floor_plan_editor.unnamed")}</wt-button
               >
             </li>`,
         )}
