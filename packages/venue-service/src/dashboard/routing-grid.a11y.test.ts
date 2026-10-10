@@ -80,19 +80,6 @@ const storedOnlyNoCategory = routing({
   ],
 });
 
-/** Bread × Every zone falls through to the default; Bread × Terrace inherits No preparation;
- * Mojito × Every zone names the default station itself. */
-const extrasNotes = routing({
-  cells: [
-    ...routing().cells,
-    {
-      row: { kind: "product", productId: "mojito" },
-      zoneId: null,
-      target: { kind: "station", stationId: "kitchen" },
-    },
-  ],
-});
-
 /** Drinks × Every zone stores a Lunch line Lunch's menus no longer offer; Mojito inherits it. */
 const flaggedLine = routing({
   periods: [
@@ -124,26 +111,10 @@ const states: Record<
     expand?: boolean;
     open?: string;
     refusal?: RoutingGrid["refusal"];
-    /** Cells and whether each must carry the extras note before the scan. */
-    notes?: Record<string, boolean>;
     /** Cells and whether each must carry a period line's not-on-menus mark before the scan. */
     flags?: Record<string, boolean>;
   }
 > = {
-  "extras notes": {
-    model: extrasNotes,
-    expand: true,
-    notes: {
-      'td[data-row="p:bread"][data-zone="every"]': true,
-      'td[data-row="all"][data-zone="every"]': true,
-      'td[data-row="p:bread"][data-zone="terrace"]': true,
-      'td[data-row="p:mojito"][data-zone="every"]': false,
-    },
-  },
-  "extras notes, read-only default": {
-    model: routing({ canMakeDefault: false }),
-    notes: { 'td[data-row="all"][data-zone="every"]': true },
-  },
   "flagged period line": {
     model: flaggedLine,
     expand: true,
@@ -202,11 +173,6 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
           throw new Error("the editor did not open");
       });
       await el.shadowRoot!.querySelector("routing-cell-editor")!.updateComplete;
-    }
-    for (const [selector, carries] of Object.entries(state.notes ?? {})) {
-      const note = el.shadowRoot!.querySelector(`${selector} [data-test="extra-note"]`);
-      if ((note !== null) !== carries)
-        throw new Error(`${selector}: extras note ${carries ? "missing" : "unexpected"}`);
     }
     for (const [selector, carries] of Object.entries(state.flags ?? {})) {
       const flag = el.shadowRoot!.querySelector(`${selector} [data-test="period-flag"]`);

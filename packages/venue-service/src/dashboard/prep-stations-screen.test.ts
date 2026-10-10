@@ -1740,16 +1740,14 @@ it.each([
   {
     locale: "en",
     heading: "Category or product",
-    field:
-      "All categories, Every zone: Bar, the default station. Bar (default) — as an extra, follows its dish",
+    field: "All categories, Every zone: Bar, the default station",
     disable: "Disable",
     enable: "Enable",
   },
   {
     locale: "es",
     heading: "Categoría o producto",
-    field:
-      "Todas las categorías, Todas las zonas: Bar, la estación predeterminada. Bar (predeterminada) — como extra, sigue a su plato",
+    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
     disable: "Deshabilitar",
     enable: "Habilitar",
   },

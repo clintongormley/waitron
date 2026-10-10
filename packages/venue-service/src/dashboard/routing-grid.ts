@@ -222,7 +222,6 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      .cell .note,
       .cell .warning {
         margin: 0;
       }
@@ -331,33 +330,13 @@ export class RoutingGrid extends LitElement {
     return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true });
   }
 
-  /**
-   * How an extra is made where the cell's choice is the default station's fall-through or No
-   * preparation: with its dish (`chooseExtraMaker`).
-   */
-  #extraNoteText(shown: RouteTarget | null, inherited: SelectedCell): string | null {
-    const choice = shown ?? inherited.target;
-    if (choice?.kind === "no_preparation") return t("routing.extra_no_preparation");
-    if (shown === null && inherited.decidedBy?.kind === "default") {
-      return format("routing.extra_default", { station: this.#targetText(choice) });
-    }
-    return null;
-  }
-
-  /** The lines and the note are drawn in the cell's button and read as part of its name. */
+  /** Period lines and their marks show in the cell's button and are read as part of its name. */
   #labelWithNote(label: string, ...notes: (string | null)[]): string {
     return notes.reduce<string>(
       (named, note) =>
         note === null ? named : format("routing.cell_label_note", { label: named, note }),
       label,
     );
-  }
-
-  #extraNote(note: string | null, { inName }: { inName: boolean }) {
-    if (note === null) return nothing;
-    return html`<span class="note" data-test="extra-note" aria-hidden=${inName ? "true" : nothing}
-      >${note}</span
-    >`;
   }
 
   /** Where a disabled station's work goes, before any opening hours are applied. */
@@ -428,7 +407,6 @@ export class RoutingGrid extends LitElement {
     target: RouteTarget | null,
     station: { text: string; inherited: boolean },
     lines: { shown: readonly PeriodLineText[]; inherited: boolean },
-    note: string | null,
   ) {
     return html`<button
       type="button"
@@ -449,7 +427,6 @@ export class RoutingGrid extends LitElement {
                 : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
             }`,
       )}
-      ${this.#extraNote(note, { inName: true })}
     </button>`;
   }
 
@@ -463,7 +440,6 @@ export class RoutingGrid extends LitElement {
         ? this.pending
         : undefined;
     const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
-    const note = this.#extraNoteText(shown, selected);
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const periodLines = this.#periodLines(entry.row, zone.id, waiting);
@@ -476,7 +452,6 @@ export class RoutingGrid extends LitElement {
         state: t(shown === null ? "routing.inherited" : "routing.set_here"),
       }),
       ...periodLines.lines.flatMap((line) => [line.text, line.flagText ?? null]),
-      note,
     );
     return html`${this.#button(
       address,
@@ -484,7 +459,6 @@ export class RoutingGrid extends LitElement {
       shown,
       { text, inherited: shown === null },
       { shown: periodLines.lines, inherited: periodLines.inherited },
-      note,
     )}${this.#error(address)}${
       disabled === null
         ? nothing
@@ -517,11 +491,9 @@ export class RoutingGrid extends LitElement {
         : html`<span class="repair" data-test="default-repair"
             >${t("routing.default_repair")}</span
           >`;
-    const note = name === null ? null : format("routing.extra_default", { station: name });
     if (!model.canMakeDefault) {
-      return html`${name !== null ? html`<span>${name}</span> ` : nothing}${this.#extraNote(note, {
-          inName: false,
-        })}${repair} <span class="note">${t("routing.default_read_only")}</span>`;
+      return html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
+        <span class="note">${t("routing.default_read_only")}</span>`;
     }
     const text = name ?? t("routing.no_station");
     const label = this.#labelWithNote(
@@ -531,9 +503,8 @@ export class RoutingGrid extends LitElement {
         value: text,
         state: t("routing.default_state"),
       }),
-      note,
     );
-    return html`${this.#button(address, label, target, { text, inherited: false }, { shown: [], inherited: false }, note)}${this.#error(address)}${repair}`;
+    return html`${this.#button(address, label, target, { text, inherited: false }, { shown: [], inherited: false })}${this.#error(address)}${repair}`;
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */

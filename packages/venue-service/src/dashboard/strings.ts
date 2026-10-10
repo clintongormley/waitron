@@ -654,8 +654,6 @@ const en = {
   "routing.period_more": "{first} +{count}",
   "routing.period_in_department": "{period} ({department})",
   "routing.period_not_on_menus": "Not on {periods} menus",
-  "routing.extra_default": "{station} (default) — as an extra, follows its dish",
-  "routing.extra_no_preparation": "No preparation — as an extra, follows its dish",
   "routing.disabled_station": "{station} (Disabled)",
   "routing.disabled_target": "{station}: Disabled.",
   "routing.default_read_only":
@@ -1366,8 +1364,6 @@ const es: Record<keyof typeof en, string> = {
   "routing.period_more": "{first} +{count}",
   "routing.period_in_department": "{period} ({department})",
   "routing.period_not_on_menus": "No está en los menús de {periods}",
-  "routing.extra_default": "{station} (predeterminada) — como extra, sigue a su plato",
-  "routing.extra_no_preparation": "Sin preparación — como extra, sigue a su plato",
   "routing.disabled_station": "{station} (Deshabilitada)",
   "routing.disabled_target": "{station}: Deshabilitada.",
   "routing.default_read_only":
