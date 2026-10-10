@@ -187,6 +187,52 @@ function product(
 }
 
 describe("product-list", () => {
+  it("searches names only: a product's and its variants', and a folder's own", async () => {
+    const { el, table, root } = await mountTree({
+      categories: [
+        { id: "beb", name: "Bebidas", parentId: null, color: null },
+        { id: "mix", name: "Mixers", parentId: "beb", color: null },
+      ],
+      products: [
+        product({
+          id: "cerveza",
+          name: "Cerveza",
+          primaryCategoryId: "mix",
+          unitPrice: "2.50",
+          ordering: "not_sold_separately",
+          modifiers: [{ kind: "extras", id: "ex-1" }],
+          variants: [
+            { ...bunVariant, id: "cana", name: "Caña", unitPrice: null },
+            { ...bunVariant, id: "jarra", name: "Jarra", unitPrice: null },
+          ],
+        }),
+        product({ id: "agua", name: "Agua", primaryCategoryId: null }),
+      ],
+      extraLists: [{ id: "ex-1", name: "Tapas" }],
+    });
+    const searchFor = async (text: string) => {
+      el.search = text;
+      await el.updateComplete;
+      await table.updateComplete;
+      return rowKeys(root);
+    };
+    expect(await searchFor("jarra")).toContain("cerveza");
+    expect(await searchFor("cerveza caña")).toContain("cerveza");
+    const price = cellUnder(root, "cerveza", t("product.price")).textContent!;
+    expect(price).toContain("2,50");
+    for (const other of [
+      "2,50",
+      "2.50",
+      euros("2,50"),
+      t("product.ordering_not_sold_separately"),
+      "Tapas",
+      "bebidas mixers",
+    ]) {
+      expect(await searchFor(other), other).toEqual([]);
+    }
+    expect(await searchFor("bebidas")).toEqual(["folder:beb"]);
+  });
+
   it("names a switched-off station with no replacement instead of nowhere", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -3965,69 +4011,43 @@ describe("the Products tree's Name column", () => {
     expect(headings).not.toContain(t("editor.modifiers"));
   });
 
-  it("still finds an empty category by its parent's path", async () => {
-    const { el, root } = await mountDeep({ products: [] });
-    el.search = "Food / Meat";
-    await el.updateComplete;
-    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(rowKeys(root)).toContain("folder:g");
-    expect(rowKeys(root)).not.toContain("folder:d");
-  });
-
-  it("still finds a product by its category's path", async () => {
-    const { el, root } = await mountDeep();
-    el.search = "Food / Meat / Grill";
-    await el.updateComplete;
-    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(rowKeys(root)).toContain("ribs");
-    expect(rowKeys(root)).not.toContain("chop");
-  });
-
-  it.each(["Food › Meat › Grill", "Food > Meat > Grill"])(
-    "finds a product by its category's path typed as %s",
-    async (typed) => {
-      const { el, root } = await mountDeep();
-      el.search = typed;
-      await el.updateComplete;
-      await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-      expect(rowKeys(root)).toContain("ribs");
-      expect(rowKeys(root)).not.toContain("chop");
-    },
-  );
-
-  it.each(["Food › Meat", "Food > Meat"])(
-    "finds an empty category by its parent's path typed as %s",
+  it.each(["Food / Meat", "Food › Meat", "Food > Meat"])(
+    "does not find an empty category by its parent's path typed as %s",
     async (typed) => {
       const { el, root } = await mountDeep({ products: [] });
       el.search = typed;
       await el.updateComplete;
       await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-      expect(rowKeys(root)).toContain("folder:g");
-      expect(rowKeys(root)).not.toContain("folder:d");
+      expect(rowKeys(root)).toEqual([]);
     },
   );
 
-  it("finds a product by its category's path after a category above it is renamed", async () => {
+  it.each([
+    "Food / Meat / Grill",
+    "Food › Meat › Grill",
+    "Food > Meat > Grill",
+    "Grill Food / Meat",
+  ])("does not find a product by its category's path typed as %s", async (typed) => {
+    const { el, root } = await mountDeep();
+    el.search = typed;
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(rowKeys(root)).toEqual([]);
+  });
+
+  it("finds a category by its own name after it is renamed", async () => {
     const { el, root } = await mountDeep();
     el.categories = el.categories.map((each) =>
       each.id === "m" ? { ...each, name: "Butcher" } : each,
     );
-    el.search = "Food / Butcher / Grill";
+    el.search = "Butcher";
     await el.updateComplete;
     await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(rowKeys(root)).toContain("ribs");
-    el.search = "Food / Meat / Grill";
+    expect(rowKeys(root)).toContain("folder:m");
+    el.search = "Meat";
     await el.updateComplete;
     await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(rowKeys(root)).not.toContain("ribs");
-  });
-
-  it("does not find a product by text that runs from one spelling of its path into the next", async () => {
-    const { el, root } = await mountDeep();
-    el.search = "Grill Food / Meat";
-    await el.updateComplete;
-    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(rowKeys(root)).not.toContain("ribs");
+    expect(rowKeys(root)).not.toContain("folder:m");
   });
 });
 

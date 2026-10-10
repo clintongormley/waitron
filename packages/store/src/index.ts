@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { archiveTo } from "./archive.js";
 import { type CommitListener, type Connections, connectionPair } from "./connections.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
+import { registerSearchFunction } from "./search-function.js";
 import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
 import { watchdogStopped } from "./venue-liveness.js";
 
@@ -153,6 +154,7 @@ async function openConnection(path: string): Promise<DatabaseSync> {
     // Connection settings rather than file operations, so no lock stands between these and success.
     connection.exec("pragma foreign_keys = on");
     connection.exec("pragma recursive_triggers = on");
+    registerSearchFunction(connection);
   } catch (error) {
     // A file whose bytes are not a database is first refused by the switch into write-ahead mode,
     // with the handle already open; a boot that retries would keep a descriptor per attempt.
@@ -179,6 +181,7 @@ async function openConnection(path: string): Promise<DatabaseSync> {
 function openReadConnection(path: string): DatabaseSync {
   const connection = new DatabaseSync(path, { readOnly: true });
   connection.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
+  registerSearchFunction(connection);
   return connection;
 }
 
@@ -190,9 +193,9 @@ function openReadConnection(path: string): DatabaseSync {
  * THE HANDLE lands on whichever connection the routing picks at that instant, so an attachment
  * belongs on a connection a caller holds itself.
  *
- * **The schemas arrive as arguments rather than as imports.** This package imports nothing from
- * the workspace, because `@waitron/db` imports it; `scripts/workspace-cycles.test.ts` fails on the
- * loop an import back would close.
+ * **The schemas arrive as arguments rather than as imports.** This package imports only
+ * `@waitron/shared` from the workspace; `@waitron/db` imports this package, so
+ * `scripts/workspace-cycles.test.ts` fails on the loop an import back would close.
  *
  * **Two connections per file, and one Drizzle instance over the pair**, so that while
  * `withWriteLock` holds a transaction open, a read whose asynchronous context began outside the

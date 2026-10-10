@@ -133,3 +133,15 @@ export type { OptionSelection, OptionSnapshot } from "./option-selection.js";
 export type { ExtraSelection } from "./extra-selection.js";
 export type { ClassificationEntry, SaleLineClassification } from "./sale-line-classification.js";
 export { compareLabels, createLabelComparator } from "./compare-labels.js";
+export {
+  compareSearchRanks,
+  foldCache,
+  foldForSearch,
+  searchBy,
+  searchFor,
+  searchRankKey,
+  textSearch,
+  type NameSearch,
+  type SearchRank,
+  type TextSearch,
+} from "./text-search.js";

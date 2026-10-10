@@ -940,6 +940,70 @@ describe("the invoice at full payment", () => {
     });
   });
 
+  it("finds an invoice by every word of the customer's name, closest first, keeping a trailing space", async () => {
+    const issueTo = async (legalName: string) => {
+      const billId = await tabWith("Caña");
+      await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
+        revision: 0,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName,
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+      const paymentId = await insertPayment(billId, { applied: 300 });
+      const completed = await inTx((tx) =>
+        completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+      );
+      return { billId, invoiceNumber: completed.invoice!.invoiceNumber };
+    };
+    const nunez = await issueTo("Distribuciones Núñez SL");
+    const closest = await issueTo("Rank Vermut SL");
+    const looser = await issueTo("Rank Vermutería SL");
+    const gin = await issueTo("Gin SL");
+    const ginger = await issueTo("Ginger Club SL");
+    const ampersand = await issueTo("Smith & Sons SL");
+    const session = await inTx(async (tx) => {
+      const [admin] = await tx
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.role, "admin"));
+      return loginWithPin(tx, {
+        deviceId: venue.cfg.origin.deviceId,
+        personId: admin!.id,
+        pin: "1234",
+      });
+    });
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...fiscal(), cfg: venue.cfg, secureCookies: false, venueLocale: LOCALE },
+      () => {},
+    );
+    const found = async (q: string) => {
+      const res = await app.request(`/api/invoices/lookup?q=${encodeURIComponent(q)}`, {
+        headers: { cookie: `${SESSION_COOKIE}=${session.token}` },
+      });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { invoices: { workingOrderId: string }[] }).invoices.map(
+        (row) => row.workingOrderId,
+      );
+    };
+    expect(await found("nunez distribuciones")).toEqual([nunez.billId]);
+    expect(await found("&")).toEqual([]);
+    expect(await found(nunez.invoiceNumber)).toEqual([nunez.billId]);
+    expect(await found(` ${nunez.invoiceNumber} `)).toEqual([nunez.billId]);
+    expect(await found("smith sons")).toEqual([ampersand.billId]);
+    expect(await found("rank vermut")).toEqual([closest.billId, looser.billId]);
+    const finished = await found("gin ");
+    expect(finished).toContain(gin.billId);
+    expect(finished).not.toContain(ginger.billId);
+    expect(await found("gin")).toEqual(expect.arrayContaining([gin.billId, ginger.billId]));
+    expect(await found(`${"x".repeat(100)}  `)).toEqual([]);
+  });
+
   it("requires a session and a bounded nonempty invoice search", async () => {
     const session = await inTx(async (tx) => {
       const [admin] = await tx

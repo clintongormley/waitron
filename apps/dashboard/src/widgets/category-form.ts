@@ -24,23 +24,11 @@ export function categoryAncestors(
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
-  separator = PATH_SEPARATOR,
 ): string {
   return categoryAncestors(category, categories)
     .map(({ name }) => name)
     .reverse()
-    .join(separator);
-}
-
-/** The path spelled with each separator a person might type, one spelling per line so a term
- * typed into a one-line search box cannot run from the end of one spelling into the next. */
-export function categoryPathSearchText(
-  category: CategorySummary,
-  categories: readonly CategorySummary[],
-): string {
-  return [PATH_SEPARATOR, " / ", " > "]
-    .map((separator) => categoryPath(category, categories, separator))
-    .join("\n");
+    .join(PATH_SEPARATOR);
 }
 
 export function categoryWithDescendants(

@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { sales, tenders, withTransaction, workingOrderLines } from "@waitron/db";
+import { diningTables, sales, tenders, withTransaction, workingOrderLines } from "@waitron/db";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -15,7 +16,7 @@ import {
   voidInvoice,
   type OrderVenue,
 } from "./testing/order-venue.js";
-import { listOrders } from "./orders-list.js";
+import { listOrders, type OrderCursor, type OrderListFilter } from "./orders-list.js";
 import "./errors.js";
 
 let venue: OrderVenue;
@@ -336,6 +337,96 @@ describe("filters and search", () => {
     const credited = (await list("anyDate=true&limit=200&credited=true")).rows;
     expect(ids(credited)).toContain(id);
     expect(credited.every((row) => row.credited !== null)).toBe(true);
+  });
+});
+
+describe("a word search", () => {
+  async function partyNamed(name: string): Promise<{ tabId: string; tableId: string }> {
+    const party = await seatedWith(venue);
+    const named = await send(venue.app, venue.cookie, "PUT", `/api/parties/${party.partyId}/name`, {
+      name,
+      expectedPartyRevision: party.revision,
+    });
+    expect(named.status).toBe(200);
+    return party;
+  }
+  async function search(
+    q: string,
+    page: Partial<Pick<OrderListFilter, "limit" | "after">> = {},
+  ): Promise<{ ids: string[]; next: OrderCursor | null }> {
+    const answer = await withTransaction(venue.db, (tx) =>
+      listOrders(tx, {
+        status: "all",
+        dates: "any",
+        credited: false,
+        limit: 200,
+        scope: "all",
+        search: q,
+        ...page,
+      }),
+    );
+    return { ids: ids(answer.rows), next: answer.next };
+  }
+
+  it("finds every word in any order, ignoring accents and capitals", async () => {
+    const { tabId } = await partyNamed("José García");
+    expect((await search("garcia jose")).ids).toEqual([tabId]);
+    expect((await search("GARCÍA")).ids).toEqual([tabId]);
+  });
+
+  it("finds a bill with no party name by its table, and never by the word null", async () => {
+    const { tabId, tableId } = await seatedWith(venue);
+    await withTransaction(venue.db, (tx) =>
+      tx.update(diningTables).set({ label: "Terraza 4" }).where(eq(diningTables.id, tableId)),
+    );
+    expect((await rowOf(tabId)).partyName).toBeNull();
+    expect((await search("terraza")).ids).toEqual([tabId]);
+    expect((await search("null")).ids).not.toContain(tabId);
+  });
+
+  it("finds nothing for a search of only punctuation", async () => {
+    await partyNamed("Smith & Co");
+    expect((await search("smith")).ids).toHaveLength(1);
+    expect((await search("&")).ids).toEqual([]);
+  });
+
+  it("lists the closest match first, whichever is newer, and a trailing space ends the word", async () => {
+    const gin = await partyNamed("Gin");
+    const ginger = await partyNamed("Ginger Club");
+    expect((await search("gin")).ids).toEqual([gin.tabId, ginger.tabId]);
+    expect((await search("gin ")).ids).toEqual([gin.tabId]);
+  });
+
+  it("pages through ranks tied in pairs, a page ending inside a pair, with no row repeated or skipped", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-04-04T12:00:00.000Z") });
+    try {
+      for (const name of ["Zorba", "Zorba Uno", "Zorbas", "Zorba", "Zorba Uno"])
+        await partyNamed(name);
+    } finally {
+      vi.useRealTimers();
+    }
+    const whole = await search("zorba");
+    expect(whole.ids).toHaveLength(5);
+    expect(whole.next).toBeNull();
+    // Pages of one and of three each end inside a pair tied on rank.
+    for (const limit of [1, 3]) {
+      const walked: string[] = [];
+      let after: OrderCursor | undefined;
+      for (let pages = 0; pages < 5; pages++) {
+        const page = await search("zorba", { limit, ...(after === undefined ? {} : { after }) });
+        walked.push(...page.ids);
+        if (page.next === null) break;
+        expect(typeof page.next.rank).toBe("number");
+        after = page.next;
+      }
+      expect(walked, `limit ${limit}`).toEqual(whole.ids);
+    }
+  });
+
+  it("refuses a page bookmark without a rank", async () => {
+    await expect(
+      search("zorba", { after: { at: "2026-04-04T12:00:00.000Z", id: randomUUID() } }),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "after" } });
   });
 });
 

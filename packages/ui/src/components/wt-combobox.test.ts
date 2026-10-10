@@ -182,6 +182,108 @@ test("filters the option list as the search box is typed into", async () => {
   expect([...rows].map((row) => row.textContent?.trim())).toEqual(["Vegan", "Vegetarian"]);
 });
 
+const DRINKS: ComboboxOption[] = [
+  { value: "virgin", label: "Virgin Mary" },
+  { value: "ginger", label: "Ginger Ale" },
+  { value: "tonic-gin", label: "Tonic Gin" },
+  { value: "gin-tonic", label: "Gin & Tónic" },
+  { value: "gin", label: "Gin" },
+];
+
+function optionLabels(el: WtCombobox): (string | undefined)[] {
+  return [...el.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+    row.textContent?.trim(),
+  );
+}
+
+async function openSearch(options: ComboboxOption[]) {
+  const el = await mountWith('<wt-combobox label="Drinks"></wt-combobox>', options);
+  await userEvent.click(fieldParts(el).trigger);
+  return { el, search: el.shadowRoot!.querySelector<HTMLInputElement>(".search")! };
+}
+
+test("the search finds every word in any order and lists the closest first", async () => {
+  const { el, search } = await openSearch(DRINKS);
+  await userEvent.type(search, "gin");
+  expect(optionLabels(el)).toEqual([
+    "Gin",
+    "Gin & Tónic",
+    "Tonic Gin",
+    "Ginger Ale",
+    "Virgin Mary",
+  ]);
+  await userEvent.clear(search);
+  await userEvent.type(search, "tonic gin");
+  expect(optionLabels(el)).toEqual(["Gin & Tónic", "Tonic Gin"]);
+});
+
+test("a trailing space finishes the word", async () => {
+  const { el, search } = await openSearch(DRINKS);
+  await userEvent.type(search, "gin ");
+  expect(optionLabels(el)).toEqual(["Gin", "Gin & Tónic", "Tonic Gin"]);
+});
+
+test("a search of only punctuation lists nothing", async () => {
+  const { el, search } = await openSearch(DRINKS);
+  await userEvent.type(search, "&");
+  expect(optionLabels(el)).toEqual([]);
+});
+
+test("a search of only spaces is no search", async () => {
+  const { el, search } = await openSearch(DRINKS);
+  await userEvent.type(search, "  ");
+  expect(optionLabels(el)).toEqual(DRINKS.map((option) => option.label));
+});
+
+test("matches are ranked within each group, and the groups keep their order", async () => {
+  const { el, search } = await openSearch([
+    { value: "pink", label: "Pink Gin", group: "A" },
+    { value: "fizz", label: "Gin Fizz", group: "A" },
+    { value: "tonic", label: "Tonic" },
+    { value: "ginger", label: "Ginger", group: "B" },
+    { value: "gin", label: "Gin", group: "B" },
+  ]);
+  await userEvent.type(search, "gin");
+  const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="group"]')];
+  expect(
+    groups.map((group) => [
+      el.shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!.textContent!.trim(),
+      ...[...group.querySelectorAll('[role="option"]')].map((row) => row.textContent!.trim()),
+    ]),
+  ).toEqual([
+    ["A", "Gin Fizz", "Pink Gin"],
+    ["B", "Gin", "Ginger"],
+  ]);
+});
+
+test("the add row is not offered for a label that differs only in accents or capitals", async () => {
+  const { el, search } = await openSearch([{ value: "cafe", label: "Café" }]);
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.type(search, "CAFE");
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+  await userEvent.type(search, "s");
+  expect(el.shadowRoot!.querySelector(".add")).not.toBeNull();
+});
+
+test("the search and the add row follow an option's new label, even on the same option object", async () => {
+  const cafe: ComboboxOption = { value: "cafe", label: "Café" };
+  const { el, search } = await openSearch([cafe, { value: "te", label: "Té" }]);
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.type(search, "cafe");
+  expect(optionLabels(el)).toEqual(["Café"]);
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+  cafe.label = "Cortado";
+  el.options = [...el.options];
+  await el.updateComplete;
+  expect(optionLabels(el)).toEqual(["Add 'cafe'"]);
+  await userEvent.clear(search);
+  await userEvent.type(search, "CORTADO");
+  expect(optionLabels(el)).toEqual(["Cortado"]);
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+});
+
 test("filtering is case-insensitive", async () => {
   const { el, trigger } = await mountWithOptions();
   await userEvent.click(trigger);
@@ -796,7 +898,7 @@ test("a combobox that has never been opened lists everything and has no active r
   expect(el.shadowRoot!.querySelector(".option.active")).toBeNull();
 });
 
-test("ignores the spaces around the typed text when filtering and when offering to add it", async () => {
+test("ignores leading spaces; a trailing space finishes the word; the add row trims both", async () => {
   const { el, trigger } = await mountWithOptions();
   el.allowAdd = true;
   await el.updateComplete;
@@ -806,10 +908,14 @@ test("ignores the spaces around the typed text when filtering and when offering 
   });
   await userEvent.click(trigger);
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
-  await userEvent.type(search, "  veg  ");
+  await userEvent.type(search, "  veg");
   expect(
     [...el.shadowRoot!.querySelectorAll('[role="option"]')].map((r) => r.textContent!.trim()),
   ).toEqual(["Vegan", "Vegetarian", "Add 'veg'"]);
+  await userEvent.type(search, "  ");
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[role="option"]')].map((r) => r.textContent!.trim()),
+  ).toEqual(["Add 'veg'"]);
   await userEvent.click(el.shadowRoot!.querySelector(".add")!);
   expect(added).toBe("veg");
 });
@@ -3154,7 +3260,7 @@ test("while searching, a row matches on its valueLabel and shows it, with no ind
   host.style.setProperty("--wt-space-4", "7px");
   await userEvent.click(fieldParts(el).trigger);
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
-  await userEvent.type(search, "drinks ›");
+  await userEvent.type(search, "drinks alcoholic");
   expect(rowTexts(el)).toEqual([
     "Drinks › Alcoholic drinks",
     "Drinks › Alcoholic drinks › Cocktails",
@@ -3177,7 +3283,10 @@ test("at phone width, a panel near the right edge that widens for a search's ful
     await new Promise(requestAnimationFrame);
     const opened = popup.getBoundingClientRect();
     expect(opened.right).toBeLessThanOrEqual(innerWidth - 8);
-    await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "drinks ›");
+    await userEvent.type(
+      el.shadowRoot!.querySelector<HTMLInputElement>(".search")!,
+      "drinks alcoholic",
+    );
     await new Promise(requestAnimationFrame);
     expect(rowTexts(el)).toEqual([
       "Drinks › Alcoholic drinks",

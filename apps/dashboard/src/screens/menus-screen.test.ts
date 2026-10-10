@@ -4685,6 +4685,26 @@ describe("the Structure tree", () => {
       );
     });
 
+    it("removes the rows ticked during a search, and only those", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "Lemonade" });
+      await settleStructure(el);
+      await pressSelect(el);
+      await tick(el, "m-drinks/m-lemonade");
+      await tick(el, "m-fav/m-fav-lemonade");
+      await openRemove(el);
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 2 items?");
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "s-drinks", memberId: "m-lemonade" },
+          { listId: "s-fav", memberId: "m-fav-lemonade" },
+        ]),
+      );
+      expect(writeCalls(client)).toEqual(["removeSectionMembers"]);
+    });
+
     it("trims the open Remove confirm when a live update takes a row away, and closes it once none is left", async () => {
       const live = new LiveData();
       const client = api({ liveData: live });

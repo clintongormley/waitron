@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 import { AllergenPicker } from "./allergen-picker.js";
 
@@ -335,6 +335,32 @@ describe("allergen-picker guards", () => {
     expect(changes).toEqual([]);
     await setReviewed(el, true);
     expect(el.value).toEqual({});
+  });
+
+  it("finds every word in any order, ignoring accents, in the language shown, closest first", async () => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    await openPicker(el);
+    const offered = async (value: string) => {
+      el.shadowRoot!.querySelector("[data-test=allergen-search]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      return [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=choose-]")].map(
+        (choice) => choice.dataset.test!.slice("choose-".length),
+      );
+    };
+    setLocale("es-ES");
+    expect(await offered("cascara frutos")).toEqual(["nuts"]);
+    expect(await offered("&")).toEqual([]);
+    setLocale("en-GB");
+    expect(await offered("frutos")).toEqual([]);
+    expect(await offered("nuts")).toEqual(["nuts", "peanuts"]);
+    expect(await offered("nut")).toEqual(["nuts", "peanuts"]);
+    expect(await offered("nut ")).toEqual([]);
   });
 
   it("says no allergen matches a search that finds none", async () => {

@@ -21,8 +21,7 @@ import {
   productStatusName,
   vatClassName,
 } from "../i18n/domain.js";
-import { categoryPathSearchText, categoryWithDescendants } from "./category-form.js";
-import { priceSearchText } from "./form-fields.js";
+import { categoryWithDescendants } from "./category-form.js";
 import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { fillPlaceholders, productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
@@ -377,7 +376,6 @@ export class ProductList extends LitElement {
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
-  #categorySearchTexts: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
   #pointerDrag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null =
     null;
@@ -654,12 +652,6 @@ export class ProductList extends LitElement {
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
     if (changed.has("categories")) {
       this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
-      this.#categorySearchTexts = new Map(
-        this.categories.map((category) => [
-          category.id,
-          categoryPathSearchText(category, this.categories),
-        ]),
-      );
     }
     if (changed.has("nameDraft")) {
       const draft = this.nameDraft;
@@ -910,11 +902,6 @@ export class ProductList extends LitElement {
     return parts.join(", ");
   }
 
-  #categorySearchText(id: string | null): string {
-    if (id === null) return "";
-    return this.#categorySearchTexts.get(id) ?? t("editor.missing_choice");
-  }
-
   #modifierNames(product: Product): string {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
@@ -1009,11 +996,7 @@ export class ProductList extends LitElement {
         label: t("product.name"),
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: ({ product }) =>
-          [
-            product.name,
-            ...product.variants.map(({ name }) => name),
-            this.#categorySearchText(product.primaryCategoryId),
-          ].join(" "),
+          [product.name, ...product.variants.map(({ name }) => name)].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) => {
           const { color, inheritedFrom } =
             product.color === null
@@ -1088,18 +1071,12 @@ export class ProductList extends LitElement {
             }`;
         },
         sortValue: (row) => this.#prices(row).low,
-        searchValue: (row) => {
-          const { low, high } = this.#prices(row);
-          const ends = this.#amounts(row).filter((raw) => [low, high].includes(Number(raw)));
-          return priceSearchText(this.#price(row), ends);
-        },
       },
       {
         key: "modifiers",
         choosable: "shown",
         label: t("editor.modifiers"),
         cell: ({ product, variant }) => (variant ? nothing : this.#modifierNames(product)),
-        searchValue: ({ product, variant }) => (variant ? "" : this.#modifierNames(product)),
       },
       {
         key: "ordering",
@@ -1116,7 +1093,6 @@ export class ProductList extends LitElement {
             >${orderingName(product.ordering)}</span
           >`;
         },
-        searchValue: ({ product, variant }) => (variant ? "" : orderingName(product.ordering)),
         sortValue: ({ product }) => PRODUCT_ORDERINGS.indexOf(product.ordering),
         filter: {
           label: t("product.ordering"),
@@ -1398,7 +1374,7 @@ export class ProductList extends LitElement {
                 : row.kind === "root" || row.kind === "draft"
                   ? ""
                   : column.key === "name"
-                    ? `${row.folder.name} ${this.#categorySearchText(row.folder.parentId)}`
+                    ? row.folder.name
                     : "",
           }
         : {}),

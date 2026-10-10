@@ -38,25 +38,6 @@ JavaScript, and name sorting still uses `Intl.Collator` for accented names.
 remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
 measure a way to bound name sorting without changing its results.
 
-## Product search and image search follow different rules, and a search of only punctuation lists every product
-
-**OPEN (left by #1478, 2026-10-09).** Two behaviours #1478's PR description named and did not change:
-
-- **Two matching rules.** The till's product search and the dashboard's till home page preview
-  (`searchFor`, `packages/catalogue/src/device-home.ts`) accept the word still being typed anywhere
-  inside a word of the name, so "irg" finds "Virgin Mary". The image library's search
-  (`fieldHolds`, `packages/media/src/images.ts`) accepts it only at the start of a word
-  (`startsWith`). #1478 kept "anywhere" so a one-word product search finds what it found before.
-- **Punctuation alone matches everything.** A query with no letter or digit holds no words, so
-  `searchFor` keeps every name. Run 2026-10-09 against `searchFor` at #1478's merge (`f88f9f495`),
-  through a throwaway Vitest case in `packages/catalogue`: "&" and "-" each returned all five names
-  of a five-name list, in the order given; the case's expected value was an empty object, so a
-  filtered answer would have shown up in the failure diff.
-
-**Next action:** the owner decides whether the two searches should share one rule (which, and
-whether image search should rank by the same closest-match order), and whether a punctuation-only
-search should list everything, nothing, or names containing that character.
-
 ## A negative catalogue price can still be stored by a direct call
 
 **A negative catalogue price can still be stored by a direct call — OPEN (left by #487).** A
@@ -499,9 +480,8 @@ flow replaces §2's copy.
   makes its scratch folder with `tmpdir()` rather than `scratchParent()` (`scripts/scratch-dir.mjs`),
   unmeasured either way; the list of hand-written migrations in
   `docs/developers/conventions-data.md` leaves out core `0036` and `0047`, catalogue `0013` and
-  media `0004`, and A157's media `0005`; and the photo search's "a phrase cannot straddle two
-  translations of a name" is untested. **Next action:** fill the list when next touching that
-  file; the other two need a decision whether they are worth a change at all.
+  media `0004`, and A157's media `0005`. **Next action:** fill the list when next touching that
+  file; the other needs a decision whether it is worth a change at all.
 
 ## Extras and Options — deliberate limits, and what is left open
 

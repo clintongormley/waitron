@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { languageDisplayName } from "@waitron/shared";
+import { foldCache, languageDisplayName, searchFor } from "@waitron/shared";
 import { tableNoMatches, QueryController } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import {
@@ -380,16 +380,18 @@ export class ContentTranslationsDialog extends LitElement {
     this.#choices.set(translationKey(row), choice);
     this.#applyReview();
   }
+  readonly #folded = foldCache<TranslationTarget>();
   #visible(): TranslationTarget[] {
-    const query = this.search.trim().toLocaleLowerCase(currentLocale());
-    return (
-      this.model?.rows.filter((row) =>
-        this.editedOnly
-          ? this.model!.isEdited(row)
-          : (this.kinds.length === 0 || this.kinds.includes(row.kind)) &&
-            (!this.why || row.reason === this.why) &&
-            label(row).toLocaleLowerCase(currentLocale()).includes(query),
-      ) ?? []
+    const rows = this.model?.rows ?? [];
+    if (this.editedOnly) return rows.filter((row) => this.model!.isEdited(row));
+    return searchFor(this.search)(
+      rows
+        .filter(
+          (row) =>
+            (this.kinds.length === 0 || this.kinds.includes(row.kind)) &&
+            (!this.why || row.reason === this.why),
+        )
+        .map((row) => [row, this.#folded(row, label(row))] as const),
     );
   }
   #showEdited(): void {

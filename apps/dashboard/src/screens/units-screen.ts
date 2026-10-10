@@ -27,6 +27,7 @@ type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 /** The reassign target that means "no unit" (Each). Distinct from a uuid and from the placeholder
  * "", so the disabled guard treats it as a real choice; `#changeUnit` maps it to a null target. */
 const REASSIGN_EACH = "__each__";
+const productKey = (product: ProductUsingUnit) => product.id;
 
 const decimalMarkers = new Map<string, string>();
 function decimalMarker(locale: string): string {
@@ -392,13 +393,25 @@ export class UnitsScreen extends LitElement {
     );
   }
 
+  #productColumnsMemo?: { locale: string; columns: DataTableColumn<ProductUsingUnit>[] };
+
+  /** The same array while the language is unchanged, so a typed search does not make the table
+   * fold every row again. */
   #productColumns(): DataTableColumn<ProductUsingUnit>[] {
+    const locale = currentLocale();
+    if (this.#productColumnsMemo?.locale !== locale)
+      this.#productColumnsMemo = { locale, columns: this.#buildProductColumns() };
+    return this.#productColumnsMemo.columns;
+  }
+
+  #buildProductColumns(): DataTableColumn<ProductUsingUnit>[] {
     return [
       {
         key: "name",
         label: t("units.name"),
         cell: (product) => product.name,
         sortValue: (product) => product.name,
+        searchValue: (product) => product.name,
       },
       {
         key: "status",
@@ -508,13 +521,6 @@ export class UnitsScreen extends LitElement {
   }
 
   override render() {
-    const productNeedle = this.inUseSearch.trim().toLocaleLowerCase();
-    const inUseRows =
-      productNeedle === ""
-        ? this.inUseProducts
-        : this.inUseProducts.filter((product) =>
-            product.name.toLocaleLowerCase().includes(productNeedle),
-          );
     const unitNameCollator = new Intl.Collator(currentLocale(), { sensitivity: "base" });
     const otherUnits = this.units
       .filter((unit) => unit.id !== this.inUseUnitId)
@@ -684,11 +690,11 @@ export class UnitsScreen extends LitElement {
                 </div>
                 <wt-data-table
                   noMatchesMessage=${tableNoMatches()}
-                  emptyMessage=${tableNoMatches()}
                   aria-label=${t("units.in_use_title")}
-                  .rows=${inUseRows}
+                  .rows=${this.inUseProducts}
+                  .searchTerm=${this.inUseSearch}
                   .columns=${this.#productColumns()}
-                  .rowKey=${(product: ProductUsingUnit) => product.id}
+                  .rowKey=${productKey}
                   .selectable=${this.selectingProducts && !this.busy}
                   .selected=${this.selectedProducts}
                   .selectionLabel=${(product: ProductUsingUnit) =>

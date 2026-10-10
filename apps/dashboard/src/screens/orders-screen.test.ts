@@ -357,6 +357,27 @@ describe("dashboard Orders", () => {
     );
   });
 
+  it("sends a search with its trailing space, and spaces alone as no search", async () => {
+    const { el, api } = await loaded();
+    const type = (value: string) =>
+      el
+        .shadowRoot!.querySelector("wt-input[name=q]")!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    const lastQ = () =>
+      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].q;
+    type("gin ");
+    await vi.waitFor(() => expect(lastQ()).toBe("gin "));
+    type("   ");
+    await vi.waitFor(() => {
+      expect(
+        (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.calls.length,
+      ).toBeGreaterThan(1);
+      expect(lastQ()).toBeUndefined();
+    });
+  });
+
   it("shows a backwards range under To without sending the invalid range", async () => {
     const { el, api } = await loaded();
     const choose = (name: string, value: string) =>

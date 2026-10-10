@@ -475,6 +475,123 @@ describe("search and sorting", () => {
   });
 });
 
+describe("one search rule with every other search", () => {
+  const add = async (tx: Transaction, width: number, names: Record<string, string>) =>
+    (await uploadImage(tx, { image: await prepare(width), names }, { fallbackLanguage: "en" }))
+      .image.id;
+  const ids = async (tx: Transaction, options: Parameters<typeof listImages>[1]) =>
+    (await listImages(tx, { limit: 100, fallbackLanguage: "en", ...options })).images.map(
+      (image) => image.id,
+    );
+
+  it("finds every word in any order, ignoring accents, and inside a word while typing", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const coffee = await add(tx, 400, { en: "Café con leche" });
+      await add(tx, 401, { en: "Fish & chips" });
+      expect(await ids(tx, { query: "leche cafe" })).toEqual([coffee]);
+      expect(await ids(tx, { query: "ech" })).toEqual([coffee]);
+      expect(await listImages(tx, { query: "&" })).toEqual({ images: [], total: 0 });
+    });
+  });
+
+  it("lists the library for a relevance sort with no search", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const bread = await add(tx, 410, { en: "Bread" });
+      const butter = await add(tx, 411, { en: "Butter" });
+      const listed = await listImages(tx, { query: "", sort: "relevance" });
+      expect(listed.total).toBe(2);
+      expect(listed.images.map((image) => image.id).sort()).toEqual([bread, butter].sort());
+    });
+  });
+
+  it("finishes a word at a space or punctuation, and finds nothing for a query of no words", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const names = [
+        "Chicken",
+        "Grilled chicken",
+        "Chicken wings",
+        "Chicken, grilled",
+        "Chi tea",
+        "Pan-fried fish",
+        "Chef's bread",
+        "Back\\slash",
+        "The plate",
+      ];
+      for (const [index, name] of names.entries()) await add(tx, 420 + index, { en: name });
+      const found = async (query: string) =>
+        (await listImages(tx, { query, limit: 100, fallbackLanguage: "en" })).images
+          .map((image) => image.names.en)
+          .sort();
+      expect(await found("chick")).toEqual([
+        "Chicken",
+        "Chicken wings",
+        "Chicken, grilled",
+        "Grilled chicken",
+      ]);
+      for (const query of ["chick ", "chick,", '"chick"', "chi wings"])
+        expect(await found(query)).toEqual([]);
+      expect(await found("wings chi")).toEqual(["Chicken wings"]);
+      expect(await found("pan-fr")).toEqual(["Pan-fried fish"]);
+      expect(await found("chef's")).toEqual(["Chef's bread"]);
+      expect(await found("Back\\slash")).toEqual(["Back\\slash"]);
+      expect(await found("the")).toEqual(["The plate"]);
+      for (const query of ["---", "!!!", "\\", '""']) expect(await found(query)).toEqual([]);
+    });
+  });
+
+  it("needs one translation to hold every word", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+      const toast = await add(tx, 402, { en: "Toast", es: "Tostada" });
+      expect(await ids(tx, { query: "tostada" })).toEqual([toast]);
+      expect(await ids(tx, { query: "toast tostada" })).toEqual([]);
+      // Ranked by its closest translation, not its first.
+      const gingerbread = await add(tx, 408, { en: "Gingerbread", es: "Gin" });
+      const ginger = await add(tx, 409, { en: "Ginger" });
+      expect(await ids(tx, { query: "gin" })).toEqual([gingerbread, ginger]);
+    });
+  });
+
+  it("lists the closest matches first, and in name or date order when sorted by either", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const virgin = await add(tx, 403, { en: "Virgin" });
+      const ginger = await add(tx, 404, { en: "Ginger" });
+      const apple = await add(tx, 405, { en: "Apple gin" });
+      const gin = await add(tx, 406, { en: "Gin" });
+      await add(tx, 407, { en: "Tonic" });
+      expect(await ids(tx, { query: "gin" })).toEqual([gin, apple, ginger, virgin]);
+      expect(await ids(tx, { query: "gin", sort: "name" })).toEqual([apple, gin, ginger, virgin]);
+      for (const [day, id] of [gin, virgin, apple, ginger].entries())
+        await tx
+          .update(mediaImages)
+          .set({ createdAt: new Date(2026, 0, day + 1) })
+          .where(eq(mediaImages.id, id));
+      expect(await ids(tx, { query: "gin", sort: "date", direction: "asc" })).toEqual([
+        gin,
+        virgin,
+        apple,
+        ginger,
+      ]);
+    });
+  });
+  it("breaks a tie among matches by ascending id", async () => {
+    const low = "00000000-0000-4000-8000-000000000001";
+    const high = "00000000-0000-4000-8000-000000000002";
+    const createdAt = new Date(2026, 0, 1);
+    await withTransaction(suite.db, async (tx) => {
+      // The higher id is stored first, so storage order alone would list it first.
+      for (const [id, filename] of [
+        [high, `${"b".repeat(64)}.webp`],
+        [low, `${"c".repeat(64)}.webp`],
+      ] as const) {
+        await tx.insert(mediaImages).values({ id, filename, names: { en: "Gin" }, createdAt });
+      }
+      for (const sort of ["relevance", "date"] as const)
+        expect(await ids(tx, { query: "gin", sort })).toEqual([low, high]);
+    });
+  });
+});
+
 describe("input boundaries", () => {
   it.each([
     { query: "x".repeat(501) },
@@ -1003,23 +1120,8 @@ it("protects the photo of a product a live menu version offers only as an extra"
 });
 
 describe("relevance scores and tie-breaks", () => {
-  const add = async (tx: Transaction, width: number, names: Record<string, string>) =>
-    uploadImage(tx, { image: await prepare(width), names }, {});
   const ids = async (tx: Transaction, options: Parameters<typeof listImages>[1]) =>
     (await listImages(tx, options)).images.map((image) => image.id);
-
-  it("scores an image by its best-matching OR group, not its first or last", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      // Groups score 1, 3, no match and 1.
-      const best = await add(tx, 200, { en: "Rye bread toast crust seed" });
-      // Only the third group matches, at 2.
-      const single = await add(tx, 201, { en: "Oat flax" });
-      expect(await ids(tx, { query: "crust OR rye bread toast OR oat flax OR seed" })).toEqual([
-        best.image.id,
-        single.image.id,
-      ]);
-    });
-  });
 
   it("breaks a name or date tie by ascending id in both directions", async () => {
     const low = "00000000-0000-4000-8000-000000000001";
@@ -1054,8 +1156,6 @@ describe("relevance scores and tie-breaks", () => {
       }
       const options = { fallbackLanguage: "en" } as const;
       expect(await ids(tx, { ...options, query: "chick" })).toEqual([high, low]);
-      // With the whole word in both, the tie-break decides again.
-      expect(await ids(tx, { ...options, query: "chick OR chicken" })).toEqual([low, high]);
     });
   });
 

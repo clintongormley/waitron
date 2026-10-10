@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { send } from "./testing/bill-venue.js";
+import { seatedWith, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
   collect,
@@ -143,11 +143,75 @@ describe("Orders routes", () => {
     ["limit=0", "limit"],
     ["limit=201", "limit"],
     ["after=2026-03-01_x", "after"],
+    [`q=zorro&after=2026-03-01T00:00:00.000Z_${randomUUID()}`, "after"],
+    [`after=5_2026-03-01T00:00:00.000Z_${randomUUID()}`, "after"],
+    [`q=12&after=5_2026-03-01T00:00:00.000Z_${randomUUID()}`, "after"],
+    [`q=zorro&after=${"1".repeat(17)}_2026-03-01T00:00:00.000Z_${randomUUID()}`, "after"],
   ])("refuses %s beside %s", async (query, field) => {
     expect(await get(venue.supervisorDashboard, `?${query}`)).toMatchObject({
       status: 400,
       json: { code: "management.request_invalid", params: { field } },
     });
+  });
+
+  it("hands back a ranked page bookmark while searching words, and a plain one otherwise", async () => {
+    for (const name of ["Quimera", "Quimera Sur"]) {
+      const party = await seatedWith(venue);
+      const named = await send(
+        venue.app,
+        venue.cookie,
+        "PUT",
+        `/api/parties/${party.partyId}/name`,
+        { name, expectedPartyRevision: party.revision },
+      );
+      expect(named.status).toBe(200);
+    }
+    const page = (query: string) =>
+      get(venue.supervisorDashboard, `?anyDate=true&limit=1&${query}`) as Promise<{
+        status: number;
+        json: { rows: { partyName: string | null }[]; next: string | null };
+      }>;
+    const first = await page("q=quimera");
+    expect(first.status).toBe(200);
+    expect(first.json.rows.map((row) => row.partyName)).toEqual(["Quimera"]);
+    expect(first.json.next).toMatch(/^\d{1,16}_\d{4}-\d{2}-\d{2}T[\d:.]+Z_[0-9a-f-]{36}$/);
+    const second = await page(`q=quimera&after=${encodeURIComponent(first.json.next!)}`);
+    expect(second.status).toBe(200);
+    expect(second.json.rows.map((row) => row.partyName)).toEqual(["Quimera Sur"]);
+
+    const plain = await page("");
+    expect(plain.json.next).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z_[0-9a-f-]{36}$/);
+    expect((await page(`after=${encodeURIComponent(plain.json.next!)}`)).status).toBe(200);
+  });
+
+  it("keeps a search's trailing space, measures it trimmed, and treats spaces alone as no search", async () => {
+    const tabs: Record<string, string> = {};
+    for (const name of ["Gin", "Ginger Club"]) {
+      const party = await seatedWith(venue);
+      const named = await send(
+        venue.app,
+        venue.cookie,
+        "PUT",
+        `/api/parties/${party.partyId}/name`,
+        { name, expectedPartyRevision: party.revision },
+      );
+      expect(named.status).toBe(200);
+      tabs[name] = party.tabId;
+    }
+    const ids = async (query: string) => {
+      const answer = (await get(venue.supervisorDashboard, `?anyDate=true&limit=200&${query}`)) as {
+        status: number;
+        json: { rows: { id: string }[] };
+      };
+      expect(answer.status).toBe(200);
+      return answer.json.rows.map((row) => row.id);
+    };
+    const finished = await ids("q=gin%20");
+    expect(finished).toContain(tabs.Gin);
+    expect(finished).not.toContain(tabs["Ginger Club"]);
+    expect(await ids("q=gin")).toEqual(expect.arrayContaining([tabs.Gin, tabs["Ginger Club"]]));
+    expect(await ids("q=%20%20")).toEqual(await ids(""));
+    expect(await ids(`q=${"x".repeat(100)}%20%20`)).toEqual([]);
   });
 
   it("answers not found for malformed and unknown ids", async () => {

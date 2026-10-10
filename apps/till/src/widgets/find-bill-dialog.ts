@@ -187,12 +187,12 @@ export class TillFindBillDialog extends LitElement {
 
   async #search(): Promise<void> {
     if (!this.isConnected || !this.active || this.busy) return;
-    const q = this.query.trim();
+    const q = this.query;
     const generation = ++this.#generation;
     this.results = null;
     this.invoiceResults = null;
     this.searchFailed = false;
-    this.queryError = q === "";
+    this.queryError = q.trim() === "";
     if (this.queryError) {
       this.searching = false;
       return;

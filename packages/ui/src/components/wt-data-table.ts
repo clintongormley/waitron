@@ -1,5 +1,11 @@
 import { DragEdgeScroll } from "../drag-edge-scroll.js";
-import { createLabelComparator } from "@waitron/shared";
+import {
+  compareSearchRanks,
+  createLabelComparator,
+  foldForSearch,
+  textSearch,
+  type SearchRank,
+} from "@waitron/shared";
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -29,6 +35,7 @@ export interface DataTableColumn<Row> {
   group?: string;
   cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
+  /** Read again only when `rows`, `columns` or the column order change. */
   searchValue?: (row: Row) => string;
   filter?: {
     label: string;
@@ -114,6 +121,19 @@ function sameChoices(a: Record<string, FilterChoice>, b: Record<string, FilterCh
       return right !== undefined && sameValues(left, right);
     })
   );
+}
+
+interface Searched<Row> {
+  inputs: readonly unknown[];
+  visible: readonly Row[];
+  ranks: ReadonlyMap<Row, SearchRank> | undefined;
+  tree?: TreeShown<Row>;
+}
+
+interface TreeShown<Row> {
+  shown: { rows: readonly Row[]; ancestorOnly: ReadonlySet<string>; heldOpen: ReadonlySet<string> };
+  byKey: ReadonlyMap<string, Row>;
+  ranks: ReadonlyMap<Row, SearchRank> | undefined;
 }
 
 interface ActiveFilter<Row> {
@@ -1040,6 +1060,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    this.#searchMemo = undefined;
     if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
       this.#releaseColumnWidths();
     if (
@@ -1537,10 +1558,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #shownRows(): readonly Row[] {
-    const visible = this.#visibleRows();
     return this.rowParent
-      ? this.#treeVisible(visible).rows
-      : this.#sortedRows(visible, this.#sortColumn(this.#shownColumns()));
+      ? this.#treeShown().shown.rows
+      : this.#sortedRows(
+          this.#visibleRows(),
+          this.#sortColumn(this.#shownColumns()),
+          this.#searched().ranks,
+        );
   }
 
   #emitSelection(next: string[]): void {
@@ -1602,9 +1626,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     rows: readonly Row[],
     column: DataTableColumn<Row> | undefined,
     indexOf: ReadonlyMap<Row, number>,
+    ranks: ReadonlyMap<Row, SearchRank> | undefined,
   ): Row[] {
     const group = this.rowGroup;
-    if (column?.sortValue === undefined && group === undefined) return [...rows];
+    if (column?.sortValue === undefined && group === undefined && ranks === undefined)
+      return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
     const compareLabels = createLabelComparator();
     return [...rows]
@@ -1612,10 +1638,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
         row,
         index: indexOf.get(row)!,
         group: group?.(row) ?? 0,
+        rank: ranks?.get(row),
         value: column?.sortValue?.(row),
       }))
       .sort((left, right) => {
         if (left.group !== right.group) return left.group - right.group;
+        if (left.rank !== right.rank) {
+          if (left.rank === undefined) return 1;
+          if (right.rank === undefined) return -1;
+          const ranked = compareSearchRanks(left.rank, right.rank);
+          if (ranked !== 0) return ranked;
+        }
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
         if (right.value == null) return -1;
@@ -1628,26 +1661,42 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
-  #searchHaystack(row: Row): string {
-    return this.columns
-      .map((column) =>
-        column.searchValue
-          ? column.searchValue(row)
-          : column.sortValue
-            ? String(column.sortValue(row) ?? "")
-            : "",
-      )
-      .join(" ")
-      .toLocaleLowerCase();
+  /** Kept while `rows`, `columns` and `columnOrder` stay the same, so typing does not fold every
+   * row again. A `Map`, not a `WeakMap`: `Row` is unconstrained and may be a primitive. */
+  #folded?: {
+    inputs: readonly unknown[];
+    columns: readonly DataTableColumn<Row>[];
+    parts: Map<Row, readonly string[]>;
+  };
+  /** Dropped on every update, so a filter reading something outside the table is asked again on
+   * each redraw. Between updates it is reused until one of its `inputs` is replaced, because
+   * `sortedSiblings` can be called after a property change and before the update that follows. */
+  #searchMemo?: Searched<Row>;
+
+  /** A row's parts follow the displayed column order, hidden columns included. */
+  #searchParts(): (row: Row) => readonly string[] {
+    const inputs = [this.rows, this.columns, this.columnOrder];
+    const held = this.#folded;
+    const folded =
+      held && inputs.every((input, index) => input === held.inputs[index])
+        ? held
+        : (this.#folded = {
+            inputs,
+            columns: this.#orderedColumns().filter((column) => column.searchValue),
+            parts: new Map(),
+          });
+    return (row) => {
+      let parts = folded.parts.get(row);
+      if (parts === undefined) {
+        parts = folded.columns.map((column) => foldForSearch(column.searchValue!(row)));
+        folded.parts.set(row, parts);
+      }
+      return parts;
+    };
   }
 
-  #term(): string {
-    return (this.searchable ? this.searchText : this.searchTerm).trim().toLocaleLowerCase();
-  }
-
-  #passesSearch(row: Row): boolean {
-    const term = this.#term();
-    return term === "" || this.#searchHaystack(row).includes(term);
+  #search() {
+    return textSearch(this.searchable ? this.searchText : this.searchTerm);
   }
 
   #activeFilters(): ActiveFilter<Row>[] {
@@ -1666,9 +1715,48 @@ export class WtDataTable<Row = unknown> extends LitElement {
     });
   }
 
-  #visibleRows(): readonly Row[] {
+  #searched(): Searched<Row> {
+    const inputs = [
+      this.rows,
+      this.columns,
+      this.filterSelections,
+      this.searchable ? this.searchText : this.searchTerm,
+      this.rowKey,
+      this.rowParent,
+      this.searchOpensPath,
+      this.columnOrder,
+    ];
+    const held = this.#searchMemo;
+    if (held && inputs.every((input, index) => Object.is(input, held.inputs[index]))) return held;
     const active = this.#activeFilters();
-    return this.rows.filter((row) => this.#passesFilters(row, active) && this.#passesSearch(row));
+    const filtered = this.rows.filter((row) => this.#passesFilters(row, active));
+    const search = this.#search();
+    if (search === undefined) {
+      this.#searchMemo = { inputs, visible: filtered, ranks: undefined };
+      return this.#searchMemo;
+    }
+    const ranks = new Map<Row, SearchRank>();
+    const partsOf = this.#searchParts();
+    for (const row of filtered) {
+      const rank = search.rank(partsOf(row));
+      if (rank !== undefined) ranks.set(row, rank);
+    }
+    this.#searchMemo = { inputs, visible: filtered.filter((row) => ranks.has(row)), ranks };
+    return this.#searchMemo;
+  }
+
+  #visibleRows(): readonly Row[] {
+    return this.#searched().visible;
+  }
+
+  #treeShown(): TreeShown<Row> {
+    const searched = this.#searched();
+    if (searched.tree === undefined) {
+      const shown = this.#treeVisible(searched.visible, searched.ranks !== undefined);
+      const byKey = this.#rowsByKey();
+      searched.tree = { shown, byKey, ranks: this.#treeRanks(shown.rows, byKey, searched.ranks) };
+    }
+    return searched.tree;
   }
 
   /** A hidden column sorts nothing, though `sortKey` still names it for when it is shown again. */
@@ -1676,20 +1764,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return shown.find((column) => column.key === this.sortKey && column.sortValue !== undefined);
   }
 
-  #sortedRows(rows: readonly Row[], column: DataTableColumn<Row> | undefined): Row[] {
+  #sortedRows(
+    rows: readonly Row[],
+    column: DataTableColumn<Row> | undefined,
+    ranks: ReadonlyMap<Row, SearchRank> | undefined,
+  ): Row[] {
     const indexOf = new Map<Row, number>();
     rows.forEach((row, index) => indexOf.set(row, index));
-    return this.#sortByColumn(rows, column, indexOf);
+    return this.#sortByColumn(rows, column, indexOf, ranks);
   }
 
   /** In tree mode a match's ancestors stay, so it is not shown as a false top-level row. With
    * `searchOpensPath` and a search typed, every ancestor is held open and what passes the filters
    * under a match stays reachable; otherwise only an ancestor kept solely for a match is held open. */
-  #treeVisible(visible: readonly Row[]): {
-    rows: readonly Row[];
-    ancestorOnly: ReadonlySet<string>;
-    heldOpen: ReadonlySet<string>;
-  } {
+  #treeVisible(visible: readonly Row[], searchTyped: boolean): TreeShown<Row>["shown"] {
     const parentOf = this.rowParent!;
     const keys = this.rows.map((row, index) => this.rowKey(row, index));
     const keyByRow = new Map<Row, string>();
@@ -1711,7 +1799,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         parentKey = parent ? parentOf(parent) : null;
       }
     });
-    const searching = this.searchOpensPath && this.#term() !== "";
+    const searching = this.searchOpensPath && searchTyped;
     const below = new Set<string>();
     if (searching) {
       const active = this.#activeFilters();
@@ -1757,7 +1845,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const bucket = p !== null && present.has(p) ? p : "";
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
     }
-    const byKey = this.#rowsByKey();
+    const { byKey, ranks } = this.#treeShown();
     const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
     const walk = (parentKey: string, depth: number) => {
       const children = childrenByParent.get(parentKey) ?? [];
@@ -1765,7 +1853,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const siblings =
         parent !== undefined && this.rowKeepsChildOrder(parent)
           ? children
-          : this.#sortByColumn(children, column, indexOf);
+          : this.#sortByColumn(children, column, indexOf, ranks);
       for (const row of siblings) {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
@@ -1779,6 +1867,34 @@ export class WtDataTable<Row = unknown> extends LitElement {
     };
     walk("", 0);
     return out;
+  }
+
+  /** A row that does not match takes the best rank among its matching descendants; one with
+   * neither has no rank, and sorts after its ranked siblings. */
+  #treeRanks(
+    rows: readonly Row[],
+    byKey: ReadonlyMap<string, Row>,
+    own: ReadonlyMap<Row, SearchRank> | undefined,
+  ): ReadonlyMap<Row, SearchRank> | undefined {
+    if (own === undefined) return undefined;
+    const parentOf = this.rowParent!;
+    const best = new Map(own);
+    for (const row of rows) {
+      const rank = own.get(row);
+      if (rank === undefined) continue;
+      const visited = new Set<string>();
+      let parentKey = parentOf(row);
+      while (parentKey !== null && !visited.has(parentKey)) {
+        visited.add(parentKey);
+        const parent = byKey.get(parentKey);
+        if (parent === undefined) break;
+        const held = best.get(parent);
+        if (held === undefined || (!own.has(parent) && compareSearchRanks(rank, held) < 0))
+          best.set(parent, rank);
+        parentKey = parentOf(parent);
+      }
+    }
+    return best;
   }
 
   #rowsByKey(): Map<string, Row> {
@@ -1860,13 +1976,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   /** The order the table draws these rows in when they share a parent. */
   sortedSiblings(rows: readonly Row[]): Row[] {
+    const tree = this.rowParent ? this.#treeShown() : undefined;
     const parentKey = rows[0] === undefined ? null : (this.rowParent?.(rows[0]) ?? null);
-    const parent = parentKey === null ? undefined : this.#rowsByKey().get(parentKey);
+    const parent = parentKey === null ? undefined : tree?.byKey.get(parentKey);
     if (parent !== undefined && this.rowKeepsChildOrder(parent)) {
       const position = new Map(this.rows.map((row, index) => [row, index]));
       return [...rows].sort((a, b) => (position.get(a) ?? -1) - (position.get(b) ?? -1));
     }
-    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()));
+    const ranks = tree ? tree.ranks : this.#searched().ranks;
+    return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()), ranks);
   }
 
   /** Opens every closed branch above the row with this key, then scrolls the row into view. */
@@ -2408,7 +2526,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (this.loading) return html`<p class="message" role="status">${this.loadingMessage}</p>`;
     if (this.errorMessage !== "")
       return html`<p class="message error" role="alert">${this.errorMessage}</p>`;
-    const visible = this.#visibleRows();
+    const { visible, ranks: searchRanks } = this.#searched();
     if (this.rows.length === 0)
       return html`<div class="empty">
         <p class="message" role="status">${this.emptyMessage}</p>
@@ -2419,7 +2537,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const isTree = this.rowParent !== undefined;
     // In tree mode kept ancestors keep a deep match on screen, so "no matches" counts the rows the
     // tree actually renders, not just the ones that matched.
-    const treeVisible = isTree ? this.#treeVisible(visible) : undefined;
+    const treeVisible = isTree ? this.#treeShown().shown : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
       return this.#withToolbar(
@@ -2437,7 +2555,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
-      const sorted = this.#sortedRows(visible, sortColumn);
+      const sorted = this.#sortedRows(visible, sortColumn, searchRanks);
       const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
         this.rowSelectable(row) ? [this.rowKey(row, index)] : [],

@@ -2947,6 +2947,49 @@ describe("search and the Available filter", () => {
     await settle(el);
   }
 
+  it("keeps its rows and columns through a typed search, and builds them again when the language changes", async () => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("en");
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    const held = table(el);
+    const { rows, columns, rowKey, rowParent } = held;
+    const englishName = menuLabel("Wines");
+    expect(nameOf(el, "included-wine")).toBe(englishName);
+    await search(el, "lem");
+    expect(held.rows).toBe(rows);
+    expect(held.columns).toBe(columns);
+    expect(held.rowKey).toBe(rowKey);
+    expect(held.rowParent).toBe(rowParent);
+    await search(el, "");
+    setLocale("es");
+    el.requestUpdate();
+    await settle(el);
+    expect(held.rows).not.toBe(rows);
+    expect(held.columns).not.toBe(columns);
+    expect(menuLabel("Wines")).not.toBe(englishName);
+    expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
+    expect(all(el, "thead th").map((th) => th.textContent!.trim())).toContain(t("members.name"));
+  });
+
+  it("builds its columns again when anything a cell reads changes", async () => {
+    const el = await mount();
+    const changes: [string, () => void][] = [
+      ["busy", () => (el.busy = true)],
+      ["current", () => (el.current = ["m-drinks"])],
+      ["products", () => (el.products = [...products])],
+      ["categories", () => (el.categories = [])],
+      ["defaultColor", () => (el.defaultColor = "#123456")],
+      ["nodes", () => (el.nodes = lunchNodes())],
+    ];
+    for (const [name, change] of changes) {
+      const columns = table(el).columns;
+      change();
+      await settle(el);
+      expect(table(el).columns, name).not.toBe(columns);
+    }
+  });
+
   it("finds a product inside a closed section by its staff name, opening the way to it", async () => {
     const el = await mount();
     expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
@@ -2982,6 +3025,44 @@ describe("search and the Available filter", () => {
     ]);
     await search(el, menuLabel("Wines"));
     expect(shown(el)).toEqual(["included-wine"]);
+  });
+
+  it("lists the closest matches first among the rows under each parent, and finishes a word on a trailing space", async () => {
+    const gins = [
+      product("p-ginger", "Ginger Ale"),
+      product("p-pink", "Pink Gin"),
+      product("p-gt", "Gin & Tónic"),
+    ];
+    const el = await mount({
+      products: gins,
+      nodes: [
+        productNode("m-ginger", "p-ginger"),
+        {
+          memberId: "m-bar",
+          ref: { kind: "section", sectionId: "s-bar" },
+          internalName: "Gin",
+          names: {},
+          image: null,
+          color: null,
+          ownerMenuId: "menu-lunch",
+          children: [productNode("m-bar-ginger", "p-ginger"), productNode("m-bar-pink", "p-pink")],
+        },
+        productNode("m-gt", "p-gt"),
+      ],
+    });
+    await search(el, "gin");
+    expect(shown(el)).toEqual([
+      "m-bar",
+      "m-bar/m-bar-pink",
+      "m-bar/m-bar-ginger",
+      "m-gt",
+      "m-ginger",
+    ]);
+    await search(el, "tonic gin");
+    expect(shown(el)).toEqual(["m-gt"]);
+    // A section that matches keeps all its rows; the top-level Ginger Ale is what goes.
+    await search(el, "gin ");
+    expect(shown(el)).toEqual(["m-bar", "m-bar/m-bar-pink", "m-bar/m-bar-ginger", "m-gt"]);
   });
 
   it("says nothing matches when the search finds no row", async () => {
@@ -3056,31 +3137,66 @@ describe("search and the Available filter", () => {
     expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
   });
 
-  it("moves a grip past only the siblings drawn, sending the full list's index", async () => {
+  it("draws no reorder grip while a search is typed, and draws them again once it is cleared", async () => {
     const el = await mount();
-    const moves = listen(el, "wt-member-move");
-    // Burger and Favourites match; Drinks, between them, is hidden.
     await search(el, "u");
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
-    await press(el, "m-fav", "ArrowUp");
-    expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 0 }]);
-    expect(shown(el)).toEqual(["m-fav", "m-burger"]);
-    expect(announced(el)).toBe(reordered("Favourites", 1, 2));
-    expect(focusedInTable(el)).toBe("drag-m-fav");
-    // The full order is now Favourites, Burger, Drinks; Burger is the last one drawn.
-    await press(el, "m-burger", "ArrowDown");
-    expect(moves).toHaveLength(1);
-    await press(el, "m-burger", "ArrowUp");
-    expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 0 });
+    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
+    expect(all(el, '[part~="grip-space"]')).toEqual([]);
+    const nameLefts = () => shown(el).map((key) => nameAt(el, key).getBoundingClientRect().left);
+    const searchingLefts = nameLefts();
+    el.reordering = false;
+    await settle(el);
+    expect(shown(el)).toEqual(["m-burger", "m-fav"]);
+    for (const [index, left] of nameLefts().entries())
+      expect(Math.abs(left - searchingLefts[index]!)).toBeLessThanOrEqual(1);
+    el.reordering = true;
+    await settle(el);
     await search(el, "");
-    expect(shown(el)).toEqual(["m-burger", "m-fav", "m-drinks"]);
+    expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
+      "drag-m-burger",
+      "drag-m-drinks",
+      "drag-m-fav",
+    ]);
   });
 
-  it("sends the full list's index when a hidden sibling sits before the shown ones", async () => {
+  it("keeps the reorder grips drawn while a search of only spaces is typed", async () => {
+    const el = await mount();
+    await search(el, "   ");
+    expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
+      "drag-m-burger",
+      "drag-m-drinks",
+      "drag-m-fav",
+    ]);
+  });
+
+  it("ends a drag held when a search of only punctuation is typed, sending no move once it is cleared", async () => {
     const el = await mount();
     const moves = listen(el, "wt-member-move");
-    // Drinks and Favourites match; Burger, first in the list, is hidden.
-    await search(el, "i");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    pointer(from, "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
+    await settle(el);
+    expect(marked(el, "dragging")).toEqual(["m-burger"]);
+    await search(el, "&");
+    await search(el, "");
+    pointer(nameAt(el, "m-fav"), "pointermove", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
+    pointer(nameAt(el, "m-fav"), "pointerup");
+    await settle(el);
+    expect(moves).toEqual([]);
+    expect(marked(el, "dragging")).toEqual([]);
+    expect(marked(el, "drop-gap-after")).toEqual([]);
+    expect(ghost(el)).toBeNull();
+  });
+
+  it("sends the full list's index when the Available filter hides a sibling before the shown ones", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    const moves = listen(el, "wt-member-move");
+    // Drinks and Favourites hold the unavailable Lemonade; Burger, first in the list, is hidden.
+    await chooseAvailable(el, "no");
     expect(shown(el).filter((key) => !key.includes("/"))).toEqual(["m-drinks", "m-fav"]);
     await press(el, "m-fav", "ArrowUp");
     expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 1 }]);
@@ -3167,6 +3283,31 @@ describe("Select mode while a search or filter hides rows", () => {
     el.search = "";
     await settle(el);
     expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  });
+
+  it("gives a box to a section only when its own name matches by the table's rule", async () => {
+    const stuff: MenuStructureNode = {
+      memberId: "m-stuff",
+      ref: { kind: "section", sectionId: "s-stuff" },
+      internalName: "Drinkstuff",
+      names: {},
+      image: null,
+      color: null,
+      ownerMenuId: "menu-lunch",
+      children: [drinksNode("m-stuff-drinks")],
+    };
+    const el = await mount({ selecting: true, nodes: [drinksNode("m-drinks"), stuff] });
+    el.search = "drinks ";
+    await settle(el);
+    expect(shown(el)).toContain("m-stuff");
+    expect(boxKeys(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
+    el.search = "beer";
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-drinks/m-beer", "m-stuff/m-stuff-drinks/m-beer"]);
+    el.search = "&";
+    await settle(el);
+    expect(boxKeys(el)).toEqual([]);
+    expect([...el.shownSelectableKeys()]).toEqual([]);
   });
 
   it("gives no section or included menu a box while the Available filter is on", async () => {

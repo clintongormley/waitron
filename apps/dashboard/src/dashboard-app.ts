@@ -8,6 +8,7 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
+import { navMatches } from "./nav-search.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -166,11 +167,6 @@ const coreItems = (group: NavGroup): NavItem[] => [
 ];
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
 type NavPage = { screen: ScreenId; label: string };
-
-/** Case- and accent-insensitive. */
-function foldForSearch(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
-}
 
 const NAV_GROUPS: NavGroup[] = [
   { id: "overview", items: [{ screen: "overview", labelKey: "nav.overview" }] },
@@ -1763,7 +1759,6 @@ export class DashboardApp extends LitElement {
           ],
         },
       ];
-    const term = foldForSearch(this.navSearch.trim());
     const shown = (items: NavItem[] = []): NavPage[] =>
       items
         .filter((item) => this.#mayOpen(item))
@@ -1788,12 +1783,8 @@ export class DashboardApp extends LitElement {
         ...among,
         ...shown(group.itemsAfterModules),
       ];
-      if (term === "") return { group, pages: permitted.length > 0 ? permitted : undefined };
-      const headerMatches =
-        group.headerKey !== undefined && foldForSearch(t(group.headerKey)).includes(term);
-      const pages = headerMatches
-        ? permitted
-        : permitted.filter((page) => foldForSearch(page.label).includes(term));
+      const heading = group.headerKey === undefined ? "" : t(group.headerKey);
+      const pages = navMatches(this.navSearch, permitted, heading);
       return { group, pages: pages.length > 0 ? pages : undefined };
     });
   }

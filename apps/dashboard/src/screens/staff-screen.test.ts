@@ -68,6 +68,23 @@ function list(el: StaffScreen): StaffList {
   return el.shadowRoot!.querySelector("dashboard-staff-list")!;
 }
 
+/** The people the staff table draws, in the order it draws them. */
+async function drawn(el: StaffScreen): Promise<string[]> {
+  await list(el).updateComplete;
+  const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return [...table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
+    row.getAttribute("data-row-key")!,
+  );
+}
+
+async function typeSearch(el: StaffScreen, value: string): Promise<void> {
+  el.shadowRoot!.querySelector("[data-test=search]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await flush(el);
+}
+
 function form(el: StaffScreen): PersonForm {
   return el.shadowRoot!.querySelector("dashboard-person-form")!;
 }
@@ -239,7 +256,7 @@ describe("staff-screen", () => {
       }),
     );
     await flush(el);
-    expect(list(el).people.map((person) => person.personId)).toEqual(["p999"]);
+    expect(await drawn(el)).toEqual(["p999"]);
     const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
     await chooseOption(role, "staff");
     await flush(el);
@@ -324,7 +341,7 @@ describe("staff-screen", () => {
       new CustomEvent("wt-change", { detail: { value: "zzz" }, bubbles: true, composed: true }),
     );
     await flush(el);
-    expect(list(el).people).toEqual([]);
+    expect(await drawn(el)).toEqual([]);
     expect(await sentence(el)).toBe(tableNoMatches());
 
     const none = await mountWidget<StaffScreen>("dashboard-staff-screen", {
@@ -1326,7 +1343,83 @@ describe("staff-screen filter fields", () => {
       new CustomEvent("wt-change", { detail: { value: "ada" }, bubbles: true, composed: true }),
     );
     await flush(el);
-    expect(shown(el)).toEqual(["p1"]);
+    expect(await drawn(el)).toEqual(["p1"]);
+  });
+
+  it("finds nobody by a role or status word, since only names, email and telephone are searched", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    expect(await drawn(el)).toEqual(["p1"]);
+    await typeSearch(el, roleName("manager"));
+    expect(await drawn(el)).toEqual([]);
+    await typeSearch(el, statusName("active"));
+    expect(await drawn(el)).toEqual([]);
+  });
+
+  it("hands the table the same rows and columns while a search is typed", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    const table = () => list(el).shadowRoot!.querySelector("wt-data-table")!;
+    await typeSearch(el, "a");
+    await list(el).updateComplete;
+    const rows = table().rows;
+    const columns = table().columns;
+    await typeSearch(el, "ad");
+    await list(el).updateComplete;
+    expect(table().rows).toBe(rows);
+    expect(table().columns).toBe(columns);
+    expect(await drawn(el)).toEqual(["p1"]);
+  });
+
+  it("finds a person by every word typed across names, email and telephone, closest first", async () => {
+    const person = (overrides: Partial<PersonSummary>): PersonSummary => ({
+      ...people[0]!,
+      firstNames: null,
+      lastNames: null,
+      email: null,
+      telephone: null,
+      ...overrides,
+    });
+    const roster = [
+      person({ personId: "edgar", displayName: "Ed", email: "edgar@x.com" }),
+      person({
+        personId: "jose",
+        displayName: "Pepe",
+        firstNames: "José",
+        lastNames: "García",
+        email: "jose@example.com",
+      }),
+      person({ personId: "phone", displayName: "Lu", telephone: "+34 600 111 222" }),
+      person({ personId: "legal", displayName: "Max", lastNames: "Garcia" }),
+    ];
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue(roster) }),
+    });
+    await flush(el);
+    await typeSearch(el, "garcia jose");
+    expect(await drawn(el)).toEqual(["jose"]);
+    await typeSearch(el, "GARCÍA pepe");
+    expect(await drawn(el)).toEqual(["jose"]);
+    await typeSearch(el, "jose example");
+    expect(await drawn(el)).toEqual(["jose"]);
+    await typeSearch(el, "600 111");
+    expect(await drawn(el)).toEqual(["phone"]);
+    await typeSearch(el, "&");
+    expect(await drawn(el)).toEqual([]);
+    await typeSearch(el, "pepe ");
+    expect(await drawn(el)).toEqual(["jose"]);
+    await typeSearch(el, "pep ");
+    expect(await drawn(el)).toEqual([]);
+    await typeSearch(el, "gar");
+    expect(await drawn(el)).toEqual(["legal", "jose", "edgar"]);
+
+    const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
+    table
+      .shadowRoot!.querySelector<HTMLElement>('thead th button[data-sort="displayName"]')!
+      .click();
+    expect(await drawn(el)).toEqual(["legal", "jose", "edgar"]);
+    await typeSearch(el, "");
+    expect(await drawn(el)).toEqual(["edgar", "phone", "legal", "jose"]);
   });
 
   it("filters by role from a labelled dropdown starting on every role", async () => {

@@ -88,7 +88,7 @@ describe("Find a bill", () => {
     const row = el.shadowRoot!.querySelector("[data-invoice]")!;
     expect(row.textContent).toContain("FF/7");
     expect(row.textContent).toContain("3,500.00");
-    expect(lookUpInvoices).toHaveBeenCalledWith("FF/7");
+    expect(lookUpInvoices).toHaveBeenCalledWith(" FF/7 ");
     expect(lookUpBills).not.toHaveBeenCalled();
     await click(el, "[data-invoice]");
     expect(opened).toEqual([{ workingOrderId: "wo-filed" }]);
@@ -162,6 +162,23 @@ describe("Find a bill", () => {
     const el = await mount();
     await click(el, "[data-search]");
     expect(lookUpBills).not.toHaveBeenCalled();
+    expect(input(el, "bill-search").error).toContain("Type an invoice number");
+  });
+
+  it("sends a search with its trailing space, and refuses spaces alone", async () => {
+    const el = await mount();
+    await type(el, "bill-search", "gin ");
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(lookUpBills).toHaveBeenCalledWith("gin "));
+    await invoices(el);
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(lookUpInvoices).toHaveBeenCalledWith("gin "));
+    lookUpBills.mockClear();
+    lookUpInvoices.mockClear();
+    await type(el, "bill-search", "   ");
+    await click(el, "[data-search]");
+    expect(lookUpBills).not.toHaveBeenCalled();
+    expect(lookUpInvoices).not.toHaveBeenCalled();
     expect(input(el, "bill-search").error).toContain("Type an invoice number");
   });
 

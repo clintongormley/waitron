@@ -26,14 +26,12 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { formatMoney } from "@waitron/shared";
+import { foldForSearch, formatMoney, searchFor } from "@waitron/shared";
 import {
   HOME_GRID_COLUMNS,
   arrangeHome,
-  foldForSearch,
   indexDocument,
   openedSection,
-  searchFor,
   sectionTrail,
   shownMembers,
   tileFill,

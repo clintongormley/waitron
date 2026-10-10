@@ -399,46 +399,48 @@ it("finds a product by its name", async () => {
   expect(shown(el)).toEqual(["mi-lemonade"]);
 });
 
-it.each(["Bebidas / Cerveza", "Bebidas › Cerveza", "Bebidas > Cerveza"])(
-  "finds a product by its main category's path typed as %s",
-  async (term) => {
-    const el = await mount();
-    await search(el, term);
-    expect(shown(el)).toEqual(["mi-lager"]);
-  },
-);
-
-it("does not find a product by text that runs from one spelling of its category's path into the next", async () => {
+it.each([
+  "Cerveza",
+  "Bebidas / Cerveza",
+  "Bebidas › Cerveza",
+  "Bebidas > Cerveza",
+  "Cerveza Bebidas",
+])("does not find a product by its main category, typed as %s", async (term) => {
   const el = await mount();
-  await search(el, "Cerveza Bebidas");
+  await search(el, "lager");
+  expect(shown(el)).toEqual(["mi-lager"]);
+  await search(el, term);
   expect(shown(el)).toEqual([]);
 });
 
-it("finds a product whose main category is missing, or that has none, by what the column says", async () => {
+it("does not find a product whose main category is missing, or that has none, by what the column says", async () => {
   const el = await mount({
     rows: [
       { ...lager, categoryId: null },
       { ...burger, categoryId: "c-gone" },
     ],
   });
-  await search(el, t("editor.missing_choice"));
-  expect(shown(el)).toEqual(["mi-burger"]);
-  await search(el, t("categories.none"));
+  expect(column(el, "category")).toEqual([t("categories.none"), t("editor.missing_choice")]);
+  await search(el, "lager");
   expect(shown(el)).toEqual(["mi-lager"]);
+  await search(el, t("editor.missing_choice"));
+  expect(shown(el)).toEqual([]);
+  await search(el, t("categories.none"));
+  expect(shown(el)).toEqual([]);
 });
 
 it.each([
   { locale: "en-GB", label: "No category" },
   { locale: "es-ES", label: "Sin categoría" },
 ])(
-  "reads $label in $locale for a product with no main category, and finds it by those words",
+  "reads $label in $locale for a product with no main category, and does not find it by those words",
   async (c) => {
     setLocale(c.locale);
     try {
       const el = await mount({ rows: [{ ...lager, categoryId: null }, burger] });
       expect(column(el, "category")[0]).toBe(c.label);
       await search(el, c.label);
-      expect(shown(el)).toEqual(["mi-lager"]);
+      expect(shown(el)).toEqual([]);
     } finally {
       setLocale("es-ES");
     }
@@ -447,17 +449,19 @@ it.each([
 
 // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
 it.each([
-  { locale: "es-ES", term: "12,00", want: ["mi-burger"] },
-  { locale: "es-ES", term: "12,00 €", want: ["mi-burger"] },
-  { locale: "en-GB", term: "€12.00", want: ["mi-burger"] },
-  { locale: "es-ES", term: "12.00", want: ["mi-burger"] },
-  { locale: "es-ES", term: "3,75", want: ["mi-lemonade", "mi-lemonade:v-large"] },
-])("finds a product in $locale by the price as shown, or as its raw amount: $term", async (c) => {
+  { locale: "es-ES", term: "12,00" },
+  { locale: "es-ES", term: "12,00 €" },
+  { locale: "en-GB", term: "€12.00" },
+  { locale: "es-ES", term: "12.00" },
+  { locale: "es-ES", term: "3,75" },
+])("does not find a product in $locale by its price: $term", async (c) => {
   setLocale(c.locale);
   try {
     const el = await mount();
+    await search(el, "burger");
+    expect(shown(el)).toEqual(["mi-burger"]);
     await search(el, c.term);
-    expect(shown(el)).toEqual(c.want);
+    expect(shown(el)).toEqual([]);
   } finally {
     setLocale("es-ES");
   }
@@ -2239,16 +2243,14 @@ describe("variants", () => {
     expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-carafe"]);
   });
 
-  it("finds a price as it is written, not as the amount it sorts by", async () => {
+  it("does not find a product or a variant by its price", async () => {
     const el = await mountVariants();
-    // The glass's own 7.00 is not the wine's 13.00, so only the glass's row shows it.
-    await search(el, "7.00");
+    await search(el, "glass");
     expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-glass"]);
-    await search(el, "700");
-    expect(shown(el)).toEqual([]);
-    // The wine's own 13.00, which the bottle follows too, finds the wine itself.
-    await search(el, "13.00");
-    expect(shown(el)).toEqual(["mi-wine"]);
+    for (const term of ["7.00", "7,00", "700", "13.00", "13,00"]) {
+      await search(el, term);
+      expect(shown(el), term).toEqual([]);
+    }
   });
 
   it("keeps a product's variants when the product is found by its name", async () => {

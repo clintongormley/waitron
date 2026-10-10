@@ -14,6 +14,7 @@ import {
   deviceOrigin,
   draftLineMergeKey,
   firstCodeInCauseChain,
+  foldCache,
   formatEquipmentCode,
   divideDecimal,
   FALLBACK_LOCALE,
@@ -62,10 +63,13 @@ import {
   toScale,
   workingOrderId,
   workingOrderLineId,
+  searchBy,
+  searchFor,
   sqliteFailureOf,
   stringToBasisPoints,
   stringToCents,
   stringToThousandths,
+  textSearch,
   worstBand,
 } from "./index.js";
 
@@ -164,6 +168,18 @@ describe("package public surface (./index.js)", () => {
   it("re-exports the equipment label code", () => {
     const id = "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b";
     expect(parseEquipmentCode(formatEquipmentCode("printer", id))).toEqual({ kind: "printer", id });
+  });
+
+  it("re-exports the search matcher", () => {
+    expect(
+      searchFor("gin")([
+        ["a", "virgin"],
+        ["b", "gin"],
+      ]),
+    ).toEqual(["b", "a"]);
+    expect(textSearch(" ")).toBeUndefined();
+    expect(searchBy("cafe", ["Té", "Café"], (name) => name)).toEqual(["Café"]);
+    expect(foldCache()({}, "Café")).toBe("cafe");
   });
 
   it("re-exports the equipment takeover rule", () => {

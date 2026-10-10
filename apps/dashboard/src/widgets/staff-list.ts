@@ -5,16 +5,20 @@ import { type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
+
+const personKey = (person: PersonSummary): string => person.personId;
 
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   @property({ attribute: false }) currentPersonId: string | null = null;
-  /** What the table says with no rows; the screen filters before the table, so it names its own. */
+  @property() searchTerm = "";
+  /** What the table says with no rows; the screen filters by role and status before the table, so
+   * it names its own. */
   @property() emptyMessage?: string;
 
   #edit(event: Event, personId: string): void {
@@ -28,13 +32,23 @@ export class StaffList extends LitElement {
     );
   }
 
+  #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<PersonSummary>[] };
+
+  /** The same array while the language and signed-in person are unchanged, so a typed search does
+   * not make the table fold every row again. The table redraws its cells only when one of its own
+   * properties changes, so `currentPersonId`, which a cell reads, has to be one of the inputs. */
   #columns(): DataTableColumn<PersonSummary>[] {
-    return [
+    const inputs = [currentLocale(), this.currentPersonId];
+    if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
+      return this.#columnsMemo.columns;
+    const columns: DataTableColumn<PersonSummary>[] = [
       {
         key: "displayName",
         label: t("staff.field_display_name"),
         cell: (person) => person.displayName,
         sortValue: (person) => person.displayName,
+        searchValue: (person) =>
+          [person.displayName, person.firstNames, person.lastNames].filter(Boolean).join(" "),
       },
       {
         key: "legalName",
@@ -59,6 +73,7 @@ export class StaffList extends LitElement {
         label: t("staff.field_email"),
         cell: (person) => person.email ?? "—",
         sortValue: (person) => person.email ?? "",
+        searchValue: (person) => person.email ?? "",
       },
       {
         key: "telephone",
@@ -66,6 +81,7 @@ export class StaffList extends LitElement {
         label: t("staff.field_telephone"),
         cell: (person) => person.telephone ?? "—",
         sortValue: (person) => person.telephone ?? "",
+        searchValue: (person) => person.telephone ?? "",
       },
       {
         key: "status",
@@ -100,6 +116,8 @@ export class StaffList extends LitElement {
         `,
       },
     ];
+    this.#columnsMemo = { inputs, columns };
+    return columns;
   }
 
   #action(person: PersonSummary, action: string, label: string) {
@@ -139,8 +157,9 @@ export class StaffList extends LitElement {
         lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         .rows=${this.people}
+        .searchTerm=${this.searchTerm}
         .columns=${this.#columns()}
-        .rowKey=${(person: PersonSummary) => person.personId}
+        .rowKey=${personKey}
         .emptyMessage=${this.emptyMessage ?? t("staff.empty")}
         ><slot name="empty-action" slot="empty-action"></slot
       ></wt-data-table>

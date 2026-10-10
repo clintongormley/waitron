@@ -149,27 +149,25 @@ export class StaffScreen extends LitElement {
 
   #editing = false;
 
+  #filtered?: { inputs: readonly unknown[]; people: PersonSummary[] };
+
+  /** The same array while the roster and filters are unchanged, so a typed search does not make
+   * the table fold every row again. */
   #filteredPeople(): PersonSummary[] {
-    const query = this.search.trim().toLocaleLowerCase();
-    return this.people.filter((person) => {
+    const inputs = [this.people, this.roleFilter, this.statusFilter];
+    if (this.#filtered?.inputs.every((input, index) => input === inputs[index]))
+      return this.#filtered.people;
+    const people = this.people.filter((person) => {
       if (this.roleFilter !== "all" && person.role !== this.roleFilter) return false;
       if (this.statusFilter === "current" && person.status === "suspended") return false;
-      if (
-        this.statusFilter !== "current" &&
-        this.statusFilter !== "all" &&
-        person.status !== this.statusFilter
-      ) {
-        return false;
-      }
-      if (query === "") return true;
-      return [
-        person.displayName,
-        person.firstNames,
-        person.lastNames,
-        person.email,
-        person.telephone,
-      ].some((value) => value?.toLocaleLowerCase().includes(query));
+      return (
+        this.statusFilter === "current" ||
+        this.statusFilter === "all" ||
+        person.status === this.statusFilter
+      );
     });
+    this.#filtered = { inputs, people };
+    return people;
   }
 
   override connectedCallback(): void {
@@ -410,6 +408,7 @@ export class StaffScreen extends LitElement {
       </div>
       <dashboard-staff-list
         .people=${this.#filteredPeople()}
+        .searchTerm=${this.search}
         .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
         .currentPersonId=${this.currentPersonId}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}

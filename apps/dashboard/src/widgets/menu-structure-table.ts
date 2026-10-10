@@ -2,6 +2,7 @@ import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
+import { foldForSearch, textSearch, type TextSearch } from "@waitron/shared";
 import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -37,7 +38,7 @@ import {
 } from "@waitron/catalogue/src/include-folder-presentation.js";
 import type { Presentation } from "@waitron/catalogue/src/section-types.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
 /** A section node's own customer-facing presentation, before any include's folder applies. */
@@ -92,6 +93,9 @@ interface Row {
   /** Inside an included menu, which is edited only from its own page. */
   readOnly: boolean;
 }
+
+const rowKey = (row: Row) => row.key;
+const rowParent = (row: Row) => row.parentKey;
 
 export type StructureAddAction = "new-section" | "include-menu" | "add-products";
 
@@ -250,7 +254,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("reordering") && !this.reordering && this.#drag) {
+    if ((changed.has("reordering") || changed.has("search")) && !this.#reorderable && this.#drag) {
       const active = this.#drag.active;
       this.#finishDrag();
       if (active) blockClickAfterDrag(true);
@@ -576,7 +580,11 @@ export class MenuStructureTable extends LitElement {
   #move(row: Row, to: number): void {
     const siblings = this.#siblings(row);
     const memberId = row.node.memberId;
-    this.#order.set(row.list, reorder(siblings, siblings.indexOf(memberId), to));
+    // A new map, so the rows built from the old order are built again.
+    this.#order = new Map(this.#order).set(
+      row.list,
+      reorder(siblings, siblings.indexOf(memberId), to),
+    );
     this.#send("wt-member-move", { path: row.path.slice(0, -1), memberId, to });
     this.requestUpdate();
   }
@@ -649,8 +657,24 @@ export class MenuStructureTable extends LitElement {
     if (row.readOnly) return false;
     if (row.node.ref.kind !== "section") return true;
     if (this.filtering) return false;
-    const term = this.search.trim().toLocaleLowerCase();
-    return term === "" || row.name.toLocaleLowerCase().includes(term);
+    const { search, names } = this.#compiledSearch();
+    if (search === undefined) return true;
+    let matches = names.get(row.name);
+    if (matches === undefined) {
+      matches = search.rank(foldForSearch(row.name)) !== undefined;
+      names.set(row.name, matches);
+    }
+    return matches;
+  }
+
+  /** Asked once per row on every draw, so the query is compiled, and each name judged, once per
+   * search typed. */
+  #searchCache?: { query: string; search: TextSearch | undefined; names: Map<string, boolean> };
+
+  #compiledSearch(): { search: TextSearch | undefined; names: Map<string, boolean> } {
+    if (this.#searchCache?.query !== this.search)
+      this.#searchCache = { query: this.search, search: textSearch(this.search), names: new Map() };
+    return this.#searchCache;
   }
 
   readonly #filterChange = (event: CustomEvent<{ filters: Record<string, string | string[]> }>) => {
@@ -723,7 +747,28 @@ export class MenuStructureTable extends LitElement {
       ?.focus();
   }
 
+  #rowsMemo?: { inputs: readonly unknown[]; rows: Row[] };
+
+  /** The same array while what the rows are built from is unchanged, so a typed search does not
+   * make the table fold every row again. */
   #rows(): Row[] {
+    const inputs = [
+      currentLocale(),
+      this.nodes,
+      this.menuName,
+      this.#order,
+      this.#productNames,
+      this.#sectionNames,
+    ];
+    if (this.#rowsMemo?.inputs.every((input, index) => input === inputs[index]))
+      return this.#rowsMemo.rows;
+    const rows = this.#buildRows();
+    this.#rowsMemo = { inputs, rows };
+    this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
+    return rows;
+  }
+
+  #buildRows(): Row[] {
     const rows: Row[] = [];
     const walk = (
       nodes: MenuStructureNode[],
@@ -777,8 +822,13 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
+  /** A search draws closest matches first, not the menu's order, so nothing is reordered during
+   * one. */
+  get #reorderable(): boolean {
+    return this.reordering && this.search.trim() === "";
+  }
+
   #grip(row: Row) {
-    if (!this.reordering) return nothing;
     if (row.readOnly) return gripSpace;
     return html`<button
       part="drag-grip"
@@ -946,7 +996,29 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
+  #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<Row>[] };
+
+  /** The same array while everything a cell reads is unchanged, so a typed search does not make
+   * the table fold every row again. */
   #columns(): DataTableColumn<Row>[] {
+    const inputs = [
+      currentLocale(),
+      this.busy,
+      this.current,
+      this.defaultColor,
+      this.#productById,
+      this.#productNames,
+      this.#categoryById,
+      this.#sectionNames,
+    ];
+    if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
+      return this.#columnsMemo.columns;
+    const columns = this.#buildColumns();
+    this.#columnsMemo = { inputs, columns };
+    return columns;
+  }
+
+  #buildColumns(): DataTableColumn<Row>[] {
     return [
       {
         key: "name",
@@ -1004,7 +1076,6 @@ export class MenuStructureTable extends LitElement {
 
   override render() {
     const rows = this.#rows();
-    this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
     const empty = this.nodes.length === 0;
     return html`<wt-data-table
         aria-label=${t("menus.tree_heading")}
@@ -1021,7 +1092,7 @@ export class MenuStructureTable extends LitElement {
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
-        .rowControls=${this.reordering ? (row: Row) => this.#grip(row) : undefined}
+        .rowControls=${this.#reorderable ? (row: Row) => this.#grip(row) : undefined}
         rowControlsLabel=${t("folders.drag")}
         rowControlsAlign="center"
         .rowActivation=${(row: Row) => (row.node.ref.kind === "section" ? "toggle" : "none")}
@@ -1029,8 +1100,8 @@ export class MenuStructureTable extends LitElement {
           t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.name)}
         .rows=${rows}
         .columns=${this.#columns()}
-        .rowKey=${(row: Row) => row.key}
-        .rowParent=${(row: Row) => row.parentKey}
+        .rowKey=${rowKey}
+        .rowParent=${rowParent}
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}

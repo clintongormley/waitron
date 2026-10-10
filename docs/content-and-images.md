@@ -104,11 +104,11 @@ before Save leaves it out of the library.
 
 ## Find and reuse an image
 
-**Search images** finds photographs by the words in their names, and searches as you type: the
-word you are still typing matches the start of a word, so **summ** finds **Summer bread**. Once you
-type a space after a word, it matches only that whole word. The word **or** on its own is the
-exception: it joins two searches, as in **summer or winter**, so typing **or** does not yet find
-**Orange**. Choose **Relevance** to prioritize search matches, **Date** to browse uploads or
+**Search images** finds photographs by the words in their names, in any order, and searches as you
+type: the word you are still typing can be any part of a word, so **read** finds **Summer bread**.
+Once you type a space after a word, it matches only that whole word. Accents and capitals make no
+difference, so **cafe** finds **Café con leche**. Every word has to be in the name in one
+language. Choose **Relevance** to list the closest matches first, **Date** to browse uploads or
 **Name** to scan names. Date starts with the newest uploads; switch to **Oldest first** when you
 need the earliest ones. Name starts with **A–Z** and also offers **Z–A**. Use the page controls when more photographs match than fit on the current page.
 

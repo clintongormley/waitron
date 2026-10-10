@@ -21,9 +21,12 @@ export function readOrdersFilter(read: (key: string) => string | null): OrdersFi
   const from = read("from");
   const to = read("to");
   const staff = read("staff");
+  // A search keeps its trailing space, which finishes the last word.
   const text = (key: string) => {
-    const value = read(key)?.trim();
-    return value === undefined || value === "" || value.length > 100 ? undefined : value;
+    const raw = read(key) ?? undefined;
+    const value = raw?.trim();
+    if (value === undefined || value === "" || value.length > 100) return undefined;
+    return key === "q" ? raw : value;
   };
   return {
     status: (ORDER_STATUS_FILTERS as readonly string[]).includes(status ?? "")

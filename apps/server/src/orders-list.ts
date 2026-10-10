@@ -47,6 +47,8 @@ export type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
 export const DEFAULT_ORDER_PAGE_SIZE = 50;
 export const MAX_ORDER_PAGE_SIZE = 200;
 export interface OrderCursor {
+  /** The row's search rank key; present exactly when the list is searched by words. */
+  rank?: number;
   at: string;
   id: string;
 }
@@ -200,10 +202,40 @@ interface RawRow extends Record<string, unknown> {
   status: OrderStatus;
   departed_at: string | null;
   credited: number;
+  search_rank?: number;
 }
 
-function likePattern(text: string): string {
-  return `%${text.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+/** A series code and an invoice number, as in `A/12`. */
+export const INVOICE_SEARCH = /^([^/\s]+)\s*\/\s*(\d{1,9})$/;
+const BARE_NUMBER = /^\d{1,9}$/;
+const SEARCH_MAX = 100;
+
+/** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
+export function optionalSearch(raw: string | undefined): string | undefined {
+  const typed = raw?.trim().length ?? 0;
+  if (typed > SEARCH_MAX) throw new AppError("management.request_invalid", { field: "q" });
+  return typed === 0 ? undefined : raw;
+}
+
+/** As `optionalSearch`, refusing a missing or blank search. */
+export function requiredSearch(raw: string | undefined): string {
+  const search = optionalSearch(raw);
+  if (search === undefined) throw new AppError("management.request_invalid", { field: "q" });
+  return search;
+}
+
+/** `A/12` or a bare number: searched as that number exactly, not as words. */
+export function isNumberSearch(search: string): boolean {
+  const trimmed = search.trim();
+  return INVOICE_SEARCH.test(trimmed) || BARE_NUMBER.test(trimmed);
+}
+
+/** The text a word search hands the matcher, untrimmed; undefined when the list is not searched by words. */
+function wordSearch(filter: OrderListFilter): string | undefined {
+  const { search } = filter;
+  return search === undefined || search.trim() === "" || isNumberSearch(search)
+    ? undefined
+    : search;
 }
 
 /**
@@ -211,24 +243,17 @@ function likePattern(text: string): string {
  * with that order number: the ticket shows the order number, and a bill sent under
  * ticket_then_pay has no invoice number yet.
  */
-function searchClause(search: string): SQL {
-  const invoice = /^([^/\s]+)\s*\/\s*(\d{1,9})$/.exec(search);
-  const bare = /^\d{1,9}$/.test(search) ? Number(search) : undefined;
-  if (invoice !== null || bare !== undefined) {
-    const number = invoice !== null ? Number(invoice[2]) : bare!;
-    const code = invoice !== null ? sql` and xs.code = ${invoice[1]} collate nocase` : sql``;
-    const byInvoice = sql`exists (select 1 from sales x join invoice_series xs on xs.id = x.series_id
-      where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id) and x.invoice_number = ${number}${code})`;
-    return bare === undefined
-      ? byInvoice
-      : sql`(${byInvoice} or (r.kind = 'bill' and r.order_number = ${bare}))`;
-  }
-  // LIKE folds ASCII letter case only; a non-ASCII letter matches in its own case.
-  const pattern = likePattern(search);
-  return sql`(r.party_name like ${pattern} escape '\\'
-    or r.delivery_label like ${pattern} escape '\\'
-    or exists (select 1 from party_tables pt join dining_tables dt on dt.id = pt.table_id
-               where pt.party_id = r.party_id and dt.label like ${pattern} escape '\\'))`;
+function numberClause(search: string): SQL {
+  const trimmed = search.trim();
+  const invoice = INVOICE_SEARCH.exec(trimmed);
+  const bare = BARE_NUMBER.test(trimmed) ? Number(trimmed) : undefined;
+  const number = invoice !== null ? Number(invoice[2]) : bare!;
+  const code = invoice !== null ? sql` and xs.code = ${invoice[1]} collate nocase` : sql``;
+  const byInvoice = sql`exists (select 1 from sales x join invoice_series xs on xs.id = x.series_id
+    where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id) and x.invoice_number = ${number}${code})`;
+  return bare === undefined
+    ? byInvoice
+    : sql`(${byInvoice} or (r.kind = 'bill' and r.order_number = ${bare}))`;
 }
 
 /** A bill credits its lines' staff; a billless sale credits the person who rang it. */
@@ -275,7 +300,8 @@ function filterClauses(filter: OrderListFilter): SQL[] {
     clauses.push(sql`exists (select 1 from sales c where c.corrects_sale_id = r.sale_id)`);
   if (filter.staffId !== undefined) clauses.push(staffClause(filter.staffId));
   if (filter.table !== undefined) clauses.push(tableClause(filter.table));
-  if (filter.search !== undefined) clauses.push(searchClause(filter.search));
+  if (filter.search !== undefined && isNumberSearch(filter.search))
+    clauses.push(numberClause(filter.search));
   if (filter.collectable === true) {
     clauses.push(sql`r.kind = 'bill'
       and (case when r.sale_id is not null
@@ -285,26 +311,57 @@ function filterClauses(filter: OrderListFilter): SQL[] {
                       where bp.working_order_id = r.id and bp.state in ('pending', 'received'))`);
   }
   if (filter.orderIn !== undefined) clauses.push(filter.orderIn(sql`r.id`));
-  if (filter.after !== undefined) {
-    const { at, id } = filter.after;
-    clauses.push(sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`);
-  }
   return clauses;
 }
 
+function cursorClause(after: OrderCursor, ranked: boolean): SQL {
+  const { at, id } = after;
+  const newer = sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`;
+  if (!ranked) return newer;
+  const { rank } = after;
+  // Bound as a number: SQLite sorts every number below every text.
+  if (typeof rank !== "number")
+    throw new AppError("management.request_invalid", { field: "after" });
+  return sql`(r.search_rank > ${rank} or (r.search_rank = ${rank} and ${newer}))`;
+}
+
+function whereOf(clauses: SQL[]): SQL {
+  return clauses.length === 0 ? sql`1` : sql.join(clauses, sql` and `);
+}
+
 /**
- * One page of rows, newest first by `at` then id. At most seven queries whatever the page holds:
- * the page, then the invoices' amounts due, payments before an invoice (two), credit-note numbers,
- * tables and staff, each for the whole page and each skipped when the page has nothing to ask.
+ * One page of rows: closest match first when searched by words, then newest first by `at`, then
+ * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due,
+ * payments before an invoice (two), credit-note numbers, tables and staff, each for the whole page
+ * and each skipped when the page has nothing to ask.
  */
 export function ordersPageSql(filter: OrderListFilter): SQL {
   const clauses = filterClauses(filter);
-  const where = clauses.length === 0 ? sql`1` : sql.join(clauses, sql` and `);
-  return sql`
+  const words = wordSearch(filter);
+  if (words === undefined) {
+    if (filter.after !== undefined) clauses.push(cursorClause(filter.after, false));
+    return sql`
     with r as (${rowsSql(filter)})
     select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
-    from r where ${where}
+    from r where ${whereOf(clauses)}
     order by r.at desc, r.id desc
+    limit ${filter.limit + 1}`;
+  }
+  // The other filters run before the matcher, so it ranks only the rows they keep; `ranked` is
+  // materialized so each kept row is ranked once.
+  const rankedClauses = [sql`r.search_rank is not null`];
+  if (filter.after !== undefined) rankedClauses.push(cursorClause(filter.after, true));
+  return sql`
+    with base as (${rowsSql(filter)}),
+    ranked as materialized (
+      select r.*, waitron_search_rank(${words}, r.party_name, r.delivery_label,
+        (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
+         where pt.party_id = r.party_id)) as search_rank
+      from base r where ${whereOf(clauses)}
+    )
+    select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
+    from ranked r where ${whereOf(rankedClauses)}
+    order by r.search_rank, r.at desc, r.id desc
     limit ${filter.limit + 1}`;
 }
 
@@ -312,7 +369,14 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
   const { rows: read } = await tx.execute<RawRow>(ordersPageSql(filter));
   const raw = read.slice(0, filter.limit);
   const last = raw[filter.limit - 1];
-  const next = read.length > filter.limit ? { at: last!.at, id: last!.id } : null;
+  const next =
+    read.length > filter.limit
+      ? {
+          ...(wordSearch(filter) === undefined ? {} : { rank: Math.trunc(last!.search_rank!) }),
+          at: last!.at,
+          id: last!.id,
+        }
+      : null;
 
   const bills = raw.filter((row) => row.kind === "bill");
   const owing = bills.filter((row) => OWING.includes(row.status));
