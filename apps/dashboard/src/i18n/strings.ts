@@ -2208,6 +2208,8 @@ export const en = {
   "menus.delete_section_note":
     "Delete {name} and the {count} sections below it? Its products stay.",
   "menus.menu_prefix": "Menu: {name}",
+  "menus.section_count": "{count} sections",
+  "menus.section_count_one": "1 section",
   "menus.open_included": "Open {name}",
   "menus.remove_included": "Remove from this menu",
   "menus.include_as_folder": "Shown as a folder",
@@ -4744,6 +4746,8 @@ export const es: Record<StringKey, string> = {
   "menus.delete_section_note":
     "¿Eliminar {name} y las {count} secciones debajo? Sus productos se conservan.",
   "menus.menu_prefix": "Carta: {name}",
+  "menus.section_count": "{count} secciones",
+  "menus.section_count_one": "1 sección",
   "menus.open_included": "Abrir {name}",
   "menus.remove_included": "Quitar de esta carta",
   "menus.include_as_folder": "Se muestra como carpeta",

@@ -3,7 +3,13 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { foldForSearch, textSearch, type TextSearch } from "@waitron/shared";
-import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import {
+  baseStyles,
+  reorder,
+  visuallyHiddenStyles,
+  type DataTableColumn,
+  type WtDataTable,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -29,6 +35,7 @@ import {
   type DropGap,
 } from "./tree-drag.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
+import { countOf } from "./product-list.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
@@ -188,6 +195,15 @@ export class MenuStructureTable extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      wt-data-table::part(count) {
+        margin-inline-start: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      wt-data-table[narrow]::part(count) {
+        ${visuallyHiddenStyles}
+        clip-path: inset(50%);
+      }
       wt-data-table::part(menu-divider) {
         align-self: stretch;
         margin: var(--wt-space-1) 0;
@@ -221,6 +237,7 @@ export class MenuStructureTable extends LitElement {
   /** With `defaultColor`, where a product without its own colour takes one from. */
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
+  @property({ attribute: false }) menuColor: string | null = null;
   @property() menuName = "";
   /** The path of the current section; empty for the menu's own top level. */
   @property({
@@ -773,6 +790,7 @@ export class MenuStructureTable extends LitElement {
       currentLocale(),
       this.nodes,
       this.menuName,
+      this.menuColor,
       this.#order,
       this.#productNames,
       this.#sectionNames,
@@ -785,13 +803,32 @@ export class MenuStructureTable extends LitElement {
       key: ROOT_KEY,
       parentKey: null,
       name: this.menuName,
-      counts: "",
-      color: null,
+      counts: this.#counts(),
+      color: this.menuColor,
     };
     const rows = members.length === 0 ? [] : [root, ...members];
     this.#rowsMemo = { inputs, rows };
     this.#rowByKey = new Map(members.map((row) => [row.key, row]));
     return rows;
+  }
+
+  /** The whole menu as a guest sees it, each section and product once, those inside included menus
+   * too; an included menu itself is no section. */
+  #counts(): string {
+    const sections = new Set<string>();
+    const products = new Set<string>();
+    const walk = (nodes: MenuStructureNode[]) => {
+      for (const node of nodes) {
+        if (node.ref.kind === "product") products.add(node.ref.productId);
+        else if (!node.includedMenuId) sections.add(node.ref.sectionId);
+        walk(node.children ?? []);
+      }
+    };
+    walk(this.nodes);
+    const parts = sections.size > 0 ? [countOf("menus.section_count", sections.size)] : [];
+    if (products.size > 0 || sections.size === 0)
+      parts.push(countOf("folders.product_count", products.size));
+    return parts.join(", ");
   }
 
   #buildRows(): Row[] {
@@ -1014,8 +1051,17 @@ export class MenuStructureTable extends LitElement {
 
   /** Never marked current: the top level is the current place when no row is marked. */
   #rootNameCell(row: RootRow) {
+    const swatch =
+      row.color === null
+        ? nothing
+        : html`<span part="swatch-box" data-test="color-root" aria-hidden="true"
+            >${swatchChip(row.color)}</span
+          >`;
     return html`<span part="folder-cell"
-      >${folderFrame()}<strong part="root-name" data-test="root-name">${row.name}</strong></span
+      >${folderFrame(swatch)}<span
+        ><strong part="root-name" data-test="root-name">${row.name}</strong
+        ><span part="count" data-test="count-root">${row.counts}</span></span
+      ></span
     >`;
   }
 

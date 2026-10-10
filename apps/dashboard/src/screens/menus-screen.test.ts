@@ -970,6 +970,46 @@ it("lists the menus by name, and reverses that order when the name heading is pr
   expect(order()).toEqual(["menu-a", "menu-b"]);
 });
 
+it("draws the menu's own colour on its Structure root row, and the colour its settings then save once it is opened again", async () => {
+  let color: string | null = "#aa3300";
+  const client = api();
+  const read = client.getMenuStructure.getMockImplementation() as (
+    id: string,
+  ) => Promise<MenuStructure>;
+  client.getMenuStructure.mockImplementation(async (id: string) => {
+    const value = await read(id);
+    return id === "menu-lunch" ? { ...value, root: { ...value.root, color } } : value;
+  });
+  client.updateMenuDetails.mockImplementation(async (_id: string, input: { color: string }) => {
+    color = input.color;
+  });
+  const el = await mountLunch(client);
+  const chip = () => inStructure(el, '[data-test="color-root"] [part~="color-swatch"]')!;
+  await settleStructure(el);
+  expect(getComputedStyle(chip()).backgroundColor).toBe("rgb(170, 51, 0)");
+  await click(el, "back");
+  await inTable(el, "rename-menu-lunch");
+  const swatch = inModal(el, "menu-form", 'button[data-color]:not([data-color=""])');
+  const picked = swatch.dataset.color!;
+  expect(picked).not.toBe("#aa3300");
+  swatch.click();
+  await el.updateComplete;
+  inModal(el, "menu-form", '[data-test="menu-save"]').click();
+  await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+  expect(client.updateMenuDetails).toHaveBeenCalledWith(
+    "menu-lunch",
+    expect.objectContaining({ color: picked }),
+  );
+  await inTable(el, "edit-menu-lunch");
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  await settleStructure(el);
+  const probe = document.createElement("span");
+  probe.style.backgroundColor = picked;
+  document.body.append(probe);
+  onTestFinished(() => probe.remove());
+  expect(getComputedStyle(chip()).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+});
+
 it("opens the menu and tab the address names, and leaves the list by the Back control", async () => {
   const client = api();
   const el = await mountLunch(client);

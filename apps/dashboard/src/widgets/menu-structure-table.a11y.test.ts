@@ -70,6 +70,7 @@ const states = [
   "included menu open",
   "included shown directly",
   "busy",
+  "coloured root",
 ] as const;
 
 const MENU_OF: Partial<Record<(typeof states)[number], string>> = {
@@ -92,6 +93,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
         menuName: "Lunch Menu",
         current: state === "current" ? ["m-drinks", "m-beer"] : [],
         busy: state === "busy",
+        menuColor: state === "coloured root" ? "#aabbcc" : null,
       },
       theme,
     );
@@ -134,6 +136,12 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
       const note = inTable('[data-test="folder-setting-included-wine"]');
       expect(note.textContent!.trim()).toBe(
         t(state === "closed" ? "menus.include_as_folder" : "menus.include_direct"),
+      );
+    }
+    if (state === "coloured root") {
+      expect(inTable('[data-test="color-root"]')).not.toBeNull();
+      expect(inTable('[data-test="count-root"]').textContent!.trim()).toBe(
+        `${t("menus.section_count").replace("{count}", "3")}, ${t("folders.product_count").replace("{count}", "3")}`,
       );
     }
     await expectNoA11yViolations(host);

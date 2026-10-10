@@ -2375,6 +2375,7 @@ export class MenusScreen extends LitElement {
         .products=${this.products}
         .categories=${this.categories}
         .defaultColor=${this.defaultColor}
+        .menuColor=${structure.root?.color ?? null}
         .current=${this.path}
         .busy=${this.busy}
         .reordering=${this.structureReordering}

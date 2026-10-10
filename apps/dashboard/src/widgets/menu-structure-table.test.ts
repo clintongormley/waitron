@@ -784,7 +784,7 @@ it("focuses the empty box's first add when the menu is empty", async () => {
   }
 });
 
-/** Sixty characters and no space, so only a break anywhere can wrap it. */
+/** Sixty characters and no space, so the table scrolls sideways to show it. */
 const LONG_MENU_NAME = "Menú-de-mediodía-de-lunes-a-viernes-con-postre-y-café-diario";
 
 it("keeps every row's menu on a phone's screen", async () => {
@@ -890,13 +890,19 @@ function pieces(el: MenuStructureTable, key: string) {
   };
 }
 
-it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))))(
-  "starts every name one even step further in per level, sections, included menus and products alike ($width px, reordering: $reordering)",
-  async ({ width, reordering }) => {
+it.each(
+  [1280, 390].flatMap((width) =>
+    [true, false].flatMap((reordering) =>
+      [null, "#aabbcc"].map((menuColor) => ({ width, reordering, menuColor })),
+    ),
+  ),
+)(
+  "starts every name one even step further in per level, sections, included menus and products alike ($width px, reordering: $reordering, menu colour: $menuColor)",
+  async ({ width, reordering, menuColor }) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(width, 844);
-      const el = await mountDeep({ reordering });
+      const el = await mountDeep({ reordering, menuColor });
       const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
       expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
       // The menu's own row is level 1, and the same step separates it from its members.
@@ -914,6 +920,11 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
         else expect(current.grip, current.key).toBeUndefined();
         expect(current.media?.left, current.key).toBeCloseTo(twin.media!.left, 0);
       }
+      // The menu's colour chip sits in the frame an uncoloured root keeps empty.
+      expect(inTable(el, '[data-test="color-root"]') !== null).toBe(menuColor !== null);
+      el.menuColor = menuColor === null ? "#aabbcc" : null;
+      await settle(el);
+      expect(rootNameLeft(el)).toBeCloseTo(root, 0);
     } finally {
       await page.viewport(before.width, before.height);
     }
@@ -3615,5 +3626,120 @@ describe("the menu's own row", () => {
     } finally {
       await page.viewport(before.width, before.height);
     }
+  });
+
+  const section = (
+    memberId: string,
+    sectionId: string,
+    children: MenuStructureNode[],
+    includedMenuId?: string,
+  ): MenuStructureNode => ({
+    memberId,
+    ref: { kind: "section", sectionId },
+    internalName: sectionId,
+    ownerMenuId: includedMenuId ?? "menu-lunch",
+    ...(includedMenuId ? { includedMenuId } : {}),
+    children,
+  });
+
+  // Lunch with Wines: Drinks is shown twice, and Lager is listed inside Drinks, Beer and Wines.
+  it.each([
+    {
+      menu: "Lunch with Wines included",
+      nodes: () => [...lunchNodes(), wines()],
+      en: "4 sections, 4 products",
+      es: "4 secciones, 4 productos",
+    },
+    {
+      menu: "one section holding one product",
+      nodes: () => [section("m-only", "s-only", [productNode("m-only-burger", "p-burger")])],
+      en: "1 section, 1 product",
+      es: "1 sección, 1 producto",
+    },
+    {
+      menu: "products only",
+      nodes: () => [
+        productNode("m-burger", "p-burger"),
+        productNode("m-lager", "p-lager"),
+        productNode("m-lemonade", "p-lemonade"),
+      ],
+      en: "3 products",
+      es: "3 productos",
+    },
+    {
+      menu: "one empty section",
+      nodes: () => [section("m-empty", "s-empty", [])],
+      en: "1 section",
+      es: "1 sección",
+    },
+    {
+      menu: "only an include of an empty menu",
+      nodes: () => [section("included-empty", "empty-root", [], "empty")],
+      en: "0 products",
+      es: "0 productos",
+    },
+  ])(
+    "counts each section and product once, after the menu's name: $menu",
+    async ({ nodes, en, es }) => {
+      const before = currentLocale();
+      onTestFinished(() => setLocale(before));
+      setLocale("en");
+      const el = await mount({ nodes: nodes() });
+      const count = () => inTable(el, '[data-test="count-root"]')!;
+      expect(count().textContent!.trim()).toBe(en);
+      expect(count().part.contains("count")).toBe(true);
+      const name = inTable(el, '[data-test="root-name"]')!.getBoundingClientRect();
+      const counted = count().getBoundingClientRect();
+      expect(counted.left).toBeGreaterThan(name.right);
+      expect(counted.top).toBeLessThan(name.bottom);
+      expect(counted.bottom).toBeGreaterThan(name.top);
+      setLocale("es");
+      el.requestUpdate();
+      await settle(el);
+      expect(count().textContent!.trim()).toBe(es);
+    },
+  );
+
+  it.each([390, 1280])(
+    "keeps the counts in the root row's text, visually hidden only on a narrow table (%i px)",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const el = await mount();
+        await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
+        const count = inTable(el, '[data-test="count-root"]')!;
+        expect(row(el, "root")!.textContent).toContain(count.textContent!.trim());
+        expect(count.textContent!.trim()).not.toBe("");
+        if (width === 390) {
+          expect(getComputedStyle(count).display).not.toBe("none");
+          expect(getComputedStyle(count).clipPath).toBe("inset(50%)");
+          expect(count.getBoundingClientRect().width).toBe(1);
+        } else {
+          expect(getComputedStyle(count).clipPath).toBe("none");
+          expect(count.getBoundingClientRect().width).toBeGreaterThan(1);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+
+  it("paints the menu's own colour in its leading frame, as no button, and starts the name in the same place without one", async () => {
+    const el = await mount({ menuColor: "#aabbcc" });
+    const box = inTable(el, '[data-test="color-root"]')!;
+    expect(box.tagName).toBe("SPAN");
+    expect(box.part.contains("swatch-box")).toBe(true);
+    expect(box.getAttribute("aria-hidden")).toBe("true");
+    expect(box.parentElement!.part.contains("folder-frame")).toBe(true);
+    expect(box.closest("td")!.querySelector("button")).toBeNull();
+    const chip = box.querySelector<HTMLElement>('[part~="color-swatch"]')!;
+    expect(getComputedStyle(chip).backgroundColor).toBe("rgb(170, 187, 204)");
+    const coloured = rootNameLeft(el);
+    el.menuColor = null;
+    await settle(el);
+    expect(inTable(el, '[data-test="color-root"]')).toBeNull();
+    expect(row(el, "root")!.querySelector('[part~="folder-frame"]')).not.toBeNull();
+    expect(rootNameLeft(el)).toBeCloseTo(coloured, 0);
   });
 });
