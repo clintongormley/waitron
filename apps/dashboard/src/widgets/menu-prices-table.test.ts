@@ -373,6 +373,14 @@ it("leaves the department out of main category cells while keeping nested folder
   expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
 });
 
+it("keeps a category name when its department is absent from the loaded list", async () => {
+  const el = await mount({
+    categories: [{ id: "orphan", name: "Orphan", parentId: "missing", color: null }],
+    rows: [{ ...burger, categoryId: "orphan" }],
+  });
+  expect(column(el, "category")).toEqual(["Orphan"]);
+});
+
 it("lists each product once with its price override, and where it appears by the sections' internal names", async () => {
   const el = await mount();
   expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lager"]);
@@ -2305,7 +2313,7 @@ describe("variants", () => {
     ]);
   });
 
-  it("offers Appears under, Main category and Available in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
+  it("offers Section, Main category and Available in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
     // A choice under either of this table's old keys, or an order under the last one, is not read.
     localStorage.setItem("waitron.menus.prices:columns", JSON.stringify({ category: false }));
     localStorage.setItem(
