@@ -678,9 +678,10 @@ the Alerts screen's "Nothing needs attention." The Departments list says
 "No departments yet." when empty. A screen that filters its rows before handing them to
 the table chooses the empty sentence itself, because the table cannot tell nothing made from nothing
 matching: the Orders screen's rows are always the result of its search and filters, so it passes
-`tableNoMatches()` as `emptyMessage`; the Users and Payments screens do while they hold people or
-readers that their own filters hide; and the Units screen's delete dialog always does, because its products table is drawn only when
-products use the unit, so an empty one means its search found nothing.
+`tableNoMatches()` as `emptyMessage`; and the Users and Payments screens do while they hold people or
+readers that their own filters hide. The Units screen's delete dialog hands its table every product
+using the unit with its search as `searchTerm`, so the table's own `noMatchesMessage` covers a
+search that finds nothing.
 
 Table cells line up by their first line of text (`vertical-align: baseline`). A flex-row cell takes
 its line from its first item, so that item must carry text, or the row uses `align-items: baseline`.
@@ -1097,8 +1098,8 @@ emits `wt-sort-change`.
 
 **One search rule.** The table, `wt-combobox`, the screens with their own search and the server's
 searches all use the matcher in `@waitron/shared` (`textSearch`, `packages/shared/src/text-search.ts`;
-the venue store registers it with SQLite as `waitron_search_rank`). A row matches when its names — a
-table's `searchValue` columns — hold every word typed, in any order, ignoring accents, capitals and
+the venue store registers it with SQLite as `waitron_search_rank`). A row matches when its
+`searchValue` columns — its names, and on the Users screen also email and telephone — hold every word typed, in any order, ignoring accents, capitals and
 punctuation. A word followed by a space or punctuation must be a whole word; the word still being
 typed may be any part of one. A search of only spaces is no search, and a search of only
 punctuation matches nothing. Matches are listed closest first (`compareSearchRanks`: a whole word,
@@ -2445,8 +2446,8 @@ A search box sits at the top of the sidebar, above the groups: a `wt-input type=
 `hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
 **Search pages**. A staff session sees My schedule and Orders in its sidebar, without a search box.
 While the box holds a term (spaces trimmed), the nav
-shows only the pages whose label in the current language matches it by the one search rule
-(Remembered, searchable, filterable tables), so "categorias" finds "Categorías", plus each page that
+shows only the pages whose label in the current language matches it by the one search rule (see
+Remembered, searchable, filterable tables), so "categorias" finds "Categorías", plus each page that
 matches only with its group's header read beside its label. Within a group the pages whose own label
 matches come first, closest first, then the others in nav order. The search
 narrows the rows the nav would already show, so a page this person may not open never appears,
@@ -2455,7 +2456,7 @@ match shows open whatever its collapsed state. While a term is typed each shown 
 collapse control: it is a plain `<div>` with no `aria-expanded`, no click handler and no chevron (an
 empty space of the chevron's width keeps the label where it was), so clicking one changes nothing.
 Picking a page opens its group, as any arrival does. When nothing matches, the nav says **No pages
-match.** in a `role="status"` message. Enter opens the first page shown, in nav order, and does
+match.** in a `role="status"` message. Enter opens the first page shown, in the order shown, and does
 nothing when nothing matches or the box is blank.
 Opening a page from a search, by Enter or by click, clears the term and closes the phone-width
 drawer, as any nav click does. Escape clears a term and goes no further, so an open drawer stays

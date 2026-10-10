@@ -107,8 +107,8 @@ before Save leaves it out of the library.
 **Search images** finds photographs by the words in their names, in any order, and searches as you
 type: the word you are still typing can be any part of a word, so **read** finds **Summer bread**.
 Once you type a space after a word, it matches only that whole word. Accents and capitals make no
-difference, so **cafe** finds **Café con leche**. Every word has to be in the same name, English or
-Spanish. Choose **Relevance** to list the closest matches first, **Date** to browse uploads or
+difference, so **cafe** finds **Café con leche**. Every word has to be in the name in one
+language. Choose **Relevance** to list the closest matches first, **Date** to browse uploads or
 **Name** to scan names. Date starts with the newest uploads; switch to **Oldest first** when you
 need the earliest ones. Name starts with **A–Z** and also offers **Z–A**. Use the page controls when more photographs match than fit on the current page.
 
