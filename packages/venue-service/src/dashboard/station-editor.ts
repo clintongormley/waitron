@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -81,6 +81,14 @@ export function stationPrinterOptions(
   });
 }
 
+/** The chosen printers still in the printer list. */
+export function listedPrinterIds(
+  ids: readonly string[],
+  printers: readonly { id: string }[],
+): string[] {
+  return ids.filter((id) => printers.some((printer) => printer.id === id));
+}
+
 /** Where a station-write refusal belongs: a field it names, or the line above the buttons. */
 export function stationRefusalField(refusal: Refusal | undefined): "name" | "printers" | undefined {
   if (refusal === undefined) return undefined;
@@ -151,6 +159,8 @@ export class StationEditor extends LitElement {
 
   @state() private draft: Draft = { name: "", printerIds: [], showsRestOfOrder: false };
   @state() private attempted = false;
+  /** A chosen printer left the printer list, so the draft lost it. */
+  @state() private printerDropped = false;
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
   private identity?: object;
@@ -172,7 +182,7 @@ export class StationEditor extends LitElement {
     super.disconnectedCallback();
   }
 
-  protected override willUpdate() {
+  protected override willUpdate(changed: PropertyValues<this>) {
     const station = this.station;
     if (!this.open || station === undefined) {
       this.scope?.dispose();
@@ -197,6 +207,7 @@ export class StationEditor extends LitElement {
       };
       this.baseline = copy(this.draft);
       this.attempted = false;
+      this.printerDropped = false;
       this.refusal = undefined;
     }
     if (this.isConnected && !this.scope) {
@@ -212,6 +223,21 @@ export class StationEditor extends LitElement {
       this.scope = scope;
       this.leave = coordinator;
       scope.commit(this.baseline!);
+    }
+    if (changed.has("printers")) this.dropUnlistedPrinters();
+  }
+
+  private dropUnlistedPrinters(): void {
+    const baseline = this.baseline!;
+    const draft = listedPrinterIds(this.draft.printerIds, this.printers);
+    const base = listedPrinterIds(baseline.printerIds, this.printers);
+    if (base.length < baseline.printerIds.length) {
+      this.baseline = { ...baseline, printerIds: base };
+      this.scope?.commit(this.baseline);
+    }
+    if (draft.length < this.draft.printerIds.length) {
+      this.changed({ ...this.draft, printerIds: draft }, "printers");
+      this.printerDropped = true;
     }
   }
 
@@ -245,6 +271,7 @@ export class StationEditor extends LitElement {
 
   private changed(draft: Draft, field: "name" | "printers" | "rest") {
     this.draft = draft;
+    this.printerDropped = false;
     if (stationRefusalField(this.refusal) === field) this.refusal = undefined;
     this.scope?.changed();
   }
@@ -282,6 +309,7 @@ export class StationEditor extends LitElement {
       return;
     this.attempted = true;
     this.refusal = undefined;
+    this.printerDropped = false;
     if (this.nameError()) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -396,7 +424,13 @@ export class StationEditor extends LitElement {
         </div>
         <wt-form-actions
           slot="footer"
-          .error=${[unplaced, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}
+          .error=${[
+            unplaced,
+            marked ? t("prep.fix_fields") : "",
+            this.printerDropped ? t("prep.printer_deleted") : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           <wt-button
             slot="cancel"

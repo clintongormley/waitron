@@ -4734,11 +4734,13 @@ export class TillApp extends LitElement {
         status?: unknown;
       };
       // An error with no HTTP status is not a refusal, so the server may have stored the choice;
-      // after a held or busy refusal the list is read again, so it shows the holder or the payment.
+      // after a held or busy refusal the list is read again, so it shows the holder or the payment,
+      // and after a printer.not_found one, so a printer deleted elsewhere drops out of it.
       if (
         typeof status !== "number" ||
         code === "device.equipment_held" ||
-        code === "reader.payment_in_progress"
+        code === "reader.payment_in_progress" ||
+        code === "printer.not_found"
       )
         this.#equipmentStale = true;
       if (opening === this.#equipmentOpenings) {

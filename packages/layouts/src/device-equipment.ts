@@ -1,7 +1,9 @@
+// The registry of `printer.not_found`, which this file throws.
+import "@waitron/printing";
 import { deviceProfilePrinters, devices, nowIso, printerHolders, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
-import { mayTakeOver } from "@waitron/shared";
+import { and, asc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { AppError, mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import type { ProfilePrinterRole } from "./device-printers.js";
 
@@ -216,6 +218,24 @@ function roleState(state: DeviceState, role: ProfilePrinterRole): PrinterRoleSta
   };
 }
 
+/**
+ * Refuses `printer.not_found` for the first of `ids` naming a deleted printer, whether or not the
+ * caller already stores it. An unknown or switched-off printer passes this check.
+ */
+export async function refuseDeletedPrinters(
+  tx: Transaction,
+  ids: readonly (string | null | undefined)[],
+): Promise<void> {
+  const named = [...new Set(ids.filter((id): id is string => typeof id === "string"))];
+  if (named.length === 0) return;
+  const deleted = await tx
+    .select({ id: printers.id })
+    .from(printers)
+    .where(and(inArray(printers.id, named), isNotNull(printers.deletedAt)));
+  const first = named.find((id) => deleted.some((row) => row.id === id));
+  if (first !== undefined) throw new AppError("printer.not_found", { id: first });
+}
+
 /** The printer `role` prints or opens on for the device, switched on or not; `null` for none. */
 export async function resolveDevicePrinterId(
   tx: Transaction,
@@ -275,13 +295,15 @@ export async function readPrinterRoles(
  * Sets one role to Use default or to a printer the device may newly choose. A portable printer
  * another device holds is refused unless taken by a scan or a confirmed list choice, never by a
  * manager; taking it clears the previous holder's choices of it, and that device acquires nothing.
- * A refusal is returned rather than thrown because its code belongs to the caller's surface.
+ * A refusal is returned rather than thrown because its code belongs to the caller's surface; a
+ * deleted printer, checked first, is thrown as `printer.not_found`.
  */
 export async function selectDevicePrinter(
   tx: Transaction,
   input: SelectDevicePrinterInput,
 ): Promise<SelectDevicePrinterResult> {
   const { deviceId, role, selection } = input;
+  if (selection !== "default") await refuseDeletedPrinters(tx, [selection.id]);
   const [device] = await tx
     .select({ profileId: devices.deviceProfileId, locationId: devices.locationId })
     .from(devices)
@@ -533,8 +555,9 @@ export async function setPrinterPortable(
   const [printer] = await tx
     .select({ portable: printers.portable })
     .from(printers)
-    .where(eq(printers.id, printerId));
-  if (printer === undefined || printer.portable === portable) return;
+    .where(and(eq(printers.id, printerId), isNull(printers.deletedAt)));
+  if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
+  if (printer.portable === portable) return;
   await tx.update(printers).set({ portable }).where(eq(printers.id, printerId));
   if (portable) {
     for (const role of HELD_ROLES) {

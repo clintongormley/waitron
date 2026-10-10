@@ -9,7 +9,7 @@ import type {
   Place,
 } from "@waitron/catalogue/src/menu-combine-types.js";
 export type { Setting, CombinedOffer, ValueSource, Place };
-import type { ContentLanguageRules, ContentLanguages } from "@waitron/shared";
+import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
 
 /**
  * Most types below are hand-kept copies of the server's JSON shapes, so nothing compares them with
@@ -1234,6 +1234,8 @@ export interface PrintJobRow {
   canResend: boolean;
   id: string;
   printerId: string;
+  /** The job's printer's name, kept after the printer is deleted. */
+  printerName: string;
   status: PrintJobStatus;
   attempts: number;
   lastError: string | null;
@@ -3244,6 +3246,14 @@ export class DashboardApi {
 
   deactivatePrinter(id: string): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}/deactivate`, "POST");
+  }
+
+  getPrinterDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/printers/${id}/delete-impact`, "GET");
+  }
+
+  deletePrinter(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/printers/${id}`, "DELETE");
   }
 
   resendPrintJob(id: string): Promise<{ jobId: string }> {

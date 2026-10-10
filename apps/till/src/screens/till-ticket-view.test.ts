@@ -156,6 +156,38 @@ describe("till-ticket-view", () => {
     expect(el.result.invoiceNumber).toBe("A/1");
   });
 
+  it.each([
+    ["en-GB", "The printer was deleted, so this job will not be retried.", "Automatic retry"],
+    [
+      "es-ES",
+      "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
+      "reintento automático",
+    ],
+  ])(
+    "says a failed original's printer was deleted, with no retry, in %s",
+    async (locale, message, autoRetry) => {
+      setLocale(locale);
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        result: { ...result, invoiceType: "F1" },
+        originalReceiptPrint: {
+          status: "failed",
+          jobId: "original",
+          canRetry: false,
+          failureCode: "printer.deleted",
+        },
+        originalReceiptAvailable: true,
+      });
+      const status = el.shadowRoot!.querySelector("[data-test=original-delivery]")!.textContent!;
+      expect(status).toContain(message);
+      expect(status).not.toContain(autoRetry);
+      for (const name of ["print-receipt", "retry-receipt", "reprint"]) {
+        expect(el.shadowRoot!.querySelector(`[data-test=${name}]`)).toBeNull();
+      }
+      expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
+    },
+  );
+
   it.each(["en-GB", "es-ES"])(
     "confirms F1 customer handover independently of printing capability in %s",
     async (locale) => {

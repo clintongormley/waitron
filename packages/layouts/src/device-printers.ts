@@ -3,7 +3,7 @@ import { deviceProfilePrinters, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { settleProfilePrinterDevices } from "./device-equipment.js";
+import { refuseDeletedPrinters, settleProfilePrinterDevices } from "./device-equipment.js";
 
 export type PrinterRole = "receipt" | "payment_slip";
 
@@ -73,16 +73,24 @@ export async function readProfilePrinterLists(
 
 /**
  * Replaces every list and default, then clears each of the profile's devices' choices the new lists
- * no longer offer it, acquiring nothing. Refuses, writing nothing, a default missing from its list
- * and a printer newly added to the drawer list that has no cash drawer; one already listed keeps
- * its place whatever its drawer flag says now. Delete-then-insert is safe because nothing
- * references `device_profile_printers`.
+ * no longer offer it, acquiring nothing. Refuses, writing nothing, a deleted printer on any list or
+ * default, even one already stored there; a default missing from its list; and a printer newly
+ * added to the drawer list that has no cash drawer, while one already listed keeps its place
+ * whatever its drawer flag says now. Delete-then-insert is safe because nothing references
+ * `device_profile_printers`.
  */
 export async function setProfilePrinterLists(
   tx: Transaction,
   profileId: string,
   lists: ProfilePrinterLists,
 ): Promise<void> {
+  await refuseDeletedPrinters(
+    tx,
+    PROFILE_PRINTER_ROLES.flatMap((role) => [
+      ...lists[LIST_KEYS[role].ids],
+      lists[LIST_KEYS[role].defaultId],
+    ]),
+  );
   for (const role of PROFILE_PRINTER_ROLES) {
     const keys = LIST_KEYS[role];
     const defaultId = lists[keys.defaultId];

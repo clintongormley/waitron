@@ -465,6 +465,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer or card reader is not available to this device. Choose another",
     es: "Esa impresora o lector de tarjetas no está disponible para este dispositivo. Elige otro",
   },
+  "printer.not_found": {
+    en: "That printer no longer exists. Choose another",
+    es: "Esa impresora ya no existe. Elige otra",
+  },
+  "printer.deleted": {
+    en: "The printer was deleted, so this job will not be retried.",
+    es: "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
+  },
   "device.equipment_held": {
     en: "Another device has that equipment now. Choose again",
     es: "Otro dispositivo tiene ahora ese equipo. Vuelve a elegir",

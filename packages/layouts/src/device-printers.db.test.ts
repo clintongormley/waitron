@@ -13,7 +13,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -617,5 +617,123 @@ describe("a profile's printer lists and each device's current printers", () => {
       .where(eq(deviceProfilePrinters.deviceProfileId, profile!.id));
     expect(left).toEqual([]);
     await suite.db.delete(printers).where(eq(printers.id, lonely));
+  });
+});
+
+describe("a deleted printer on a profile's lists", () => {
+  let loc: LocationId;
+  let live: string;
+  let gone: string;
+
+  beforeEach(async () => {
+    await seedTenant(suite.db);
+    loc = await seedLocation("Here");
+    live = await seedPrinter(loc, "Bar");
+    const [row] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: loc,
+        name: "Gone",
+        transport: "network_tcp",
+        host: "10.0.0.2",
+        hasCashDrawer: true,
+      })
+      .returning({ id: printers.id });
+    gone = row!.id;
+  });
+
+  // Only the tombstone is written: a real delete also removes the profile's rows
+  // (apps/server/src/printer-delete.ts), so the resave cases pin a backstop for a state it never
+  // leaves.
+  async function tombstone(printerId: string): Promise<void> {
+    await suite.db
+      .update(printers)
+      .set({ active: false, deletedAt: "2026-10-10T12:00:00.000Z" })
+      .where(eq(printers.id, printerId));
+  }
+
+  const ROLES = [
+    ["receipt", { receiptPrinterIds: ["GONE"] }],
+    ["payment slip", { paymentSlipPrinterIds: ["GONE"] }],
+    ["cash drawer", { cashDrawerPrinterIds: ["GONE"] }],
+    ["receipt default", { receiptPrinterIds: ["GONE"], receiptPrinterDefaultId: "GONE" }],
+    [
+      "payment slip default",
+      { paymentSlipPrinterIds: ["GONE"], paymentSlipPrinterDefaultId: "GONE" },
+    ],
+    ["cash drawer default", { cashDrawerPrinterIds: ["GONE"], cashDrawerPrinterDefaultId: "GONE" }],
+  ] as const;
+
+  function withGone(partial: Partial<Record<keyof ProfilePrinterLists, unknown>>) {
+    return lists(
+      Object.fromEntries(
+        Object.entries(partial).map(([key, value]) => [
+          key,
+          !Array.isArray(value) ? gone : key === "cashDrawerPrinterIds" ? [gone] : [live, gone],
+        ]),
+      ) as Partial<ProfilePrinterLists>,
+    );
+  }
+
+  it.each(ROLES)(
+    "refuses newly listing it on the %s list with printer.not_found, storing nothing",
+    async (_role, partial) => {
+      const { profileId } = await seedDevice(suite.db, { locationId: loc });
+      const stored = lists({ receiptPrinterIds: [live], receiptPrinterDefaultId: live });
+      await inTx((tx) => setProfilePrinterLists(tx, profileId, stored));
+      await tombstone(gone);
+      const e = await captureError(() =>
+        inTx((tx) => setProfilePrinterLists(tx, profileId, withGone(partial))),
+      );
+      expect(e).toBeInstanceOf(AppError);
+      expect([(e as AppError).code, (e as AppError).params]).toEqual([
+        "printer.not_found",
+        { id: gone },
+      ]);
+      expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(stored);
+    },
+  );
+
+  it.each(ROLES)(
+    "refuses a %s list still naming it when the same lists are saved again, storing nothing",
+    async (_role, partial) => {
+      const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+      const stale = withGone(partial);
+      await inTx((tx) => setProfilePrinterLists(tx, profileId, stale));
+      await tombstone(gone);
+      const e = await captureError(() =>
+        inTx((tx) => setProfilePrinterLists(tx, profileId, stale)),
+      );
+      expect(e).toBeInstanceOf(AppError);
+      expect([(e as AppError).code, (e as AppError).params]).toEqual([
+        "printer.not_found",
+        { id: gone },
+      ]);
+      expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(stale);
+      expect(await devicePrinters(deviceId)).toEqual({
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      });
+    },
+  );
+
+  it("still saves lists naming a switched-off printer that is not deleted", async () => {
+    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const saved = withGone(ROLES[5][1]);
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
+    await setActive(gone, false);
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(saved);
+  });
+
+  it("saves lists that no longer name it", async () => {
+    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    await inTx((tx) =>
+      setProfilePrinterLists(tx, profileId, lists({ receiptPrinterIds: [live, gone] })),
+    );
+    await tombstone(gone);
+    const next = lists({ receiptPrinterIds: [live], receiptPrinterDefaultId: live });
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, next));
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(next);
   });
 });

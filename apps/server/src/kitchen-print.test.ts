@@ -10,6 +10,7 @@ import {
   orderGroups,
   parties,
   partyTables,
+  printers,
   printJobs,
   ticketItems,
   withTransaction,
@@ -27,7 +28,12 @@ import {
   updateUnit,
 } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
+import {
+  createPrinter,
+  deactivatePrinter,
+  endDeletedPrinterJobs,
+  updatePrinter,
+} from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
@@ -46,9 +52,12 @@ import {
   enqueueKitchenTickets,
   enqueueStationMoved,
   orderTableLabel,
+  ordersWithPrintProblem,
   readCancelledExtra,
   reprintOrderTickets,
 } from "./kitchen-print.js";
+import { deletePrinter } from "./printer-delete.js";
+import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
@@ -1878,5 +1887,154 @@ describe("the table a slip names (spec decision 9)", () => {
 
     expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, delivered))).toBe("Terraza 2");
     expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, walkUp))).toBeNull();
+  });
+});
+
+describe("a station printer that was deleted", () => {
+  /** Cocina prints on P and Q; one dish there fired before P goes. */
+  async function stationWithTwo(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
+    const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+    const p = await makePrinter(tx, cfg, "Old kitchen");
+    const q = await makePrinter(tx, cfg, "Cocina Q");
+    await attachPrinterToStation(tx, { stationId: cocina.id, printerId: p });
+    await attachPrinterToStation(tx, { stationId: cocina.id, printerId: q });
+    const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
+    const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
+    return { cocina, p, q, steak, orderId };
+  }
+
+  it("leaves fire, correction and reprint printing on the station's other printer only", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { p, q, fired, reprinted, corrected, problems, before } = await asApp(cfg, async (tx) => {
+      const { cocina, p, q, steak, orderId } = await stationWithTwo(tx, cfg, catalogueId);
+      await deletePrinter(tx, printCfg(cfg), p);
+      const before = await printJobsFor(tx);
+      const known = new Set(before.map((job) => job.id));
+      const fresh = async () => {
+        const jobs = (await printJobsFor(tx)).filter((job) => !known.has(job.id));
+        for (const job of jobs) known.add(job.id);
+        return jobs.map((job) => job.printerId);
+      };
+      await fireNewOrder(tx, cfg, [line(steak)]);
+      const fired = await fresh();
+      await reprintOrderTickets(tx, cfg, orderId);
+      const reprinted = await fresh();
+      const [item] = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        [{ ...item!, stationId: item!.stationId!, quantity: 1000, wasStarted: false }],
+        "RECALLED",
+      );
+      const corrected = await fresh();
+      const problems = await ordersWithPrintProblem(tx, cocina.id, [orderId], new Date());
+      return { p, q, fired, reprinted, corrected, problems, before };
+    });
+
+    expect(fired).toEqual([q]);
+    expect(reprinted).toEqual([q]);
+    expect(corrected).toEqual([q]);
+    expect(problems).toEqual(new Set());
+    // P's own ticket stays in history, ended.
+    expect(before.filter((job) => job.printerId === p).map((job) => job.status)).toEqual([
+      "failed",
+    ]);
+  });
+
+  it("leaves a fire with no output, and no problem, when the deleted printer was the station's only one, keeping its ticket's link", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { orderId, added, problemsBefore, problems, linksBefore, linksAfter } = await asApp(
+      cfg,
+      async (tx) => {
+        const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+        const p = await makePrinter(tx, cfg, "Old kitchen");
+        await attachPrinterToStation(tx, { stationId: cocina.id, printerId: p });
+        const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+          stationId: cocina.id,
+        });
+        const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
+        // Past the waiting window, so P's unprinted ticket is a printing problem before the delete.
+        const later = new Date(Date.now() + JOBS_WAITING_MS + 60_000);
+        const problemsBefore = await ordersWithPrintProblem(tx, cocina.id, [orderId], later);
+        const links = () =>
+          tx.select().from(kitchenPrintJobs).where(eq(kitchenPrintJobs.workingOrderId, orderId));
+        const linksBefore = await links();
+        await deletePrinter(tx, printCfg(cfg), p);
+        const count = (await printJobsFor(tx)).length;
+        await reprintOrderTickets(tx, cfg, orderId);
+        await fireNewOrder(tx, cfg, [line(steak)]);
+        return {
+          orderId,
+          added: (await printJobsFor(tx)).length - count,
+          problemsBefore,
+          problems: await ordersWithPrintProblem(tx, cocina.id, [orderId], later),
+          linksBefore,
+          linksAfter: await links(),
+        };
+      },
+    );
+    expect(problemsBefore).toEqual(new Set([orderId]));
+    expect(added).toBe(0);
+    expect(problems).toEqual(new Set());
+    expect(linksBefore).toHaveLength(1);
+    expect(linksAfter).toEqual(linksBefore);
+  });
+
+  it.each([
+    ["on the station's other printer", true],
+    ["nowhere at that station when it was the only one", false],
+  ] as const)("prints a HOLD ticket %s", async (_label, withOther) => {
+    const {
+      cfg,
+      products,
+      tables,
+      party,
+      stations,
+      printers: venuePrinters,
+    } = await setupSplitExtrasVenue();
+    const { added, q } = await asApp(cfg, async (tx) => {
+      const q = withOther ? await makePrinter(tx, cfg, "Grill Q") : null;
+      if (q !== null) await attachPrinterToStation(tx, { stationId: stations.grill, printerId: q });
+      await deletePrinter(tx, printCfg(cfg), venuePrinters.grill);
+      await writePrintHeldWork(tx, true);
+      const known = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await placeGroups(tx, cfg, party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: [{ menuItemId: tables.offerFor(products.burger), quantity: "1", extras: [] }],
+          },
+        ],
+      });
+      return { added: (await printJobsFor(tx)).filter((job) => !known.has(job.id)), q };
+    });
+    expect(added.filter((job) => job.printerId === venuePrinters.grill)).toEqual([]);
+    const onQ = added.filter((job) => job.printerId === q);
+    expect(onQ).toHaveLength(withOther ? 1 : 0);
+    if (withOther) expect(decodeTicket(onQ[0]!.payload)).toContain("*** HOLD ***");
+  });
+
+  it("raises no printing problem for a deleted printer even while a station link to it is still stored", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const problems = await asApp(cfg, async (tx) => {
+      const { cocina, p, orderId } = await stationWithTwo(tx, cfg, catalogueId);
+      // Only the tombstone and its ended jobs: a real delete removes the link too, so this pins
+      // the switched-off-inclusive read's own guard.
+      await endDeletedPrinterJobs(tx, p);
+      await tx
+        .update(printers)
+        .set({ active: false, deletedAt: new Date().toISOString() })
+        .where(eq(printers.id, p));
+      return ordersWithPrintProblem(tx, cocina.id, [orderId], new Date());
+    });
+    expect(problems).toEqual(new Set());
   });
 });

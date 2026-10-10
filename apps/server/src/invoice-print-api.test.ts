@@ -23,7 +23,9 @@ import {
   resendPrintJob,
   reportPrintJob,
   runAgentOnce,
+  endDeletedPrinterJobs,
   MAX_DELIVERY_ATTEMPTS,
+  PRINTER_DELETED,
 } from "@waitron/printing";
 import {
   hashSecret,
@@ -46,6 +48,7 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
 } from "./invoice-delivery.js";
+import { endDeletedInvoicePrintDeliveries } from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
@@ -1129,5 +1132,220 @@ describe("invoice receipt printer deactivation", () => {
     expect(await ctx.row()).toEqual(completed);
     expect(await ctx.jobRow()).toEqual(job);
     expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
+  });
+});
+
+/** The printer delete's job and receipt endings and its tombstone write, in one transaction. */
+async function deletePrinterNow(
+  ctx: Awaited<ReturnType<typeof setup>>,
+  printerId = ctx.printer.id,
+) {
+  await withTransaction(suite.db, async (tx) => {
+    const live = await tx.execute<{ print_job_id: string }>(sql`
+      select d.print_job_id from invoice_deliveries d
+      join print_jobs j on j.id = d.print_job_id
+      where j.printer_id = ${printerId} and d.medium = 'receipt'
+        and d.status in ('queued', 'sending')`);
+    await endDeletedPrinterJobs(tx, printerId);
+    await endDeletedInvoicePrintDeliveries(
+      tx,
+      live.rows.map((row) => row.print_job_id),
+      ctx.now(),
+    );
+    await tx
+      .update(printers)
+      .set({ active: false, deletedAt: ctx.now().toISOString() })
+      .where(eq(printers.id, printerId));
+  });
+}
+
+const DELETED_JOB = {
+  status: "failed",
+  attempts: MAX_DELIVERY_ATTEMPTS,
+  lastError: PRINTER_DELETED,
+};
+
+describe("invoice receipt printer deletion", () => {
+  it.each([
+    ["done", false],
+    ["failed", false],
+    ["done", true],
+    ["failed", true],
+  ] as const)(
+    "keeps a pulled receipt unknown and its job ended after a late %s result (newer attempt first: %s)",
+    async (status, newerFirst) => {
+      const ctx = await setup();
+      const claim = (await ctx.pull())[0]!.invoiceClaim!;
+      const tokenHash = (await ctx.row()).claimTokenHash;
+      await deletePrinterNow(ctx);
+      const endedJob = await ctx.jobRow();
+      expect(endedJob).toMatchObject({ ...DELETED_JOB, claimedBy: ctx.agentId });
+      const ended = await ctx.row();
+      expect(ended).toMatchObject({
+        status: "unknown",
+        failureCode: "transport_failed",
+        expiredAt: ctx.now().toISOString(),
+        completedAt: null,
+        claimTokenHash: tokenHash,
+        reportedAt: null,
+      });
+      const retry = newerFirst ? await emailRetry(ctx) : undefined;
+      ctx.advance(1000);
+      const body =
+        status === "done"
+          ? { status, invoiceClaim: claim }
+          : { status, error: "paper", invoiceClaim: claim };
+
+      for (const [bad, jobId, bearer] of [
+        [{ ...body, invoiceClaim: { ...claim, token: randomUUID() } }, undefined, undefined],
+        [
+          { ...body, invoiceClaim: { ...claim, generation: claim.generation + 1 } },
+          undefined,
+          undefined,
+        ],
+        [{ ...body, invoiceClaim: undefined }, undefined, undefined],
+        [body, undefined, ctx.otherToken],
+      ] as const) {
+        expect((await ctx.result(bad, jobId, bearer)).status).toBe(204);
+        expect(await ctx.row()).toEqual(ended);
+        expect(await ctx.jobRow()).toEqual(endedJob);
+      }
+
+      expect((await ctx.result(body)).status).toBe(204);
+      const reported = {
+        ...ended,
+        reportedOutcome: status === "done" ? "sent" : "failed",
+        reportedAt: ctx.now().toISOString(),
+        reportedFailureCode: status === "done" ? null : "transport_failed",
+      };
+      expect(await ctx.row()).toEqual(reported);
+      expect(await ctx.jobRow()).toEqual(endedJob);
+
+      ctx.advance(1000);
+      expect((await ctx.result(body)).status).toBe(204);
+      expect(await ctx.row()).toEqual(reported);
+      expect(await ctx.jobRow()).toEqual(endedJob);
+
+      expect(await ctx.pull()).toEqual([]);
+      if (retry !== undefined) {
+        expect(
+          (
+            await suite.db
+              .select()
+              .from(invoiceDeliveries)
+              .where(eq(invoiceDeliveries.id, retry.id))
+          )[0],
+        ).toEqual(retry);
+      } else {
+        expect(await emailRetry(ctx)).toMatchObject({ designation: "original", generation: 2 });
+      }
+    },
+  );
+
+  it("fails a queued receipt with its job, and nothing claims it", async () => {
+    const ctx = await setup();
+    await deletePrinterNow(ctx);
+    expect(await ctx.row()).toMatchObject({
+      status: "failed",
+      failureCode: "transport_failed",
+      expiredAt: null,
+      claimTokenHash: null,
+    });
+    expect(await ctx.jobRow()).toMatchObject({ ...DELETED_JOB, claimedBy: null });
+    ctx.advance(1000);
+    expect(await ctx.pull()).toEqual([]);
+    expect(await ctx.row()).toMatchObject({ status: "failed" });
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "original", status: "queued" });
+  });
+
+  it("leaves a printed receipt and its job as they were", async () => {
+    const ctx = await setup();
+    const claim = (await ctx.pull())[0]!.invoiceClaim!;
+    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
+    const sent = await ctx.row();
+    const job = await ctx.jobRow();
+    await deletePrinterNow(ctx);
+    expect(await ctx.row()).toEqual(sent);
+    expect(await ctx.jobRow()).toEqual(job);
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
+  });
+
+  it.each(["printed", "ended"] as const)(
+    "answers printer.not_found to a resend of a deleted printer's %s receipt and adds nothing",
+    async (state) => {
+      const ctx = await setup();
+      if (state === "printed") {
+        const claim = (await ctx.pull())[0]!.invoiceClaim!;
+        await ctx.result({ status: "done", invoiceClaim: claim });
+      }
+      await deletePrinterNow(ctx);
+      const jobs = await suite.db.select().from(printJobs);
+      const deliveries = await suite.db.select().from(invoiceDeliveries);
+      const command = await manager(ctx);
+
+      const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: ctx.printer.id } },
+      });
+      expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
+    },
+  );
+
+  it("rolls back the claim expiry a refused resend of a deleted printer's receipt ran first", async () => {
+    const ctx = await setup();
+    await deletePrinterNow(ctx);
+    // A receipt sent long enough ago that the resend's expiry pass would end it.
+    const stale = new Date(ctx.now().getTime() - 120_000).toISOString();
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ status: "sending", claimedAt: stale, expiredAt: null, failureCode: null })
+      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+    const before = await suite.db.select().from(invoiceDeliveries);
+    const jobs = await suite.db.select().from(printJobs);
+    const command = await manager(ctx);
+
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+
+    expect(response.status).toBe(404);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual(before);
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+    // The control: the same expiry, committed on its own, does end it.
+    await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, ctx.now()));
+    expect(await ctx.row()).toMatchObject({ status: "unknown", failureCode: "timeout" });
+  });
+
+  it("switches off only the live printer when a deleted printer's Bluetooth address is unpaired", async () => {
+    const ctx = await setup(true);
+    const command = await manager(ctx);
+    await deletePrinterNow(ctx);
+    expect((await bluetoothPull(ctx)).jobs).toEqual([]);
+    const replacement = await withTransaction(suite.db, (tx) =>
+      createPrinter(
+        tx,
+        { locationId: ctx.locationId },
+        { name: "Receipt again", transport: "bluetooth", localKey: MAC },
+      ),
+    );
+    const [tombstone] = await suite.db
+      .select()
+      .from(printers)
+      .where(eq(printers.id, ctx.printer.id));
+    // Fails the pull on any write to the deleted row, so a same-value write shows too.
+    await suite.db.execute(sql`create trigger test_tombstone_written before update on printers
+      when old.deleted_at is not null begin select raise(abort, 'tombstone_written'); end`);
+    try {
+      await forget(ctx, command);
+    } finally {
+      await suite.db.execute(sql`drop trigger test_tombstone_written`);
+    }
+    expect(
+      (await suite.db.select().from(printers).where(eq(printers.id, ctx.printer.id)))[0],
+    ).toEqual(tombstone);
+    expect(
+      (await suite.db.select().from(printers).where(eq(printers.id, replacement.id)))[0],
+    ).toMatchObject({ active: false, deletedAt: null });
   });
 });

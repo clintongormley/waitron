@@ -271,6 +271,65 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 
+  it("printers: carries a deleted_at column, null by default", async () => {
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('printers')`,
+    );
+    expect(columns.map((c) => c.name)).toContain("deleted_at");
+    const id = await seedPrinter("Deletion default");
+    const [fresh] = await inTx((tx) => tx.select().from(printers).where(eq(printers.id, id)));
+    expect(fresh!.deletedAt).toBeNull();
+    await inTx((tx) =>
+      tx.update(printers).set({ deletedAt: "2026-10-09T10:00:00.000Z" }).where(eq(printers.id, id)),
+    );
+    const [marked] = await inTx((tx) => tx.select().from(printers).where(eq(printers.id, id)));
+    expect(marked!.deletedAt).toBe("2026-10-09T10:00:00.000Z");
+  });
+
+  it.each([
+    { transport: "usb" as const, localKey: "SN-REUSE-1" },
+    { transport: "bluetooth" as const, localKey: "AA:BB:CC:00:00:01" },
+  ])(
+    "printers: a $transport key is unique among undeleted rows, disabled included, and free again once deleted",
+    async ({ transport, localKey }) => {
+      const name = `Reused ${transport}`;
+      const insertDisabled = () =>
+        inTx((tx) =>
+          tx
+            .insert(printers)
+            .values({ locationId: LOCATION_A, name, transport, localKey, active: false })
+            .returning({ id: printers.id }),
+        );
+      const [first] = await insertDisabled();
+      const duplicate = await captureError(insertDisabled);
+      expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
+
+      const job = await seedJob(first!.id);
+      await inTx((tx) =>
+        tx
+          .update(printers)
+          .set({ deletedAt: "2026-10-09T10:00:00.000Z" })
+          .where(eq(printers.id, first!.id)),
+      );
+      const [second] = await insertDisabled();
+      expect(second!.id).not.toBe(first!.id);
+
+      const retained = await inTx((tx) =>
+        tx
+          .select({ id: printers.id, deletedAt: printers.deletedAt })
+          .from(printers)
+          .where(eq(printers.localKey, localKey)),
+      );
+      expect(retained).toHaveLength(2);
+      expect(retained.find((r) => r.id === first!.id)!.deletedAt).toBe("2026-10-09T10:00:00.000Z");
+      expect(retained.find((r) => r.id === second!.id)!.deletedAt).toBeNull();
+      const [child] = await inTx((tx) =>
+        tx.select({ printerId: printJobs.printerId }).from(printJobs).where(eq(printJobs.id, job)),
+      );
+      expect(child!.printerId).toBe(first!.id);
+    },
+  );
+
   it("printers: allows two NULL-local_key printers in one location (partial index)", async () => {
     const a = await insertPrinter({ transport: "network_tcp", host: "10.0.0.1" });
     expect(a[0]!.id).toBeDefined();

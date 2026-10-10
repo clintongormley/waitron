@@ -960,3 +960,55 @@ describe("under the dashboard's leave coordinator", () => {
     expect(await state(el, "confirm-add-printer")).toEqual(ready);
   });
 });
+
+describe("the printer delete dialog's Delete", () => {
+  const impact = {
+    target: { id: "p1", name: "Cocina" },
+    refusals: [],
+    ends: [{ key: "print_jobs", count: 2, targets: [] }],
+    removes: [],
+  };
+
+  it("is quiet and unpressable while the impact loads, danger once read, busy while sent, and pressable again after a refusal", async () => {
+    let answerRead!: (value: typeof impact) => void;
+    let refuse!: (error: unknown) => void;
+    const api = stubApi({
+      getPrinterDeleteImpact: vi.fn(
+        () => new Promise<typeof impact>((resolve) => (answerRead = resolve)),
+      ),
+      deletePrinter: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    } as Partial<DashboardApi>);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=delete-printer-p1]")).not.toBeNull());
+    q(el, "[data-test=delete-printer-p1]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=delete-confirm]")).not.toBeNull());
+    await settle();
+    expect(await state(el, "delete-confirm")).toEqual(quiet);
+
+    answerRead(impact);
+    await settle();
+    expect(await state(el, "delete-confirm")).toEqual({
+      variant: "danger",
+      disabled: false,
+      innerDisabled: false,
+    });
+
+    await press(el, "delete-confirm");
+    await settle();
+    expect(await state(el, "delete-confirm")).toEqual({
+      variant: "danger",
+      disabled: true,
+      innerDisabled: true,
+    });
+    expect(action(el, "delete-confirm").loading).toBe(true);
+
+    refuse({ code: "connection.failed" });
+    await settle();
+    expect(await state(el, "delete-confirm")).toEqual({
+      variant: "danger",
+      disabled: false,
+      innerDisabled: false,
+    });
+    expect(api.deletePrinter).toHaveBeenCalledExactlyOnceWith("p1");
+  });
+});

@@ -11,18 +11,30 @@ import {
   locations,
   printJobs,
   printAgents,
+  printers,
   tenants,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { createPrinter, enqueuePrintJob, claimPrintJobs } from "@waitron/printing";
+import {
+  createPrinter,
+  enqueuePrintJob,
+  claimPrintJobs,
+  endDeletedPrinterJobs,
+  MAX_DELIVERY_ATTEMPTS,
+  PRINTER_DELETED,
+} from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
+import {
+  claimInvoicePrintJobs,
+  endDeletedInvoicePrintDeliveries,
+  reportInvoicePrintJob,
+} from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
 import { runInvoiceEmailPass, runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as documentFixture } from "./testing/full-invoice-fixture.js";
@@ -1123,6 +1135,231 @@ describe("receipt delivery reservation", () => {
     ).toEqual({ updated: true, historical: false });
     expect((await suite.db.select().from(printJobs))[0]!.status).toBe("done");
   });
+
+  /** The printer delete's job and receipt endings and its tombstone write, in one transaction. */
+  async function deleteReceiptPrinter(jobId: string, now = start) {
+    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    const printerId = job!.printerId;
+    await withTransaction(suite.db, async (tx) => {
+      const live = await tx.execute<{ print_job_id: string }>(sql`
+        select d.print_job_id from invoice_deliveries d
+        join print_jobs j on j.id = d.print_job_id
+        where j.printer_id = ${printerId} and d.medium = 'receipt'
+          and d.status in ('queued', 'sending')`);
+      await endDeletedPrinterJobs(tx, printerId);
+      await endDeletedInvoicePrintDeliveries(
+        tx,
+        live.rows.map((row) => row.print_job_id),
+        now,
+      );
+      await tx
+        .update(printers)
+        .set({ active: false, deletedAt: now.toISOString() })
+        .where(eq(printers.id, printerId));
+    });
+    return printerId;
+  }
+  async function jobById(jobId: string) {
+    return (await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]!;
+  }
+
+  it("answers printer.not_found to a receipt reservation naming a deleted printer's job, before replaying its request key", async () => {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const first = request(job.jobId);
+    await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, first));
+    const printerId = await deleteReceiptPrinter(job.jobId);
+    // Not a state the delete leaves; it shows a waiting job does not reopen the deleted printer.
+    const [seeded] = await suite.db
+      .insert(printJobs)
+      .values({
+        locationId: (await jobById(job.jobId)).locationId,
+        printerId,
+        payload: new Uint8Array([27, 64]),
+        saleId: sale.saleId,
+        receiptCopy: false,
+      })
+      .returning();
+    const before = await rows();
+    const jobsBefore = await suite.db.select().from(printJobs);
+
+    for (const input of [first, request(seeded!.id)]) {
+      await expect(
+        withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, input)),
+      ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
+    }
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, request(randomUUID())),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.receipt_invalid" });
+    expect(await rows()).toEqual(before);
+    expect(await suite.db.select().from(printJobs)).toEqual(jobsBefore);
+  });
+
+  it("gives no invoice token for a deleted printer's receipt, even with its job seeded back to printing", async () => {
+    const ctx = await receiptClaimSetup();
+    await pulled(ctx);
+    await deleteReceiptPrinter(ctx.job.jobId);
+    // Neither state is one the delete leaves; together they isolate the deleted-printer check.
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ status: "queued" })
+      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+    await suite.db
+      .update(printJobs)
+      .set({ status: "printing", claimedBy: ctx.agentId, claimedAt: start.toISOString() })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const before = await rows();
+    const job = await jobById(ctx.job.jobId);
+
+    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+
+    expect(await rows()).toEqual(before);
+    expect(await jobById(ctx.job.jobId)).toEqual(job);
+  });
+
+  it.each(["sent", "failed"] as const)(
+    "keeps a deleted printer's ended receipt and job, recording only a late %s report's metadata",
+    async (status) => {
+      const ctx = await receiptClaimSetup();
+      const [pulledJob] = await withTransaction(suite.db, (tx) =>
+        claimInvoicePrintJobs(
+          tx,
+          ctx.agentId,
+          { locationId: ctx.locationId, visibleKeys: [] },
+          start,
+        ),
+      );
+      const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId };
+      await deleteReceiptPrinter(ctx.job.jobId);
+      const ended = await jobById(ctx.job.jobId);
+      expect(ended).toMatchObject({
+        status: "failed",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+        lastError: PRINTER_DELETED,
+        claimedBy: ctx.agentId,
+      });
+      const [unknown] = await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+      expect(unknown).toMatchObject({
+        status: "unknown",
+        failureCode: "transport_failed",
+        expiredAt: start.toISOString(),
+        completedAt: null,
+      });
+      const outcome: InvoiceDeliveryOutcome =
+        status === "sent" ? { status } : { status, failureCode: "transport_failed" };
+
+      expect(
+        await withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, held, outcome, expired)),
+      ).toEqual({ updated: false, historical: false });
+
+      const [reported] = await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+      expect(reported).toEqual({
+        ...unknown,
+        reportedOutcome: status,
+        reportedAt: expired.toISOString(),
+        reportedFailureCode: status === "sent" ? null : "transport_failed",
+      });
+      expect(await jobById(ctx.job.jobId)).toEqual(ended);
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          reportInvoiceDelivery(tx, held, { status: "sent" }, expired),
+        ),
+      ).toEqual({ updated: false, historical: false });
+      expect(
+        (
+          await suite.db
+            .select()
+            .from(invoiceDeliveries)
+            .where(eq(invoiceDeliveries.id, ctx.delivery.id))
+        )[0],
+      ).toEqual(reported);
+      expect(await jobById(ctx.job.jobId)).toEqual(ended);
+    },
+  );
+
+  it("ends a live receipt whose job had already printed, leaves that job as it was, and refuses its late report", async () => {
+    const ctx = await receiptClaimSetup();
+    const [pulledJob] = await withTransaction(suite.db, (tx) =>
+      claimInvoicePrintJobs(
+        tx,
+        ctx.agentId,
+        { locationId: ctx.locationId, visibleKeys: [] },
+        start,
+      ),
+    );
+    const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId };
+    // A job finished while its receipt still says sending: not a state the routes leave, which is
+    // why only the retained printer, not the job, can fence its late report.
+    await suite.db
+      .update(printJobs)
+      .set({ status: "done", deliveredAt: start.toISOString() })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const printed = await jobById(ctx.job.jobId);
+
+    await deleteReceiptPrinter(ctx.job.jobId);
+
+    expect(await jobById(ctx.job.jobId)).toEqual(printed);
+    expect((await rows())[0]).toMatchObject({
+      status: "unknown",
+      failure_code: "transport_failed",
+    });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        reportInvoiceDelivery(
+          tx,
+          held,
+          { status: "failed", failureCode: "transport_failed" },
+          expired,
+        ),
+      ),
+    ).toEqual({ updated: false, historical: false });
+    expect(await jobById(ctx.job.jobId)).toEqual(printed);
+    expect((await rows())[0]).toMatchObject({
+      status: "unknown",
+      reported_outcome: "failed",
+      completed_at: null,
+    });
+  });
+
+  it.each(["deleted printer", "deletion reason"] as const)(
+    "expiry leaves the job of a %s as it was",
+    async (fence) => {
+      const ctx = await receiptClaimSetup();
+      await pulled(ctx);
+      await claim(ctx.delivery.id, ctx.agentId);
+      if (fence === "deleted printer") {
+        await deleteReceiptPrinter(ctx.job.jobId);
+        // Neither state is one the delete leaves; together they isolate expiry's printer check.
+        await suite.db
+          .update(invoiceDeliveries)
+          .set({ status: "sending" })
+          .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+        await suite.db
+          .update(printJobs)
+          .set({ status: "done", deliveredAt: start.toISOString() })
+          .where(eq(printJobs.id, ctx.job.jobId));
+      } else {
+        await suite.db
+          .update(printJobs)
+          .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: PRINTER_DELETED })
+          .where(eq(printJobs.id, ctx.job.jobId));
+      }
+      const job = await jobById(ctx.job.jobId);
+
+      expect(await expire()).toBe(1);
+
+      expect(await jobById(ctx.job.jobId)).toEqual(job);
+      expect((await rows())[0]).toMatchObject({ status: "unknown", failure_code: "timeout" });
+    },
+  );
 });
 
 describe("invoice delivery staff attribution", () => {

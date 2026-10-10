@@ -2046,6 +2046,8 @@ export type OriginalReceiptPrint =
       status: "queued" | "printing" | "failed" | "done";
       jobId: string;
       canRetry: boolean;
+      /** Only on a failed original: its printer was deleted, so it will never print there. */
+      failureCode?: "printer.deleted";
       handover?: { personId: string; confirmedAt: string };
     };
 

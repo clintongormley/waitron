@@ -27,6 +27,10 @@ declare module "@waitron/shared" {
      * the agent had sent it and its report was lost. Not thrown; stored as the job's `last_error` by
      * `endUnpairedPrinterJobs`. */
     "printer.unpaired": Record<string, never>;
+    /** A print job ended because its printer was deleted; it may already have printed, if an
+     * agent had sent it before the delete. Not thrown; stored as the job's `last_error` by
+     * `endDeletedPrinterJobs`. */
+    "printer.deleted": Record<string, never>;
     /** No print agent carries this id. `id` is the id looked up. */
     "agent.not_found": { id: string };
     /** The bearer token did not verify, or the agent is revoked. No params, so the failure never

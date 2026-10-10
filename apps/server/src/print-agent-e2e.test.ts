@@ -1,20 +1,34 @@
 import { probeNetwork } from "@waitron/print-agent-app/tcp-probe.js";
 import { createLinuxDevices } from "@waitron/print-agent-app/linux-devices.js";
 import net from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import type { Server as HttpServer } from "node:http";
+import { serve, type ServerType } from "@hono/node-server";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, printJobs, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { MAX_DELIVERY_ATTEMPTS, enqueuePrintJob, esc } from "@waitron/printing";
-import { FakeSink, NetworkTcpTransport, RoutingTransport, createAgent } from "@waitron/print-agent";
+import {
+  MAX_DELIVERY_ATTEMPTS,
+  PRINTER_DELETED,
+  endDeletedPrinterJobs,
+  enqueuePrintJob,
+  esc,
+} from "@waitron/printing";
+import {
+  FakeSink,
+  NetworkTcpTransport,
+  RoutingTransport,
+  createAgent,
+  type PrinterTarget,
+} from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import {
   locationId as brandLocationId,
@@ -27,10 +41,12 @@ import { mountJoinApi } from "./join-api.js";
 import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
+import { freePorts } from "./testing/free-ports.js";
 import "./errors.js";
 
 // The whole print-agent path in one process with no real hardware: the real routes driven by the real
-// agent loop, whose fetch is routed into `app.request`. It lives in apps/server because packages never
+// agent loop. Every case but the real-HTTP one at the end routes the agent's fetch into
+// `app.request`. It lives in apps/server because packages never
 // import apps, so the agent package cannot reach the routes it must be proven against.
 const noopLog: Logger = () => {};
 /** A setting to draw opaque job payloads at; the agent never reads them. */
@@ -571,6 +587,502 @@ describe("print-agent end to end", () => {
       expect(radio.written).toEqual([]);
     } finally {
       await rm(sysfsRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The box's usblp sysfs shape, as `apps/print-agent/src/usb.test.ts` writes it. */
+async function addUsbPrinter(root: string, lp: string, serial: string): Promise<void> {
+  const bus = `1-${lp}`;
+  const path = ["devices", "pci0000:00", "0000:00:14.0", "usb1", bus];
+  const deviceDir = join(root, ...path);
+  await mkdir(join(deviceDir, `${bus}:1.0`, "usbmisc", lp), { recursive: true });
+  await writeFile(join(deviceDir, "serial"), `${serial}\n`);
+  const classDir = join(root, "class", "usbmisc");
+  await mkdir(classDir, { recursive: true });
+  await symlink(join("..", "..", ...path, `${bus}:1.0`, "usbmisc", lp), join(classDir, lp));
+}
+
+describe("a printer deleted while its agent is sending", () => {
+  it.each([
+    ["usb", "done"],
+    ["usb", "failed"],
+    ["bluetooth", "done"],
+    ["bluetooth", "failed"],
+    ["network_tcp", "done"],
+    ["network_tcp", "failed"],
+  ] as const)(
+    "keeps a %s job ended when its %s result arrives after the delete, and pulls it no more",
+    async (transport, outcome) => {
+      const n = randomUUID().replaceAll("-", "").toUpperCase();
+      const serial = `USB-DEL-${n.slice(0, 8)}`;
+      const keepSerial = `USB-KEEP-${n.slice(0, 8)}`;
+      const mac = `5A:4A:${n.slice(0, 2)}:${n.slice(2, 4)}:${n.slice(4, 6)}:${n.slice(6, 8)}`;
+      const app = new Hono();
+      const pairingMode = createPairingMode();
+      pairingMode.open();
+      mountPrintApi(
+        app,
+        { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+        noopLog,
+      );
+      mountJoinApi(
+        app,
+        { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+        noopLog,
+      );
+      mountNodeApi(
+        app,
+        {
+          nodeId: cfg.nodeId,
+          acceptingSales: true,
+          environment: "preproduction",
+          readMembership: async () => null,
+        },
+        noopLog,
+      );
+      const sysfsRoot = await mkdtemp(join(tmpdir(), "print-agent-e2e-delete-"));
+      try {
+        await addUsbPrinter(sysfsRoot, "lp0", serial);
+        await addUsbPrinter(sysfsRoot, "lp1", keepSerial);
+        const devRoot = join(sysfsRoot, "devroot");
+        const devices = createLinuxDevices({
+          sysfsRoot,
+          devRoot,
+          bluetooth: {
+            scan: async () => [],
+            pair: async () => ({ ok: false, error: "no fake" }),
+            paired: async () => [{ mac, name: "Bluetooth receipt" }],
+            forget: async () => ({ ok: false, error: "no fake" }),
+          },
+        });
+
+        let targetId = "";
+        let signalSending!: () => void;
+        const sending = new Promise<void>((resolve) => {
+          signalSending = resolve;
+        });
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const sent: PrinterTarget[] = [];
+        const results = new Map<string, number>();
+        const host = fakeHost({
+          config: { serverUrl: BASE, name: `Delete ${transport} ${outcome}` },
+          transport: {
+            async send(target) {
+              sent.push(target);
+              if (target.id !== targetId) return;
+              signalSending();
+              await released;
+              if (outcome === "failed") throw new Error("paper out");
+            },
+          },
+          visibleDevices: () => devices.visibleDevices(),
+          pairedBluetooth: () => devices.pairedBluetooth(),
+          bluetoothPrinting: () => devices.bluetoothPrinting(),
+          resolve: (job) => devices.resolve(job),
+          fetch: async (input, init) => {
+            const response = await app.request(input, init);
+            const path = typeof input === "string" ? input : input.toString();
+            const match = /\/print-api\/agent\/jobs\/([^/]+)\/result$/.exec(path);
+            if (match !== null) results.set(match[1]!, response.status);
+            return response;
+          },
+        });
+        host.now = Date.now;
+        const agent = createAgent({ host });
+        await agent.runOnce();
+        const agentId = (await host.token())!.split(".")[0]!;
+        const choice = host.statuses.find(
+          (status) => status.verificationCode !== undefined,
+        )!.verificationCode;
+        expect(
+          (
+            await send(app, "POST", `/management-api/print-agent-join-requests/${agentId}/accept`, {
+              cookie: managerCookie,
+              body: { choice },
+            })
+          ).status,
+        ).toBe(204);
+        const create = async (body: Record<string, unknown>) => {
+          const response = await send(app, "POST", "/management-api/printers", {
+            cookie: managerCookie,
+            body,
+          });
+          expect(response.status).toBe(201);
+          return ((await response.json()) as { id: string }).id;
+        };
+        targetId = await create(
+          transport === "usb"
+            ? { name: `Deleted ${n}`, transport, localKey: serial }
+            : transport === "bluetooth"
+              ? { name: `Deleted ${n}`, transport, localKey: mac }
+              : { name: `Deleted ${n}`, transport, host: "printer.e2e", port: 9101 },
+        );
+        const keepId = await create({ name: `Kept ${n}`, transport: "usb", localKey: keepSerial });
+        await agent.runOnce();
+        const enqueue = (printerId: string) =>
+          withTransaction(suite.db, (tx) =>
+            enqueuePrintJob(tx, { locationId }, printerId, esc(WIDE).line(n).cut().bytes()),
+          );
+        const { jobId } = await enqueue(targetId);
+        const { jobId: keepJobId } = await enqueue(keepId);
+
+        const tick = agent.runOnce();
+        await sending;
+        await withTransaction(suite.db, async (tx) => {
+          await endDeletedPrinterJobs(tx, targetId);
+          await tx
+            .update(printers)
+            .set({ active: false, deletedAt: new Date().toISOString() })
+            .where(eq(printers.id, targetId));
+        });
+        release();
+        await tick;
+
+        expect(results.get(jobId)).toBe(204);
+        expect(results.get(keepJobId)).toBe(204);
+        const [ended] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+        expect(ended).toMatchObject({
+          status: "failed",
+          attempts: MAX_DELIVERY_ATTEMPTS,
+          lastError: PRINTER_DELETED,
+          claimedBy: agentId,
+          deliveredAt: null,
+        });
+        expect(await jobStatus(keepJobId)).toBe("done");
+        expect(sent.filter((target) => target.id === targetId)).toEqual([
+          transport === "usb"
+            ? {
+                id: targetId,
+                transport,
+                host: null,
+                port: null,
+                devicePath: join(devRoot, "usb", "lp0"),
+              }
+            : transport === "bluetooth"
+              ? { id: targetId, transport, host: null, port: null, devicePath: mac }
+              : { id: targetId, transport, host: "printer.e2e", port: 9101, devicePath: null },
+        ]);
+        expect(sent.filter((target) => target.id === keepId)).toEqual([
+          {
+            id: keepId,
+            transport: "usb",
+            host: null,
+            port: null,
+            devicePath: join(devRoot, "usb", "lp1"),
+          },
+        ]);
+
+        await agent.runOnce();
+        expect(sent.filter((target) => target.id === targetId)).toHaveLength(1);
+        expect((await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]).toEqual(
+          ended,
+        );
+      } finally {
+        await rm(sysfsRoot, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+/** A network printer on a fixed loopback port that keeps every connection's bytes; a discovery
+ * probe connects and sends nothing. */
+async function startRecordingPrinter(port: number) {
+  const printed: Buffer[] = [];
+  const waiting: Array<{ count: number; resolve: () => void }> = [];
+  const sockets = new Set<net.Socket>();
+  const server = net.createServer((socket) => {
+    const chunks: Buffer[] = [];
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("error", () => {});
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+    socket.on("end", () => {
+      const bytes = Buffer.concat(chunks);
+      if (bytes.length > 0) printed.push(bytes);
+      for (const wait of waiting.filter((entry) => printed.length >= entry.count)) wait.resolve();
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => resolve());
+  });
+  return {
+    printed,
+    /** Resolves once `count` payloads have arrived in all. */
+    received: (count: number) =>
+      printed.length >= count
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => waiting.push({ count, resolve })),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        for (const socket of sockets) socket.destroy();
+      }),
+  };
+}
+
+/** Fails naming `step` if `wait` has not settled within `ms`, well inside the test's own timeout,
+ * so a stalled step still reaches the test's `finally`. */
+async function within<T>(step: string, wait: Promise<T>, ms = 10_000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms waiting for ${step}`)), ms);
+  });
+  try {
+    return await Promise.race([wait, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function listen(app: Hono, port: number): Promise<ServerType> {
+  return new Promise((resolve, reject) => {
+    const server = serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, () => resolve(server));
+    server.once("error", reject);
+  });
+}
+
+describe("a printer deleted over real HTTP", () => {
+  it("serves create, impact, delete, the late result, history, discovery and a replacement to a real agent and client", async () => {
+    const [httpPort, printerPort] = await freePorts(2);
+    const base = `http://127.0.0.1:${httpPort}`;
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    pairingMode.open();
+    mountPrintApi(
+      app,
+      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      noopLog,
+    );
+    mountJoinApi(
+      app,
+      { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+      noopLog,
+    );
+    mountNodeApi(
+      app,
+      {
+        nodeId: cfg.nodeId,
+        acceptingSales: true,
+        environment: "preproduction",
+        readMembership: async () => null,
+      },
+      noopLog,
+    );
+    const call = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${base}${path}`, {
+        method,
+        headers: {
+          cookie: managerCookie,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      return {
+        status: response.status,
+        body: response.status === 204 ? null : await response.json(),
+      };
+    };
+    let signalSending!: () => void;
+    const sending = new Promise<void>((resolve) => {
+      signalSending = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const servers: ServerType[] = [];
+    let sink: Awaited<ReturnType<typeof startRecordingPrinter>> | undefined;
+    let agent: ReturnType<typeof createAgent> | undefined;
+    try {
+      sink = await startRecordingPrinter(printerPort!);
+      servers.push(await listen(app, httpPort!));
+
+      const tcp = new NetworkTcpTransport();
+      let holdPrinter: string | null = null;
+      const results = new Map<string, number>();
+      const host = fakeHost({
+        config: { serverUrl: base, name: "Real HTTP agent" },
+        probeNetwork,
+        transport: {
+          async send(target, bytes) {
+            if (target.id === holdPrinter) {
+              signalSending();
+              await released;
+            }
+            await tcp.send(target, bytes);
+          },
+        },
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          const path = input instanceof Request ? input.url : input.toString();
+          const match = /\/print-api\/agent\/jobs\/([^/]+)\/result$/.exec(path);
+          if (match !== null) results.set(match[1]!, response.status);
+          return response;
+        },
+      });
+      host.now = Date.now;
+      agent = createAgent({ host });
+      await agent.runOnce();
+      const joinId = (await host.token())!.split(".")[0]!;
+      const choice = host.statuses.find(
+        (status) => status.verificationCode !== undefined,
+      )!.verificationCode;
+      expect(
+        (
+          await call("POST", `/management-api/print-agent-join-requests/${joinId}/accept`, {
+            choice,
+          })
+        ).status,
+      ).toBe(204);
+
+      const created = await call("POST", "/management-api/printers", {
+        name: "Old kitchen",
+        transport: "network_tcp",
+        host: "127.0.0.1",
+        port: printerPort,
+      });
+      expect(created.status).toBe(201);
+      const oldId = (created.body as { id: string }).id;
+      const enqueue = async (printerId: string, text: string) => {
+        const payload = esc(WIDE).line(text).cut().bytes();
+        const { jobId } = await withTransaction(suite.db, (tx) =>
+          enqueuePrintJob(tx, { locationId }, printerId, payload),
+        );
+        return { jobId, payload: Buffer.from(payload) };
+      };
+
+      // An undeleted printer prints: the control for everything after the delete.
+      const before = await enqueue(oldId, "Before the delete");
+      await agent.runOnce();
+      await within("the first print", sink.received(1));
+      expect(sink.printed).toEqual([before.payload]);
+      expect(await jobStatus(before.jobId)).toBe("done");
+
+      const waiting = await enqueue(oldId, "Waiting at the impact read");
+      const impact = await call("GET", `/management-api/printers/${oldId}/delete-impact`);
+      expect(impact.status).toBe(200);
+      expect(impact.body).toMatchObject({
+        target: { id: oldId, name: "Old kitchen" },
+        refusals: [],
+        ends: [{ key: "print_jobs", count: 1, targets: [] }],
+      });
+
+      // New work queued after the impact read, then claimed and held mid-send while the delete runs.
+      const later = await enqueue(oldId, "Queued after the impact read");
+      holdPrinter = oldId;
+      const tick = agent.runOnce();
+      await within("the held send to start", sending);
+      const deleted = await call("DELETE", `/management-api/printers/${oldId}`);
+      expect(deleted.status).toBe(200);
+      expect(deleted.body).toMatchObject({
+        target: { id: oldId, name: "Old kitchen" },
+        ends: [{ key: "print_jobs", count: 2, targets: [] }],
+      });
+      release();
+      await within("the held tick to finish", tick);
+      holdPrinter = null;
+
+      for (const { jobId } of [waiting, later]) {
+        expect(results.get(jobId)).toBe(204);
+        expect(
+          (await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId)))[0],
+        ).toMatchObject({
+          status: "failed",
+          attempts: MAX_DELIVERY_ATTEMPTS,
+          lastError: PRINTER_DELETED,
+          deliveredAt: null,
+        });
+      }
+      const ended = await suite.db.select().from(printJobs).where(eq(printJobs.printerId, oldId));
+      const sentAfterDelete = sink.printed.length;
+      await agent.runOnce();
+      expect(sink.printed).toHaveLength(sentAfterDelete);
+      expect(await suite.db.select().from(printJobs).where(eq(printJobs.printerId, oldId))).toEqual(
+        ended,
+      );
+
+      const jobs = (await call("GET", "/management-api/print-jobs")).body as Array<{
+        id: string;
+        printerName: string;
+        canResend: boolean;
+      }>;
+      expect(
+        [before, waiting, later].map(({ jobId }) => jobs.find((row) => row.id === jobId)),
+      ).toEqual(
+        [before, waiting, later].map(({ jobId }) =>
+          expect.objectContaining({ id: jobId, printerName: "Old kitchen", canResend: false }),
+        ),
+      );
+      const listed = (await call("GET", "/management-api/printers")).body as Array<{ id: string }>;
+      expect(listed.map((row) => row.id)).not.toContain(oldId);
+
+      const discovered = async () => {
+        expect(
+          (
+            await call("POST", "/management-api/printer-discovery/probe", {
+              host: "127.0.0.1",
+              port: printerPort,
+            })
+          ).status,
+        ).toBe(200);
+        await agent!.runOnce();
+        await agent!.runOnce();
+        const rows = (await call("GET", "/management-api/discovered-printers")).body as Array<{
+          host: string | null;
+          port: number | null;
+          alreadyRegistered: boolean;
+          printerId: string | null;
+        }>;
+        return rows.find((row) => row.host === "127.0.0.1" && row.port === printerPort);
+      };
+      expect(await discovered()).toMatchObject({ alreadyRegistered: false, printerId: null });
+
+      const replaced = await call("POST", "/management-api/printers", {
+        name: "New kitchen",
+        transport: "network_tcp",
+        host: "127.0.0.1",
+        port: printerPort,
+      });
+      expect(replaced.status).toBe(201);
+      const newId = (replaced.body as { id: string }).id;
+      expect(newId).not.toBe(oldId);
+      expect(await discovered()).toMatchObject({ alreadyRegistered: true, printerId: newId });
+      const onReplacement = await enqueue(newId, "On the replacement");
+      await agent.runOnce();
+      await within("the replacement's print", sink.received(sentAfterDelete + 1));
+      expect(sink.printed.at(-1)).toEqual(onReplacement.payload);
+      expect(await jobStatus(onReplacement.jobId)).toBe("done");
+
+      // Disable is not Delete: a switched-off printer keeps its match and comes back as itself.
+      expect((await call("POST", `/management-api/printers/${newId}/deactivate`)).status).toBe(204);
+      expect(await discovered()).toMatchObject({ alreadyRegistered: true, printerId: newId });
+      expect(
+        (await call("PATCH", `/management-api/printers/${newId}`, { active: true })).status,
+      ).toBe(204);
+      const reEnabled = await enqueue(newId, "After Enable");
+      await agent.runOnce();
+      await within("the print after Enable", sink.received(sentAfterDelete + 2));
+      expect(sink.printed.at(-1)).toEqual(reEnabled.payload);
+      expect(await jobStatus(reEnabled.jobId)).toBe("done");
+
+      const [tombstone] = await suite.db.select().from(printers).where(eq(printers.id, oldId));
+      expect(tombstone).toMatchObject({ name: "Old kitchen", active: false });
+      expect(tombstone!.deletedAt).not.toBeNull();
+    } finally {
+      release();
+      agent?.stop();
+      for (const server of servers) {
+        (server as HttpServer).closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+      await sink?.close();
     }
   });
 });

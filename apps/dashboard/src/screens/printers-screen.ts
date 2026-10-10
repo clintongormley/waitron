@@ -31,11 +31,14 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-notice.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
+import type { DeleteImpact } from "@waitron/shared";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
 import { holderText } from "../i18n/equipment.js";
+import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -75,8 +78,13 @@ interface PrinterDraft {
 }
 
 /** The `last_error` codes of a job the server ended itself, setting its attempts to the cap
- * (`BLUETOOTH_PRINTING_UNAVAILABLE` and `PRINTER_UNPAIRED`, packages/printing/src/runtime.ts). */
-const ENDED_BY_SERVER = new Set(["printer.bluetooth_printing_unavailable", "printer.unpaired"]);
+ * (`BLUETOOTH_PRINTING_UNAVAILABLE` and `PRINTER_UNPAIRED`, packages/printing/src/runtime.ts;
+ * `PRINTER_DELETED`, packages/printing/src/printer-delete-jobs.ts). */
+const ENDED_BY_SERVER = new Set([
+  "printer.bluetooth_printing_unavailable",
+  "printer.unpaired",
+  "printer.deleted",
+]);
 
 const jobReason = (lastError: string): string =>
   ENDED_BY_SERVER.has(lastError) ? codeMessage(lastError) : lastError;
@@ -184,6 +192,19 @@ export class PrintersScreen extends LitElement {
         text-align: start;
         overflow-wrap: anywhere;
         --wt-color-text: var(--wt-color-primary);
+      }
+      /* The table is never narrower than its content (min-width: max-content, wt-data-table.ts),
+         so a long reason gets a width cap to make it wrap. */
+      wt-data-table::part(job-reason) {
+        max-width: calc(var(--wt-space-6) * 8);
+        overflow-wrap: anywhere;
+      }
+      .status-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin-top: var(--wt-space-4);
       }
       wt-data-table::part(job-actions) {
         display: flex;
@@ -830,6 +851,23 @@ export class PrintersScreen extends LitElement {
   @state() private labelPrinterId: string | null = null;
   #labelOpener: HTMLElement | null = null;
 
+  /** The id of the printer the delete dialog is open on. Each opening and close is a new generation, so a
+   * delete's answer for an earlier one is never applied; an impact read for an earlier one is
+   * dropped by its query slot, which the next `watch` or `release` replaces. */
+  @state() private deleteTarget: string | null = null;
+  @state() private deleteImpact: DeleteImpact | null = null;
+  @state() private deleteLoading = false;
+  @state() private deleteSubmitting = false;
+  @state() private deleteReadError = "";
+  @state() private deleteActionError = "";
+  #deleteGeneration = 0;
+  #deleteOpener: HTMLElement | null = null;
+  readonly #impactQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => this.#impactFailed(error),
+  );
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -862,6 +900,7 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeDelete();
     this.#disposeDetailDrafts();
     this.#disposeCalibrationDraft();
     this.editingPrinter = null;
@@ -898,7 +937,10 @@ export class PrintersScreen extends LitElement {
           this.agents = agents;
         }),
         this.#queries.watch("listPrinters", [], (printers) => {
+          const listed = new Set(printers.map(({ id }) => id));
+          const gone = this.printers.filter(({ id }) => !listed.has(id));
           this.printers = printers;
+          for (const { id } of gone) this.#printerGone(id, true);
         }),
         this.#queries.watch("listRecentJobs", [], (jobs) => {
           this.jobs = jobs;
@@ -1105,6 +1147,8 @@ export class PrintersScreen extends LitElement {
     const started = ++this.#readCount;
     const devices = await api.listDiscoveredPrinters();
     if (epoch !== this.#scanEpoch || !this.addingPrinter || !this.isConnected) return;
+    // A live answer that arrived after this read started is kept: it may be the newer one.
+    if (this.#liveReadFloor > started) return;
     this.#setDiscovered(devices, started);
   }
 
@@ -1829,10 +1873,6 @@ export class PrintersScreen extends LitElement {
 
   // ── Formatting helpers ───────────────────────────────────────────────────────────────────────────
 
-  #printerName(printerId: string): string {
-    return this.printers.find((p) => p.id === printerId)?.name ?? printerId;
-  }
-
   #timestamp(iso: string | null): string {
     if (iso === null) return t("printers.last_seen_never");
     return formatIsoMinute(iso);
@@ -2311,6 +2351,16 @@ export class PrintersScreen extends LitElement {
               >${t("printers.disable")}</wt-button
             >`
       }
+      <wt-button
+        variant="danger"
+        data-test=${`delete-printer-${p.id}`}
+        @click=${(event: Event) => {
+          const button = event.currentTarget as HTMLElement;
+          const menu = button.closest("dashboard-row-actions");
+          this.#openDelete(p, menu?.shadowRoot?.querySelector<HTMLElement>("button") ?? button);
+        }}
+        >${t("action.delete")}</wt-button
+      >
     </dashboard-row-actions>`;
   }
 
@@ -2657,16 +2707,26 @@ export class PrintersScreen extends LitElement {
             ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
             ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
           </dl>
-          <wt-switch
-            name="printer-detail-active"
-            label=${t("printers.status_active")}
-            .checked=${live(p.active)}
-            ?disabled=${this.detailActiveSavingIds.has(p.id)}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              void this.#setDetailActive(p, event.detail.checked);
-            }}
-          ></wt-switch>
+          <div class="status-actions">
+            <wt-switch
+              name="printer-detail-active"
+              label=${t("printers.status_active")}
+              .checked=${live(p.active)}
+              ?disabled=${this.detailActiveSavingIds.has(p.id)}
+              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                event.stopPropagation();
+                void this.#setDetailActive(p, event.detail.checked);
+              }}
+            ></wt-switch>
+            <wt-button
+              variant=${this.detailActiveSavingIds.has(p.id) ? "secondary" : "danger"}
+              data-test="delete-printer-detail"
+              ?disabled=${this.detailActiveSavingIds.has(p.id)}
+              @click=${(event: Event) =>
+                void this.#requestDetailDelete(p, event.currentTarget as HTMLElement)}
+              >${t("action.delete")}</wt-button
+            >
+          </div>
           ${
             this.detailActiveError
               ? html`<p role="alert" data-test="printer-detail-active-error">
@@ -3003,9 +3063,7 @@ export class PrintersScreen extends LitElement {
                     @click=${() => this.#showPrinterStatus(printer.id)}
                     >${printer.name}</wt-button
                   >`
-                : html`<span data-test=${`job-printer-${j.id}`}
-                    >${this.#printerName(j.printerId)}</span
-                  >`
+                : html`<span data-test=${`job-printer-${j.id}`}>${j.printerName}</span>`
             }</span
           >`;
         },
@@ -3017,7 +3075,7 @@ export class PrintersScreen extends LitElement {
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span
-            >${j.lastError === null ? nothing : html`<p data-test=${`job-error-${j.id}`}>${jobReason(j.lastError)}</p>`}`,
+            >${j.lastError === null ? nothing : html`<p part="job-reason" data-test=${`job-error-${j.id}`}>${jobReason(j.lastError)}</p>`}`,
       },
       {
         key: "attempts",
@@ -3852,6 +3910,166 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
+  // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
+
+  #openDelete(p: Printer, opener: HTMLElement): void {
+    this.#deleteGeneration++;
+    this.#deleteOpener = opener;
+    this.deleteTarget = p.id;
+    this.deleteImpact = null;
+    this.deleteLoading = true;
+    this.deleteSubmitting = false;
+    this.deleteReadError = "";
+    this.deleteActionError = "";
+    this.#readImpact(p.id);
+  }
+
+  #readImpact(id: string): void {
+    this.#impactQueries
+      .watch("getPrinterDeleteImpact", [id], (impact) => {
+        this.deleteImpact = impact;
+        this.deleteLoading = false;
+        this.deleteReadError = "";
+      })
+      // A failure has already reached `#impactFailed`.
+      .catch(() => undefined);
+  }
+
+  #impactFailed(error: unknown): void {
+    const target = this.deleteTarget;
+    if (target === null) return;
+    const code = codeOf(error);
+    if (code === "printer.not_found") {
+      // The delete in flight may be what removed it; its own answer decides what is shown.
+      if (!this.deleteSubmitting) this.#printerGone(target, true);
+      return;
+    }
+    this.deleteLoading = false;
+    this.deleteReadError = codeMessage(code);
+  }
+
+  #retryImpact(): void {
+    const target = this.deleteTarget;
+    if (target === null || this.deleteSubmitting) return;
+    this.deleteLoading = true;
+    this.deleteReadError = "";
+    this.#readImpact(target);
+  }
+
+  #closeDelete(): void {
+    this.#deleteGeneration++;
+    this.#impactQueries.release("getPrinterDeleteImpact");
+    this.deleteTarget = null;
+    this.deleteImpact = null;
+    this.deleteLoading = false;
+    this.deleteSubmitting = false;
+    this.deleteReadError = "";
+    this.deleteActionError = "";
+  }
+
+  /** The printer page's editors are asked to leave first, as any other way off the page would. */
+  async #requestDetailDelete(p: Printer, opener: HTMLElement): Promise<void> {
+    if (this.detailActiveSavingIds.has(p.id)) return;
+    const scopes = [this.#detailNameScope, this.#detailConnectionScope].flatMap((scope) =>
+      scope ? [scope.id] : [],
+    );
+    const coordinator = leaveCoordinatorFor(this);
+    if (coordinator && scopes.length > 0) {
+      const outcome = await coordinator.request({ scopes, reason: "navigation", proceed() {} });
+      if (outcome !== "proceeded" || this.selectedPrinterId !== p.id) return;
+    }
+    this.#disposeDetailDrafts();
+    this.detailName = null;
+    this.detailConnection = null;
+    this.#openDelete(p, opener);
+  }
+
+  async #confirmDelete(id: string): Promise<void> {
+    const target = this.deleteTarget;
+    if (target === null || id !== target || this.deleteSubmitting) return;
+    const generation = this.#deleteGeneration;
+    this.deleteSubmitting = true;
+    this.deleteActionError = "";
+    try {
+      await this.api.deletePrinter(id);
+    } catch (error) {
+      if (generation !== this.#deleteGeneration) return;
+      this.deleteSubmitting = false;
+      const code = codeOf(error);
+      if (code !== "printer.not_found") {
+        this.deleteActionError = codeMessage(code);
+        return;
+      }
+      this.#printerGone(id, true);
+      if (this.isConnected) await this.#load();
+      return;
+    }
+    if (generation !== this.#deleteGeneration) return;
+    // What opened the dialog goes with the printer, and the dialog hands focus to its opener as it
+    // closes, so the list is drawn first and its Add printer becomes the opener.
+    if (this.selectedPrinterId === id) {
+      this.#resetPrinterSections();
+      this.selectedPrinterId = null;
+      void this.#url.write({ printer: null }, true);
+      await this.updateComplete;
+      if (generation !== this.#deleteGeneration) return;
+    }
+    this.#deleteOpener = this.#tabAction("open-add-printer") ?? this.#deleteOpener;
+    this.#printerGone(id, false);
+    if (this.isConnected) await this.#load();
+  }
+
+  /**
+   * Ends everything still open on a printer that no longer exists — its delete dialog, its page and
+   * the editors on it, its calibration wizard and its label — without asking to keep their drafts,
+   * and drops its row. `refuse` says so where something was open on it.
+   */
+  #printerGone(id: string, refuse: boolean): void {
+    const ours = this.deleteSubmitting && this.deleteTarget === id;
+    let open = false;
+    if (this.deleteTarget === id) {
+      open = true;
+      this.#closeDelete();
+    }
+    if (this.editingPrinter?.id === id) {
+      open = true;
+      if (this.#readdingId === id) this.#readdingId = undefined;
+      this.#disposeCalibrationDraft();
+      this.editingPrinter = null;
+      this.#closeTest();
+    }
+    if (this.labelPrinterId === id) {
+      open = true;
+      this.labelPrinterId = null;
+    }
+    if (this.selectedPrinterId === id) {
+      open = true;
+      this.#resetPrinterSections();
+      this.selectedPrinterId = null;
+      void this.#url.write({ printer: null }, true);
+    }
+    this.printers = this.printers.filter((p) => p.id !== id);
+    if (refuse && open && !ours) this.errorKey = "printer.not_found";
+  }
+
+  #renderDeleteDialog(): TemplateResult {
+    return html`<wt-delete-dialog
+      data-test="delete-printer-dialog"
+      .open=${this.deleteTarget !== null}
+      .impact=${this.deleteImpact}
+      .loading=${this.deleteLoading}
+      .submitting=${this.deleteSubmitting}
+      .readError=${this.deleteReadError}
+      .actionError=${this.deleteActionError}
+      .copy=${printerDeleteCopy()}
+      .opener=${this.#deleteOpener}
+      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
+        void this.#confirmDelete(event.detail.id)}
+      @wt-delete-retry=${() => this.#retryImpact()}
+      @wt-close=${() => this.#closeDelete()}
+    ></wt-delete-dialog>`;
+  }
+
   #renderEquipmentLabel(): TemplateResult | typeof nothing {
     const printer = this.printers.find((p) => p.id === this.labelPrinterId);
     if (printer === undefined) return nothing;
@@ -3898,7 +4116,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}
+      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

@@ -1,6 +1,6 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -128,6 +128,7 @@ export async function updatePrinter(
   patch: UpdatePrinterInput,
 ): Promise<void> {
   void cfg;
+  const liveId = and(eq(printers.id, id), isNull(printers.deletedAt));
   // Undefined keys are dropped here so a `{ name: undefined }` patch still takes the empty-patch path.
   const set: Record<string, unknown> = Object.fromEntries(
     Object.entries(patch).filter(([, v]) => v !== undefined),
@@ -135,18 +136,14 @@ export async function updatePrinter(
 
   // drizzle's `.set({})` throws ("No values to set"), so an empty patch is an existence check.
   if (Object.keys(set).length === 0) {
-    const [exists] = await tx.select({ id: printers.id }).from(printers).where(eq(printers.id, id));
+    const [exists] = await tx.select({ id: printers.id }).from(printers).where(liveId);
     if (exists === undefined) throw new AppError("printer.not_found", { id });
     return;
   }
 
   let updated: { id: string }[];
   try {
-    updated = await tx
-      .update(printers)
-      .set(set)
-      .where(eq(printers.id, id))
-      .returning({ id: printers.id });
+    updated = await tx.update(printers).set(set).where(liveId).returning({ id: printers.id });
   } catch (error) {
     return translatePrinterWriteError(error, patch.localKey ?? undefined);
   }
@@ -154,8 +151,8 @@ export async function updatePrinter(
 }
 
 /**
- * Never a hard delete: `print_jobs.printer_id` references the row. A deactivated printer refuses new
- * jobs and its queued ones wait, unclaimed, until it is reactivated.
+ * Disable keeps the id, and Enable brings the printer back. A deactivated printer refuses new jobs
+ * and its queued ones wait, unclaimed, until it is reactivated.
  */
 export async function deactivatePrinter(
   tx: Transaction,
@@ -166,12 +163,12 @@ export async function deactivatePrinter(
   const updated = await tx
     .update(printers)
     .set({ active: false })
-    .where(eq(printers.id, id))
+    .where(and(eq(printers.id, id), isNull(printers.deletedAt)))
     .returning({ id: printers.id });
   if (updated.length === 0) throw new AppError("printer.not_found", { id });
 }
 
-/** Includes deactivated printers, so the dashboard can show and reactivate them. */
+/** Includes deactivated printers, so the dashboard can show and reactivate them; never deleted ones. */
 export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
   void cfg;
   return tx
@@ -190,5 +187,6 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       active: printers.active,
     })
     .from(printers)
+    .where(isNull(printers.deletedAt))
     .orderBy(printers.name);
 }

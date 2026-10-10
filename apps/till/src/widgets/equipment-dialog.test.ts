@@ -432,6 +432,44 @@ describe("till-equipment-dialog", () => {
     );
   });
 
+  it("a printer deleted elsewhere, picked from a stale list, is refused and gone once the list is read again", async () => {
+    const el = await mountDialog();
+    const picker = combobox(el, "receiptPrinterId")!;
+
+    await chooseOption(picker, "P2");
+    el.error = { code: "printer.not_found" };
+    await el.updateComplete;
+
+    expect(picker.value).toBe("P1");
+    expect(bottom(el)).toBe(codeMessage("printer.not_found"));
+
+    el.equipment = equipment({ receipt: onItem("receipt", P1, [P1], P1) });
+    await el.updateComplete;
+
+    const refreshed = combobox(el, "receiptPrinterId")!;
+    expect(refreshed.value).toBe("P1");
+    expect(refreshed.options.map((option) => option.value)).not.toContain("P2");
+    expect(optionLabels(refreshed).join(" ")).not.toContain("Bar printer");
+    expect(resolvedText(el, "receipt")).toBe("Counter printer");
+  });
+
+  it("a chosen printer deleted elsewhere reads as Use default once the list is read again, with no switched-off or held entry for it", async () => {
+    const el = await mountDialog({
+      equipment: equipment({ receipt: onItem("receipt", P2, [P1, P2], P1) }),
+    });
+    expect(combobox(el, "receiptPrinterId")!.value).toBe("P2");
+
+    el.equipment = equipment({ receipt: onDefault("receipt", P1, [P1]) });
+    await el.updateComplete;
+
+    const refreshed = combobox(el, "receiptPrinterId")!;
+    expect(refreshed.value).toBe("");
+    expect(refreshed.options.map((option) => option.value)).not.toContain("P2");
+    expect(optionLabels(refreshed).join(" ")).not.toContain("Bar printer");
+    expect(resolvedText(el, "receipt")).toBe("Counter printer");
+    expect(contextText(el, "receipt") ?? "").not.toContain("Bar printer");
+  });
+
   it("sends nothing when the current choice is picked again", async () => {
     const el = await mountDialog();
     const seen = changes(el);

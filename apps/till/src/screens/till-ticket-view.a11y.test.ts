@@ -54,6 +54,7 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     { status: "printing", jobId: "original", canRetry: false },
     { status: "failed", jobId: "original", canRetry: false },
     { status: "failed", jobId: "original", canRetry: true },
+    { status: "failed", jobId: "original", canRetry: false, failureCode: "printer.deleted" },
     { status: "done", jobId: "original", canRetry: false },
   ] as const)("has no violations with F1 original status %j", async (print) => {
     const { host } = await mountWidget<TillTicketView>(

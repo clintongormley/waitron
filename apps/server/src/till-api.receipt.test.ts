@@ -83,6 +83,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { reprintOrderReceipt } from "./orders-reprint.js";
+import { deletePrinter } from "./printer-delete.js";
 import {
   commandNames,
   decodeTicket,
@@ -1012,6 +1013,152 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       expect(await unknown.json()).toMatchObject({ error: { code: "working_order.not_found" } });
     }
     expect(await suite.db.select().from(printJobs)).toEqual(before);
+  });
+});
+
+describe("an original receipt whose printer was deleted", () => {
+  async function deleteVia(cfg: TillConfig, printerId: string): Promise<void> {
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, printCfg(cfg), printerId));
+  }
+
+  async function snapshot() {
+    return {
+      jobs: await suite.db.select().from(printJobs),
+      deliveries: await suite.db.select().from(invoiceDeliveries),
+      reprints: await suite.db.select().from(receiptReprints),
+      drawers: await suite.db.select().from(drawerOpens),
+      sales: await suite.db.select().from(sales),
+      registros: await suite.db.select().from(registrosFacturacion),
+    };
+  }
+
+  async function open(): Promise<{
+    app: Hono;
+    cfg: TillConfig;
+    orderId: string;
+    cookie: string;
+    printerId: string;
+    menuItemId: string;
+  }> {
+    const { cfg, each, operatorId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    return { app, cfg, orderId, cookie, printerId, menuItemId: each.menuItemId };
+  }
+
+  it.each([
+    ["was still waiting when the printer was deleted", null],
+    ["had already used up its attempts before the printer was deleted", "offline"],
+  ] as const)(
+    "explains a failed original that %s and refuses its retry, writing nothing",
+    async (_label, earlierError) => {
+      const { app, cfg, orderId, cookie, printerId } = await open();
+      const [original] = await suite.db.select().from(printJobs);
+      if (earlierError !== null)
+        await suite.db
+          .update(printJobs)
+          .set({ status: "failed", attempts: 5, lastError: earlierError })
+          .where(eq(printJobs.id, original!.id));
+      await deleteVia(cfg, printerId);
+
+      const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+      expect(status.status).toBe(200);
+      expect(await status.json()).toEqual({
+        status: "failed",
+        jobId: original!.id,
+        canRetry: false,
+        failureCode: "printer.deleted",
+      });
+
+      const before = await snapshot();
+      const retry = await app.request(`/api/sales/${orderId}/receipt/retry`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(retry.status).toBe(409);
+      expect(await retry.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it("names no deletion for a live printer's failed original whose agent reported the same words", async () => {
+    const { app, orderId, cookie } = await open();
+    const [original] = await suite.db.select().from(printJobs);
+    // An agent's failure text is stored as sent (`reportPrintJob`), so it can spell the marker.
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: 5, lastError: "printer.deleted" })
+      .where(eq(printJobs.id, original!.id));
+
+    const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+    const body = (await status.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ status: "failed", jobId: original!.id });
+    expect(body).not.toHaveProperty("failureCode");
+  });
+
+  it("still reads a completed original and its handover, with no failure explained", async () => {
+    const { app, cfg, orderId, cookie, printerId } = await open();
+    await suite.db.update(printJobs).set({ status: "done" });
+    const confirmed = await app.request(`/api/sales/${orderId}/receipt/handover`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    const facts = (await confirmed.json()) as Record<string, unknown>;
+    await deleteVia(cfg, printerId);
+
+    const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+    expect(await status.json()).toEqual(facts);
+    expect(facts).toMatchObject({ status: "done", canRetry: false });
+    expect(facts).not.toHaveProperty("failureCode");
+  });
+
+  it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint answers as with none", async () => {
+    const { app, cfg, cookie, printerId, menuItemId } = await open();
+    await deleteVia(cfg, printerId);
+    const jobsBefore = await suite.db.select().from(printJobs);
+
+    const orderId = await ringSale(app, cfg, cookie, menuItemId);
+    const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+    expect(await status.json()).toEqual({ status: "not_queued" });
+    const deletedReprint = await app.request(`/api/sales/${orderId}/reprint`, {
+      method: "POST",
+      headers: { cookie },
+      body: "{}",
+    });
+    const deletedAnswer = [deletedReprint.status, await deletedReprint.text()];
+    expect(await suite.db.select().from(printJobs)).toEqual(jobsBefore);
+
+    await configureReceipt(cfg, { printerId: null });
+    const noneReprint = await app.request(`/api/sales/${orderId}/reprint`, {
+      method: "POST",
+      headers: { cookie },
+      body: "{}",
+    });
+    expect(deletedAnswer).toEqual([noneReprint.status, await noneReprint.text()]);
+    expect(await suite.db.select().from(printJobs)).toEqual(jobsBefore);
+  });
+
+  it("keeps a completed original first when a later resend to the deleted printer was ended", async () => {
+    const { app, cfg, orderId, cookie, printerId } = await open();
+    const [original] = await suite.db.select().from(printJobs);
+    await suite.db.update(printJobs).set({ status: "done" });
+    await suite.db.insert(printJobs).values({
+      locationId: original!.locationId,
+      printerId,
+      saleId: original!.saleId,
+      payload: original!.payload,
+      kind: "document",
+      receiptCopy: false,
+      resendOf: original!.id,
+    });
+    await deleteVia(cfg, printerId);
+
+    const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+    expect(await status.json()).toEqual({ status: "done", jobId: original!.id, canRetry: false });
   });
 });
 

@@ -25,8 +25,10 @@ import { enqueuePrintJob, esc, updatePrinter } from "@waitron/printing";
 import {
   configureDemoPrinter,
   deliverDemoPrinterJobs,
+  routeToDemoPrinter,
   startDemoPrinterLoop,
 } from "./demo-printer.js";
+import { deletePrinter } from "./printer-delete.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -157,6 +159,72 @@ describe("the Demo printer", () => {
     ).toEqual([]);
     const [job] = await suite.db.select({ status: printJobs.status }).from(printJobs);
     expect(job?.status).toBe("queued");
+  });
+
+  it("after its printer is deleted, a Demo boot adds a new one rather than bringing it back", async () => {
+    const { locationId, deviceId, profileId } = await venue();
+    const first = await configureDemoPrinter(suite.db, locationId, true);
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, first!.printerId));
+    const deletedRow = await suite.db
+      .select()
+      .from(printers)
+      .where(eq(printers.id, first!.printerId));
+
+    const second = await configureDemoPrinter(suite.db, locationId, true);
+
+    expect(second!.printerId).not.toBe(first!.printerId);
+    expect(second!.agentId).toBe(first!.agentId);
+    expect(await suite.db.select().from(printers).where(eq(printers.id, first!.printerId))).toEqual(
+      deletedRow,
+    );
+    expect(deletedRow[0]).toMatchObject({ active: false, deletedAt: expect.any(String) });
+    expect(await profileLists(profileId)).toEqual(demoEverywhere(second!.printerId));
+    expect(
+      await withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, "receipt")),
+    ).toBe(second!.printerId);
+  });
+
+  it("refuses to route to a deleted printer itself, before anything that would also refuse it", async () => {
+    await seedTenant(suite.db);
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Empty", invoiceLocales: ["en-GB"], operationDescription: "Restaurant sale" })
+      .returning({ id: locations.id });
+    const locationId = location!.id;
+    const gone = await realPrinter(locationId, "Gone");
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, gone));
+
+    await expect(
+      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, locationId, gone)),
+    ).rejects.toMatchObject({ code: "printer.not_found" });
+  });
+
+  it("a deleted printer's route writes no list, default or station link", async () => {
+    const { locationId, profileId } = await venue();
+    await suite.db.insert(kitchenStations).values({ locationId, name: "Grill" });
+    const gone = await realPrinter(locationId, "Gone");
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, gone));
+    const lists = await profileLists(profileId);
+
+    await expect(
+      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, locationId, gone)),
+    ).rejects.toMatchObject({ code: "printer.not_found" });
+
+    expect(await profileLists(profileId)).toEqual(lists);
+    expect(
+      await suite.db.select().from(stationPrinters).where(eq(stationPrinters.printerId, gone)),
+    ).toEqual([]);
+  });
+
+  it("a Live boot after its printer is deleted leaves the deleted row as it is", async () => {
+    const { locationId } = await venue();
+    const first = await configureDemoPrinter(suite.db, locationId, true);
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, first!.printerId));
+    const before = await suite.db.select().from(printers);
+
+    expect(await configureDemoPrinter(suite.db, locationId, false)).toBeNull();
+
+    expect(await suite.db.select().from(printers)).toEqual(before);
   });
 
   it("adds itself after a profile's real printers, leaving held printers and revoked devices alone", async () => {

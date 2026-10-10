@@ -17,6 +17,28 @@ it("counts the initial screen read as activity and subsequent refreshes as passi
   expect(active).toHaveBeenCalledOnce();
 });
 
+it("reads a printer's delete impact passively after the first read, and sends its delete as activity", async () => {
+  const impact = { target: { id: "p1", name: "Cocina" }, refusals: [], ends: [], removes: [] };
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify(impact), { status: 200 }),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const query = dashboardQuery(api, "getPrinterDeleteImpact", ["p1"]);
+  expect(await query.read()).toEqual(impact);
+  await query.read();
+  expect(fetchImpl.mock.calls[1]![0]).toBe("/management-api/printers/p1/delete-impact");
+  expect(fetchImpl.mock.calls[1]![1].method).toBe("GET");
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(active).toHaveBeenCalledOnce();
+
+  expect(await api.deletePrinter("p1")).toEqual(impact);
+  expect(fetchImpl.mock.calls[2]![0]).toBe("/management-api/printers/p1");
+  expect(fetchImpl.mock.calls[2]![1].method).toBe("DELETE");
+  expect(new Headers(fetchImpl.mock.calls[2]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(active).toHaveBeenCalledTimes(2);
+});
+
 it.each([
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "bill_payments"],
@@ -125,6 +147,26 @@ it.each([
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile. Not `devices`, which a device's heartbeat changes every minute.
   ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
+  // `printerDeleteRules` (apps/server/src/printer-delete.ts): the printer, its live jobs and
+  // invoice receipts, its holder, the devices choosing or inheriting it and the profile rows they
+  // inherit through, and the stations and watchers it prints for, each named.
+  [
+    "getPrinterDeleteImpact",
+    ["p1"],
+    [
+      "printers",
+      "print_jobs",
+      "invoice_deliveries",
+      "printer_holders",
+      "devices",
+      "device_profiles",
+      "device_profile_printers",
+      "kitchen_stations",
+      "station_printers",
+      "watchers",
+      "watcher_printers",
+    ],
+  ],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's
   // rows and lists, joined to the stations and zones they name.
   [

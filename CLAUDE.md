@@ -345,7 +345,7 @@ called weaker than its name, the topic file lists what it does not see.
   events plainly.
 - **A retained hardware registration must remain re-addable after deactivation.** Discovery matches
   disabled printers and card readers too; each reactivates the existing id (printers, devices and
-  card readers offer Enable).
+  card readers offer Enable). A deleted printer is not matched and comes back under a new id.
 - **A narrower roll in a wider receipt printer needs an explicit print area before native centring.**
   Cost: a shifted, clipped 58mm receipt. Guard: `apps/server/src/receipt-ticket.test.ts`.
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no

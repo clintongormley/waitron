@@ -2,13 +2,17 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { isStatusColor } from "./status-color.js";
 
-/** Refuses (`setup.request_invalid`) a table service status whose colour a save would refuse. */
+/** Refuses (`setup.request_invalid`) a table service status whose colour a save would refuse, and a
+ * deleted printer, which the exporter leaves behind. */
 export function validateCoreConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
 ): void {
   for (const row of tables.table_service_statuses ?? [])
     if (!isStatusColor(row.color))
       throw new AppError("setup.request_invalid", { field: "table_service_statuses.color" });
+  for (const row of tables.printers ?? [])
+    if (row.deleted_at !== undefined && row.deleted_at !== null)
+      throw new AppError("setup.request_invalid", { field: "printers.deleted_at" });
 }
 
 export const CORE_CONFIGURATION_TRANSFER = {
@@ -55,6 +59,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
       locationColumns: ["location_id"],
       omit: ["poll_token_hash"],
       reconnect: true,
+      leaveBehindWhenSet: "deleted_at",
     },
     { name: "page_printers", locationColumns: ["location_id"], reconnect: true },
     { name: "device_profile_printers" },

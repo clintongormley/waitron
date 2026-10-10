@@ -805,3 +805,180 @@ describe("which printer each of a device's roles resolves to", () => {
     ]);
   });
 });
+
+describe("a deleted printer as a device's choice or a portable setting", () => {
+  let loc: string;
+  let profile: string;
+  let a: string;
+  let b: string;
+  let fixed: string;
+  let carried: string;
+  let other: string;
+
+  beforeEach(async () => {
+    await seedTenant(suite.db);
+    loc = await seedLocation("Here");
+    const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
+    profile = first.profileId;
+    a = first.deviceId;
+    b = (await seedDevice(suite.db, { locationId: loc, label: "Till B", profileId: profile }))
+      .deviceId;
+    fixed = await seedPrinter(loc, "Bar", { hasCashDrawer: true });
+    carried = await seedPrinter(loc, "Handheld", { portable: true });
+    other = await seedPrinter(loc, "Counter", { hasCashDrawer: true });
+    await inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        profile,
+        lists({
+          receiptPrinterIds: [fixed, carried, other],
+          paymentSlipPrinterIds: [fixed, carried, other],
+          cashDrawerPrinterIds: [fixed, other],
+        }),
+      ),
+    );
+  });
+
+  // Only the tombstone is written: a real delete also clears the device's choice
+  // (apps/server/src/printer-delete.ts), so these pin a backstop for a state it never leaves.
+  async function tombstone(printerId: string): Promise<void> {
+    await suite.db
+      .update(printers)
+      .set({ active: false, deletedAt: "2026-10-10T12:00:00.000Z" })
+      .where(eq(printers.id, printerId));
+  }
+
+  async function portableOf(printerId: string): Promise<boolean> {
+    const [row] = await suite.db
+      .select({ portable: printers.portable })
+      .from(printers)
+      .where(eq(printers.id, printerId));
+    return row!.portable;
+  }
+
+  async function refusal(run: () => Promise<unknown>): Promise<[string, unknown]> {
+    const e = await captureError(run);
+    expect(e).toBeInstanceOf(AppError);
+    return [(e as AppError).code, (e as AppError).params];
+  }
+
+  it.each(
+    (["receipt", "payment_slip", "cash_drawer"] as const).flatMap((role) =>
+      (["scan", "list", "manage"] as const).map((via) => [role, via] as const),
+    ),
+  )(
+    "refuses choosing a deleted printer for %s by %s with printer.not_found, changing nothing",
+    async (role, via) => {
+      await choose(a, role, { id: other });
+      await tombstone(fixed);
+      const before = [await columns(a), await holders()];
+      expect(await refusal(() => choose(a, role, { id: fixed }, via, true))).toEqual([
+        "printer.not_found",
+        { id: fixed },
+      ]);
+      expect([await columns(a), await holders()]).toEqual(before);
+    },
+  );
+
+  it.each(["receipt", "payment_slip", "cash_drawer"] as const)(
+    "refuses the %s choice the device already stores once that printer is deleted",
+    async (role) => {
+      await choose(a, role, { id: fixed });
+      await tombstone(fixed);
+      const before = await columns(a);
+      expect(await refusal(() => choose(a, role, { id: fixed }, "manage"))).toEqual([
+        "printer.not_found",
+        { id: fixed },
+      ]);
+      expect(await columns(a)).toEqual(before);
+    },
+  );
+
+  it("refuses taking over a deleted portable printer another device holds, keeping the holder", async () => {
+    await choose(b, "receipt", { id: carried });
+    expect(await holders()).toEqual([[carried, b]]);
+    await tombstone(carried);
+    expect(await refusal(() => choose(a, "receipt", { id: carried }, "scan", true))).toEqual([
+      "printer.not_found",
+      { id: carried },
+    ]);
+    expect(await holders()).toEqual([[carried, b]]);
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+    expect(await columns(b)).toMatchObject({ receipt: carried });
+  });
+
+  it("still puts a role on Use default after its chosen printer is deleted", async () => {
+    await choose(a, "receipt", { id: fixed });
+    await tombstone(fixed);
+    expect(await choose(a, "receipt", "default", "manage")).toEqual({
+      ok: true,
+      previousHolderDeviceId: null,
+    });
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+  });
+
+  it("still lets two devices choose one portable drawer printer for the drawer, holding nothing", async () => {
+    const portableDrawer = await seedPrinter(loc, "Drawer on wheels", {
+      portable: true,
+      hasCashDrawer: true,
+    });
+    await inTx((tx) =>
+      setProfilePrinterLists(tx, profile, lists({ cashDrawerPrinterIds: [portableDrawer] })),
+    );
+    for (const device of [a, b]) {
+      expect(await choose(device, "cash_drawer", { id: portableDrawer }, "list")).toEqual({
+        ok: true,
+        previousHolderDeviceId: null,
+      });
+    }
+    expect(await holders()).toEqual([]);
+    expect([await resolve(a, "cash_drawer"), await resolve(b, "cash_drawer")]).toEqual([
+      portableDrawer,
+      portableDrawer,
+    ]);
+  });
+
+  it("still refuses a switched-off printer that is not deleted as not_permitted", async () => {
+    await setActive(fixed, false);
+    expect(await choose(a, "receipt", { id: fixed }, "manage")).toEqual({
+      ok: false,
+      refusal: "not_permitted",
+    });
+  });
+
+  it.each([true, false])(
+    "refuses marking a deleted printer portable=%s with printer.not_found, changing nothing",
+    async (portable) => {
+      await choose(a, "receipt", { id: fixed });
+      await choose(b, "receipt", { id: carried });
+      await tombstone(fixed);
+      await tombstone(carried);
+      const before = [await columns(a), await columns(b), await holders()];
+      for (const id of [fixed, carried]) {
+        const stored = await portableOf(id);
+        expect(await refusal(() => inTx((tx) => setPrinterPortable(tx, id, portable)))).toEqual([
+          "printer.not_found",
+          { id },
+        ]);
+        expect(await portableOf(id)).toBe(stored);
+      }
+      expect([await columns(a), await columns(b), await holders()]).toEqual(before);
+    },
+  );
+
+  it("refuses marking an unknown printer portable with printer.not_found", async () => {
+    const unknown = "00000000-0000-4000-8000-000000000000";
+    expect(await refusal(() => inTx((tx) => setPrinterPortable(tx, unknown, true)))).toEqual([
+      "printer.not_found",
+      { id: unknown },
+    ]);
+  });
+
+  it("still marks a switched-off printer that is not deleted portable", async () => {
+    await choose(a, "receipt", { id: fixed });
+    await setActive(fixed, false);
+    await inTx((tx) => setPrinterPortable(tx, fixed, true));
+    expect(await portableOf(fixed)).toBe(true);
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+  });
+});

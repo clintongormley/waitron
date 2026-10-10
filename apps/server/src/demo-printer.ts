@@ -1,4 +1,6 @@
+import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
+import { AppError } from "@waitron/shared";
 import {
   deviceProfilePrinters,
   deviceProfiles,
@@ -30,7 +32,13 @@ export async function configureDemoPrinter(
     const [existing] = await tx
       .select({ id: printers.id })
       .from(printers)
-      .where(and(eq(printers.locationId, locationId), eq(printers.localKey, DEMO_PRINTER_KEY)));
+      .where(
+        and(
+          eq(printers.locationId, locationId),
+          eq(printers.localKey, DEMO_PRINTER_KEY),
+          isNull(printers.deletedAt),
+        ),
+      );
     if (!practiceMode) {
       if (existing !== undefined) {
         await unlistDemoPrinter(tx, existing.id);
@@ -121,9 +129,10 @@ export async function routeToDemoPrinter(
   const [printer] = await tx
     .select({ hasCashDrawer: printers.hasCashDrawer })
     .from(printers)
-    .where(eq(printers.id, printerId));
+    .where(and(eq(printers.id, printerId), isNull(printers.deletedAt)));
+  if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   // `setProfilePrinterLists` refuses a newly listed drawer printer without a drawer.
-  const opensDrawer = printer?.hasCashDrawer === true;
+  const opensDrawer = printer.hasCashDrawer;
   const profiles = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)

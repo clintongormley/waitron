@@ -99,6 +99,7 @@ const jobs: PrintJobRow[] = [
   {
     id: "j1",
     printerId: "p1",
+    printerName: "Cocina",
     status: "failed",
     canResend: true,
     attempts: 2,
@@ -904,6 +905,70 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       expect(q(el, "[data-test=print-test-page-notice]")!.checkVisibility()).toBe(true);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
+    },
+  );
+
+  it.each(["en", "es-ES"] as const)(
+    "renders the printer delete dialog loading, read, after a failed read and after a refused delete accessibly (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        let answer!: (value: unknown) => void;
+        const impact = {
+          target: { id: "p1", name: "Cocina" },
+          refusals: [],
+          ends: [
+            { key: "print_jobs", count: 2, targets: [] },
+            { key: "portable_holder", count: 1, targets: [{ id: "d1", name: "Handheld Ana" }] },
+          ],
+          removes: [
+            { key: "device_receipt_default", count: 1, targets: [{ id: "d2", name: "Bar till" }] },
+          ],
+        };
+        const getPrinterDeleteImpact = vi
+          .fn()
+          .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(impact);
+        const { el, host } = await mountWidget<PrintersScreen>(
+          "dashboard-printers-screen",
+          {
+            api: stubApi(false, {
+              getPrinterDeleteImpact,
+              deletePrinter: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+            } as Partial<DashboardApi>),
+          },
+          theme,
+        );
+        await flush(el);
+        q(el, "wt-tabs")!
+          .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+          .click();
+        await flush(el);
+        q(el, "[data-test=delete-printer-p1]")!.click();
+        await flush(el);
+        await expectNoA11yViolations(host);
+
+        answer(impact);
+        await flush(el);
+        await expectNoA11yViolations(host);
+
+        const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+        dialog.dispatchEvent(new CustomEvent("wt-delete-retry", { bubbles: true, composed: true }));
+        await flush(el);
+        expect(dialog.readError).not.toBe("");
+        await expectNoA11yViolations(host);
+
+        q(el, "[data-test=delete-retry]")!.click();
+        await flush(el);
+        q(el, "[data-test=delete-confirm]")!.click();
+        await flush(el);
+        expect(dialog.actionError).not.toBe("");
+        await expectNoA11yViolations(host);
+      } finally {
+        setLocale(before);
+      }
     },
   );
 

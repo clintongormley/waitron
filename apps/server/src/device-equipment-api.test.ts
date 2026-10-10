@@ -21,6 +21,7 @@ import { mountDeviceApi } from "./device-api.js";
 import type { EquipmentRole, RoleEquipment, RoleSummary } from "./device-equipment.js";
 import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
+import { deletePrinter } from "./printer-delete.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
 // Choosing equipment over HTTP: two tills A ("Barra") and B ("Terraza") on one profile, each with
@@ -760,5 +761,144 @@ describe("management: a device's equipment", () => {
       expect.objectContaining({ id: r1, busy: true }),
     );
     expect(await listed()).toEqual(before);
+  });
+});
+
+describe("a deleted printer named by a stale choice", () => {
+  const removePrinter = (id: string) => inTx((tx) => deletePrinter(tx, venue.cfg, id));
+
+  async function deviceState(deviceId: string) {
+    const [row] = await suite.db
+      .select({
+        name: devices.label,
+        receipt: devices.receiptPrinterId,
+        slip: devices.paymentSlipPrinterId,
+        drawer: devices.cashDrawerPrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return { ...row!, holders: await suite.db.select().from(printerHolders) };
+  }
+
+  it.each(
+    (["receipt", "payment_slip", "cash_drawer"] as const).flatMap((role) =>
+      (
+        [
+          ["scan", undefined],
+          ["list", undefined],
+          ["list", true],
+          ["scan", true],
+        ] as const
+      ).map(([via, takeOver]) => [role, via, takeOver] as const),
+    ),
+  )(
+    "the till choosing it again for %s by %s (takeOver %s) is 400 printer.not_found, changing nothing",
+    async (role, via, takeOver) => {
+      const target = role === "cash_drawer" ? dr : fp;
+      expect((await choose(venue.cookie, role, { id: target }, "list")).status).toBe(200);
+      await removePrinter(target);
+      const before = await deviceState(a);
+
+      const res = await choose(venue.cookie, role, { id: target }, via, takeOver);
+
+      expect(res.status).toBe(400);
+      expect(res.json).toEqual({ code: "printer.not_found", params: { id: target } });
+      expect(await deviceState(a)).toEqual(before);
+    },
+  );
+
+  it("a scan taking over a deleted portable printer another device held is 400 printer.not_found", async () => {
+    expect((await choose(venue.cookie2, "receipt", { id: pp }, "list")).status).toBe(200);
+    await removePrinter(pp);
+    const before = [await deviceState(a), await deviceState(b)];
+
+    const res = await choose(venue.cookie, "receipt", { id: pp }, "scan", true);
+
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({ code: "printer.not_found", params: { id: pp } });
+    expect([await deviceState(a), await deviceState(b)]).toEqual(before);
+  });
+
+  it("the till can still choose Use default and a printer that is not deleted", async () => {
+    expect((await choose(venue.cookie, "receipt", { id: fp }, "list")).status).toBe(200);
+    await removePrinter(fp);
+
+    expect((await choose(venue.cookie, "receipt", "default", "list")).status).toBe(200);
+    expect((await choose(venue.cookie, "payment_slip", { id: pp }, "list")).status).toBe(200);
+    expect(await columns(a)).toEqual({ receipt: null, slip: pp, drawer: null });
+  });
+
+  function patchDevice(deviceId: string, changes: Record<string, unknown>) {
+    return send(deviceApp, managerCookie, "PATCH", `/management-api/devices/${deviceId}`, {
+      name: "Barra",
+      profileId,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      ...changes,
+    });
+  }
+
+  it.each([
+    ["receiptPrinterId", "receipt"],
+    ["paymentSlipPrinterId", "payment_slip"],
+    ["cashDrawerPrinterId", "cash_drawer"],
+  ] as const)(
+    "a manager's stale form resubmitting the deleted %s unchanged is 400 printer.not_found",
+    async (field, role) => {
+      const target = role === "cash_drawer" ? dr : fp;
+      expect((await patchDevice(a, { [field]: target })).status).toBe(204);
+      await removePrinter(target);
+      const before = await deviceState(a);
+
+      const res = await patchDevice(a, { [field]: target });
+
+      expect(res.status).toBe(400);
+      expect(res.json).toEqual({ code: "printer.not_found", params: { id: target } });
+      expect(await deviceState(a)).toEqual(before);
+    },
+  );
+
+  it("a stale form naming the deleted printer then a new one rolls back every field it changed", async () => {
+    expect((await patchDevice(a, { receiptPrinterId: fp })).status).toBe(204);
+    await removePrinter(fp);
+    const before = await deviceState(a);
+
+    const res = await patchDevice(a, {
+      name: "Barra nueva",
+      receiptPrinterId: fp,
+      paymentSlipPrinterId: pp,
+      cashDrawerPrinterId: dr,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({ code: "printer.not_found", params: { id: fp } });
+    expect(await deviceState(a)).toEqual(before);
+  });
+
+  it("a stored choice still naming a deleted printer, resubmitted unchanged, is 400 printer.not_found", async () => {
+    expect((await patchDevice(a, { receiptPrinterId: fp })).status).toBe(204);
+    // Only the tombstone: a real delete clears the choice, so this pins a backstop for a state it
+    // never leaves.
+    await suite.db
+      .update(printers)
+      .set({ active: false, deletedAt: new Date().toISOString() })
+      .where(eq(printers.id, fp));
+    const before = await deviceState(a);
+
+    const res = await patchDevice(a, { name: "Barra nueva", receiptPrinterId: fp });
+
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({ code: "printer.not_found", params: { id: fp } });
+    expect(await deviceState(a)).toEqual(before);
+  });
+
+  it("a manager can still clear the role and choose a printer that is not deleted", async () => {
+    expect((await patchDevice(a, { receiptPrinterId: fp })).status).toBe(204);
+    await removePrinter(fp);
+
+    const res = await patchDevice(a, { receiptPrinterId: null, paymentSlipPrinterId: pp });
+
+    expect(res.status).toBe(204);
+    expect(await columns(a)).toEqual({ receipt: null, slip: pp, drawer: null });
   });
 });

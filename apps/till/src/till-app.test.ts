@@ -15085,6 +15085,28 @@ describe("the device's equipment, chosen from the header", () => {
     },
   );
 
+  it("after a printer.not_found refusal the list is read again, so a printer deleted elsewhere drops out", async () => {
+    const after = structuredClone(initial);
+    after.roles[0]!.choices = after.roles[0]!.choices.filter((choice) => choice.id !== "P2");
+    const getDeviceEquipment = vi.fn().mockResolvedValue(initial);
+    const el = await openEquipment({
+      getDeviceEquipment,
+      setDeviceEquipment: vi
+        .fn()
+        .mockRejectedValue({ code: "printer.not_found", params: { id: "P2" }, status: 400 }),
+    });
+    const reads = getDeviceEquipment.mock.calls.length;
+    getDeviceEquipment.mockResolvedValue(after);
+
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
+    await flush(el);
+    await flush(el);
+
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(reads + 1);
+    expect(equipmentDialog(el)!.equipment).toEqual(after);
+    expect(equipmentDialog(el)!.error).toEqual({ code: "printer.not_found" });
+  });
+
   it("after any other refusal the list is not read again", async () => {
     const getDeviceEquipment = vi.fn().mockResolvedValue(initial);
     const el = await openEquipment({

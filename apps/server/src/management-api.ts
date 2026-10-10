@@ -18,7 +18,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
-import { inArray } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import {
   fireControlMode,
   printers,
@@ -691,8 +691,9 @@ async function withProfileAccess(
 }
 
 /**
- * Refuses a listed printer that does not exist, after the manager gate so a session without
- * `layout.configure` learns nothing about printer ids. The store's own writes authorize again.
+ * Refuses a listed or default printer that does not exist or is deleted, after the manager gate so
+ * a session without `layout.configure` learns nothing about printer ids. The store's own writes
+ * authorize again.
  */
 async function requireListedPrinters(
   tx: Transaction,
@@ -704,6 +705,7 @@ async function requireListedPrinters(
       ...(lists.receiptPrinterIds ?? []),
       ...(lists.paymentSlipPrinterIds ?? []),
       ...(lists.cashDrawerPrinterIds ?? []),
+      ...PRINTER_DEFAULT_FIELDS.flatMap((field) => lists[field] ?? []),
     ]),
   ];
   if (ids.length === 0) return;
@@ -711,7 +713,7 @@ async function requireListedPrinters(
   const found = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(inArray(printers.id, ids));
+    .where(and(inArray(printers.id, ids), isNull(printers.deletedAt)));
   const known = new Set(found.map((row) => row.id));
   const missing = ids.find((id) => !known.has(id));
   if (missing !== undefined) throw new AppError("printer.not_found", { id: missing });

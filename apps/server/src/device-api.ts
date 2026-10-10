@@ -18,7 +18,12 @@ import {
   profilesAdmitting,
   type Permission,
 } from "@waitron/identity";
-import { kindOfFormFactor, listDeviceProfiles, type ProfilePrinterRole } from "@waitron/layouts";
+import {
+  kindOfFormFactor,
+  listDeviceProfiles,
+  refuseDeletedPrinters,
+  type ProfilePrinterRole,
+} from "@waitron/layouts";
 import { kitchenNotices } from "@waitron/venue-service";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -741,6 +746,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         ) {
           throw new AppError("management.request_invalid", { field: "approvedProfileIds" });
         }
+        // Before the unchanged-choice skip below, which would otherwise keep a deleted one.
+        await refuseDeletedPrinters(tx, Object.values(chosen));
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
         if (kitchenScreens !== undefined) {

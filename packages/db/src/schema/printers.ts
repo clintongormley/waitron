@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, flag, id, label, newId, table } from "./columns.js";
+import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -46,14 +46,15 @@ export const printers = table(
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
     // A portable printer is used by one device at a time, its holder in `printer_holders`.
     portable: flag("portable").notNull().default(false),
-    // Deactivate via active := false, never a hard delete (print_jobs reference it).
+    // Disable clears `active`; Delete also sets `deleted_at`; print_jobs keep the row either way.
     active: flag("active").notNull().default(true),
+    deletedAt: tsString("deleted_at"),
   },
   (t) => [
-    // One registered printer per physical USB/BT device per venue.
+    // One undeleted printer per physical USB/BT device per venue; a deleted row frees its key.
     uniqueIndex("printers_local_key_key")
       .on(t.locationId, t.localKey)
-      .where(sql`${t.localKey} is not null`),
+      .where(sql`${t.localKey} is not null and ${t.deletedAt} is null`),
     check("printers_transport_ck", enumCheck(t.transport)),
     check("printers_ticket_scope_ck", enumCheck(t.ticketScope)),
     check("printers_paper_width_ck", enumCheck(t.paperWidth)),

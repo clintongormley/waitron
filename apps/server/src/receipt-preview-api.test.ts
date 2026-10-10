@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   devices,
   locations,
@@ -25,6 +25,7 @@ import { isAppError } from "@waitron/shared";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
 import type { TillConfig } from "./till-config.js";
+import { deletePrinter } from "./printer-delete.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -816,5 +817,35 @@ describe("the receipt preview's top block", () => {
     await spoilImageBytes(spoiled);
     const undecodable = await rendered({ logo: spoiled });
     expect([sizes(undecodable), undecodable.marks.logo]).toEqual([[], null]);
+  });
+});
+
+describe("a deleted receipt printer in the receipt preview", () => {
+  it("is no longer offered as a width, nor drawn at, once deleted", async () => {
+    const widths = async () => {
+      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}`);
+      expect(response.status).toBe(200);
+      const result = (await response.json()) as ReceiptPreviewResponse;
+      return [result.paperWidths, result.paperWidth];
+    };
+    await withPrinters(
+      [
+        { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+        { device: "Caja 1", paperWidth: "58mm", resolution: "180dpi" },
+        { device: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
+      ],
+      async () => {
+        expect(await widths()).toEqual([["58mm", "80mm"], "58mm"]);
+        const narrow = await suite.db
+          .select({ id: printers.id })
+          .from(printers)
+          .where(inArray(printers.name, ["Printer Barra", "Printer Caja 1"]));
+        await withTransaction(suite.db, async (tx) => {
+          for (const { id } of narrow)
+            await deletePrinter(tx, { locationId: venue.cfg.locationId }, id);
+        });
+        expect(await widths()).toEqual([["80mm"], "80mm"]);
+      },
+    );
   });
 });

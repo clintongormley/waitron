@@ -13,6 +13,7 @@ import {
 } from "@waitron/shared";
 import { FALLBACK_RECEIPT_LOCALE, receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptLabels } from "@waitron/country";
+import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import type {
@@ -690,7 +691,7 @@ export class TillTicketView extends LitElement {
                 >
               </p>
               <p>
-                ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : t(this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
+                ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
               </p>
               ${
                 this.originalReceiptPrint?.status === "done" && !this.originalReceiptPrint.handover

@@ -37,6 +37,7 @@ import {
   type SaleLineClassification,
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { deletePrinter } from "./printer-delete.js";
 import type { CategoryReport, CategoryTotal } from "@waitron/reporting";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -605,5 +606,33 @@ describe("POST /management-api/reports/categories/print", () => {
     expect(staff.status).toBe(403);
     expect((await errorOf(staff)).code).toBe("authorization.not_permitted");
     expect((await print(body, { cookie: supervisorCookie })).status).toBe(202);
+  });
+});
+
+describe("a deleted printer and report printing", () => {
+  it("is not offered for reports, and printing on it is 404 printer.not_found with no job", async () => {
+    const deleted = await withTransaction(suite.db, async (tx) => {
+      const [row] = await tx
+        .insert(printers)
+        .values({ locationId, name: "Old reports", transport: "network_tcp", host: "10.0.9.9" })
+        .returning({ id: printers.id });
+      await deletePrinter(tx, { locationId }, row!.id);
+      return row!.id;
+    });
+    const offered = await request("/management-api/reports/printers", {
+      cookie: supervisorCookie,
+    });
+    expect(((await offered.json()) as { id: string }[]).map((row) => row.id)).not.toContain(
+      deleted,
+    );
+
+    const jobsBefore = await suite.db.select({ id: printJobs.id }).from(printJobs);
+    const res = await request("/management-api/reports/categories/print", {
+      method: "POST",
+      body: { from: DAY1, to: DAY1, mode: "current", printerId: deleted },
+    });
+    expect(res.status).toBe(404);
+    expect(await errorOf(res)).toMatchObject({ code: "printer.not_found" });
+    expect(await suite.db.select({ id: printJobs.id }).from(printJobs)).toEqual(jobsBefore);
   });
 });

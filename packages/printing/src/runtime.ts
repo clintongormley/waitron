@@ -109,7 +109,7 @@ export async function claimPrintJobs(
     table: "print_jobs",
     key: "id",
     claimableJoin: sql`join printers p on p.id = j.printer_id`,
-    claimable: sql`p.active = true
+    claimable: sql`p.active = true and p.deleted_at is null
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
       and (not exists (select 1 from invoice_deliveries d where d.print_job_id = j.id)
@@ -153,8 +153,8 @@ export async function failUnprintableBluetoothJobs(
     table: "print_jobs",
     key: "id",
     claimableJoin: sql`join printers p on p.id = j.printer_id`,
-    claimable: sql`p.active = true and p.transport = 'bluetooth' and p.local_key in ${addresses}
-      and ${due}`,
+    claimable: sql`p.active = true and p.deleted_at is null and p.transport = 'bluetooth'
+      and p.local_key in ${addresses} and ${due}`,
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
     set: sql`status = 'failed', last_error = ${BLUETOOTH_PRINTING_UNAVAILABLE},
@@ -193,7 +193,8 @@ export async function endUnpairedPrinterJobs(
       claimed_at = ${claimedAt}, claimed_by = ${agentId}
     where j.printer_id in (
         select p.id from printers p
-        where p.transport = 'bluetooth' and p.local_key in ${addresses})
+        where p.transport = 'bluetooth' and p.local_key in ${addresses}
+          and p.deleted_at is null)
       and (${due} or (j.status = 'printing' and j.claimed_by = ${agentId}))
     returning id`);
   return ended.rows.map(({ id }) => id);

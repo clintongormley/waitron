@@ -184,6 +184,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The printer was unpaired, so this job will not be retried.",
     es: "La impresora se desvinculó, así que este trabajo no se volverá a intentar.",
   },
+  "printer.deleted": {
+    en: "The printer was deleted, so this job will not be retried.",
+    es: "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
+  },
   "content.language_invalid": {
     en: "Choose a recognised language.",
     es: "Elige un idioma reconocido.",

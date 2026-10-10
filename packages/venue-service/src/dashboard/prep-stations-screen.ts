@@ -64,6 +64,7 @@ import "./station-table.js";
 import "./station-editor.js";
 import {
   refusalOf,
+  listedPrinterIds,
   stationPrinterOptions,
   stationRefusalField,
   type StationEditorSave,
@@ -522,10 +523,22 @@ export class PrepStationsScreen extends LitElement {
             this.#addressShown(this.cellRefusal.address)
           )
             this.cellRefusal = null;
+          this.#dropUnlistedPrinters(value.printers);
         },
       );
     } catch {
       this.#showReadError(t("prep.load_error"));
+    }
+  }
+  /** A printer deleted elsewhere leaves the open printer choices, and each says so in its message. */
+  #dropUnlistedPrinters(printers: PrepStationsView["printers"]): void {
+    if (this.editor) {
+      const printerIds = listedPrinterIds(this.draft.printerIds, printers);
+      if (printerIds.length < this.draft.printerIds.length) {
+        this.#change("printerIds", printerIds);
+        if (!Object.values(this.fieldError).some(Boolean))
+          this.#showError(t("prep.printer_deleted"));
+      }
     }
   }
   #path(id: string): string {
@@ -954,6 +967,7 @@ export class PrepStationsScreen extends LitElement {
       if (!current()) return;
       this.stationEditRefusal = refusalOf(error);
       this.stationEditBusy = false;
+      if (this.stationEditRefusal?.code === "printer.not_found") void this.#load();
       return;
     }
     if (!current()) return;
@@ -1098,6 +1112,7 @@ export class PrepStationsScreen extends LitElement {
           ),
         };
       this.#showError(t(field === undefined ? "prep.save_error" : "prep.fix_fields"));
+      if (refusal.code === "printer.not_found") void this.#load();
     } finally {
       if (this.isConnected && (identity === this.#stationIdentity || !this.editor))
         this.busy = false;
