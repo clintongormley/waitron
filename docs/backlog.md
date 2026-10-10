@@ -1797,11 +1797,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
   `#onPayTab`. Raised by the A1 review wave (A1d).
 
-- **The till's top bar: because items leave strictly in that order, a wide item can take narrower
-  ones with it** — open, for the owner; left open by A395 (#1435). Option: after the bar fits, bring
-  back any item that left earlier and now fits, so the order is no longer strict. Not done.
-  [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
-
 - **The till's top bar: a change in the pending-transfer count alone never brings items back onto
   the bar**, so when the count shrinks or goes away, items can stay in More although they would now
   fit, until the next resize or other change refits the bar. Open, decided as built; left open by
