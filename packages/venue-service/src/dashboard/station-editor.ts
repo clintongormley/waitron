@@ -45,7 +45,7 @@ type Draft = { name: string; printerIds: string[]; showsRestOfOrder: boolean };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
 
-/** A rejected station write as the editor reads it: its code and what the code names. */
+/** A rejected write as an editor reads it: its code and what the code names. */
 export function refusalOf(error: unknown): StationRefusal {
   const params =
     typeof error === "object" && error !== null

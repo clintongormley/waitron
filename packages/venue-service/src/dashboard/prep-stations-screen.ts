@@ -831,7 +831,7 @@ export class PrepStationsScreen extends LitElement {
       const message = this.#defaultRefusal(error);
       this.cellChoice = null;
       this.#showError(message);
-      this.defaultRefusal = { code: "", ...this.#refusalCode(error), message };
+      this.defaultRefusal = { ...refusalOf(error), message };
       this.busy = false;
       return;
     }
@@ -918,15 +918,6 @@ export class PrepStationsScreen extends LitElement {
       ),
     };
   }
-  /** What the cell's editor needs to place a refusal: its code and its params. */
-  #refusalCode(error: unknown): { code?: string; params?: Record<string, unknown> } {
-    const code = codeOf(error);
-    const params = (error as { params?: Record<string, unknown> } | undefined)?.params;
-    return {
-      ...(code === undefined ? {} : { code }),
-      ...(params === undefined ? {} : { params }),
-    };
-  }
   #refuseCell(address: CellAddress, error: unknown): void {
     this.cellChoice = null;
     this.cellRefusal = {
@@ -934,7 +925,7 @@ export class PrepStationsScreen extends LitElement {
       message: t(
         codeOf(error) === "route.station_inactive" ? "prep.station_disabled" : "prep.save_error",
       ),
-      ...this.#refusalCode(error),
+      ...refusalOf(error),
     };
   }
   async #saveCell(pending: NonNullable<PrepStationsScreen["pending"]>) {
