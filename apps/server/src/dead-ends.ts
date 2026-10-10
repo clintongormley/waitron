@@ -58,7 +58,7 @@ export async function findDeadEnds(
   at: Date,
 ): Promise<readonly DeadEnd[]> {
   if (lines.length === 0) return [];
-  const states = await VENUE_SERVICE.stationStates(tx, cfg, at);
+  const states = await (await VENUE_SERVICE.routingAt(tx, cfg, at)).stations();
   const routed = lines.filter((line) => !states.get(line.makeAt ?? "")?.active);
   if (routed.length === 0) return [];
   const productsById = new Map(

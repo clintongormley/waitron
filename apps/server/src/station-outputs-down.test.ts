@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   devices,
   deviceProfiles,
-  kitchenStations,
   passItemMarks,
   printJobs,
   printers,
@@ -13,6 +12,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { stationDayStates } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
@@ -273,32 +273,36 @@ describe("station output status", () => {
       .returning({ id: deviceProfiles.id });
     await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
-      stationId: f.grill,
+      stationId: f.bar,
       deviceProfileId: profile!.id,
       label: "Screen",
       tokenHash: "hash",
       lastSeenAt: "2026-10-02T18:00:00.000Z",
     });
-    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const orderId = await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
     expect(
       await withTransaction(suite.db, (tx) =>
         stationScreensDark(tx, f.venue.cfg.locationId, new Date("2026-10-02T18:02:00Z")),
       ),
     ).toEqual([]);
-    await suite.db
-      .update(kitchenStations)
-      .set({ active: false })
-      .where(eq(kitchenStations.id, f.grill));
+    await suite.db.insert(stationDayStates).values({
+      stationId: f.bar,
+      businessDay: "2026-10-02",
+      open: false,
+    });
+    expect(
+      (
+        await withTransaction(suite.db, (tx) => VENUE_SERVICE.stationStates(tx, f.venue.cfg, at))
+      ).get(f.bar)?.open,
+    ).toBe(false);
     expect(
       await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([
-      { stationId: f.grill, stationName: "Cocina", lastSeenAt: "2026-10-02T18:00:00.000Z" },
-    ]);
+    ).toEqual([{ stationId: f.bar, stationName: "Bar", lastSeenAt: "2026-10-02T18:00:00.000Z" }]);
     expect([
       ...(await withTransaction(suite.db, (tx) =>
-        stationsWithWaitingDishes(tx, f.venue.cfg.locationId, at, [f.grill, f.bar]),
+        stationsWithWaitingDishes(tx, f.venue.cfg.locationId, at, [f.bar, f.grill]),
       )),
-    ]).toEqual([f.grill]);
+    ]).toEqual([f.bar]);
     await suite.db
       .update(ticketItems)
       .set({ state: "ready" })
