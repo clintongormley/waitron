@@ -27,9 +27,9 @@
 
 ## Review Focus
 
-1. **A payment started between the impact read and the delete.** The dialog showed no refusal, but a card payment began on the device after that. The delete must refuse with `device.payment_in_progress` and write nothing. Test: Task 3, "a refusal created between the read and the delete".
-2. **A knock that proved the device before the delete and writes after it.** `provenDisabledDevice` runs outside any transaction (`apps/server/src/join-requests.ts:228-240`). If the delete commits before `createJoinRequest` re-reads the row (:131-137), the knock must answer `device.join_stale` and must not write the new token onto the deleted row (:207-208). Test: Task 4.
-3. **A profile save after a device was deleted.** `setProfileKitchenScreens` narrows every device on the profile, disabled ones included (`packages/venue-service/src/kitchen-screens.ts:159-183`), and reports each narrowed device to the dashboard. It must neither write removal rows for a deleted device nor report one. Test: Task 5.
+1. **A payment started between the impact read and the delete.** The dialog showed no refusal, but a card payment began on the device after that. The delete must refuse with `device.payment_in_progress` and write nothing. Tests: Task 3a, "a payment started after the read refuses the delete, and nothing is written", and Task 3b, "a refusal created between the read and the delete".
+2. **A knock that proved the device before the delete and writes after it.** `provenDisabledDevice` runs outside any transaction (`apps/server/src/join-requests.ts:228-240`). If the delete commits before `createJoinRequest` re-reads the row (:131-137), the knock must answer `device.join_stale` and must not write the new token onto the deleted row (:207-208). Task 3a's delete already makes this happen, because it sets the token to `""` and the re-read compares stored hashes (:135-136), so Task 4's stale-knock case passes before Task 4 and stays as a pin. What tests Task 4's own conditions are its backstop cases, which first write a real token hash onto the deleted row.
+3. **A profile save after a device was deleted.** `setProfileKitchenScreens` narrows every device on the profile, disabled ones included (`packages/venue-service/src/kitchen-screens.ts:159-183`), and reports each narrowed device to the dashboard. It must neither write removal rows for a deleted device nor report one. The delete removes the device's stored choices, which is all the narrowing reads (`narrowDevices`, :737 onward), so the case built through the delete passes first; Task 5's backstop writes a choice row for the deleted device straight into the database. Test: Task 5.
 4. **A printer delete after a device was deleted.** The printer impact's "devices using a default" list (`apps/server/src/printer-delete.ts:108-131`) finds devices through their profile and does not filter on `active`. It must not name a deleted device. Test: Task 5.
 5. **The same browser after a delete, in dev mode as well.** In dev mode a disabled device's knock re-enables it at once (`docs/developers/conventions-ui.md:567-570`). A deleted device's browser must arrive as a NEW device with a new id, and the old row must stay deleted. Test: Task 4.
 
@@ -73,6 +73,9 @@ Found with `rg -n "devices\.id" packages apps -g '*.ts' -g '!*.test.ts' | rg "re
 | `unpaid_departures.device_id` | `packages/db/src/schema/unpaid-departures.ts:30` | History | Kept |
 | `drawer_opens.device_id` | `packages/db/src/schema/drawer-opens.ts:25` | History | Kept |
 | `incidents.device_id` | `packages/db/src/schema/incidents.ts:29` | History | Kept |
+| `daily_closes.snapshot`: `cashReconciliation.byDevice[].deviceId`, and `close.cash.byOrigin[].deviceId` in the same document | `packages/db/src/schema/daily-closes.ts:26-28`; `packages/reporting/src/close-types.ts:31-39`, `packages/reporting/src/types.ts:142-148` | History (JSON in an append-only, hash-chained row; no foreign key) | Kept. No product code reads a device's name from it: `packages/reporting/src/daily-close-hash.ts:74-75` sorts by the id, and `packages/reporting/src/verify-daily-close-chain.ts:82-91` recomputes the document's hash. The one reader that prints device names, the demo script `apps/server/scripts/daily-close-z-demo.ts:242,250`, takes them from its own seeded map (:134). |
+
+The `daily_closes` readers were found with `rg -n "cashReconciliation|byDevice" apps packages -g '*.ts' -g '!*.test.ts'`.
 
 **History reads that name a device and must keep working (no filter added):** alerts, through `packages/core/src/incidents.ts:137,181,195,206`; the cash-up by device, through `namedCashUp` (`apps/server/src/report-api.ts:440-462`, "no `active` filter" by design); the stuck-payment lists (`apps/server/src/payments-api.ts:812`, `:948`, `:1110`); who fired a group (`apps/server/src/order-groups.ts:1122-1135`); station queue moves (`apps/server/src/station-queue-moves.ts:24-30`); a sale's operation description (`packages/core/src/sale-location.ts:22-25`).
 
@@ -94,7 +97,9 @@ Found with `rg -n "devices\.id" packages apps -g '*.ts' -g '!*.test.ts' | rg "re
 | `settleProfilePrinterDevices`, `packages/layouts/src/device-equipment.ts:505-540`; `settleProfileReaderDevices`, `packages/payments/src/device-readers.ts:405-425` | every device on the profile | 5: no change, because a deleted device has no choices or holds left to settle; pinned by a test |
 | `deleteDeviceProfile`, `packages/layouts/src/device-profile-store.ts:303-337` | a profile held only by disabled devices is retired, not deleted | unchanged: a deleted row keeps its `device_profile_id` key, so retiring is still right; pinned by a test (Task 5) |
 
-**Already safe, no change, because they read `active = true`:** device cookie authentication (`apps/server/src/device-session.ts:202-204,215-224`, re-checked at :237-238 and :243-251); `assertDeviceStillProven` (`device-session.ts:330-344`); shift sessions (`apps/server/src/till-session.ts:105-117`); `readJoinStatus` (`join-requests.ts:415-440`); the dev devices list (`device-api.ts:818-820`); reader assignments (`payments-api.ts:537`); receipt preview (`apps/server/src/receipt-preview-api.ts:103`); dark station and pass screens (`apps/server/src/station-outputs-down.ts:152,207`). Device-authenticated writes (battery `device-api.ts:371-402`, sighting `device-session.ts:285-301`, profile switch `apps/server/src/device.ts:295-318`) run only after `requireDevice` has found an active row.
+**Already safe, no change, because they read `active = true`:** device cookie authentication (`apps/server/src/device-session.ts:202-204,215-224`, re-checked at :237-238 and :243-251); `assertDeviceStillProven` (`device-session.ts:330-344`); shift sessions (`apps/server/src/till-session.ts:105-117`); `readJoinStatus` (`join-requests.ts:415-440`); the dev devices list (`device-api.ts:818-820`); reader assignments (`payments-api.ts:537`); receipt preview (`apps/server/src/receipt-preview-api.ts:103`); dark station and pass screens (`apps/server/src/station-outputs-down.ts:152,207`). Two device-authenticated writes re-read the row inside the transaction that writes: the sighting (`device-session.ts:246-251`) and the profile switch (`apps/server/src/device.ts:305`).
+
+**Not safe, changed in Task 4:** the battery report (`PUT /api/device/battery`). It does not re-read `active`: `requireDevice` checks the row before its transaction opens, and the read and update inside it (`device-api.ts:383-398`) name the id alone, so a delete that commits between the two gets battery columns written onto the deleted row. Task 4 adds `isNull(devices.deletedAt)` there, with a test.
 
 **Configuration export:** `devices` is not exported (`packages/db/src/configuration-transfer.ts:19-70` has no `devices` or `device_*` link row; `apps/server/src/configuration-transfer.test.ts:1736` asserts it is absent). Nothing to do.
 
@@ -105,21 +110,21 @@ Found with `rg -n "devices\.id" packages apps -g '*.ts' -g '!*.test.ts' | rg "re
 3. **`device.payment_in_progress` today checks card payments only.** `assertNoPaymentInProgress` (`apps/server/src/device.ts:240-254`) reads `payments` in `attempting`/`initiated`. The spec also counts bill payments and refunds, so the delete's refusal adds `bill_payments.state = 'pending'` and `bill_payment_refunds.state = 'pending'`. The profile-switch check is left as it is (Plan default 2).
 4. **Kitchen-screen settings landed after the spec** (A366 slice 5): `device_kitchen_screens` with its station and zone rows, and `device_kitchen_screen_removals`, all in venue-service. They are Settings and are removed. The spec's list (`device_made_here_stations`, `device_approved_profiles`, `device_card_readers`) is incomplete without them.
 5. **The equipment a device holds is two tables**, `printer_holders` and `card_reader_holders`. Both are released by `releaseDevice`, as Disable does.
-6. **The stuck-payment lists can never hold a deleted device's payment through the product.** An `attempting` payment, a `pending` bill payment and a `pending` refund are exactly what refuses the delete. The spec's test "history still names it: … the stuck-payment lists" is therefore built as a backstop: the row is written straight into the database after the delete, to show that those reads join `devices` without a filter. The test says so in its name.
+6. **A payment can still be written on a device after its delete commits, through a window Disable has today.** A till's sign-in is checked in its own transaction (`requireSession`, `apps/server/src/till-session.ts:98-117`) and the payment is written in a later one. `beginBillPayment` (`apps/server/src/bill-payments.ts:1002`, called from the reader path at :1242-1251) checks nothing about the device, and `insertAttempting` checks the profile (`packages/payments/src/store.ts:154-162`) and, when a reader is named, that this device holds it (`assertReaderStartable`, :129-141). So a delete that commits between the sign-in check and the write lets a payment row land on the deleted device. What then happens, on the paths read: a card on a reader is refused `reader.not_held`, because the delete released the reader, and the bill payment the reader path had already inserted `pending` is failed (`bill-payments.ts:1214-1218, 1278-1282`); a cash or hand-keyed payment (`takeBillPayment`, :1066-1070) is recorded `received` at once, which is history, and issues the invoice in the same transaction when it pays the bill in full. The refund paths were not traced. Closing the window for both Disable and Delete is a backlog entry (Task 8), not this branch. The spec's test "history still names it: … the stuck-payment lists" is built as a backstop: rows written straight into the database after the delete, each meeting its own list's filters, to show those reads join `devices` without a filter. The test's name says "backstop: written straight into the database".
 7. **No uniqueness rule needs narrowing.** The only unique index on `devices` is `devices_location_label_active_key`, which already counts only active rows (`packages/db/src/schema/devices.ts:60-64`), and a deleted device is always inactive. There is no unique index on `token_hash`.
-8. **The token cannot be set to NULL without rebuilding `devices`.** `token_hash` is `NOT NULL` (`devices.ts:47`), and dropping that on this engine is a table rebuild. `devices` has cascading children (`printer_holders`, `card_reader_holders`, `device_approved_profiles`), so a rebuild with foreign keys on would delete their rows (CLAUDE.md §3). "Cleared" is therefore `""` (Plan default 1).
+8. **The token cannot be set to NULL without rebuilding `devices`, and that rebuild would need a venue reset.** `token_hash` is `NOT NULL` (`devices.ts:47`), and dropping that on this engine is a table rebuild. With foreign keys on, a rebuild's `DROP TABLE` deletes the rows of cascading children and fails on a `restrict` child holding rows (CLAUDE.md §3). `sales.device_id` and `registros_facturacion.device_id` are both `onDelete: "restrict"` (`packages/db/src/schema/sales.ts:72`, `packages/fiscal-verifactu/src/schema/registros.ts:33`), so on any venue with sales the rebuild would fail outright. `devices` was last rebuilt in `packages/db/drizzle/0123_devices_lose_binding.sql`, and its commit (`073d37ae9`, #1479) shipped with "Venue reset needed on every box that has any device" for that reason. "Cleared" is therefore `""` (Plan default 1).
 
 ### Plan defaults (conservative choices a reviewer can overturn)
 
-- **Plan default 1 — the token is cleared to `""`.** `verifySecretAsync` returns false for any stored value that is not `scrypt$<salt>$<key>` (`packages/identity/src/secret-hash.ts:22-29,46-50`). Every authentication read also requires `active = true`. Task 3 tests this, not just reads it: the old cookie is refused after the delete.
+- **Plan default 1 — the token is cleared to `""`.** `verifySecretAsync` returns false for any stored value that is not `scrypt$<salt>$<key>` (`packages/identity/src/secret-hash.ts:22-29,46-50`). Probed 2026-10-10 on Node v26.7.0 by importing that file: `verifySecretAsync("", "")` and `verifySecretAsync("abc", "")` both returned false, and the control `verifySecretAsync("abc", hashSecret("abc"))` returned true. Every authentication read also requires `active = true`. Task 3b tests it through the routes: the old cookie is refused after the delete.
 - **Plan default 2 — one refusal names every unfinished payment.** The impact carries at most one refusal, `{ code: "device.payment_in_progress", params: {}, targets }`. `targets` are the distinct open orders those payments belong to, named by `working_orders.label`, or `#<order_number>` when the label is null. `params` stays `{}` because the registry types it `Record<string, never>` (`errors.ts:730`). `assertNoPaymentInProgress` and the profile switch do not change.
-- **Plan default 3 — the deleted device's own printer choices are cleared.** The three columns are set to null in the delete, and the impact names the printers in one item. The deleted row is then never matched by `deletePrinter`'s clearing (`printer-delete.ts:188-193`) or the printer-delete impact's "devices choosing" list (`:73-87`). That keeps a deleted row unwritten after its delete. `device_profile_id` stays, because it is `NOT NULL`.
+- **Plan default 3 — the deleted device's own printer choices are cleared.** The three columns are set to null in the delete, and the impact names the printers in one item. The deleted row is then never matched by `deletePrinter`'s clearing (`printer-delete.ts:188-193`) or the printer-delete impact's "devices choosing" list (`:73-87`). This does not make the row unwritable: the battery report can write it (see "Already safe" above), which Task 4 closes with its own condition. `device_profile_id` stays, because it is `NOT NULL`.
 - **Plan default 4 — the printer-delete inherited-default list skips deleted devices.** One `isNull(devices.deletedAt)` predicate in `printer-delete.ts`.
 - **Plan default 5 — the profile-wide kitchen-screen narrowing skips deleted devices.** The printer and reader settle loops are left alone, because a deleted device has nothing left for them to change; a test pins that a profile save leaves a deleted device's rows byte-for-byte.
 - **Plan default 6 — a malformed id answers 404 `device.not_found` after the permission check.** This follows `PATCH /management-api/devices/:id` (`device-api.ts:707-709`), not printers' 400 from `requireUuidParam`. An unauthorised caller learns nothing about the id.
 - **Plan default 7 — the delete ends only this node's request to come back**, filtered by `node_id` as every other join-request verb is (`join-requests.ts:26`), and drops the pairing claim after commit, as deny does (`apps/server/src/join-api.ts:262-264`). As a backstop, `acceptDeviceJoinRequest` refuses `join_request.not_found` when the request's id names a deleted device, so the product never tries to insert a second row under that id.
 - **Plan default 8 — kitchen screens go through two new venue-service seat methods**, `countDeviceKitchenScreens` and `removeDeviceKitchenScreens`, on `VenueServiceContribution` (`packages/module/src/module.ts:523` onward). The server reaches venue-service tables only through that seat today (`VENUE_SERVICE`, `apps/server/src/modules.ts:16`).
-- **Plan default 9 — `pass_item_marks` are left alone.** They are a device's own Done marks on a kitchen record, and are removed with that record (`pass-item-marks.ts:6`). Nothing shows another device's marks.
+- **Plan default 9 — `pass_item_marks` are left alone.** They are a device's own Done marks on a kitchen record, and are removed with that record (`pass-item-marks.ts:6`). Nothing shows another device's marks. A kitchen item split copies every device's marks onto the new item, a deleted device's included (`apps/server/src/working-order.ts:3909-3914`), so its marks can also outlive the delete on a split item, until that record goes.
 - **Plan default 10 — Delete is in the row menu only.** It is offered on active rows (Edit, Disable, Delete) and on disabled rows (Delete only; today a disabled row has no menu, `apps/dashboard/src/screens/devices-screen.ts:1521-1522`). The Edit dialog gains no Delete.
 - **Plan default 11 — the dashboard's `device.payment_in_progress` sentence becomes neutral**, because the delete dialog's action error shows it too. Today it says "Change its profile once the payment finishes…" (`apps/dashboard/src/i18n/codes.ts:612-615`). The till's wording (`apps/till/src/i18n/codes.ts:496-499`) is about switching profile on the till and stays.
 - **Plan default 12 — sign-ins are counted, not named.**
@@ -220,12 +225,12 @@ it("devices: a deleted device frees its name, as a disabled one does", async () 
 });
 ```
 
-  Check that `seedDevice` and `inTx` are the file's existing helpers (they are used at `devices.test.ts:69-80`). If `seedDevice` seeds a fixed label, give it a parameter rather than writing a second helper. The second case already passes today, because the index counts only active rows. Keep it as a control for plan correction 7, and say so in a one-line test name, not a comment.
+  Check that `seedDevice` and `inTx` are the file's existing helpers (they are used at `devices.test.ts:69-80`). If `seedDevice` seeds a fixed label, give it a parameter rather than writing a second helper. Both cases fail first: the first on its assertion, the second because it writes `deleted_at` before the column exists. Once the column exists the second passes, because the index counts only active rows, and it stays as the check for plan correction 7; its name says so, not a comment.
 
 - [ ] **Step 2: Run it and see it fail.**
 
 Run: `pnpm --filter @waitron/db exec vitest run src/schema/devices.test.ts`
-Expected: the first new case FAILS: `expected undefined to deeply equal { name: 'deleted_at', notnull: 0 }`. The second passes.
+Expected: both new cases FAIL. The first: `expected undefined to deeply equal { name: 'deleted_at', notnull: 0 }`. The second: an error naming the missing column (`no such column: deleted_at`).
 
 - [ ] **Step 3: Add the column.** In `devices.ts`, after `active`:
 
@@ -272,6 +277,7 @@ git commit -s -m "Devices can be marked deleted (a new deleted_at time), ready f
 - Modify: `packages/module/src/module.ts` (two methods on `VenueServiceContribution`, beside `setDeviceKitchenScreens` at :866)
 - Modify: `packages/venue-service/src/kitchen-screens.ts` (two exported functions after `setDeviceKitchenScreens`, :538-575)
 - Modify: `packages/venue-service/src/service.ts` (:90 and :157, wire both)
+- Modify: `packages/venue-service/src/service.test.ts` (:21 pins `Object.keys(VENUE_SERVICE).sort()` exactly; the list gains exactly `countDeviceKitchenScreens` and `removeDeviceKitchenScreens`, in sorted order, and nothing else changes)
 - Modify: `apps/server/src/join-requests.ts` (two exported functions after `denyJoinRequest`, :632-640)
 - Test: the venue-service suite that already covers `setDeviceKitchenScreens` (find it with `rg -l "setDeviceKitchenScreens" packages/venue-service/src -g '*.test.ts'`); `apps/server/src/join-requests.test.ts`
 - Check also: any test double that implements `VenueServiceContribution` in full (`rg -n "VenueServiceContribution" packages apps -g '*.test.ts' -g '**/testing/**'`) gets the two methods, or typecheck fails.
@@ -297,27 +303,38 @@ it("counts a device's kitchen screens, then removes them with their stations, zo
 
   `snapshotKitchenScreenRows` is a small local helper that selects `*` from `device_kitchen_screens`, `device_kitchen_screen_stations`, `device_kitchen_screen_zones` and `device_kitchen_screen_removals`, ordered by every column. Before running, assert that device A really has station, zone and removal rows, so the removal is not tested on empty tables.
 
-- [ ] **Step 2: Write the failing join-request test** in `apps/server/src/join-requests.test.ts`, using that file's fixtures. Make a disabled device's knock (as `apps/server/src/device-api.test.ts:669-686` does: enrol, `update devices set active = 0`, knock again with the cookie), so a request with the device's id exists. Add a second node's row with the same id by a direct insert (`node_id` of another node), and an unrelated pending request.
+- [ ] **Step 2: Write the failing join-request tests** in `apps/server/src/join-requests.test.ts`, using that file's fixtures. Make a disabled device's knock (as `apps/server/src/device-api.test.ts:669-686` does: enrol, `update devices set active = 0`, knock again with the cookie), so a request with the device's id exists. `join_requests.id` is the table's only primary key (`packages/db/src/schema/join-requests.ts:35`), so another node cannot hold a row under the same id. Add instead, by direct insert, another node's request under a different id (`node_id` of another node), and an unrelated pending request of this node's.
 
 ```ts
-it("finds and ends only this node's request to come back, by the device's id", async () => {
+it("finds and ends this node's request to come back, by the device's id, and nothing else", async () => {
   expect(await inTx((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(true);
   expect(await inTx((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(true);
   expect(await inTx((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
   expect(await inTx((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
   const rows = await suite.db.select({ id: joinRequests.id, nodeId: joinRequests.nodeId }).from(joinRequests);
-  expect(rows).toEqual(expect.arrayContaining([{ id: deviceId, nodeId: otherNode }, { id: unrelatedId, nodeId: cfg.nodeId }]));
+  expect(rows).toEqual(expect.arrayContaining([{ id: otherNodesId, nodeId: otherNode }, { id: unrelatedId, nodeId: cfg.nodeId }]));
   expect(rows).toHaveLength(2);
 });
+
+it("does not see or end the device's request once it belongs to another node", async () => {
+  // The same knock as above, then the row is moved to another node by a direct
+  // `update join_requests set node_id = <otherNode> where id = <deviceId>`.
+  const before = await suite.db.select().from(joinRequests);
+  expect(await inTx((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+  expect(await inTx((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+  expect(await suite.db.select().from(joinRequests)).toEqual(before);
+});
 ```
+
+  The second case is the one that fails if the helpers ignore `node_id`; check that `before` holds the moved row, so it is not run on an empty table.
 
 - [ ] **Step 3: Run both and see them fail.**
 
 ```
-pnpm --filter @waitron/venue-service exec vitest run <the kitchen-screens suite>
+pnpm --filter @waitron/venue-service exec vitest run <the kitchen-screens suite> src/service.test.ts
 pnpm --filter @waitron/server exec vitest run src/join-requests.test.ts
 ```
-Expected: each fails on the missing export (an import error is acceptable here only because the behaviour cannot be reached any other way; say so in the task report).
+Expected: each new case fails on the missing export (an import error is acceptable here only because the behaviour cannot be reached any other way; say so in the task report), and `service.test.ts`'s key list, already extended by the two names, fails its `toEqual`.
 
 - [ ] **Step 4: Implement.** In `kitchen-screens.ts`:
 
@@ -360,7 +377,7 @@ export async function endReturningRequest(tx: Transaction, cfg: TillConfig, devi
 - [ ] **Step 5: Run again, then the seat guards.**
 
 ```
-pnpm --filter @waitron/venue-service exec vitest run <the kitchen-screens suite>
+pnpm --filter @waitron/venue-service exec vitest run <the kitchen-screens suite> src/service.test.ts
 pnpm --filter @waitron/server exec vitest run src/join-requests.test.ts
 pnpm exec vitest run scripts/module-seams.test.ts scripts/workspace-cycles.test.ts
 pnpm --filter @waitron/module typecheck && pnpm --filter @waitron/venue-service typecheck && pnpm --filter @waitron/server typecheck
@@ -369,22 +386,19 @@ Expected: all pass. Read the `Tests` count of each.
 
 - [ ] **Step 6: Commit.** `git commit -s -m "Venue service can count and remove a device's kitchen screens; the server can find and end a device's request to come back"`
 
-### Task 3: The device impact read and delete, and their routes
+### Task 3a: The device impact read and delete, in the database
 
-**Deliverable:** `GET /management-api/devices/:id/delete-impact` and `DELETE /management-api/devices/:id`, behind `device.manage`, sharing one set of rules, with every refusal, ending and removal checked in the database.
+**Deliverable:** `readDeviceDeleteImpact` and `deleteDevice`, sharing one set of rules, with every refusal, ending and removal checked in the database. No route yet.
 
 **Files:**
 - Create: `apps/server/src/delete-impact.ts` (the moved `named`)
 - Modify: `apps/server/src/printer-delete.ts` (import `named`; no behaviour change)
 - Create: `apps/server/src/device-delete.ts`
-- Modify: `apps/server/src/device-api.ts` (two routes after the revoke route, :670-689)
-- Modify: `apps/server/src/errors.ts` (comments only: `device.payment_in_progress` at :726-730 now also refuses a delete, including bill payments and refunds; `device.not_found` at :741-745 now also answers for a deleted device on every device-management route)
 - Create: `apps/server/src/device-delete.db.test.ts` (rules and transaction)
-- Create: `apps/server/src/device-api.delete.test.ts` (routes, over `app.request`)
 
 **Interfaces:**
 - Consumes: Task 1's `devices.deletedAt`; Task 2's seat methods and join-request helpers; `endDeviceSessions` (`@waitron/identity`); `releaseDevice` (`apps/server/src/device-equipment.ts:105`); `IN_PROGRESS_PAYMENT_STATES`, `payments`, `cardReaders`, `cardReaderHolders`, `deviceCardReaders` (`@waitron/payments`); `billPayments`, `billPaymentRefunds`, `workingOrders`, `printers`, `printerHolders`, `deviceMadeHereStations`, `deviceApprovedProfiles`, `deviceProfiles`, `kitchenStations`, `sessions` (from `@waitron/db` and `@waitron/identity`).
-- Produces: `readDeviceDeleteImpact`, `deleteDevice` (signatures above) and the two routes.
+- Produces: `readDeviceDeleteImpact`, `deleteDevice` (signatures above).
 
 - [ ] **Step 1: Write the failing rules tests** in `apps/server/src/device-delete.db.test.ts`. Use `useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) })` (as `device-api.test.ts:60-63` does), `setupVenue` (`apps/server/src/testing/venue-fixtures.ts:68`) and `enrolDeviceForTest` (`apps/server/src/testing/enrol.ts:15`). The fixture, "Bar till" (the device to delete) and "Pass" (a control device), has:
   - an open sign-in on each (`loginWithPin`, as `device-api.test.ts:3240-3256` does);
@@ -392,7 +406,7 @@ Expected: all pass. Read the `Tests` count of each.
   - Bar till's explicit receipt, slip and drawer choices (two distinct printers);
   - made-here stations "Grill" and "Bar"; approved profile "Waiters"; card reader choice "Reader R"; one station kitchen screen;
   - a pending request to come back under Bar till's id (disable it, knock again with its cookie, then set it active again by direct update, so the request and an active device coexist; or seed the `join_requests` row directly with this node's id, which is closer to the case);
-  - history: a sale, an incident, a drawer opening and an order group fired from Bar till (whatever the existing fixtures make cheaply: at least the incident and the cash sale, because Task 4 reads them).
+  - history: a sale, an incident, a drawer opening and an order group fired from Bar till (whatever the existing fixtures make cheaply: at least the incident and the cash sale, because the Delete case compares them before and after).
 
   Cases (each compares whole rows, not counts alone):
 
@@ -421,7 +435,7 @@ it("names every sign-in, held printer and reader, request and setting the delete
 });
 
 it("refuses with device.payment_in_progress naming each open order with a card payment, bill payment or refund in progress", async () => { /* … */ });
-it("does not refuse for payments that finished, failed or were declined", async () => { /* … */ });
+it("does not refuse for a payment in any state that is not in progress", async () => { /* … */ });
 it("answers device.not_found for an unknown device and a deleted one", async () => { /* … */ });
 it("answers an empty impact for a disabled device with nothing left on it, and deletes it", async () => { /* … */ });
 it("deletes: ends sign-ins, holds and the request, removes every setting, clears the token and printer choices, keeps the row and every history row", async () => { /* … */ });
@@ -433,36 +447,21 @@ it("leaves the control device, its sign-in, its hold and its settings exactly as
 
   Details each case must pin:
   - **Refusal.** Seed in turn, on Bar till, using `device-api.test.ts:3268-3289`'s `paymentInProgress` shape and `bill-payments-loop.test.ts:584-600,636-650`'s rows: a card payment `attempting`; a card payment `initiated`; a bill payment `pending`; a refund `pending`. Each alone gives `refusals: [{ code: "device.payment_in_progress", params: {}, targets: [{ id: <working order id>, name: "Mesa 1" }] }]`; an order with a null label is named `#<order_number>`. `deleteDevice` with that state rejects with `{ code: "device.payment_in_progress" }`, caught OUTSIDE `withTransaction`, and `snapshot()` is unchanged. A payment on the control device does not refuse Bar till.
-  - **Not refusing.** `payments.state` `captured`, `failed` and `declined` (`PaymentState`, `packages/payments/src/provider.ts:11-21`), bill payment `received`/`failed`/`declined`, refund `completed`/`failed`: `refusals: []`. This is the case that would fail if the refusal read ignored state.
+  - **Not refusing.** One card payment in each `PaymentState` (`packages/payments/src/provider.ts:11-21`) that is not in `IN_PROGRESS_PAYMENT_STATES` (:25-28): `captured`, `voided`, `refunded`, `partially_refunded`, `failed`, `accepted_offline`, `settled` and `declined`; a bill payment `received`, `failed` and `declined`; a refund `completed` and `failed` (`billPaymentState` and `billPaymentRefundState`, `packages/db/src/schema/bill-payments.ts:23-24`). Each gives `refusals: []`. This is the case that would fail if the refusal read ignored state.
   - **Delete.** After `deleteDevice` (with `now = new Date("2026-10-10T10:00:00.000Z")`): the row has `active: false`, `deletedAt: "2026-10-10T10:00:00.000Z"`, `tokenHash: ""`, all three printer columns null, and every other column unchanged (compare the whole row with `before`, overriding those fields). Bar till's `sessions` have `endedAt` set, and the control's do not. Its `printer_holders` and `card_reader_holders` rows are gone. `device_made_here_stations`, `device_approved_profiles`, `device_card_readers` and the four kitchen-screen tables hold no row with its id. The `join_requests` row is gone. Every history table (sales, incidents, drawer openings, order groups, `registros_facturacion`, `order_amendments`, `time_entries`) is byte-for-byte equal to `before`. The function returns the impact the read gave.
   - **Recompute.** Read the impact; then add a second sign-in and a second made-here station; then delete. Both are ended or removed, and the returned impact counts them (2 and 3).
   - **Rollback.** Install a temporary trigger in the test (`create trigger test_refuse before update of deleted_at on devices begin select raise(abort, 'test_delete_failure'); end`), subscribe to changes as `printer-delete.db.test.ts` does (`subscribeToChanges`, `installChangeFeed`), run the whole `withTransaction(… deleteDevice …)`, and catch outside. Every row equals `before` and no change was published. Drop the trigger in `finally`. Note the order of writes in Step 3: the `devices` update comes LAST so this trigger fires after every other write.
 
-- [ ] **Step 2: Write the failing route tests** in `apps/server/src/device-api.delete.test.ts`. Copy the small helpers it needs from `device-api.test.ts` (`mountApp`, `send` with `"DELETE"` added to its method union, `deviceCookieFrom`, `seedProfile`); do not import from another test file.
-
-```ts
-it("device.manage gates both routes: 401 with no session, 403 for staff, 200 for a manager, and the gate is the file's own", async () => { /* … */ });
-it("a malformed id answers 404 device.not_found, after the permission check", async () => { /* … */ });
-it("reads the impact, then deletes with it recomputed, and a second delete answers device.not_found and writes nothing", async () => { /* … */ });
-it("a refusal created between the read and the delete makes the delete answer 409 device.payment_in_progress", async () => { /* … */ });
-it("after the delete, the device's cookie is refused and its sign-in cookie is refused", async () => { /* … */ });
-it("the delete drops the pairing claim on the device's request to come back", async () => { /* … */ });
-```
-
-  - Permission: assert status and `error.code` for each caller (`management_session.required`, `authorization.not_permitted`); for the staff caller also assert the device row and its sessions are unchanged. "The gate is the file's own": in a disposable checkout, change the new route to skip `gated` and see the 403 case fail; record what ran in the task report, then restore.
-  - Cookie: before the delete, `GET /api/device/me` with the device's cookie answers 200; after, 401 `device.unauthorized`. Same for a shift-session route the till uses (pick one that `till-session.ts:92-117` guards, for instance the one `device-api.test.ts:3936` uses). This is the test behind Plan default 1.
-  - Claim: open the pairing window, knock with the disabled device's cookie, claim the request as `join-api.ts` does (read how a claim is made: `PairingMode.claim`, `apps/server/src/pairing-mode.ts:85-87`), delete, and assert `pairingMode.claimOf(deviceId)` is undefined.
-
-- [ ] **Step 3: Run both files and see them fail.**
+- [ ] **Step 2: Run it and see it fail.**
 
 ```
-pnpm --filter @waitron/server exec vitest run src/device-delete.db.test.ts src/device-api.delete.test.ts
+pnpm --filter @waitron/server exec vitest run src/device-delete.db.test.ts
 ```
 Expected: FAIL on the missing module, then (once a stub exports the names) on the assertions.
 
-- [ ] **Step 4: Move `named`.** Create `apps/server/src/delete-impact.ts` with `named` exactly as it is at `printer-delete.ts:37-43` (with its imports), export it, import it in `printer-delete.ts`. Run `pnpm --filter @waitron/server exec vitest run src/printer-delete.db.test.ts` and see it still pass.
+- [ ] **Step 3: Move `named`.** Create `apps/server/src/delete-impact.ts` with `named` exactly as it is at `printer-delete.ts:37-43` (with its imports), export it, import it in `printer-delete.ts`. Run `pnpm --filter @waitron/server exec vitest run src/printer-delete.db.test.ts` and see it still pass.
 
-- [ ] **Step 5: Implement `device-delete.ts`.** Shape:
+- [ ] **Step 4: Implement `device-delete.ts`.** Shape:
 
 ```ts
 import "./errors.js";
@@ -551,7 +550,56 @@ export async function deleteDevice(tx: Transaction, cfg: TillConfig, id: string,
 
   `named` sorts and deduplicates by id, which is what both the refusal targets and each item need. The `device_kitchen_screens` count is the seat's. Confirm `endDeviceSessions` is exported from `@waitron/identity` (`packages/identity/src/index.ts:9`) and the payments names from `@waitron/payments` (`packages/payments/src/index.ts:134-137`; `IN_PROGRESS_PAYMENT_STATES` is imported by `apps/server/src/device.ts:23`). Doc comments on the two exports say what they do in one or two lines each, like `printer-delete.ts:163-178`.
 
-- [ ] **Step 6: Add the routes** in `device-api.ts`, after the revoke route:
+- [ ] **Step 5: Run it until green, then the neighbours.**
+
+```
+pnpm --filter @waitron/server exec vitest run src/device-delete.db.test.ts src/printer-delete.db.test.ts
+pnpm --filter @waitron/server exec vitest run src/device-equipment.test.ts src/join-requests.test.ts
+pnpm exec vitest run scripts/module-seams.test.ts
+pnpm --filter @waitron/server typecheck
+```
+Expected: all pass, with `Tests` counts read.
+
+- [ ] **Step 6: Controls by deletion**, in a disposable worktree made with `git worktree add --detach <dir> HEAD` (CLAUDE.md §4), never by editing files in this one. Remove, one at a time: the `billPayments` refusal read (the pending-bill-payment case must fail); the `endReturningRequest` call (the request assertion must fail); the `tokenHash: ""` (the row comparison's token assertion must fail). Record what ran and what failed in the task report, then remove the worktree.
+
+- [ ] **Step 7: Commit.** `git commit -s -m "The server can work out what deleting a device will do, and delete it"`. The body lists what refuses, what ends, what is removed, and that the row is kept switched off with its token and printer choices cleared, and says no route calls it yet.
+
+### Task 3b: The device delete routes
+
+**Deliverable:** `GET /management-api/devices/:id/delete-impact` and `DELETE /management-api/devices/:id`, behind `device.manage`, calling Task 3a's functions, with the permission, the read-then-delete order, the cookies and the pairing claim checked over `app.request`.
+
+**Files:**
+- Modify: `apps/server/src/device-api.ts` (two routes after the revoke route, :670-689)
+- Modify: `apps/server/src/errors.ts` (comment only: `device.payment_in_progress` at :726-730 now also refuses a delete, including bill payments and refunds)
+- Create: `apps/server/src/device-api.delete.test.ts` (routes, over `app.request`)
+
+**Interfaces:**
+- Consumes: Task 3a's `readDeviceDeleteImpact` and `deleteDevice`; `deps.pairingMode.dropClaim`.
+- Produces: the two routes.
+
+- [ ] **Step 1: Write the failing route tests** in `apps/server/src/device-api.delete.test.ts`. Copy the small helpers it needs from `device-api.test.ts` (`mountApp`, `send` with `"DELETE"` added to its method union, `deviceCookieFrom`, `seedProfile`); do not import from another test file.
+
+```ts
+it("device.manage gates both routes: 401 with no session, 403 for staff, 200 for a manager, and the gate is the file's own", async () => { /* … */ });
+it("a malformed id answers 404 device.not_found, after the permission check", async () => { /* … */ });
+it("reads the impact, then deletes with it recomputed, and a second delete answers device.not_found and writes nothing", async () => { /* … */ });
+it("a refusal created between the read and the delete makes the delete answer 409 device.payment_in_progress", async () => { /* … */ });
+it("after the delete, the device's cookie is refused and its sign-in cookie is refused", async () => { /* … */ });
+it("the delete drops the pairing claim on the device's request to come back", async () => { /* … */ });
+```
+
+  - Permission: assert status and `error.code` for each caller (`management_session.required`, `authorization.not_permitted`); for the staff caller also assert the device row and its sessions are unchanged. "The gate is the file's own": in a disposable checkout, change the new route to skip `gated` and see the 403 case fail; record what ran in the task report, then restore.
+  - Cookie: before the delete, `GET /api/device/me` with the device's cookie answers 200; after, 401 `device.unauthorized`. Same for a shift-session route the till uses (pick one that `till-session.ts:92-117` guards, for instance the one `device-api.test.ts:3936` uses). This is the test behind Plan default 1.
+  - Claim: open the pairing window, knock with the disabled device's cookie, claim the request as `join-api.ts` does (read how a claim is made: `PairingMode.claim`, `apps/server/src/pairing-mode.ts:85-87`), delete, and assert `pairingMode.claimOf(deviceId)` is undefined.
+
+- [ ] **Step 2: Run it and see it fail.**
+
+```
+pnpm --filter @waitron/server exec vitest run src/device-api.delete.test.ts
+```
+Expected: the cases calling the two routes FAIL with 404 (no such route); record any that pass and why.
+
+- [ ] **Step 3: Add the routes** in `device-api.ts`, after the revoke route:
 
 ```ts
   app.get("/management-api/devices/:id/delete-impact", (c) =>
@@ -583,32 +631,33 @@ export async function deleteDevice(tx: Transaction, cfg: TillConfig, id: string,
 
   `STATUS` already maps `device.not_found` to 404 and `device.payment_in_progress` to 409 (`device-api.ts:139,159`). Check whether `deps.now` exists on `DeviceApiDeps` (`device-api.ts:120`: "The battery route's clock"); reuse it.
 
-- [ ] **Step 7: Run both files until green, then the neighbours and guards.**
+- [ ] **Step 4: Run it until green, then the neighbours and guards.**
 
 ```
-pnpm --filter @waitron/server exec vitest run src/device-delete.db.test.ts src/device-api.delete.test.ts src/printer-delete.db.test.ts
-pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/device-equipment.test.ts src/join-requests.test.ts
-pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/module-seams.test.ts
+pnpm --filter @waitron/server exec vitest run src/device-api.delete.test.ts src/device-delete.db.test.ts
+pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/join-api.test.ts
+pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts
 pnpm --filter @waitron/server typecheck
 ```
 Expected: all pass, with `Tests` counts read. No new code was added, so `alert-codes` and `errors-reachable` must stay green with no edit to their lists.
 
-- [ ] **Step 8: Controls by deletion**, in a disposable worktree made with `git worktree add --detach <dir> HEAD` (CLAUDE.md §4), never by editing files in this one. Remove, one at a time: the `billPayments` refusal read (the pending-bill-payment case must fail); the `endReturningRequest` call (the request assertion must fail); the `tokenHash: ""` (the cookie case still passes, because `active = false` alone refuses it; record that, and keep the token assertion in the row comparison, which does fail). Record what ran and what failed in the task report, then remove the worktree.
+- [ ] **Step 5: Controls**, in a disposable worktree made with `git worktree add --detach <dir> HEAD`: the gate control described in Step 1; and remove the `tokenHash: ""` from `deleteDevice` and run the cookie case. It still passes, because `active = false` alone refuses the cookie; record that in the task report (Task 3a's row comparison is what fails without it). Remove the worktree.
 
-- [ ] **Step 9: Commit.** `git commit -s -m "Managers can see what deleting a device will do, then delete it"`. The body lists the routes, what refuses, what ends, what is removed, and that the row is kept switched off with its token and printer choices cleared.
+- [ ] **Step 6: Commit.** `git commit -s -m "Managers can see what deleting a device will do, then delete it"`. The body lists the two routes, their permission, and that the delete recomputes what it does inside its own transaction.
 
 ### Task 4: A deleted device can't be listed, edited, disabled, or brought back
 
 **Deliverable:** every management route and every return path refuses a deleted device; the same browser knocking again arrives as a new device, in dev mode too.
 
 **Files:**
-- Modify: `apps/server/src/device-api.ts` (list query :616-635 adds `isNull(devices.deletedAt)`; revoke's update at :678-682 adds it to its `where`)
+- Modify: `apps/server/src/device-api.ts` (list query :616-635 adds `isNull(devices.deletedAt)`; revoke's update at :678-682 adds it to its `where`; the battery report's read and update at :383-398 add it)
 - Modify: `apps/server/src/payments-api.ts` (:720-724 adds it)
 - Modify: `apps/server/src/join-requests.ts` (:131-137, :207-208, :228-240, :258-285, :492-555)
+- Modify: `apps/server/src/errors.ts` (comment only: `device.not_found` at :741-745 now also answers for a deleted device on the device-management routes)
 - Test: `apps/server/src/device-api.delete.test.ts` (extend), `apps/server/src/join-requests.test.ts`, `apps/server/src/join-e2e.test.ts` (one case), the payments reader route suite (`rg -l "payments/devices/" apps/server/src -g '*.test.ts'`)
 
 **Interfaces:**
-- Consumes: Task 3's routes, used to make a real deleted device in every test (never a direct `update devices set deleted_at`, except where a case says it is a backstop).
+- Consumes: Task 3b's routes, used to make a real deleted device in every test (never a direct `update devices set deleted_at`, except where a case says it is a backstop).
 
 - [ ] **Step 1: Write the failing tests** (in `device-api.delete.test.ts` unless named otherwise):
 
@@ -618,14 +667,34 @@ it("a deleted device answers 404 device.not_found to Disable, Edit, the delete-i
 it("a deleted device's browser knocking again is a new request under a new id, and accepting it makes a second device", async () => { /* … */ });
 it("in dev mode, a deleted device's browser knocking again is enrolled at once as a new device", async () => { /* … */ });
 it("a knock proved before the delete and written after it answers device.join_stale and leaves the deleted row as it was", async () => { /* … */ });
-it("a pending request whose id names a deleted device is refused join_request.not_found on accept (backstop: another node's request)", async () => { /* … */ });
+it("a pending request whose id names a deleted device is refused join_request.not_found on accept (backstop: the request row written straight into the database)", async () => { /* … */ });
+it("a new device is accepted under a deleted device's name at the same location", async () => { /* … */ });
+it("a battery report checked before the delete and written after it leaves the deleted row as it was (backstop: the deleted state written from the route's clock)", async () => { /* … */ });
+
+// Backstops for Task 4's own conditions. Task 3a's delete sets the token to "", which already
+// refuses every knock, so each case first writes a REAL token hash back onto the deleted row:
+// `update devices set token_hash = <hashSecret(token)> where id = <deleted id>`, with the token
+// from the old cookie (`parseDeviceCookie`).
+it("backstop: with a real token hash on the deleted row, its browser's knock still makes a new device", async () => { /* … */ });
+```
+
+  In `join-requests.test.ts` (a device deleted through `deleteDevice` in one `withTransaction`, then the same real-hash write):
+
+```ts
+it("backstop: createJoinRequest with a proof matching a deleted row's real hash answers device.join_stale and leaves the row", async () => { /* … */ });
+it("backstop: returningDevicesOf does not report a deleted device, even with a real hash on its row", async () => { /* … */ });
 ```
 
   - List: compare `GET /management-api/devices`' ids with the set of undeleted devices; the disabled control is present with `active: false`.
   - Writes: for each route, assert status, `error.code`, and that the device row and every settings table are equal to before (the PATCH body must be a valid one, so that a missing check, not a bad body, is what the test would catch).
   - New device: the dev-mode case uses `mountDevApp(cfg, true)` and the old cookie, as `device-api.test.ts:669-686` does for a disabled device; assert the new `joinId` differs from the old id, `select count(*) from devices` is 2, and the old row still has `deleted_at` set, `active` false and `token_hash` `""`. The window case opens the pairing window, knocks with the old cookie, accepts through `acceptDeviceJoinRequest`, and asserts the same. Also assert, before the accept, that the pending list (`listPendingJoinRequests` or the route `join-api.ts` serves) does not mark the request `returning`.
   - Stale knock: call `provenDisabledDevice` with the disabled device's parsed cookie (it returns a proof), then delete the device through the route, then call `createJoinRequest` with `returning:` that proof; expect `device.join_stale` (caught outside the transaction) and the row unchanged, including `token_hash` still `""`.
-  - Backstop: insert a `join_requests` row whose id is the deleted device's and whose `node_id` is this node's (as another node's leftover would look if it were ours), then accept it; expect `join_request.not_found`, and the devices table unchanged.
+  - Accept backstop: insert a `join_requests` row whose id is the deleted device's and whose `node_id` is this node's, then accept it; expect `join_request.not_found`, and the devices table unchanged.
+  - Same name: after the delete, a new browser (no cookie) knocks and is accepted through `POST /management-api/device-join-requests/:id/accept` under the deleted device's name at the same location; expect success, two rows with that label, and the old one still deleted. This is the route-level check for plan correction 7 (a clash would answer `device.name_taken`: `mapDeviceNameTaken`, `apps/server/src/device.ts:53-72`, and `join-api.ts:60`).
+  - Battery: mount the app with `now` (`DeviceApiDeps.now`, `device-api.ts:121`, as `device-api.test.ts:2921-2931` does) set to a function that, on the report's call, writes the deleted state straight into the database (``suite.db.run(sql`update devices set active = 0, deleted_at = …, token_hash = '' where id = …`)``) and returns the time. The route reads that clock after `requireDevice` and before its transaction (`device-api.ts:381-382`), so the write lands in the window. Expect 204 and the battery columns still null. The case name says backstop, because the deleted state is written by hand rather than by the delete route. If the store refuses a write from inside the clock (for instance because of its write queue), stop and report it rather than reach for another seam.
+  - Knock backstop: with the real hash written back, knock with the old cookie (in the pairing window); expect a `joinId` different from the old id, and the old row still deleted with the hash the test wrote. Without the condition, `provenDisabledDevice` matches the row, and the knock then answers `device.join_stale` (while `createJoinRequest`'s condition stands) or takes the old id (without it); either fails this case.
+  - `createJoinRequest` backstop: call it with `returning: { deviceId: <deleted id>, tokenHash: <the hash written> }`; expect `device.join_stale` (caught outside the transaction), no new `join_requests` row, and the devices row equal to before.
+  - `returningDevicesOf` backstop: call it with the deleted id among `ids`; expect a map without it, beside a disabled device's id that it does report.
 
   In `join-e2e.test.ts`, add one end-to-end case beside its disabled-device cases: enrol, sign in, delete through the route, and the same browser knocks and is accepted as a new device whose sign-in works, while the old cookie stays refused.
 
@@ -634,10 +703,12 @@ it("a pending request whose id names a deleted device is refused join_request.no
 ```
 pnpm --filter @waitron/server exec vitest run src/device-api.delete.test.ts src/join-requests.test.ts src/join-e2e.test.ts
 ```
-Expected: list, Disable, reader choice and the knock cases FAIL (Disable answers 204; the knock takes the old id because `provenDisabledDevice` matches the deleted row, which is `active = false`; the reader route answers 204). Edit already answers 404, because a deleted device is inactive; keep that case as a pin, and say in the task report that it passed before the change.
+Expected to FAIL: the list (it lists the deleted device); Disable and the reader choice (each answers 204); the accept backstop (the accept re-enables the deleted row); the battery backstop (the columns are written); and the three real-hash backstops (the knock takes the old id; `createJoinRequest` writes a request under the old id and the new token onto the deleted row; `returningDevicesOf` reports the deleted id).
+
+Expected to PASS before the change, and kept as pins (say so in the task report): Edit, the delete-impact read and Delete on a deleted device (each already answers 404: Edit because the row is inactive, the other two through Task 3a's `deleted_at` check); the new-device knock, the dev-mode knock and the stale knock, because Task 3a set the token to `""`, so `provenDisabledDevice` fails its token check (`join-requests.ts:238`) and `createJoinRequest`'s comparison of stored hashes (:135-136) never matches `""`; and the same-name accept, because the name index counts only active rows.
 
 - [ ] **Step 3: Implement.**
-  - `device-api.ts` list: `.where(isNull(devices.deletedAt))`. Revoke: `.where(and(ownDeviceById(id), isNull(devices.deletedAt)))`.
+  - `device-api.ts` list: `.where(isNull(devices.deletedAt))`. Revoke: `.where(and(ownDeviceById(id), isNull(devices.deletedAt)))`. Battery: `.where(and(ownDeviceById(device.deviceId), isNull(devices.deletedAt)))` on both its read and its update.
   - `payments-api.ts:720-724`: `.where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)))`.
   - `join-requests.ts`: add `isNull(devices.deletedAt)` to `provenDisabledDevice`'s and `createJoinRequest`'s reads and to its token write (`and(eq(devices.id, returningId), isNull(devices.deletedAt))`), and to `returningDevicesOf`. In `acceptDeviceJoinRequest`, after the request row is taken and before `resolveDeviceKitchenScreens`, add:
 
@@ -659,7 +730,7 @@ pnpm --filter @waitron/server exec vitest run <the payments reader route suite>
 ```
 Expected: all pass, with every existing disabled-device case unchanged (`device-api.test.ts:669` "a disabled device's browser comes back as the same device" in particular).
 
-- [ ] **Step 5: Control.** In a disposable worktree, remove the `isNull(devices.deletedAt)` from `provenDisabledDevice` only, and run the dev-mode knock case: it must fail (the knock takes the old id, or the accept re-enables the deleted row). Record it.
+- [ ] **Step 5: Controls by deletion.** In a disposable worktree (`git worktree add --detach <dir> HEAD`), remove one condition at a time and run its backstop case, which must fail: `provenDisabledDevice`'s (the real-hash knock case; with `createJoinRequest`'s condition still in place the knock answers `device.join_stale` instead of making a new device, which also fails it); `createJoinRequest`'s re-read (its backstop); `returningDevicesOf`'s (its backstop); the accept check (the accept backstop); the battery condition (the battery backstop). The condition on `createJoinRequest`'s token write cannot fail a test on its own, because the re-read in the same transaction refuses first; record that rather than claim a control for it. Record what ran and what failed, then remove the worktree.
 
 - [ ] **Step 6: Commit.** `git commit -s -m "A deleted device can't be listed, edited, disabled or brought back; its browser comes back as a new device"`
 
@@ -673,41 +744,43 @@ Expected: all pass, with every existing disabled-device case unchanged (`device-
 - Test: the venue-service suite for `setProfileKitchenScreens` (`rg -l "setProfileKitchenScreens" packages/venue-service/src -g '*.test.ts'`), `apps/server/src/printer-delete.db.test.ts`, `apps/server/src/device-delete.history.test.ts` (new), `packages/layouts/src/device-profile-store.db.test.ts`
 
 - [ ] **Step 1: Write the failing tests.**
-  - Venue-service: a profile with a disabled device A and a deleted device B (deleted by `deleteDevice` through a real transaction where the package can reach it; otherwise by the column update plus `removeDeviceKitchenScreens`, which is exactly what the delete leaves, and the test says so). A save that narrows the profile returns a `NarrowedDevice` for A and none for B, and writes no `device_kitchen_screen_removals` row for B.
+  - Venue-service: a profile with a disabled device A and a deleted device B (deleted by `deleteDevice` through a real transaction where the package can reach it; otherwise by the column update plus `removeDeviceKitchenScreens`, which is exactly what the delete leaves, and the test says so). A save that narrows the profile returns a `NarrowedDevice` for A and none for B, and writes no `device_kitchen_screen_removals` row for B. This case passes before Task 5: the delete removed B's stored choices, and `narrowDevices` (`kitchen-screens.ts:737` onward) narrows only what a device has stored, so B has nothing to narrow. Keep it as a pin.
+  - Venue-service backstop, the case that tests the new condition: after B is deleted, insert a `device_kitchen_screens` row for B straight into the database (a choice the narrowing would take away), then save the same narrowing. Expect no `NarrowedDevice` for B and no removal row for B. Without `isNull(devices.deletedAt)` at `kitchen-screens.ts:159-163`, B is narrowed and reported. The case name says "backstop: written straight into the database".
   - `printer-delete.db.test.ts`: add a case where a device that inherited printer P as its profile's default receipt printer is deleted (through `deleteDevice`), and `readPrinterDeleteImpact` for P no longer names it under `device_receipt_default`, while a disabled device in the same position is still named. Then `deletePrinter(P)` leaves the deleted device's row byte-for-byte unchanged.
   - Profile save leaves a deleted device alone: in `apps/server/src/device-delete.history.test.ts` or the layouts suite, change the profile's printer list and reader list (through `setProfilePrinterLists` and the reader list writer) after the delete, and assert the deleted device's row and every settings table are unchanged.
   - `device-profile-store.db.test.ts`: a profile held only by a deleted device is retired by `deleteDeviceProfile`, not deleted, exactly as one held only by a disabled device is (the existing case for disabled devices is the model; find it with `rg -n "retire" packages/layouts/src/device-profile-store.db.test.ts`).
-  - History, in `apps/server/src/device-delete.history.test.ts` (own `useVenueDb`, full manifest): make a cash sale on the device and raise an incident naming it; delete the device through `deleteDevice`; then the alerts list (`listOpenIncidents`, `packages/core/src/incidents.ts`) still gives its `deviceName`; the cash-up report (the route `report-api.ts` serves, so `namedCashUp` runs) still gives its name in `byOrigin`. Then, as a backstop (plan correction 6), insert straight into the database an `attempting` payment, a `pending` bill payment and a `pending` refund naming the deleted device on an open order, and read the three stuck lists (`payments-api.ts:800-830`, `:935-960`, `:1095-1120`): each row carries the deleted device's `deviceName`. The case name says "backstop: written after the delete, which the product would refuse".
+  - History, in `apps/server/src/device-delete.history.test.ts` (own `useVenueDb`, full manifest): make a cash sale on the device and raise an incident naming it; delete the device through `deleteDevice`; then the alerts list (`listOpenIncidents`, `packages/core/src/incidents.ts`) still gives its `deviceName`; the cash-up report (the route `report-api.ts` serves, so `namedCashUp` runs) still gives its name in `byOrigin`. Then, as a backstop (plan correction 6), write rows straight into the database after the delete, each meeting its own list's filters, and read the three stuck lists: each row carries the deleted device's `deviceName`. The card list (`GET /management-api/payments/stuck`, `payments-api.ts:792-828`) needs a payment `attempting` on a working order whose `status` is `'open'` and whose `payment_attempt_at` is not null, and no live attempt for that order in this process (`paymentAttemptIsLive`, :824; a row written by the test is not registered as live). The bill-payment list (`/management-api/payments/bill-payments`, :926-962) needs a bill payment `pending` that `billPaymentIsLive` (:955) does not hold. The refund list (`/management-api/payments/bill-refunds`, :1085-1124) needs a refund `pending` that `billRefundIsLive` (:1117) does not hold. Before asserting the names, assert each list holds exactly the row written, so a filter the row misses fails the test rather than leaving it empty. The case name says "backstop: written straight into the database".
 
-- [ ] **Step 2: Run and see the first two fail; the rest pass already.**
+- [ ] **Step 2: Run and see which fail first.**
 
 ```
 pnpm --filter @waitron/venue-service exec vitest run <the setProfileKitchenScreens suite>
 pnpm --filter @waitron/server exec vitest run src/printer-delete.db.test.ts src/device-delete.history.test.ts
 pnpm --filter @waitron/layouts exec vitest run src/device-profile-store.db.test.ts
 ```
-Expected: the narrowing case and the printer-default case FAIL (B is narrowed and reported; the deleted device is named). The history, settle and retire cases pass before any change: they pin behaviour this branch must keep, and the task report says they passed first.
+Expected: the venue-service backstop and the printer-default case FAIL (B is narrowed and reported; the deleted device is named). The narrowing case built through the delete, and the history, settle and retire cases, pass before any change: they pin behaviour this branch must keep, and the task report says they passed first.
 
 - [ ] **Step 3: Implement the two predicates.** Nothing else.
 
 - [ ] **Step 4: Run until green**, then the printer step's neighbouring suites: `pnpm --filter @waitron/server exec vitest run src/print-api.printer-wiring.test.ts src/printer-delete.db.test.ts` and `pnpm --filter @waitron/server exec vitest run src/management-api.device-profiles.test.ts`.
 
-- [ ] **Step 5: Commit.** `git commit -s -m "Profile saves and printer deletes skip a deleted device, and its history still names it"`
+- [ ] **Step 5: Controls by deletion.** In a disposable worktree (`git worktree add --detach <dir> HEAD`), remove each of the two predicates in turn and run its case: the venue-service backstop and the printer-default case must each fail. Record what ran, then remove the worktree.
 
-### Task 6: Dashboard: Delete on the devices screen
+- [ ] **Step 6: Commit.** `git commit -s -m "Profile saves and printer deletes skip a deleted device, and its history still names it"`
 
-**Deliverable:** Delete in the devices row menu (active and disabled rows), opening the shared dialog with device copy, in English and Spanish, with the printers screen's request handling.
+### Task 6a: Dashboard: the device delete client, copy and wording
+
+**Deliverable:** the two client methods, the impact read's live-query dependencies, `deviceDeleteCopy()` with its EN and ES strings, and the neutral `device.payment_in_progress` sentence. No screen uses them yet.
 
 **Files:**
 - Modify: `apps/dashboard/src/api/client.ts` (two methods beside `revokeDevice`, :3136)
 - Modify: `apps/dashboard/src/api/live-queries.ts` (`getDeviceDeleteImpact` dependencies)
 - Create: `apps/dashboard/src/widgets/device-delete-copy.ts`, `apps/dashboard/src/widgets/device-delete-copy.test.ts`
 - Modify: `apps/dashboard/src/i18n/strings.ts` (EN and ES), `apps/dashboard/src/i18n/codes.ts` (:612-615, Plan default 11)
-- Modify: `apps/dashboard/src/screens/devices-screen.ts` (row menu :1521-1537; dialog state, handlers and render, modelled on `printers-screen.ts:854-864` and :3920-4077)
-- Test: `apps/dashboard/src/screens/devices-screen.test.ts`, `apps/dashboard/src/screens/devices-screen.a11y.test.ts`, `apps/dashboard/src/api/live-queries.test.ts`
+- Test: `apps/dashboard/src/widgets/device-delete-copy.test.ts`, `apps/dashboard/src/api/live-queries.test.ts`
 
 **Interfaces:**
-- Consumes: Task 3's routes and item keys.
+- Consumes: Task 3b's routes and Task 3a's item keys.
 - Produces: `getDeviceDeleteImpact(id)`, `deleteDevice(id)` on the dashboard API; `deviceDeleteCopy(): DeleteDialogCopy`.
 
 - [ ] **Step 1: Write the failing copy test** in `device-delete-copy.test.ts`, shaped like `printer-delete-copy.test.ts` (:19, :80, :145, :157, :174): the fixed text in EN and ES; one line per key below with its names; no line shows a key or an id; an unknown key reads "names (count)"; the refusal line names the orders.
@@ -737,7 +810,51 @@ Expected: the narrowing case and the printer-default case FAIL (B is narrowed an
 
   Before committing to them, grep the existing Spanish for a card reader (`rg -n '"[^"]*reader[^"]*": "' apps/dashboard/src/i18n/strings.ts | sed -n '/es/,$p'`, or read the ES block near `devices.receipt_printer_now`, :3698) and use the noun the devices screen already uses. "Made here, no ticket" and "Profiles staff can switch to" reuse the field labels at `strings.ts:1095,1098`. `held_printers` and `held_readers` share `devices.delete_held`. A refusal line with no targets reads "Payment in progress" / "Pago en curso" (a `_none` variant, or trim the colon as `printer-delete-copy.ts:51-55` does).
 
-- [ ] **Step 2: Write the failing screen tests** in `devices-screen.test.ts`, using its own harness (`mountWidget`, `stubApi`, `flush`, `devicesTable`, `q`, `dq`):
+- [ ] **Step 2: Write the failing client and live-query tests** in `live-queries.test.ts`, as it covers the printer delete: one case like "reads a printer's delete impact passively after the first read, and sends its delete as activity" (:20-40), checking each method's path and verb and that only the read is passive; and a `getDeviceDeleteImpact` row in its dependency table beside `getPrinterDeleteImpact` (:154), with a one-line comment naming the server function it mirrors, as that row has.
+
+- [ ] **Step 3: Run and see them fail.**
+
+```
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/device-delete-copy.test.ts src/api/client.test.ts src/api/live-queries.test.ts
+```
+Before a browser run, check free memory (`memory_pressure | grep free`) and run beside another session's browser run only when free memory is well above 15%.
+
+- [ ] **Step 4: Implement.**
+  - Client:
+
+```ts
+  getDeviceDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/devices/${id}/delete-impact`, "GET");
+  }
+
+  deleteDevice(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/devices/${id}`, "DELETE");
+  }
+```
+
+  - Live query dependencies for `getDeviceDeleteImpact`: `devices`, `payments`, `bill_payments`, `bill_payment_refunds`, `working_orders`, `sessions`, `printer_holders`, `printers`, `card_reader_holders`, `card_readers`, `join_requests`, `device_made_here_stations`, `kitchen_stations`, `device_approved_profiles`, `device_profiles`, `device_card_readers`, `device_kitchen_screens`. Run `pnpm exec vitest run scripts/live-subscriptions.test.ts`: drop any name it reports as undeclared (it only accepts declared server resources) and say which in the commit message. The delete recomputes anyway, so a missing dependency only leaves the dialog's counts older until another listed table changes.
+- [ ] **Step 5: Run until green, then the guards.**
+
+```
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/device-delete-copy.test.ts src/api/client.test.ts src/api/live-queries.test.ts
+pnpm exec vitest run scripts/live-subscriptions.test.ts
+pnpm --filter @waitron/dashboard typecheck
+```
+
+- [ ] **Step 6: Commit.** `git commit -s -m "Dashboard: the client, wording and dialog copy for deleting a device"`
+
+### Task 6b: Dashboard: Delete on the devices screen
+
+**Deliverable:** Delete in the devices row menu (active and disabled rows), opening the shared dialog with Task 6a's copy, in English and Spanish, with the printers screen's request handling.
+
+**Files:**
+- Modify: `apps/dashboard/src/screens/devices-screen.ts` (row menu :1521-1537; dialog state, handlers and render, modelled on `printers-screen.ts:854-864` and :3920-4077)
+- Test: `apps/dashboard/src/screens/devices-screen.test.ts` (new cases, and the two changed tests below), `apps/dashboard/src/screens/devices-screen.a11y.test.ts`
+
+**Interfaces:**
+- Consumes: Task 6a's client methods and `deviceDeleteCopy()`.
+
+- [ ] **Step 1: Write the failing screen tests** in `devices-screen.test.ts`, using its own harness (`mountWidget`, `stubApi`, `flush`, `devicesTable`, `q`, `dq`):
 
 ```ts
 describe("Delete", () => {
@@ -760,26 +877,14 @@ describe("Delete", () => {
 
   The ordering test reads the dialog's shadow DOM and checks the refusal group comes before the ends group, which comes before the removes group, then the irreversible sentence; the Delete button is `secondary` and its inner native `button` disabled while loading or refused, and `danger` and enabled when ready (as `packages/ui/src/components/wt-delete-dialog.test.ts` reads it). The stale-answer case uses deferred promises for two openings, as the printers screen's tests do (find them with `rg -n "earlier opening|generation" apps/dashboard/src/screens/printers-screen.test.ts`). Restore the language after each locale case (`currentLocale()` / `setLocale`, as `devices-screen.test.ts:858` does).
 
-- [ ] **Step 3: Run and see them fail.**
+- [ ] **Step 2: Run and see them fail.**
 
 ```
-pnpm --filter @waitron/dashboard exec vitest run src/widgets/device-delete-copy.test.ts src/screens/devices-screen.test.ts
+pnpm --filter @waitron/dashboard exec vitest run src/screens/devices-screen.test.ts
 ```
+Before a browser run, check free memory (`memory_pressure | grep free`) and run beside another session's browser run only when free memory is well above 15%.
 
-- [ ] **Step 4: Implement.**
-  - Client:
-
-```ts
-  getDeviceDeleteImpact(id: string): Promise<DeleteImpact> {
-    return this.#request(`/management-api/devices/${id}/delete-impact`, "GET");
-  }
-
-  deleteDevice(id: string): Promise<DeleteImpact> {
-    return this.#request(`/management-api/devices/${id}`, "DELETE");
-  }
-```
-
-  - Live query dependencies for `getDeviceDeleteImpact`: `devices`, `payments`, `bill_payments`, `bill_payment_refunds`, `working_orders`, `sessions`, `printer_holders`, `printers`, `card_reader_holders`, `card_readers`, `join_requests`, `device_made_here_stations`, `kitchen_stations`, `device_approved_profiles`, `device_profiles`, `device_card_readers`, `device_kitchen_screens`. Run `pnpm exec vitest run scripts/live-subscriptions.test.ts`: drop any name it reports as undeclared (it only accepts declared server resources) and say which in the commit message. The delete recomputes anyway, so a missing dependency only leaves the dialog's counts older until another listed table changes.
+- [ ] **Step 3: Implement.**
   - Screen: copy the printers screen's delete state and handlers (`deleteTarget`, `deleteImpact`, `deleteLoading`, `deleteSubmitting`, `deleteReadError`, `deleteActionError`, a generation counter, the opener, a separate `DashboardQueries` for the impact read, `#openDelete`, `#readImpact`, `#impactFailed`, `#retryImpact`, `#closeDelete`, `#confirmDelete`, a `#deviceGone(id, refuse)`), renamed for devices, and render `<wt-delete-dialog data-test="delete-device-dialog" …>` with `.copy=${deviceDeleteCopy()}`. Do not copy the printer page, calibration or label branches; the devices screen has the Edit dialog instead: `#deviceGone` closes it (disposing its draft scope without the leave prompt) when it is open on that device. After a successful delete, the opener becomes the screen's Add a device button (`data-test="open-add-device"`, `devices-screen.ts:1673`), as the printers screen does with Add printer (`printers-screen.ts:4024`).
   - Row menu (`#deviceActions`): for an active device, Edit, Disable (unchanged), then
 
@@ -795,25 +900,25 @@ pnpm --filter @waitron/dashboard exec vitest run src/widgets/device-delete-copy.
     and for a disabled device a menu holding only that button (remove the `if (!device.active) return nothing;` early return; keep `.rowClickable` at :1664 as it is). Use the printers screen's row-menu opener lookup (`#rowMenuButton`, `printers-screen.ts:2359`) so Escape returns focus to the menu's button.
   - `#deviceGone` runs when a live list refresh no longer has the device (deleted in another tab), and on `device.not_found` from the read or the delete, setting the screen's error to `device.not_found` only when something was open on it and the delete in flight was not this screen's own (same rule as `printers-screen.ts:4034-4060`).
 
-- [ ] **Step 5: Run until green, then the screen's other suites.**
+- [ ] **Step 4: Run until green, then the screen's other suites.**
 
 ```
-pnpm --filter @waitron/dashboard exec vitest run src/widgets/device-delete-copy.test.ts src/screens/devices-screen.test.ts src/screens/devices-screen.a11y.test.ts src/screens/devices-screen.save-state.test.ts src/api/live-queries.test.ts src/api/client.test.ts
-pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/pinned-actions-column.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts
+pnpm --filter @waitron/dashboard exec vitest run src/screens/devices-screen.test.ts src/screens/devices-screen.a11y.test.ts src/screens/devices-screen.save-state.test.ts
+pnpm exec vitest run scripts/pinned-actions-column.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts
 ```
 Before a browser run, check free memory (`memory_pressure | grep free`) and run beside another session's browser run only when free memory is well above 15%. In `devices-screen.a11y.test.ts`, add axe runs, both themes, for the dialog open and ready, open and refused, and loading; and one for a disabled row's menu open.
 
-- [ ] **Step 6: Commit.** `git commit -s -m "Dashboard: delete a device from its row, after a confirmation that says what the delete will do"`
+- [ ] **Step 5: Commit.** `git commit -s -m "Dashboard: delete a device from its row, after a confirmation that says what the delete will do"`
 
 ### Task 7: Look at it: screenshots
 
-**Deliverable:** the dialog and the row menus seen in the real dashboard, EN and ES, light and dark, at 1280 and 390 wide, with anything wrong fixed in Task 6's files (test first) before this task closes.
+**Deliverable:** the dialog and the row menus seen in the real dashboard, EN and ES, light and dark, at 1280 and 390 wide, with anything wrong fixed in Task 6a's or 6b's files (test first) before this task closes.
 
 **Files:** none committed, unless a defect is found (then a fix with its own failing test, committed separately). Screenshots go in `mktemp -d`, never in the worktree.
 
 - [ ] **Step 1:** `wa-wt ls`, confirm this worktree is registered, then `wa-wt demo waitron-feat-a435-4-device-delete`. Check nothing else holds the venue first (`lsof` on the venue folder and port 8080), and never run `wa-wt reset` on a slot another lane uses.
 - [ ] **Step 2:** Make two devices: enrol one by opening the till in a second browser context and pairing it from the dashboard's Add a device (or in dev mode, by knocking), give it a made-here station, an approved profile and a card reader choice, sign in on it, and disable a second one.
-- [ ] **Step 3:** With the workspace's Playwright Chromium, capture at 1280×800 and 390×844, light and dark, EN and ES: the active row's open menu; the disabled row's open menu; the dialog loading (throttle the request or take it from the browser test); the dialog ready. The refused dialog comes from the Task 6 browser test fixture (a `page.screenshot()` in a throwaway run), because putting a stuck payment into the dev venue means writing its database by hand.
+- [ ] **Step 3:** With the workspace's Playwright Chromium, capture at 1280×800 and 390×844, light and dark, EN and ES: the active row's open menu; the disabled row's open menu; the dialog loading (throttle the request or take it from the browser test); the dialog ready. The refused dialog comes from the Task 6b browser test fixture (a `page.screenshot()` in a throwaway run), because putting a stuck payment into the dev venue means writing its database by hand.
 - [ ] **Step 4:** Look at every image. Check: the device's name in bold; the groups in order; long names wrap without clipping; the footer's buttons are reachable at 390 wide; Delete is quiet while loading or refused and red when ready; Spanish fits. Then press Escape and check focus returns to the menu button; Tab through the dialog.
 - [ ] **Step 5:** Stop only the processes you started, by the ids you recorded. Report the image paths and what was checked.
 
@@ -828,17 +933,18 @@ Before a browser run, check free memory (`memory_pressure | grep free`) and run 
 - Modify: `docs/backlog.md` (A435 entries at :4863-4875)
 
 - [ ] **Step 1: Sweep for stale prose and missed reads.** Run `rg -n "from\(devices\)|\.from\(devices|join\(devices|Join\(devices|update\(devices\)" apps packages -g '*.ts' -g '!*.test.ts' -g '!**/testing/**'` and compare every hit with the inventory's three lists; any new hit is classified and either filtered (with a test) or listed as history. Then `rg -n -i "revoke|disabled device|never a hard DELETE|durable identity" packages/db/src/schema/devices.ts apps/server/src/device-api.ts apps/server/src/errors.ts docs/developers README.md`: change only sentences that are now false, and prefer deleting to rewording.
-- [ ] **Step 2: Backlog.** Delete the line "A435 step 4 — devices: …". Update the A435 header's "steps 3–6 open" and "Card readers are next" to what is true when this lands (check whether step 3 has landed: `git log --oneline origin/main | rg -i "card reader.*delet|A435 step 3"`). Any open point this branch leaves (for example, if the owner wants sign-ins named rather than counted, Plan default 12) becomes its own short entry in the same area, ending "Left open by A435 step 4." Do not add entries for decisions the owner has not questioned.
+- [ ] **Step 2: Backlog.** Delete the line "A435 step 4 — devices: …". Add one new short entry under _Payments and card readers_, following `docs/backlog.md` → _How to keep this file honest_: **Re-check the device inside payment write transactions.** A till's sign-in is checked in its own transaction (`requireSession`, `apps/server/src/till-session.ts`) and a payment is written in a later one that does not re-read the device (`beginBillPayment`, `apps/server/src/bill-payments.ts`; `insertAttempting`, `packages/payments/src/store.ts`), so a device disabled or deleted between the two can still have a cash or hand-keyed payment recorded on it. Re-read the device's `active` inside each payment write. End it "Left open by A435 step 4." and give the PR number once it exists (plan correction 6 has the detail; re-check its line pointers before copying any). Update the A435 header's "steps 3–6 open" and "Card readers are next" to what is true when this lands (check whether step 3 has landed: `git log --oneline origin/main | rg -i "card reader.*delet|A435 step 3"`). Any open point this branch leaves (for example, if the owner wants sign-ins named rather than counted, Plan default 12) becomes its own short entry in the same area, ending "Left open by A435 step 4." Do not add entries for decisions the owner has not questioned.
 - [ ] **Step 3: Final checks.** Run, reading each `Tests` count and exit status:
 
 ```
 pnpm exec vitest run scripts/claude-md-pointers.test.ts scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/live-subscriptions.test.ts scripts/module-seams.test.ts scripts/id-columns-are-references.test.ts scripts/pinned-actions-column.test.ts
-pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts
+pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts
+pnpm exec vitest run scripts/migration-upgrade.test.ts
 pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts src/write-path.e2e.test.ts
 git diff ad64b10be --stat -- packages/fiscal-verifactu
 pnpm format:check && pnpm lint
 ```
-Expected: all green and the fiscal diff empty. `docs/` is ignored by prettier, so for a doc file use `pnpm exec prettier --file-info <file>` before believing a clean `--check`; `CLAUDE.md` is checked. No whole-workspace test run: CI runs the package suites and coverage.
+Expected: all green and the fiscal diff empty. The journal and upgrade tests are here in case a rebase onto step 3 regenerated this branch's migration. `docs/` is ignored by prettier, so for a doc file use `pnpm exec prettier --file-info <file>` before believing a clean `--check`; `CLAUDE.md` is checked. No whole-workspace test run: CI runs the package suites and coverage.
 - [ ] **Step 4: Commit.** `git commit -s -m "Docs: a deleted device comes back only as a new device; backlog drops A435 step 4"`
 - [ ] **Step 5:** Tell the owner the branch is ready for `finish-branch`. This branch touches a migration, a permission-gated route and identity (device tokens and sign-ins), so it takes the full review path, with two run-it reviews.
 
@@ -846,7 +952,8 @@ Expected: all green and the fiscal diff empty. `docs/` is ignored by prettier, s
 
 Changed, and stricter than before:
 
-- `apps/dashboard/src/screens/devices-screen.test.ts:824` (a disabled row now has a one-item menu holding Delete) and `:841` (the active menu gains Delete), as Task 6 Step 2 describes.
+- `apps/dashboard/src/screens/devices-screen.test.ts:824` (a disabled row now has a one-item menu holding Delete) and `:841` (the active menu gains Delete), as Task 6b Step 1 describes.
+- `packages/venue-service/src/service.test.ts:21` pins `Object.keys(VENUE_SERVICE).sort()` exactly; it gains exactly `countDeviceKitchenScreens` and `removeDeviceKitchenScreens` (Task 2).
 - Any test that pins the dashboard's `device.payment_in_progress` wording as a literal. The one found (`devices-screen.test.ts:2016-2025`) compares with `codeMessage(...)`, so it follows the new wording without an edit; check for others with `rg -n "Change its profile once" apps/dashboard/src`.
 - Any test double implementing `VenueServiceContribution` in full gains the two seat methods (Task 2).
 
@@ -854,6 +961,7 @@ Unchanged and expected to stay green: every disabled-device case in `apps/server
 
 ## Plan self-review
 
-- Spec "Devices": refusals (Task 3), ended sign-ins, holds and request (Task 3), no way back (Tasks 3–4), removed settings (Task 3), open orders untouched (Task 3's history comparison), history kept and named (Tasks 3 and 5). Shared model: two calls with one set of rules (Task 3), routes and permission (Task 3), the shared dialog (Task 6). Testing: each item maps to a named case in Tasks 3–6.
+- Spec "Devices": refusals (Task 3a), ended sign-ins, holds and request (Task 3a), no way back (Tasks 3a, 3b and 4), removed settings (Task 3a), open orders untouched (Task 3a's history comparison), history kept and named (Tasks 3a and 5). Shared model: two calls with one set of rules (Task 3a), routes and permission (Task 3b), the shared dialog (Tasks 6a and 6b). Testing: each item maps to a named case in Tasks 3a to 6b.
+- Size: each task is one implementer's job, kept well under about 100 tool calls; Tasks 3 and 6 were split for that reason.
 - Interfaces: item keys, seat methods, join-request helpers, server functions and client methods are named the same in every task that uses them.
-- Corrections and defaults are listed above, each with the line it rests on. Nothing here has been run; every claim about behaviour is a reading of code at `ad64b10be`, and each task's first step turns it into a test.
+- Corrections and defaults are listed above, each with the line it rests on. Apart from the probe in Plan default 1, nothing here has been run; every other claim about behaviour is a reading of code at `ad64b10be` (rechecked at `fb5f026cb`, whose only change is this plan), and each task's first step turns it into a test.
