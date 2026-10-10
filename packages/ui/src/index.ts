@@ -71,6 +71,23 @@ export type {
   TableShape,
   ZoneTab,
 } from "./floor.js";
+export {
+  GRID_SQUARE_PX,
+  NAME_MIN_PX,
+  NEW_TABLE_SIZE,
+  automaticNames,
+  bounds,
+  clampToGrid,
+  cropToTables,
+  firstFreeSpot,
+  fitScale,
+  gridExtent,
+  rotatedRect,
+  rotationFromAngle,
+  showsName,
+  snapToSquare,
+} from "./floor-plan-geometry.js";
+export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.js";
 export { submitOnEnter } from "./submit-on-enter.js";
 export {
   ContentLanguageController,
