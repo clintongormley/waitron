@@ -1378,6 +1378,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   alongside a dirty field, and keep an outstanding leave choice open on unchanged refreshes.
   Held-response browser cases now cover older paper/errors after department edits and saved-language
   refreshes, plus unchanged snapshots and explicit preview-language choices.
+  On that branch, loaded department edits, saves and draft previews now stay usable after
+  unrelated receipt/location/language reads refuse; recovery retains refused department drafts.
   Retiring the legacy combined form, remaining page lifecycle checks and branch review stay
   open after landed 3A/6A. Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.

@@ -323,6 +323,42 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
   });
 }
 
+for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"] as const) {
+  it(`previews the independent department draft when ${failed} refuses`, async () => {
+    const api = fixture();
+    api[failed].mockRejectedValue({ code: "server.internal" });
+    api.previewReceiptDraft.mockImplementation(async (value) =>
+      paper(`${value.departmentId}: ${value.receipt.email ?? "empty"}`),
+    );
+    const { el } = await mount(api);
+    await vi.waitFor(() =>
+      expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
+    );
+    await edit(department(el), "email", "preview@bar.example");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent ?? "").toContain(
+        "bar: preview@bar.example",
+      ),
+    );
+    expect(api.previewReceiptDraft).toHaveBeenLastCalledWith({
+      departmentId: "bar",
+      receipt: { email: "preview@bar.example" },
+      settings: {
+        headerSubtitle: "Current defaults",
+        footerMessage: "Thanks",
+        printAddress: false,
+      },
+    });
+    expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+    if (failed === "getReceiptLanguage")
+      expect(el.shadowRoot!.querySelector("wt-combobox[name=previewLanguage]")).toBeNull();
+  });
+}
+
 for (const locale of ["en-GB", "es-ES"])
   for (const theme of ["light", "dark"] as const)
     it(`keeps mounted defaults and their refusal accessible in ${locale}/${theme}`, async () => {
@@ -471,3 +507,123 @@ for (const available of ["language", "description"] as const) {
     expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   });
 }
+
+for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"] as const) {
+  it(`keeps the department editable and independently savable when ${failed} refuses`, async () => {
+    const api = fixture();
+    api[failed].mockRejectedValue({ code: "server.internal" });
+    const { el, host } = await mount(api);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
+    );
+    const action = save(department(el), "department");
+    await action.updateComplete;
+    expect(action.variant).toBe("secondary");
+    expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    action.click();
+    await edit(department(el), "email", "bar@example.com");
+    await action.updateComplete;
+    expect(action.variant).toBe("primary");
+    expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    await userEvent.click(page.elementLocator(action.shadowRoot!.querySelector("button")!));
+    await vi.waitFor(() =>
+      expect(api.putDepartmentReceipt).toHaveBeenCalledExactlyOnceWith("bar", {
+        email: "bar@example.com",
+      }),
+    );
+    await vi.waitFor(async () => {
+      await action.updateComplete;
+      expect(action.variant).toBe("secondary");
+      expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    });
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+    await expectNoA11yViolations(host);
+  });
+
+  it(`keeps a refused department draft after ${failed} recovers`, async () => {
+    const api = fixture();
+    const read = api[failed].getMockImplementation()!;
+    api[failed].mockRejectedValue({ code: "server.internal" });
+    api.putDepartmentReceipt.mockRejectedValue({ code: "server.internal" });
+    const { el } = await mount(api);
+    await vi.waitFor(() =>
+      expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
+    );
+    const form = department(el);
+    await edit(form, "email", "refused@bar.example");
+    save(form, "department").click();
+    const message = () =>
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+        .error;
+    await vi.waitFor(() => expect(message()).not.toBe(""));
+    const refusal = message();
+    api[failed].mockImplementation(read as never);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=retry]")).toBeNull());
+    expect(department(el)).toBe(form);
+    expect(message()).toBe(refusal);
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!
+        .value,
+    ).toBe("refused@bar.example");
+    const action = save(form, "department");
+    await action.updateComplete;
+    expect(action.variant).toBe("primary");
+    expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    api.putDepartmentReceipt.mockResolvedValue(undefined);
+    await userEvent.click(page.elementLocator(action.shadowRoot!.querySelector("button")!));
+    await vi.waitFor(() => expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(2));
+    expect(api.putDepartmentReceipt.mock.calls).toEqual([
+      ["bar", { email: "refused@bar.example" }],
+      ["bar", { email: "refused@bar.example" }],
+    ]);
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+  });
+}
+
+it("redraws the department's saved-language fallback after a live change despite a failed venue receipt read", async () => {
+  const api = fixture();
+  api.getReceipt.mockRejectedValue({ code: "server.internal" });
+  let savedLanguage = "es-ES";
+  api.previewReceiptDraft.mockImplementation(async () => paper(savedLanguage));
+  const { el } = await mount(api);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector(".paper")?.textContent ?? "").toContain("es-ES"),
+  );
+  savedLanguage = "ca-ES";
+  api.getReceiptLanguage.mockResolvedValue({
+    language: "ca-ES",
+    choices: ["es-ES", "ca-ES"],
+    fixed: null,
+  });
+  api.liveData.invalidate([{ type: "locations" }]);
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=previewLanguage]",
+      )?.value,
+    ).toBe("ca-ES"),
+  );
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector(".paper")?.textContent ?? "").toContain("ca-ES"),
+  );
+  expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
+    departmentId: "bar",
+    receipt: {},
+    settings: {
+      headerSubtitle: "Current defaults",
+      footerMessage: "Thanks",
+      printAddress: false,
+    },
+  });
+  expect(save(department(el), "department").disabled).toBe(true);
+  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+  expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+});

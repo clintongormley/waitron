@@ -569,7 +569,7 @@ export class ReceiptsScreen extends LitElement {
             (value.fixed !== null && this.#languageScope?.isDirty())
           )
             this.#languageScope?.commit(this.#shownLanguage());
-          if ((savedElsewhere || droppedPick) && this.receiptLoaded && this.pickedLanguage === null)
+          if ((savedElsewhere || droppedPick) && this.pickedLanguage === null)
             this.#redrawInSavedLanguage();
         },
       );
@@ -700,7 +700,7 @@ export class ReceiptsScreen extends LitElement {
 
   async #sendPreview(): Promise<void> {
     if (
-      !this.receiptLoaded ||
+      (!this.receiptLoaded && this.previewDepartmentId === null) ||
       !this.#departmentsLoaded ||
       (this.previewDepartmentId !== null && this.departmentDraft === null)
     )
@@ -1484,7 +1484,7 @@ export class ReceiptsScreen extends LitElement {
       }
       <div class="layout">
         <div class="form-column">
-          ${locationReady ? html`<section class="department-settings">${this.#renderDepartment()}</section>` : nothing}
+          <section class="department-settings">${this.#renderDepartment()}</section>
           <dashboard-venue-receipt-defaults-editor
             .api=${this.api}
             .draftParent=${this}
@@ -1492,7 +1492,7 @@ export class ReceiptsScreen extends LitElement {
           ></dashboard-venue-receipt-defaults-editor>
           ${locationReady ? this.#renderForm() : this.#renderLocation()}
         </div>
-        ${locationReady ? this.#renderPreview() : nothing}
+        ${locationReady || this.departmentDraft !== null ? this.#renderPreview() : nothing}
       </div>`;
   }
 }

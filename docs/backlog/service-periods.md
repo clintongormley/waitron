@@ -48,6 +48,8 @@ their full text.
   its authored draft feeds preview and inherited department hints. Language/description have
   separate actions. Held-response browser cases cover older paper/errors after department edits
   and saved-language refreshes, plus unchanged snapshots and explicit preview-language choices.
+  Loaded department edits, saves and draft previews on that branch stay usable after unrelated
+  receipt/location/language read refusals; read recovery retains a refused department draft.
   Remaining page lifecycle checks and caller retirement remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
