@@ -91,6 +91,7 @@ import {
 import type { TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
+import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 
@@ -182,7 +183,8 @@ export interface BillBalance {
 
 export interface BillPaymentResult {
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending) or
-   * `network_unavailable` (failed, nothing charged). A retry answers the state it finds. */
+   * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
+   * till (the first sign-in or a later one) answers the state it finds. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;
@@ -990,10 +992,11 @@ export async function findSubmission(
 }
 
 /**
- * The start every payment of a bill shares, in the caller's transaction: a retry finds its first
- * row; otherwise the bill must be open and no payment of the whole order in flight, the allocation
- * must be the one the operator saw (design §3.6), and the payment and its lines are inserted in
- * `state`. A new payment answers the bill's total too, which the insert leaves as it was.
+ * The start every payment of a bill shares, in the caller's transaction: the operator must still
+ * be signed in on the requesting device ({@link assertStillSignedIn}); a retry finds its first row;
+ * otherwise the bill must be open and no payment of the whole order in flight, the allocation must be
+ * the one the operator saw (design §3.6), and the payment and its lines are inserted in `state`. A new
+ * payment answers the bill's total too, which the insert leaves as it was.
  *
  * Keyed by `submissionId` within the bill (design §5.1): the same request again answers the first
  * row and writes nothing; the id with another request, or naming one of the bill's refunds, is
@@ -1005,10 +1008,16 @@ async function beginBillPayment(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
-  operatorId: string,
+  operator: { personId: string; sessionId: string },
   state: "received" | "pending",
   now: Date,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
+  // Before the replay lookup: a retry the route would now refuse is refused too.
+  await assertStillSignedIn(tx, {
+    deviceId: cfg.origin.deviceId,
+    sessionId: operator.sessionId,
+    personId: operator.personId,
+  });
   const print = fingerprint(retryShapeOf(req));
   const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
   if (earlier.payment !== undefined) {
@@ -1049,7 +1058,7 @@ async function beginBillPayment(
       tip: decimalToCents(allocation.tip),
       tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
       state,
-      requestedBy: operatorId,
+      requestedBy: operator.personId,
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? now.toISOString() : null,
@@ -1072,7 +1081,7 @@ export async function takeBillPayment(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
-  operatorId: string,
+  operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
   return withTransaction(deps.db, async (tx) => {
     const receivedAt = deps.clock.now().instant;
@@ -1082,7 +1091,7 @@ export async function takeBillPayment(
       cfg,
       workingOrderId,
       req,
-      operatorId,
+      operator,
       "received",
       receivedAt,
     );
@@ -1098,14 +1107,21 @@ export async function takeBillPayment(
         externalRef: req.externalRef,
         billPaymentId: payment.id,
       });
-      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operatorId, printers);
+      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
     } else {
-      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operatorId, printers);
+      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
     }
-    const { invoice, total } = await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, {
-      total: begun.total,
-      printers,
-    });
+    const { invoice, total } = await issueWhenFullyPaid(
+      tx,
+      deps,
+      cfg,
+      workingOrderId,
+      operator.personId,
+      {
+        total: begun.total,
+        printers,
+      },
+    );
     return resultOf(tx, deps, cfg, payment, invoice, total);
   });
 }
@@ -1228,14 +1244,15 @@ const REFUSED_START: ReadonlySet<string> = new Set([
  *    offline fails it; any other answer leaves it pending, for the loop to settle from the
  *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
  *
- * A retry of a payment already taken answers its state and never collects again.
+ * A retry of a payment already taken, whose own sign-in is open on an active till (the first sign-in
+ * or a later one), answers its state and never collects again.
  */
 export async function takeReaderBillPayment(
   deps: ReaderBillPaymentDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
-  operatorId: string,
+  operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
   let release = (): void => {};
   try {
@@ -1246,7 +1263,7 @@ export async function takeReaderBillPayment(
         cfg,
         workingOrderId,
         req,
-        operatorId,
+        operator,
         "pending",
         deps.clock.now().instant,
       );

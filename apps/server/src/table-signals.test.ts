@@ -624,7 +624,7 @@ describe("a bill request", () => {
           applied: "3.00",
           tip: "0.00",
         },
-        OPERATOR,
+        v.operator,
       );
       expect(paid.invoice).toBeDefined();
     } finally {

@@ -12,13 +12,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import {
-  authorizeManager,
-  endDeviceSessions,
-  profilesAdmitting,
-  sessions,
-  type Permission,
-} from "@waitron/identity";
+import { authorizeManager, profilesAdmitting, sessions, type Permission } from "@waitron/identity";
 import {
   kindOfFormFactor,
   listDeviceProfiles,
@@ -56,11 +50,10 @@ import {
 import {
   readDeviceEquipment,
   readDevicesEquipment,
-  releaseDevice,
   selectDeviceEquipment,
   type EquipmentRole,
 } from "./device-equipment.js";
-import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
+import { deleteDevice, disableDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -685,17 +678,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const id = c.req.param("id");
       // A malformed id names no device, exactly as an absent one does.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      // Revoke flips `active = false`, NEVER a hard DELETE: a device is a durable identity.
-      await gated(sessionId, async (tx) => {
-        const updated = await tx
-          .update(devices)
-          .set({ active: false })
-          .where(and(ownDeviceById(id), isNull(devices.deletedAt)))
-          .returning({ id: devices.id });
-        if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
-        await endDeviceSessions(tx, id);
-        await releaseDevice(tx, id);
-      });
+      await gated(sessionId, (tx) => disableDevice(tx, id));
       return c.body(null, 204);
     }),
   );

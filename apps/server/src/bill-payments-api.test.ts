@@ -83,6 +83,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
+import { disableDevice } from "./device-delete.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -3005,6 +3006,60 @@ describe("the bottle (design §8 test 9, §7)", () => {
     expect(filedLines.map((line) => thousandthsToDecimal(line.quantity))).toEqual(["1.000"]);
     expect(sale!.total).toBe(3000);
     expect((await tendersOf(sale!.id)).map((t) => t.amount)).toEqual([1000, 1000, 1000]);
+  });
+});
+
+describe("a Disable committed after the session check", () => {
+  it("refuses the payment session.required and writes no bill payment", async () => {
+    const [own] = await inTx((tx) =>
+      tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, venue.deviceId)),
+    );
+    const device = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: `Barra ${randomUUID()}`,
+      profileId: own!.profileId,
+    });
+    const session = await inTx((tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+    );
+    const billId = await tabWith("Caña");
+    let disabled = false;
+    const racing = new Hono();
+    racing.use("/api/working-orders/:id/payments", async (c, next) => {
+      const parse = c.req.json.bind(c.req);
+      c.req.json = async () => {
+        await inTx((tx) => disableDevice(tx, device.deviceId));
+        disabled = true;
+        return parse();
+      };
+      await next();
+    });
+    racing.route("/", venue.app);
+
+    const res = await racing.request(`/api/working-orders/${billId}/payments`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+      },
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "3.00",
+        method: "cash",
+        tendered: "3.00",
+        applied: "3.00",
+        tip: "0.00",
+      }),
+    });
+
+    expect(disabled).toBe(true);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+    expect(await paymentRows(billId)).toEqual([]);
+    expect(await saleOf(billId)).toEqual([]);
   });
 });
 

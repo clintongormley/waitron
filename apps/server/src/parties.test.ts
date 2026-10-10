@@ -1679,7 +1679,7 @@ describe("money received against a bill before its invoice", () => {
         applied,
         tip,
       },
-      OPERATOR,
+      venue.operator,
     );
     return result.payment.id;
   }

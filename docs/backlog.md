@@ -3020,11 +3020,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
-- **Re-check the device inside payment write transactions.** A till's sign-in is checked in one
-  transaction and the payment written in a later one, and `beginBillPayment` reads nothing about
-  the device, so a device disabled or deleted, or the operator's session ended, between the two can
-  still have a cash or hand-keyed payment recorded on it. Left open by A435 step 4.
-  [Detail](backlog/payments.md#re-check-the-device-inside-payment-write-transactions)
+- **The counter sale, `/api/pay` and collecting a placed order do not re-check the device and the
+  sign-in inside their write, and bill refunds do not re-check the device**, as a bill payment does
+  since A471. A probe recorded
+  a sale, a captured card or a completed refund from a till switched off after its sign-in was
+  checked. Left open by A471.
+  [Detail](backlog/payments.md#the-counter-sale-apipay-collecting-a-placed-order-and-bill-refunds-do-not-re-check-the-device-inside-their-write)
 
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
@@ -4903,8 +4904,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   steps 5 and 6 would add more copies. Pull it into one shared piece, with the `names` helper that
   `printer-delete-copy.ts`, `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the
   `line` helper the first two share. Left open by A435 step 4 (#1519) and step 3.
-- **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` at about 13
-  places in 6 files; one named check would keep a new query from forgetting it. Left open by A435
+- **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` in several
+  files; one named check would keep a new query from forgetting it. Left open by A435
   step 4 (#1519).
 - **Owner question: may a reader still paired at SumUp be deleted while SumUp cannot be reached?**
   Today its delete is refused "Connect SumUp first" while the account is disconnected, and answers

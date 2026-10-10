@@ -522,7 +522,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         applied: "4.00",
         tip: "0.00",
       },
-      OPERATOR,
+      v.operator,
     );
 
     expect(await statusOf(id)).toBe("settled");
@@ -794,7 +794,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
             applied: "4.00",
             tip: "0.00",
           },
-          OPERATOR,
+          v.operator,
         ),
       );
 

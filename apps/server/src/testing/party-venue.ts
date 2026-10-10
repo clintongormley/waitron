@@ -43,7 +43,7 @@ import { payWorkingOrder } from "../till-sale.js";
 import { addTabRound, listTablesWithState, parkOrder } from "../working-order.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
-import { deviceRequestCfg } from "./session-device.js";
+import { deviceRequestCfg, openTillSession } from "./session-device.js";
 
 /**
  * A provisioned venue for the party suites: real Veri*Factu filing that never contacts AEAT, one
@@ -69,6 +69,8 @@ export interface PartyVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   cfg: DeviceRequestConfig;
+  /** {@link OPERATOR}'s open session on the venue's device, which a bill payment is taken under. */
+  operator: { personId: string; sessionId: string };
   /** The "tables" zone. */
   tables: ZoneOffers;
   /** The venue's counter-default zone, selling the same offers as the tables zone. */
@@ -136,6 +138,10 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  const operator = {
+    personId: OPERATOR,
+    sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
+  };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });
@@ -164,6 +170,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     backend,
     clock,
     cfg,
+    operator,
     tables,
     counter,
     item: (name) => tables.offerFor(productIds.get(name)!),
@@ -460,7 +467,7 @@ export async function cashContribution(
       applied: amount,
       tip: "0.00",
     },
-    OPERATOR,
+    v.operator,
   );
   return result.payment.id;
 }

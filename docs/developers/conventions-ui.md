@@ -584,7 +584,14 @@ session"). The same check hands back the device as it stands at that moment, and
 refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile is now a kitchen
 screen's (`refuseKitchenSignIn`, `apps/server/src/till-api.ts`), so a move onto a kitchen-screen
 profile while the PIN is checked opens no session (`apps/server/src/join-e2e.test.ts`, "a sign-in
-overtaken by a move onto a kitchen-screen profile is refused, and opens no session"). Enabling
+overtaken by a move onto a kitchen-screen profile is refused, and opens no session"). A bill payment checks again inside the transaction that writes it, before anything is written: the
+operator's session is still open on that device, then the device is still active and not deleted,
+or it is refused `session.required` or `device.unauthorized` (`assertStillSignedIn`,
+`apps/server/src/till-session.ts`, called first in `beginBillPayment`,
+`apps/server/src/bill-payments.ts`; cases in `apps/server/src/bill-payments.signed-in.test.ts`).
+The counter sale, `/api/pay` and collecting a placed order do not yet, and a bill refund re-checks
+only that its session is still open (`authorize`, `packages/identity/src/authorize.ts`, refusing
+`session.not_open`; `docs/backlog/payments.md`). Enabling
 still ends any session open on the device, a second line for a device turned off outside the
 Disable route. A
 knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,

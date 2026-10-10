@@ -77,7 +77,7 @@ import {
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { deviceRequestCfg, orderDeviceOrigin } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession, orderDeviceOrigin } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -1396,6 +1396,13 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     const orderId = await openOrder(v);
     const card = new FakePaymentProvider(suite.db);
     const release = card.holdNextCollect();
+    const operator = {
+      personId: v.managerId,
+      sessionId: await openTillSession(suite.db, {
+        deviceId: v.cfg.origin.deviceId,
+        personId: v.managerId,
+      }),
+    };
     const paying = takeReaderBillPayment(
       { db: suite.db, backend, clock, provider: card },
       v.cfg,
@@ -1409,7 +1416,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
         applied: "1.00",
         tip: "0.00",
       },
-      v.managerId,
+      operator,
     );
     await vi.waitFor(() => expect(card.collectCalls).toHaveLength(1));
     const [live] = await suite.db
