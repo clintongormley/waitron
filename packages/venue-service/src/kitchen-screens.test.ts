@@ -2099,6 +2099,7 @@ describe("a device's kitchen screens counted and removed", () => {
     await recordRemoval(deviceA, "station", { stationId: venue.cold });
     await choose(venue, deviceB, venue.till, [
       { kind: "station", stationIds: [venue.cold], zoneIds: null },
+      { kind: "pass", stationIds: null, zoneIds: [venue.dining] },
     ]);
     await recordRemoval(deviceB, "pass", { zoneId: venue.terrace });
 
@@ -2107,6 +2108,7 @@ describe("a device's kitchen screens counted and removed", () => {
       expect(before[table].some((row) => row.device_id === deviceA)).toBe(true);
     }
     expect(before.stations.some((row) => row.device_id === deviceB)).toBe(true);
+    expect(before.zones.some((row) => row.device_id === deviceB)).toBe(true);
     expect(before.removals.some((row) => row.device_id === deviceB)).toBe(true);
 
     expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(2);
@@ -2116,6 +2118,6 @@ describe("a device's kitchen screens counted and removed", () => {
       expect(after[table]).toEqual(before[table].filter((row) => row.device_id !== deviceA));
     }
     expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(0);
-    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceB))).toBe(1);
+    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceB))).toBe(2);
   });
 });

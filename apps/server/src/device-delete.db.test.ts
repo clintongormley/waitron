@@ -13,8 +13,11 @@ import {
   installChangeFeed,
   joinRequests,
   kitchenStations,
+  orderGroups,
+  parties,
   printerHolders,
   printers,
+  removeChangeFeed,
   subscribeToChanges,
   withTransaction,
   type Transaction,
@@ -24,7 +27,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncident, recordSale } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin, persons, sessions } from "@waitron/identity";
 import {
   cardReaderHolders,
   cardReaders,
@@ -268,8 +271,9 @@ async function refund(
   orderId: string,
   deviceId: string,
   state: "pending" | "completed" | "failed",
+  receivedOn = deviceId,
 ) {
-  const paid = await billPayment(orderId, deviceId, "received");
+  const paid = await billPayment(orderId, receivedOn, "received");
   const at = new Date().toISOString();
   await suite.db.insert(billPaymentRefunds).values({
     billPaymentId: paid,
@@ -355,6 +359,12 @@ async function seed() {
     { deviceId: pass, deviceProfileId: waiters },
   ]);
 
+  // An ended sign-in on Bar till, which the delete neither counts nor ends.
+  await signIn(barTill);
+  await suite.db
+    .update(sessions)
+    .set({ endedAt: "2026-10-10T09:00:00.000Z" })
+    .where(eq(sessions.deviceId, barTill));
   await signIn(barTill);
   await signIn(pass);
 
@@ -369,7 +379,7 @@ async function seed() {
     decoyNumbers: ["42", "43"],
   });
 
-  // History a delete keeps: a cash sale, an incident and a drawer opening on Bar till.
+  // History a delete keeps: a cash sale, an incident, a drawer opening and a fired group on Bar till.
   const sale = await inTx((tx) =>
     recordSale(tx, backend, {
       origin: deviceOrigin(barTill),
@@ -410,6 +420,18 @@ async function seed() {
     personId: OPERATOR,
     authorizedBy: OPERATOR,
     reason: "manual",
+  });
+  const [party] = await suite.db
+    .insert(parties)
+    .values({ openedBy: OPERATOR })
+    .returning({ id: parties.id });
+  await suite.db.insert(orderGroups).values({
+    partyId: party!.id,
+    position: 0,
+    state: "fired",
+    firedAt: NOW.toISOString(),
+    firedByDeviceId: barTill,
+    submittedBy: OPERATOR,
   });
 
   return {
@@ -546,6 +568,22 @@ describe("the device delete impact", () => {
     expect(impact.refusals).toEqual([]);
   });
 
+  it("refuses for a pending refund on the device it was taken on, not the device that received the payment", async () => {
+    const s = await seed();
+    const orderId = await openOrder(s.venue);
+    await refund(orderId, s.barTill, "pending", s.pass);
+    const refusals = async (id: string) =>
+      (await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, id))).refusals;
+    expect(await refusals(s.barTill)).toEqual([
+      {
+        code: "device.payment_in_progress",
+        params: {},
+        targets: [{ id: orderId, name: "Mesa 1" }],
+      },
+    ]);
+    expect(await refusals(s.pass)).toEqual([]);
+  });
+
   it("answers device.not_found for an unknown device and a deleted one", async () => {
     const s = await seed();
     await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
@@ -593,6 +631,7 @@ describe("the device delete impact", () => {
     expect(before.sales!.length).toBeGreaterThan(0);
     expect(before.incidents!.length).toBeGreaterThan(0);
     expect(before.drawer_opens!.length).toBeGreaterThan(0);
+    expect(before.order_groups!.some((row) => row.fired_by_device_id === s.barTill)).toBe(true);
     expect(before.device_kitchen_screens!.some((row) => row.device_id === s.barTill)).toBe(true);
     expect(before.join_requests!.some((row) => row.id === s.barTill)).toBe(true);
 
@@ -603,7 +642,10 @@ describe("the device delete impact", () => {
     expect(withEndedSessions(after, s.barTill, openSessionIds(before, s.barTill))).toEqual(
       afterDelete(before, s.barTill, NOW),
     );
-    for (const table of history) expect(after[table], table).toEqual(before[table]);
+    for (const table of history) {
+      expect(before[table], table).toBeDefined();
+      expect(after[table], table).toEqual(before[table]);
+    }
   });
 
   it("lets a new device take the deleted device's name at the same location", async () => {
@@ -698,23 +740,29 @@ describe("the device delete impact", () => {
     ]);
     const heard: ResourceIdentity[] = [];
     const unsubscribe = subscribeToChanges((change) => heard.push(...change.resources));
-    const before = await snapshot();
-    await suite.db.execute(
-      sql.raw(`create trigger test_refuse before update of deleted_at on devices
-        begin select raise(abort, 'test_delete_failure'); end`),
-    );
+    // The reset between cases does not remove the feed's triggers, so this case does.
     try {
-      const error = await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW)));
-      expect(String(error)).toMatch(/test_delete_failure/);
-      expect(await snapshot()).toEqual(before);
-      expect(heard).toEqual([]);
-    } finally {
-      await suite.db.execute(sql`drop trigger test_refuse`);
-    }
+      const before = await snapshot();
+      await suite.db.execute(
+        sql.raw(`create trigger test_refuse before update of deleted_at on devices
+          begin select raise(abort, 'test_delete_failure'); end`),
+      );
+      try {
+        const error = await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW)));
+        expect(String(error)).toMatch(/test_delete_failure/);
+        expect(await snapshot()).toEqual(before);
+        expect(heard).toEqual([]);
+      } finally {
+        await suite.db.execute(sql`drop trigger test_refuse`);
+      }
 
-    // Control: the same subscription hears the delete once the trigger is gone.
-    await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
-    unsubscribe();
-    expect(heard).toContainEqual(expect.objectContaining({ type: "devices", id: s.barTill }));
+      // Control: the same subscription hears the delete once the trigger is gone.
+      await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+      expect(heard).toContainEqual(expect.objectContaining({ type: "devices", id: s.barTill }));
+    } finally {
+      unsubscribe();
+      removeChangeFeed(suite.db);
+      await suite.db.execute(sql`delete from change_log`);
+    }
   });
 });

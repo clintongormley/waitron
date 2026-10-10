@@ -384,7 +384,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const [row] = await tx
           .select({ charging: devices.batteryCharging, reportedAt: devices.batteryReportedAt })
           .from(devices)
-          .where(and(ownDeviceById(device.deviceId), isNull(devices.deletedAt)));
+          .where(ownDeviceById(device.deviceId));
         // At most one stored report a minute, as for last-seen, unless the charger was plugged or
         // unplugged.
         if (

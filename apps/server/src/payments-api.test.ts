@@ -545,6 +545,28 @@ describe("device and profile readers", () => {
     expect({ choices: await choices(), holder: await readerHolder(reader!) }).toEqual(before);
   });
 
+  it("reading a deleted or unknown device's reader choice is device.not_found, as the PUT answers", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [reader] = await seedReaders("Barra");
+    const device = await seedDevice(venue);
+    await listOnProfile(device, reader!);
+    const opts = { cookie: venue.managerCookie };
+    const path = (id: string) => `/management-api/payments/devices/${id}/reader`;
+    expect(
+      (await send(app, "PUT", path(device), { ...opts, body: { readerId: reader } })).status,
+    ).toBe(204);
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, cfgOf(venue), device));
+
+    for (const id of [device, randomUUID()]) {
+      const res = await send(app, "GET", path(id), opts);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.not_found", params: { deviceId: id } },
+      });
+    }
+  });
+
   it("profile readers: stores the list and default, and refuses a default not in the list", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);

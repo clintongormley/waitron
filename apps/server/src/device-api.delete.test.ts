@@ -298,6 +298,11 @@ describe("device delete routes", () => {
     expect(((await read.json()) as DeleteImpact).refusals).toEqual([]);
 
     await paymentInProgress(venue, deviceId);
+    const again = await send(app, "GET", impactPath(deviceId), { cookie: venue.managerCookie });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as DeleteImpact).refusals[0]?.code).toBe(
+      "device.payment_in_progress",
+    );
     const res = await send(app, "DELETE", devicePath(deviceId), { cookie: venue.managerCookie });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "device.payment_in_progress" } });

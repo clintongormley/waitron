@@ -690,16 +690,25 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
+  const requireDevice = async (tx: Transaction, deviceId: string): Promise<void> => {
+    const [device] = await tx
+      .select({ id: devices.id })
+      .from(devices)
+      .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
+    if (device === undefined) throw new AppError("device.not_found", { deviceId });
+  };
+
   app.get("/management-api/payments/devices/:id/reader", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceId = requireUuidParam(c.req.param("id"), "DeviceId");
-      const rows = await gated(sessionId, (tx) =>
-        tx
+      const rows = await gated(sessionId, async (tx) => {
+        await requireDevice(tx, deviceId);
+        return tx
           .select({ readerId: deviceCardReaders.readerId })
           .from(deviceCardReaders)
-          .where(eq(deviceCardReaders.deviceId, deviceId)),
-      );
+          .where(eq(deviceCardReaders.deviceId, deviceId));
+      });
       return c.json({ readerId: rows[0]?.readerId ?? null });
     }),
   );
@@ -717,11 +726,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
         // So an unknown device is `device.not_found`, not a foreign-key refusal (a 500).
-        const [device] = await tx
-          .select({ id: devices.id })
-          .from(devices)
-          .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
-        if (device === undefined) throw new AppError("device.not_found", { deviceId });
+        await requireDevice(tx, deviceId);
         if (readerId !== null) await requireKnownReader(tx, readerId);
         await selectDeviceEquipment(tx, {
           deviceId,
