@@ -196,6 +196,8 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #ignoreGridClick = false;
 
+  #room: number | null = null;
+
   #observer = new ResizeObserver(([entry]) => {
     // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
     // never overflows only because a scrollbar appeared; min-width/min-height fill the remainder.
@@ -290,16 +292,13 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
     const box = rotatedRect(p);
-    const host = getComputedStyle(this);
-    const room =
-      parseFloat(host.getPropertyValue("--wt-tap-min")) +
-      parseFloat(host.getPropertyValue("--wt-space-1"));
+    // The side follows the table's saved place, so it does not jump while a drag is drawn.
+    const above = rotatedRect(t.placement).y * GRID_SQUARE_PX >= this.#handleRoom();
     const style = styleMap({
       left: px(box.x + box.width / 2),
-      top:
-        box.y * GRID_SQUARE_PX >= room
-          ? `calc(${px(box.y)} - var(--wt-tap-min) - var(--wt-space-1))`
-          : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
+      top: above
+        ? `calc(${px(box.y)} - var(--wt-tap-min) - var(--wt-space-1))`
+        : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
     });
     return html`
       <button
@@ -315,6 +314,17 @@ export class WtFloorPlanCanvas extends LitElement {
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
       </button>
     `;
+  }
+
+  /** The handle's size and its gap in px, read once rather than on every redraw of a drag. */
+  #handleRoom(): number {
+    if (this.#room === null) {
+      const host = getComputedStyle(this);
+      this.#room =
+        parseFloat(host.getPropertyValue("--wt-tap-min")) +
+        parseFloat(host.getPropertyValue("--wt-space-1"));
+    }
+    return this.#room;
   }
 
   #onTableKey(e: KeyboardEvent, t: PlanCanvasTable): void {
@@ -384,6 +394,11 @@ export class WtFloorPlanCanvas extends LitElement {
     if (e.pointerId !== drag.pointerId) return;
     const draft = this.draft;
     this.#endDrag();
+    // A release away from where the press began sends its click to the grid, which would clear
+    // the selection. That click comes in the same task as this pointerup. A tap's click goes to
+    // the pressed button instead, which stops it.
+    this.#ignoreGridClick = true;
+    setTimeout(() => (this.#ignoreGridClick = false));
     if (draft === null) return;
     const from = drag.table.placement;
     const to = draft.placement;
@@ -394,10 +409,6 @@ export class WtFloorPlanCanvas extends LitElement {
       if (to.x === from.x && to.y === from.y) return;
       this.#move(draft.key, to.x, to.y);
     }
-    // A release away from where the press began sends its click to the grid, which would clear
-    // the selection. That click comes in the same task as this pointerup.
-    this.#ignoreGridClick = true;
-    setTimeout(() => (this.#ignoreGridClick = false));
   };
 
   readonly #onPointerCancel = (e: PointerEvent): void => {

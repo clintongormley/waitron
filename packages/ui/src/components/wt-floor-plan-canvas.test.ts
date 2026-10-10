@@ -672,6 +672,67 @@ it("a real drag of a table released over empty grid keeps the selection", async 
   expect(selections).toEqual([]);
 });
 
+it("a real drag of the handle that turns nothing keeps the selection", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  await settled(el);
+  const seen = rotates(el);
+  const selections = selects(el);
+  await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), {
+    targetPosition: { x: 168, y: 20 },
+  });
+  expect(seen).toEqual([]);
+  expect(selections).toEqual([]);
+});
+
+it("a real drag of a table that moves nothing keeps the selection", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 2, height: 2 })], {
+    selected: "t1",
+  });
+  await settled(el);
+  const seen = moves(el);
+  const selections = selects(el);
+  // About 5 px right, under half a square, ending past the table's right edge (48 px).
+  await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
+    sourcePosition: { x: 20, y: 12 },
+    targetPosition: { x: 50, y: 48 },
+  });
+  expect(seen).toEqual([]);
+  expect(selections).toEqual([]);
+});
+
+it("keeps the handle on the side it started on while the table turns", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 0, width: 2, height: 10 })], {
+    selected: "t1",
+  });
+  const box = button(el, "t1").getBoundingClientRect();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  const h = handles(el)[0]!.getBoundingClientRect();
+  pointer(handles(el)[0]!, "pointerdown", 1, h.left + h.width / 2, h.top + h.height / 2);
+  pointer(window, "pointermove", 1, cx + 80, cy);
+  await el.updateComplete;
+  const turned = button(el, "t1").getBoundingClientRect();
+  expect(handles(el)[0]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(turned.bottom);
+  pointer(window, "pointercancel", 1, cx + 80, cy);
+});
+
+it("does not read styles again while the handle is dragged", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const read = vi.spyOn(window, "getComputedStyle");
+  try {
+    const h = handles(el)[0]!.getBoundingClientRect();
+    pointer(handles(el)[0]!, "pointerdown", 1, h.left + h.width / 2, h.top);
+    for (const dx of [40, 80, 120]) {
+      pointer(window, "pointermove", 1, h.left + dx, h.top + dx);
+      await el.updateComplete;
+    }
+    await release(el, { x: h.left + 120, y: h.top + 120 });
+    expect(read).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+  }
+});
+
 it("a click on empty grid after a drag still clears the selection", async () => {
   const el = await canvas([table("t1", "T1", { x: 2, y: 3 })], { selected: "t1" });
   await settled(el);
