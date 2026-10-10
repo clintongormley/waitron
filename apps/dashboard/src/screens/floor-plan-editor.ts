@@ -305,6 +305,9 @@ export class FloorPlanEditor extends LitElement {
   /** Set by a new selection or the sheet opening, cleared by the user's press, wheel or page
    *  scroll, so a later change in the sheet's height never moves a canvas the user has panned. */
   #revealing = false;
+  /** Set when a check or refusal points at a table, which may already be selected, with the sheet
+   *  already open: what it draws beside the table (a reason) still has to be lifted. */
+  #flagged = false;
   readonly #userScrolls = (): void => {
     this.#revealing = false;
   };
@@ -383,7 +386,8 @@ export class FloorPlanEditor extends LitElement {
       this.#watchedSheet = sheet;
       if (sheet !== null) this.#sheetResize.observe(sheet, { box: "border-box" });
     }
-    if (changed.has("selected") || (changed.has("sheetOpen") && this.sheetOpen)) {
+    if (changed.has("selected") || (changed.has("sheetOpen") && this.sheetOpen) || this.#flagged) {
+      this.#flagged = false;
       this.#revealing = true;
       void this.#reveal();
     }
@@ -505,6 +509,8 @@ export class FloorPlanEditor extends LitElement {
 
   /** A table a check or a refusal points at; on a phone the sheet opens so its fields show. */
   #selectFlagged(key: string): void {
+    this.#flagged = true;
+    this.requestUpdate();
     this.selected = key;
     if (this.narrow) this.sheetOpen = true;
   }

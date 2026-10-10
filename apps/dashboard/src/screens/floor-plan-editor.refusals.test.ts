@@ -305,6 +305,47 @@ it("at 390 px a booked table comes back above the sheet the refusal opens, with 
   ).toBeGreaterThanOrEqual(0);
 });
 
+it("at 390 px a booked refusal of the selected table with the sheet already open lifts its reason above the sheet", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(...before));
+  const low: FloorPlan = {
+    ...plan(),
+    tables: plan().tables.map((t) =>
+      t.id === "m2" ? { ...t, placement: { ...placement, y: 40 } } : t,
+    ),
+  };
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(low),
+      saveFloorPlan: vi
+        .fn()
+        .mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
+    }),
+  );
+  const sheet = () => el.shadowRoot!.querySelector<WtSheet>("wt-sheet");
+  await expect.poll(sheet).not.toBeNull();
+  sheet()!.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+  await el.updateComplete;
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m2" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const root = canvas(el).shadowRoot!;
+  const box = () => root.querySelector("button[data-key=m2]")!.getBoundingClientRect();
+  await expect.poll(() => box().bottom <= sheet()!.getBoundingClientRect().top + 0.5).toBe(true);
+  await change(el, deleteTable(draftFromPlan(low), "m2"));
+  await press(el, "save");
+  expect(sheet()!.expanded).toBe(true);
+  expect(canvas(el).selected).toBe("m2");
+  const reason = () => root.querySelector(".refused-reason[data-key=m2]")?.getBoundingClientRect();
+  await expect.poll(() => reason()).toBeDefined();
+  await expect
+    .poll(() => reason()!.bottom <= sheet()!.getBoundingClientRect().top + 0.5)
+    .toBe(true);
+  expect(window.scrollY).toBe(0);
+});
+
 it("a booked table's mark goes at the next Save, which sends it back", async () => {
   const saveFloorPlan = vi
     .fn()
