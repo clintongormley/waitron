@@ -33,7 +33,7 @@ export interface DataTableColumn<Row> {
   key: string;
   label: string;
   group?: string;
-  cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
+  cell: (row: Row, context: { ancestorOnly: boolean; searchRoot?: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
   /** Read again only when `rows`, `columns` or the column order change. */
   searchValue?: (row: Row) => string;
@@ -130,7 +130,10 @@ interface Searched<Row> {
   tree?: TreeShown<Row>;
 }
 
+type TreeEntry<Row> = { row: Row; key: string; depth: number; hasChildren: boolean };
+
 interface TreeShown<Row> {
+  entries?: TreeEntry<Row>[];
   shown: { rows: readonly Row[]; ancestorOnly: ReadonlySet<string>; heldOpen: ReadonlySet<string> };
   byKey: ReadonlyMap<string, Row>;
   ranks: ReadonlyMap<Row, SearchRank> | undefined;
@@ -861,6 +864,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** In a tree, while a search is typed, holds open every row above a match, and keeps what passes
    * the filters under a match reachable. Off, only a row kept solely to place a match is held open. */
   @property({ type: Boolean }) searchOpensPath = false;
+
+  @property({ type: Boolean }) flatTreeSearch = false;
+
+  @state() private searchExpanded = new Set<string>();
+  #searchExpansionQuery = "";
   /** Rows scroll inside the table's own box, under headings held at its top, while the toolbar
    * stays above it. The box fills the block size a bounded flex container gives the table, but is
    * never shorter than its minimum; given no such container, it is that minimum. */
@@ -1059,6 +1067,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     this.#searchMemo = undefined;
+    const query = this.#flatSearching()
+      ? this.searchable
+        ? this.searchText
+        : this.searchTerm
+      : "";
+    if (query !== this.#searchExpansionQuery) {
+      this.#searchExpansionQuery = query;
+      this.searchExpanded = new Set();
+    } else if (changed.has("rows")) {
+      const keys = this.#rowsByKey();
+      this.searchExpanded = new Set([...this.searchExpanded].filter((key) => keys.has(key)));
+    }
     if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
       this.#releaseColumnWidths();
     if (
@@ -1625,6 +1645,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     column: DataTableColumn<Row> | undefined,
     indexOf: ReadonlyMap<Row, number>,
     ranks: ReadonlyMap<Row, SearchRank> | undefined,
+    rankFirst = false,
   ): Row[] {
     const group = this.rowGroup;
     if (column?.sortValue === undefined && group === undefined && ranks === undefined)
@@ -1640,13 +1661,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
         value: column?.sortValue?.(row),
       }))
       .sort((left, right) => {
-        if (left.group !== right.group) return left.group - right.group;
+        if (!rankFirst && left.group !== right.group) return left.group - right.group;
         if (left.rank !== right.rank) {
           if (left.rank === undefined) return 1;
           if (right.rank === undefined) return -1;
           const ranked = compareSearchRanks(left.rank, right.rank);
           if (ranked !== 0) return ranked;
         }
+        if (rankFirst && left.group !== right.group) return left.group - right.group;
         if (left.value == null && right.value == null) return left.index - right.index;
         if (left.value == null) return 1;
         if (right.value == null) return -1;
@@ -1722,6 +1744,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.rowKey,
       this.rowParent,
       this.searchOpensPath,
+      this.flatTreeSearch,
       this.columnOrder,
     ];
     const held = this.#searchMemo;
@@ -1749,6 +1772,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #treeShown(): TreeShown<Row> {
     const searched = this.#searched();
+    if (searched.tree === undefined && this.#flatSearching()) {
+      const entries = this.#flatSearchEntries();
+      const active = this.#activeFilters();
+      const context = this.#treeVisible(
+        this.rows.filter((row) => this.#passesFilters(row, active)),
+        false,
+      );
+      searched.tree = {
+        entries,
+        shown: {
+          rows: entries.map(({ row }) => row),
+          ancestorOnly: context.ancestorOnly,
+          heldOpen: new Set(),
+        },
+        byKey: this.#rowsByKey(),
+        ranks: searched.ranks,
+      };
+    }
     if (searched.tree === undefined) {
       const shown = this.#treeVisible(searched.visible, searched.ranks !== undefined);
       const byKey = this.#rowsByKey();
@@ -1770,6 +1811,69 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const indexOf = new Map<Row, number>();
     rows.forEach((row, index) => indexOf.set(row, index));
     return this.#sortByColumn(rows, column, indexOf, ranks);
+  }
+
+  #flatSearching(): boolean {
+    return this.flatTreeSearch && this.rowParent !== undefined && this.#search() !== undefined;
+  }
+
+  #flatSearchEntries(expandAll = false): TreeEntry<Row>[] {
+    const parentOf = this.rowParent!;
+    const indexOf = new Map(this.rows.map((row, index) => [row, index]));
+    const keyOf = (row: Row) => this.rowKey(row, indexOf.get(row)!);
+    const active = this.#activeFilters();
+    const allowed = this.#treeVisible(
+      this.rows.filter((row) => this.#passesFilters(row, active)),
+      false,
+    ).rows;
+    const present = new Set(allowed.map(keyOf));
+    const children = new Map<string, Row[]>();
+    for (const row of allowed) {
+      const parent = parentOf(row);
+      if (parent === null || !present.has(parent)) continue;
+      const list = children.get(parent) ?? [];
+      list.push(row);
+      children.set(parent, list);
+    }
+    const isOpen = (row: Row) =>
+      expandAll || !this.rowCollapsible(row) || this.searchExpanded.has(keyOf(row));
+    const matched = this.#searched().visible;
+    const covered = new Set<string>();
+    const cover = (row: Row, seen: Set<string>) => {
+      const key = keyOf(row);
+      if (seen.has(key) || !isOpen(row)) return;
+      const next = new Set(seen).add(key);
+      for (const child of children.get(key) ?? []) {
+        if (next.has(keyOf(child))) continue;
+        covered.add(keyOf(child));
+        cover(child, next);
+      }
+    };
+    for (const row of matched) cover(row, new Set());
+    const column = this.#sortColumn(this.#shownColumns());
+    const roots = this.#sortByColumn(
+      matched.filter((row) => !covered.has(keyOf(row))),
+      column,
+      indexOf,
+      this.#searched().ranks,
+      true,
+    );
+    const out: TreeEntry<Row>[] = [];
+    const emitted = new Set<string>();
+    const walk = (row: Row, depth: number) => {
+      const key = keyOf(row);
+      if (emitted.has(key)) return;
+      emitted.add(key);
+      const below = children.get(key) ?? [];
+      out.push({ row, key, depth, hasChildren: below.length > 0 });
+      if (!isOpen(row)) return;
+      const ordered = this.rowKeepsChildOrder(row)
+        ? below
+        : this.#sortByColumn(below, column, indexOf, undefined);
+      for (const child of ordered) walk(child, depth + 1);
+    };
+    for (const row of roots) walk(row, 0);
+    return out;
   }
 
   /** In tree mode a match's ancestors stay, so it is not shown as a false top-level row. With
@@ -1905,6 +2009,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #setOpen(keys: readonly string[], open: boolean): void {
+    if (this.#flatSearching()) {
+      const next = new Set(this.searchExpanded);
+      for (const key of keys) {
+        if (open) next.add(key);
+        else next.delete(key);
+      }
+      this.searchExpanded = next;
+      return;
+    }
     const next = new Set(this.collapsed);
     const remembered = this.#rememberedOpen();
     for (const key of keys) {
@@ -1926,7 +2039,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #toggle(key: string): void {
-    const expanded = this.collapsed.has(key);
+    const expanded = !this.isExpanded(key);
     this.#setOpen([key], expanded);
     this.dispatchEvent(
       new CustomEvent("wt-expand-change", {
@@ -1937,9 +2050,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
   }
 
-  /** Whether a branch shows its children; a key the table has never closed reads as open. */
   isExpanded(key: string): boolean {
-    return !this.collapsed.has(key);
+    return this.#flatSearching() ? this.searchExpanded.has(key) : !this.collapsed.has(key);
   }
 
   /** Opens or closes one branch as its toggle would, without reporting it as a person's change. */
@@ -1949,8 +2061,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#setOpen([key], expanded);
   }
 
-  /** The keys of the rows the search and filters show now, including rows a closed branch hides. */
+  /** Flat search reports rendered keys; ordinary trees include children of collapsed branches. */
   shownKeys(): string[] {
+    if (this.#flatSearching()) return this.#treeShown().entries!.map(({ key }) => key);
     return this.#shownRows().map((row, index) => this.rowKey(row, index));
   }
 
@@ -1994,7 +2107,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     let parent = row !== undefined && this.rowParent ? this.rowParent(row) : null;
     while (parent !== null && byKey.has(parent) && !seen.has(parent)) {
       seen.add(parent);
-      if (this.collapsed.has(parent)) closed.push(parent);
+      if (!this.isExpanded(parent)) closed.push(parent);
       parent = this.rowParent!(byKey.get(parent)!);
     }
     if (closed.length > 0) this.#setOpen(closed, true);
@@ -2174,6 +2287,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #branchKeys(): string[] {
+    if (this.#flatSearching())
+      return this.#flatSearchEntries(true)
+        .filter(
+          ({ row, hasChildren }) =>
+            hasChildren && this.rowCollapsible(row) && (this.expandAllIncludes?.(row) ?? true),
+        )
+        .map(({ key }) => key);
     const byKey = this.#rowsByKey();
     const parents = new Set<string>();
     for (const row of this.rows) {
@@ -2189,7 +2309,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #renderExpandAll() {
     if (!this.rowParent || this.expandAllLabel === "") return nothing;
     const branches = this.#branchKeys();
-    const allOpen = branches.length > 0 && branches.every((key) => !this.collapsed.has(key));
+    const allOpen = branches.length > 0 && branches.every((key) => this.isExpanded(key));
     return html`<button
       type="button"
       class="expand-all"
@@ -2617,7 +2737,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
 
     const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
-    const entries = this.#treeRows(treeRows, heldOpen, sortColumn);
+    const entries = this.#treeShown().entries ?? this.#treeRows(treeRows, heldOpen, sortColumn);
     const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
     return this.#withToolbar(
       html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
@@ -2642,8 +2762,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ({ row, key, depth, hasChildren }) => {
                 const collapsible = this.rowCollapsible(row);
                 const held = heldOpen.has(key);
-                const expanded = !collapsible || !this.collapsed.has(key) || held;
-                const cellContext = { ancestorOnly: ancestorOnly.has(key) };
+                const expanded = !collapsible || this.isExpanded(key) || held;
+                const cellContext = {
+                  ancestorOnly: ancestorOnly.has(key),
+                  ...(this.#flatSearching() ? { searchRoot: depth === 0 } : {}),
+                };
                 const branch = hasChildren && collapsible && !held;
                 const mode = this.rowActivation?.(row) ?? "click";
                 const toggles = mode === "toggle" && branch;
