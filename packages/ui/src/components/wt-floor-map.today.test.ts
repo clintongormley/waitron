@@ -347,3 +347,137 @@ it("a re-read that moves the held table up by the drag's own distance drops from
   up(el, 300, 189);
   expect(drops).toEqual([{ tableId: "t1", x: 10, y: 7, targetId: null }]);
 });
+
+/** A token's colour as the map's shadow root computes it. */
+function colourOf(el: WtFloorMap, token: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${token})`;
+  el.shadowRoot!.append(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}
+
+const linked = (table: FloorMapTable, linkId: string): FloorMapTable => ({ ...table, linkId });
+
+const bar1 = t("t1", "Bar 1", { x: 0, y: 0 });
+const bar2 = { ...t("t2", "Bar 2", { x: 12, y: 0 }), description: "Seated" };
+const t3 = t("t3", "T3", { x: 0, y: 8 });
+
+async function centreIn(el: WtFloorMap, id: string): Promise<[number, number]> {
+  const box = await boxIn(el, button(el, id));
+  return [box.left + box.width / 2, box.top + box.height / 2];
+}
+
+const lineEnds = (line: Element) =>
+  ["x1", "y1", "x2", "y2"].map((name) => Number(line.getAttribute(name)));
+
+const names = (el: WtFloorMap) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>('[part="name"]')].map((n) => [
+    n.closest<HTMLElement>('[part="table"]')!.dataset["tableId"],
+    n.textContent,
+  ]);
+
+it("links a party's tables with a line and names them once", async () => {
+  const el = await map([linked(bar2, "p1"), t3, linked(bar1, "p1")]);
+  // Inherited, so a page's own width would otherwise reach the line.
+  el.style.strokeWidth = "3px";
+  const links = el.shadowRoot!.querySelectorAll('[part="links"]');
+  expect(links).toHaveLength(1);
+  const link = links[0]!;
+  expect(link.getAttribute("aria-hidden")).toBe("true");
+  expect(await boxIn(el, link)).toEqual({ left: 0, top: 0, width: 600, height: 300 });
+  expect(getComputedStyle(link).pointerEvents).toBe("none");
+  // Under the buttons: drawn before them, at the same stacking level.
+  expect(link.compareDocumentPosition(button(el, "t1")) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  expect(getComputedStyle(link).zIndex).toBe("auto");
+  const lines = link.querySelectorAll("line");
+  expect(lines).toHaveLength(1);
+  expect(lineEnds(lines[0]!)).toEqual([
+    ...(await centreIn(el, "t1")),
+    ...(await centreIn(el, "t2")),
+  ]);
+  expect(getComputedStyle(lines[0]!).stroke).toBe(colourOf(el, "--wt-color-field-line"));
+  expect(getComputedStyle(lines[0]!).stroke).not.toBe(colourOf(el, "--wt-color-primary"));
+  expect(getComputedStyle(lines[0]!).strokeWidth).toBe("1px");
+  expect(getComputedStyle(lines[0]!).visibility).toBe("visible");
+  expect(names(el)).toEqual([
+    ["t3", "T3"],
+    ["t1", "Bar 1+2"],
+  ]);
+  expect(button(el, "t1").getAttribute("aria-label")).toBe("Bar 1+2, Free");
+  expect(button(el, "t2").getAttribute("aria-label")).toBe("Bar 1+2, Seated");
+  expect(button(el, "t3").getAttribute("aria-label")).toBe("T3, Free");
+});
+
+it("links a party's groups in the number order of their first members", async () => {
+  const merged = [
+    { ...linked(t("m4", "Bar 4", { x: 0, y: 8 }), "p1"), joinId: "j" },
+    { ...linked(t("m5", "Bar 5", { x: 8, y: 8 }), "p1"), joinId: "j" },
+  ];
+  const bar10 = linked(t("t10", "Bar 10", { x: 0, y: 0 }), "p1");
+  const el = await map([bar10, ...merged, linked(bar2, "p1"), t3]);
+  const lines = el.shadowRoot!.querySelectorAll('[part="links"] line');
+  expect(await Promise.all([...lines].map(lineEnds))).toEqual([
+    [...(await centreIn(el, "t2")), ...(await centreIn(el, "m4"))],
+    [...(await centreIn(el, "m4")), ...(await centreIn(el, "t10"))],
+  ]);
+  expect(names(el)).toEqual([
+    ["t2", "Bar 2+4+5+10"],
+    ["t3", "T3"],
+  ]);
+  expect(button(el, "m4").getAttribute("aria-label")).toBe("Bar 2+4+5+10, Free");
+});
+
+it("two parties each get their own link", async () => {
+  const el = await map([
+    linked(bar1, "p1"),
+    linked(bar2, "p1"),
+    linked(t3, "p2"),
+    linked(t("t4", "T4", { x: 12, y: 8 }), "p2"),
+  ]);
+  const links = [...el.shadowRoot!.querySelectorAll('[part="links"]')];
+  expect(links.map((l) => l.querySelectorAll("line").length)).toEqual([1, 1]);
+  expect(lineEnds(links[1]!.querySelector("line")!)).toEqual([
+    ...(await centreIn(el, "t3")),
+    ...(await centreIn(el, "t4")),
+  ]);
+  expect(names(el)).toEqual([
+    ["t1", "Bar 1+2"],
+    ["t3", "T3+T4"],
+  ]);
+});
+
+it("a linked party's name is not drawn when its first table is too small for it", async () => {
+  const stool = linked(t("s1", "Bar 1", { x: 0, y: 0, width: 1, height: 1 }), "p1");
+  const el = await map([stool, linked(bar2, "p1")]);
+  expect(names(el)).toEqual([]);
+  expect(button(el, "s1").getAttribute("aria-label")).toBe("Bar 1+2, Free");
+  expect(button(el, "t2").getAttribute("aria-label")).toBe("Bar 1+2, Seated");
+});
+
+it("draws no link for a party at one table", async () => {
+  const el = await map([linked(bar1, "p1"), t3]);
+  expect(part(el, "links")).toBeNull();
+  expect(names(el)).toEqual([
+    ["t1", "Bar 1"],
+    ["t3", "T3"],
+  ]);
+  expect(button(el, "t1").getAttribute("aria-label")).toBe("Bar 1, Free");
+});
+
+it("a linked table is dragged alone", async () => {
+  const el = await map([linked(bar1, "p1"), linked(bar2, "p1"), t3]);
+  const [x1, y1] = await centreIn(el, "t1");
+  const before2 = await boxIn(el, button(el, "t2"));
+  const before1 = await boxIn(el, button(el, "t1"));
+  const square = before1.width / 8;
+  hold(el, x1, y1);
+  move(el, x1, y1 + square * 2);
+  expect((await boxIn(el, button(el, "t1"))).top).toBeCloseTo(before1.top + square * 2, 5);
+  expect(await boxIn(el, button(el, "t2"))).toEqual(before2);
+  up(el, x1, y1 + square * 2);
+  expect(drops).toEqual([{ tableId: "t1", x: 0, y: 2, targetId: null }]);
+});

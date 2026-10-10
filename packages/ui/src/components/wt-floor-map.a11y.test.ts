@@ -112,6 +112,17 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  test("a linked party", async () => {
+    await mountMap(theme, [
+      t("Bar 1", { x: 0 }, { linkId: "p1", fill: "seated" }),
+      t("Bar 2", { x: 12 }, { linkId: "p1", fill: "seated" }),
+      t("T3", { x: 0, y: 8 }),
+    ]);
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    expect(root.querySelectorAll('[part="links"] line')).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
   test("focus on the second table after an arrow key", async () => {
     await mountMap(theme, [t("T1", { x: 0 }), t("T2", { x: 8 })]);
     const root = host.querySelector("wt-floor-map")!.shadowRoot!;

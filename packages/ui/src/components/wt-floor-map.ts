@@ -17,7 +17,7 @@ import {
   snapToSquare,
 } from "../floor-plan-geometry.js";
 
-/** A merge's members carry the same `fill`, `dot` and `description`. */
+/** A merge's members carry the same `fill`, `dot`, `linkId` and `description`. */
 export interface FloorMapTable {
   id: string;
   label: string;
@@ -27,6 +27,8 @@ export interface FloorMapTable {
   joinId: string | null;
   /** A fixed table is not drawn moved by a drag: a copy follows the finger. Unset is movable. */
   fixed?: boolean;
+  /** Groups sharing one are drawn linked by a line and named once: one party at several groups. */
+  linkId?: string | null;
   /** Read after the name: "Seated, 2 ready". */
   description: string;
 }
@@ -84,7 +86,10 @@ interface Group {
   key: string;
   members: FloorMapTable[];
   box: PlanRect;
+  /** Its tables' name, or its linked party's. */
   label: string;
+  /** False on a linked group after the first. */
+  drawsName: boolean;
   fixed: boolean;
 }
 
@@ -130,9 +135,32 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
       members,
       box: bounds(members.map((m) => m.placement))!,
       label: mergeLabel(members.map((m) => m.label)),
+      drawsName: true,
       fixed: members.some((m) => m.fixed === true),
     };
   });
+}
+
+/** Names each linked party's groups once, on the first; its groups in their first labels' order. */
+function linksOf(groups: readonly Group[]): Group[][] {
+  const byLink = new Map<string, Group[]>();
+  for (const group of groups) {
+    const linkId = group.members[0]!.linkId;
+    if (linkId === undefined || linkId === null) continue;
+    const linked = byLink.get(linkId);
+    if (linked) linked.push(group);
+    else byLink.set(linkId, [group]);
+  }
+  const links = [...byLink.values()].filter((linked) => linked.length > 1);
+  for (const linked of links) {
+    linked.sort((a, b) => inNumberOrder(a.members[0]!.label, b.members[0]!.label));
+    const label = mergeLabel(linked.flatMap((g) => g.members.map((m) => m.label)));
+    for (const group of linked) {
+      group.label = label;
+      group.drawsName = group === linked[0];
+    }
+  }
+  return links;
 }
 
 const px = (value: number): string => `${value}px`;
@@ -224,6 +252,16 @@ export class WtFloorMap extends LitElement {
         pointer-events: none;
       }
 
+      [part="links"] {
+        position: absolute;
+        pointer-events: none;
+      }
+
+      [part="links"] line {
+        stroke: var(--wt-color-field-line);
+        stroke-width: 1px;
+      }
+
       [part="ghost"] {
         opacity: 0.5;
       }
@@ -232,7 +270,8 @@ export class WtFloorMap extends LitElement {
         pointer-events: none;
       }
 
-      [part="drag-link"] {
+      [part="drag-link"],
+      [part="links"] {
         inset: 0;
         width: 100%;
         height: 100%;
@@ -332,6 +371,9 @@ export class WtFloorMap extends LitElement {
   #readingOrder: Group[] = [];
 
   #groupOf = new Map<string, Group>();
+
+  /** Each linked party's groups, in their first labels' order. */
+  #links: Group[][] = [];
 
   /** The host's box, read when a pinch's first move needs it; a pointerdown clears it. */
   #pinchBox: DOMRect | null = null;
@@ -661,6 +703,7 @@ export class WtFloorMap extends LitElement {
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("tables")) {
       this.#groups = groupsOf(this.tables);
+      this.#links = linksOf(this.#groups);
       this.#readingOrder = readingOrder(this.#groups);
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
@@ -697,7 +740,7 @@ export class WtFloorMap extends LitElement {
     const tabStop =
       (this.#focusedId === null ? undefined : this.#groupOf.get(this.#focusedId)) ??
       this.#readingOrder[0];
-    return html`${repeat(
+    return html`${this.#links.map((linked) => this.#renderLink(linked, view))}${repeat(
       this.#groups,
       (g) => g.key,
       (g) => this.#renderGroup(g, view, still, g === tabStop),
@@ -708,7 +751,7 @@ export class WtFloorMap extends LitElement {
     const { box, members, label } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
-    const named = showsName(merged ? box : first.placement, view.scale);
+    const named = group.drawsName && showsName(merged ? box : first.placement, view.scale);
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const dot = members.find((m) => m.dot !== null)?.dot ?? null;
     return html`<button
@@ -737,6 +780,21 @@ export class WtFloorMap extends LitElement {
         dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
       }
     </button>`;
+  }
+
+  #renderLink(linked: readonly Group[], view: View): TemplateResult {
+    const centres = linked.map(({ box }) => ({
+      x: view.x + (box.x + box.width / 2) * view.scale,
+      y: view.y + (box.y + box.height / 2) * view.scale,
+    }));
+    return html`<svg part="links" aria-hidden="true">
+      ${centres
+        .slice(1)
+        .map(
+          (to, i) =>
+            html`<line x1=${centres[i]!.x} y1=${centres[i]!.y} x2=${to.x} y2=${to.y}></line>`,
+        )}
+    </svg>`;
   }
 
   /** A fixed group's copy where the drag would put it, and a line to the table under the pointer. */
