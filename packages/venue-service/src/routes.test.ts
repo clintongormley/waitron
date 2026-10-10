@@ -3084,32 +3084,24 @@ describe("a routing cell's period choices on the routes", () => {
   });
 });
 
-describe("read-only station overview", () => {
-  it("serves today's station status to a supervisor without exposing routing configuration", async () => {
+describe("what a supervisor reaches of prep stations", () => {
+  it("answers 404 for the removed read-only overview route, to a manager and a supervisor", async () => {
     const f = await fixture();
-    const response = await send(
-      f.app,
-      "GET",
-      "/management-api/venue-service/stations/overview",
-      f.supervisorCookie,
-    );
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(Object.keys(body).sort()).toEqual([
-      "clockReadable",
-      "defaultStationId",
-      "stationTimes",
-      "stations",
-      "todayEnds",
-    ]);
-    expect(body.stations).toEqual([{ id: f.stationId, name: "Terrace bar", active: true }]);
-    expect(body.stationTimes).toEqual([
-      expect.objectContaining({ stationId: f.stationId, status: { open: true, why: "default" } }),
-    ]);
+    for (const cookie of [f.managerCookie, f.supervisorCookie])
+      expect(
+        (await send(f.app, "GET", "/management-api/venue-service/stations/overview", cookie))
+          .status,
+      ).toBe(404);
+  });
+  it("refuses a supervisor's routing read", async () => {
+    const f = await fixture();
     expect(
       (await send(f.app, "GET", "/management-api/venue-service/routing", f.supervisorCookie))
         .status,
     ).toBe(403);
+  });
+  it("has no management route for a supervisor to change a station's state today", async () => {
+    const f = await fixture();
     expect(
       (
         await send(
@@ -3121,19 +3113,6 @@ describe("read-only station overview", () => {
         )
       ).status,
     ).toBe(404);
-  });
-  it("refuses staff and unauthenticated overview reads while serving managers", async () => {
-    const f = await fixture();
-    for (const [cookie, status] of [
-      [f.staffCookie, 403],
-      [undefined, 401],
-      [f.managerCookie, 200],
-    ] as const) {
-      expect(
-        (await send(f.app, "GET", "/management-api/venue-service/stations/overview", cookie))
-          .status,
-      ).toBe(status);
-    }
   });
 });
 

@@ -1386,11 +1386,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **The dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
-  manager does not see the watcher list there** — left open by W110b (#1278) and A285 (#1308): `GET /management-api/watchers`
-  now needs only `venue.view`, like the stations and courses lists (writes still need
-  `venue.configure`).
-
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
 
@@ -1491,9 +1486,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   whether an options answer deserves its own prominent form on the ticket.
   [Detail](backlog/kitchen.md#is-a--sub-line-enough-for-a-doneness-answer-on-the-kitchen-ticket)
 
-- **Prep stations review notes retained for future cleanup** — left open by A261 step 3 (#1269): the
-  overview API object still exposes write methods (server routes remain the permission boundary),
-  and station reordering repeats an active filter after an active-only read.
+- **Prep stations review note retained for future cleanup** — left open by A261 step 3 (#1269):
+  station reordering repeats an active filter after an active-only read (`reorderStations`,
+  `apps/server/src/kitchen.ts`).
 
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
   caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { RoutingPeriod } from "../routing-types.js";
@@ -648,4 +648,77 @@ it("says in Spanish which deleted periods were taken out", async () => {
   expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
     "Periodos eliminados: Lunch (Bar)",
   );
+});
+
+describe("a stored line whose period's menus no longer offer the row", () => {
+  const notes = (el: RoutingCellEditor) =>
+    all<HTMLElement>(el, "[data-test=period-line]").map(
+      (line) => line.querySelector("[data-test=period-flag]")?.textContent?.trim() ?? null,
+    );
+
+  it("notes it under that line in the warning colour, and not under a line still offered", async () => {
+    const el = await mount({
+      periods: [
+        { periodId: "breakfast", target: up, notOffered: true },
+        { periodId: "brunch", target: down },
+      ],
+    });
+    expect(notes(el)).toEqual(["Not on Breakfast menus", null]);
+    const note = one(el, "[data-test=period-flag]")!;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-warning)";
+    el.shadowRoot!.append(probe);
+    expect(getComputedStyle(note).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(note).color).not.toBe(
+      getComputedStyle(one(el, "[data-test=period-line]")!).color,
+    );
+    expect(linePeriods(el).map((field) => field.error)).toEqual(["", ""]);
+    expect(bottom(el)).toBe("");
+  });
+
+  it("names every flagged period of the line as its field names them", async () => {
+    const el = await mount({
+      periods: [
+        { periodId: "breakfast", target: up, notOffered: true },
+        { periodId: "lunch", target: up, notOffered: true },
+      ],
+    });
+    expect(notes(el)).toEqual(["Not on Breakfast, Lunch (Dining) menus"]);
+  });
+
+  it("clears a line's note once that line's periods or station change, and only that line's", async () => {
+    const el = await mount({
+      periods: [
+        { periodId: "breakfast", target: up, notOffered: true },
+        { periodId: "brunch", target: down, notOffered: true },
+      ],
+    });
+    expect(notes(el)).toEqual(["Not on Breakfast menus", "Not on Brunch menus"]);
+    await pick(el, linePeriods(el)[0]!, { values: ["breakfast", "lunch"] });
+    expect(notes(el)).toEqual([null, "Not on Brunch menus"]);
+    await pick(el, lineTargets(el)[1]!, { value: "station:up" });
+    expect(notes(el)).toEqual([null, null]);
+  });
+
+  it("keeps the note when another field changes", async () => {
+    const el = await mount({ periods: [{ periodId: "breakfast", target: up, notOffered: true }] });
+    await pick(el, one<Combobox>(el, "[name=target]")!, { value: "station:down" });
+    await click(el, "add-line");
+    expect(notes(el)).toEqual(["Not on Breakfast menus", null]);
+  });
+
+  it("notes nothing on a line the cell inherits", async () => {
+    const el = await mount({
+      inheritedFrom: "Every zone",
+      periods: [{ periodId: "lunch", target: down, notOffered: true }],
+    });
+    expect(linePeriods(el).map((field) => field.values)).toEqual([["lunch"]]);
+    expect(notes(el)).toEqual([null]);
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({ periods: [{ periodId: "breakfast", target: up, notOffered: true }] });
+    expect(notes(el)).toEqual(["No está en los menús de Breakfast"]);
+  });
 });

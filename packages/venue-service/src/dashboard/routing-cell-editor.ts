@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { cellKey, parseTargetKey, targetKey, type RouteTarget } from "../routing.js";
 import type { CellAddress, PeriodLine, RoutingPeriod } from "../routing-types.js";
 import { format } from "./hours-view.js";
+import { periodsText } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
 export interface RoutingCellEditorCell {
@@ -25,7 +26,7 @@ export interface RoutingCellEditorCell {
   label: string;
   /** The cell's own choice, or the inherited one; null when nothing decides it. */
   target: RouteTarget | null;
-  periods?: readonly PeriodLine[];
+  periods?: readonly (PeriodLine & { notOffered?: true })[];
   /** Where an inherited choice comes from; absent for a stored cell. */
   inheritedFrom?: string;
 }
@@ -88,9 +89,16 @@ export class RoutingCellEditor extends LitElement {
           grid-column: 1 / -1;
         }
       }
-      .note {
+      .note,
+      .warning {
         margin: 0;
+      }
+      .note {
         color: var(--wt-color-text-muted);
+      }
+      .warning {
+        grid-column: 1 / -1;
+        color: var(--wt-color-warning);
       }
       .add {
         justify-self: start;
@@ -132,6 +140,8 @@ export class RoutingCellEditor extends LitElement {
   private baseline?: Draft;
   private leftOut: LeftOut[] = [];
   private nextLine = 0;
+  /** Lines whose periods or station the person changed: their stored flags no longer apply. */
+  private edited = new Set<number>();
   private rowMemo?: {
     periods: readonly RoutingPeriod[];
     rowProductIds: readonly string[];
@@ -172,6 +182,7 @@ export class RoutingCellEditor extends LitElement {
       this.generation = {};
       this.draft = this.opening();
       this.baseline = copy(this.draft);
+      this.edited = new Set();
       this.attempted = false;
       this.refusal = undefined;
       this.removed = [];
@@ -351,6 +362,7 @@ export class RoutingCellEditor extends LitElement {
   }
 
   private setLine(id: number, change: Partial<Line>) {
+    this.edited.add(id);
     this.changed(
       {
         ...this.draft,
@@ -436,6 +448,26 @@ export class RoutingCellEditor extends LitElement {
             }
           : {}),
       }));
+  }
+
+  /** "Not on Breakfast menus" for a stored line nobody edited whose periods' menus reach none of the row's products. */
+  private flagText(line: Line, repeated: Set<string>): string | undefined {
+    if (this.inherited || this.isDefaultCell || this.edited.has(line.id)) return undefined;
+    const flagged = new Set(
+      (this.cell?.periods ?? [])
+        .filter(
+          ({ notOffered, target }) => notOffered === true && targetKey(target) === line.target,
+        )
+        .map(({ periodId }) => periodId),
+    );
+    const periods = this.periods.filter(
+      (period) => flagged.has(period.id) && line.periodIds.includes(period.id),
+    );
+    return periods.length === 0
+      ? undefined
+      : format("routing.period_not_on_menus", {
+          periods: periodsText(periods, this.periods, repeated),
+        });
   }
 
   /** A line's periods named in the model's order, for the field's closed face. */
@@ -534,8 +566,9 @@ export class RoutingCellEditor extends LitElement {
           ${repeat(
             this.draft.lines,
             (line) => line.id,
-            (line, index) =>
-              html`<div class="line" data-test="period-line">
+            (line, index) => {
+              const flag = this.flagText(line, repeated);
+              return html`<div class="line" data-test="period-line">
                 <wt-combobox
                   name="line-periods"
                   label=${t("routing.line_periods")}
@@ -591,7 +624,9 @@ export class RoutingCellEditor extends LitElement {
                   }}
                   >${t("routing.remove_line")}</wt-button
                 >
-              </div>`,
+                ${flag === undefined ? nothing : html`<p class="warning" data-test="period-flag">${flag}</p>`}
+              </div>`;
+            },
           )}
           <wt-combobox
             name="target"

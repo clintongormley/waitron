@@ -252,7 +252,7 @@ async function validatePeriodLines(
     (line) => targetKey(stored.get(line.periodId) ?? null) !== targetKey(line.target),
   );
   if (unchecked.length === 0) return valid;
-  const rowProducts = await rowProductIds(tx, cell.address);
+  const rowProducts = await readRowProductIds(tx, cell.address);
   const offered = await periodProductIds(
     tx,
     unchecked.map((line) => periods.get(line.periodId)!),
@@ -263,8 +263,7 @@ async function validatePeriodLines(
   return valid;
 }
 
-/** The active products a row covers, variants by their parent's id. */
-async function rowProductIds(tx: Transaction, address: CellAddress): Promise<Set<string>> {
+async function readRowProductIds(tx: Transaction, address: CellAddress): Promise<Set<string>> {
   const { row } = address;
   const folders =
     row.kind === "category"
@@ -273,15 +272,22 @@ async function rowProductIds(tx: Transaction, address: CellAddress): Promise<Set
           .from(categories)
           .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
       : [];
-  const reach = changeReach(
+  return rowProductIds(
     new Map(folders.map((folder) => [folder.id, folder.parentId])),
     address,
+    await activeProducts(tx, row.kind === "product" ? row.productId : undefined),
   );
+}
+
+/** Of `active`, the products a row covers, variants by their parent's id. */
+function rowProductIds(
+  parentOf: ReadonlyMap<string, string | null>,
+  address: CellAddress,
+  active: readonly { id: string; routedId: string; categoryId: string | null }[],
+): Set<string> {
+  const reach = changeReach(parentOf, address);
   const covered = new Set<string>();
-  for (const product of await activeProducts(
-    tx,
-    row.kind === "product" ? row.productId : undefined,
-  )) {
+  for (const product of active) {
     const facts = rowFacts(product);
     if (reach.covers(facts)) covered.add(facts.routedProductId);
   }
@@ -1114,6 +1120,16 @@ export async function routingModel(
   const shown = new Set(gridProducts.map((product) => product.id));
   const periods = await readRoutingPeriods(tx, cfg, clock.dayCutover);
   const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
+  const periodProducts = new Map(periods.map((period) => [period.id, period.productIds]));
+  const active = (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];
+  const productsOfRow = new Map<string, Set<string>>();
+  const rowProducts = (cell: CellAddress) => {
+    const key = cellKey({ row: cell.row, zoneId: null });
+    let found = productsOfRow.get(key);
+    if (found === undefined)
+      productsOfRow.set(key, (found = rowProductIds(rules.parentOf, cell, active)));
+    return found;
+  };
   return {
     zones,
     categories: folders,
@@ -1123,11 +1139,20 @@ export async function routingModel(
       .map((cell) => {
         const lines = rules.cellPeriods?.get(cellKey(cell));
         if (lines === undefined) return cell;
+        const covered = rowProducts(cell);
         return {
           ...cell,
           periods: [...lines]
-            .map(([periodId, target]) => ({ periodId, target }))
-            .sort((a, b) => periodOrder.get(a.periodId)! - periodOrder.get(b.periodId)!),
+            .map(([periodId, target]) =>
+              (periodProducts.get(periodId) ?? []).some((productId) => covered.has(productId))
+                ? { periodId, target }
+                : { periodId, target, notOffered: true as const },
+            )
+            .sort(
+              (a, b) =>
+                (periodOrder.get(a.periodId) ?? periods.length) -
+                (periodOrder.get(b.periodId) ?? periods.length),
+            ),
         };
       }),
     periods,

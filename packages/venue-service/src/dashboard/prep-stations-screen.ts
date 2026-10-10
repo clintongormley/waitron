@@ -199,7 +199,6 @@ export class PrepStationsScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
-  @property({ type: Boolean }) readOnly = false;
   @state() private view?: PrepStationsView;
   @state() private settingsEditor?: SettingsDraft;
   @state() private settingsBusy = false;
@@ -261,9 +260,7 @@ export class PrepStationsScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       const requested = this.#url.read("view");
-      this.tab =
-        (this.readOnly ? (["stations"] as const) : PREP_TABS).find((tab) => tab === requested) ??
-        "stations";
+      this.tab = PREP_TABS.find((tab) => tab === requested) ?? "stations";
       if (this.tab !== requested)
         this.#url.write({ dashboard: "prep-stations", view: this.tab }, true);
     },
@@ -351,7 +348,7 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   #leaveSettings(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
-    if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+    if (!this.#settingsCurrent(identity) || this.settingsBusy) return;
     if (!this.#settingsScope || !this.#leave) proceed();
     else
       void this.#leave!.request({
@@ -653,11 +650,6 @@ export class PrepStationsScreen extends LitElement {
       this.cellRefusal = null;
       this.defaultRefusal = null;
       this.#closeCellEditor();
-    }
-    if (changed.has("readOnly") && this.readOnly) {
-      this.tab = "stations";
-      if (this.#url.read("dashboard") === "prep-stations")
-        this.#url.write({ dashboard: "prep-stations", view: "stations" }, true);
     }
   }
   override connectedCallback() {
@@ -1862,7 +1854,7 @@ export class PrepStationsScreen extends LitElement {
   async #saveSettingsCell(identity: object | undefined) {
     if (saveActionState(this.#settingsScope).unchanged) return;
     const editor = this.settingsEditor;
-    if (!editor || !this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+    if (!editor || !this.#settingsCurrent(identity) || this.settingsBusy) return;
     const scope = this.#settingsScope;
     const submitted = this.#settingsValue(editor);
     this.settingsEditor = { ...editor, attempted: true };
@@ -2006,7 +1998,7 @@ export class PrepStationsScreen extends LitElement {
         .noResultsLabel=${t("venue.combobox_no_results")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+          if (!this.#settingsCurrent(identity) || this.settingsBusy) return;
           this.settingsEditor = {
             ...editor,
             value: event.detail.value,
@@ -2035,7 +2027,7 @@ export class PrepStationsScreen extends LitElement {
           variant=${saveActionState(this.#settingsScope).variant}
           ?disabled=${saveActionState(this.#settingsScope).unchanged || this.settingsBusy || !!invalid}
           @click=${() => {
-            if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+            if (!this.#settingsCurrent(identity) || this.settingsBusy) return;
             if (saveActionState(this.#settingsScope).unchanged) return;
             if (!editor.confirming) this.settingsEditor = { ...editor, confirming: true };
             else void this.#saveSettingsCell(identity);
@@ -2099,7 +2091,7 @@ export class PrepStationsScreen extends LitElement {
         .disabled=${this.settingsBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+          if (!this.#settingsCurrent(identity) || this.settingsBusy) return;
           this.settingsEditor = { ...editor, value: event.detail.value, fieldError: "", error: "" };
           this.#settingsScope?.changed();
         }}
@@ -2779,11 +2771,11 @@ export class PrepStationsScreen extends LitElement {
           ? html`<wt-tabs
               label=${t("prep.title")}
               .value=${this.tab}
-              .items=${(this.readOnly ? (["stations"] as const) : PREP_TABS).map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
+              .items=${PREP_TABS.map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
               @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
                 if (event.target !== event.currentTarget) return;
                 const tab = PREP_TABS.find((tab) => tab === event.detail.value);
-                if (!tab || tab === this.tab || (this.readOnly && tab !== "stations")) return;
+                if (!tab || tab === this.tab) return;
                 (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.tab;
                 const proceed = () => {
                   this.tab = tab;
@@ -2796,7 +2788,7 @@ export class PrepStationsScreen extends LitElement {
               }}
             >
               ${
-                this.readOnly || this.tab !== "stations"
+                this.tab !== "stations"
                   ? nothing
                   : html`<div slot="actions">
                       <wt-button @click=${() => this.#openStation()} data-test="new-station"
@@ -2815,8 +2807,8 @@ export class PrepStationsScreen extends LitElement {
                 </div>
                 <prep-station-table
                   .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
-                  .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
-                  .outputs=${this.readOnly ? undefined : this.#stationOutputs(view)}
+                  .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
+                  .outputs=${this.#stationOutputs(view)}
                   .today=${Object.fromEntries(
                     view.stations.map((station) => {
                       const status = this.#todayCell(station);
@@ -2825,48 +2817,44 @@ export class PrepStationsScreen extends LitElement {
                   )}
                 ></prep-station-table>
               </div>
-              ${
-                this.readOnly
-                  ? nothing
-                  : html`<div slot="routing">
-                        <venue-routing-grid
-                          .model=${view.routing}
-                          .pending=${this.cellChoice}
-                          .refusal=${this.cellRefusal}
-                          .defaultRefusal=${this.defaultRefusal}
-                          @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
-                            void this.#chooseCell(event.detail)}
-                          @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
-                            void this.#makeDefault(event.detail.stationId)}
-                          @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
-                            this.#dropDraft(event.detail.address)}
-                        ></venue-routing-grid>
-                        <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
-                        ${
-                          inactive.length
-                            ? html`<section>
-                                <h2>${t("prep.disabled")}</h2>
-                                ${inactive.map(
-                                  (station) =>
-                                    html`<wt-card data-test=${`inactive-${station.id}`}
-                                      ><h3>${station.name}</h3>
-                                      <p>
-                                        ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
-                                      </p>
-                                      <p>
-                                        ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
-                                      </p>
-                                    </wt-card>`,
-                                )}
-                              </section>`
-                            : nothing
-                        }
-                      </div>
-                      <div slot="watchers">${this.#watchers()}</div>
-                      <div slot="settings">${this.#settings()}</div>`
-              }
+              <div slot="routing">
+                <venue-routing-grid
+                  .model=${view.routing}
+                  .pending=${this.cellChoice}
+                  .refusal=${this.cellRefusal}
+                  .defaultRefusal=${this.defaultRefusal}
+                  @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
+                    void this.#chooseCell(event.detail)}
+                  @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
+                    void this.#makeDefault(event.detail.stationId)}
+                  @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
+                    this.#dropDraft(event.detail.address)}
+                ></venue-routing-grid>
+                <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
+                ${
+                  inactive.length
+                    ? html`<section>
+                        <h2>${t("prep.disabled")}</h2>
+                        ${inactive.map(
+                          (station) =>
+                            html`<wt-card data-test=${`inactive-${station.id}`}
+                              ><h3>${station.name}</h3>
+                              <p>
+                                ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
+                              </p>
+                              <p>
+                                ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
+                              </p>
+                            </wt-card>`,
+                        )}
+                      </section>`
+                    : nothing
+                }
+              </div>
+              <div slot="watchers">${this.#watchers()}</div>
+              <div slot="settings">${this.#settings()}</div>
             </wt-tabs>`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#stationEditor()}`}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#stationEditor()}`;
   }
 }

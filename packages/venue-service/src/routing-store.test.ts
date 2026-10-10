@@ -7,6 +7,7 @@ import {
   createCategory,
   addProductToMenu,
   buildMenuDocument,
+  removeMember,
   createExtraList,
   createProduct,
   menuDocumentHash,
@@ -3455,7 +3456,7 @@ describe("saving a cell's period choices", () => {
       expect(await modelCell(tx, f, everyZone(f))).toEqual({
         ...everyZone(f),
         target: station(f.bar),
-        periods: [line(f.lunch, station(f.downstairs))],
+        periods: [{ ...line(f.lunch, station(f.downstairs)), notOffered: true }],
       });
       await expect(
         setRoutingCell(tx, f.cfg, everyZone(f), station(f.bar), [
@@ -3467,6 +3468,199 @@ describe("saving a cell's period choices", () => {
       });
       expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: f.downstairs }]);
     }));
+
+  describe("marking a stored line its period's menus no longer offer", () => {
+    const lunchRootMember = async (tx: Transaction, f: Choices, productId: string) => {
+      const [member] = await tx
+        .select({ id: sectionMembers.id, sectionId: sectionMembers.sectionId })
+        .from(sectionMembers)
+        .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))
+        .where(
+          and(
+            eq(sections.ownerMenuId, f.lunchMenu),
+            eq(sections.role, "menu_root"),
+            eq(sectionMembers.productId, productId),
+          ),
+        );
+      return member!;
+    };
+    const takeOffLunchMenu = async (tx: Transaction, f: Choices, productId: string) => {
+      const member = await lunchRootMember(tx, f, productId);
+      await removeMember(tx, member.sectionId, member.id);
+    };
+    const mojitoRow = (f: Choices): CellAddress => ({ row: productRow(f.mojito), zoneId: null });
+
+    it("leaves a product row's line unmarked while its period's menu offers the product, marks it once the product leaves the menu, and still saves the cell unchanged", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs), [
+          line(f.lunch, station(f.downstairs)),
+        ]);
+        expect(await modelCell(tx, f, mojitoRow(f))).toStrictEqual({
+          ...mojitoRow(f),
+          target: station(f.upstairs),
+          periods: [line(f.lunch, station(f.downstairs))],
+        });
+        await takeOffLunchMenu(tx, f, f.mojito);
+        const marked = {
+          ...mojitoRow(f),
+          target: station(f.upstairs),
+          periods: [{ ...line(f.lunch, station(f.downstairs)), notOffered: true }],
+        };
+        expect(await modelCell(tx, f, mojitoRow(f))).toStrictEqual(marked);
+        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs), [
+          line(f.lunch, station(f.downstairs)),
+        ]);
+        expect(await modelCell(tx, f, mojitoRow(f))).toStrictEqual(marked);
+      }));
+
+    it("leaves a line unmarked while only the period's staff-only menu offers the product", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs), [
+          line(f.staffLunch, station(f.downstairs)),
+        ]);
+        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+          line(f.staffLunch, station(f.downstairs)),
+        ]);
+        await takeOffLunchMenu(tx, f, f.mojito);
+        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+          { ...line(f.staffLunch, station(f.downstairs)), notOffered: true },
+        ]);
+      }));
+
+    it("leaves a category row's line unmarked while any active product of its subtree is on the period's menus, and marks it when none is", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const drinksRow: CellAddress = { row: categoryRow(f.drinks), zoneId: null };
+        await setRoutingCell(tx, f.cfg, drinksRow, station(f.upstairs), [
+          line(f.lunch, station(f.downstairs)),
+        ]);
+        const periodsOf = async () => (await modelCell(tx, f, drinksRow))?.periods;
+        expect(await periodsOf()).toStrictEqual([line(f.lunch, station(f.downstairs))]);
+        await addProductToMenu(tx, { menuId: f.lunchMenu, productId: f.daiquiri });
+        await takeOffLunchMenu(tx, f, f.mojito);
+        expect(await periodsOf()).toStrictEqual([line(f.lunch, station(f.downstairs))]);
+        await updateProduct(tx, f.daiquiri, { active: false });
+        expect(await periodsOf()).toStrictEqual([
+          { ...line(f.lunch, station(f.downstairs)), notOffered: true },
+        ]);
+      }));
+
+    it("marks every line of a category row with no active product", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const beerRow: CellAddress = { row: categoryRow(f.beer), zoneId: null };
+        await setRoutingCell(tx, f.cfg, beerRow, station(f.upstairs));
+        const [cell] = await tx
+          .select({ id: routingCells.id })
+          .from(routingCells)
+          .where(eq(routingCells.categoryId, f.beer));
+        await tx.insert(routingCellPeriods).values(
+          [f.lunch, f.staffLunch].map((periodId) => ({
+            cellId: cell!.id,
+            periodId,
+            departmentId: f.department,
+            stationId: f.downstairs,
+          })),
+        );
+        expect((await modelCell(tx, f, beerRow))?.periods).toStrictEqual([
+          { ...line(f.lunch, station(f.downstairs)), notOffered: true },
+          { ...line(f.staffLunch, station(f.downstairs)), notOffered: true },
+        ]);
+      }));
+
+    it("counts a variant on the period's menu for its parent's row", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const [root] = await tx
+          .select({ id: sections.id })
+          .from(sections)
+          .where(and(eq(sections.ownerMenuId, f.breadMenu), eq(sections.role, "menu_root")));
+        const [variantMember] = await tx
+          .insert(sectionMembers)
+          .values({ sectionId: root!.id, position: 9, productId: f.variant })
+          .returning();
+        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs), [
+          line(f.brunch, station(f.downstairs)),
+        ]);
+        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+          line(f.brunch, station(f.downstairs)),
+        ]);
+        await tx.delete(sectionMembers).where(eq(sectionMembers.id, variantMember!.id));
+        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+          { ...line(f.brunch, station(f.downstairs)), notOffered: true },
+        ]);
+      }));
+
+    it("marks a stored line whose period is not one of the venue's, last, rather than failing the read", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const [elsewhere] = await tx
+          .insert(locations)
+          .values({
+            name: "Elsewhere",
+            invoiceLocales: ["en-GB"],
+            operationDescription: "Hospitality",
+          })
+          .returning();
+        const otherCfg = { locationId: locationId(elsewhere!.id) };
+        const otherDepartment = await createDepartment(tx, otherCfg, {
+          name: "Dining",
+          orderStart: "table",
+        });
+        const otherLunch = (
+          await saveMenuPeriod(tx, otherCfg, otherDepartment.id, {
+            name: "Lunch",
+            menuId: f.lunchMenu,
+            staffMenuIds: [],
+            colour: "blue",
+          })
+        ).id;
+        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs));
+        const [cell] = await tx
+          .select({ id: routingCells.id })
+          .from(routingCells)
+          .where(eq(routingCells.productId, f.mojito));
+        for (const [periodId, departmentId] of [
+          [otherLunch, otherDepartment.id],
+          [f.lunch, f.department],
+        ])
+          await tx.insert(routingCellPeriods).values({
+            cellId: cell!.id,
+            periodId: periodId!,
+            departmentId: departmentId!,
+            stationId: f.downstairs,
+          });
+        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+          line(f.lunch, station(f.downstairs)),
+          { ...line(otherLunch, station(f.downstairs)), notOffered: true },
+        ]);
+      }));
+
+    it("reads no product list when no cell stores a period line", async () =>
+      scoped(async (tx) => {
+        const f = await choicesFixture(tx);
+        const session = (
+          tx as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        const productListReads = () =>
+          prepared.mock.calls.filter(([query]) => query.sql.includes("coalesce(")).length;
+        try {
+          await routingModel(tx, f.cfg, at);
+          expect(productListReads()).toBe(0);
+          await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs), [
+            line(f.lunch, station(f.downstairs)),
+          ]);
+          prepared.mockClear();
+          await routingModel(tx, f.cfg, at);
+          expect(productListReads()).toBe(1);
+        } finally {
+          prepared.mockRestore();
+        }
+      }));
+  });
 
   it("checks every line sent to pin an inherited cell, as the cell stores none of them", async () =>
     scoped(async (tx) => {

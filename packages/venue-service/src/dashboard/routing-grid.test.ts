@@ -770,93 +770,53 @@ describe("venue-routing-grid", () => {
     },
   );
 
-  describe("how extras are made", () => {
-    const DEFAULT_NOTE = "Kitchen (default) — as an extra, follows its dish";
-    const NO_PREP_NOTE = "No preparation — as an extra, follows its dish";
-    const extraNote = (el: RoutingGrid, row: string, zone: string) =>
-      cell(el, row, zone)
-        .querySelector('[data-test="extra-note"]')
-        ?.textContent!.replace(/\s+/g, " ")
-        .trim() ?? null;
+  describe("no note on how an extra is made", () => {
+    const text = (el: RoutingGrid, row: string, zone: string) =>
+      cell(el, row, zone).textContent!.replace(/\s+/g, " ").trim();
     const name = (el: RoutingGrid, row: string, zone: string) =>
       trigger(combo(el, row, zone)!).getAttribute("aria-label");
 
-    it("an empty Every zone cell falls through to the default station and says its extras follow the dish", async () => {
+    it("an empty Every zone cell shows and names only the default station it falls through to", async () => {
       const { el } = await mount();
-      expect(extraNote(el, "p:bread", "every")).toBe(DEFAULT_NOTE);
-      expect(name(el, "p:bread", "every")).toBe(
-        `Bread, Every zone: Kitchen, inherited. ${DEFAULT_NOTE}`,
-      );
+      expect(text(el, "p:bread", "every")).toBe("Kitchen");
+      expect(name(el, "p:bread", "every")).toBe("Bread, Every zone: Kitchen, inherited");
     });
 
-    it("the All categories × Every zone cell, which sets the default, carries the default note", async () => {
+    it("a No preparation cell, its own or inherited, shows and names only No preparation", async () => {
       const { el } = await mount();
-      expect(extraNote(el, "all", "every")).toBe(DEFAULT_NOTE);
-      expect(name(el, "all", "every")).toBe(
-        `All categories, Every zone: Kitchen, the default station. ${DEFAULT_NOTE}`,
-      );
-
-      const readOnly = await mount(routing({ canMakeDefault: false }));
-      expect(extraNote(readOnly.el, "all", "every")).toBe(DEFAULT_NOTE);
-      expect(cell(readOnly.el, "all", "every").textContent!.replace(/\s+/g, " ").trim()).toBe(
-        `Kitchen ${DEFAULT_NOTE} Only someone who can configure the venue can change the default station.`,
-      );
+      expect(text(el, "all", "terrace")).toBe("No preparation");
+      expect(name(el, "all", "terrace")).toBe("All categories, Terrace: No preparation, set here");
+      expect(text(el, "p:bread", "terrace")).toBe("No preparation");
+      expect(name(el, "p:bread", "terrace")).toBe("Bread, Terrace: No preparation, inherited");
     });
 
-    it("a cell whose choice, inherited or its own, is No preparation carries the No preparation note", async () => {
-      const { el } = await mount();
-      expect(extraNote(el, "p:bread", "terrace")).toBe(NO_PREP_NOTE);
-      expect(name(el, "p:bread", "terrace")).toBe(
-        `Bread, Terrace: No preparation, inherited. ${NO_PREP_NOTE}`,
-      );
-      expect(extraNote(el, "all", "terrace")).toBe(NO_PREP_NOTE);
-      expect(name(el, "all", "terrace")).toBe(
-        `All categories, Terrace: No preparation, set here. ${NO_PREP_NOTE}`,
-      );
-    });
-
-    it("a cell that names a station, even the default one, carries no note", async () => {
+    it("a product row storing its own station shows and names only that station", async () => {
       const { el } = await mount();
       root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
       await el.updateComplete;
-      expect(extraNote(el, "p:burger", "every")).toBeNull();
+      expect(text(el, "p:burger", "every")).toBe("Kitchen");
       expect(name(el, "p:burger", "every")).toBe("Food › Burger, Every zone: Kitchen, set here");
-      // Inheriting Kitchen from a cell that names it is not falling through to the default.
-      expect(extraNote(el, "p:burger", "terrace")).toBeNull();
-      expect(extraNote(el, "c:drinks", "every")).toBeNull();
-      expect(extraNote(el, "p:cola", "terrace")).toBeNull();
     });
 
-    it("a pending choice decides the note until it settles", async () => {
-      const address: CellAddress = { row: { kind: "product", productId: "bread" }, zoneId: null };
-      const { el } = await mount(routing(), { pending: { address, target: station("kitchen") } });
-      expect(extraNote(el, "p:bread", "every")).toBeNull();
-      el.pending = { address, target: NO_PREP };
-      await el.updateComplete;
-      expect(extraNote(el, "p:bread", "every")).toBe(NO_PREP_NOTE);
-      el.pending = null;
-      await el.updateComplete;
-      expect(extraNote(el, "p:bread", "every")).toBe(DEFAULT_NOTE);
+    it("the All categories × Every zone cell shows only the default station, editable or not", async () => {
+      const { el } = await mount();
+      expect(text(el, "all", "every")).toBe("Kitchen");
+      expect(name(el, "all", "every")).toBe(
+        "All categories, Every zone: Kitchen, the default station",
+      );
+
+      const readOnly = await mount(routing({ canMakeDefault: false }));
+      expect(text(readOnly.el, "all", "every")).toBe(
+        "Kitchen Only someone who can configure the venue can change the default station.",
+      );
     });
 
-    it("with no active default station, an empty cell has no station to name and no note", async () => {
-      const { el } = await mount(routing({ defaultStationId: null }));
-      expect(extraNote(el, "p:bread", "every")).toBeNull();
-      expect(extraNote(el, "all", "every")).toBeNull();
-    });
-
-    it("says it in Spanish", async () => {
+    it("says none of it in Spanish either", async () => {
       setLocale("es");
       const { el } = await mount();
-      expect(extraNote(el, "p:bread", "every")).toBe(
-        "Kitchen (predeterminada) — como extra, sigue a su plato",
-      );
-      expect(extraNote(el, "p:bread", "terrace")).toBe(
-        "Sin preparación — como extra, sigue a su plato",
-      );
-      expect(name(el, "p:bread", "terrace")).toBe(
-        "Bread, Terrace: Sin preparación, heredado. Sin preparación — como extra, sigue a su plato",
-      );
+      expect(text(el, "p:bread", "terrace")).toBe("Sin preparación");
+      expect(name(el, "p:bread", "terrace")).toBe("Bread, Terrace: Sin preparación, heredado");
+      expect(name(el, "p:bread", "every")).toBe("Bread, Todas las zonas: Kitchen, heredado");
     });
   });
 
@@ -967,7 +927,7 @@ describe("venue-routing-grid", () => {
     const lines = (el: RoutingGrid, row: string, zone: string) =>
       [...combo(el, row, zone)!.querySelectorAll(".line")].map((line) => line.textContent!.trim());
 
-    it("draws the station, its period lines beneath and its extras note, and names all three", async () => {
+    it("draws the station and its period lines beneath, and names both", async () => {
       const model = {
         ...timed(),
         cells: [
@@ -990,11 +950,11 @@ describe("venue-routing-grid", () => {
       );
       const bread = combo(el, "p:bread", "terrace")!;
       expect(lines(el, "p:bread", "terrace")).toEqual(["Staff lunch: Bar"]);
-      expect(bread.querySelector('[data-test="extra-note"]')!.textContent!.trim()).toBe(
-        "No preparation — as an extra, follows its dish",
+      expect(bread.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        "No preparation Staff lunch: Bar",
       );
       expect(bread.getAttribute("aria-label")).toBe(
-        "Bread, Terrace: No preparation, set here. Staff lunch: Bar. No preparation — as an extra, follows its dish",
+        "Bread, Terrace: No preparation, set here. Staff lunch: Bar",
       );
       // Inherited: italic, with the lines of the cell that decides it.
       root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
@@ -1007,6 +967,97 @@ describe("venue-routing-grid", () => {
       expect(cola.getAttribute("aria-label")).toBe(
         "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
       );
+    });
+
+    describe("a stored line whose period's menus no longer offer the row", () => {
+      /** Drinks × Every zone stores Lunch and Staff lunch, each to its own station unless `shared`. */
+      const flagged = (notOffered: string[], shared = false) => ({
+        ...timed(),
+        cells: timed().cells.map((stored) =>
+          cellKey(stored) === cellKey(drinks)
+            ? {
+                ...stored,
+                periods: [
+                  { periodId: "lunch", target: station("kitchen") },
+                  { periodId: "staff", target: station(shared ? "kitchen" : "bar") },
+                ].map((line) =>
+                  notOffered.includes(line.periodId)
+                    ? { ...line, notOffered: true as const }
+                    : line,
+                ),
+              }
+            : stored,
+        ),
+      });
+      /** The button's lines and marks, in the order drawn. */
+      const drawn = (el: RoutingGrid, row: string, zone: string) =>
+        [...combo(el, row, zone)!.querySelectorAll(".line, [data-test='period-flag']")].map(
+          (node) => `${node.matches(".line") ? "line" : "flag"}: ${node.textContent!.trim()}`,
+        );
+
+      it("draws the mark under its own line in the warning colour, and names it after that line", async () => {
+        const { el } = await mount(flagged(["lunch"]));
+        expect(drawn(el, "c:drinks", "every")).toEqual([
+          "line: Lunch: Kitchen",
+          "flag: Not on Lunch menus",
+          "line: Staff lunch: Bar",
+        ]);
+        const own = combo(el, "c:drinks", "every")!;
+        expect(own.getAttribute("aria-label")).toBe(
+          "Drinks, Every zone: Bar, set here. Lunch: Kitchen. Not on Lunch menus. Staff lunch: Bar",
+        );
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-warning)";
+        el.parentElement!.append(probe);
+        const mark = own.querySelector("[data-test='period-flag']")!;
+        expect(getComputedStyle(mark).color).toBe(getComputedStyle(probe).color);
+        expect(getComputedStyle(mark).color).not.toBe(getComputedStyle(own).color);
+        probe.remove();
+      });
+
+      it("names both flagged periods of one line in one mark", async () => {
+        const { el } = await mount(flagged(["lunch", "staff"], true));
+        expect(drawn(el, "c:drinks", "every")).toEqual([
+          "line: Lunch, Staff lunch: Kitchen",
+          "flag: Not on Lunch, Staff lunch menus",
+        ]);
+      });
+
+      it("draws no mark where the menus still offer the line, nor under a line a child inherits", async () => {
+        const { el } = await mount(flagged([]));
+        expect(drawn(el, "c:drinks", "every")).toEqual([
+          "line: Lunch: Kitchen",
+          "line: Staff lunch: Bar",
+        ]);
+        el.model = flagged(["lunch"]);
+        root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+        await el.updateComplete;
+        expect(drawn(el, "p:cola", "every")).toEqual([
+          "line: Lunch: Kitchen",
+          "line: Staff lunch: Bar",
+        ]);
+        expect(combo(el, "p:cola", "every")!.getAttribute("aria-label")).toBe(
+          "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen. Staff lunch: Bar",
+        );
+      });
+
+      it("hands the mark to the editor opened on that cell, which notes it under the line", async () => {
+        const { el } = await mount(flagged(["lunch"]));
+        const editor = await openEditor(el, combo(el, "c:drinks", "every")!);
+        const notes = [...editor.shadowRoot!.querySelectorAll("[data-test=period-line]")].map(
+          (line) => line.querySelector("[data-test=period-flag]")?.textContent?.trim() ?? null,
+        );
+        expect(notes).toEqual(["Not on Lunch menus", null]);
+      });
+
+      it("says the mark in Spanish", async () => {
+        setLocale("es");
+        const { el } = await mount(flagged(["lunch"]));
+        expect(drawn(el, "c:drinks", "every")[1]).toBe("flag: No está en los menús de Lunch");
+        expect(combo(el, "c:drinks", "every")!.getAttribute("aria-label")).toContain(
+          "Lunch: Kitchen. No está en los menús de Lunch. Staff lunch: Bar",
+        );
+      });
     });
 
     it("opens the editor with the cell's place, choice, lines, products and zone department", async () => {

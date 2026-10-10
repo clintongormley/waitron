@@ -1,4 +1,5 @@
-import { afterEach, describe, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -80,15 +81,26 @@ const storedOnlyNoCategory = routing({
   ],
 });
 
-/** Bread × Every zone falls through to the default; Bread × Terrace inherits No preparation;
- * Mojito × Every zone names the default station itself. */
-const extrasNotes = routing({
-  cells: [
-    ...routing().cells,
+/** Drinks × Every zone stores a Lunch line Lunch's menus no longer offer; Mojito inherits it. */
+const flaggedLine = routing({
+  periods: [
     {
-      row: { kind: "product", productId: "mojito" },
+      id: "lunch",
+      departmentId: "dining",
+      departmentName: "Dining",
+      name: "Lunch",
+      colour: "blue",
+      productIds: [],
+    },
+  ],
+  cells: [
+    {
+      row: { kind: "category", categoryId: "drinks" },
       zoneId: null,
-      target: { kind: "station", stationId: "kitchen" },
+      target: { kind: "station", stationId: "bar" },
+      periods: [
+        { periodId: "lunch", target: { kind: "station", stationId: "kitchen" }, notOffered: true },
+      ],
     },
   ],
 });
@@ -100,23 +112,17 @@ const states: Record<
     expand?: boolean;
     open?: string;
     refusal?: RoutingGrid["refusal"];
-    /** Cells and whether each must carry the extras note before the scan. */
-    notes?: Record<string, boolean>;
+    /** Cells and whether each must carry a period line's not-on-menus mark before the scan. */
+    flags?: Record<string, boolean>;
   }
 > = {
-  "extras notes": {
-    model: extrasNotes,
+  "flagged period line": {
+    model: flaggedLine,
     expand: true,
-    notes: {
-      'td[data-row="p:bread"][data-zone="every"]': true,
-      'td[data-row="all"][data-zone="every"]': true,
-      'td[data-row="p:bread"][data-zone="terrace"]': true,
+    flags: {
+      'td[data-row="c:drinks"][data-zone="every"]': true,
       'td[data-row="p:mojito"][data-zone="every"]': false,
     },
-  },
-  "extras notes, read-only default": {
-    model: routing({ canMakeDefault: false }),
-    notes: { 'td[data-row="all"][data-zone="every"]': true },
   },
   collapsed: { model: routing() },
   expanded: { model: routing(), expand: true },
@@ -169,11 +175,55 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       });
       await el.shadowRoot!.querySelector("routing-cell-editor")!.updateComplete;
     }
-    for (const [selector, carries] of Object.entries(state.notes ?? {})) {
-      const note = el.shadowRoot!.querySelector(`${selector} [data-test="extra-note"]`);
-      if ((note !== null) !== carries)
-        throw new Error(`${selector}: extras note ${carries ? "missing" : "unexpected"}`);
+    for (const [selector, carries] of Object.entries(state.flags ?? {})) {
+      const flag = el.shadowRoot!.querySelector(`${selector} [data-test="period-flag"]`);
+      if ((flag !== null) !== carries)
+        throw new Error(`${selector}: not-on-menus mark ${carries ? "missing" : "unexpected"}`);
     }
     await expectNoA11yViolations(host);
+  });
+});
+
+// axe is not asked about a hovered cell, so its small coloured text is measured here.
+function contrastRatio(a: string, b: string): number {
+  const luminance = (rgb: string) => {
+    expect(rgb).toMatch(/^rgba?\(/);
+    const [r, g, bl] = rgb
+      .match(/\d+(\.\d+)?/g)!
+      .slice(0, 3)
+      .map((part) => Number(part) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
+describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme) => {
+  test.each([
+    [
+      "the not-on-menus mark",
+      'td[data-row="c:drinks"][data-zone="every"]',
+      '[data-test="period-flag"]',
+    ],
+    ["an inherited line", 'td[data-row="p:mojito"][data-zone="every"]', ".line.inherited"],
+  ])("keeps %s at 4.5:1 against the hover", async (_, cellSelector, textSelector) => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model: flaggedLine });
+    host.append(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await el.updateComplete;
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      `${cellSelector} button[data-test="routing-cell"]`,
+    )!;
+    const text = cell.querySelector(textSelector)!;
+    const atRest = getComputedStyle(cell).backgroundColor;
+    await userEvent.hover(cell);
+    expect(cell.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(cell).backgroundColor;
+    expect(hovered).not.toBe(atRest);
+    expect(contrastRatio(getComputedStyle(text).color, hovered)).toBeGreaterThanOrEqual(4.5);
   });
 });

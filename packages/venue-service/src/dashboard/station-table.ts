@@ -45,7 +45,7 @@ export class StationTable extends LitElement {
   @property({ attribute: false }) today: Readonly<Record<string, string | TemplateResult>> = {};
   @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
-  /** Each station's printers and screens, or none at all for a person who may not read them. */
+  /** Each station's printers and screens. */
   @property({ attribute: false }) outputs?: Readonly<
     Record<string, { printedOn: string | TemplateResult; shownOn: string | TemplateResult }>
   >;

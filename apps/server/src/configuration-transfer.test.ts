@@ -112,6 +112,7 @@ import {
   saveSpecialDate,
   saveMenuPeriod,
   replaceMenuWeek,
+  routingModel,
   setProfileServiceAccess,
   setRoutingCell,
   setStationToday,
@@ -3966,7 +3967,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     "a strong passphrase",
   );
   expect(decoded.tables.routing_cell_periods).toHaveLength(2);
-  await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
+  const target = await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx, result) =>
@@ -3979,7 +3980,8 @@ it("carries a cell's period choices with their cell, including a period whose me
       ),
   });
   const choices = await targetSuite.db.execute<Record<string, unknown>>(sql`
-    select x.cell_id, x.period_id, x.department_id, c.product_id is not null as product_cell,
+    select x.cell_id, x.period_id, x.department_id, x.station_id,
+      c.product_id is not null as product_cell,
       z.name as zone, p.name as period, d.name as department, s.name as station, x.no_preparation
     from routing_cell_periods x
     join routing_cells c on c.id = x.cell_id
@@ -4018,6 +4020,41 @@ it("carries a cell's period choices with their cell, including a period whose me
   for (const row of choices.rows)
     for (const id of [row.cell_id, row.period_id, row.department_id])
       expect(sourceIds).not.toContain(id);
+  const model = await withTransaction(targetSuite.db, (tx) =>
+    routingModel(
+      tx,
+      { locationId: brandLocationId(target.locationId) },
+      new Date("2026-10-09T10:00:00Z"),
+    ),
+  );
+  const [productLine, categoryLine] = choices.rows;
+  expect(
+    model.cells
+      .filter((cell) => cell.periods !== undefined)
+      .map(({ row, periods }) => ({ kind: row.kind, periods }))
+      .sort((a, b) => b.kind.localeCompare(a.kind)),
+  ).toStrictEqual([
+    {
+      kind: "product",
+      periods: [
+        {
+          periodId: productLine!.period_id,
+          target: { kind: "station", stationId: productLine!.station_id },
+          notOffered: true,
+        },
+      ],
+    },
+    {
+      kind: "category",
+      periods: [
+        {
+          periodId: categoryLine!.period_id,
+          target: { kind: "no_preparation" },
+          notOffered: true,
+        },
+      ],
+    },
+  ]);
 });
 
 describe("opening hours in a configuration transfer", () => {

@@ -1740,16 +1740,14 @@ it.each([
   {
     locale: "en",
     heading: "Category or product",
-    field:
-      "All categories, Every zone: Bar, the default station. Bar (default) — as an extra, follows its dish",
+    field: "All categories, Every zone: Bar, the default station",
     disable: "Disable",
     enable: "Enable",
   },
   {
     locale: "es",
     heading: "Categoría o producto",
-    field:
-      "Todas las categorías, Todas las zonas: Bar, la estación predeterminada. Bar (predeterminada) — como extra, sigue a su plato",
+    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
     disable: "Deshabilitar",
     enable: "Habilitar",
   },
@@ -3727,41 +3725,8 @@ it("Watchers keeps a conflict while another selected printer still serves a stat
   expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next", "old"]);
 });
 
-it("a supervisor sees the stations read-only", async () => {
-  const liveData = new LiveData();
-  const a = api({
-    liveData,
-    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-  });
-  expect("readStationHealth" in a).toBe(false);
-  const host = document.createElement("div");
-  applyTokens(host);
-  document.body.append(host);
-  hosts.push(host);
-  const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-  el.api = a;
-  el.readOnly = true;
-  host.append(el);
-  await settle(el);
-  expect(q(el, '[data-test="new-station"]')).toBeNull();
-  expect(q(el, '[data-test="new-watcher"]')).toBeNull();
-  expect(q(el, '[data-test="interim-station-hours"]')).toBeNull();
-  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-  await tabs.updateComplete;
-  expect(tabs.shadowRoot!.querySelectorAll('[role="tab"]')).toHaveLength(1);
-  const summary = stationTable(el)!;
-  expect(summary.textContent).toContain("Upstairs bar");
-  expect(summary.textContent).toContain("Open now");
-  expect(summary.querySelector("wt-row-actions")).toBeNull();
-  expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
-  expect(summary.querySelector("[data-station-id]")).toBeNull();
-  expect(summary.querySelector('[part~="number"]')).toBeNull();
-  expect(stationHeadings(el)).toEqual(["Name", "Today"]);
-  expect(a.updateStation).not.toHaveBeenCalled();
-});
-
 it.each(["en", "es"] as const)(
-  "a manager's Stations table reads Printed on and Shown on, and a supervisor's reads neither (%s)",
+  "a manager's Stations table reads Printed on and Shown on (%s)",
   async (locale) => {
     setLocale(locale);
     const manager = await mountStations();
@@ -3776,21 +3741,6 @@ it.each(["en", "es"] as const)(
     );
     expect(q(manager.el, '[data-test="screens-bar"]')!.textContent).toContain("Bar screen");
     expect(q(manager.el, '[data-test="screens-upstairs"]')!.textContent).toContain("Other screen");
-    const host = document.createElement("div");
-    applyTokens(host);
-    document.body.append(host);
-    hosts.push(host);
-    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-    el.api = api({ load: vi.fn().mockResolvedValue(ticketView) });
-    el.readOnly = true;
-    host.append(el);
-    await settle(el);
-    expect(stationTable(el)!.textContent).toContain("Upstairs bar");
-    expect(stationHeadings(el)).toEqual(locale === "en" ? ["Name", "Today"] : ["Nombre", "Hoy"]);
-    expect(q(el, '[data-test^="printed-on-"]')).toBeNull();
-    expect(q(el, '[data-test^="screens-"]')).toBeNull();
-    expect(stationTable(el)!.textContent).not.toContain("Old printer");
-    expect(stationTable(el)!.textContent).not.toContain("Bar screen");
   },
 );
 
@@ -3806,23 +3756,6 @@ it("an old Tickets address opens Stations and rewrites the address", async () =>
   expect(el.shadowRoot!.querySelector('[slot="tickets"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="tickets-table"]')).toBeNull();
   expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
-});
-
-it("moves a configuration panel back to the overview when the screen becomes read-only", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/settings/test/bread");
-  const a = api();
-  const el = await mount(a);
-  expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
-    "settings",
-  );
-  el.readOnly = true;
-  await settle(el);
-  expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
-    "stations",
-  );
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
-  expect(q(el, '[data-test="settings-table"]')).toBeNull();
-  expect(q(el, '[data-test="new-station"]')).toBeNull();
 });
 
 it.each([

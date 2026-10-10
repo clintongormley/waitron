@@ -536,17 +536,22 @@ owner may override any when reviewing the plan.
     already stores in the line that holds its stored target; if that line's station changes, the
     server's `not_offered` refusal shows under the line. Override: check every period in the
     request, so a stale line must be removed before the cell can be saved.
+    _Owner override 2026-10-09: save, but flag it — the check stays as above, and a stored line
+    whose period's menus no longer offer the row is marked "Not on … menus"; built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 30. **The new refusal is a reason, not a new code.** _Added 2026-10-09, not yet answered._
     `route.period_invalid` gains `reason: "not_offered"`, beside its other two, as the house's
     siblings carry a `reason` union under one code (`station.destination_invalid`,
     `errors.ts:94-98`; `device_profile.access_invalid`, `:101-118`, N). It names `periodId`, so the
     editor puts it under that period's line. Override: a separate code, `route.period_not_offered
     { periodId }`.
+    _Owner 2026-10-09: the default stands._
 31. **The configuration import does not apply the menu check.** _Added 2026-10-09, not yet
     answered._ An export can hold a line whose period's menus changed after it was saved, which
     decision 29 keeps valid, so refusing it on import would make a good export unimportable. The
     import still refuses the rows decision 10 lists otherwise (Task A3). Override: refuse such a
     row on import as well.
+    _Owner 2026-10-09: the default stands; an imported line its period's menus no longer offer
+    shows decision 29's mark, built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 32. **What goes with the tester.** _Added 2026-10-09, not yet answered._ The route `GET
     /management-api/venue-service/routing/explain` (`routes.ts:442-478`, N) answers 404;
     `explainRoute` and `ExplainWhen` (`routing-store.ts:332-426`, N), `RouteExplanation` and
@@ -569,6 +574,7 @@ owner may override any when reviewing the plan.
     (`/manage/prep-stations/view/routing/test/<id>`) opens the tab its `view` names, else Stations:
     the URL controller ignores a segment its config does not name (`packages/ui/src/url-state.ts:58-75`,
     N) and drops it at its next write. Override: keep the route for a later tool.
+    _Owner 2026-10-09: nothing to build — no old tester links exist ([A455](2026-10-10-a455-prep-stations-owner-answers.md))._
 33. **The extras note belongs to the cell's plain choice.** _Added 2026-10-09, not yet answered._
     Spec §9.3: an empty cell (nothing set at it or above it, so it falls through to the default
     station) shows "{station} (default) — as an extra, follows its dish", and a No preparation
@@ -581,6 +587,7 @@ owner may override any when reviewing the plan.
     every empty cell falls through to. It is built with the tester's removal (Task A3d), so no
     commit leaves the grid without what only the tester showed. Override: also note a No
     preparation period line; leave the default cell without the note.
+    _Owner override 2026-10-09: no note; the note is removed in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 34. **The printer-down and dark-screen notes leave the Stations tab too.** _Added 2026-10-09, not
     yet answered._ They come from the same live read (`#name`, `station-health-table.ts:114-130`,
     N) and are live state, which spec §9 keeps off these pages. The dashboard still raises both as
@@ -593,6 +600,7 @@ owner may override any when reviewing the plan.
     (`listOutputsDown`, `routing-client.ts:274-278`, N) but nothing calls. This slice does not
     remove that route or method — the owner asked for the read only the Stations tab used, and
     this one it never used; Task A13 records them as a backlog entry instead.
+    _Owner 2026-10-09: the default stands._
 35. **A supervisor still gets the page, read-only.** _Added 2026-10-09, not yet answered._ The
     page is offered to `venue.view` read-only (`readPermission: "venue.view"`,
     `packages/venue-service/src/dashboard/index.ts:38-39`, N), as Opening hours and the Station
@@ -607,12 +615,15 @@ owner may override any when reviewing the plan.
     `printer.manage` and `device.manage` (`print-api.ts:898-901`, `device-api.ts:106`, `:164-170`,
     N). This keeps the existing permission pattern and adds no read. Override: stop offering the
     page to `venue.view` (remove its `readPermission`).
+    _Owner override 2026-10-09: hide the page — it is offered only with `venue_service.manage`, and
+    the read-only overview route is gone; built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 36. **The table is renamed for what it shows.** _Added 2026-10-09, not yet answered._ With no
     health in it, `prep-station-health-table` in `dashboard/station-health-table.ts` would misname
     itself, so it becomes `prep-station-table` in `dashboard/station-table.ts` (`git mv`, with its
     tests), as Task A11c's first, mechanical commit; selectors in other suites and the
     `healthRow` helper (`prep-stations-screen.test.ts:1260`, N) follow in the same commit, which
     changes no assertion. Override: keep the name.
+    _Owner 2026-10-09: the default stands._
 37. **Closing with open dishes asks once.** _Added 2026-10-09 to carry out the owner's change to
     decisions 22–24, not yet answered; Part B designs it after re-grounding._ "Close for today" on
     a station with open dishes keeps one dialog: the person picks one station (the default
@@ -622,6 +633,7 @@ owner may override any when reviewing the plan.
     whether the open dishes go to a station the person picks or stay to finish; NEW dishes go to
     the default station, because a switched-off station stores no destination (decision 22).
     Override: two separate questions, one for open dishes and one for new dishes.
+    _Owner 2026-10-09: the default stands._
 
 ## Where the code differs from what the spec assumes
 
@@ -813,10 +825,12 @@ The conditions most likely to bite a person that no single task's happy path exe
    old `/test/<id>` link opens a tab without error; an empty cell and a No preparation cell say how
    an extra is made, a cell naming the default station does not; every routing behaviour an
    `explainRoute` case pinned is still pinned through the routing reads (Tasks A3b–A3d).
+   _(2026-10-09: no cell says how an extra is made — decision 33, A455.)_
 7. **The Stations tab is configuration only.** No Waiting, Preparing, Ready, Late or Oldest, no
    drill-down and no printer-down note; `GET /management-api/stations/health` answers 404; a
    supervisor still opens Prep stations and sees the station list read-only, and a manager's
    station reorder still works with rows from the stations list (Tasks A11b, A11d).
+   _(2026-10-09: a supervisor is not offered Prep stations — decision 35, A455.)_
 8. **Without hours, nothing is dropped.** In Part B: a station closed for today with no recorded
    destination sends work to the default station; a switched-off station's work goes to the
    default station; a held Lunch dish sent after its station's worked-out times goes to that
@@ -1019,6 +1033,8 @@ screen's next URL write.
 ---
 
 ### Task A3d: Empty and No preparation cells say how extras are made
+
+_(2026-10-09: removed by the owner's answer to decision 33, A455.)_
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/routing-grid.ts` (the cell `:361-378`, N, and
