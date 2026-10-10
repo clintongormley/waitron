@@ -180,8 +180,10 @@ hand-keyed payment recorded on it. A card on a reader also has its bill payment 
 named, refuses one the device no longer holds (`assertReaderStartable`, `reader.not_held`), and
 `takeReaderBillPayment` then fails the bill payment. Disable and Delete both release the device's
 reader holds (`releaseDevice`, `apps/server/src/device-equipment.ts:105`). A start that names no
-reader passes that check. Re-read the device's `active` inside `beginBillPayment`. Left open by A435
-step 4.
+reader passes that check. Re-read the device's `active` and the operator's open session inside
+`beginBillPayment`, as `PUT /api/device/equipment` does (`apps/server/src/device-api.ts`): an `active`
+check alone misses a sign-out, or a Disable followed by a re-pair, landing between the two
+transactions. Left open by A435 step 4.
 
 ## Decisions and deliberate limits
 

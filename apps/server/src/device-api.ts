@@ -349,7 +349,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const { device, sessionId } = await requireSession({ db: deps.db }, c);
       const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
       const equipment = await withTransaction(deps.db, async (tx) => {
-        // A Delete, Disable or sign-out may have committed since requireSession's own transaction.
+        // The device and the session may both have changed since requireSession's own transaction.
         await assertDeviceStillProven(tx, { device, tokenHash: null });
         const [open] = await tx
           .select({ id: sessions.id })
