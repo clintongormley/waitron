@@ -17,7 +17,6 @@ import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { stationPrinters } from "./station-printers.js";
 import { locations } from "./tenants.js";
-import { watchers, watcherStations } from "./watchers.js";
 
 async function migrateThroughTiming(db: Database, includeTiming: boolean): Promise<void> {
   const staged = mkdtempSync(join(tmpdir(), "wt-timing-upgrade-"));
@@ -74,12 +73,15 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
   await db.run(sql`insert into printers (id, location_id, name, transport, local_key)
     values (${printerId}, ${locationId}, 'Grill printer', 'usb', 'grill-fixture')`);
   await db.insert(stationPrinters).values({ stationId, printerId });
-  const [watcher] = await db.insert(watchers).values({ locationId, name: "Pass" }).returning();
-  await db.insert(watcherStations).values({ watcherId: watcher!.id, stationId });
-  // By hand: the table definitions name `device_profiles` and `devices` columns later migrations
-  // add, which this schema does not have yet.
-  const profileId = randomUUID();
+  // By hand: no schema object names `watchers` or `watcher_stations` any more, and the table
+  // definitions name `device_profiles` and `devices` columns later migrations add.
   const now = new Date().toISOString();
+  const watcherId = randomUUID();
+  await db.run(sql`insert into watchers (id, location_id, name, created_at)
+    values (${watcherId}, ${locationId}, 'Pass', ${now})`);
+  await db.run(sql`insert into watcher_stations (watcher_id, station_id)
+    values (${watcherId}, ${stationId})`);
+  const profileId = randomUUID();
   await db.run(sql`insert into device_profiles (id, name, form_factor, capabilities, created_at, updated_at)
     values (${profileId}, 'Till', 'till', '[]', ${now}, ${now})`);
   const deviceId = randomUUID();

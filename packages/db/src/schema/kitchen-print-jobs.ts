@@ -9,8 +9,8 @@ import { printJobs } from "./print-jobs.js";
  * written by `enqueueKitchenTickets` and `reprintOrderTickets`
  * (`apps/server/src/kitchen-print.ts`), written again by `moveKitchenPrintLinks` there when a merge
  * carries a bill's tickets onto another, and copied by `copyKitchenPrintLinks` there onto a bill
- * some of its dishes move to, so one job can be linked to several bills. A watcher's copy has no
- * station link. A job no kitchen ticket made (a receipt, a correction slip, a drawer pulse) has none.
+ * some of its dishes move to, so one job can be linked to several bills. A job no kitchen ticket made
+ * (a receipt, a correction slip, a drawer pulse) has none.
  */
 export const kitchenPrintJobs = table(
   "kitchen_print_jobs",

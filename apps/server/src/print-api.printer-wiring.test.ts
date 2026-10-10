@@ -13,8 +13,6 @@ import {
   printJobs,
   printers,
   stationPrinters,
-  watcherPrinters,
-  watchers,
   tenants,
   withTransaction,
   installChangeFeed,
@@ -902,7 +900,7 @@ describe("station printer selection replacement", () => {
     ).toEqual([{ stationId: second, printerId: f.next }]);
   });
 
-  it.each(["missing", "disabled", "watcher"])(
+  it.each(["missing", "disabled"])(
     "rolls back the whole selection for a %s printer",
     async (kind) => {
       const f = await fixture();
@@ -914,27 +912,14 @@ describe("station printer selection replacement", () => {
           `Disabled ${randomUUID()}`,
         );
         await suite.db.update(printers).set({ active: false }).where(eq(printers.id, refused));
-      } else if (kind === "watcher") {
-        refused = await createPrinter(
-          f.app,
-          (await joinAndAccept(f.app, `Watcher agent ${randomUUID()}`)).agentId,
-          `Watcher printer ${randomUUID()}`,
-        );
-        const [watcher] = await suite.db
-          .insert(watchers)
-          .values({ locationId: tenantA.locationId, name: `Watcher ${randomUUID()}` })
-          .returning();
-        await suite.db
-          .insert(watcherPrinters)
-          .values({ printerId: refused, watcherId: watcher!.id });
       }
       const response = await send(f.app, "PUT", f.path, {
         cookie: managerCookie,
         body: { printerIds: [f.next, refused] },
       });
-      expect(response.status).toBe(kind === "watcher" ? 409 : 404);
+      expect(response.status).toBe(404);
       expect(await response.json()).toMatchObject({
-        error: { code: kind === "watcher" ? "printer.makes_and_watches" : "printer.not_found" },
+        error: { code: "printer.not_found" },
       });
       expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
     },
@@ -997,164 +982,5 @@ describe("station printer selection replacement", () => {
       expect(await response.json()).toMatchObject({ error: { code } });
       expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
     }
-  });
-});
-
-describe("watcher printer selection", () => {
-  async function seedSelection() {
-    const [watcher, other] = await suite.db
-      .insert(watchers)
-      .values([
-        { locationId: tenantA.locationId, name: `Selection ${randomUUID()}` },
-        { locationId: tenantA.locationId, name: `Other ${randomUUID()}` },
-      ])
-      .returning({ id: watchers.id });
-    const rows = await suite.db
-      .insert(printers)
-      .values(
-        ["Old", "New", "Moved", "Blocked", "Disabled"].map((name) => ({
-          locationId: tenantA.locationId,
-          name: `${name} ${randomUUID()}`,
-          transport: "network_tcp" as const,
-          host: "10.0.0.8",
-          active: name !== "Disabled",
-        })),
-      )
-      .returning({ id: printers.id });
-    const [old, fresh, moved, blocked, disabled] = rows.map((row) => row.id);
-    const [station] = await suite.db
-      .insert(kitchenStations)
-      .values({
-        locationId: tenantA.locationId,
-        name: `Selection ${randomUUID()}`,
-      })
-      .returning({ id: kitchenStations.id });
-    await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: blocked! });
-    await suite.db.insert(watcherPrinters).values([
-      { watcherId: watcher!.id, printerId: old! },
-      { watcherId: other!.id, printerId: moved! },
-    ]);
-    return {
-      watcherId: watcher!.id,
-      otherId: other!.id,
-      old: old!,
-      fresh: fresh!,
-      moved: moved!,
-      blocked: blocked!,
-      disabled: disabled!,
-    };
-  }
-  async function selected(watcherId: string) {
-    const rows = await suite.db
-      .select({ id: watcherPrinters.printerId })
-      .from(watcherPrinters)
-      .where(eq(watcherPrinters.watcherId, watcherId));
-    return rows.map((row) => row.id).sort();
-  }
-  async function save(watcherId: string, printerIds: unknown, cookie = managerCookie) {
-    return send(mountApp(tenantA), "PUT", `/management-api/watchers/${watcherId}/printers`, {
-      cookie,
-      body: { printerIds },
-    });
-  }
-  it("replaces the complete watcher printer set and moves a printer from another watcher", async () => {
-    const v = await seedSelection();
-    expect((await save(v.watcherId, [v.fresh, v.moved])).status).toBe(204);
-    expect(await selected(v.watcherId)).toEqual([v.fresh, v.moved].sort());
-    expect(await selected(v.otherId)).toEqual([]);
-    expect((await save(v.watcherId, [])).status).toBe(204);
-    expect(await selected(v.watcherId)).toEqual([]);
-  });
-  for (const kind of ["blocked", "disabled", "missing"] as const) {
-    it(`rolls back a partial watcher printer move when the ${kind} printer is refused`, async () => {
-      const v = await seedSelection();
-      const bad = kind === "missing" ? randomUUID() : v[kind];
-      const response = await save(v.watcherId, [v.fresh, v.moved, bad]);
-      expect(response.status).toBe(kind === "blocked" ? 409 : 404);
-      expect(await response.json()).toMatchObject({
-        error: {
-          code: kind === "blocked" ? "printer.makes_and_watches" : "printer.not_found",
-          params: { id: bad },
-        },
-      });
-      expect(await selected(v.watcherId)).toEqual([v.old]);
-      expect(await selected(v.otherId)).toEqual([v.moved]);
-    });
-  }
-  it("retains and can clear a disabled printer that was already selected", async () => {
-    const v = await seedSelection();
-    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, v.old));
-    expect((await save(v.watcherId, [v.old, v.fresh])).status).toBe(204);
-    expect(await selected(v.watcherId)).toEqual([v.old, v.fresh].sort());
-    expect((await save(v.watcherId, [v.fresh])).status).toBe(204);
-    expect(await selected(v.watcherId)).toEqual([v.fresh]);
-  });
-  it("refuses a disabled or foreign-location watcher before moving any printer", async () => {
-    const v = await seedSelection();
-    const [foreignLocation] = await suite.db
-      .insert(locations)
-      .values({
-        name: `Other ${randomUUID()}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Test",
-      })
-      .returning({ id: locations.id });
-    const [foreign] = await suite.db
-      .insert(watchers)
-      .values({
-        locationId: foreignLocation!.id,
-        name: `Foreign ${randomUUID()}`,
-      })
-      .returning({ id: watchers.id });
-    await suite.db.update(watchers).set({ active: false }).where(eq(watchers.id, v.watcherId));
-    for (const id of [v.watcherId, foreign!.id, randomUUID()]) {
-      const response = await save(id, [v.moved]);
-      expect(response.status).toBe(404);
-      expect(await response.json()).toMatchObject({
-        error: { code: "watcher.not_found", params: { watcherId: id } },
-      });
-      expect(await selected(v.otherId)).toEqual([v.moved]);
-      const cleared = await save(id, []);
-      expect(cleared.status).toBe(404);
-      expect(await cleared.json()).toMatchObject({
-        error: { code: "watcher.not_found", params: { watcherId: id } },
-      });
-    }
-    expect(await selected(v.watcherId)).toEqual([v.old]);
-  });
-  for (const value of [null, "printer", [42], ["not-a-uuid"], undefined] as const) {
-    it(`refuses malformed watcher printer selection ${JSON.stringify(value)}`, async () => {
-      const v = await seedSelection();
-      const response = await save(v.watcherId, value);
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: {
-          code:
-            Array.isArray(value) && value[0] === "not-a-uuid"
-              ? "shared.invalid_id"
-              : "management.request_invalid",
-        },
-      });
-      expect(await selected(v.watcherId)).toEqual([v.old]);
-    });
-  }
-  it("refuses duplicate watcher printer ids", async () => {
-    const v = await seedSelection();
-    const response = await save(v.watcherId, [v.fresh, v.fresh]);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "printerIds" } },
-    });
-    expect(await selected(v.watcherId)).toEqual([v.old]);
-  });
-  it("requires printer management permission for a whole watcher selection", async () => {
-    const v = await seedSelection();
-    const response = await save(v.watcherId, [v.moved], staffCookie);
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "printer.manage" } },
-    });
-    expect(await selected(v.watcherId)).toEqual([v.old]);
-    expect(await selected(v.otherId)).toEqual([v.moved]);
   });
 });

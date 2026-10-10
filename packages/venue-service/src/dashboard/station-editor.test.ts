@@ -32,9 +32,8 @@ async function mount(
     { id: "epson", name: "Epson" },
     { id: "star", name: "Star" },
     { id: "old", name: "Old printer", active: false },
-    { id: "pass", name: "Pass printer", watcherId: "expo" },
+    { id: "pass", name: "Pass printer" },
   ];
-  el.watchers = [{ id: "expo", name: "Expo", printerIds: ["pass"] }];
   el.canManagePrinters = canManagePrinters;
   el.open = true;
   await el.updateComplete;
@@ -109,19 +108,17 @@ it("sends only what changed, so a name change carries no printers", async () => 
   expect(seen).toEqual([{ name: "Hot grill" }, { name: "Hot grill", printerIds: ["star"] }]);
 });
 
-it("offers active printers no watcher uses, and keeps a chosen one it would not offer", async () => {
+it("offers every active printer, and keeps a chosen disabled one", async () => {
   const el = await mount({ ...GRILL, printerIds: ["epson", "old"] });
   const options = printersField(el)!.options;
   expect(options.map(({ value, disabled }) => [value, !!disabled])).toEqual([
     ["epson", false],
     ["star", false],
     ["old", false],
-    ["pass", true],
+    ["pass", false],
   ]);
   expect(options.find((option) => option.value === "old")!.description).toBe("Disabled");
-  expect(options.find((option) => option.value === "pass")!.description).toBe(
-    "Used by watcher Expo",
-  );
+  expect(options.find((option) => option.value === "pass")!.description).toBeUndefined();
 });
 
 it.each([
@@ -163,14 +160,13 @@ it("explains a blank name beside the field and above the buttons, and sends noth
 
 it.each([
   ["printer.not_found", { printerId: "star" }],
-  ["printer.makes_and_watches", { printerId: "pass" }],
   ["management.request_invalid", { field: "printerIds" }],
 ] as const)("puts a %s refusal under Printers", async (code, params) => {
   const el = await mount();
   await pickPrinters(el, ["star"]);
   el.refusal = { code, params };
   await el.updateComplete;
-  expect(printersField(el)!.error).toBe("Choose active printers that no watcher uses.");
+  expect(printersField(el)!.error).toBe("Choose active printers.");
   expect(nameField(el).error).toBe("");
   expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
   await pickPrinters(el, ["epson", "star"]);
@@ -251,14 +247,9 @@ it("tells its host when it is cancelled", async () => {
   expect(el.open).toBe(false);
 });
 
-it("names a printer it cannot find by its id, and a watcher it cannot find by the printer's", async () => {
+it("names a printer it cannot find by its id", async () => {
   const el = await mount({ ...GRILL, printerIds: ["gone"] }, { canManagePrinters: false });
   expect($(el, "[data-test=station-printers]")!.textContent).toContain("gone");
-  el.canManagePrinters = true;
-  el.printers = [{ id: "pass", name: "Pass printer", watcherId: "ghost" }];
-  el.watchers = [];
-  await el.updateComplete;
-  expect(printersField(el)!.options[0]!.description).toBe("Used by watcher ghost");
 });
 
 it("does not close on a saved() with no save sent", async () => {

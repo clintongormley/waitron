@@ -18,7 +18,6 @@ const printer: Printer = {
   port: 9100,
   localKey: null,
   pollId: null,
-  watcherId: null,
   paperWidth: "80mm",
   resolution: "180dpi",
   hasCashDrawer: false,

@@ -6,7 +6,6 @@ import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
-import type { WatcherView } from "./watchers-seen.js";
 import "./prep-stations-screen.js";
 
 registerIcons({
@@ -85,8 +84,6 @@ const view: PrepStationsView = {
   printers: [],
   stationPrinters: [],
   devices: [],
-  watchers: [],
-  disabledWatchers: [],
 };
 // These cases must still observe attempted fallback writes.
 type ScreenApi = PrepStationsApi & {
@@ -105,110 +102,6 @@ function api(overrides: Partial<ScreenApi> = {}): ScreenApi {
     ...overrides,
   } as unknown as ScreenApi;
 }
-it("shows watcher table relationships", async () => {
-  setLocale("en");
-  const pass = {
-    id: "pass",
-    name: "Pass",
-    active: true,
-    displayOrder: 0,
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-    printerIds: ["printer"],
-  };
-  const runner = {
-    id: "runner",
-    name: "Terrace runner",
-    active: true,
-    displayOrder: 1,
-    everyStation: false,
-    stationIds: ["bar"],
-    everyZone: false,
-    zoneIds: ["terrace"],
-    runsPass: false,
-    printerIds: [],
-  };
-  const a = api({
-    load: vi.fn().mockResolvedValue({
-      ...view,
-      zones: [{ id: "terrace", name: "Terrace", active: true }],
-      printers: [{ id: "printer", name: "Expo printer" }],
-      devices: [
-        {
-          id: "device",
-          label: "Pass screen",
-          kind: "kds_station",
-          active: true,
-          kitchenScreens: [],
-        },
-      ],
-      watchers: [pass, runner],
-    }),
-  });
-  const el = await mount(a);
-  expect(q(el, '[data-test="edit-watcher-follows-pass"]')?.textContent?.trim()).toBe(
-    "every station",
-  );
-  expect(q(el, '[data-test="edit-watcher-zones-pass"]')?.textContent?.trim()).toBe(
-    "every service zone",
-  );
-  expect(q(el, '[data-test="edit-watcher-pass-pass"]')?.textContent?.trim()).toBe("Yes");
-  expect(q(el, '[data-test="watcher-screens-pass"]')).toBeNull();
-  expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
-  expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
-  expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
-  window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
-});
-
-it("edits and confirms removal of a watcher", async () => {
-  setLocale("en");
-  const pass = {
-    id: "pass",
-    name: "Pass",
-    active: true,
-    displayOrder: 0,
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-    printerIds: [],
-    inUse: true,
-  };
-  const a = api({
-    load: vi.fn().mockResolvedValue({ ...view, watchers: [pass] }),
-    updateWatcher: vi.fn(),
-    removeWatcher: vi.fn(),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="rename-watcher-pass"]')!.click();
-  await settle(el);
-  const rename = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-  expect(rename.value).toBe("Pass");
-  rename.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await settle(el);
-  expect(a.updateWatcher).toHaveBeenCalledWith("pass", {
-    name: "Expo",
-    everyStation: true,
-    stationIds: [],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-    displayOrder: 0,
-  });
-  q(el, '[data-test="remove-watcher-pass"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="remove-watcher-modal"]')?.textContent).toContain("Disable Pass?");
-  q(el, '[data-test="confirm-remove-watcher"]')!.click();
-  await settle(el);
-  expect(a.removeWatcher).toHaveBeenCalledWith("pass", { disable: true });
-});
-
 async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<PrepStationsScreen> {
   const host = document.createElement("div");
   applyTokens(host);
@@ -240,9 +133,6 @@ async function editSaveField(el: PrepStationsScreen, field: HTMLElement, value: 
 const q = (el: PrepStationsScreen, s: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(s) ??
   el.shadowRoot!.querySelector("prep-station-editor")?.shadowRoot?.querySelector<HTMLElement>(s) ??
-  el
-    .shadowRoot!.querySelector('[data-test="watchers-table"]')
-    ?.shadowRoot?.querySelector<HTMLElement>(s) ??
   stationTable(el)?.querySelector<HTMLElement>(s) ??
   el
     .shadowRoot!.querySelector("station-disable-dialog")
@@ -1426,7 +1316,6 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
     { key: "routing", label: "Routes" },
-    { key: "watchers", label: "Watchers" },
     { key: "settings", label: "Settings" },
   ]);
   expect(tabs!.value).toBe("stations");
@@ -1441,7 +1330,7 @@ it("opens the default Stations tab and places Add station, the only create actio
 
 it.each([
   ["tickets", "stations"],
-  ["watchers", "watchers"],
+  ["watchers", "stations"],
   ["settings", "settings"],
 ])(
   "opens the %s tab an old tester link names (showing %s), and its next tab change drops the tester's product",
@@ -1469,10 +1358,10 @@ it("opens Routing from an old tester link that names it, and its next tab change
   expect(tabs.value).toBe("routing");
   expect(await routingGrid(el)).not.toBeNull();
   expect(q(el, '[data-test="route-tester"]')).toBeNull();
-  tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="watchers"]')!.click();
+  tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="settings"]')!.click();
   await settle(el);
-  expect(tabs.value).toBe("watchers");
-  expect(location.pathname).toBe("/manage/prep-stations/view/watchers");
+  expect(tabs.value).toBe("settings");
+  expect(location.pathname).toBe("/manage/prep-stations/view/settings");
 });
 
 it("opens Stations from an old tester link that names no tab, and restores panels on Back without adding history entries", async () => {
@@ -1485,10 +1374,10 @@ it("opens Stations from an old tester link that names no tab, and restores panel
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(history.length).toBe(count);
-  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  history.replaceState(null, "", "/manage/prep-stations/view/settings");
   dispatchEvent(new PopStateEvent("popstate"));
   await settle(el);
-  expect(tabs!.value).toBe("watchers");
+  expect(tabs!.value).toBe("settings");
   expect(history.length).toBe(count);
 });
 
@@ -1575,35 +1464,19 @@ it.each([
     enable: "Habilitar",
   },
 ])(
-  "uses category and Disable/Enable wording for retained stations and watchers ($locale)",
+  "uses category and Disable/Enable wording for retained stations ($locale)",
   async ({ locale, heading, field, disable, enable }) => {
     setLocale(locale);
     const disabled = { ...upstairs, active: false };
-    const pass = {
-      id: "pass",
-      name: "Pass",
-      active: true,
-      displayOrder: 0,
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: true,
-      printerIds: [],
-      inUse: true,
-    };
     const el = await mount(
       api({
-        load: vi
-          .fn()
-          .mockResolvedValue({ ...view, stations: [...view.stations, disabled], watchers: [pass] }),
+        load: vi.fn().mockResolvedValue({ ...view, stations: [...view.stations, disabled] }),
       }),
     );
     const grid = (await routingGrid(el))!;
     expect(grid.shadowRoot!.querySelector("thead th")!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="disable-bar"]')!.textContent!.trim()).toBe(disable);
     expect(q(el, '[data-test="enable-upstairs"]')!.textContent!.trim()).toBe(enable);
-    expect(q(el, '[data-test="remove-watcher-pass"]')!.textContent!.trim()).toBe(disable);
     expect(gridCombo(grid, "all", "every")!.label).toBe(field);
   },
 );
@@ -1648,7 +1521,6 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   for (const [key, actions] of [
     ["stations", ["new-station"]],
     ["routing", []],
-    ["watchers", []],
     ["settings", []],
     ["stations", ["new-station"]],
   ] as const) {
@@ -1726,7 +1598,7 @@ it.each([
       document.documentElement.style.background = canvas;
       const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
       await tabs.updateComplete;
-      for (const key of ["stations", "routing", "watchers", "settings"]) {
+      for (const key of ["stations", "routing", "settings"]) {
         const button = tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!;
         await page.elementLocator(button).click();
         await settle(el);
@@ -2273,7 +2145,7 @@ const ticketView: PrepStationsView = {
   printers: [
     { id: "old", name: "Old printer", active: true },
     { id: "next", name: "Next printer", active: true },
-    { id: "watcher", name: "Pass printer", active: true, watcherId: "pass" },
+    { id: "watcher", name: "Pass printer", active: true },
     { id: "disabled", name: "Disabled printer", active: false },
   ],
   stationPrinters: [{ stationId: "bar", printerId: "old" }],
@@ -2298,21 +2170,6 @@ const ticketView: PrepStationsView = {
       kitchenScreens: [stationScreen([slot("bar", "Bar")])],
       kind: "kds_station",
       active: false,
-    },
-  ],
-  watchers: [
-    {
-      id: "pass",
-      name: "Pass",
-      active: true,
-      displayOrder: 0,
-      everyStation: false,
-      stationIds: ["bar"],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: true,
-      printerIds: ["watcher"],
-      inUse: true,
     },
   ],
 };
@@ -2444,10 +2301,9 @@ it("the station editor offers printers as a multi-select, explains unavailable c
   const combo = await openPrinters(el);
   expect(combo.multiple).toBe(true);
   expect(combo.values).toEqual(["old"]);
-  expect(combo.options.find((o) => o.value === "watcher")).toMatchObject({
-    disabled: true,
-    description: "Used by watcher Pass",
-  });
+  const watcherPrinter = combo.options.find((o) => o.value === "watcher")!;
+  expect(watcherPrinter.disabled).toBe(false);
+  expect(watcherPrinter.description).toBeUndefined();
   expect(combo.options.find((o) => o.value === "disabled")).toMatchObject({
     disabled: true,
     description: "Disabled",
@@ -2474,15 +2330,13 @@ it("the station editor cancels a pending printer selection without submitting it
 it("the station editor retains a refused printer set beside its field and allows correction and retry", async () => {
   const save = vi
     .fn()
-    .mockRejectedValueOnce({ code: "printer.makes_and_watches" })
+    .mockRejectedValueOnce({ code: "printer.not_found" })
     .mockResolvedValue(undefined);
   const { el } = await mountStations({ updateStation: save });
   await openPrinters(el);
   await pickPrinters(el, ["next"]);
   editorSave(el).click();
-  await vi.waitFor(() =>
-    expect(printersOf(el)!.error).toBe("Choose active printers that no watcher uses."),
-  );
+  await vi.waitFor(() => expect(printersOf(el)!.error).toBe("Choose active printers."));
   expect(printersOf(el)!.values).toEqual(["next"]);
   expect(editorSave(el).disabled).toBe(false);
   editorSave(el).click();
@@ -2581,7 +2435,7 @@ it.each([
     try {
       await page.viewport(width, 900);
       setLocale(locale);
-      const save = vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" });
+      const save = vi.fn().mockRejectedValue({ code: "printer.not_found" });
       const { el } = await mountStations({ updateStation: save });
       const host = el.parentElement!;
       host.setAttribute("data-theme", theme);
@@ -2729,834 +2583,6 @@ it.each([
   },
 );
 
-async function mountWatcherPrinters(overrides: Partial<PrepStationsApi> = {}) {
-  setLocale("en");
-  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
-  const a = api({
-    load: vi.fn().mockResolvedValue(ticketView),
-    setWatcherPrinters: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  });
-  const el = await mount(a);
-  await settle(el);
-  return { el, a };
-}
-async function openWatcherPrinters(el: PrepStationsScreen) {
-  const trigger = q(el, '[data-test="edit-watcher-printers-pass"]');
-  expect(trigger, "watcher printer selection opens where its output is shown").not.toBeNull();
-  trigger!.click();
-  await settle(el);
-  return q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
-}
-
-it("Watchers chooses several printers, explains station and disabled conflicts, and saves the set", async () => {
-  const server = structuredClone(ticketView);
-  const save = vi.fn(async (_id: string, ids: readonly string[]) => {
-    server.watchers[0]!.printerIds = [...ids];
-  });
-  const { el } = await mountWatcherPrinters({
-    load: vi.fn(async () => structuredClone(server)),
-    setWatcherPrinters: save,
-  });
-  const combo = await openWatcherPrinters(el);
-  expect(combo.multiple).toBe(true);
-  expect(combo.name).toBe("printerIds");
-  expect(combo.options.map((row) => [row.value, row.label])).toEqual([
-    ["old", "Old printer"],
-    ["next", "Next printer"],
-    ["watcher", "Pass printer"],
-    ["disabled", "Disabled printer"],
-  ]);
-  expect(combo.values).toEqual(["watcher"]);
-  expect(combo.options.find((row) => row.value === "old")).toMatchObject({
-    disabled: true,
-    description: "Used by station Bar",
-  });
-  expect(combo.options.find((row) => row.value === "disabled")).toMatchObject({
-    disabled: true,
-    description: "Disabled",
-  });
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["watcher", "next"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await vi.waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith("pass", ["watcher", "next"]));
-  await settle(el);
-  expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
-  expect(q(el, '[data-test="edit-watcher-printers-pass"]')!.textContent).toContain(
-    "Pass printer, Next printer",
-  );
-  const reopened = await openWatcherPrinters(el);
-  await reopened.updateComplete;
-  reopened.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
-  await reopened.updateComplete;
-  const selected = [
-    ...reopened.shadowRoot!.querySelectorAll('[role="option"][aria-selected="true"]'),
-  ].map((row) => row.textContent!.trim());
-  expect(selected).toEqual(["Next printer", "Pass printer"]);
-});
-
-it("Watchers retains a disabled mapping for removal but does not offer it as a new assignment", async () => {
-  const retained = structuredClone(ticketView);
-  retained.watchers[0]!.printerIds = ["disabled"];
-  const { el, a } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(retained) });
-  const combo = await openWatcherPrinters(el);
-  expect(combo.values).toEqual(["disabled"]);
-  expect(combo.options.find((row) => row.value === "disabled")!.disabled).toBe(false);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: [] } }));
-  await settle(el);
-  expect(
-    (q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).options.find(
-      (row) => row.value === "disabled",
-    )!.disabled,
-  ).toBe(true);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await vi.waitFor(() => expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", []));
-});
-
-it("Watchers permits transferring a printer from another watcher and names its current owner", async () => {
-  const other = structuredClone(ticketView);
-  other.watchers.push({
-    ...other.watchers[0]!,
-    id: "runner",
-    name: "Runner",
-    printerIds: ["next"],
-  });
-  other.printers.find((row) => row.id === "next")!.watcherId = "runner";
-  const { el, a } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(other) });
-  const combo = await openWatcherPrinters(el);
-  expect(combo.options.find((row) => row.value === "next")).toMatchObject({
-    disabled: false,
-    description: "Used by watcher Runner",
-  });
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await vi.waitFor(() =>
-    expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]),
-  );
-});
-
-it("Watchers cancels a printer draft without submitting it", async () => {
-  const { el, a } = await mountWatcherPrinters();
-  const combo = await openWatcherPrinters(el);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  q(el, '[data-test="cancel-watcher-printers-pass"]')!.click();
-  await settle(el);
-  expect(a.setWatcherPrinters).not.toHaveBeenCalled();
-  expect((await openWatcherPrinters(el)).values).toEqual(["watcher"]);
-});
-
-it.each(["printer.makes_and_watches", "printer.not_found", "management.request_invalid"])(
-  "Watchers preserves the printer draft and enables retry after %s",
-  async (code) => {
-    const save = vi
-      .fn()
-      .mockRejectedValueOnce({ code, params: { field: "printerIds" } })
-      .mockResolvedValue(undefined);
-    const { el } = await mountWatcherPrinters({ setWatcherPrinters: save });
-    const combo = await openWatcherPrinters(el);
-    combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-    await settle(el);
-    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-    await settle(el);
-    const retained = q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
-    expect(retained.values).toEqual(["next"]);
-    expect(retained.error).toContain("Choose available printers");
-    expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
-    expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
-      "Fix the fields marked above",
-    );
-    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenNthCalledWith(2, "pass", ["next"]));
-    await settle(el);
-    expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
-  },
-);
-
-it("Watchers keeps a printer draft and its general save error through a successful live read", async () => {
-  const liveData = new LiveData();
-  const load = vi
-    .fn()
-    .mockResolvedValueOnce(ticketView)
-    .mockResolvedValue({
-      ...ticketView,
-      watchers: [{ ...ticketView.watchers[0]!, printerIds: [] }],
-    });
-  const { el } = await mountWatcherPrinters({
-    liveData,
-    load,
-    setWatcherPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
-  });
-  const combo = await openWatcherPrinters(el);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await settle(el);
-  const message = q(el, '[data-test="watcher-printer-actions-pass"]')!;
-  expect(message.shadowRoot!.textContent).toContain("could not be saved");
-  liveData.invalidate([{ type: "watcher_printers", id: "pass" }]);
-  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual(["next"]);
-  expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
-    "could not be saved",
-  );
-});
-
-it("Watchers closes its printer editor after a successful write even when refresh fails", async () => {
-  const load = vi.fn().mockResolvedValueOnce(ticketView).mockRejectedValue(new Error("offline"));
-  const { el, a } = await mountWatcherPrinters({ load });
-  await openWatcherPrinters(el);
-  await editSaveField(el, q(el, '[data-test="watcher-printers-pass"]')!, ["watcher", "next"]);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await settle(el);
-  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["watcher", "next"]);
-  expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
-  expect(el.shadowRoot!.textContent).toContain("could not be loaded");
-});
-
-it.each([
-  ["en", "light", 390],
-  ["en", "dark", 390],
-  ["es", "light", 390],
-  ["es", "dark", 390],
-  ["en", "light", 1280],
-  ["en", "dark", 1280],
-  ["es", "light", 1280],
-  ["es", "dark", 1280],
-] as const)(
-  "Watchers printer picker and refusal render accessibly in %s %s at %ipx",
-  async (locale, theme, width) => {
-    const previous = { width: window.innerWidth, height: window.innerHeight };
-    try {
-      await page.viewport(width, 900);
-      const { el } = await mountWatcherPrinters({
-        setWatcherPrinters: vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" }),
-      });
-      setLocale(locale);
-      el.requestUpdate();
-      await settle(el);
-      const host = el.parentElement!;
-      host.style.width = `${width}px`;
-      host.setAttribute("data-theme", theme);
-      host.style.background = "var(--wt-color-bg)";
-      expect(window.innerWidth).toBe(width);
-      expect(host.getBoundingClientRect().width).toBe(width);
-      const combo = await openWatcherPrinters(el);
-      await combo.updateComplete;
-      await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-      await combo.updateComplete;
-      const list = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-      expect(list.matches(":popover-open")).toBe(true);
-      expect(list.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
-      expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-      expect(list.textContent).toContain(
-        locale === "en" ? "Used by station Bar" : "La usa la estación Bar",
-      );
-      const station = combo.shadowRoot!.querySelector<HTMLElement>(
-        '[role="option"][aria-disabled="true"]',
-      )!;
-      await page.elementLocator(station).click({ force: true });
-      expect(combo.values).toEqual(["watcher"]);
-      await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/look/watcher-printers-${locale}-${theme}-${width}-picker.png`,
-      });
-      await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-      await editSaveField(el, combo, ["watcher", "next"]);
-      q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-      await settle(el);
-      expect(
-        q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent,
-      ).toContain(locale === "en" ? "Fix the fields" : "Corrige los campos");
-      await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/look/watcher-printers-${locale}-${theme}-${width}-refusal.png`,
-      });
-    } finally {
-      await page.viewport(previous.width, previous.height);
-    }
-  },
-);
-
-it("Watchers Escape cancels a printer draft without writing and reopens the saved selection", async () => {
-  const { el, a } = await mountWatcherPrinters();
-  const combo = await openWatcherPrinters(el);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  combo.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
-  expect(a.setWatcherPrinters).not.toHaveBeenCalled();
-  expect((await openWatcherPrinters(el)).values).toEqual(["watcher"]);
-});
-
-function watcherTableQ(el: PrepStationsScreen, selector: string) {
-  const table = q(el, '[data-test="watchers-table"]');
-  expect(table, "Watchers has one table of editable subject cells").not.toBeNull();
-  return table!.shadowRoot!.querySelector<HTMLElement>(selector);
-}
-async function openWatcherCell(el: PrepStationsScreen, field: string) {
-  watcherTableQ(el, `[data-test="edit-watcher-${field}-pass"]`)!.click();
-  await settle(el);
-  return watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
-}
-function chooseWatcherCell(combo: WtCombobox, values: string[]) {
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values, value: values[0] ?? "" } }));
-}
-it("Watchers table no longer lists screens: a device chooses its kitchen screens on its own page", async () => {
-  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(ticketView) });
-  const table = q(el, '[data-test="watchers-table"]') as unknown as {
-    columns: { label: string }[];
-  };
-  expect(table?.columns.map((column) => column.label)).toEqual([
-    "Name",
-    "Follows",
-    "For service zones",
-    "Runs the pass",
-    "Printers",
-    "Actions",
-  ]);
-  expect(watcherTableQ(el, '[data-test="watcher-screens-pass"]')).toBeNull();
-  expect(watcherTableQ(el, '[data-test="edit-watcher-printers-pass"]')).not.toBeNull();
-});
-it.each(["follows", "zones"])(
-  "Watchers %s cell keeps every and explicit selection exclusive and persists only its field",
-  async (field) => {
-    const server = structuredClone(ticketView);
-    server.zones = [
-      { id: "terrace", name: "Terrace", active: true },
-      { id: "off-zone", name: "Old zone", active: false },
-    ];
-    const save = vi.fn(
-      async (_id: string, input: Parameters<PrepStationsApi["updateWatcher"]>[1]) => {
-        Object.assign(server.watchers[0]!, input);
-      },
-    );
-    const { el } = await mountWatcherPrinters({
-      load: vi.fn(async () => structuredClone(server)),
-      updateWatcher: save,
-    });
-    let combo = await openWatcherCell(el, field);
-    expect(combo.multiple).toBe(true);
-    expect(combo.name).toBe(field === "follows" ? "stationIds" : "zoneIds");
-    expect(combo.options.some((option) => option.value === "off-zone")).toBe(false);
-    chooseWatcherCell(combo, field === "follows" ? ["bar", "__every__"] : ["__every__", "terrace"]);
-    await settle(el);
-    combo = watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
-    expect(combo.values).toEqual(field === "follows" ? ["__every__"] : ["terrace"]);
-    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-    await vi.waitFor(() =>
-      expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
-        name: "Pass",
-        everyStation: field === "follows",
-        stationIds: field === "follows" ? [] : ["bar"],
-        everyZone: field !== "zones",
-        zoneIds: field === "zones" ? ["terrace"] : [],
-        runsPass: true,
-        displayOrder: 0,
-      }),
-    );
-    await settle(el);
-    combo = await openWatcherCell(el, field);
-    expect(combo.values).toEqual(field === "follows" ? ["__every__"] : ["terrace"]);
-  },
-);
-it("Watchers empty follows submission explains itself and disables Save until corrected", async () => {
-  const save = vi.fn();
-  const { el } = await mountWatcherPrinters({ updateWatcher: save });
-  const combo = await openWatcherCell(el, "follows");
-  chooseWatcherCell(combo, []);
-  await settle(el);
-  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-  await settle(el);
-  expect(save).not.toHaveBeenCalled();
-  expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).error).toBe(
-    "Choose at least one station, or every station",
-  );
-  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(true);
-  expect(watcherTableQ(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
-    "Fix the fields marked above.",
-  );
-  chooseWatcherCell(combo, ["__every__"]);
-  await settle(el);
-  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
-    false,
-  );
-});
-it("Watchers pass cell saves a choice without opening the whole watcher dialog", async () => {
-  const server = structuredClone(ticketView);
-  const save = vi.fn(
-    async (_id: string, input: Parameters<PrepStationsApi["updateWatcher"]>[1]) => {
-      Object.assign(server.watchers[0]!, input);
-    },
-  );
-  const { el } = await mountWatcherPrinters({
-    load: vi.fn(async () => structuredClone(server)),
-    updateWatcher: save,
-  });
-  const combo = await openWatcherCell(el, "pass");
-  expect(combo.multiple).toBe(false);
-  expect(combo.value).toBe("yes");
-  chooseWatcherCell(combo, ["no"]);
-  await settle(el);
-  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-  await vi.waitFor(() => expect(server.watchers[0]!.runsPass).toBe(false));
-  expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
-  await settle(el);
-  expect((await openWatcherCell(el, "pass")).value).toBe("no");
-});
-it.each(["station.not_found", "connection.failed"])(
-  "Watchers cell keeps its draft and retry action after %s",
-  async (code) => {
-    const save = vi.fn().mockRejectedValueOnce({ code }).mockResolvedValue(undefined);
-    const { el } = await mountWatcherPrinters({ updateWatcher: save });
-    const combo = await openWatcherCell(el, "follows");
-    chooseWatcherCell(combo, ["__every__"]);
-    await settle(el);
-    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    await settle(el);
-    expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).values).toEqual([
-      "__every__",
-    ]);
-    expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
-      false,
-    );
-    const field = watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
-    expect(field.error).toBe(
-      code === "station.not_found" ? "Choose at least one station, or every station" : "",
-    );
-    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
-    await settle(el);
-    expect(watcherTableQ(el, '[data-test="watcher-cell-input"]')).toBeNull();
-  },
-);
-it("Watchers Cancel and Escape discard cell edits without a write", async () => {
-  const save = vi.fn();
-  const { el } = await mountWatcherPrinters({ updateWatcher: save });
-  let combo = await openWatcherCell(el, "follows");
-  chooseWatcherCell(combo, ["__every__"]);
-  await settle(el);
-  watcherTableQ(el, '[data-test="cancel-watcher-cell"]')!.click();
-  await settle(el);
-  combo = await openWatcherCell(el, "follows");
-  expect(combo.values).toEqual(["bar"]);
-  combo.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
-  );
-  await settle(el);
-  expect(watcherTableQ(el, '[data-test="watcher-cell-input"]')).toBeNull();
-  expect(save).not.toHaveBeenCalled();
-});
-
-it("Watchers Rename changes only the name and closes before a failed refresh", async () => {
-  const server = structuredClone(ticketView);
-  const save = vi.fn(
-    async (_id: string, input: Parameters<PrepStationsApi["updateWatcher"]>[1]) => {
-      Object.assign(server.watchers[0]!, input);
-    },
-  );
-  const load = vi
-    .fn()
-    .mockResolvedValueOnce(server)
-    .mockRejectedValueOnce({ code: "connection.failed" });
-  const { el } = await mountWatcherPrinters({ load, updateWatcher: save });
-  watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
-  await settle(el);
-  expect(q(el, "watcher-form")).toBeNull();
-  const input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-  expect(input.name).toBe("name");
-  expect(input.required).toBe(true);
-  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "  Expo  " } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await vi.waitFor(() =>
-    expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
-      name: "Expo",
-      everyStation: false,
-      stationIds: ["bar"],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: true,
-      displayOrder: 0,
-    }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
-  expect(el.shadowRoot!.textContent).toContain("could not be loaded");
-});
-it("Watchers Rename validates empty names and retains a retryable duplicate-name refusal", async () => {
-  const save = vi
-    .fn()
-    .mockRejectedValueOnce({ code: "watcher.name_taken" })
-    .mockResolvedValue(undefined);
-  const { el } = await mountWatcherPrinters({ updateWatcher: save });
-  watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
-  await settle(el);
-  let input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: " " } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await settle(el);
-  expect(save).not.toHaveBeenCalled();
-  input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-  expect(input.error).toBe("This field is required.");
-  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(true);
-  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await settle(el);
-  expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
-    "A watcher already has this name.",
-  );
-  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(false);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
-});
-it("Watchers service zones refuses an empty explicit set and allows every zone instead", async () => {
-  const save = vi.fn();
-  const initial = structuredClone(ticketView);
-  initial.zones = [{ id: "terrace", name: "Terrace", active: true }];
-  initial.watchers[0]!.everyZone = false;
-  initial.watchers[0]!.zoneIds = ["terrace"];
-  const { el } = await mountWatcherPrinters({
-    updateWatcher: save,
-    load: vi.fn().mockResolvedValue(initial),
-  });
-  const combo = await openWatcherCell(el, "zones");
-  chooseWatcherCell(combo, []);
-  await settle(el);
-  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-  await settle(el);
-  expect(save).not.toHaveBeenCalled();
-  expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).error).toBe(
-    "Choose at least one service zone, or every service zone",
-  );
-  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(true);
-  chooseWatcherCell(combo, ["__every__"]);
-  await settle(el);
-  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
-    false,
-  );
-});
-it("Watchers live recovery keeps a cell draft and its action error while other saved fields refresh", async () => {
-  const server = structuredClone(ticketView);
-  let readFailed = false;
-  const liveData = new LiveData();
-  const save = vi
-    .fn()
-    .mockRejectedValueOnce({ code: "connection.failed" })
-    .mockResolvedValue(undefined);
-  const { el } = await mountWatcherPrinters({
-    liveData,
-    load: vi.fn(async () => {
-      if (readFailed) throw { code: "connection.failed" };
-      return structuredClone(server);
-    }),
-    updateWatcher: save,
-  });
-  const combo = await openWatcherCell(el, "follows");
-  chooseWatcherCell(combo, ["__every__"]);
-  await settle(el);
-  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-  await settle(el);
-  readFailed = true;
-  liveData.invalidate([{ type: "watchers", id: "pass" }]);
-  await settle(el);
-  readFailed = false;
-  server.watchers[0]!.runsPass = false;
-  liveData.invalidate([{ type: "watchers", id: "pass" }]);
-  await settle(el);
-  expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).values).toEqual([
-    "__every__",
-  ]);
-  expect(watcherTableQ(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
-    "could not be saved",
-  );
-  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-  await vi.waitFor(() =>
-    expect(save).toHaveBeenLastCalledWith("pass", {
-      name: "Pass",
-      everyStation: true,
-      stationIds: [],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: false,
-      displayOrder: 0,
-    }),
-  );
-});
-
-it("Watchers Rename leaves an unsaved follows draft out of its write", async () => {
-  const save = vi.fn().mockResolvedValue(undefined);
-  const { el } = await mountWatcherPrinters({ updateWatcher: save });
-  const combo = await openWatcherCell(el, "follows");
-  chooseWatcherCell(combo, ["__every__"]);
-  await settle(el);
-  watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
-  await settle(el);
-  (q(el, '[data-test="watcher-rename-name"]') as WtInput).dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "Expo" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await vi.waitFor(() =>
-    expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
-      name: "Expo",
-      everyStation: false,
-      stationIds: ["bar"],
-      everyZone: true,
-      zoneIds: [],
-      runsPass: true,
-      displayOrder: 0,
-    }),
-  );
-});
-
-it.each([
-  ["en", "light", 390],
-  ["en", "dark", 390],
-  ["es", "light", 390],
-  ["es", "dark", 390],
-  ["en", "light", 1280],
-  ["en", "dark", 1280],
-  ["es", "light", 1280],
-  ["es", "dark", 1280],
-] as const)(
-  "Watchers table cells and Rename render accessibly in %s %s at %ipx",
-  async (locale, theme, width) => {
-    const previous = { width: window.innerWidth, height: window.innerHeight };
-    try {
-      await page.viewport(width, 900);
-      const server = structuredClone(ticketView);
-      server.zones = [
-        { id: "terrace", name: "Terrace", active: true },
-        { id: "removed", name: "Old terrace", active: false },
-      ];
-      server.devices.push({
-        id: "retained",
-        label: "Old display",
-        kitchenScreens: [],
-        kind: "kds_station",
-        active: false,
-      });
-      const { el } = await mountWatcherPrinters({
-        load: vi.fn().mockResolvedValue(server),
-        updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      });
-      setLocale(locale);
-      el.requestUpdate();
-      await settle(el);
-      const host = el.parentElement!;
-      host.style.width = `${width}px`;
-      host.setAttribute("data-theme", theme);
-      host.style.background = "var(--wt-color-bg)";
-      expect(window.innerWidth).toBe(width);
-      expect(host.getBoundingClientRect().width).toBe(width);
-      const table = q(el, '[data-test="watchers-table"]')!;
-      expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-      for (const field of ["follows", "zones", "pass"]) {
-        const combo = await openWatcherCell(el, field);
-        await combo.updateComplete;
-        await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-        const popup = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        expect(popup.matches(":popover-open")).toBe(true);
-        expect(popup.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
-        expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-        expect(popup.textContent).not.toContain("Old terrace");
-        await expectNoA11yViolations(host);
-        await page.screenshot({
-          path: `__screenshots__/look/watcher-table-${locale}-${theme}-${width}-${field}.png`,
-        });
-        await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
-        watcherTableQ(el, '[data-test="cancel-watcher-cell"]')!.click();
-        await settle(el);
-      }
-      const menu = watcherTableQ(el, "wt-row-actions")!;
-      await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
-      await page.screenshot({
-        path: `__screenshots__/look/watcher-table-${locale}-${theme}-${width}-menu.png`,
-      });
-      await page.elementLocator(watcherTableQ(el, '[data-test="rename-watcher-pass"]')!).click();
-      await settle(el);
-      await editSaveField(el, q(el, '[data-test="watcher-rename-name"]')!, "Expo");
-      q(el, '[data-test="save-watcher-name"]')!.click();
-      await settle(el);
-      expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
-        locale === "en"
-          ? "A watcher already has this name."
-          : "Ya existe un punto de seguimiento con este nombre.",
-      );
-      await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/look/watcher-table-${locale}-${theme}-${width}-rename.png`,
-      });
-    } finally {
-      await page.viewport(previous.width, previous.height);
-    }
-  },
-);
-
-it("Watchers clears a printer conflict only once a live update frees the printer from every station", async () => {
-  const liveData = new LiveData();
-  const server = structuredClone(ticketView);
-  server.stationPrinters = [
-    { stationId: "bar", printerId: "next" },
-    { stationId: "upstairs", printerId: "next" },
-  ];
-  const load = vi.fn(async () => structuredClone(server));
-  const { el, a } = await mountWatcherPrinters({
-    liveData,
-    load,
-    setWatcherPrinters: vi
-      .fn()
-      .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
-  });
-  const combo = await openWatcherPrinters(el);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await settle(el);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
-    "Choose available printers",
-  );
-  expect(server.watchers[0]!.printerIds).toEqual(["watcher"]);
-  server.stationPrinters.shift();
-  liveData.invalidate([{ type: "station_printers", id: "first" }]);
-  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
-    "Choose available printers",
-  );
-  server.stationPrinters.shift();
-  liveData.invalidate([{ type: "station_printers", id: "last" }]);
-  await vi.waitFor(() =>
-    expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe(""),
-  );
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual(["next"]);
-  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]);
-  expect(server.watchers[0]!.printerIds).toEqual(["watcher"]);
-});
-
-it("Watchers restores the saved printer set after cancelling a refused attachment", async () => {
-  const { el, a } = await mountWatcherPrinters({
-    setWatcherPrinters: vi
-      .fn()
-      .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
-  });
-  const combo = await openWatcherPrinters(el);
-  expect(combo.values).toEqual(["watcher"]);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await settle(el);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
-    "Choose available printers",
-  );
-  q(el, '[data-test="cancel-watcher-printers-pass"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="edit-watcher-printers-pass"]')!.textContent!.trim()).toBe(
-    "Pass printer",
-  );
-  const saved = await openWatcherPrinters(el);
-  expect(saved.values).toEqual(["watcher"]);
-  await saved.updateComplete;
-  saved.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
-  await saved.updateComplete;
-  expect(
-    [...saved.shadowRoot!.querySelectorAll('[role="option"][aria-selected="true"]')].map((row) =>
-      row.textContent!.trim(),
-    ),
-  ).toEqual(["Pass printer"]);
-  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]);
-  expect(a.updateStation).not.toHaveBeenCalled();
-});
-
-it.each([
-  ["en", "Used by station Bar", "Choose available printers that are not used by a station."],
-  ["es", "La usa la estación Bar", "Elige impresoras disponibles que no use una estación."],
-] as const)(
-  "Watchers localises station-printer guidance and refusal (%s)",
-  async (locale, description, refusal) => {
-    const { el } = await mountWatcherPrinters({
-      setWatcherPrinters: vi
-        .fn()
-        .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
-    });
-    setLocale(locale);
-    el.requestUpdate();
-    await settle(el);
-    const combo = await openWatcherPrinters(el);
-    expect(combo.options.find((row) => row.value === "old")!.description).toBe(description);
-    combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-    await settle(el);
-    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-    await vi.waitFor(() =>
-      expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe(refusal),
-    );
-  },
-);
-
-it("Watchers keeps its printer picker inside a 320px viewport", async () => {
-  const previous = { width: window.innerWidth, height: window.innerHeight };
-  try {
-    await page.viewport(320, 900);
-    const { el } = await mountWatcherPrinters();
-    el.parentElement!.style.width = "320px";
-    const trigger = q(el, '[data-test="edit-watcher-printers-pass"]')!;
-    await page.elementLocator(trigger).click();
-    await settle(el);
-    const combo = q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
-    expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(320);
-    expect(combo.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
-  } finally {
-    await page.viewport(previous.width, previous.height);
-  }
-});
-
-it("Watchers keeps a conflict while another selected printer still serves a station", async () => {
-  const liveData = new LiveData();
-  const server = structuredClone(ticketView);
-  server.stationPrinters.push({ stationId: "upstairs", printerId: "next" });
-  const load = vi.fn(async () => structuredClone(server));
-  const { el, a } = await mountWatcherPrinters({
-    liveData,
-    load,
-    setWatcherPrinters: vi
-      .fn()
-      .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
-  });
-  const combo = await openWatcherPrinters(el);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next", "old"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await settle(el);
-  server.stationPrinters = [{ stationId: "bar", printerId: "old" }];
-  liveData.invalidate([{ type: "station_printers", id: "next-released" }]);
-  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-  await settle(el);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
-    "Choose available printers",
-  );
-  server.stationPrinters = [];
-  liveData.invalidate([{ type: "station_printers", id: "old-released" }]);
-  await vi.waitFor(() =>
-    expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe(""),
-  );
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual([
-    "next",
-    "old",
-  ]);
-  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next", "old"]);
-});
-
 it.each(["en", "es"] as const)(
   "a manager's Stations table reads Printed on and Shown on (%s)",
   async (locale) => {
@@ -3576,6 +2602,19 @@ it.each(["en", "es"] as const)(
   },
 );
 
+it("an old Watchers address opens Stations and rewrites the address", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
+  await settle(el);
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(tabs.shadowRoot!.querySelector('[data-key="watchers"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[slot="watchers"]')).toBeNull();
+  expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
+});
+
 it("an old Tickets address opens Stations and rewrites the address", async () => {
   history.replaceState(null, "", "/manage/prep-stations/view/tickets");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
@@ -3589,120 +2628,6 @@ it("an old Tickets address opens Stations and rewrites the address", async () =>
   expect(el.shadowRoot!.querySelector('[data-test="tickets-table"]')).toBeNull();
   expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
 });
-
-it.each([
-  [
-    "follows",
-    "management.request_invalid",
-    "stationIds",
-    "Choose at least one station, or every station",
-    "Fix the fields marked above.",
-  ],
-  ["follows", "management.request_invalid", "zoneIds", "", "The change could not be saved."],
-  [
-    "zones",
-    "zone.not_found",
-    "",
-    "Choose at least one service zone, or every service zone",
-    "Fix the fields marked above.",
-  ],
-  [
-    "zones",
-    "management.request_invalid",
-    "zoneIds",
-    "Choose at least one service zone, or every service zone",
-    "Fix the fields marked above.",
-  ],
-  ["zones", "management.request_invalid", "stationIds", "", "The change could not be saved."],
-  ["pass", "watcher.not_found", "", "", "This watcher could not be found."],
-  ["pass", "connection.failed", "", "", "The change could not be saved."],
-])(
-  "Watchers %s classifies %s/%s without losing a retryable draft",
-  async (field, code, errorField, expectedField, expectedSummary) => {
-    const save = vi.fn().mockRejectedValue({ code, params: { field: errorField } });
-    const initial = structuredClone(ticketView);
-    initial.zones = [{ id: "terrace", name: "Terrace", active: true }];
-    initial.watchers[0]!.everyZone = false;
-    initial.watchers[0]!.zoneIds = ["terrace"];
-    const { el } = await mountWatcherPrinters({
-      updateWatcher: save,
-      load: vi.fn().mockResolvedValue(initial),
-    });
-    const combo = await openWatcherCell(el, field);
-    chooseWatcherCell(combo, field === "pass" ? ["no"] : ["__every__"]);
-    await settle(el);
-    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    await settle(el);
-    const retained = watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
-    expect(retained.values).toEqual(field === "pass" ? ["no"] : ["__every__"]);
-    expect(retained.error).toBe(expectedField);
-    expect(watcherTableQ(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
-      expectedSummary,
-    );
-    expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
-      false,
-    );
-  },
-);
-
-it.each([
-  ["management.request_invalid", "name", "This field is required.", "Fix the fields marked above."],
-  ["management.request_invalid", "stationIds", "", "The change could not be saved."],
-  ["watcher.not_found", "", "", "This watcher could not be found."],
-  ["connection.failed", "", "", "The change could not be saved."],
-])(
-  "Watchers Rename classifies %s/%s and retains its submitted name",
-  async (code, field, expectedField, summary) => {
-    const save = vi.fn().mockRejectedValue({ code, params: { field } });
-    const { el } = await mountWatcherPrinters({ updateWatcher: save });
-    watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
-    await settle(el);
-    const input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-    input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
-    await settle(el);
-    input
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    await settle(el);
-    const retained = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-    expect(retained.value).toBe("Expo");
-    expect(retained.error).toBe(expectedField);
-    expect(
-      q(el, '[data-test="watcher-rename-modal"]')!.querySelector("wt-form-actions")!.shadowRoot!
-        .textContent,
-    ).toContain(summary);
-    expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(false);
-  },
-);
-
-it.each(["cancel", "dismiss"])(
-  "Watchers Rename %s discards its draft and reopens the stored name",
-  async (how) => {
-    const save = vi.fn();
-    const { el } = await mountWatcherPrinters({ updateWatcher: save });
-    watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
-    await settle(el);
-    (q(el, '[data-test="watcher-rename-name"]') as WtInput).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Unsaved" } }),
-    );
-    await settle(el);
-    const modal = q(el, '[data-test="watcher-rename-modal"]')!;
-    const closed = new Promise((resolve) =>
-      modal.addEventListener("wt-close", resolve, { once: true }),
-    );
-    if (how === "cancel") (modal.querySelector('wt-button[slot="cancel"]') as HTMLElement).click();
-    else modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-    await closed;
-    await settle(el);
-    await vi.waitFor(() => expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull());
-    expect(save).not.toHaveBeenCalled();
-    watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
-    await settle(el);
-    expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).value).toBe("Pass");
-  },
-);
 
 it.each(["ArrowUp", "Enter", "ArrowLeft"])(
   "Stations ignores %s when it cannot change the first row's position",
@@ -3759,17 +2684,12 @@ it("Stations pointer drag ignores another pointer and outside rows, and a no-op 
   expect(document.body.style.cursor).not.toBe("grabbing");
 });
 
-it("preserves unknown printer ids on both output surfaces", async () => {
+it("preserves an unknown printer id on the Stations table", async () => {
   const server = structuredClone(ticketView);
   server.stationPrinters = [{ stationId: "bar", printerId: "missing-station-printer" }];
-  server.watchers[0]!.printerIds = ["missing-watcher-printer"];
   const stations = await mountStations({ load: vi.fn().mockResolvedValue(server) });
   expect(q(stations.el, '[data-test="printed-on-bar"]')!.textContent).toContain(
     "missing-station-printer",
-  );
-  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
-  expect(q(el, '[data-test="edit-watcher-printers-pass"]')!.textContent).toContain(
-    "missing-watcher-printer",
   );
 });
 
@@ -3802,439 +2722,6 @@ it.each(["settings", "stations"])(
     }
   },
 );
-
-it("Watchers orders tied positions by name", async () => {
-  const server = structuredClone(ticketView);
-  server.watchers = [
-    { ...server.watchers[0]!, id: "zulu", name: "Zulu", displayOrder: 1 },
-    { ...server.watchers[0]!, id: "alpha", name: "Alpha", displayOrder: 1 },
-  ];
-  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
-  const table = el.shadowRoot!.querySelector('[data-test="watchers-table"]')!;
-  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
-  expect(rows[0]!.textContent).toContain("Alpha");
-  expect(rows[1]!.textContent).toContain("Zulu");
-});
-
-it("a missing watcher refusal keeps the printer draft retryable", async () => {
-  const save = vi.fn().mockRejectedValue({ code: "watcher.not_found" });
-  const { el } = await mountWatcherPrinters({ setWatcherPrinters: save });
-  const combo = await openWatcherPrinters(el);
-  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
-  await settle(el);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual(["next"]);
-  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe("");
-  expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
-    "This watcher could not be found.",
-  );
-  expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
-});
-
-it.each(["cancel", "dismiss"])("%s abandons watcher removal without writing", async (how) => {
-  const remove = vi.fn();
-  const { el } = await mountWatcherPrinters({ removeWatcher: remove });
-  q(el, '[data-test="remove-watcher-pass"]')!.click();
-  await settle(el);
-  const modal = q(el, '[data-test="remove-watcher-modal"]')!;
-  expect(modal.textContent).toContain("Pass");
-  if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
-  else modal.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
-  expect(remove).not.toHaveBeenCalled();
-});
-
-it("failed watcher removal explains itself and retains confirmation for retry", async () => {
-  const remove = vi
-    .fn()
-    .mockRejectedValueOnce({ code: "connection.failed" })
-    .mockResolvedValue(undefined);
-  const { el } = await mountWatcherPrinters({ removeWatcher: remove });
-  q(el, '[data-test="remove-watcher-pass"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-remove-watcher"]')!.click();
-  await settle(el);
-  expect(
-    q(el, '[data-test="remove-watcher-modal"]')!.querySelector('[role="alert"]')!.textContent,
-  ).toBe("The change could not be saved.");
-  expect(q(el, '[data-test="confirm-remove-watcher"]')!.hasAttribute("disabled")).toBe(false);
-  q(el, '[data-test="confirm-remove-watcher"]')!.click();
-  await settle(el);
-  expect(remove).toHaveBeenNthCalledWith(2, "pass", { disable: true });
-  expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
-});
-
-it("keeps an attempted watcher Rename invalid through whitespace until a name is supplied", async () => {
-  const save = vi.fn();
-  const { el } = await mountWatcherPrinters({ updateWatcher: save });
-  q(el, '[data-test="rename-watcher-pass"]')!.click();
-  await settle(el);
-  const input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
-  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
-  await settle(el);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await settle(el);
-  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "   " } }));
-  await settle(el);
-  expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
-    "This field is required.",
-  );
-  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(true);
-  expect(save).not.toHaveBeenCalled();
-  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
-  await settle(el);
-  expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe("");
-  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(false);
-  q(el, '[data-test="save-watcher-name"]')!.click();
-  await settle(el);
-  expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
-    name: "Expo",
-    everyStation: false,
-    stationIds: ["bar"],
-    everyZone: true,
-    zoneIds: [],
-    runsPass: true,
-    displayOrder: 0,
-  });
-  expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
-});
-
-it("the station editor names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
-  setLocale("en");
-  const server = structuredClone(ticketView);
-  server.watchers = [];
-  server.printers.find((row) => row.id === "watcher")!.watcherId = "missing-watcher";
-  const { el } = await mountStations({ load: vi.fn().mockResolvedValue(server) });
-  const choice = await openPrinters(el);
-  expect(choice.options.find((row) => row.value === "watcher")).toEqual({
-    value: "watcher",
-    label: "Pass printer",
-    disabled: true,
-    description: "Used by watcher missing-watcher",
-  });
-  expect(choice.values).toEqual(["old"]);
-});
-
-const watcherRow = (id: string, name: string, extra: Partial<WatcherView> = {}): WatcherView => ({
-  id,
-  name,
-  active: true,
-  displayOrder: 0,
-  everyStation: true,
-  stationIds: [],
-  everyZone: true,
-  zoneIds: [],
-  runsPass: false,
-  printerIds: [],
-  inUse: false,
-  ...extra,
-});
-/** Pass is on a screen, Runner is on nothing; Old pass is disabled and on a screen, Spare on nothing. */
-function retainedWatchersView(): PrepStationsView {
-  const server = structuredClone(ticketView);
-  server.watchers = [
-    { ...server.watchers[0]!, inUse: true },
-    watcherRow("runner", "Runner", { displayOrder: 1 }),
-  ];
-  server.disabledWatchers = [
-    watcherRow("old", "Old pass", {
-      active: false,
-      inUse: true,
-      everyStation: false,
-      stationIds: ["bar"],
-    }),
-    watcherRow("spare", "Spare", { active: false, displayOrder: 2 }),
-  ];
-  server.printers.push({ id: "spare-printer", name: "Spare printer", active: true });
-  server.disabledWatchers[0]!.printerIds = ["spare-printer"];
-  return server;
-}
-const watcherMenu = (el: PrepStationsScreen, id: string) =>
-  [...q(el, `[data-test="watcher-actions-${id}"]`)!.querySelectorAll("wt-button")].map((button) =>
-    button.textContent!.trim(),
-  );
-const watcherRowIds = (el: PrepStationsScreen) =>
-  [...q(el, '[data-test="watchers-table"]')!.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
-    row.querySelector('[data-test^="watcher-"]')?.getAttribute("data-test"),
-  );
-
-it.each([
-  { locale: "en", remove: "Delete", disable: "Disable", enable: "Enable", status: "Disabled" },
-  {
-    locale: "es",
-    remove: "Eliminar",
-    disable: "Deshabilitar",
-    enable: "Habilitar",
-    status: "Deshabilitado",
-  },
-] as const)(
-  "Watchers offers Delete, Disable or Enable by what refers to each watcher ($locale)",
-  async ({ locale, remove, disable, enable, status }) => {
-    const { el } = await mountWatcherPrinters({
-      load: vi.fn().mockResolvedValue(retainedWatchersView()),
-    });
-    setLocale(locale);
-    el.requestUpdate();
-    await settle(el);
-    expect(watcherMenu(el, "runner")).toEqual([
-      locale === "en" ? "Rename" : "Cambiar nombre",
-      remove,
-    ]);
-    expect(watcherMenu(el, "pass").at(-1)).toBe(disable);
-    expect(watcherMenu(el, "old")).toEqual([enable]);
-    expect(watcherMenu(el, "spare")).toEqual([enable, remove]);
-    expect(q(el, '[data-test="watcher-status-old"]')!.textContent!.trim()).toBe(status);
-  },
-);
-
-it("Watchers lists disabled watchers after the active ones, muted, with a gap before their status", async () => {
-  const { el } = await mountWatcherPrinters({
-    load: vi.fn().mockResolvedValue(retainedWatchersView()),
-  });
-  expect(watcherRowIds(el)).toEqual([
-    "watcher-pass",
-    "watcher-runner",
-    "watcher-old",
-    "watcher-spare",
-  ]);
-  for (const id of ["pass", "runner"])
-    expect(q(el, `[data-test="watcher-status-${id}"]`)).toBeNull();
-  const name = q(el, '[data-test="watcher-name-old"]')!;
-  const status = q(el, '[data-test="watcher-status-old"]')!;
-  expect(name.textContent!.trim()).toBe("Old pass");
-  expect(status.textContent!.trim()).toBe("Disabled");
-  const probe = document.createElement("span");
-  probe.style.color = "var(--wt-color-text-muted)";
-  el.shadowRoot!.appendChild(probe);
-  const muted = getComputedStyle(probe).color;
-  probe.remove();
-  expect(getComputedStyle(name).color).toBe(muted);
-  expect(getComputedStyle(q(el, '[data-test="watcher-follows-old"]')!).color).toBe(muted);
-  expect(getComputedStyle(q(el, '[data-test="watcher-pass"]')!).color).not.toBe(muted);
-  expect(status.getBoundingClientRect().left - name.getBoundingClientRect().right).toBeGreaterThan(
-    4,
-  );
-});
-
-it("Watchers gives a disabled watcher no Rename and no follows, zones, pass or printer editing", async () => {
-  const { el } = await mountWatcherPrinters({
-    load: vi.fn().mockResolvedValue(retainedWatchersView()),
-  });
-  for (const id of ["old", "spare"]) {
-    expect(q(el, `[data-test="rename-watcher-${id}"]`)).toBeNull();
-    for (const field of ["follows", "zones", "pass", "printers"])
-      expect(q(el, `[data-test="edit-watcher-${field}-${id}"]`)).toBeNull();
-  }
-  expect(q(el, '[data-test="watcher-follows-old"]')!.textContent!.trim()).toBe("Bar");
-  expect(q(el, '[data-test="watcher-zones-old"]')!.textContent!.trim()).toBe("every service zone");
-  expect(q(el, '[data-test="watcher-pass-old"]')!.textContent!.trim()).toBe("No");
-  expect(q(el, '[data-test="watcher-printers-old"]')!.textContent!.trim()).toBe("Spare printer");
-  expect(q(el, '[data-test="rename-watcher-pass"]')).not.toBeNull();
-  expect(q(el, '[data-test="edit-watcher-follows-pass"]')).not.toBeNull();
-});
-
-it.each([
-  {
-    locale: "en",
-    heading: "Delete watcher",
-    text: "Delete Runner? This cannot be undone.",
-    button: "Delete",
-  },
-  {
-    locale: "es",
-    heading: "Eliminar punto de seguimiento",
-    text: "¿Eliminar Runner? Esta acción no se puede deshacer.",
-    button: "Eliminar",
-  },
-] as const)(
-  "Watchers confirms Delete of a watcher nothing refers to, then removes it and reads again ($locale)",
-  async ({ locale, heading, text, button }) => {
-    const load = vi.fn().mockResolvedValue(retainedWatchersView());
-    const remove = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountWatcherPrinters({ load, removeWatcher: remove });
-    setLocale(locale);
-    el.requestUpdate();
-    await settle(el);
-    q(el, '[data-test="remove-watcher-runner"]')!.click();
-    await settle(el);
-    const modal = q(el, '[data-test="remove-watcher-modal"]')! as HTMLElement & { heading: string };
-    expect(modal.getAttribute("size")).toBe("compact");
-    expect(modal.heading).toBe(heading);
-    expect(modal.querySelector("p")!.textContent!.trim()).toBe(text);
-    const confirm = q(el, '[data-test="confirm-remove-watcher"]')!;
-    expect(confirm.getAttribute("variant")).toBe("danger");
-    expect(confirm.textContent!.trim()).toBe(button);
-    const reads = load.mock.calls.length;
-    confirm.click();
-    await settle(el);
-    expect(remove.mock.calls).toEqual([["runner", { disable: false }]]);
-    expect(load).toHaveBeenCalledTimes(reads + 1);
-    expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
-  },
-);
-
-it.each([
-  {
-    locale: "en",
-    heading: "Disable",
-    text: "Disable Pass? Its printers stop printing its copies.",
-    button: "Disable",
-  },
-  {
-    locale: "es",
-    heading: "Deshabilitar",
-    text: "¿Deshabilitar Pass? Sus impresoras dejarán de imprimir sus copias.",
-    button: "Deshabilitar",
-  },
-] as const)(
-  "Watchers confirms Disable of a watcher something refers to, then removes it and reads again ($locale)",
-  async ({ locale, heading, text, button }) => {
-    const load = vi.fn().mockResolvedValue(retainedWatchersView());
-    const remove = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountWatcherPrinters({ load, removeWatcher: remove });
-    setLocale(locale);
-    el.requestUpdate();
-    await settle(el);
-    q(el, '[data-test="remove-watcher-pass"]')!.click();
-    await settle(el);
-    const modal = q(el, '[data-test="remove-watcher-modal"]')! as HTMLElement & { heading: string };
-    expect(modal.getAttribute("size")).toBe("compact");
-    expect(modal.heading).toBe(heading);
-    expect(modal.querySelector("p")!.textContent!.trim()).toBe(text);
-    const confirm = q(el, '[data-test="confirm-remove-watcher"]')!;
-    expect(confirm.getAttribute("variant")).toBe("danger");
-    expect(confirm.textContent!.trim()).toBe(button);
-    const reads = load.mock.calls.length;
-    confirm.click();
-    await settle(el);
-    expect(remove.mock.calls).toEqual([["pass", { disable: true }]]);
-    expect(load).toHaveBeenCalledTimes(reads + 1);
-  },
-);
-
-it("Watchers confirms Delete of a disabled watcher nothing refers to", async () => {
-  const remove = vi.fn().mockResolvedValue(undefined);
-  const { el } = await mountWatcherPrinters({
-    load: vi.fn().mockResolvedValue(retainedWatchersView()),
-    removeWatcher: remove,
-  });
-  q(el, '[data-test="remove-watcher-spare"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="remove-watcher-modal"]')!.querySelector("p")!.textContent!.trim()).toBe(
-    "Delete Spare? This cannot be undone.",
-  );
-  q(el, '[data-test="confirm-remove-watcher"]')!.click();
-  await settle(el);
-  expect(remove.mock.calls).toEqual([["spare", { disable: false }]]);
-});
-
-it("Watchers enables a disabled watcher, reads again, and puts focus on its menu", async () => {
-  const before = retainedWatchersView();
-  const after = retainedWatchersView();
-  after.watchers.push({ ...after.disabledWatchers[0]!, active: true });
-  after.disabledWatchers.splice(0, 1);
-  const load = vi.fn().mockResolvedValueOnce(before).mockResolvedValue(after);
-  const enable = vi.fn().mockResolvedValue(undefined);
-  const remove = vi.fn();
-  const { el } = await mountWatcherPrinters({ load, enableWatcher: enable, removeWatcher: remove });
-  q(el, '[data-test="enable-watcher-old"]')!.click();
-  await settle(el);
-  expect(enable.mock.calls).toEqual([["old"]]);
-  expect(remove).not.toHaveBeenCalled();
-  expect(load).toHaveBeenCalledTimes(2);
-  expect(q(el, '[data-test="watcher-status-old"]')).toBeNull();
-  expect(q(el, '[data-test="rename-watcher-old"]')).not.toBeNull();
-  const table = q(el, '[data-test="watchers-table"]')!;
-  await vi.waitFor(() =>
-    expect(table.shadowRoot!.activeElement).toBe(q(el, '[data-test="watcher-actions-old"]')),
-  );
-});
-
-it.each([
-  {
-    locale: "en",
-    code: "watcher.name_taken",
-    message:
-      "Old pass cannot be enabled: an active watcher already has that name. Rename that watcher first, then enable this one.",
-  },
-  {
-    locale: "es",
-    code: "watcher.name_taken",
-    message:
-      "No se puede habilitar Old pass: un punto de seguimiento activo ya tiene ese nombre. Cambia primero el nombre de ese punto de seguimiento y luego habilita este.",
-  },
-  { locale: "en", code: "watcher.not_found", message: "This watcher could not be found." },
-  { locale: "en", code: "connection.failed", message: "The change could not be saved." },
-] as const)(
-  "Watchers explains a refused Enable ($locale, $code) and reads nothing again",
-  async ({ locale, code, message }) => {
-    const load = vi.fn().mockResolvedValue(retainedWatchersView());
-    const { el } = await mountWatcherPrinters({
-      load,
-      enableWatcher: vi.fn().mockRejectedValue({ code, params: { name: "Old pass" } }),
-    });
-    setLocale(locale);
-    el.requestUpdate();
-    await settle(el);
-    q(el, '[data-test="enable-watcher-old"]')!.click();
-    await settle(el);
-    expect(q(el, '[role="alert"]')!.textContent!.trim()).toBe(message);
-    expect(load).toHaveBeenCalledTimes(1);
-    expect(q(el, '[data-test="watcher-status-old"]')).not.toBeNull();
-  },
-);
-
-it.each(["rename", "remove"] as const)(
-  "Watchers clears a refused Enable's message once the next action starts (%s)",
-  async (next) => {
-    const update = vi.fn().mockResolvedValue(undefined);
-    const remove = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountWatcherPrinters({
-      load: vi.fn().mockResolvedValue(retainedWatchersView()),
-      enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
-      updateWatcher: update,
-      removeWatcher: remove,
-    });
-    q(el, '[data-test="enable-watcher-old"]')!.click();
-    await settle(el);
-    expect(q(el, '[role="alert"]')!.textContent).toContain("Rename that watcher first");
-    q(el, `[data-test="${next}-watcher-runner"]`)!.click();
-    await settle(el);
-    if (next === "rename")
-      await editSaveField(el, q(el, '[data-test="watcher-rename-name"]')!, "Expo");
-    q(
-      el,
-      next === "rename"
-        ? '[data-test="save-watcher-name"]'
-        : '[data-test="confirm-remove-watcher"]',
-    )!.click();
-    await settle(el);
-    expect((next === "rename" ? update : remove).mock.calls.length).toBe(1);
-    expect(q(el, '[role="alert"]')).toBeNull();
-  },
-);
-
-it("keeps a disabled watcher out of the printer pickers", async () => {
-  const { el } = await mountStations({
-    load: vi.fn().mockResolvedValue(retainedWatchersView()),
-  });
-  const choice = await openPrinters(el);
-  expect(choice.options.find((row) => row.value === "spare-printer")).toEqual({
-    value: "spare-printer",
-    label: "Spare printer",
-    disabled: false,
-    description: undefined,
-  });
-  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
-  await cancelEditor(el);
-  const watcherPicker = await openWatcherPrinters(el);
-  expect(watcherPicker.options.find((row) => row.value === "spare-printer")?.description).toBe(
-    undefined,
-  );
-});
 
 describe("Routing grid", () => {
   const drinksTerrace = { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" };
@@ -5645,17 +4132,7 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
 );
 
 describe("Save follows changes", () => {
-  const modes = [
-    "create",
-    "rename",
-    "printers",
-    "watcher-name",
-    "watcher-printers",
-    "watcher-pass",
-    "watcher-follows",
-    "watcher-zones",
-    "timing",
-  ] as const;
+  const modes = ["create", "rename", "printers", "timing"] as const;
   type Mode = (typeof modes)[number];
   async function openSave(mode: Mode, overrides: Partial<PrepStationsApi> = {}) {
     history.replaceState(null, "", "/manage/prep-stations/view/stations");
@@ -5664,8 +4141,6 @@ describe("Save follows changes", () => {
         ...ticketView,
         zones: [{ id: "terrace", name: "Terrace", active: true }],
       }),
-      updateWatcher: vi.fn(),
-      setWatcherPrinters: vi.fn(),
       setStationFallback: vi.fn(),
       ...overrides,
     });
@@ -5681,41 +4156,6 @@ describe("Save follows changes", () => {
         'wt-combobox[name="printerIds"]',
         ["old"],
         ["next"],
-      ],
-      "watcher-name": [
-        "rename-watcher-pass",
-        "save-watcher-name",
-        '[data-test="watcher-rename-name"]',
-        "Pass",
-        "New pass",
-      ],
-      "watcher-printers": [
-        "edit-watcher-printers-pass",
-        "save-watcher-printers-pass",
-        '[data-test="watcher-printers-pass"]',
-        ["watcher"],
-        ["next"],
-      ],
-      "watcher-pass": [
-        "edit-watcher-pass-pass",
-        "save-watcher-cell",
-        '[data-test="watcher-cell-input"]',
-        ["yes"],
-        ["no"],
-      ],
-      "watcher-follows": [
-        "edit-watcher-follows-pass",
-        "save-watcher-cell",
-        '[data-test="watcher-cell-input"]',
-        ["bar"],
-        ["__every__"],
-      ],
-      "watcher-zones": [
-        "edit-watcher-zones-pass",
-        "save-watcher-cell",
-        '[data-test="watcher-cell-input"]',
-        ["__every__"],
-        ["terrace"],
       ],
       timing: [
         "edit-settings-warmAfterMinutes-bar",
@@ -5759,13 +4199,7 @@ describe("Save follows changes", () => {
       const { el, a, button, query } = await openSave(mode);
       button().click();
       await settle(el);
-      for (const write of [
-        a.createStation,
-        a.updateStation,
-        a.updateWatcher,
-        a.setWatcherPrinters,
-        a.setStationFallback,
-      ])
+      for (const write of [a.createStation, a.updateStation, a.setStationFallback])
         expect(write).not.toHaveBeenCalled();
       expect(query('[data-test="settings-fallback-confirmation"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
@@ -5834,14 +4268,13 @@ describe("Save follows changes", () => {
     );
     expect(form.a.createStation).not.toHaveBeenCalled();
   });
-  it.each(["rename", "watcher-name"] as const)("%s compares trimmed names", async (mode) => {
+  it.each(["rename"] as const)("%s compares trimmed names", async (mode) => {
     const form = await openSave(mode);
     await form.edit(` ${form.initial as string} `);
     await state(form.button(), false);
     form.button().click();
     await settle(form.el);
     expect(form.a.updateStation).not.toHaveBeenCalled();
-    expect(form.a.updateWatcher).not.toHaveBeenCalled();
   });
   it("an explicit default minute value is a change from inheritance, then numeric spelling is ignored", async () => {
     const server = structuredClone(ticketView);
@@ -5852,37 +4285,31 @@ describe("Save follows changes", () => {
     await form.edit("");
     await state(form.button(), true);
   });
-  it.each([
-    "rename",
-    "printers",
-    "watcher-name",
-    "watcher-printers",
-    "watcher-pass",
-    "timing",
-  ] as const)("%s stays primary during a write and retryable after refusal", async (mode) => {
-    let refuse!: (error: unknown) => void;
-    const write = new Promise<void>((_resolve, reject) => {
-      refuse = reject;
-    });
-    const save = vi.fn(() => write);
-    const form = await openSave(mode, {
-      updateStation: save,
-      updateWatcher: save,
-      setWatcherPrinters: save,
-    });
-    await form.edit(form.changed);
-    form.button().click();
-    await settle(form.el);
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(form.button().variant).toBe("primary");
-    expect(form.button().disabled).toBe(true);
-    refuse({ code: "server.internal" });
-    await settle(form.el);
-    await state(form.button(), true);
-    form.button().click();
-    await settle(form.el);
-    expect(save).toHaveBeenCalledTimes(2);
-  });
+  it.each(["rename", "printers", "timing"] as const)(
+    "%s stays primary during a write and retryable after refusal",
+    async (mode) => {
+      let refuse!: (error: unknown) => void;
+      const write = new Promise<void>((_resolve, reject) => {
+        refuse = reject;
+      });
+      const save = vi.fn(() => write);
+      const form = await openSave(mode, {
+        updateStation: save,
+      });
+      await form.edit(form.changed);
+      form.button().click();
+      await settle(form.el);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(form.button().variant).toBe("primary");
+      expect(form.button().disabled).toBe(true);
+      refuse({ code: "server.internal" });
+      await settle(form.el);
+      await state(form.button(), true);
+      form.button().click();
+      await settle(form.el);
+      expect(save).toHaveBeenCalledTimes(2);
+    },
+  );
   it("station printer comparison ignores the saved membership order", async () => {
     const saved = {
       ...ticketView,
@@ -5957,7 +4384,7 @@ describe("The station editor", () => {
   it("puts a refused printer under Printers and keeps the editor open", async () => {
     const { el, a } = await openEdit({
       updateStation: vi.fn().mockRejectedValue({
-        code: "printer.makes_and_watches",
+        code: "printer.not_found",
         params: { printerId: "next" },
       }),
     });
@@ -5967,7 +4394,7 @@ describe("The station editor", () => {
     await editorOf(el)!.updateComplete;
     expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["next"] });
     expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
-      "Choose active printers that no watcher uses.",
+      "Choose active printers.",
     );
     expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
     expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
@@ -6007,7 +4434,7 @@ describe("The station editor", () => {
     await settle(el);
     const printers = q(el, "wt-combobox[name=printerIds]") as WtCombobox;
     expect(printers.label).toBe("Printers");
-    expect(printers.options.find((option) => option.value === "watcher")!.disabled).toBe(true);
+    expect(printers.options.find((option) => option.value === "watcher")!.disabled).toBe(false);
     expect(printers.options.find((option) => option.value === "disabled")!.disabled).toBe(true);
     await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
     await editSaveField(el, printers, ["next"]);
@@ -6090,7 +4517,7 @@ describe("The station editor", () => {
     q(el, '[data-test="save-station"]')!.click();
     await settle(el);
     expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
-      "Choose active printers that no watcher uses.",
+      "Choose active printers.",
     );
     expect(q(el, '[data-field-error="name"]')).toBeNull();
     expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");

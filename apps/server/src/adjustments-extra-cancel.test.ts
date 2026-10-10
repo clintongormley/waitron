@@ -31,7 +31,7 @@ import {
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { createWatcher, setPrinterWatcher } from "./watchers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import "./errors.js";
 
 // Cancelling one extra of a dish the kitchen already has (B11g): the kitchen is told which extra to
@@ -229,16 +229,8 @@ async function noticesDuring(act: () => Promise<void>) {
 }
 
 describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
-  it("sends EXTRA CANCELLED from the adjustment action to the dish's watcher", async () => {
+  it("sends EXTRA CANCELLED from the adjustment action to a printer on the dish's station", async () => {
     const printerId = await inTx(venue, async (tx) => {
-      const watcher = await createWatcher(tx, venue.cfg, {
-        name: `Extra ${randomUUID()}`,
-        runsPass: false,
-        everyStation: false,
-        stationIds: [venue.stationId],
-        everyZone: true,
-        zoneIds: [],
-      });
       const printer = await createPrinter(
         tx,
         { locationId: venue.cfg.locationId },
@@ -248,7 +240,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
           pollId: randomUUID(),
         },
       );
-      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+      await attachPrinterToStation(tx, { stationId: venue.stationId, printerId: printer.id });
       return printer.id;
     });
     try {
@@ -261,7 +253,13 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       expect(printedLines(added[0]!.payload).join(" ")).toContain("Gherkins");
       expect(printedLines(added[0]!.payload).join(" ")).toContain("CHANGED");
     } finally {
-      await inTx(venue, (tx) => setPrinterWatcher(tx, venue.cfg, printerId, null));
+      await inTx(venue, (tx) =>
+        detachPrinterFromStation(
+          tx,
+          { locationId: venue.cfg.locationId },
+          { stationId: venue.stationId, printerId },
+        ),
+      );
     }
   });
   it("prints one CHANGED slip of the dish as it now stands, and the extra to take off", async () => {

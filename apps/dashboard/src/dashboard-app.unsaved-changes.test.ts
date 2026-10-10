@@ -956,7 +956,6 @@ it.each([
             "/management-api/products",
             "/management-api/printers",
             "/management-api/devices",
-            "/management-api/watchers?includeDisabled=true",
             "/management-api/stations/bar/printers",
           ].includes(url)
         )

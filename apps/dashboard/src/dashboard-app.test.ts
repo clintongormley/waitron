@@ -3898,7 +3898,7 @@ describe("dashboard URL navigation", () => {
       [...tabs.shadowRoot!.querySelectorAll('[role="tab"]')].map((tab) =>
         tab.getAttribute("data-key"),
       ),
-    ).toEqual(["stations", "routing", "watchers", "settings"]);
+    ).toEqual(["stations", "routing", "settings"]);
   });
 
   it("an old tester link opens the Routing tab", async () => {
@@ -6642,7 +6642,6 @@ describe("printer breadcrumb during a pending save", () => {
                 port: 9100,
                 localKey: null,
                 pollId: null,
-                watcherId: null,
                 paperWidth: "80mm",
                 resolution: "180dpi",
                 hasCashDrawer: false,

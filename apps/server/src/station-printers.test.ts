@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction, watcherPrinters } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -13,7 +13,6 @@ import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
-import { createWatcher } from "./watchers.js";
 import {
   attachPrinterToStation,
   detachPrinterFromStation,
@@ -76,30 +75,6 @@ function printer(cfg: TillConfig, name: string): Promise<string> {
 }
 
 describe("station→printer mapping verbs", () => {
-  it("refuses a watcher printer and leaves station mappings empty", async () => {
-    const cfg = await setupVenue();
-    const stationId = await station(cfg, "Cocina");
-    const printerId = await printer(cfg, "Pass");
-    const watcher = await asApp(cfg, (tx) =>
-      createWatcher(tx, cfg, {
-        name: "Pass",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
-    );
-    await asApp(cfg, (tx) =>
-      tx.insert(watcherPrinters).values({ printerId, watcherId: watcher.id }),
-    );
-    await expect(
-      asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId })),
-    ).rejects.toMatchObject({ code: "printer.makes_and_watches", params: { id: printerId } });
-    expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg), { printerId }))).toEqual(
-      [],
-    );
-  });
   it("attaches a mapping, lists it, and is idempotent on a repeat attach", async () => {
     const cfg = await setupVenue();
     const s1 = await station(cfg, "Cocina");

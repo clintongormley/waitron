@@ -6,8 +6,6 @@ import {
   isRefusal,
   locations,
   printers,
-  watchers,
-  watcherPrinters,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -95,24 +93,12 @@ async function fullRow(printerId: string): Promise<{
 }
 
 describe("createPrinter", () => {
-  it("lists the attached watcher id and null for an unattached printer", async () => {
+  it("lists printers with no watcherId", async () => {
     const cfg = await setup();
-    const attached = await seedPrinter(cfg, "Pass copy");
-    const unattached = await seedPrinter(cfg, "Kitchen");
-    const [watcher] = await asTx(cfg, (tx) =>
-      tx
-        .insert(watchers)
-        .values({ locationId: cfg.locationId, name: "Pass", everyStation: true, everyZone: true })
-        .returning({ id: watchers.id }),
-    );
-    await asTx(cfg, (tx) =>
-      tx.insert(watcherPrinters).values({ printerId: attached, watcherId: watcher!.id }),
-    );
+    const kitchen = await seedPrinter(cfg, "Kitchen");
     const listed = await asTx(cfg, (tx) => listPrinters(tx, cfg));
-    expect(listed.find((printer) => printer.id === attached)).toMatchObject({
-      watcherId: watcher!.id,
-    });
-    expect(listed.find((printer) => printer.id === unattached)).toMatchObject({ watcherId: null });
+    expect(listed.map((printer) => printer.id)).toContain(kitchen);
+    for (const printer of listed) expect(printer).not.toHaveProperty("watcherId");
   });
   it("inserts a network_tcp printer; an omitted port defaults to 9100", async () => {
     const cfg = await setup();

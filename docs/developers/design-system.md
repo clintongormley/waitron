@@ -1858,7 +1858,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor, the routing cell editor,
-watcher Rename/follows/zones/pass/printers, and Settings timing. Rest-of-order is edited in
+and Settings timing. Rest-of-order is edited in
 the station editor. Routing Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -3151,10 +3151,11 @@ leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hi
 remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
-Prep stations uses `stations`, `routing`, `watchers` and `settings` at
-`/manage/prep-stations/view/<key>`; an old `tickets` address opens Stations. Stations shows no
-live kitchen numbers: each station's name with its Default mark, Printed on (its printers, or
-"No printer") and Shown on (the devices whose kitchen screens show it, and a link to Devices).
+Prep stations uses `stations`, `routing` and `settings` at
+`/manage/prep-stations/view/<key>`; any other key, such as an old `tickets` or `watchers` address,
+opens Stations. Stations shows no live kitchen numbers: each station's name with its Default mark,
+Printed on (its printers, or "No printer") and Shown on (the devices whose kitchen screens show it,
+and a link to Devices).
 A closure note beside its name reads Closed for today and its destination, or Switched off;
 open and default stations need no status note (`packages/venue-service/src/dashboard/station-table.ts`).
 Each active non-default station links to Opening hours with its station id.
@@ -3187,10 +3188,11 @@ copy. The default cell (All categories × Every zone) takes no period lines. A c
 products opens a preview listing each one with its old and new destination ("… during Lunch" for a
 period's move) before anything is saved; a choice that moves nothing saves at once. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers and "Show the
-rest of the order", saved in one request. Printers offers a printer a watcher uses as disabled,
-unless the station already has it, and is a read-out for a switched-off station; the editor also has
+rest of the order", saved in one request. Printers offers every active printer, shows a
+disabled one as Disabled and lets it stay chosen only where the station already has it, and is a
+read-out for a switched-off station; the editor also has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
-also sets Printers. Watchers keeps its own printer selections. Settings edits each station value in
+also sets Printers. Settings edits each station value in
 its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Edit, Make default and
 Disable/Enable actions belong to the Stations row menu; Routing's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
@@ -3349,7 +3351,7 @@ removing a product from a menu removes that offer.
 
 Something switched off but kept — an options or extras list, a zone, a
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
-agent, a device, a card reader, and a watcher or a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
+agent, a device, a card reader, and a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
@@ -3358,12 +3360,12 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
 screen uses: **Activo** or **Deshabilitado** for a departamento, estado, motivo, usuario,
-lector, agente, dispositivo, punto de seguimiento or curso; **Activa** or **Deshabilitada** for a lista, zona,
+lector, agente, dispositivo or curso; **Activa** or **Deshabilitada** for a lista, zona,
 estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
-Where a screen has both, the action follows what the code does: a watcher's or a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then.
+Where a screen has both, the action follows what the code does: a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then.
 
 Products use **Archive**, with **Active / Archived** status, and **View** for an archived row.
 In Spanish these are **Archivar**, **Activo / Archivado** for a product,

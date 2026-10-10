@@ -30,8 +30,10 @@ list does not exist.
   - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
     every station it covered, even where that station's own printer printed; it stops showing at
     a station once a Reprint of the bill would not link that pass printer to that station.
-    _2026-10-01 (slice 3d): the whole-order printer is gone; a watcher's copy is linked to no
-    station and shows no printing problem (W23)._
+    _2026-10-10 (A366 slice 5 Part B): watchers are gone, and a pass printer is now a printer
+    listed on every station; its combined ticket is linked to each station it covers, so this
+    applies again ("shows a failed combined ticket on both stations' cards, and one Reprint there
+    clears both", `apps/server/src/print-problems.test.ts`)._
   - Finish table drops the problem of a bill that transfers emptied (read, not run; not
     re-checked by B6a).
   - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears

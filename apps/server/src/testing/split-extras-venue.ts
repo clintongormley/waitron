@@ -23,7 +23,6 @@ import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
-import { createWatcher, setPrinterWatcher } from "../watchers.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createTable } from "../tables.js";
 import { seatTable } from "../parties.js";
@@ -111,15 +110,8 @@ export async function setupSplitExtrasVenue() {
       },
     );
     printers.pass = pass.id;
-    const watcher = await createWatcher(tx, cfg, {
-      name: "Pase",
-      runsPass: true,
-      everyStation: false,
-      stationIds: [stations.grill, stations.fryer],
-      everyZone: true,
-      zoneIds: [],
-    });
-    await setPrinterWatcher(tx, cfg, pass.id, watcher.id);
+    for (const stationId of [stations.grill, stations.fryer])
+      await attachPrinterToStation(tx, { stationId, printerId: pass.id });
 
     const food = await createCategory(tx, { name: "Food" });
     const burgers = await createCategory(tx, { name: "Burgers", parentId: food.id });

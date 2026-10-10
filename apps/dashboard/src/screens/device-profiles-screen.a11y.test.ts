@@ -72,7 +72,6 @@ function printer(id: string, name: string, active = true): Printer {
     port: 9100,
     localKey: null,
     pollId: null,
-    watcherId: null,
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,

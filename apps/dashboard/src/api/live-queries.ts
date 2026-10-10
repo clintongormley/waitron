@@ -58,7 +58,7 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "units",
   ],
-  listPrinters: ["printers", "print_jobs", "watcher_printers", "printer_holders"],
+  listPrinters: ["printers", "print_jobs", "printer_holders"],
   listPrinterProfiles: ["device_profile_printers", "device_profiles"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
@@ -309,7 +309,6 @@ export const QUERY_DEPENDENCIES = {
     "floor_zones",
   ],
   listStations: ["kitchen_stations"],
-  listWatchers: ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"],
   listCourses: ["kitchen_courses"],
   // Not the order tables `inUse` also reads: a stale Delete is answered by disabling instead.
   listCoursesWithDisabled: ["kitchen_courses", "products"],

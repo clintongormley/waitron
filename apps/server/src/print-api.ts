@@ -76,7 +76,6 @@ import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
-import { replaceWatcherPrinters, setPrinterWatcher } from "./watchers.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 import { setPrinterPortable } from "@waitron/layouts";
 import { readPrinterHolders } from "./device-equipment.js";
@@ -113,8 +112,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_full": 429,
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
-  "printer.makes_and_watches": 409,
-  "watcher.not_found": 404,
   "printer.probe_busy": 429,
   "printer.bluetooth_command_busy": 429,
   "printer.bluetooth_not_discovered": 409,
@@ -986,39 +983,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
         if (portable !== undefined) await setPrinterPortable(tx, id, portable);
       });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.put("/management-api/watchers/:id/printers", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const watcherId = requireUuidParam(c.req.param("id"), "WatcherId");
-      const body = await readJsonBody<{ printerIds?: unknown }>(c);
-      if (
-        !Array.isArray(body.printerIds) ||
-        body.printerIds.some((id) => typeof id !== "string") ||
-        new Set(body.printerIds).size !== body.printerIds.length
-      ) {
-        throw new AppError("management.request_invalid", { field: "printerIds" });
-      }
-      const printerIds = body.printerIds.map((id) => requireUuidParam(id as string, "PrinterId"));
-      await gated(sessionId, (tx) => replaceWatcherPrinters(tx, deps.cfg, watcherId, printerIds));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.put("/management-api/printers/:id/watcher", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      const body = await readJsonBody<Record<string, unknown>>(c);
-      if (body.watcherId !== null && typeof body.watcherId !== "string") {
-        throw new AppError("management.request_invalid", { field: "watcherId" });
-      }
-      await gated(sessionId, (tx) =>
-        setPrinterWatcher(tx, deps.cfg, id, body.watcherId as string | null),
-      );
       return c.body(null, 204);
     }),
   );

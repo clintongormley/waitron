@@ -37,8 +37,6 @@ import {
   kitchenStations,
   locations,
   sales,
-  watchers,
-  watcherZones,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -1764,14 +1762,14 @@ describe("departments", () => {
     ).toEqual(expect.arrayContaining([{ zoneId: front }, { zoneId: back }]));
   });
 
-  it("removes a zone's routing and watcher selections while retaining its menu and policy", async () => {
+  it("removes a zone's routing while retaining its menu and policy", async () => {
     await seedUnitTenant();
     const cfg = { locationId: brandLocationId(await seedLocation("Zone cleanup")) };
     const zoneId = await seedZone(cfg.locationId, "Terrace");
     const otherZoneId = await seedZone(cfg.locationId, "Dining room");
     const kitchen = await seedStation(cfg.locationId, "Kitchen");
     const bar = await seedStation(cfg.locationId, "Bar");
-    const { watcherId, menuId, departmentId, categoryId, productId } = await scoped(async (tx) => {
+    const { menuId, departmentId, categoryId, productId } = await scoped(async (tx) => {
       const department = await createDepartment(tx, cfg, {
         name: "Restaurant",
         orderStart: "table",
@@ -1814,16 +1812,7 @@ describe("departments", () => {
         { row: { kind: "category", ...category }, zoneId: otherZoneId },
         station(bar),
       );
-      const [watcher] = await tx
-        .insert(watchers)
-        .values({
-          locationId: cfg.locationId,
-          name: "Pass",
-        })
-        .returning({ id: watchers.id });
-      await tx.insert(watcherZones).values({ watcherId: watcher!.id, zoneId });
       return {
-        watcherId: watcher!.id,
         departmentId: department.id,
         menuId: menu.id,
         categoryId: product.categoryId,
@@ -1850,9 +1839,6 @@ describe("departments", () => {
     ];
     expect(await cells()).toEqual(expect.arrayContaining(remaining));
     expect(await cells()).toHaveLength(remaining.length);
-    expect(
-      await db.select().from(watcherZones).where(eq(watcherZones.watcherId, watcherId)),
-    ).toEqual([]);
     expect(
       await db
         .select({ menuId: menuPeriods.menuId })

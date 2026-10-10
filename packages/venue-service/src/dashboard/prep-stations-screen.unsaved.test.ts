@@ -69,8 +69,6 @@ const view: PrepStationsView = {
   printers: [],
   stationPrinters: [],
   devices: [],
-  watchers: [],
-  disabledWatchers: [],
 };
 
 class StationLeaveApp extends LitElement {

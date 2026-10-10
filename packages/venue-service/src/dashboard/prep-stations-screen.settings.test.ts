@@ -76,8 +76,6 @@ const view: PrepStationsView = {
   printers: [],
   stationPrinters: [],
   devices: [],
-  watchers: [],
-  disabledWatchers: [],
 };
 // These cases must still observe attempted fallback writes.
 type ScreenApi = PrepStationsApi & {

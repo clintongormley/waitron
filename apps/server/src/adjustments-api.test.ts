@@ -8,7 +8,7 @@ import { deviceProfiles, printJobs, products, withTransaction, workingOrders } f
 import { createPrinter } from "@waitron/printing";
 import { clearRoutingCell, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
-import { createWatcher, removeWatcher, setPrinterWatcher } from "./watchers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   adjustments,
@@ -95,18 +95,10 @@ function recordedOn(billId: string) {
   );
 }
 
-describe("watcher corrections through order actions", () => {
+describe("corrections through order actions on a station's printers", () => {
   it("sends HOLD CHANGED and HOLD CANCELLED through the order edit routes", async () => {
     const printerId = await inTx(venue, async (tx) => {
       await writePrintHeldWork(tx, true);
-      const watcher = await createWatcher(tx, venue.cfg, {
-        name: `Held ${randomUUID()}`,
-        runsPass: false,
-        everyStation: false,
-        stationIds: [venue.stationId],
-        everyZone: true,
-        zoneIds: [],
-      });
       const printer = await createPrinter(
         tx,
         { locationId: venue.cfg.locationId },
@@ -116,7 +108,7 @@ describe("watcher corrections through order actions", () => {
           pollId: randomUUID(),
         },
       );
-      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+      await attachPrinterToStation(tx, { stationId: venue.stationId, printerId: printer.id });
       return printer.id;
     });
     try {
@@ -164,13 +156,17 @@ describe("watcher corrections through order actions", () => {
       expect((await papers())[2]).toContain("CHULETA");
     } finally {
       await inTx(venue, async (tx) => {
-        await setPrinterWatcher(tx, venue.cfg, printerId, null);
+        await detachPrinterFromStation(
+          tx,
+          { locationId: venue.cfg.locationId },
+          { stationId: venue.stationId, printerId },
+        );
         await writePrintHeldWork(tx, false);
       });
     }
   });
-  it("routes beer VOID only to its watcher, and steak VOID to the Grill-only watcher", async () => {
-    const { beerId, printerIds, watcherIds } = await inTx(venue, async (tx) => {
+  it("routes beer VOID only to a printer on its station, and steak VOID to a Grill-only printer too", async () => {
+    const { beerId, printerIds, listed } = await inTx(venue, async (tx) => {
       const bar = await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` });
       const [beer] = await tx
         .select({ id: products.id })
@@ -183,19 +179,11 @@ describe("watcher corrections through order actions", () => {
         { kind: "station", stationId: bar.id },
       );
       const ids: string[] = [];
-      const watcherIds: string[] = [];
+      const listed: [string, readonly string[]][] = [];
       for (const [label, stationIds] of [
         ["Both", [venue.stationId, bar.id]],
         ["Grill only", [venue.stationId]],
       ] as const) {
-        const watcher = await createWatcher(tx, venue.cfg, {
-          name: `${label} ${randomUUID()}`,
-          runsPass: false,
-          everyStation: false,
-          stationIds: [...stationIds],
-          everyZone: true,
-          zoneIds: [],
-        });
         const printer = await createPrinter(
           tx,
           { locationId: venue.cfg.locationId },
@@ -205,11 +193,12 @@ describe("watcher corrections through order actions", () => {
             pollId: randomUUID(),
           },
         );
-        await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+        for (const stationId of stationIds)
+          await attachPrinterToStation(tx, { stationId, printerId: printer.id });
         ids.push(printer.id);
-        watcherIds.push(watcher.id);
+        listed.push([printer.id, stationIds]);
       }
-      return { beerId: beer!.id, printerIds: ids, watcherIds };
+      return { beerId: beer!.id, printerIds: ids, listed };
     });
     try {
       const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Cana" }]);
@@ -256,12 +245,13 @@ describe("watcher corrections through order actions", () => {
       }
     } finally {
       await inTx(venue, async (tx) => {
-        for (const printerId of printerIds) {
-          await setPrinterWatcher(tx, venue.cfg, printerId, null);
-        }
-        for (const watcherId of watcherIds) {
-          await removeWatcher(tx, venue.cfg, watcherId);
-        }
+        for (const [printerId, stationIds] of listed)
+          for (const stationId of stationIds)
+            await detachPrinterFromStation(
+              tx,
+              { locationId: venue.cfg.locationId },
+              { stationId, printerId },
+            );
         await clearRoutingCell(tx, venue.cfg, {
           row: { kind: "product", productId: beerId },
           zoneId: null,

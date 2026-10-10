@@ -141,7 +141,7 @@ describe("seedDemoRestaurant", () => {
     expect(separate).toEqual([{ count: 0 }]);
   });
 
-  it("gives the kitchen display profile the pass levers, and seeds no watcher", async () => {
+  it("gives the kitchen display profile the pass levers", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -166,9 +166,6 @@ describe("seedDemoRestaurant", () => {
         ],
       },
     ]);
-    const { rows } = await suite.db.execute<{ n: number }>(sql`
-      select cast(count(*) as integer) as n from watchers`);
-    expect(rows).toEqual([{ n: 0 }]);
   });
 
   it("connects the demo printer to every device profile and the preparation stations", async () => {

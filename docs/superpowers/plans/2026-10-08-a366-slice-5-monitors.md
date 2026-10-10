@@ -2343,6 +2343,375 @@ are not on `main`, or a pass ticket today still comes only from a watcher printe
 After Part A no screen shows a watcher and the dashboard cannot add one (decision 22); what is left
 is the venue's existing watchers as printer settings, and those a new venue imports at setup.
 
+### Part B re-grounded against main 47b6a4c53 (2026-10-10)
+
+**This subsection replaces Tasks B1–B3 below**, which stay only as the original outline. Lines are
+at `47b6a4c53`. "Ran" marks a command run on 2026-10-10; everything else was read.
+
+#### The STOP gate: go, with five changes the driver must accept (decisions P1–P5)
+
+- **(a) Combined tickets are on `main`** (#1489). Ran
+  `pnpm --filter @waitron/server exec vitest run src/kitchen-print.shared-printers.test.ts`: 16
+  passed. `kitchen-print.shared-printers.test.ts:158` ("prints one ticket per send, with a section
+  for each of its stations in this send") and `:189` ("prints one ticket with every station's
+  section on a printer every station uses": one job, header `Cold · Grill · Pastry`, three
+  sections, linked to all three stations). A reprint (`:364`), a correction slip (`:451`) and two
+  widths (`:240`) follow the same grouping; a failed combined ticket shows on each station's card
+  (`print-problems.test.ts:1691`). Routing: `routeKitchenTickets`, `kitchen-print.ts:450-479`.
+- **(b) What a watcher printer prints today** (`kitchen-print.ts`): per send, one ticket per
+  watcher headed with the watcher's name, a section per followed station, made-here dishes left
+  out, filtered by the order's zone, no "rest of the order", no kitchen links (`:679-760`,
+  `:773`); a HOLD ticket the same way (`order-groups.ts:1276`); reprints (`:1550-1565`);
+  correction, HOLD and EXTRA CANCELLED slips per dish (`printCorrectionSlips :1112-1186`); MOVED
+  slips filtered by the old and new zone (`notifyMoved :1288-1334`); on a station move, a slip only
+  to a watcher that stops following the dish and a copy only to one that starts
+  (`enqueueStationMoved :933-968`, `station-move.ts:356-366`, `working-order.ts:2031-2037`).
+- **Does a venue lose a ticket nothing else prints? No, apart from one the owner accepted.** The
+  whole-send pass ticket is a printer listed on every station (spec §8: "A printer listed on every
+  station prints the whole send: the pass ticket"; slice 4 plan `:59-61`, `:215-229`). The one
+  loss is a watcher printer limited to zones (a "Terrace runner"): spec §15 item 2 accepts it has
+  no replacement. Nothing in `docs/backlog.md` (A366 entry `:1326-1334`), the slice 4 plan or the
+  slice 6 plan says otherwise. What changes, for the driver to accept or put to the owner:
+  - **P1 — a station move prints twice on a pass printer.** Ran a throwaway probe (a printer
+    attached to Bar and Grill, a dish moved Bar → Grill with `moveDishesToStation`): the printer
+    got 2 jobs, `*** MOVED TO GRILL ***` headed Bar, and a Grill ticket `From Bar`. A watcher
+    following both printed nothing (`station-move.test.ts:1686-1687`, read). Spec §8 ("Reprints
+    and correction slips follow the same grouping") implies the new paper; default: accept and pin
+    it (Task B1b).
+  - **P2 — a pass printer keeps up with new stations only by hand.** A watcher with
+    `every_station` covered a new station at once (`watcherSees`, `watchers.ts:42-53`); a printer
+    "on every station" must be added to each new station. Default: accept; a backlog entry for an
+    "add to every station" control.
+  - **P3 — a pass printer may print "the rest of the order"** when any of its stations shows it
+    (`kitchen-print.ts:585-603`, `:635`, pinned at `shared-printers.test.ts:273`); a watcher copy never did
+    (`kitchen-ticket.ts:229`). Slice 4's behaviour; default: accept.
+  - **P4 — a pass printer's failed ticket now shows on station cards** (linked,
+    `print-problems.test.ts:1691`); a watcher copy's failure showed on none (`print-problems.test.ts:312`).
+    Default: accept.
+  - **P5 — upgrading venues lose their pass printer silently.** The migration deletes the
+    venue's watchers and their printer settings; nothing prints there until a manager lists that
+    printer on every station. Pre-live, so no data-migration code (CLAUDE.md §3); say it in the
+    pull request.
+
+#### Venue reset: measured NOT needed — the plan's "venue reset needed" is wrong
+
+Ran, in a throwaway worktree at `47b6a4c53`: deleted `packages/db/src/schema/watchers.ts` and its
+two exports, `pnpm --filter @waitron/db db:generate` wrote `0131_majestic_dracula.sql`:
+`DROP TABLE watcher_printers`, `watcher_stations`, `watcher_zones`, `watchers`, in that order. Then
+`pnpm exec vitest run scripts/migration-upgrade.test.ts`: 1 passed with no `RESETS` entry, so the
+step carried every other table's two rows. Control: the same file with `watchers` dropped first
+failed `DROP TABLE watchers` with `FOREIGN KEY constraint failed`, so the walk had rows in the
+child tables at that step. After Part A nothing outside the four tables refers to `watchers`
+(ran `grep -n -i "references \`\?watcher" packages/*/drizzle/*.sql`: in `0071` the three child
+tables' keys, `watcher_item_marks`' and `devices.watcher_id`; `devices` again in `0090`; venue-service
+`0024`'s `device_profile_watchers`. `0123` dropped `watcher_item_marks` and rebuilt `devices` without
+the column; venue-service `0041` only drops `device_profile_stations` and `device_profile_watchers`).
+The only trigger bodies naming a watcher (`0072`, `0091`, the device binding pair, reading
+`devices.watcher_id`) were dropped by `0119_drop_device_binding_triggers.sql`. So: **no `RESETS` entry** (one would fail the guard: "it carried the
+rows", `migration-upgrade.test.ts:410`), and the pull request's first line must not say "venue
+reset needed". Re-run the walk after generating; if it refuses, STOP.
+
+`kitchen_print_jobs` has no watcher column or check value (`schema/kitchen-print-jobs.ts`; only a
+comment at `:12`); `scope: "watcher"` is a formatter type in `kitchen-ticket.ts:69-76`, never
+stored.
+
+#### Plan corrections (drift)
+
+- `kitchen-print.ts`: `WatcherCopies :107`, `readWatcherPrinters :116-141`, `KitchenJob.watcherId
+  :427`, `planKitchenTickets :502` (option `:512`, `:521`; reads `:536-537`; watcher block
+  `:679-760`), `enqueueKitchenJobs :773`, `enqueueKitchenTickets :785-804`, `enqueueWatcherCopies
+  :806-824`, `WatcherSlipRule :1107-1110`, `SentWork.zoneId :1192-1197`, `readSentWork :1213-1216`,
+  `notifyMoved :1325-1333`, `readPartiesSentWork :1384-1392`, reprint `:1550`, `:1557`, `:1565`;
+  imports `:23-24`, `:50-52`. `kitchen-ticket.ts` `:5-6`, `:69-76`, `:213`, `:229`.
+  `working-order.ts :189`, `:2020`, `:2030-2037`. `station-move.ts :356-366`.
+- `management-api.ts :133-140`, `:318-319`, `:329` (`printer.makes_and_watches`, added by slice 4
+  for the station routes), `:367-397`, `:2000-2056`. `print-api.ts :79`, `:116-117`, `:993-1022`.
+  `station-printers.ts :5`, `:35-44`. `errors.ts :57-58`, `:641-644`.
+- **`printer.makes_and_watches` is still on `main`**: slice 4 kept it on purpose (slice 4 plan
+  decision 4, `:265-269`); slice 4 also taught the station editor the code
+  (`packages/venue-service/src/dashboard/station-editor.ts:62`).
+- `watcher-form.ts` and `watcher-form.unsaved.test.ts` no longer exist (deleted by #1479); the
+  Watchers tab is inline editing in `prep-stations-screen.ts`. `PREP_TABS :81`; an unknown view
+  falls back to Stations at `:263`.
+- `routing-client.ts :12`, `:44`, `:54-56`, `:65-75`, `:82-112`, `:128-143`; venue-service
+  `live-queries.ts :22-25`; `operations.ts :21`, `:365`.
+- Dashboard: `client.ts` `Watcher :660`, `Printer.watcherId :1122`, `listWatchers :2856`,
+  `setPrinterWatcher :3241`; none has a caller outside `client.test.ts` (ran `grep -rn
+  "listWatchers\|setPrinterWatcher" apps/dashboard/src`). `live-queries.ts :61`, `:318`.
+  `strings.ts` `printers.watcher_*` (`:1128-1133`, `:3658-3663`) have no reader.
+- db: `index.ts :139`, `classification.ts :112-115`, `configuration-transfer.ts :45-47`, `:65`.
+  `scripts/schema-constraints.test.ts :283-289`, `:451`. `configuration-transfer.test.ts
+  :1698-1790`.
+- `apps/server/scripts/demo-seed/` seeds no watcher (Part A); only `seed.test.ts:169-171` reads the
+  table.
+- `docs/developers/design-system.md :1857`, `:3148`, `:3180-3183`, `:3360`, `:3374`;
+  `products.md :223`.
+
+#### Classification of every hit
+
+Ran `grep -rn "watcher\|Watcher" apps packages scripts --include='*.ts' --include='*.mjs' | grep -v
+node_modules | grep -v drizzle/meta` (2048 lines, 104 files) and `grep -rn "makes_and_watches" apps
+packages scripts`. Each file is in a task below, or here:
+
+- **Unrelated — leave:** `apps/dashboard/src/screens/backup-screen.ts` and its test (the backup
+  status watcher), `apps/server/src/testing/watched-scrypt.ts`,
+  `packages/venue-service/src/dashboard/model-watch.ts`, `hours-client.test.ts:171`,
+  `packages/store/src/index.test.ts:381-426`, `apps/dashboard/src/screens/payments-screen.test.ts:
+  111-157` (lock waiters), `scripts/step-watch.mjs`, `packages/ui/src/components/wt-tabs.a11y.test.ts:48`
+  (sample labels that make the strip overflow), `apps/server/src/join-api.test.ts:53` (a profile
+  named "Watcher KDS"), `apps/till/src/till-app-boot-and-counter.test.ts:442` (a device id).
+- **Part A's absence checks — keep:** `device-api.pass.test.ts:468-500` (till watcher routes 404),
+  `device-api.test.ts:1636-1649`, `management-api.device-profiles.test.ts:1419`,
+  `packages/db/src/schema/devices.test.ts:88-94`, venue-service `migrations.test.ts:180-183`,
+  `service.test.ts:113`, `apps/server/scripts/demo-seed/data-set.test.ts:198`,
+  `dev-setup.test.ts:431`, `scripts/migration-upgrade.test.ts:394` (the shipped `0123` entry),
+  `till-app.test.ts:11874` (an old `/watcher/` address still opens the device's choice),
+  `till-expo-screen.test.ts:300`, `:711`, `:729` (`[data-watcher]` absent),
+  `docs/developers/conventions-data.md:1852-1853` (a shipped migration's history).
+- **Names only, no watcher behaviour (decision P6):** the till's pass read types `WatcherCourse`,
+  `WatcherGroup`, `WatcherOrder` (`apps/till/src/api/client.ts:1639-1651`, used by
+  `till-expo-screen.ts:30-31`, `:971`, `:1137` and its test `:20`, `:221`), the string
+  `expo.watcher_empty` (`apps/till/src/i18n/strings.ts:364`, `:1506`), `#item(…, watcher)`
+  (`till-expo-screen.ts:1023-1035`); `apps/server/src/watchers.leave.test.ts` (tests the pass and
+  station queue, imports nothing from `watchers.ts`); `watch-zones.ts` (`orderWatchZones`, used by
+  `pass-board.ts:8`, `device-levers.ts:15`, stays); the dashboard string key
+  `devices.watcher_disabled_mark` (`strings.ts:1042`, `:3572`), which marks a disabled card reader
+  (`device-profiles-screen.ts:1813`). Default: leave them (outside "Behaviour this slice removes");
+  the optional Task B5 renames them.
+- **Live subscriptions (order matters):** `scripts/live-subscriptions.test.ts` accepts only types a
+  module's change sources declare, and core's come from `CORE_CLASSIFICATION`
+  (`classification.ts:242`). So `watchers`, `watcher_stations`, `watcher_zones`,
+  `watcher_printers` must leave `apps/dashboard/src/api/live-queries.ts:61`, `:318` and venue-service
+  `live-queries.ts:22-25` (Tasks V2b, D) before Task B3a removes the classification rows.
+- **Error codes:** `watcher.not_found`, `watcher.name_taken`, `printer.makes_and_watches`. No alert
+  code, so `scripts/alert-codes.test.ts` is untouched; `scripts/errors-reachable.test.ts` checks only
+  reachability. The retiring grep, run after Task D: `grep -rn
+  '"watcher\.\(not_found\|name_taken\)"\|"printer.makes_and_watches"' apps packages docs/developers`
+  answers nothing.
+- **Old exports naming watchers:** refused today and after, with no code: a bundle whose `version`
+  is not 2 answers `setup.configuration_outdated` (`configuration-transfer.ts:459`), a module
+  version other than the target's answers `setup.request_invalid {field: "module:core"}` (`:573-576`),
+  and a table the target does not declare answers `{field: "tables"}` (`:538-542`). The fixture
+  `testing/fixtures/configuration-v1-before-printing-retirement.json` (version 1, empty watcher
+  tables at `:215`, `:246`) is refused on its version (`configuration-import.test.ts:96-188`) and
+  stays unchanged.
+
+#### Task split
+
+Order: server printing, server configuration, venue-service UI, dashboard, db. Every task runs its
+package's typecheck and the named files; each red run must show the failure named. Implementers are
+dispatched as `subagent_type: "implementer"`; the global CLAUDE.md handover rule applies. Every
+commit `git commit -s`.
+
+**B1a — Sends, HOLD tickets, reprints and station moves print no watcher copy.**
+- Red first (`kitchen-print.shared-printers.test.ts`): "a printer a watcher holds prints nothing on
+  a send, a HOLD ticket or a reprint" — insert `watchers` (every station, every zone) and a
+  `watcher_printers` row through `@waitron/db`, fire, reprint. Today it prints one copy per send:
+  the run prints an expected length 0 against 1. Task B3a deletes this case with the tables.
+- Delete: `WatcherCopies`, the `watchers` option of `planKitchenTickets` and
+  `enqueueKitchenTickets`, the watcher block, `KitchenJob.watcherId` and its skip, the
+  `watcherId` match in `reprintOrderTickets`, `enqueueWatcherCopies` and its call
+  (`working-order.ts:2031-2037`; the two `enqueueKitchenTickets` calls lose `watchers: "none"`),
+  `watchers: { newSince }` (`station-move.ts:358`, `:364`), `scope: "watcher"` in
+  `kitchen-ticket.ts`. Keep `readWatcherPrinters` for B1b.
+- Fixture: `testing/split-extras-venue.ts:103-122` — "Pase" becomes a printer attached to Grill and
+  Fryer with `attachPrinterToStation`; drop `createWatcher`/`setPrinterWatcher` (`:26`).
+- Tests (changed checks below): `kitchen-print.watchers.test.ts` deleted after each case is
+  placed; `kitchen-print.test.ts` (`makeWatcherPrinter :420-441` becomes a helper attaching the
+  printer to the named stations; `:242`, `:503`, `:537`, `:744`, `:1251`, `:1641`);
+  `print-problems.test.ts` (`:312`, `:327`, `:380`, `:542`, `:727`, `:899`, `:1074`, helper
+  `:1828-1846`); `order-groups.test.ts:4381`; `station-move.test.ts:892-1003`;
+  `split-off-extras.send.test.ts:13-15`, `:222-235`; `kitchen-ticket.test.ts :76`, `:307-360`,
+  `:877`, `:1086`.
+- Run: `pnpm --filter @waitron/server exec vitest run src/kitchen-print src/kitchen-ticket.test.ts
+  src/print-problems.test.ts src/order-groups.test.ts src/station-move.test.ts src/split-off-extras
+  src/tabs.test.ts`; `pnpm --filter @waitron/server typecheck`.
+- Commit: `feat(server): kitchen tickets no longer print watcher copies (A366)`.
+
+**B1b — Correction, HOLD, EXTRA CANCELLED and MOVED slips go to station printers only.**
+- Red first: "a printer a watcher holds gets no VOID slip" (rows inserted as in B1a; VOID through
+  the order action). Today one slip prints. Deleted in B3a. Pin P1 (passes today, measured): "a
+  printer on both stations gets the MOVED TO slip and the new station's From ticket on a move".
+- Delete: `WatcherSlipRule`, `printCorrectionSlips`' `watchers` parameter and filter,
+  `followed_until` in `enqueueStationMoved`, `followed_in` in `notifyMoved`, `SentWork.zoneId` and
+  its reads in `readSentWork` and `readPartiesSentWork`, `readWatcherPrinters`, `WatcherPrinter`,
+  imports `:23-24`, `:50-52` (`orderWatchZones` leaves this file only), "and watchers" at `:905`,
+  the sentence at `packages/db/src/schema/kitchen-print-jobs.ts:12`.
+- Tests: `adjustments-api.test.ts:98-270`, `adjustments-extra-cancel.test.ts:232-265`,
+  `party-table-actions.test.ts:277-330`, `order-groups.test.ts:3850-3900`,
+  `station-move.test.ts:1471`, `:1501`, `:1628`.
+- Run: `pnpm --filter @waitron/server exec vitest run src/kitchen-print src/adjustments
+  src/party-table-actions.test.ts src/order-groups.test.ts src/station-move.test.ts
+  src/table-actions src/tabs.test.ts`; typecheck (it names every `SentWork` literal).
+- Commit: `feat(server): correction slips go to station printers only (A366)`.
+
+**B2 — Watcher routes, refusals and the printer's watcher field go.**
+- Red first: as a manager, `GET`/`POST /management-api/watchers`, `PUT`/`DELETE
+  /management-api/watchers/:id`, `POST …/:id/reactivate`, `PUT …/:id/printers` and `PUT
+  /management-api/printers/:id/watcher` answer 404 (today 200/201/204); a printer a watcher holds
+  (rows inserted directly) attaches to a station (today 409 `printer.makes_and_watches`); `GET
+  /management-api/printers` rows have no `watcherId` key.
+- Delete: `watchers.ts`, `watchers.test.ts`; `management-api.ts :133-140`, `:318-319`, `:329`,
+  `:367-397`, `:2000-2056`; `print-api.ts :79`, `:116-117`, `:993-1022`;
+  `station-printers.ts :5`, `:35-44`; `errors.ts :57-58`, `:641-644`;
+  `packages/printing/src/printers.ts :5`, `:116`, `:187`, `:195`.
+- Tests: `management-api.test.ts :303-520`, `:3073-3105`; `print-api.test.ts :15`, `:1244-1290`;
+  `print-api.printer-wiring.test.ts :905` (its `"watcher"` row), `:1003-1160`;
+  `station-printers.test.ts :3`, `:16`, `:79-99`; `in-use-references.test.ts :7`, `:10-11`,
+  `:30-34`; `packages/printing/src/printers.test.ts :9-10`, `:98-116`.
+- Run: `pnpm --filter @waitron/server exec vitest run src/management-api.test.ts src/print-api
+  src/station-printers.test.ts src/in-use-references.test.ts src/device-api.pass.test.ts`;
+  `pnpm --filter @waitron/printing exec vitest run src/printers.test.ts`; typecheck server and
+  printing.
+- Commit: `feat(server): watchers are removed from configuration (A366)`.
+
+**V1 — A station may print on any active printer.**
+- Red first (`station-editor.test.ts`): a printer listed in a watcher's `printerIds`, or with
+  `watcherId` set, is an ordinary choice. Today it is disabled "Used by watcher …".
+- Delete: `station-editor.ts :35`, `:62` (the code leaves `PRINTER_REFUSALS`), `:72-95` (the
+  `watchers` argument), the `watchers` property `:161-…` and `:342`; `.watchers=`
+  (`prep-stations-screen.ts:1209`); `prep.tickets.watcher_printer` (`strings.ts:89`, `:780`);
+  `watcherId?` on the routing client's printers (`routing-client.ts:44`).
+- Tests: `station-editor.test.ts :35`, `:112`, `:164-170`, `:254`; `station-editor.a11y.test.ts
+  :29-41` (refusal sample becomes `printer.not_found`); `prep-stations-screen.test.ts :2642`,
+  `:2731`, `:3018` (drop the `printer.makes_and_watches` row), `:6150`.
+- Run: `pnpm --filter @waitron/venue-service exec vitest run --project browser
+  src/dashboard/station-editor src/dashboard/prep-stations-screen.test.ts`; typecheck.
+- Commit: `feat(venue-service): a station may print on any active printer (A366)`.
+
+**V2a — The Watchers tab goes.**
+- Red first: the tab list is Stations, Routing, Settings; `/manage/prep-stations/view/watchers`
+  opens Stations. Today Watchers shows.
+- Delete from `prep-stations-screen.ts` the regions the grep names (`:53-55`, `:81`, `:147-159`,
+  `:205-231`, `:309-314`, `:434-554`, `:641`, `:670-695`, `:736-741`, `:1495-1848`, `:1970`,
+  `:2015`, `:2069`, `:2100`, `:2155-2455`, `:2491`, `:2854-2858`; confirm each); the `watchers.*`
+  keys and `prep.tab.watchers` in `strings.ts` (`:96-120`, `:125`, `:787-812`, `:817`);
+  `prep-stations-screen.watchers-unsaved.test.ts`.
+- Tests: `prep-stations-screen.test.ts` cases whose subject is the tab (`:102`, `:160`, `:2920`,
+  `:2966`, `:2984`, `:3007`, `:3045`, `:3075`, `:3087`, `:3151`, `:3178`, `:3194`, `:3236`, `:3258`,
+  `:3307`, `:3325`, `:3361`, `:3391`, `:3417`, `:3465`, `:3491`, `:3575`, `:3616`, `:3650`, `:3675`,
+  `:3692`, `:3761`, `:3817`, `:3848`, `:3974`, `:3988`, `:4004`, `:4018`, `:4038`, `:4073`, `:4132`,
+  `:4161`, `:4190`, `:4207`, `:4247`, `:4286`, `:4302`, `:4324`, `:4358`, `:4388`, `:5816`, `:6014`'s
+  `"watcher-name"` row; confirm each body) deleted; tab lists at `:1596-1906` lose `watchers`;
+  `prep-stations-screen.a11y.test.ts :49-60`, `:302`, `:325-376` watcher rows;
+  `apps/dashboard/src/dashboard-app.test.ts:3901`.
+- Run: venue-service `--project browser src/dashboard/prep-stations-screen`;
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`; typecheck both.
+  LOOK at the page in EN and ES, both themes, 1280 and 390 wide (the tab strip and the action
+  area, `:112-115`).
+- Commit: `feat(venue-service): the Watchers tab goes (A366)`.
+
+**V2b — The Prep stations page stops reading watchers.**
+- Red first (`routing-client.test.ts:18-43`): the load requests no `/management-api/watchers`.
+- Delete: `routing-client.ts :12`, `:54-56`, `:65-75`, the read at `:91` and `:111-112`,
+  `:128-143`; `watchers-seen.ts`; `live-queries.ts :22-25`; model fixtures `watchers`,
+  `disabledWatchers` (the typecheck names them: prep-stations-screen*.test.ts,
+  `routing-grid.unsaved.test.ts:72`, `station-action.unsaved.test.ts:71`); the stub at
+  `apps/dashboard/src/dashboard-app.unsaved-changes.test.ts:959`.
+- Tests: `routing-client.test.ts :35`, `:44`, `:77`, `:83`, `:453`; `live-queries.test.ts :28-31`.
+- Run: venue-service `--project browser src/dashboard/routing-client.test.ts
+  src/dashboard/live-queries.test.ts src/dashboard/prep-stations-screen src/dashboard/routing-grid
+  src/dashboard/station-action` (everything under `src/dashboard` is the browser project,
+  `packages/venue-service/vitest.config.ts:11`, `:23`); dashboard
+  `src/dashboard-app.unsaved-changes.test.ts`; `pnpm exec vitest run
+  scripts/live-subscriptions.test.ts`; typecheck.
+- Commit: `feat(venue-service): Prep stations reads no watchers (A366)`.
+
+**D — Dashboard app.**
+- Red first (`api/live-queries.test.ts`): `listPrinters` names no `watcher_printers` and there is
+  no `listWatchers` query.
+- Delete: `client.ts :660-671`, `:1122`, `:2856-2858`, `:3241-3245`; `live-queries.ts :61`
+  (`watcher_printers`), `:318`; `i18n/codes.ts :656-663`; `strings.ts :1128-1133`, `:3658-3663`;
+  `printers-screen.ts:1380`; every `watcherId: null` fixture the typecheck names;
+  `client.test.ts :2809-2819`.
+- Run: `pnpm --filter @waitron/dashboard exec vitest run src/api src/screens/printers-screen
+  src/screens/devices-screen src/screens/device-profiles-screen src/screens/printer-calibration
+  src/screens/printer-inline`; typecheck; `scripts/live-subscriptions.test.ts`; the retiring grep.
+- Commit: `feat(dashboard): no watcher calls, codes or strings (A366)`.
+
+**B3a — Migration: drop the four tables.**
+- Red first: a new `packages/db/src/schema/retired-watchers.test.ts` — a venue migrated with
+  `CORE_MIGRATIONS` has none of the four tables, and `CORE_CONFIGURATION_TRANSFER` names none.
+  Today all four exist.
+- Delete: `schema/watchers.ts`, `schema/watchers.test.ts`, `schema/index.ts:29`, `index.ts:139`,
+  `classification.ts:112-115`, `configuration-transfer.ts:45-47`, `:65`; the B1a and B1b red
+  cases; `packages/venue-service/src/operations.ts :21`, `:365`;
+  `apps/server/src/testing/clear-provision-fixture.ts:53-56`.
+- Generate: `pnpm --filter @waitron/db db:generate`; read the SQL: four `DROP TABLE`, children
+  first (as measured). Never edit the journal or snapshot by hand.
+- Tests: `kitchen-timing-upgrade.test.ts:20`, `:77-78` (insert by raw SQL, as `:71-89` does for
+  printers, profiles and devices); `scripts/schema-constraints.test.ts:283-289`, `:451`; venue-service
+  `operations.test.ts:40-41`, `:1826-1915`; `configuration-transfer.test.ts:55-58`,
+  `:1698-1790`; `apps/server/scripts/demo-seed/seed.test.ts:144`, `:169-171`.
+- Run: the red test; `pnpm exec vitest run scripts/schema-constraints.test.ts
+  scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts
+  scripts/migration-upgrade.test.ts scripts/classification-complete.test.ts
+  scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts
+  scripts/module-graph-honesty.test.ts scripts/append-only-triggers.test.ts
+  scripts/behavioural-triggers.test.ts scripts/apply-migrations-callers.test.ts
+  scripts/live-subscriptions.test.ts`; `pnpm --filter @waitron/composition exec vitest run
+  src/composition.test.ts`; `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  src/inmutabilidad.test.ts`; server `src/configuration-transfer.test.ts
+  src/configuration-import.test.ts`, `scripts/demo-seed/seed.test.ts`; venue-service node
+  `src/operations.test.ts`; typecheck db, venue-service, server. Read each `Tests` count. No
+  `RESETS` entry; if the walk refuses the step, STOP.
+- Commit: `feat(db): watchers are retired (A366)`. Body: the four tables and their rows go; the
+  upgrade walk carries every other table's rows, so no venue reset; a venue's watchers and their
+  printer settings are deleted, and a pass printer is now a printer listed on every station (P5).
+
+**B3b — Documentation and backlog.**
+- `design-system.md :1857`, `:3148`, `:3180-3183`, `:3360`, `:3374`; `products.md:223`.
+- `docs/backlog.md`: the A366 entry `:1326-1334` (slice 5 Part B built); `:1449-1453` and
+  `docs/backlog/kitchen.md:30-34` (their 2026-10-01 note is stale: a pass printer's failed ticket
+  shows on each station again, `print-problems.test.ts:1691`); delete `:1549-1551`, `:1615-1618`,
+  `:2994-2996` (watcher-only); `docs/backlog/service-periods.md:22-24`; a new entry for P2 if the
+  driver keeps it.
+- Run `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
+- Commit: `docs: watchers retired (A366)`.
+
+**B5 (optional, decision P6) — Rename what still says watcher.** Till pass types, `expo.watcher_empty`,
+`watchers.leave.test.ts`, `devices.watcher_disabled_mark`. Run the till's and dashboard's
+typechecks and the touched files.
+
+#### Changed test checks (Part B)
+
+| Task | Check | Before | After |
+| --- | --- | --- | --- |
+| B1a | `kitchen-print.watchers.test.ts` (`:56`, `:168`, `:266`, `:339`, `:406`, `:456`, `:530`, `:608`, `:709`) | watcher copies and slips | file deleted. `:339` → `shared-printers.test.ts:240`; `:608` → `:158`, `:189`; `:56` → `:451`; `:266` → B1b's P1 case; `:530` zone runner: no replacement (spec §15 item 2); `:168`, `:406` made-here and `:456` "From" after a move: rewritten on a shared printer unless a station case already pins it (name it); `:709` keeps its replaced-printer, reprint and no-drawer-pulse checks without the watcher |
+| B1a | `kitchen-print.test.ts:503`, `:744` | a station ticket plus one watcher copy; two widths on one watcher | deleted; `shared-printers.test.ts:158`, `:240` |
+| B1a | `kitchen-print.test.ts:242`, `:537`, `:1251`, `:1641` | the second paper is a watcher copy | the second printer is attached to the stations; assertions read its station or combined ticket |
+| B1a | `print-problems.test.ts:312`, `:327`, `:380`, `:542`, `:727`, `:899`, `:1074` | a watcher copy is unlinked and raises no station problem | deleted with watcher copies; `:1691` pins the shared printer's |
+| B1a | `order-groups.test.ts:4381` | a HOLD is marked printed when only a watcher's printer took it | deleted; the station-printer case stays (name it) |
+| B1a | `station-move.test.ts:892-1003`; `split-off-extras.send.test.ts:222-235`; `testing/split-extras-venue.ts:103-122` | "Pase" is a watcher of Grill and Fryer | "Pase" is a printer on Grill and Fryer |
+| B1a | `kitchen-ticket.test.ts:76`, `:307-360`, `:877`, `:1086` | `scope: "watcher"` | moved to `scope: "stations"` where no stations case pins the same line; `:343` (zero stations) deleted |
+| B1b | `adjustments-api.test.ts:98-270`, `adjustments-extra-cancel.test.ts:232`, `order-groups.test.ts:3850`, `station-move.test.ts:1471`, `:1501` | slips reach a watcher's printer | the slip reaches a printer on the dish's station |
+| B1b | `party-table-actions.test.ts:277` | MOVED to watchers of the old and new zones, not a third | deleted (zone-filtered paper retired, spec §15 item 2) |
+| B1b | `station-move.test.ts:1628` | a watcher following both stations prints nothing on a move | a printer on both prints `MOVED TO` and `From` (P1) |
+| B1a, B1b | the two red cases | a watcher's printer prints nothing | deleted in B3a with the tables |
+| B2 | `watchers.test.ts` (whole); `management-api.test.ts:303-520`; `print-api.test.ts:1244`; `print-api.printer-wiring.test.ts:1003-1160` | watcher routes and functions | deleted; one case: every watcher route answers 404 |
+| B2 | `management-api.test.ts:3073`; `station-printers.test.ts:79`; `print-api.printer-wiring.test.ts:905` (`"watcher"` row) | a watcher's printer is refused for a station, 409 `printer.makes_and_watches` | deleted with the rule (spec §8); B2's case: the attach succeeds |
+| B2 | `in-use-references.test.ts:30-34` | keys into `watchers` | the watcher half deleted; `kitchen_courses` kept |
+| B2 | `packages/printing/src/printers.test.ts:98` | lists a printer's watcher id | deleted; rows carry no `watcherId` |
+| V1 | `station-editor.test.ts:112`, `:164-170`, `:254`; `station-editor.a11y.test.ts:29-41`; `prep-stations-screen.test.ts:2642`, `:2731`, `:3018`, `:6150` | a watcher's printer is disabled; `printer.makes_and_watches` as the sample refusal | every active printer offered; sample `printer.not_found` |
+| V2a | the Watchers cases listed in V2a; `prep-stations-screen.watchers-unsaved.test.ts`; a11y rows; tab lists `:1596-1906`; `dashboard-app.test.ts:3901` | the Watchers tab | deleted; tabs Stations, Routing, Settings; `view/watchers` opens Stations |
+| V2b | `routing-client.test.ts:44`, `:77`, `:83`, `:453`; `live-queries.test.ts:28-31` | watcher reads and writes | deleted; the load reads no watchers |
+| D | `client.test.ts:2809` | `setPrinterWatcher` | deleted |
+| B3a | `packages/db/src/schema/watchers.test.ts` (3 cases); `schema-constraints.test.ts:283-289`, `:451` | the tables' defaults, index and keys | deleted with the tables (decision 16) |
+| B3a | `kitchen-timing-upgrade.test.ts:77-78` | rows written through the schema objects | the same rows by raw SQL; the carry assertion unchanged |
+| B3a | venue-service `operations.test.ts:1826` | removing a zone clears its routing and watcher zones | the watcher half deleted |
+| B3a | `configuration-transfer.test.ts:1698` | a watcher and its printer travel | a printer on two stations travels (`station_printers`); still not `devices`; none of the four tables declared |
+| B3a | `seed.test.ts:169-171` | the demo seeds no `watchers` row | deleted (the table is gone) |
+
+#### Outside scope — recorded, not fixed
+
+- `removeZone` (`packages/venue-service/src/operations.ts:340-368`) clears the zone's watcher zones
+  but no kitchen screen's zone rows (`device_kitchen_screen_zones`,
+  `device_profile_kitchen_screen_zones`); the zone is switched off, not deleted. What a pass screen
+  or the device editor shows for a switched-off zone was not checked (read only).
+- `apps/dashboard`'s `listWatchers`, `setPrinterWatcher`, `Watcher` and `printers.watcher_*`
+  strings have had no reader since before this branch (I believe since #1479; not checked with
+  `git log`); Task D removes them.
+
 ### Task B1: Kitchen printing without watchers
 
 **Files (today):** `apps/server/src/kitchen-print.ts` (`WatcherCopies :106`, `readWatcherPrinters

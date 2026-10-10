@@ -54,8 +54,6 @@ declare module "@waitron/shared" {
     "printer.bluetooth_not_discovered": { address: string };
     /** Forget names an address the named print agent does not currently report as paired. */
     "printer.bluetooth_not_paired": { address: string };
-    /** One printer cannot print both station tickets and watcher copies. */
-    "printer.makes_and_watches": { id: string };
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
@@ -638,10 +636,6 @@ declare module "@waitron/shared" {
     "station.name_taken": { name: string };
     /** The effective late thresholds would be unordered for this station. */
     "station.thresholds_invalid": { field: string; stationId?: string; name: string };
-    /** No watcher with this id in this venue; where only an active watcher will do, also a disabled one. */
-    "watcher.not_found": { watcherId: string };
-    /** A switched-on watcher already has this name in this venue. */
-    "watcher.name_taken": { name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
      * No kitchen notice with this id in this venue (for a station's own display, at its station).

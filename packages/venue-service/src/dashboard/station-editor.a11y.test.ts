@@ -26,9 +26,8 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
     };
     el.printers = [
       { id: "epson", name: "Epson" },
-      { id: "pass", name: "Pass printer", watcherId: "expo" },
+      { id: "pass", name: "Pass printer" },
     ];
-    el.watchers = [{ id: "expo", name: "Expo", printerIds: ["pass"] }];
     el.canManagePrinters = state !== "read-out";
     el.open = true;
     await el.updateComplete;
@@ -38,14 +37,14 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       );
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
-      el.refusal = { code: "printer.makes_and_watches", params: { printerId: "pass" } };
+      el.refusal = { code: "printer.not_found", params: { printerId: "pass" } };
       await el.updateComplete;
       expect(
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error,
       ).toBe("Enter a name.");
       expect(
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.error,
-      ).toBe("Choose active printers that no watcher uses.");
+      ).toBe("Choose active printers.");
     }
     await expectNoA11yViolations(host);
   });

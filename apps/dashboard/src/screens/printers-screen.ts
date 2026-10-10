@@ -1377,7 +1377,6 @@ export class PrintersScreen extends LitElement {
               port: device.port ?? (device.transport === "network_tcp" ? 9100 : null),
               localKey: device.localKey ?? null,
               pollId: null,
-              watcherId: null,
               paperWidth: "80mm",
               resolution: "180dpi",
               hasCashDrawer: false,

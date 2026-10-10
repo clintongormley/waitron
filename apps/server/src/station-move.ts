@@ -131,7 +131,7 @@ export async function rerouteHeldAtRelease(
             },
           ];
     });
-    await enqueueStationMoved(tx, cfg, orderId, corrections, destination.name, destinationId);
+    await enqueueStationMoved(tx, cfg, orderId, corrections, destination.name);
     for (const row of rows) {
       const old = states.get(row.stationId);
       if (!old) throw new Error("held ticket has no old station in this venue");
@@ -289,14 +289,7 @@ export async function moveDishesToStation(
             },
           ];
         });
-        await enqueueStationMoved(
-          tx,
-          cfg,
-          orderId,
-          corrections,
-          destination.name,
-          request.stationId,
-        );
+        await enqueueStationMoved(tx, cfg, orderId, corrections, destination.name);
       }
       const changed = await tx
         .update(ticketItems)
@@ -355,16 +348,11 @@ export async function moveDishesToStation(
             stationId: request.stationId,
             quantity: row.quantity,
           }));
-        if (fired.length > 0)
-          await enqueueKitchenTickets(tx, cfg, orderId, fired, {
-            from,
-            watchers: { newSince: oldStationId },
-          });
+        if (fired.length > 0) await enqueueKitchenTickets(tx, cfg, orderId, fired, { from });
         if (held.length > 0)
           await enqueueKitchenTickets(tx, cfg, orderId, held, {
             mark: "HOLD",
             from,
-            watchers: { newSince: oldStationId },
           });
       }
       await bumpRevision(tx, [orderId]);

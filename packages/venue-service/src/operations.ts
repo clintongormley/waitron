@@ -18,7 +18,6 @@ import {
   locations,
   parties,
   partyTables,
-  watcherZones,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -362,7 +361,6 @@ export async function deactivateServiceZone(
   }
 
   await tx.delete(routingCells).where(eq(routingCells.zoneId, zoneId));
-  await tx.delete(watcherZones).where(eq(watcherZones.zoneId, zoneId));
   await tx.update(diningTables).set({ active: false }).where(eq(diningTables.zoneId, zoneId));
   await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId));
 }

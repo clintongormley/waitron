@@ -10,9 +10,6 @@ import {
   printJobs,
   products,
   stationPrinters,
-  watcherPrinters,
-  watcherStations,
-  watchers,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -223,14 +220,11 @@ describe("sending split-off extras", () => {
         expect(attached).toHaveLength(1);
       }
       const pass = await tx
-        .select({ name: watchers.name, stationId: watcherStations.stationId })
-        .from(watcherPrinters)
-        .innerJoin(watchers, eq(watchers.id, watcherPrinters.watcherId))
-        .innerJoin(watcherStations, eq(watcherStations.watcherId, watchers.id))
-        .where(eq(watcherPrinters.printerId, venue.printers.pass));
-      expect(pass.map((row) => row.name)).toEqual(["Pase", "Pase"]);
-      expect(new Set(pass.map((row) => row.stationId))).toEqual(
-        new Set([venue.stations.grill, venue.stations.fryer]),
+        .select({ stationId: stationPrinters.stationId })
+        .from(stationPrinters)
+        .where(eq(stationPrinters.printerId, venue.printers.pass));
+      expect(pass.map((row) => row.stationId).sort()).toEqual(
+        [venue.stations.grill, venue.stations.fryer].sort(),
       );
       const [table] = await tx
         .select({ zoneId: diningTables.zoneId })

@@ -18,7 +18,6 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { codeOf } from "@waitron/dashboard-kit";
-import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 export interface StationEditorStation {
@@ -32,7 +31,6 @@ export interface StationEditorPrinter {
   id: string;
   name: string;
   active?: boolean;
-  watcherId?: string | null;
 }
 /** Only what changed from the opened values; `printerIds` only when printers may be changed. */
 export type StationEditorSave = {
@@ -59,8 +57,6 @@ export function refusalOf(error: unknown): StationRefusal {
   };
 }
 
-const PRINTER_REFUSALS = new Set(["printer.not_found", "printer.makes_and_watches"]);
-
 const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
 const copy = (draft: Draft): Draft => ({ ...draft, printerIds: [...draft.printerIds] });
@@ -69,27 +65,18 @@ const equal = (a: Draft, b: Draft) =>
   a.showsRestOfOrder === b.showsRestOfOrder &&
   sameSet(a.printerIds, b.printerIds);
 
-/** The printers a station may print on: active ones no watcher uses, plus any it already has. */
+/** The printers a station may print on: active ones, plus any it already has. */
 export function stationPrinterOptions(
   printers: readonly StationEditorPrinter[],
-  watchers: readonly { id: string; name: string; printerIds: readonly string[] }[],
   chosen: readonly string[],
 ) {
   return printers.map((printer) => {
-    const watcher = watchers.find(
-      (row) => row.printerIds.includes(printer.id) || row.id === printer.watcherId,
-    );
-    const watched = !!watcher || !!printer.watcherId;
+    const disabled = printer.active === false;
     return {
       value: printer.id,
       label: printer.name,
-      disabled: (printer.active === false || watched) && !chosen.includes(printer.id),
-      description:
-        printer.active === false
-          ? t("prep.health.disabled")
-          : watched
-            ? format("prep.tickets.watcher_printer", { name: watcher?.name ?? printer.watcherId! })
-            : undefined,
+      disabled: disabled && !chosen.includes(printer.id),
+      description: disabled ? t("prep.health.disabled") : undefined,
     };
   });
 }
@@ -99,7 +86,7 @@ export function stationRefusalField(refusal: Refusal | undefined): "name" | "pri
   if (refusal === undefined) return undefined;
   if (refusal.code === "station.name_taken") return "name";
   if (
-    PRINTER_REFUSALS.has(refusal.code) ||
+    refusal.code === "printer.not_found" ||
     (refusal.code === "management.request_invalid" && refusal.params?.field === "printerIds") ||
     (refusal.code === "authorization.not_permitted" &&
       refusal.params?.permission === "printer.manage")
@@ -158,11 +145,6 @@ export class StationEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) station?: StationEditorStation;
   @property({ attribute: false }) printers: readonly StationEditorPrinter[] = [];
-  @property({ attribute: false }) watchers: readonly {
-    id: string;
-    name: string;
-    printerIds: readonly string[];
-  }[] = [];
   /** Whether the person holds `printer.manage`; without it the printers are a read-out. */
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
@@ -339,7 +321,7 @@ export class StationEditor extends LitElement {
       label=${t("prep.printers")}
       multiple
       .values=${this.draft.printerIds}
-      .options=${stationPrinterOptions(this.printers, this.watchers, this.draft.printerIds)}
+      .options=${stationPrinterOptions(this.printers, this.draft.printerIds)}
       .error=${error}
       .countLabel=${() => this.printerNames(this.draft.printerIds)}
       .searchPlaceholder=${t("prep.printers")}
