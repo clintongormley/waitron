@@ -470,6 +470,15 @@ describe("today's copy of the master's joins", () => {
     expect(await seatsOf([two.table.a!, two.table.b!])).toBeNull();
   });
 
+  it("finds no copied join when one of the tables has no reset row, or one is named twice", async () => {
+    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
+    const loose = await v.table(`Loose ${table.a!.slice(0, 6)}`);
+
+    expect(await seatsOf([table.a!, table.b!])).toBe(6);
+    expect(await seatsOf([table.a!, table.b!, loose])).toBeNull();
+    expect(await seatsOf([table.a!, table.a!, table.b!])).toBeNull();
+  });
+
   it("copies no join whose master table two live tables follow", async () => {
     const { zoneId, table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
     const [b] = await inTx(v, (tx) =>

@@ -173,7 +173,7 @@ export async function savedJoinSeats(
     .select({ id: floorResetTables.id })
     .from(floorResetTables)
     .where(inArray(floorResetTables.tableId, [...tableIds]));
-  if (rows.length !== tableIds.length || new Set(tableIds).size !== tableIds.length) return null;
+  if (rows.length !== tableIds.length) return null;
   const wanted = new Set(rows.map((row) => row.id));
   const candidates = await tx
     .select({ joinId: floorResetJoinTables.joinId })
