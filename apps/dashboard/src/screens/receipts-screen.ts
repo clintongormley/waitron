@@ -1209,6 +1209,87 @@ export class ReceiptsScreen extends LitElement {
     </div>`;
   }
 
+  #renderLocation(): TemplateResult | typeof nothing {
+    if (!this.locationLoaded && this.receiptLanguage === null) return nothing;
+    const heading = this.locationLoaded ? this.name : t("receipts.language");
+    const descriptionError = this.#descriptionError();
+    return html`
+      <section class="settings" aria-labelledby="location-heading">
+        <h2 id="location-heading" data-test="location-name">${heading}</h2>
+        ${
+          this.receiptLanguage !== null
+            ? html`
+                <div data-test="language-section">
+                  ${this.#renderLanguage(this.receiptLanguage!)}
+                  ${this.languageSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
+                  <wt-form-actions
+                    data-test="language-actions"
+                    .error=${[this.languageError ?? "", this.languageRefusal ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+                  >
+                    <wt-button
+                      data-test="language-save"
+                      variant=${saveActionState(this.#languageScope).variant}
+                      ?loading=${this.languageSaving}
+                      ?disabled=${this.saving || this.languageSaving || saveActionState(this.#languageScope).unchanged}
+                      @click=${() => void this.#saveLanguage()}
+                      >${t("action.save")}</wt-button
+                    >
+                  </wt-form-actions>
+                </div>
+              `
+            : nothing
+        }
+        ${
+          this.locationLoaded
+            ? html`
+                <div data-test="description-section">
+                  <wt-input
+                    name="operationDescription"
+                    autocomplete="off"
+                    required
+                    label=${t("location_settings.description")}
+                    hint=${t("receipts.operation_description_hint")}
+                    .value=${this.description}
+                    error=${descriptionError}
+                    ?invalid=${descriptionError !== ""}
+                    ?disabled=${this.saving || this.descriptionSaving}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.description = event.detail.value;
+                      this.#descriptionScope?.changed();
+                      this.#dirty = this.#descriptionScope!.isDirty();
+                      this.refusal = "";
+                      this.descriptionSaved = false;
+                      this.saved = false;
+                    }}
+                    @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=description-save]"))}
+                  >
+                    <wt-help-tooltip slot="help" aria-label=${t("location_settings.help_label")}
+                      >${t("location_settings.help")}</wt-help-tooltip
+                    >
+                  </wt-input>
+                  ${this.descriptionSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
+                  <wt-form-actions
+                    data-test="description-actions"
+                    .error=${[this.saveFailed ? t("location_settings.save_error") : "", descriptionError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+                  >
+                    <wt-button
+                      data-test="description-save"
+                      variant=${saveActionState(this.#descriptionScope).variant}
+                      ?loading=${this.descriptionSaving}
+                      ?disabled=${this.saving || this.descriptionSaving || saveActionState(this.#descriptionScope).unchanged || (this.descriptionAttempted && this.#validate() !== "")}
+                      @click=${() => void this.#saveDescription()}
+                      >${t("action.save")}</wt-button
+                    >
+                  </wt-form-actions>
+                </div>
+              `
+            : nothing
+        }
+      </section>
+    `;
+  }
+
   #renderForm(): TemplateResult {
     const descriptionError = this.#descriptionError();
     const marked =
@@ -1256,67 +1337,7 @@ export class ReceiptsScreen extends LitElement {
         ${this.#renderAddress()} ${this.#renderContact("phone", "tel")}
         ${this.#renderContact("email", "email")} ${this.#renderFooter()}
       </section>
-      <section class="settings" aria-labelledby="location-heading">
-        <h2 id="location-heading" data-test="location-name">${this.name}</h2>
-        <div data-test="language-section">
-          ${this.#renderLanguage(this.receiptLanguage!)}
-          ${this.languageSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
-          <wt-form-actions
-            data-test="language-actions"
-            .error=${[this.languageError ?? "", this.languageRefusal ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
-          >
-            <wt-button
-              data-test="language-save"
-              variant=${saveActionState(this.#languageScope).variant}
-              ?loading=${this.languageSaving}
-              ?disabled=${this.saving || this.languageSaving || saveActionState(this.#languageScope).unchanged}
-              @click=${() => void this.#saveLanguage()}
-              >${t("action.save")}</wt-button
-            >
-          </wt-form-actions>
-        </div>
-        <div data-test="description-section">
-          <wt-input
-            name="operationDescription"
-            autocomplete="off"
-            required
-            label=${t("location_settings.description")}
-            hint=${t("receipts.operation_description_hint")}
-            .value=${this.description}
-            error=${descriptionError}
-            ?invalid=${descriptionError !== ""}
-            ?disabled=${this.saving || this.descriptionSaving}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.description = event.detail.value;
-              this.#descriptionScope?.changed();
-              this.#dirty = this.#descriptionScope!.isDirty();
-              this.refusal = "";
-              this.descriptionSaved = false;
-              this.saved = false;
-            }}
-            @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=description-save]"))}
-          >
-            <wt-help-tooltip slot="help" aria-label=${t("location_settings.help_label")}
-              >${t("location_settings.help")}</wt-help-tooltip
-            >
-          </wt-input>
-          ${this.descriptionSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
-          <wt-form-actions
-            data-test="description-actions"
-            .error=${[this.saveFailed ? t("location_settings.save_error") : "", descriptionError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
-          >
-            <wt-button
-              data-test="description-save"
-              variant=${saveActionState(this.#descriptionScope).variant}
-              ?loading=${this.descriptionSaving}
-              ?disabled=${this.saving || this.descriptionSaving || saveActionState(this.#descriptionScope).unchanged || (this.descriptionAttempted && this.#validate() !== "")}
-              @click=${() => void this.#saveDescription()}
-              >${t("action.save")}</wt-button
-            >
-          </wt-form-actions>
-        </div>
-      </section>
+      ${this.#renderLocation()}
       ${this.saved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
       <wt-form-actions data-test="combined-actions" .error=${bottom}
         ><wt-button
@@ -1469,7 +1490,7 @@ export class ReceiptsScreen extends LitElement {
             .draftParent=${this}
             @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
           ></dashboard-venue-receipt-defaults-editor>
-          ${locationReady ? this.#renderForm() : nothing}
+          ${locationReady ? this.#renderForm() : this.#renderLocation()}
         </div>
         ${locationReady ? this.#renderPreview() : nothing}
       </div>`;

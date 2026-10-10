@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { VenueReceiptSettings } from "@waitron/shared";
 import type { DashboardApi, ReceiptPreview } from "../api/client.js";
@@ -348,3 +349,125 @@ for (const locale of ["en-GB", "es-ES"])
       expect(save(defaults(el), "defaults").disabled).toBe(false);
       await expectNoA11yViolations(host);
     });
+
+for (const [failed, available] of [
+  ["getReceipt", "language"],
+  ["getReceipt", "description"],
+  ["getLocationSettings", "language"],
+  ["getReceiptLanguage", "description"],
+] as const) {
+  it(`keeps ${available} independently savable when ${failed} refuses`, async () => {
+    const api = fixture();
+    api[failed].mockRejectedValue({ code: "server.internal" });
+    const { el, host } = await mount(api);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test=${available}-save]`,
+    );
+    expect(button).not.toBeNull();
+    await button!.updateComplete;
+    expect(button!.variant).toBe("secondary");
+    expect(button!.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    button!.click();
+    if (available === "description") {
+      const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        "wt-input[name=operationDescription]",
+      )!;
+      await field.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(field.shadowRoot!.querySelector("input")!),
+        "Independent sales",
+      );
+    } else {
+      await chooseOption(
+        el.shadowRoot!.querySelector("wt-combobox[name=receiptLanguage]")!,
+        "ca-ES",
+      );
+    }
+    await el.updateComplete;
+    await button!.updateComplete;
+    expect(button!.variant).toBe("primary");
+    expect(button!.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    await userEvent.click(page.elementLocator(button!.shadowRoot!.querySelector("button")!));
+    await vi.waitFor(() =>
+      available === "description"
+        ? expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Independent sales")
+        : expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("ca-ES"),
+    );
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
+    if (available === "description") expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+    else expect(api.putLocationSettings).not.toHaveBeenCalled();
+    await vi.waitFor(async () => {
+      await button!.updateComplete;
+      expect(button!.variant).toBe("secondary");
+      expect(button!.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    });
+    if (failed === "getReceiptLanguage")
+      expect(el.shadowRoot!.querySelector("[data-test=language-section]")).toBeNull();
+    if (failed === "getLocationSettings")
+      expect(el.shadowRoot!.querySelector("[data-test=description-section]")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+}
+
+for (const available of ["language", "description"] as const) {
+  it(`retains a refused ${available} draft when the receipt read recovers`, async () => {
+    const api = fixture();
+    const read = api.getReceipt.getMockImplementation()!;
+    api.getReceipt.mockRejectedValue({ code: "server.internal" });
+    if (available === "language")
+      api.putReceiptLanguage.mockRejectedValue({ code: "server.internal" });
+    else api.putLocationSettings.mockRejectedValue({ code: "server.internal" });
+    const { el } = await mount(api);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(`[data-test=${available}-save]`)).toBeTruthy(),
+    );
+    if (available === "language") {
+      await chooseOption(
+        el.shadowRoot!.querySelector("wt-combobox[name=receiptLanguage]")!,
+        "ca-ES",
+      );
+    } else {
+      const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        "wt-input[name=operationDescription]",
+      )!;
+      await field.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(field.shadowRoot!.querySelector("input")!),
+        "Unsubmitted description",
+      );
+    }
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${available}-save]`)!.click();
+    const message = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+        `[data-test=${available}-actions]`,
+      )!.error;
+    await vi.waitFor(() => expect(message()).not.toBe(""));
+    const refusal = message();
+    api.getReceipt.mockImplementation(read);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=retry]")).toBeNull());
+    expect(message()).toBe(refusal);
+    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test=${available}-save]`,
+    )!;
+    await button.updateComplete;
+    expect(button.variant).toBe("primary");
+    expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    if (available === "language")
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "wt-combobox[name=receiptLanguage]",
+        )!.value,
+      ).toBe("ca-ES");
+    else
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+          "wt-input[name=operationDescription]",
+        )!.value,
+      ).toBe("Unsubmitted description");
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
+  });
+}
