@@ -310,9 +310,7 @@ export class StationEditor extends LitElement {
       ...copy(this.draft),
       printerIds: [...(detail.printerIds ?? this.baseline!.printerIds)],
     };
-    this.dispatchEvent(
-      new CustomEvent("station-editor-save", { detail, bubbles: true, composed: true }),
-    );
+    this.dispatchEvent(new CustomEvent("station-save", { detail, bubbles: true, composed: true }));
   }
 
   private readonly beforeClose = async (reason: LeaveReason): Promise<boolean> => {
@@ -380,9 +378,7 @@ export class StationEditor extends LitElement {
           event.stopPropagation();
           if (generation !== this.generation || !this.isConnected) return;
           this.open = false;
-          this.dispatchEvent(
-            new CustomEvent("station-editor-cancel", { bubbles: true, composed: true }),
-          );
+          this.dispatchEvent(new CustomEvent("station-close", { bubbles: true, composed: true }));
         }}
       >
         <div class="form">

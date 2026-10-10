@@ -653,7 +653,7 @@ export class RoutingGrid extends LitElement {
         event.stopPropagation();
         this.#emit<RoutingCellChange>("routing-cell-change", { address, target: null });
       }}
-      @routing-cell-cancel=${(event: Event) => {
+      @routing-cell-close=${(event: Event) => {
         event.stopPropagation();
         if (this.editing === address) this.editing = null;
       }}

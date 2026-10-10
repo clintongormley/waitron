@@ -6276,7 +6276,7 @@ describe("The station editor", () => {
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
     q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
-    old.dispatchEvent(new CustomEvent("station-editor-cancel", { bubbles: true, composed: true }));
+    old.dispatchEvent(new CustomEvent("station-close", { bubbles: true, composed: true }));
     await settle(el);
     expect(editorOf(el)).not.toBeNull();
     q(el, '[data-test="cancel-station-edit"]')!.click();

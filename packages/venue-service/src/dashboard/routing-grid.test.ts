@@ -517,7 +517,7 @@ describe("venue-routing-grid", () => {
       "wt-change",
       "routing-cell-save",
       "routing-cell-clear",
-      "routing-cell-cancel",
+      "routing-cell-close",
     ]) {
       outside.addEventListener(name, () => heard.push(name));
     }

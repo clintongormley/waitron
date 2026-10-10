@@ -56,7 +56,7 @@ async function change(el: StationEditor, selector: string, detail: unknown) {
 it("opens quiet and sends nothing for a click on its quiet Save", async () => {
   const el = await mount();
   const seen: unknown[] = [];
-  el.addEventListener("station-editor-save", (event) => seen.push(event));
+  el.addEventListener("station-save", (event) => seen.push(event));
   expect(await saveState(el)).toEqual(quiet);
   saveButton(el).click();
   await el.updateComplete;

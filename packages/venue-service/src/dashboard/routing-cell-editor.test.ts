@@ -304,7 +304,7 @@ it("drops a line's period the model no longer lists, without counting it as a ch
 it("ignores every change and action while saving", async () => {
   const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
   const fired: string[] = [];
-  for (const name of ["routing-cell-save", "routing-cell-clear", "routing-cell-cancel"])
+  for (const name of ["routing-cell-save", "routing-cell-clear", "routing-cell-close"])
     el.addEventListener(name, () => fired.push(name));
   await pick(el, one<Combobox>(el, "[name=target]")!, { value: "station:down" });
   el.busy = true;
@@ -374,7 +374,7 @@ it("puts a refusal naming no shown line at the bottom", async () => {
 
 it("Cancel closes and tells the screen", async () => {
   const el = await mount();
-  const cancels = events(el, "routing-cell-cancel");
+  const cancels = events(el, "routing-cell-close");
   const modal = one<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!;
   const closed = new Promise((resolve) =>
     modal.addEventListener("wt-close", resolve, { once: true }),

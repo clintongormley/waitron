@@ -1220,11 +1220,11 @@ export class PrepStationsScreen extends LitElement {
         .watchers=${this.view.watchers}
         .canManagePrinters=${canManagePrinters}
         .refusal=${this.stationEditRefusal}
-        @station-editor-save=${(event: CustomEvent<StationEditorSave>) => {
+        @station-save=${(event: CustomEvent<StationEditorSave>) => {
           event.stopPropagation();
           void this.#saveStationEdit(token, event.detail);
         }}
-        @station-editor-cancel=${(event: Event) => {
+        @station-close=${(event: Event) => {
           event.stopPropagation();
           if (this.stationEdit?.token === token) this.stationEdit = undefined;
         }}

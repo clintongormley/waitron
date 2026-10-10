@@ -515,7 +515,7 @@ export class RoutingCellEditor extends LitElement {
           if (generation !== this.generation || !this.isConnected) return;
           this.open = false;
           this.dispatchEvent(
-            new CustomEvent("routing-cell-cancel", { bubbles: true, composed: true }),
+            new CustomEvent("routing-cell-close", { bubbles: true, composed: true }),
           );
         }}
       >

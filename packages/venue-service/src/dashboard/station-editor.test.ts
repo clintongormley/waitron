@@ -66,7 +66,7 @@ async function flipRest(el: StationEditor, checked: boolean) {
 }
 function saves(el: StationEditor) {
   const seen: StationEditorSave[] = [];
-  el.addEventListener("station-editor-save", (event) =>
+  el.addEventListener("station-save", (event) =>
     seen.push((event as CustomEvent<StationEditorSave>).detail),
   );
   return seen;
@@ -240,7 +240,7 @@ it("ignores a cancel and a save while busy", async () => {
 it("tells its host when it is cancelled", async () => {
   const el = await mount();
   let cancelled = 0;
-  el.addEventListener("station-editor-cancel", () => cancelled++);
+  el.addEventListener("station-close", () => cancelled++);
   const modal = $<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!;
   const closed = new Promise((resolve) =>
     modal.addEventListener("wt-close", resolve, { once: true }),
