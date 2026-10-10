@@ -179,6 +179,21 @@ describe("till-table-details-sheet", () => {
     expect(find(el, "[data-guests]")).toBeNull();
   });
 
+  it("says one ready dish in the singular, as the pin does", async () => {
+    setLocale("es");
+    const el = await mount({
+      table: table({ ...seated, pendingToServe: 2, readyToServe: 1, party: party() }),
+    });
+    expect(text(el, "[data-kitchen]")).toBe("1 por servir · 1 listo");
+    el.table = table({ ...seated, pendingToServe: 3, readyToServe: 2, enRoute: 1, party: party() });
+    await el.updateComplete;
+    expect(text(el, "[data-kitchen]")).toBe("1 por servir · 1 listo · 1 en camino");
+    setLocale("en");
+    el.table = table({ ...seated, pendingToServe: 2, readyToServe: 1, party: party() });
+    await el.updateComplete;
+    expect(text(el, "[data-kitchen]")).toBe("1 to serve · 1 ready");
+  });
+
   it("says Paid when the party owes nothing", async () => {
     const el = await mount({
       table: table({ ...seated, hasOpenTab: false, party: party({ outstanding: "0.00" }) }),

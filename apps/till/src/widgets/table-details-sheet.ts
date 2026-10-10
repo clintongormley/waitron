@@ -32,12 +32,15 @@ function kitchenProgress(table: TableState): string {
   const ready =
     signalOf(table.signals, "ready") === undefined ? table.readyToServe - table.enRoute : 0;
   return [
-    [table.pendingToServe - table.readyToServe, t("floor.to_serve")] as const,
-    [ready, t("floor.ready")] as const,
-    [table.enRoute, t("floor.en_route")] as const,
+    [
+      table.pendingToServe - table.readyToServe,
+      (n: number) => `${n} ${t("floor.to_serve")}`,
+    ] as const,
+    [ready, (n: number) => countText(n, "table.flash_ready", "table.flash_ready_one")] as const,
+    [table.enRoute, (n: number) => `${n} ${t("floor.en_route")}`] as const,
   ]
     .filter(([count]) => count > 0)
-    .map(([count, words]) => `${count} ${words}`)
+    .map(([count, words]) => words(count))
     .join(" · ");
 }
 
