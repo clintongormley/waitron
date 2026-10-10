@@ -39,7 +39,6 @@ export type GridRow = {
 export interface StationTimes {
   stationId: string;
   status: StationStatus;
-  fallbackStationId: string | null;
   today: "open" | "closed" | null;
   closedSendsTo: string | null;
 }

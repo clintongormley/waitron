@@ -33,6 +33,10 @@ export class OpeningHoursStation extends LitElement {
   @state() private error = "";
   private detach?: () => void;
   private key = "";
+  override connectedCallback() {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
   override disconnectedCallback() {
     this.detach?.();
     this.key = "";

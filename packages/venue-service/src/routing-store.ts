@@ -1111,7 +1111,6 @@ export async function routingModel(
     stationTimes: stations.map(({ id }) => ({
       stationId: id,
       status: stationStatus(rules, id, moment),
-      fallbackStationId: null,
       today: rules.timing.get(id)?.today ?? null,
       closedSendsTo: closedSendsTo(rules, id, moment),
     })),

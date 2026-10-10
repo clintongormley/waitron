@@ -160,9 +160,6 @@ const en = {
   "prep.open_now": "Open now",
   "prep.open_until": "Open until {time}{day}",
   "prep.scheduled_opens": "Opens at {time}{day}",
-  "prep.on_weekday": "on {day}",
-  "prep.opened_by_hand": "Open now, opened by hand until {time} {day}",
-  "prep.closed_hours": "Closed now: outside its opening hours. {destination}",
   "prep.closed_by_hand": "Closed now, closed by hand until {time} {day}. {destination}",
   "prep.always_open_default": "Always open: this is the default station",
   "prep.clock_unreadable":
@@ -873,9 +870,6 @@ const es: Record<keyof typeof en, string> = {
   "prep.open_now": "Abierta ahora",
   "prep.open_until": "Abierta hasta las {time}{day}",
   "prep.scheduled_opens": "Abre a las {time}{day}",
-  "prep.on_weekday": "el {day}",
-  "prep.opened_by_hand": "Abierta ahora, abierta manualmente hasta las {time} de {day}",
-  "prep.closed_hours": "Cerrada ahora: fuera del horario de apertura. {destination}",
   "prep.closed_by_hand":
     "Cerrada ahora, cerrada manualmente hasta las {time} de {day}. {destination}",
   "prep.always_open_default": "Siempre abierta: es la estación predeterminada",
