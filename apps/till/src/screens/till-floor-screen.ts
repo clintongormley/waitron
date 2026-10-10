@@ -518,7 +518,7 @@ export class TillFloorScreen extends LitElement {
   /** The server's floor does not change when a reminder falls due, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
-    if (this.now !== undefined) return;
+    if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
     for (const table of this.tables) {
       const dueAt = reminderDueAt(table.party?.reminder);
