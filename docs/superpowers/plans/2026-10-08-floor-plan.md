@@ -292,6 +292,13 @@ export const floorTodayJoinTables;// floor_today_join_tables: id, join_id (FK), 
 // parties.table_names: labelList (nullable)
 ```
 
+As built, `floor_reset_tables` also has `plan_table_id` (nullable, a plain no-action foreign key to
+`floor_plan_tables`: the master table the target was copied from; `saveZonePlan` sets it null before
+deleting a master table) and `placed` (flag not null default false: today's row has been set from
+the target, so a later catch-up only retries its name). Migration 0130 adds indexes on
+`floor_reset_tables (zone_id, pending)` and `floor_today_joins (zone_id)` (amended 2026-10-10, as
+built in slice 1).
+
 `dining-tables.ts` and `floor-plans.ts` reference each other: declare `plan_table_id`'s key with
 a lazy column, as `parties.ts` does for `main_bill_id` (`(): AnySQLiteColumn => floorPlanTables.id`).
 
@@ -690,13 +697,16 @@ export async function todayBusinessDay(tx: Transaction, cfg: TillConfig, now: Da
 /** Copies the zone's master into today's plan: replaces the zone's reset rows with targetsFromMaster, then catches up. */
 export async function resetZone(tx: Transaction, cfg: TillConfig, removals: readonly TableRemoval[], zoneId: string, now: Date): Promise<void>;
 /** Applies the zone's PENDING reset rows that can be applied now, repeating while a pass changes something. */
-export async function catchUpZone(tx: Transaction, cfg: TillConfig, removals: readonly TableRemoval[], zoneId: string): Promise<void>;
+export async function catchUpZone(tx: Transaction, cfg: TillConfig, removals: readonly TableRemoval[], zoneId: string, now: Date): Promise<void>;
 /** For each zone with a master plan: resetZone when its today's plan is for an earlier business day (or it has none), else catchUpZone when it has pending rows. */
 export async function ensureToday(tx: Transaction, cfg: TillConfig, removals: readonly TableRemoval[], now: Date): Promise<void>;
 ```
 
 `removals` is an argument, never optional, so no caller can skip the modules' part (Task 1.9 uses
 it; until then pass it through). A clock that cannot be read leaves today's plan as it is.
+`catchUpZone` takes `now` too, for the modules' `refuse` (Task 1.9). The reset's `Target`
+(`floor-reset-plan.ts`) carries `planTableId`, the master table it was copied from (amended
+2026-10-10, as built in slice 1).
 
 `resetZone`: write `floor_today_zones` (business day, generation + 1); replace the zone's
 `floor_reset_tables` rows with `targetsFromMaster` (every row pending); `catchUpZone`.
@@ -713,10 +723,14 @@ apply it in this order:
    `move-bill.ts:225`; the floor read, `:7027`; `listTables`) until slice 5;
 3. every `apply` whose label changes, to the row's own id (first pass);
 4. `create`: a `dining_tables` row (`location_id` = `cfg.locationId`, `zone_id`, label,
-   `plan_table_id` from the master table it was made from, `planned` true) and its today's row;
-5. every `apply`: the final label (second pass); today's row set from the target (seats, fixed,
-   placement, `taken_off` false); the table leaves any today's merge (a merge left with fewer than
-   two members goes with its members);
+   `plan_table_id` = the target's `planTableId`, so a new table links to its master by id, not by
+   name, `planned` true) and its today's row (amended 2026-10-10, as built in slice 1);
+5. every `apply`: the final label (second pass); then, only when the reset row is not yet `placed`,
+   today's row set from the target (seats, fixed, placement, `taken_off` false), `active` true, the
+   table leaves any today's merge (a merge left with fewer than two members goes with its
+   members), and the row is marked `placed`. A reset places a table once; a later catch-up of a
+   row still pending for its name only retries the name, keeping the day's moves and merges
+   (amended 2026-10-10, as built in slice 1);
 6. `seed`: a today's row from the target, label unchanged;
 7. reset rows: a target not in `pending` stops being pending; a created one gets its new
    `table_id`.
@@ -774,7 +788,7 @@ it("leaves a table the master never had untouched", async () => { /* planned fal
 /** An open party holds the table or used it earlier in its meal, or an order to it is unpaid or has food on its way. */
 export async function tableTied(tx: Transaction, tableId: string): Promise<boolean>;
 /** Removes the live table for good. Returns false, having removed nothing, when something unknown still names it. */
-export async function removeLiveTable(tx: Transaction, removals: readonly TableRemoval[], tableId: string): Promise<boolean>;
+export async function removeLiveTable(tx: Transaction, cfg: Pick<TillConfig, "locationId">, removals: readonly TableRemoval[], tableId: string, now: Date): Promise<boolean>;
 ```
 
 `tableTied`: a `party_tables` row of an OPEN party names the table (held, or left earlier while
@@ -782,6 +796,11 @@ the party is still open); or an order names it in `delivery_table_id` and either
 `open` or `placed`, or the floor's pending-delivery test holds — the conditions at
 `working-order.ts:7015-7023` exactly (not abandoned, `collected_at` null, and a ticket item with
 `made_here = 0`).
+
+(amended 2026-10-10, as built in slice 1) `removeLiveTable` first asks every module's `refuse`; if
+any refuses (bookings: an upcoming booking), it changes nothing and answers `false`. `catchUpZone`
+asks the same before planning, and treats a refused table as held: it waits whole, on today's plan
+with its reset row pending, until the refusal clears.
 
 `removeLiveTable`: each removal's `release`; `releaseDeliveries(tx, id, label)`; delete its
 `floor_today_join_tables` row (a merge left with fewer than two members goes with its members),
@@ -947,6 +966,10 @@ it("deletes a table a party sits at, and the party stays", async () => {
 **Interfaces:**
 - Consumes: `ensureToday` (Tasks 1.8, 1.9); `enabledTableRemovals` (Task 1.6).
 
+`ensureToday` resets or catches up only ACTIVE zones, so a switched-off zone's tables stay off, and
+finds the zones with work due (no today's plan, an earlier business day, or a pending reset row) in
+one query (amended 2026-10-10, as built in slice 1).
+
 Catching up happens at the next floor read or change, not inside each path that frees a table
 (decision 19): the till re-reads the floor after its own actions and, from slice 3, every 15
 seconds, and a delivery being paid or collected frees a table without any table route running.
@@ -988,6 +1011,12 @@ it("does nothing when no reset happened while the table was taken", async () => 
   floor plan editor.")
 - Test: `apps/server/src/tables.test.ts`
 
+(amended 2026-10-10, as built in slice 1) The same refusal covers the old screen's Disable
+(`deactivateTable`) and a placement into a different zone (`setTablePlacement`); a change is refused
+only when the value actually differs from the stored one, because the old screen resends the
+unchanged name and zone; and in `updateTable` a missing zone answers `zone.not_found` before the
+floor-plan check.
+
 Until slice 5 removes the old screen, this keeps decision 17's promise: a reset never reverts a
 change made there, and a table a reset hid cannot be switched back on behind the master's back. The
 old screen still adds tables; `readZonePlan` offers them for adoption (Task 1.10).
@@ -1019,6 +1048,11 @@ table never planned, all four succeed as today.
   (`:339`). The body is shape-checked in the route (`management.request_invalid { field }` for a
   non-object, a non-array `tables`/`joins`, a non-string `label`/`key`, a non-boolean `fixed`), and
   value-checked by `checkZonePlanSave`.
+- (amended 2026-10-10, as built in slice 1) The route checks the body's shape (`revision`, `tables`,
+  `joins`, each table's `key`, `label`, `fixed`, `placement`, `id` and `liveTableId`, each join's
+  `tableKeys`) before it checks permission, as its sibling routes do. A GET answer is not a valid
+  save as it stands: the editor adds a `key` to each table and turns each join's `tableIds` into
+  `tableKeys` first (slice 2's editor does this).
 
 - [ ] **Step 1: Write the failing tests**: manager reads a first draft (200, revision 0); saves
 (200, revision 1) and reads it back; an older copy is 409 `floor_plan.changed`; a bad rotation is
@@ -1089,6 +1123,11 @@ two tables in one zone overlap (compare their rectangles; rotation ignored).
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the seed test; start the demo stack (`wa-wt demo <worktree-name>`) and
 `GET /management-api/zones/<terrace>/floor-plan` once to see the seed's plan read back.
+  (amended 2026-10-10, as built in slice 1) The live demo-stack check was replaced by a read-back
+  with `readZonePlan` inside the seed test (`seed-floor.test.ts`), because the shared dev venue
+  holds the owner's real data. The overlap check measures each table by the box around it once
+  turned about its centre, not the unturned rectangle; measured that way, dining tables 5, 7 and 8
+  overlapped neighbours, so their `posY` moved down slightly to clear.
 - [ ] **Step 5: Commit.**
 
 **Slice 1 done when:** focused tests above pass; `/finish-branch` runs the full wave; CI is green on

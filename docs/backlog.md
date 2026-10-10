@@ -1807,11 +1807,38 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Unassigned Profile cells stay blank; the None profile filter selects them.** No cell-wording
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
-  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
-  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
-  and rearranging.
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slice
+  1 built on branch `feat/floor-plan-storage`, not yet merged; slices 2–5 open).** Slice 1 is the
+  storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
+  the till works from), kept table names, the till's table-state answer, the dashboard's read and
+  save routes, and the demo seed. Left: the editor, the till's map, today's changes on the till,
+  and removing the old pieces.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
+
+- **The bookings list shows no table for any booking, and a past booking's kept table name
+  (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1.
+
+- **A zone switched off and back on in the same business day keeps its planned tables off until the
+  next day's reset, and the old floor screen cannot switch them on** (reasoned from the code, not
+  run). Should switching a planned zone back on rebuild today's plan? Left open by A429 slice 1.
+
+- **A stray row that blocks a table's final delete keeps that table's reset row waiting forever**,
+  and each catch-up quietly re-runs the release (reasoned, not run). Left open by A429 slice 1.
+
+- **A walk-up counter sale delivered to a table in a table-service zone may become a table tab whose
+  payment sends nothing to the kitchen** (unverified, read only): `createOpenOrder`
+  (`apps/server/src/working-order.ts`, from #297) replaces the order's zone with the delivery
+  table's. Whether the till can offer such a table was not checked. Left open by A429 slice 1.
+
+- **Nothing at boot level tests that the till API receives the table-removal seats** (each enabled
+  module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
+  API's wiring. Left open by A429 slice 1.
+
+- **Small floor-plan refusals still missing.** `dining_tables.plan_table_id` has no unique index;
+  a saved join's seats have no upper bound and duplicate joins are accepted; the delivery-release
+  trigger accepts an empty label; a rename clash during the two-step rename answers a raw
+  unique-key error. Left open by A429 slice 1.
+  [Detail](backlog/till.md#small-floor-plan-refusals-still-missing)
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1
   lands).** [Detail](backlog/till.md#a414--device-screens-on-a-phone)
@@ -4664,6 +4691,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   pins both its absent default and explicit null. Lane D RUNNER §7 bars this campaign from editing
   the rule file.
   [Detail](backlog/ci.md#update-the-root-null-exception-rule-after-w54)
+
+- **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES`
+  on this engine, while its snapshot kept it**, and no guard compares a key's delete rule with the
+  migrated database. Observed once by an implementer (five store tests failed with a foreign-key
+  refusal), not independently re-run. Left open by A429 slice 1.
 
 ### Dependency upgrades
 

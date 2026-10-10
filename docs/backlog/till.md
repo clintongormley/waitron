@@ -234,10 +234,16 @@ screen is designed.
 
 ## A429 — floor plans: a master plan per zone, today's plan on the till
 
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
-  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
-  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
-  and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slice
+  1 built on branch `feat/floor-plan-storage`, not yet merged; slices 2–5 open).** Slice 1 is the
+  storage and reads: the master plan's tables, today's plan, table names kept as text when a party
+  closes or a table is removed, today's plan in the till's table-state answer, the dashboard's
+  read and save routes for a zone's master plan, today's plan caught up on every floor read and
+  change, the old floor screen refusing to change a planned table, and the demo seed writing
+  master plans. Left: slice 2 (the dashboard editor), slice 3 (the till's map), slice 4 (today's
+  changes on the till) and slice 5 (removing the old pieces). A Square-style editor on the
+  dashboard for each zone's master plan (tables created in bulk, saved joins, Undo/Redo), and a
+  till map whose job is status and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
   is edited freely and is copied into today's plan at the day's reset or on a button; everything
   live points at today's plan; staff move, join, split and take off tables on today's plan but
   never add or rename one (they keep spares in reserve); a table a party sits at waits and catches
@@ -248,6 +254,17 @@ screen is designed.
   [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A366-6 rebuilds the Departments
   and zones screen the editor opens from; A182 (canvases retired) and A414 touch the till's floor
   screen that slice 3 replaces.
+
+## Small floor-plan refusals still missing
+
+- **Small floor-plan refusals still missing.** Left open by A429 slice 1.
+  - `dining_tables.plan_table_id` has no unique index; no writer makes two live tables follow one
+    master table today.
+  - A saved join's seats have no upper bound, and two saved joins of the same tables are accepted.
+  - The delivery-release trigger accepts an empty label.
+  - During the two-step rename (a table first takes its own internal id as its name, then the new
+    name), a new name equal to another table's internal id answers a raw unique-key error instead
+    of `table.label_taken`.
 
 ## A414 — device screens on a phone
 
