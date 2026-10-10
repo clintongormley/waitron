@@ -38,16 +38,23 @@ import type {
   PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
-import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import { compareLabels, decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
+import "../widgets/join-with-dialog.js";
+import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import { otherPartyRead, partyScope } from "../widgets/table-targets.js";
 import type { TodaySeatsDetail } from "../widgets/today-seats-dialog.js";
 import { codeMessage } from "../i18n/codes.js";
-import { type DropAction, dropAction, pendingPlaces } from "../state/floor-today.js";
+import {
+  type DropAction,
+  type SheetAction,
+  dropAction,
+  pendingPlaces,
+} from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import { isPlannedZone, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
@@ -451,6 +458,8 @@ export class TillFloorScreen extends LitElement {
    * every placement write. */
   @property({ attribute: false }) canEdit = false;
   @property({ attribute: false }) canExitToCounter = true;
+  /** The device's profile allows `take-orders`, which today's changes from the details sheet need. */
+  @property({ attribute: false }) canChangeToday = false;
   /** The device has a station view, so each station's ready work links into it. */
   @property({ attribute: false }) canOpenStation = false;
   /** Mounted inside a card host, which supplies the header; the view/edit toggles stay. */
@@ -485,12 +494,15 @@ export class TillFloorScreen extends LitElement {
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words; cleared by the next drop or a change of zone. */
   @state() private refusal: string | null = null;
-  /** A merge the server would not size, waiting for the seats prompt. */
+  /** A merge the server would not size, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
     heading: string;
     seatsGuess: number;
+    action: "join" | "save";
     resend: (seats: number) => void;
   } | null = null;
+  /** Join with…'s table and the groups it may join. */
+  @state() private joiningWith: { table: TableState; targets: TableState[] } | null = null;
   /** A drop joining two seated parties, waiting for which bills to keep. */
   @state() private askingBills: { api: TillApi; action: JoinAction } | null = null;
 
@@ -647,6 +659,8 @@ export class TillFloorScreen extends LitElement {
       .table=${table}
       .heading=${this.#detailsHeading(table)}
       .now=${this.#drawnAt}
+      .actions=${this.canChangeToday}
+      @today-action=${(event: Event) => this.#onTodayAction(event)}
       @details-close=${(event: Event) => {
         event.stopPropagation();
         this.details = null;
@@ -728,8 +742,12 @@ export class TillFloorScreen extends LitElement {
 
   #onDragEnd(event: Event): void {
     event.stopPropagation();
+    this.#onDrop((event as CustomEvent<FloorMapDrop>).detail);
+  }
+
+  #onDrop(drop: FloorMapDrop): void {
     this.refusal = null;
-    const action = dropAction(this.#zone.visible, (event as CustomEvent<FloorMapDrop>).detail);
+    const action = dropAction(this.#zone.visible, drop);
     switch (action.kind) {
       case "say":
         this.refusal = action.message;
@@ -762,6 +780,98 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
+  #onTodayAction(event: Event): void {
+    event.stopPropagation();
+    this.refusal = null;
+    const { action, tableId } = (event as CustomEvent<{ action: SheetAction; tableId: string }>)
+      .detail;
+    const table = this.tables.find((each) => each.id === tableId);
+    const api = this.api;
+    if (table === undefined || api === undefined) return;
+    switch (action) {
+      case "join-with":
+        this.joiningWith = { table, targets: this.#joinTargets(table) };
+        return;
+      case "split":
+        void this.#settle(this.#split(api, table));
+        return;
+      case "rotate":
+        void this.#settle(api.rotateToday(table.id));
+        return;
+      case "seats":
+        this.askingSeats = {
+          heading: this.#mergeName(table) ?? table.label,
+          seatsGuess: seatsFor(table) ?? 0,
+          action: "save",
+          resend: (seats) => void this.#settle(api.setSeatsToday(table.id, seats)),
+        };
+        return;
+      case "back":
+        void this.#settle(api.backToSavedToday(table.id));
+        return;
+      case "take-off":
+        void this.#settle(api.takeOffToday(table.id));
+        return;
+    }
+  }
+
+  /** A seated merge loses its last member in label order, with a new empty bill (decision 16). */
+  async #split(api: TillApi, table: TableState): Promise<void> {
+    const party = table.party;
+    if (party === null) return api.splitToday(table.id);
+    const joinId = table.today?.joinId;
+    const last = this.#zone.visible
+      .filter((each) => each.today?.joinId === joinId)
+      .sort((a, b) => compareLabels(a.label, b.label))
+      .at(-1)!;
+    await api.splitTable(party.id, last.id, null, party.revision);
+  }
+
+  /**
+   * One per placed group of the zone, its first member in label order named as the map names the
+   * group, leaving out every group a drop of `table` on it would do nothing with.
+   */
+  #joinTargets(table: TableState): TableState[] {
+    const zoneTables = this.#zone.visible;
+    const from = table.today?.placement;
+    if (from == null) return [];
+    const seen = new Set<string>();
+    const targets: TableState[] = [];
+    for (const each of [...zoneTables].sort((a, b) => compareLabels(a.label, b.label))) {
+      if (each.today?.placement == null) continue;
+      const group = each.today.joinId ?? each.id;
+      if (seen.has(group)) continue;
+      seen.add(group);
+      const drop = { tableId: table.id, x: from.x, y: from.y, targetId: each.id };
+      if (dropAction(zoneTables, drop).kind === "none") continue;
+      targets.push({ ...each, label: this.#mergeName(each) ?? each.label });
+    }
+    return targets;
+  }
+
+  #onJoinWithPick(event: Event): void {
+    event.stopPropagation();
+    const { tableId, targetId } = (event as CustomEvent<JoinWithPickDetail>).detail;
+    const from = this.#zone.visible.find((each) => each.id === tableId)?.today?.placement;
+    if (from == null) return;
+    this.#onDrop({ tableId, x: from.x, y: from.y, targetId });
+  }
+
+  #joinWith(): TemplateResult | typeof nothing {
+    const joining = this.joiningWith;
+    if (joining === null) return nothing;
+    return html`<till-join-with-dialog
+      .table=${joining.table}
+      .targets=${joining.targets}
+      .heading=${t("floor.join_with_title").replace("{table}", () => joining.table.label)}
+      @join-with-pick=${(event: Event) => this.#onJoinWithPick(event)}
+      @join-with-close=${(event: Event) => {
+        event.stopPropagation();
+        this.joiningWith = null;
+      }}
+    ></till-join-with-dialog>`;
+  }
+
   /** The dragged party joins the party at the target (decision 5 of the floor plan's slice 4). */
   async #join(
     api: TillApi,
@@ -792,6 +902,7 @@ export class TillFloorScreen extends LitElement {
         this.askingSeats = {
           heading: action.heading,
           seatsGuess: action.seatsGuess,
+          action: "join",
           resend: (chosen) => void this.#join(api, action, bills, chosen),
         };
         return true;
@@ -816,6 +927,7 @@ export class TillFloorScreen extends LitElement {
         this.askingSeats = {
           heading: action.heading,
           seatsGuess: action.seatsGuess,
+          action: "join",
           resend: (chosen) => void this.#merge(api, action, chosen),
         };
         return true;
@@ -843,7 +955,7 @@ export class TillFloorScreen extends LitElement {
     const asking = this.askingSeats;
     if (asking === null) return nothing;
     return html`<till-today-seats-dialog
-      action="join"
+      .action=${asking.action}
       .heading=${t("floor.seats_title").replace("{table}", () => asking.heading)}
       .seats=${asking.seatsGuess}
       @today-seats-confirm=${(event: Event) => {
@@ -1075,7 +1187,7 @@ export class TillFloorScreen extends LitElement {
               : this.#map(placed, unplaced)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#billChoice()}
+        ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }
