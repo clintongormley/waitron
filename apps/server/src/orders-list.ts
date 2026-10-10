@@ -480,8 +480,12 @@ export async function readCreditNotes(
   return notes;
 }
 
-/** Every table each open party ever held, once each, in the order they joined it. */
-async function readPartyTables(
+/**
+ * The names of every table each party holds or held, once each, in the order the party joined
+ * them; a party with no `party_tables` row has no entry. A closing party stores this list
+ * (`closePartyTables`), which the order list then reads in its place.
+ */
+export async function readPartyTables(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, string[]>> {

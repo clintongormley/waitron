@@ -26,7 +26,7 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
-import { readCreditNotes } from "./orders-list.js";
+import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import "./errors.js";
 
@@ -649,13 +649,7 @@ export async function closeParty(
  * state changes: `parties_clear_table_status` reads the rows then.
  */
 export async function closePartyTables(tx: Transaction, partyId: string): Promise<void> {
-  const held = await tx
-    .select({ label: diningTables.label })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(eq(partyTables.partyId, partyId))
-    .orderBy(partyTables.joinedAt, partyTables.id);
-  const tableNames = [...new Set(held.map((row) => row.label))];
+  const tableNames = (await readPartyTables(tx, [partyId])).get(partyId) ?? [];
   await tx.update(parties).set({ tableNames }).where(eq(parties.id, partyId));
   await tx.delete(partyTables).where(eq(partyTables.partyId, partyId));
 }
