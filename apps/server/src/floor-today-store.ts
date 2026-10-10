@@ -46,7 +46,7 @@ export function placementOf(row: Placed): Placement | null {
   };
 }
 
-function placementColumns(placement: Placement | null): Placed {
+export function placementColumns(placement: Placement | null): Placed {
   return placement ?? { x: null, y: null, width: null, height: null, shape: null, rotation: null };
 }
 

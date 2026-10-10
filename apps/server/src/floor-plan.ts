@@ -13,7 +13,7 @@ import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
-import { placementOf, resetZone } from "./floor-today-store.js";
+import { placementColumns, placementOf, resetZone } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -315,15 +315,7 @@ export async function checkZonePlanSave(
 }
 
 function masterColumns(table: ZonePlanSave["tables"][number]) {
-  const placement = table.placement ?? {
-    x: null,
-    y: null,
-    width: null,
-    height: null,
-    shape: null,
-    rotation: null,
-  };
-  return { seats: table.seats, fixed: table.fixed, ...placement };
+  return { seats: table.seats, fixed: table.fixed, ...placementColumns(table.placement) };
 }
 
 /**
@@ -362,25 +354,25 @@ export async function saveZonePlan(
 
   const masters = await mastersOf(tx, planId);
   const kept = new Set(input.tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
-  for (const master of masters) {
-    if (kept.has(master.id)) continue;
+  const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
+  if (deleted.length > 0) {
     // `planned` stays true, so the next reset removes the live table.
     await tx
       .update(diningTables)
       .set({ planTableId: null })
-      .where(eq(diningTables.planTableId, master.id));
+      .where(inArray(diningTables.planTableId, deleted));
     await tx
       .update(floorResetTables)
       .set({ planTableId: null })
-      .where(eq(floorResetTables.planTableId, master.id));
-    await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, master.id));
+      .where(inArray(floorResetTables.planTableId, deleted));
+    await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, deleted));
   }
 
   // Two passes, so a swap or a rename onto a name another row is giving up never meets the
   // (plan_id, label) unique key mid-way: each renamed row first takes its own id as its label.
-  const labelOf = new Map(masters.map((m) => [m.id, m.label]));
+  const masterOf = new Map(masters.map((m) => [m.id, m]));
   for (const table of input.tables) {
-    if (table.id !== undefined && labelOf.get(table.id) !== table.label.trim()) {
+    if (table.id !== undefined && masterOf.get(table.id)!.label !== table.label.trim()) {
       await tx
         .update(floorPlanTables)
         .set({ label: table.id })
@@ -401,10 +393,10 @@ export async function saveZonePlan(
   }
   for (const table of input.tables) {
     if (table.id === undefined) continue;
-    await tx
-      .update(floorPlanTables)
-      .set({ label: table.label.trim(), ...masterColumns(table) })
-      .where(eq(floorPlanTables.id, table.id));
+    const next = { label: table.label.trim(), ...masterColumns(table) };
+    const current = masterOf.get(table.id)!;
+    if ((Object.keys(next) as (keyof typeof next)[]).every((k) => current[k] === next[k])) continue;
+    await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
   }
 
   for (const join of input.joins) {

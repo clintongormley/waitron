@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -9,6 +9,7 @@ import {
   floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
+  floorResetTables,
   floorTodayTables,
   floorTodayZones,
   floorZones,
@@ -607,6 +608,34 @@ describe("saveZonePlan", () => {
     return Object.fromEntries(plan.tables.map((t) => [t.id!, t.label]));
   }
 
+  /** Everything live about the zone: its tables, their today's rows, its reset rows and day. */
+  async function liveStateOf(zoneId: string) {
+    return inTx(v, async (tx) => {
+      const tables = await tx
+        .select()
+        .from(diningTables)
+        .where(eq(diningTables.zoneId, zoneId))
+        .orderBy(asc(diningTables.id));
+      const today = await tx
+        .select()
+        .from(floorTodayTables)
+        .where(
+          inArray(
+            floorTodayTables.tableId,
+            tables.map((t) => t.id),
+          ),
+        )
+        .orderBy(asc(floorTodayTables.id));
+      const reset = await tx
+        .select()
+        .from(floorResetTables)
+        .where(eq(floorResetTables.zoneId, zoneId))
+        .orderBy(asc(floorResetTables.id));
+      const day = await tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
+      return { tables, today, reset, day };
+    });
+  }
+
   /** A zone with live T1 saved as its first plan, plus a new fixed "Bar 1". */
   async function firstSaved() {
     const z = await zone();
@@ -652,9 +681,7 @@ describe("saveZonePlan", () => {
     const { z, t1, live, result } = await firstSaved();
     const barLive = (await liveOf(result.ids.bar!))!.id;
     const patio = fresh("Patio 1");
-    const today = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, z)),
-    );
+    const before = await liveStateOf(z);
 
     const second = await save(z, {
       revision: 1,
@@ -663,17 +690,24 @@ describe("saveZonePlan", () => {
     });
 
     expect(second).toEqual({ revision: 2, ids: { t1: result.ids.t1 } });
-    expect(await tableRow(v, live)).toMatchObject({ label: t1, planTableId: result.ids.t1 });
-    expect(await todayOf(live)).toMatchObject({ x: 0 });
-    expect(await tableRow(v, barLive)).toMatchObject({
-      active: true,
-      planned: true,
-      planTableId: null,
+    // The one expected difference: the deleted Bar 1's live row and reset row lose their master.
+    const unlinked = <T extends { id: string; planTableId: string | null }>(
+      rows: T[],
+      id: string,
+    ) => rows.map((row) => (row.id === id ? { ...row, planTableId: null } : row));
+    const barReset = before.reset.find((row) => row.tableId === barLive)!;
+    expect(barReset.planTableId).toBe(result.ids.bar);
+    expect(await liveStateOf(z)).toEqual({
+      ...before,
+      tables: unlinked(before.tables, barLive),
+      reset: unlinked(before.reset, barReset.id),
     });
-    expect(await todayOf(barLive)).toBeDefined();
-    expect(
-      await inTx(v, (tx) => tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, z))),
-    ).toEqual(today);
+    expect(before.tables.find((row) => row.id === live)).toMatchObject({
+      label: t1,
+      planTableId: result.ids.t1,
+    });
+    expect(before.today.find((row) => row.tableId === live)).toMatchObject({ x: 0 });
+    expect(before.today.find((row) => row.tableId === barLive)).toBeDefined();
 
     await inTx(v, (tx) => resetZone(tx, v.cfg, NONE, z, NOW));
 
@@ -796,5 +830,37 @@ describe("saveZonePlan", () => {
     expect(third).toEqual({ revision: 3, ids: { again: ids.again } });
     expect(await tableRow(v, live)).toMatchObject({ label: t1, planTableId: null, planned: true });
     expect(ids.again).not.toBe(result.ids.t1);
+  });
+
+  it("unlinks a pending create's reset row when its master table is deleted", async () => {
+    const z = await zone();
+    const name = fresh("N");
+    // A planned table with no master, held by a party: the first reset must keep it, and its
+    // name, so the new master table "N" can only wait as a pending create.
+    const held = await liveTable(z, name);
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ planned: true }).where(eq(diningTables.id, held)),
+    );
+    await seat(v, held);
+    const { ids } = await save(z, { revision: 0, tables: [entry("n", name)], joins: [] });
+    const pending = async () =>
+      inTx(v, (tx) =>
+        tx
+          .select()
+          .from(floorResetTables)
+          .where(and(eq(floorResetTables.zoneId, z), isNull(floorResetTables.tableId))),
+      );
+    expect(await pending()).toEqual([
+      expect.objectContaining({ planTableId: ids.n, pending: true, label: name }),
+    ]);
+
+    await expect(save(z, { revision: 1, tables: [], joins: [] })).resolves.toEqual({
+      revision: 2,
+      ids: {},
+    });
+
+    expect(await pending()).toEqual([
+      expect.objectContaining({ planTableId: null, pending: true, label: name }),
+    ]);
   });
 });
