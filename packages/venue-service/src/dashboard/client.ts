@@ -1,5 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type { PlanPlacement } from "@waitron/ui";
+import type { PlanPlacement, PreviewTable } from "@waitron/ui";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -68,17 +68,16 @@ export interface NamedRow {
 export interface FloorZone extends NamedRow {
   active?: boolean;
 }
-/** The part of a zone's master plan the zone panel draws (`ZonePlan`, apps/server/src/floor-plan.ts). */
+/** The part of a zone's master plan the zone panel reads (`ZonePlan`, apps/server/src/floor-plan.ts). */
 export interface ZoneFloorPlan {
-  zoneId: string;
-  revision: number;
-  tables: {
-    id: string | null;
-    liveTableId: string | null;
-    label: string;
-    fixed: boolean;
-    placement: PlanPlacement | null;
-  }[];
+  /** `id` is null only for a live table offered for adoption, which is never placed. */
+  tables: { id: string | null; fixed: boolean; placement: PlanPlacement | null }[];
+}
+
+export function placedTables(tables: ZoneFloorPlan["tables"]): PreviewTable[] {
+  return tables.flatMap(({ id, fixed, placement }) =>
+    placement && id ? [{ key: id, fixed, placement }] : [],
+  );
 }
 export interface VenueServiceModel {
   departments: Department[];

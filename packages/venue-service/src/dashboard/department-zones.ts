@@ -7,17 +7,19 @@ import {
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
+  type PreviewTable,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-preview.js";
 import "./service-settings-fields.js";
-import type {
-  VenueServiceApi,
-  VenueServiceView,
-  ZoneFloorPlan,
-  ZoneServiceSettingsInput,
+import {
+  placedTables,
+  type VenueServiceApi,
+  type VenueServiceView,
+  type ZoneFloorPlan,
+  type ZoneServiceSettingsInput,
 } from "./client.js";
 import { t } from "./strings.js";
 import { currentLocale } from "@waitron/dashboard-kit";
@@ -94,6 +96,8 @@ export class DepartmentZones extends LitElement {
   private hoursDetach?: () => void;
   private hoursApi?: VenueServiceApi;
   @state() private plan?: ZoneFloorPlan;
+  private previewOf?: ZoneFloorPlan;
+  private previewTables: PreviewTable[] = [];
   @state() private planFailed = false;
   private planDetach?: () => void;
   private planApi?: VenueServiceApi;
@@ -212,7 +216,7 @@ export class DepartmentZones extends LitElement {
       this.scope.commit(this.baseline);
     }
   }
-  /** Reads only the selected, active zone's plan; a reply for an earlier zone is dropped. */
+  /** Reads only the selected, active zone's plan. */
   private watchPlan(api: VenueServiceApi | undefined, zoneId: string | undefined) {
     if (api === this.planApi && zoneId === this.planZone) return;
     this.planDetach?.();
@@ -222,27 +226,26 @@ export class DepartmentZones extends LitElement {
     this.plan = undefined;
     this.planFailed = false;
     if (!api || zoneId === undefined) return;
-    const current = () => this.planApi === api && this.planZone === zoneId;
     this.planDetach = api.watchZoneFloorPlan?.(
       zoneId,
       (plan) => {
-        if (!current()) return;
         this.plan = plan;
         this.planFailed = false;
       },
       () => {
-        if (current()) this.planFailed = true;
+        this.planFailed = true;
       },
       () => {
-        if (current()) this.planFailed = false;
+        this.planFailed = false;
       },
     );
   }
   private floorPlan(zone: { id: string; name: string }, departmentId: string) {
-    const placed = (this.plan?.tables ?? []).flatMap(
-      ({ id, liveTableId, label, fixed, placement }) =>
-        placement ? [{ key: id ?? liveTableId ?? label, label, fixed, placement }] : [],
-    );
+    if (this.plan !== this.previewOf) {
+      this.previewOf = this.plan;
+      this.previewTables = placedTables(this.plan?.tables ?? []);
+    }
+    const placed = this.previewTables;
     const empty = this.plan !== undefined && placed.length === 0;
     return html`${this.planFailed ? html`<p role="alert" data-test="floor-plan-error">${t("venue.floor_plan_load_error")}</p>` : nothing}
       ${placed.length ? html`<wt-floor-plan-preview .tables=${placed} label=${t("venue.zone_floor_plan_preview").replace("{zone}", zone.name)}></wt-floor-plan-preview>` : nothing}

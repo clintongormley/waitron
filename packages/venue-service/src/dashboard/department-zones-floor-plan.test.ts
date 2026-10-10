@@ -14,18 +14,14 @@ const placement = (x: number) => ({
   rotation: 0,
 });
 const placed: ZoneFloorPlan = {
-  zoneId: "z2",
-  revision: 3,
   tables: [
-    { id: "t1", liveTableId: "l1", label: "B1", fixed: true, placement: placement(0) },
-    { id: null, liveTableId: "l2", label: "B2", fixed: false, placement: placement(3) },
-    { id: null, liveTableId: "l3", label: "B3", fixed: false, placement: null },
+    { id: "t1", fixed: true, placement: placement(0) },
+    { id: "t2", fixed: false, placement: placement(3) },
+    { id: null, fixed: false, placement: null },
   ],
 };
 const unplaced: ZoneFloorPlan = {
-  zoneId: "z1",
-  revision: 0,
-  tables: [{ id: null, liveTableId: "l9", label: "T1", fixed: false, placement: null }],
+  tables: [{ id: null, fixed: false, placement: null }],
 };
 const back = (zone: string) =>
   `/manage/floor-plan/zone/${zone}?back=%2Fmanage%2Fvenue-operations%2Fdepartment%2Fd1%2Fview%2Fzones%2Fzone%2F${zone}`;
@@ -78,8 +74,8 @@ it("a zone whose plan has placed tables shows its preview above Edit floor plan"
   );
   await expect.poll(() => preview()).not.toBeNull();
   expect(preview()!.tables).toEqual([
-    { key: "t1", label: "B1", fixed: true, placement: placement(0) },
-    { key: "l2", label: "B2", fixed: false, placement: placement(3) },
+    { key: "t1", fixed: true, placement: placement(0) },
+    { key: "t2", fixed: false, placement: placement(3) },
   ]);
   expect(preview()!.label).toBe("Floor plan: Bar");
   expect(linkText()).toBe("Edit floor plan");
@@ -90,9 +86,33 @@ it("a zone whose plan has placed tables shows its preview above Edit floor plan"
   expect(reads).toEqual(["z2"]);
 });
 
+it("keeps the preview's tables when the panel redraws for something else", async () => {
+  await mount(
+    "z2",
+    planRequest(async () => structuredClone(placed)),
+  );
+  await expect.poll(() => preview()).not.toBeNull();
+  const drawn = preview()!.tables;
+  const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+  fields.dispatchEvent(
+    new CustomEvent("service-settings-change", {
+      detail: { value: { ...fields.value, paidWhen: "ticket_then_pay" } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(fields.value.paidWhen).toBe("ticket_then_pay");
+  expect(preview()!.tables).toBe(drawn);
+});
+
 it.each([
   ["only live tables offered for adoption", unplaced],
-  ["no tables at all", { zoneId: "z1", revision: 0, tables: [] }],
+  [
+    "only saved tables with no place yet",
+    { tables: [{ id: "t9", fixed: false, placement: null }] },
+  ],
+  ["no tables at all", { tables: [] }],
 ])("a zone whose plan has %s shows no preview and Add a floor plan", async (_, plan) => {
   await mount(
     "z1",
@@ -146,12 +166,11 @@ it("a live change to the plan updates the preview", async () => {
   );
   await expect.poll(() => preview()?.tables.length).toBe(2);
   current = {
-    ...placed,
-    tables: placed.tables.map((table) => ({ ...table, placement: placement(0) })),
+    tables: [...placed.tables, { id: "t3", fixed: false, placement: placement(6) }],
   };
   live.invalidate([{ type: "floor_plan_tables" }]);
   await expect.poll(() => preview()?.tables.length).toBe(3);
-  current = { ...placed, tables: [] };
+  current = { tables: [] };
   live.invalidate([{ type: "dining_tables" }]);
   await expect.poll(linkText).toBe("Add a floor plan");
   expect(preview()).toBeNull();
@@ -164,11 +183,33 @@ it("a failed read shows one alert and keeps Edit floor plan", async () => {
       throw { code: "server.unavailable" };
     }),
   );
-  await expect.poll(() => alert()?.textContent?.trim()).toBe("Couldn't load the floor plan.");
+  await expect
+    .poll(() => alert()?.textContent?.trim())
+    .toBe("The floor plan could not be loaded. It will be tried again.");
   expect(alert()!.getAttribute("role")).toBe("alert");
   expect(linkText()).toBe("Edit floor plan");
   expect(link()!.getAttribute("href")).toBe(back("z2"));
   expect(preview()).toBeNull();
+});
+
+it("a good read after a failed one clears the alert and shows the plan", async () => {
+  const live = new LiveData();
+  let failing = true;
+  await mount(
+    "z2",
+    planRequest(async () => {
+      if (failing) throw { code: "server.unavailable" };
+      return structuredClone(placed);
+    }),
+    live,
+  );
+  await expect.poll(alert).not.toBeNull();
+  expect(preview()).toBeNull();
+  failing = false;
+  live.invalidate([{ type: "floor_plans" }]);
+  await expect.poll(() => preview()?.tables.map((table) => table.key)).toEqual(["t1", "t2"]);
+  expect(alert()).toBeNull();
+  expect(linkText()).toBe("Edit floor plan");
 });
 
 it("a disabled zone reads no plan and shows neither preview nor link", async () => {

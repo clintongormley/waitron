@@ -3,7 +3,6 @@ import type { LiveData } from "@waitron/dashboard-kit";
 /** Re-read with no row written, so today's date and the labels that follow it move on. */
 const REFRESH_MS = 60_000;
 
-/** The live or timed reads behind a screen's whole-page model, shared by Hours and Menu timetable. */
 export class ModelWatches {
   /** Each attached watch's read when there is no live data, for {@link reread}. */
   readonly #rereads = new Set<() => void>();
