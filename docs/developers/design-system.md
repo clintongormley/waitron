@@ -3153,7 +3153,7 @@ period's move) before anything is saved; a choice that moves nothing saves at on
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers and "Show the
 rest of the order", saved in one request. Printers offers a printer a watcher uses as disabled,
 unless the station already has it, and is a read-out for a switched-off station; the editor also has
-a read-out for a person without `printer.manage`, which the screen cannot yet select. New station
+a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
 also sets Printers. Watchers keeps its own printer selections. Settings edits each station value in
 its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured
 fallback field reads "Outside its hours, work goes to". Station Edit, Make default and
@@ -3280,7 +3280,7 @@ impresión" tab is cut that way beside "Añadir un agente" (the "shows the selec
 every window width except the Spanish Agents tab on a phone" case in
 `apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations shows its one add button,
 Add station, on Stations alone, and caps its action area at half the row through the
-`tab-actions` part so its tabs keep that half whatever the font (the "shows New station on the
+`tab-actions` part so its tabs keep that half whatever the font (the "shows Add station on the
 Stations tab alone" and "keeps half of a … px tab row for the tabs" cases in
 `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.

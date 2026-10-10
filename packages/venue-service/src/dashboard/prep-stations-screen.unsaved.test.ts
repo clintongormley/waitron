@@ -137,7 +137,7 @@ async function open(screen: PrepStationsScreen, rename: boolean) {
   await modal.updateComplete;
   return modal;
 }
-/** The open station form: New station is drawn by the screen, Edit by its station editor. */
+/** The open station form: Add station is drawn by the screen, Edit by its station editor. */
 function modalIn(screen: PrepStationsScreen) {
   return (
     screen.shadowRoot!.querySelector("wt-modal") ??

@@ -1508,7 +1508,7 @@ function stationTable(el: PrepStationsScreen) {
     ?.querySelector("prep-station-table")
     ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
 }
-it("a live routing refresh keeps an open New station draft", async () => {
+it("a live routing refresh keeps an open Add station draft", async () => {
   const liveData = new LiveData();
   const changed = { ...view, stations: [{ ...view.stations[0]!, name: "Renamed bar" }] };
   const load = vi.fn().mockResolvedValueOnce(view).mockResolvedValue(changed);
@@ -1809,7 +1809,7 @@ it.each([
   },
 );
 
-it("shows New station on the Stations tab alone, and no action on the other tabs", async () => {
+it("shows Add station on the Stations tab alone, and no action on the other tabs", async () => {
   setLocale("en");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
@@ -6244,7 +6244,7 @@ describe("The station editor", () => {
     await settle(el);
     expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("retired", { name: "Old bar" });
   });
-  it("New station sends the printers chosen with the station", async () => {
+  it("Add station sends the printers chosen with the station", async () => {
     const a = api({
       load: vi.fn().mockResolvedValue(ticketView),
       createStation: vi.fn().mockResolvedValue({ id: "grill" }),
@@ -6269,7 +6269,7 @@ describe("The station editor", () => {
       printerIds: ["next"],
     });
   });
-  it("ignores a departed editor's cancel and a departed New station's printers", async () => {
+  it("ignores a departed editor's cancel and a departed Add station's printers", async () => {
     const { el, a } = await openEdit({ createStation: vi.fn() });
     const old = editorOf(el)!;
     q(el, '[data-test="cancel-station-edit"]')!.click();
@@ -6295,7 +6295,7 @@ describe("The station editor", () => {
     expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
     expect(a.createStation).not.toHaveBeenCalled();
   });
-  it("New station keeps a printer refusal until the printers change, and names printer.manage", async () => {
+  it("Add station keeps a printer refusal until the printers change, and names printer.manage", async () => {
     const a = api({
       load: vi.fn().mockResolvedValue(ticketView),
       createStation: vi.fn().mockRejectedValue({
@@ -6317,7 +6317,7 @@ describe("The station editor", () => {
     await editSaveField(el, printers(), []);
     expect(printers().error).toBe("");
   });
-  it("New station puts a refused printer under its printers field", async () => {
+  it("Add station puts a refused printer under its printers field", async () => {
     const a = api({
       load: vi.fn().mockResolvedValue(ticketView),
       createStation: vi.fn().mockRejectedValue({ code: "printer.not_found", params: {} }),
