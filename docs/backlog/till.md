@@ -236,14 +236,16 @@ screen is designed.
 ## A429 — floor plans: a master plan per zone, today's plan on the till
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493) and 2 built; slices 3–5 open).** Slice 1 is the
+  1 (#1493), 2 (#1506) and 3 built; slices 4–5 open).** Slice 1 is the
   storage and reads: the master plan's tables, today's plan, table names kept as text when a party
   closes or a table is removed, today's plan in the till's table-state answer, the dashboard's
   read and save routes for a zone's master plan, today's plan caught up on every floor read and
   change, the old floor screen refusing to change a planned table, and the demo seed writing
   master plans. Slice 2 is the dashboard editor at `/manage/floor-plan/zone/<id>`, opened from
-  the zone panel's "Edit floor plan". Left: slice 3 (the till's map), slice 4 (today's
-  changes on the till) and slice 5 (removing the old pieces). A Square-style editor on the
+  the zone panel's "Edit floor plan". Slice 3 is the till's map: a planned zone drawn on a new
+  map with status colours and dots, a details sheet, the seat dialog's seats hint, a 15-second
+  re-read, and the order screen's status pin and notice. Left: slice 4 (today's changes on the
+  till) and slice 5 (removing the old pieces). A Square-style editor on the
   dashboard for each zone's master plan (tables created in bulk, saved joins, Undo/Redo), and a
   till map whose job is status and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
   is edited freely and is copied into today's plan at the day's reset or on a button; everything
@@ -291,6 +293,32 @@ screen is designed.
     above Close and Save, because `wt-form-actions`' outer row never wraps.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
     `super.disconnectedCallback` and `preventScroll`.
+
+## A470 — the till's floor map follow-ups
+
+- **A470 — the till's floor map follow-ups (2026-10-10).** Left open by A429 slice 3.
+  - `wt-floor-map` acts on a `click` only when its `detail` is 0 (the keyboard's), leaving a
+    pointer's click to the gestures, so a screen reader whose activation sends a `click` with
+    `detail` 1 or more and no pointer events would open nothing. Unmeasured; needs a manual
+    VoiceOver and TalkBack check.
+  - `wt-floor-map`'s wheel reads `deltaX`/`deltaY` as pixels and ignores `deltaMode`, so a wheel
+    that reports lines (Firefox) pans about 3 px a notch.
+  - A re-read that removes the held table during a drag still lets the drop send that drag's
+    coordinates (`wt-table-drag-end`). Slice 4 owns drops.
+  - A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet
+    (`table-details-sheet.ts`); the floor card shows €0.00 the same way.
+  - The old floor card says "1 listos" in Spanish (`till-floor-screen.ts`, the count followed by
+    `floor.ready`); the map's pin and notice say "1 listo".
+  - For slice 4: spec §6.2 refuses a take-off only while a tab is open, but the till lists a
+    taken-off table that needs clearing or has a delivery on its way (`listedTables`,
+    `apps/till/src/state/floor-map.ts`), so slice 4 should refuse those take-offs or keep that
+    listing. A merge's member tables could also sit in different zones, while the map reads one
+    zone at a time.
+  - Six choices from the look pass (`~/waitron-campaign/questions.md`, "FYI 2026-10-10 — A429-3"):
+    the map's height of 65dvh; a requested bill purple on the map but a blue chip in the sheet and
+    the list; the pin's colour swatch and its words able to differ; a single table's sheet headed by
+    its bare number; the "Covers" placeholder; the notice covering the order title row at 390 px.
+    Built with defaults; owner may override.
 
 ## Small floor-plan refusals still missing
 

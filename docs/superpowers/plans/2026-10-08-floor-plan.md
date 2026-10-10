@@ -2607,6 +2607,44 @@ if it is wrong.
     `preventScroll`, a table arrowed to in a part of the map the tab shell's body has scrolled out
     of view stays off-screen.
 
+**As built (2026-10-10).** The controller's rulings during the build; where one differs from a
+decision above or a task's text, the ruling is what was built. Line numbers checked at the slice's
+head: the till's idle listeners are at `till-app.ts:1406-1407` (`#onInteraction` at `:1384`);
+design-system.md → "Adding a primitive" is at `:3119`, its item 4's `delegatesFocus` at
+`:3126-3128`; the backlog's "Nothing has carried that out" is at `docs/backlog.md:2405`.
+
+- Decision 2 reads "reachability wins": a taken-off table a party holds, with a delivery on its way
+  or needing clearing is listed, not drawn.
+- Decision 8's double tap refits only when both taps land on empty space, for touch and mouse
+  alike.
+- Decision 12's "old capacity" applies to any table with no today's row, a never-planned table in
+  a planned zone included (`seatsFor`).
+- Decision 18's arrow-key pan stays within the pan limit (decision 8), so at high zoom the focused
+  table can stay off-screen; the map has no composite-widget role, and each table stays a button.
+- A merge's words take the fill's words from the member that supplied the fill and the dot's count
+  from the member that supplied the dot; nothing is summed (`statusWords`, `pinText`). Its members
+  are grouped over every table in the zone, drawn or not.
+- `mapLabel` is exported from `@waitron/ui`; the details sheet's heading is `mapLabel` over the
+  labels of the table's merge.
+- The sheet's kitchen line counts each dish once (to serve, ready, en route), and leaves out the
+  ready count when a station's ready chip shows. It drops the party-name line when the name is null
+  or equals the heading, adds a "Needs clearing" line, says "Free" only with no lines and no chips,
+  and shows a forgotten wait's chip.
+- The status pin keeps its sheet open across re-reads, passing it the party's first row, and closes
+  it on `details-close`.
+- The floor screen also starts the 15-second re-read on re-attach when its last render drew a
+  planned map; a table read's answer is applied unless a read that started after it was applied
+  first (`#applyTables`).
+- `wt-floor-map` finds a table with `closest("[part=table]")`; any button other than 0 starts no
+  gesture; a reused pointer id is handled. A touch or pen double tap on the table already tapped
+  sends nothing; one on a different table counts as a tap on it.
+- When a table is wider or taller than the map, an arrow key's pan moves nothing if the table
+  already covers the map that way, else the least distance that leaves no gap.
+- The notice and the pin say "<n> ready", not "<n> ready to serve".
+- Stryker ran on every new `packages/ui` file, `floor-map-fills.ts` included; the ten fill tokens
+  were added to design-system.md's colour list; the design-system paragraph for `wt-floor-map` names
+  its events `wt-table-tap`, `wt-table-details` and `wt-table-drag-end`.
+
 **Mutation runs.** As slice 2: each task that adds a `packages/ui` file runs
 `gtimeout 900 pnpm --filter @waitron/ui exec stryker run --mutate <file>` once, and a survivor gets
 an exact-value assertion. If it cannot start or runs out of time, say so in the commit message.

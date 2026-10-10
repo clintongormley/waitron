@@ -1825,10 +1825,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493) and 2 (#1506) built; slices 3–5 open).** Slice 1 is the
+  1 (#1493), 2 (#1506) and 3 built; slices 4–5 open).** Slice 1 is the
   storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
   the till works from), kept table names, the till's table-state answer, the dashboard's read and
-  save routes, and the demo seed. Slice 2 is the dashboard editor. Left: the till's map, today's
+  save routes, and the demo seed. Slice 2 is the dashboard editor. Slice 3 is the till's map: a
+  planned zone drawn on a new map with status colours and dots, a details sheet, the seat dialog's
+  seats hint, a 15-second re-read, and the order screen's status pin and notice. Left: today's
   changes on the till, and removing the old pieces.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
 
@@ -1836,6 +1838,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   left: a preview not heard on focus, an ungated link, a duplicated address template, list and
   canvas details and surviving mutants. Left open by A429 slice 2.
   [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
+
+- **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
+  unmeasured screen-reader activation, the wheel's line mode, a drop after a re-read, two wordings,
+  two notes for slice 4 and six look-pass choices built with defaults. Left open by A429 slice 3.
+  [Detail](backlog/till.md#a470--the-tills-floor-map-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
