@@ -1,9 +1,11 @@
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
+  locations,
+  tenantReceipts,
   products,
   saleLines,
   sales,
@@ -41,7 +43,12 @@ import {
   rateLines,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
-import { workingLineContexts } from "@waitron/venue-service";
+import {
+  departments,
+  departmentReceipts,
+  saleReceiptHeaders,
+  workingLineContexts,
+} from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -60,6 +67,10 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder, receiptQr, recordTillSale, type TillSaleRequest } from "./till-sale.js";
 import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
+import * as venueAddressReads from "./venue-address.js";
+import { readReceiptPresentation } from "./receipt-presentation.js";
+import { recordSale } from "@waitron/core";
+import { decimal } from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -2372,3 +2383,311 @@ async function revisionOf(orderId: string): Promise<number> {
     .where(eq(workingOrders.id, orderId));
   return row!.revision;
 }
+
+describe("per-answer receipt presentation", () => {
+  it.each(["cash", "card"] as const)(
+    "resolves live authored fields on a %s sale and replay without rewriting transaction facts",
+    async (method) => {
+      const { cfg, zoneId, waterOfferId } = await setupVenue();
+      const [department] = await suite.db
+        .select()
+        .from(departments)
+        .where(eq(departments.locationId, cfg.locationId));
+      const global = {
+        headerSubtitle: "Venue subtitle",
+        footerMessage: "Venue footer",
+        phone: "+34910000000",
+        email: "venue@example.test",
+        printAddress: true,
+      };
+      await suite.db
+        .insert(tenantReceipts)
+        .values({ id: 1, receipt: global })
+        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
+      await suite.db.insert(departmentReceipts).values({
+        departmentId: department!.id,
+        receipt: {
+          headerSubtitle: { "es-ES": "Department subtitle" },
+          email: "department@example.test",
+        },
+      });
+      const req: TillSaleRequest = {
+        zoneId,
+        workingOrderId: randomUUID(),
+        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        tender: { method, amount: "10.00" },
+      };
+      const deps = { db: suite.db, backend, clock };
+      const first = await recordTillSale(deps, cfg, req);
+      expect(first).toMatchObject({
+        receiptTrim: {
+          headerSubtitle: "Department subtitle",
+          footerMessage: "Venue footer",
+          email: "department@example.test",
+        },
+        venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+        venueReceiptSettings: {
+          headerSubtitle: "Venue subtitle",
+          footerMessage: "Venue footer",
+          printAddress: true,
+        },
+      });
+      expect(first).toHaveProperty("receiptTrim");
+      expect(first.receiptTrim).toEqual({
+        headerSubtitle: "Department subtitle",
+        footerMessage: "Venue footer",
+        email: "department@example.test",
+      });
+      expect(first.venueReceiptSettings).toEqual({
+        headerSubtitle: "Venue subtitle",
+        footerMessage: "Venue footer",
+        printAddress: true,
+      });
+      const before = await suite.db.execute<{ n: number }>(
+        sql`select count(*) as n from registros_facturacion`,
+      );
+      await suite.db
+        .update(departmentReceipts)
+        .set({ receipt: { footerMessage: { "es-ES": "New department footer" } } })
+        .where(eq(departmentReceipts.departmentId, department!.id));
+      await suite.db
+        .update(tenantReceipts)
+        .set({ receipt: { headerSubtitle: "New venue subtitle", printAddress: false } });
+      await suite.db
+        .update(locations)
+        .set({ addressLine1: "Current street" })
+        .where(eq(locations.id, cfg.locationId));
+      const replay = await recordTillSale(deps, cfg, req);
+      expect(replay).toMatchObject({
+        receiptTrim: {
+          headerSubtitle: "New venue subtitle",
+          footerMessage: "New department footer",
+        },
+        venueAddress: ["Current street", "28013 Madrid"],
+        venueReceiptSettings: { headerSubtitle: "New venue subtitle", printAddress: false },
+      });
+      expect(replay.receiptTrim).toEqual({
+        headerSubtitle: "New venue subtitle",
+        footerMessage: "New department footer",
+      });
+      expect(replay.venueReceiptSettings).toEqual({
+        headerSubtitle: "New venue subtitle",
+        printAddress: false,
+      });
+      expect({
+        ...replay,
+        receiptTrim: first.receiptTrim,
+        venueAddress: first.venueAddress,
+        venueReceiptSettings: first.venueReceiptSettings,
+      }).toEqual(first);
+      expect(
+        (
+          await suite.db.execute<{ n: number }>(
+            sql`select count(*) as n from registros_facturacion`,
+          )
+        ).rows,
+      ).toEqual(before.rows);
+    },
+  );
+});
+
+describe("receipt presentation sources", () => {
+  it("treats absent and explicitly null saved departments as venue-only, and clears previous defaults", async () => {
+    const { cfg } = await setupVenue();
+    const global = {
+      headerSubtitle: "Venue subtitle",
+      footerMessage: "Venue footer",
+      phone: "+34910000000",
+      email: "venue@example.test",
+      printAddress: false,
+    };
+    await suite.db
+      .insert(tenantReceipts)
+      .values({ id: 1, receipt: global })
+      .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
+    const absent = await withTransaction(suite.db, (tx) =>
+      readReceiptPresentation(tx, cfg, randomUUID(), "en-GB"),
+    );
+    expect(absent).toEqual({
+      receiptHeader: undefined,
+      receiptTrim: {
+        headerSubtitle: "Venue subtitle",
+        footerMessage: "Venue footer",
+        phone: "+34910000000",
+        email: "venue@example.test",
+      },
+      venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+      venueReceiptSettings: {
+        headerSubtitle: "Venue subtitle",
+        footerMessage: "Venue footer",
+        printAddress: false,
+      },
+    });
+    const sale = await withTransaction(suite.db, (tx) =>
+      recordSale(tx, backend, {
+        origin: cfg.origin,
+        nodeId: cfg.nodeId,
+        seriesId: cfg.seriesId,
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        clock,
+        total: "1.50",
+        settlement: { kind: "deferred" },
+        vatBreakdown: [{ rate: decimal("21"), base: decimal("1.24"), tax: decimal("0.26") }],
+        lines: [
+          {
+            lineNo: 1,
+            name: "Stored water",
+            descriptions: { "es-ES": "Agua guardada" },
+            quantity: "1",
+            unitPrice: "1.24",
+            vatRate: "21",
+            lineTotal: "1.24",
+            lineGross: "1.50",
+          },
+        ],
+      }),
+    );
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: sale.saleId,
+      departmentId: null,
+      tradingName: "Must not borrow this name",
+      printTradingName: true,
+    });
+    const noDepartment = await withTransaction(suite.db, (tx) =>
+      readReceiptPresentation(tx, cfg, sale.saleId, "es-ES"),
+    );
+    expect(noDepartment).toEqual(absent);
+    await suite.db.update(tenantReceipts).set({ receipt: {} });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        readReceiptPresentation(tx, cfg, randomUUID(), "en-GB"),
+      ),
+    ).toEqual({
+      receiptHeader: undefined,
+      receiptTrim: {},
+      venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+      venueReceiptSettings: {},
+    });
+  });
+
+  it.each(["venue", "department", "both"] as const)(
+    "keeps surviving fields when the %s optional source cannot be read",
+    async (source) => {
+      const { cfg, zoneId, waterOfferId } = await setupVenue();
+      const [department] = await suite.db
+        .select()
+        .from(departments)
+        .where(eq(departments.locationId, cfg.locationId));
+      await suite.db
+        .insert(tenantReceipts)
+        .values({ id: 1, receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } })
+        .onConflictDoUpdate({
+          target: tenantReceipts.id,
+          set: { receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } },
+        });
+      await suite.db.insert(departmentReceipts).values({
+        departmentId: department!.id,
+        receipt: { footerMessage: { "es-ES": "Own footer" }, email: "own@example.test" },
+      });
+      const req: TillSaleRequest = {
+        zoneId,
+        workingOrderId: randomUUID(),
+        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+      };
+      await recordTillSale({ db: suite.db, backend, clock }, cfg, req);
+      const [saved] = await suite.db.select().from(saleReceiptHeaders);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const hiddenVenue = source !== "department";
+      const hiddenDepartment = source !== "venue";
+      try {
+        if (hiddenVenue)
+          await suite.db.execute(sql`alter table tenant_receipts rename to test_hidden_receipts`);
+        if (hiddenDepartment)
+          await suite.db.execute(
+            sql`alter table department_receipts rename to test_hidden_department_receipts`,
+          );
+        const presentation = await withTransaction(suite.db, (tx) =>
+          readReceiptPresentation(tx, cfg, saved!.saleId, "es-ES"),
+        );
+        expect(presentation.receiptTrim).toEqual(
+          source === "venue"
+            ? { footerMessage: "Own footer", email: "own@example.test" }
+            : source === "department"
+              ? { headerSubtitle: "Venue subtitle" }
+              : {},
+        );
+        expect(presentation.venueAddress).toEqual(["Calle Mayor 1", "28013 Madrid"]);
+        expect(presentation.venueReceiptSettings).toEqual(
+          hiddenVenue ? {} : { headerSubtitle: "Venue subtitle" },
+        );
+        expect(warning.mock.calls).toEqual([
+          ...(hiddenVenue
+            ? [
+                [
+                  "receipt.optional_read_failed",
+                  { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" },
+                ],
+              ]
+            : []),
+          ...(hiddenDepartment
+            ? [
+                [
+                  "receipt.optional_read_failed",
+                  {
+                    operation: "readPrintedDepartmentReceipt",
+                    departmentId: department!.id,
+                    code: "receipt.read_failed",
+                  },
+                ],
+              ]
+            : []),
+        ]);
+      } finally {
+        if (hiddenDepartment)
+          await suite.db.execute(
+            sql`alter table test_hidden_department_receipts rename to department_receipts`,
+          );
+        if (hiddenVenue)
+          await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);
+        warning.mockRestore();
+      }
+    },
+  );
+});
+
+describe("receipt presentation address failure", () => {
+  it("keeps the sale and surviving trim when the optional current-address read fails", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+    await suite.db
+      .insert(tenantReceipts)
+      .values({ receipt: { headerSubtitle: "Surviving subtitle" } });
+    const address = vi
+      .spyOn(venueAddressReads, "readLocationAddress")
+      .mockRejectedValue(new Error("current address read refused"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const ticket = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+      });
+      expect(ticket.receiptTrim).toEqual({ headerSubtitle: "Surviving subtitle" });
+      expect(ticket.venueAddress).toEqual([]);
+      expect(ticket.total).toBe("2.25");
+      expect(ticket.tender).toEqual({ method: "cash", change: "7.75" });
+      expect(await suite.db.select().from(sales)).toHaveLength(1);
+      expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(1);
+      expect(warning.mock.calls).toEqual([
+        [
+          "receipt.optional_read_failed",
+          { operation: "readLocationAddress", code: "receipt.read_failed" },
+        ],
+      ]);
+    } finally {
+      address.mockRestore();
+      warning.mockRestore();
+    }
+  });
+});

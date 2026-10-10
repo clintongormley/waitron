@@ -22,7 +22,8 @@ import {
   printedCommands,
   printedLines,
 } from "./testing/decode-ticket.js";
-import type { TillSaleResult } from "./till-sale.js";
+import type { ReceiptDocumentInput } from "./receipt-document.js";
+type TillSaleResult = ReceiptDocumentInput["result"];
 
 // `formatReceipt` is pure, so these are unit tests. `printedLines` and `decodeTicket` read the text
 // back from the images each line is drawn as; `printedCommands` lists the commands themselves.

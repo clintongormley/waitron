@@ -2950,18 +2950,22 @@ describe("department receipt presentation on thermal jobs", () => {
         expect(text).not.toContain("venue@example.test");
         expect(await registroCount(cfg)).toBe(1);
         expect(await suite.db.select().from(tenders)).toHaveLength(1);
-        expect(warning.mock.calls).toEqual([
-          [
-            "receipt.optional_read_failed",
-            source === "venue"
-              ? { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" }
-              : {
-                  operation: "readPrintedDepartmentReceipt",
-                  departmentId,
-                  code: "receipt.read_failed",
-                },
-          ],
-        ]);
+        const diagnostic = [
+          "receipt.optional_read_failed",
+          source === "venue"
+            ? { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" }
+            : {
+                operation: "readPrintedDepartmentReceipt",
+                departmentId,
+                code: "receipt.read_failed",
+              },
+        ];
+        expect(warning.mock.calls).toEqual([diagnostic, diagnostic]);
+        expect(ticket.receiptTrim).toEqual(
+          source === "venue"
+            ? { headerSubtitle: "Own subtitle", email: "own@example.test" }
+            : { headerSubtitle: "Venue subtitle", footerMessage: "Venue footer" },
+        );
       } finally {
         if (source === "venue")
           await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);

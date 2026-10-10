@@ -8,6 +8,9 @@ import type { TillSaleResult } from "./till-sale.js";
 // `captured`/`accepted_offline` arms run.
 
 const TICKET: TillSaleResult = {
+  receiptTrim: {},
+  venueAddress: [],
+  venueReceiptSettings: {},
   locale: "es-ES",
   orderLabel: null,
   orderNumber: 1,

@@ -8,6 +8,7 @@ import {
   resolveSnapshotText,
   subtractDecimal,
   type ReceiptLogoRaster,
+  type ReceiptPresentation,
 } from "@waitron/shared";
 import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
 import { formatMoney } from "./receipt-money.js";
@@ -29,7 +30,7 @@ export interface ReceiptTrim {
 export interface ReceiptDocumentInput {
   surface?: "thermal" | "a4";
   logo?: ReceiptLogoRaster | null;
-  result: TillSaleResult;
+  result: Omit<TillSaleResult, keyof ReceiptPresentation>;
   issuer: ReceiptIssuer;
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   receipt: ReceiptTrim;

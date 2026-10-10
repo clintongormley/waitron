@@ -56,6 +56,7 @@ import type {
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
+import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -738,7 +739,7 @@ async function issueWhenFullyPaid(
 
   const ticket = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
+    ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
     invoiceType: selected.invoiceType,
     ...(selected.recipient === undefined ? {} : { recipient: selected.recipient }),
     ...receiptOrder,

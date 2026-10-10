@@ -28,6 +28,7 @@ import {
   parties,
   printJobs,
   sales,
+  tenantReceipts,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -2711,5 +2712,45 @@ describe("a party's bill request goes when a card or collect settles its last ow
         ],
       ]);
     });
+  });
+});
+
+describe("integrated answer receipt presentation", () => {
+  it("includes current inherited fields on connected capture and refreshes them on replay", async () => {
+    const { cfg, cafe } = await setupVenue();
+    await suite.db.insert(tenantReceipts).values({
+      receipt: {
+        headerSubtitle: "Connected subtitle",
+        phone: "910000000",
+        email: "venue@example.test",
+        printAddress: false,
+      },
+    });
+    const provider = new SimulatorPaymentProvider(suite.db);
+    const req = {
+      id: randomUUID(),
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      simulationOutcome: "captured" as const,
+    };
+    const deps = { db: suite.db, backend, clock, provider };
+    const first = await payWorkingOrderIntegrated(deps, cfg, req);
+    expect(first.outcome).toBe("captured");
+    if (first.outcome !== "captured") throw new Error("Expected capture");
+    expect(first.ticket.receiptTrim).toEqual({ headerSubtitle: "Connected subtitle" });
+    expect(first.ticket.venueReceiptSettings).toEqual({
+      headerSubtitle: "Connected subtitle",
+      printAddress: false,
+    });
+    await suite.db.update(tenantReceipts).set({ receipt: {} });
+    const replay = await payWorkingOrderIntegrated(deps, cfg, req);
+    expect(replay.outcome).toBe("captured");
+    if (replay.outcome !== "captured") throw new Error("Expected replay");
+    expect(replay.ticket.receiptTrim).toEqual({});
+    expect(replay.ticket.venueReceiptSettings).toEqual({});
+    expect(replay.ticket.invoiceNumber).toBe(first.ticket.invoiceNumber);
+    expect(replay.ticket.tender).toEqual(first.ticket.tender);
+    expect(await saleCount(req.id)).toBe(1);
+    expect(await paymentCount(req.id)).toBe(1);
   });
 });

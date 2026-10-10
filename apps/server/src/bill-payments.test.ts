@@ -2878,3 +2878,51 @@ describe("the bill's payments, taken within one millisecond", () => {
     expect(printed[1]).not.toContain("Propina");
   });
 });
+
+describe("bill answer receipt presentation", () => {
+  it("resolves live defaults on direct bill issuance and resultOf replay", async () => {
+    const billId = await tabWith("Caña");
+    const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+    try {
+      await inTx((tx) =>
+        tx
+          .insert(tenantReceipts)
+          .values({
+            receipt: {
+              headerSubtitle: "Bill subtitle",
+              email: "venue@example.test",
+              printAddress: false,
+            },
+          })
+          .onConflictDoUpdate({
+            target: tenantReceipts.id,
+            set: {
+              receipt: {
+                headerSubtitle: "Bill subtitle",
+                email: "venue@example.test",
+                printAddress: false,
+              },
+            },
+          }),
+      );
+      const request = cash("3.00");
+      const first = await take(billId, request);
+      expect(first.invoice?.receiptTrim).toEqual({ headerSubtitle: "Bill subtitle" });
+      expect(first.invoice?.venueReceiptSettings).toEqual({
+        headerSubtitle: "Bill subtitle",
+        printAddress: false,
+      });
+      await inTx((tx) => tx.update(tenantReceipts).set({ receipt: {} }));
+      const replay = await take(billId, request);
+      expect(replay.invoice?.receiptTrim).toEqual({});
+      expect(replay.invoice?.venueReceiptSettings).toEqual({});
+      expect(replay.invoice?.invoiceNumber).toBe(first.invoice?.invoiceNumber);
+      expect(replay.invoice?.tender).toEqual(first.invoice?.tender);
+      expect(replay.payment).toEqual(first.payment);
+      expect(replay.balance).toEqual(first.balance);
+    } finally {
+      if (original === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: original.receipt }));
+    }
+  });
+});

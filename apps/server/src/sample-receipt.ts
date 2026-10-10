@@ -1,7 +1,7 @@
 import type { ReceiptQrText } from "@waitron/fiscal";
 import type { EscSetting } from "@waitron/printing";
 import { formatReceipt } from "./receipt-ticket.js";
-import type { TillSaleResult } from "./till-sale.js";
+import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 const SAMPLE_QR = "https://example.invalid/waitron/sample-receipt";
 
@@ -9,7 +9,7 @@ const SAMPLE_QR = "https://example.invalid/waitron/sample-receipt";
  * The sale a sample or preview receipt shows: it was never filed. It carries a sample QR only when
  * the venue's fiscal backend has words to print around one, as a filed sale's receipt would.
  */
-export function sampleSale(qrText: ReceiptQrText | undefined): TillSaleResult {
+export function sampleSale(qrText: ReceiptQrText | undefined): ReceiptDocumentInput["result"] {
   return {
     locale: "es-ES",
     orderLabel: "Mesa 6",

@@ -1,6 +1,7 @@
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
+import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { randomUUID } from "node:crypto";
 import { clearBillRequestIfPaid } from "./bill-request.js";
@@ -31,7 +32,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { Decimal, SaleId } from "@waitron/shared";
+import type { Decimal, SaleId, ReceiptPresentation } from "@waitron/shared";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import type { GrossLines } from "@waitron/catalogue";
 import {
@@ -194,7 +195,7 @@ export interface BillTenderRefund {
   tip: string;
 }
 
-export interface TillSaleResult {
+export interface TillSaleResult extends ReceiptPresentation {
   issuedOffsetMinutes?: number;
   operationDate?: string;
   invoiceType?: "F1" | "F2";
@@ -676,7 +677,7 @@ export async function readSettledTicket(
 
   return {
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
-    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, issued.saleId)) ?? undefined,
+    ...(await readReceiptPresentation(tx, cfg, issued.saleId, issued.locale)),
     locale: issued.locale,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
@@ -826,7 +827,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
+    ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1361,7 +1362,7 @@ async function finalizeCapture(
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
+        ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
         ...(await readReceiptOrder(tx, cfg, req.id)),
         locale: language.locale,
         invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1511,7 +1512,7 @@ async function finalizeRecovery(
 
     const ticket: TillSaleResult = {
       ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-      receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
+      ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
       ...(await readReceiptOrder(tx, cfg, req.id)),
       locale: language.locale,
       invoiceNumber: await readInvoiceNumber(tx, saleId),
