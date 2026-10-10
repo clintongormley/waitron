@@ -1680,19 +1680,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **`PUT /api/device/equipment` checks the sign-in, then writes in a second transaction**
-  (`apps/server/src/device-api.ts:345-355`), and `selectDevicePrinter`
-  (`packages/layouts/src/device-equipment.ts:307-310`) does not re-check the device, so a Disable or
-  Delete committing between them can leave a printer choice or hold on the row. Believed to predate
-  A435 step 4 (the route came with W100, #1332). Left open by A435 step 4.
-
-- **The devices screen has two device-list refreshers with near-identical names**:
-  `#reloadDevices` reads the list once and writes it, `#rereadDevices` subscribes the live list
-  again (`apps/dashboard/src/screens/devices-screen.ts:1035`, `:1677`). Route the first through
-  `#watchDevices` or rename one. Left open by A435 step 4.
+  (`apps/server/src/device-api.ts:345-355`). Neither `selectDevicePrinter`
+  (`packages/layouts/src/device-equipment.ts:307-310`) nor, for a card reader, `selectDeviceReader`
+  (`packages/payments/src/device-readers.ts:265-273`) reads the device's `active`, so a Disable or
+  Delete committing between them can leave a printer or card reader choice or hold on the row.
+  Believed to predate A435 step 4 (the route came with W100, #1332). Left open by A435 step 4.
 
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
-  dialog is open does not change its count; the delete itself recomputes. Left open by A435 step 4.
+  dialog is open does not by itself update its count; the delete itself recomputes. Left open by A435 step 4.
 
 - **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
   find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
@@ -3026,12 +3022,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
-- **Re-check the device inside payment write transactions.** A till's sign-in is checked in its
-  own transaction (`requireSession`, `apps/server/src/till-session.ts:92-117`) and a payment is
-  written in a later one that does not re-read the device (`beginBillPayment`,
-  `apps/server/src/bill-payments.ts:1002`; `insertAttempting`, `packages/payments/src/store.ts:146`),
-  so a device disabled or deleted between the two can still have a cash or hand-keyed payment
-  recorded on it. Re-read the device's `active` inside each payment write. Left open by A435 step 4.
+- **Re-check the device inside payment write transactions.** A till's sign-in is checked in one
+  transaction and the payment written in a later one, and `beginBillPayment` reads nothing about
+  the device, so a device disabled or deleted between the two can still have a cash or hand-keyed
+  payment recorded on it. Left open by A435 step 4.
+  [Detail](backlog/payments.md#re-check-the-device-inside-payment-write-transactions)
 
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured

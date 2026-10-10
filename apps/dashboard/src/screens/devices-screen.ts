@@ -1661,7 +1661,7 @@ export class DevicesScreen extends LitElement {
         return;
       }
       this.#deviceGone(id, true);
-      await this.#rereadDevices();
+      await this.#rewatchDevices();
       return;
     }
     if (generation !== this.#deleteGeneration) return;
@@ -1670,11 +1670,11 @@ export class DevicesScreen extends LitElement {
       this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]") ??
       this.#deleteOpener;
     this.#deviceGone(id, false);
-    await this.#rereadDevices();
+    await this.#rewatchDevices();
   }
 
   /** Not `#load`, which would clear a message this screen has just shown. A failure is a read's. */
-  async #rereadDevices(): Promise<void> {
+  async #rewatchDevices(): Promise<void> {
     if (!this.isConnected) return;
     this.armedRemoveId = null;
     // A failure has already reached `#showReadError`.
