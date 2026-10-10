@@ -49,6 +49,14 @@ export interface FloorPlanSelect {
   key: string | null;
 }
 
+/** A panel field whose typed text the draft cannot hold. */
+export type FloorPlanTypedField = "seats" | "width" | "height";
+
+/** A panel refusing typed text (`text`), or saying the field it refused holds a value again. */
+export type FloorPlanInvalid =
+  | { key: string; field: FloorPlanTypedField; text: string; message: () => string }
+  | { key: string; field: FloorPlanTypedField; text: null };
+
 const HOME = "/manage";
 
 /** Below this width of the page itself, the side panel becomes a bottom sheet. */
@@ -76,8 +84,11 @@ interface FieldMark {
   key: string;
   field: FloorPlanField;
   text: () => string;
-  /** A failure of the editor's own check keeps Save disabled; a request's refusal never does. */
-  from: "check" | "refusal";
+  /** The editor's own check, or a panel's refusal of typed text, keeps Save disabled; a request's
+   *  refusal never does. */
+  from: "check" | "typed" | "refusal";
+  /** The refused text, which the panel shows in place of the draft's value. */
+  typed?: string;
 }
 
 const SERVER_FIELDS: Record<string, FloorPlanField> = {
@@ -285,6 +296,9 @@ export class FloorPlanEditor extends LitElement {
     this.addEventListener("floor-plan-add-tables", () => {
       this.renderRoot.querySelector("floor-plan-add-tables")?.show();
     });
+    this.addEventListener("floor-plan-invalid", (event) => {
+      this.#typed((event as CustomEvent<FloorPlanInvalid>).detail);
+    });
     this.addEventListener("floor-plan-select", (event) => {
       this.selected = (event as CustomEvent<FloorPlanSelect>).detail.key;
     });
@@ -393,6 +407,7 @@ export class FloorPlanEditor extends LitElement {
   #step(next: FloorPlanDraft | undefined): void {
     if (next === undefined) return;
     this.draft = next;
+    if (this.mark?.from === "typed") this.#clearMark();
     this.#clearReadMessage();
     this.#followMark(next);
     this.#followRefused(next);
@@ -401,6 +416,27 @@ export class FloorPlanEditor extends LitElement {
     }
     this.#scope?.changed();
     this.requestUpdate();
+  }
+
+  /** Typed text stays marked until its field holds a value again, or the draft's value changes. */
+  #typed(detail: FloorPlanInvalid): void {
+    const mark = this.mark;
+    if (detail.text === null) {
+      if (mark?.from === "typed" && mark.key === detail.key && mark.field === detail.field) {
+        this.#clearMark();
+      }
+      return;
+    }
+    const table = this.draft?.tables.find((t) => t.key === detail.key);
+    if (table === undefined) return;
+    this.#markedValue = fieldValue(table, detail.field);
+    this.#setMark({
+      key: detail.key,
+      field: detail.field,
+      text: detail.message,
+      from: "typed",
+      typed: detail.text,
+    });
   }
 
   /** A table a check or a refusal points at; on a phone the sheet opens so its fields show. */
@@ -513,6 +549,7 @@ export class FloorPlanEditor extends LitElement {
 
   readonly #save = async (): Promise<void> => {
     if (this.saving || this.loadingNewer || saveActionState(this.#scope).unchanged) return;
+    if (this.mark?.from === "typed") return;
     if (this.#markCheck(this.draft!)) {
       this.#selectFlagged(this.mark!.key);
       return;
@@ -688,10 +725,10 @@ export class FloorPlanEditor extends LitElement {
   #errorFor: FieldMark | null = null;
   #errorKey: string | null = null;
   #errorLocale: string | null = null;
-  #panelErrorValue: { field: string; message: string } | null = null;
+  #panelErrorValue: { field: string; message: string; text?: string } | null = null;
 
   /** The mark for the selected table only; the same object while it, the key and the language stay. */
-  #panelError(key: string): { field: string; message: string } | null {
+  #panelError(key: string): { field: string; message: string; text?: string } | null {
     const mark = this.mark;
     const locale = currentLocale();
     if (mark !== this.#errorFor || key !== this.#errorKey || locale !== this.#errorLocale) {
@@ -699,7 +736,13 @@ export class FloorPlanEditor extends LitElement {
       this.#errorKey = key;
       this.#errorLocale = locale;
       this.#panelErrorValue =
-        mark === null || mark.key !== key ? null : { field: mark.field, message: mark.text() };
+        mark === null || mark.key !== key
+          ? null
+          : {
+              field: mark.field,
+              message: mark.text(),
+              ...(mark.typed === undefined ? {} : { text: mark.typed }),
+            };
     }
     return this.#panelErrorValue;
   }
@@ -810,7 +853,11 @@ export class FloorPlanEditor extends LitElement {
           <wt-button
             data-action="save"
             variant=${save.variant}
-            ?disabled=${save.unchanged || this.loadingNewer || this.mark?.from === "check"}
+            ?disabled=${
+              save.unchanged ||
+              this.loadingNewer ||
+              (this.mark !== null && this.mark.from !== "refusal")
+            }
             @click=${this.#save}
             >${t("action.save")}</wt-button
           >

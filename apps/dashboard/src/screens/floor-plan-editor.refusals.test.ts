@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import "@waitron/dashboard-modules";
 import type { WtButton, WtFloorPlanCanvas, WtSheet } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -678,7 +678,9 @@ const tablePanel = (el: FloorPlanEditor) =>
     "floor-plan-table-panel",
   )!;
 const panelField = (el: FloorPlanEditor, name: string) =>
-  tablePanel(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(`[name=${name}]`)!;
+  tablePanel(el).shadowRoot!.querySelector<HTMLElement & { error: string; value: string }>(
+    `[name=${name}]`,
+  )!;
 
 it("a taken name from Save shows under the table's name field", async () => {
   const el = await open(refusing(taken));
@@ -706,4 +708,87 @@ it("a refusal shows only on the table it names, and comes back with it", async (
   );
   await el.updateComplete;
   expect(panelField(el, "seats").error).toBe("Check the floor plan's tables and try again");
+});
+
+/** Types as a person does: one input event per character, after clearing the field. */
+async function typeIntoPanel(el: FloorPlanEditor, name: string, keys: string): Promise<void> {
+  const input = panelField(el, name).shadowRoot!.querySelector("input")!;
+  await userEvent.clear(input);
+  await userEvent.type(input, keys);
+  await el.updateComplete;
+  await tablePanel(el).updateComplete;
+}
+
+/** Wide enough for the side panel, so typing reaches a field a collapsed sheet would hide. */
+async function wide(): Promise<void> {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(1280, 800);
+  onTestFinished(() => page.viewport(...before));
+}
+
+async function select(el: FloorPlanEditor, key: string): Promise<void> {
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
+it("a seat count typed past 999 disables Save and says so until it is fixed", async () => {
+  await wide();
+  const api = stubApi();
+  const el = await open(api);
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(panelField(el, "seats").value).toBe("1000");
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(true);
+  await press(el, "save");
+  expect(api.saveFloorPlan).not.toHaveBeenCalled();
+  const input = panelField(el, "seats").shadowRoot!.querySelector("input")!;
+  await userEvent.type(input, "{Backspace}{Backspace}");
+  await el.updateComplete;
+  expect(panelField(el, "seats").error).toBe("");
+  expect(message(el)).toBe("");
+  expect(button(el, "save").disabled).toBe(false);
+  await press(el, "save");
+  expect(vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables[0]!.seats).toBe(10);
+});
+
+it("a width with a fraction is refused and keeps Save disabled", async () => {
+  await wide();
+  const el = await open(stubApi());
+  await select(el, "m1");
+  await typeIntoPanel(el, "width", "1.5");
+  expect(panelField(el, "width").error).toBe("Enter 1 to 99.");
+  expect(panelField(el, "width").value).toBe("1.5");
+  expect(button(el, "save").disabled).toBe(true);
+});
+
+it("Undo of another field clears a typed refusal and shows the draft's value", async () => {
+  await wide();
+  const el = await open(stubApi());
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await typeIntoPanel(el, "table-name", "Patio");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  await press(el, "undo");
+  await tablePanel(el).updateComplete;
+  expect(el.fieldError).toBeNull();
+  expect(panelField(el, "seats").error).toBe("");
+  expect(panelField(el, "seats").value).toBe("100");
+  expect(button(el, "save").disabled).toBe(false);
+});
+
+it("a typed refusal stays on its table while another is selected", async () => {
+  await wide();
+  const el = await open(stubApi());
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await select(el, "m2");
+  expect(panelField(el, "seats").error).toBe("");
+  expect(button(el, "save").disabled).toBe(true);
+  await select(el, "m1");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(panelField(el, "seats").value).toBe("1000");
 });

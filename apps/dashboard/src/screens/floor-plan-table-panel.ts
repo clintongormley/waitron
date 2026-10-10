@@ -1,13 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { PlanPlacement } from "../api/client.js";
 import {
@@ -18,7 +18,12 @@ import {
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
-import type { FloorPlanChange, FloorPlanSelect } from "./floor-plan-editor.js";
+import type {
+  FloorPlanChange,
+  FloorPlanInvalid,
+  FloorPlanSelect,
+  FloorPlanTypedField,
+} from "./floor-plan-editor.js";
 
 const MAX_SEATS = 999;
 const MIN_SIZE = 1;
@@ -26,11 +31,15 @@ const MAX_SIZE = 99;
 const ROTATION_STEP = 15;
 const TURN = 360;
 
-type Typed = "seats" | "width" | "height";
+const ROTATIONS = Array.from({ length: TURN / ROTATION_STEP }, (_, i) => {
+  const degrees = String(i * ROTATION_STEP);
+  return { value: degrees, label: `${degrees}°` };
+});
 
 function wholeIn(value: string, min: number, max: number): number | null {
+  if (!/^\d+$/.test(value)) return null;
   const n = Number(value);
-  return value.trim() === "" || !Number.isInteger(n) || n < min || n > max ? null : n;
+  return n < min || n > max ? null : n;
 }
 
 function value(event: CustomEvent<{ value: string }>): string {
@@ -70,13 +79,15 @@ export class FloorPlanTablePanel extends LitElement {
 
   @property({ attribute: false }) draft!: FloorPlanDraft;
   @property() tableKey = "";
-  @property({ attribute: false }) fieldError: { field: string; message: string } | null = null;
+  /** The page's mark for this table; `text` is a typed value it refused, shown in place of the
+   *  draft's while the mark stands. */
+  @property({ attribute: false }) fieldError: {
+    field: string;
+    message: string;
+    text?: string;
+  } | null = null;
   /** The page's join keys, for the joins this panel will add. */
   @property({ attribute: false }) nextJoinKey!: () => string;
-
-  /** A typed value the draft cannot hold, refused beside its field without changing the draft. */
-  @state() private invalid: { key: string; fields: Partial<Record<Typed, StringKey>> } | null =
-    null;
 
   constructor() {
     super();
@@ -95,28 +106,44 @@ export class FloorPlanTablePanel extends LitElement {
     this.#change(patchTable(this.draft, this.tableKey, patch), mergeKey);
   }
 
-  #setInvalid(field: Typed, text: StringKey | null): void {
-    const fields = this.invalid?.key === this.tableKey ? { ...this.invalid.fields } : {};
-    if (text === null) delete fields[field];
-    else fields[field] = text;
-    this.invalid = { key: this.tableKey, fields };
+  /** A typed value the draft cannot hold goes to the page, which marks it and holds Save. */
+  #refuse(field: FloorPlanTypedField, text: string, message: () => string): void {
+    this.#send<FloorPlanInvalid>("floor-plan-invalid", {
+      key: this.tableKey,
+      field,
+      text,
+      message,
+    });
+  }
+
+  #accept(field: FloorPlanTypedField): void {
+    this.#send<FloorPlanInvalid>("floor-plan-invalid", { key: this.tableKey, field, text: null });
   }
 
   #error(field: string): string {
-    if (this.invalid?.key === this.tableKey) {
-      const own = this.invalid.fields[field as Typed];
-      if (own !== undefined) return t(own);
-    }
     return this.fieldError?.field === field ? this.fieldError.message : "";
   }
 
+  /** The refused text while the page's mark holds it, else the draft's value, re-applied over
+   *  anything typed since. */
+  #shown(field: FloorPlanTypedField, draftValue: number | null): ReturnType<typeof live> {
+    const mark = this.fieldError;
+    return live(
+      mark?.field === field && mark.text !== undefined
+        ? mark.text
+        : draftValue === null
+          ? ""
+          : String(draftValue),
+    );
+  }
+
   #seats(value: string): void {
-    const seats = value.trim() === "" ? null : wholeIn(value, 0, MAX_SEATS);
-    if (value.trim() !== "" && seats === null) {
-      this.#setInvalid("seats", "floor_plan_editor.seats_invalid");
+    const seats = value === "" ? null : wholeIn(value, 0, MAX_SEATS);
+    if (value !== "" && seats === null) {
+      this.#refuse("seats", value, () => t("floor_plan_editor.seats_invalid"));
       return;
     }
-    this.#setInvalid("seats", null);
+    this.#accept("seats");
     this.#patch({ seats }, `seats:${this.tableKey}`);
   }
 
@@ -127,11 +154,26 @@ export class FloorPlanTablePanel extends LitElement {
   #size(table: DraftTable, field: "width" | "height", value: string): void {
     const size = wholeIn(value, MIN_SIZE, MAX_SIZE);
     if (size === null) {
-      this.#setInvalid(field, "floor_plan_editor.size_invalid");
+      this.#refuse(field, value, () => t("floor_plan_editor.size_invalid"));
       return;
     }
-    this.#setInvalid(field, null);
+    this.#accept(field);
     this.#placement(table, { [field]: size }, `${field}:${this.tableKey}`);
+  }
+
+  #shapesLocale: string | null = null;
+  #shapeOptions: { value: string; label: string }[] = [];
+
+  #shapes(): { value: string; label: string }[] {
+    const locale = currentLocale();
+    if (locale !== this.#shapesLocale) {
+      this.#shapesLocale = locale;
+      this.#shapeOptions = [
+        { value: "rect", label: t("floor_plan_editor.rectangle") },
+        { value: "round", label: t("floor_plan_editor.round") },
+      ];
+    }
+    return this.#shapeOptions;
   }
 
   #delete(): void {
@@ -141,18 +183,11 @@ export class FloorPlanTablePanel extends LitElement {
 
   #placed(table: DraftTable) {
     const placement = table.placement!;
-    const rotations = Array.from({ length: TURN / ROTATION_STEP }, (_, i) => {
-      const degrees = String(i * ROTATION_STEP);
-      return { value: degrees, label: `${degrees}°` };
-    });
     return html`<wt-combobox
         name="shape"
         search="never"
         label=${t("floor_plan_editor.shape")}
-        .options=${[
-          { value: "rect", label: t("floor_plan_editor.rectangle") },
-          { value: "round", label: t("floor_plan_editor.round") },
-        ]}
+        .options=${this.#shapes()}
         .value=${placement.shape}
         .error=${this.#error("shape")}
         @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -163,7 +198,7 @@ export class FloorPlanTablePanel extends LitElement {
         label=${t("floor_plan_editor.width")}
         .min=${MIN_SIZE}
         .max=${MAX_SIZE}
-        .value=${String(placement.width)}
+        .value=${this.#shown("width", placement.width)}
         .error=${this.#error("width")}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#size(table, "width", value(e))}
       ></wt-number-stepper>
@@ -172,7 +207,7 @@ export class FloorPlanTablePanel extends LitElement {
         label=${t("floor_plan_editor.height")}
         .min=${MIN_SIZE}
         .max=${MAX_SIZE}
-        .value=${String(placement.height)}
+        .value=${this.#shown("height", placement.height)}
         .error=${this.#error("height")}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#size(table, "height", value(e))}
       ></wt-number-stepper>
@@ -180,16 +215,12 @@ export class FloorPlanTablePanel extends LitElement {
         name="rotation"
         search="never"
         label=${t("floor_plan_editor.rotation")}
-        .options=${rotations}
+        .options=${ROTATIONS}
         .value=${String(placement.rotation)}
         .error=${this.#error("rotation")}
         @wt-change=${(e: CustomEvent<{ value: string }>) =>
           this.#placement(table, { rotation: Number(value(e)) })}
       ></wt-combobox>`;
-  }
-
-  override willUpdate(): void {
-    if (this.invalid !== null && this.invalid.key !== this.tableKey) this.invalid = null;
   }
 
   override render() {
@@ -212,7 +243,7 @@ export class FloorPlanTablePanel extends LitElement {
           label=${t("floor_plan_editor.seats")}
           .min=${0}
           .max=${MAX_SEATS}
-          .value=${table.seats === null ? "" : String(table.seats)}
+          .value=${this.#shown("seats", table.seats)}
           .error=${this.#error("seats")}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#seats(value(e))}
         ></wt-number-stepper>

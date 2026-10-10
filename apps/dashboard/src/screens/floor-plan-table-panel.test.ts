@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-table-panel.js";
@@ -109,35 +110,81 @@ it("an empty seat count sends no seats", async () => {
   expect(tableOf(changes[0], "m1")!.seats).toBeNull();
 });
 
-it("a seat count out of range is refused beside the field and changes nothing", async () => {
+interface Invalid {
+  key: string;
+  field: string;
+  text: string | null;
+  message?: () => string;
+}
+
+function listenInvalid(el: FloorPlanTablePanel): Invalid[] {
+  const sent: Invalid[] = [];
+  el.addEventListener("floor-plan-invalid", (e) => sent.push((e as CustomEvent<Invalid>).detail));
+  return sent;
+}
+
+/** Types as a person does: one input event per character, after clearing the field. */
+async function typeInto(el: FloorPlanTablePanel, name: string, keys: string): Promise<void> {
+  const input = field(el, name)!.shadowRoot!.querySelector("input")!;
+  await userEvent.clear(input);
+  await userEvent.type(input, keys);
+  await el.updateComplete;
+}
+
+it("a seat count typed past 999 asks the page to refuse it, sending only the valid prefixes", async () => {
   const el = await open();
   const { changes } = listen(el);
-  await set(el, "seats", "1000");
-  expect(changes).toEqual([]);
+  const invalid = listenInvalid(el);
+  await typeInto(el, "seats", "1000");
+  expect(changes.map((c) => tableOf(c, "m1")!.seats)).toEqual([null, 1, 10, 100]);
+  expect(invalid.at(-1)).toMatchObject({ key: "m1", field: "seats", text: "1000" });
+  expect(invalid.at(-1)!.message!()).toBe("Enter 0 to 999.");
+});
+
+it("a fraction or a trailing point is refused", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  const invalid = listenInvalid(el);
+  await typeInto(el, "width", "1.5");
+  expect(changes.map((c) => tableOf(c, "m1")!.placement!.width)).toEqual([1]);
+  expect(invalid.filter((i) => i.text !== null).map((i) => i.text)).toEqual(["", "1.", "1.5"]);
+  expect(invalid.at(-1)!.message!()).toBe("Enter 1 to 99.");
+  await typeInto(el, "seats", "4.");
+  expect(invalid.at(-1)).toMatchObject({ field: "seats", text: "4." });
+});
+
+it("a valid value after a refusal tells the page the field is fine", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  const invalid = listenInvalid(el);
+  await typeInto(el, "seats", "1000");
+  const input = field(el, "seats")!.shadowRoot!.querySelector("input")!;
+  await userEvent.type(input, "{Backspace}");
+  expect(invalid.at(-1)).toMatchObject({ key: "m1", field: "seats", text: null });
+  expect(tableOf(changes.at(-1), "m1")!.seats).toBe(100);
+});
+
+it("shows the refused text the page hands back, and the draft's value once it goes", async () => {
+  const el = await open({
+    fieldError: { field: "seats", message: "Enter 0 to 999.", text: "1000" },
+  });
+  expect(field(el, "seats")!.value).toBe("1000");
   expect(field(el, "seats")!.error).toBe("Enter 0 to 999.");
-  await set(el, "seats", "6");
+  el.fieldError = null;
+  await el.updateComplete;
+  expect(field(el, "seats")!.value).toBe("4");
   expect(field(el, "seats")!.error).toBe("");
-  expect(tableOf(changes[0], "m1")!.seats).toBe(6);
 });
 
-it("a size out of range is refused beside the field and changes nothing", async () => {
-  const el = await open();
-  const { changes } = listen(el);
-  await set(el, "width", "0");
-  await set(el, "height", "1.5");
-  expect(changes).toEqual([]);
-  expect(field(el, "width")!.error).toBe("Enter 1 to 99.");
-  expect(field(el, "height")!.error).toBe("Enter 1 to 99.");
-});
-
-it("a refused value's sentence goes when another table is selected", async () => {
+it("shows a draft value again over text typed into the field", async () => {
   const el = await open();
   listen(el);
-  await set(el, "seats", "abc");
-  expect(field(el, "seats")!.error).toBe("Enter 0 to 999.");
-  el.tableKey = "m2";
+  listenInvalid(el);
+  await typeInto(el, "height", "0");
+  expect(field(el, "height")!.value).toBe("0");
+  el.draft = patchTable(el.draft, "m1", { label: "T1x" });
   await el.updateComplete;
-  expect(field(el, "seats")!.error).toBe("");
+  expect(field(el, "height")!.value).toBe("8");
 });
 
 it("Fixed in place, shape, width, height and rotation each send their change", async () => {
