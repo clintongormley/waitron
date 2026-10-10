@@ -71,6 +71,7 @@ const onCategory = (categoryId: string, target: Target) => cell(category(categor
 const times = (
   stationId: string,
   fields: Partial<RoutingModel["stationTimes"][number]> & {
+    fallbackStationId?: string | null;
     hours?: { weekday: number; opensAt: string; closesAt: string }[];
     weekSet?: boolean;
     specialDateRestricts?: boolean;
@@ -78,7 +79,6 @@ const times = (
 ): RoutingModel["stationTimes"][number] => ({
   stationId,
   status: { open: true, why: "open" },
-  fallbackStationId: null,
   today: null,
   closedSendsTo: null,
   ...fields,
@@ -520,11 +520,12 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
       ).toEqual({ drinks: true, beer: true, craft: false, food: false });
     });
 
-    it("follows a switched-off station's fallback for a period line, as for a cell", () => {
+    it("uses the active default for a switched-off period target, ignoring its retired fallback", () => {
       const fallsBackToBar = madeAt(
         routing({
           ...diningTerrace,
-          stationTimes: [times("cocktail", { fallbackStationId: "bar" })],
+          defaultStationId: "bar",
+          stationTimes: [times("cocktail", { fallbackStationId: "kitchen" })],
           cells: [
             onCategory("drinks", station("bar")),
             withLine(productRow("cola"), null, "lunch", station("cocktail")),
