@@ -823,7 +823,7 @@ describe("the receipt preview's top block", () => {
 describe("a deleted receipt printer in the receipt preview", () => {
   it("is no longer offered as a width, nor drawn at, once deleted", async () => {
     const widths = async () => {
-      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}`);
+      const response = await preview({ settings: {} });
       expect(response.status).toBe(200);
       const result = (await response.json()) as ReceiptPreviewResponse;
       return [result.paperWidths, result.paperWidth];

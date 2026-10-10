@@ -13,6 +13,7 @@ import {
   printJobs,
   printerHolders,
   printers,
+  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
@@ -43,6 +44,7 @@ import {
 import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
+import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
