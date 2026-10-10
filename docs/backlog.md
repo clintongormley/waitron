@@ -151,12 +151,6 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **Find an invoice does not find a bare number as an invoice number** — owner question left by
-  A454 (#1491). The search spec says a bare number "still finds that number exactly, as today", but
-  before #1491 too, "12" searched customer names; `A/12` (series and number) finds invoice 12
-  exactly. **Next action:** the owner decides whether "12" alone should also match invoice
-  number 12.
-
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
   the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.

@@ -92,6 +92,10 @@ For each task below, write a focused behavioral test first, run it and retain th
 
 **2026-10-05 invoice-lookup checkpoint:** authenticated `GET /api/invoices/lookup?q=...` finds filed F1 bills by exact series/number or a literal substring of the saved customer name. The SQL filters before its twenty-row limit and orders by issued time, then insertion order for ties. Additional real captured-card cases cover a settled F1, twenty-one matching invoices, an unissued F1 choice, an F2 control, wildcard/quote input, invalid/missing/overlong searches and session refusal; checked sale/payment/tender/series/print rows retain their values after lookup. The till client forwards its read signal and retains the flattened refusal field. Existing unpaid-bill lookup remains unchanged and its suite passed. No existing test assertion or fixture changed. This completes the lookup reader, without a recovery-screen entry; service-start snapshot, remaining issuance checks, physical output and owner approval are still outstanding. Public F1 issuance stays disabled.
 
+_2026-10-10, A459: the lookup checkpoint above records the earlier substring search. A454
+replaced it with the shared every-word matcher. A459 adds bare invoice numbers across full-invoice
+series ahead of ranked customer-name matches; exact series/number lookup remains available._
+
 **2026-10-05 recovery-screen checkpoint:** Find a bill retains unpaid-bill collection as its default and offers a separate Full invoices search by invoice number or saved customer name. Selecting a result opens the filed ticket and reads its existing original-print status; it sends neither a payment nor an issuance request. Browser tests cover invoice identity, print controls, failed-read retry, busy rows and a late answer after recovery is closed/reopened. Added accessibility states cover invoice search, results, loading and read refusal in both themes. Eight English/Spanish phone/desktop screenshots were inspected with the real combobox selection. Service-start snapshot, remaining issuance checks, physical paper/QR and owner approval remain outstanding. Public F1 issuance stays disabled.
 
 ## 5. Gate and handoff

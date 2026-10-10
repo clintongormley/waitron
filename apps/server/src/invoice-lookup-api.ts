@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { centsToDecimal, rawCentsToDecimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import { INVOICE_SEARCH, requiredSearch } from "./orders-list.js";
+import { INVOICE_SEARCH, isNumberSearch, requiredSearch } from "./orders-list.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
@@ -81,6 +81,10 @@ export async function lookUpInvoices(
       total: centsToDecimal(row.total),
     }));
   }
+  const nameRank = sql`waitron_search_rank(${q}, ${sales.counterpartyLegalName})`;
+  const searchRank = isNumberSearch(q)
+    ? sql`case when ${sales.invoiceNumber} = ${Number(q.trim())} then -1 else ${nameRank} end`
+    : nameRank;
   // Materialized so the matcher runs once per row rather than once in the filter and again in the
   // sort. Drizzle wraps the embedded select in its own parentheses.
   const ranked = tx
@@ -92,7 +96,7 @@ export async function lookUpInvoices(
       customerName: sql`${sales.counterpartyLegalName}`.as("customer_name"),
       total: sql`cast(${sales.total} as text)`.as("total"),
       saleRowid: sql`"sales".rowid`.as("sale_rowid"),
-      searchRank: sql`waitron_search_rank(${q}, ${sales.counterpartyLegalName})`.as("search_rank"),
+      searchRank: searchRank.as("search_rank"),
     })
     .from(workingOrders)
     .innerJoin(sales, eq(sales.workingOrderId, workingOrders.id))
