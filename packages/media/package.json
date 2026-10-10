@@ -22,6 +22,7 @@
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/ui": "workspace:*",
+    "@waitron/venue-service": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.9",
     "lit": "^3.2.0",

@@ -28,7 +28,6 @@ import { MEDIA_CHANGE_SOURCES } from "../module.js";
  * `0007`, past the migration that drops `alt_text` and `labels`. The rows are written BEFORE that
  * migration runs, because the table rebuild it carries is what could lose them.
  *
- * Only core, catalogue and media are applied: the sets media requires, not every module a box runs.
  */
 
 const BEFORE = "0004_drop_category_image_triggers";

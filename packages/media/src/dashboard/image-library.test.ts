@@ -1979,3 +1979,54 @@ it("leaves Edit and Delete working as before once a preview has been opened and 
   click("[data-test=confirm-delete]");
   await vi.waitFor(() => expect(client.deleteImage).toHaveBeenCalledWith("one"));
 });
+
+it.each([
+  ["en-GB", "Bar receipt logo (Disabled department)", "Dining receipt logo"],
+  [
+    "es-ES",
+    "Logotipo del recibo de Bar (Departamento deshabilitado)",
+    "Logotipo del recibo de Dining",
+  ],
+])(
+  "in %s, names each department logo and links its explicit picker",
+  async (locale, disabled, active) => {
+    setLocale(locale);
+    const client = api();
+    client.getImage.mockResolvedValue({
+      image: { ...image, usageCount: 3 },
+      uses: [
+        { kind: "receipt" },
+        { kind: "department_receipt", id: "bar/a&b", name: "Bar", active: false },
+        { kind: "department_receipt", id: "dining", name: "Dining", active: true },
+      ] as ImageUsage[],
+    });
+    await mount(client);
+    click("[data-test=delete-one]");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelectorAll("wt-modal li a")).toHaveLength(3),
+    );
+    const links = [...el.shadowRoot!.querySelectorAll("wt-modal li a")];
+    expect(links.map((link) => link.textContent)).toEqual([
+      locale === "en-GB" ? "Receipt logo" : "Logotipo del recibo",
+      disabled,
+      active,
+    ]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/manage/venue-settings/view/receipts",
+      "/manage/venue-settings/view/receipts?departmentId=bar%2Fa%26b",
+      "/manage/venue-settings/view/receipts?departmentId=dining",
+    ]);
+    expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+  },
+);
+
+it.each(["department_receipts", "departments"])(
+  "refreshes image counts passively when %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const background = api();
+    await mount(Object.assign(api(), { background, liveData }));
+    liveData.invalidate([{ type }]);
+    await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
+  },
+);

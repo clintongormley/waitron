@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -17,7 +18,7 @@ import { samplePreparedImage } from "./testing/sample-image.js";
  * case here interleaves two transactions.
  */
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 
 const photo = await samplePreparedImage({ width: 8 });

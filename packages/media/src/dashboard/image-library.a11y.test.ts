@@ -133,3 +133,25 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     await expectNoA11yViolations(host);
   });
 });
+
+it.each([
+  ["en-GB", "light"],
+  ["en-GB", "dark"],
+  ["es-ES", "light"],
+  ["es-ES", "dark"],
+] as const)("keeps venue and department logo uses accessible in %s/%s", async (locale, theme) => {
+  setLocale(locale);
+  const library = await mount(theme);
+  vi.mocked(library.api.getImage).mockResolvedValue({
+    image: { ...image, usageCount: 3 },
+    uses: [
+      { kind: "receipt" },
+      { kind: "department_receipt", id: "bar", name: "Bar", active: false },
+      { kind: "department_receipt", id: "dining", name: "Dining", active: true },
+    ],
+  });
+  const modal = await openDialog(library, "delete-bread");
+  await vi.waitFor(() => expect(modal.querySelectorAll("a")).toHaveLength(3));
+  expect(modal.querySelector("[data-test=confirm-delete]")).toBeNull();
+  await expectNoA11yViolations(host);
+});

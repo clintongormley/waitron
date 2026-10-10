@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -27,7 +28,13 @@ import { sampleImage } from "./testing/sample-image.js";
  */
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    CATALOGUE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    VENUE_SERVICE_MIGRATIONS,
+    MEDIA_MIGRATIONS,
+  ],
 });
 
 const original = { names: { en: "Bread" } };

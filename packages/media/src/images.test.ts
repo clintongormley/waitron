@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -30,7 +31,7 @@ import { samplePreparedImage } from "./testing/sample-image.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 /** A photo ready to store. A different width is a different photo (`testing/sample-image.ts`). */
 const prepare = (width: number): Promise<PreparedImage> => samplePreparedImage({ width });
@@ -46,7 +47,7 @@ describe("image library", () => {
       );
       const selects = vi.spyOn(tx, "select");
       expect((await readImage(tx, image.image.id)).usageCount).toBe(0);
-      expect(selects).toHaveBeenCalledTimes(6);
+      expect(selects).toHaveBeenCalledTimes(7);
       selects.mockRestore();
     });
   });

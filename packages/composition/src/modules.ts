@@ -115,7 +115,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
     provisioning: CATALOGUE_PROVISIONING,
   },
-  MEDIA_MODULE,
   {
     name: "venue-service",
     version: "0.0.0",
@@ -135,6 +134,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     permissions: VENUE_SERVICE_PERMISSIONS,
     alerts: VENUE_SERVICE_ALERTS,
   },
+  MEDIA_MODULE,
   {
     name: "identity",
     version: "0.0.0",

@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, catalogues, products, withTransaction, type Database } from "@waitron/db";
@@ -47,7 +48,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * itself and returns them rather than reaching the delete trigger.
  */
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 
 const PRESENT = `${"a".repeat(64)}.jpg`;

@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -23,7 +24,13 @@ import { samplePreparedImage } from "./testing/sample-image.js";
 // through the DESCRIPTOR rather than the function it names: a seat left empty or pointed at the
 // wrong thing fails here and nowhere else.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    CATALOGUE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    VENUE_SERVICE_MIGRATIONS,
+    MEDIA_MIGRATIONS,
+  ],
 });
 
 describe("the media module descriptor", () => {

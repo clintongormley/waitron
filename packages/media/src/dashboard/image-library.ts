@@ -29,6 +29,8 @@ import { t } from "./strings.js";
 
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
+  if (use.kind === "department_receipt")
+    return `/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(use.id)}`;
   if (use.kind === "receipt") return "/manage/venue-settings/view/receipts";
   if (use.kind === "section")
     return `/manage/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;
@@ -43,6 +45,8 @@ function usageName(use: ImageUsage): string {
   switch (use.kind) {
     case "receipt":
       return t("image.receipt_logo");
+    case "department_receipt":
+      return t("image.department_receipt_logo").replace("{department}", () => use.name);
     case "section":
       return use.internalName;
     case "menu_include":
@@ -369,7 +373,10 @@ export class ImageLibrary extends LitElement {
   }
   #usage(use: ImageUsage) {
     const name = usageName(use);
-    const inactive = "active" in use && !use.active ? ` (${t("image.disabled_product")})` : "";
+    const inactive =
+      "active" in use && !use.active
+        ? ` (${t(use.kind === "department_receipt" ? "image.disabled_department" : "image.disabled_product")})`
+        : "";
     return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }
 
