@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-sheet.js";
+import "./floor-plan-add-tables.js";
 import "./floor-plan-tables-panel.js";
 import { bookedReason } from "./floor-plan-booked.js";
 import { dashboardPath } from "../navigation.js";
@@ -277,6 +278,9 @@ export class FloorPlanEditor extends LitElement {
     this.addEventListener("floor-plan-change", (event) => {
       const { draft, mergeKey } = (event as CustomEvent<FloorPlanChange>).detail;
       this.#change(draft, mergeKey);
+    });
+    this.addEventListener("floor-plan-add-tables", () => {
+      this.renderRoot.querySelector("floor-plan-add-tables")?.show();
     });
     this.addEventListener("floor-plan-select", (event) => {
       this.selected = (event as CustomEvent<FloorPlanSelect>).detail.key;
@@ -708,14 +712,17 @@ export class FloorPlanEditor extends LitElement {
       .selected=${this.selected}
       .refused=${this.#refusedForPanel()}
       .inSheet=${this.narrow}
-      .zoneName=${this.zoneName ?? ""}
-      .takenElsewhere=${this.#takenElsewhere(draft)}
-      .nextKey=${this.#nextKey}
-      .draftParent=${this.#scopeId}
     ></floor-plan-tables-panel>`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">
-      ${canvas}${this.narrow ? this.#sheet(draft, panel) : html`<div class="side">${panel}</div>`}
-    </div>`;
+        ${canvas}${this.narrow ? this.#sheet(draft, panel) : html`<div class="side">${panel}</div>`}
+      </div>
+      <floor-plan-add-tables
+        .draft=${draft}
+        .zoneName=${this.zoneName ?? ""}
+        .takenElsewhere=${this.#takenElsewhere(draft)}
+        .nextKey=${this.#nextKey}
+        .draftParent=${this.#scopeId}
+      ></floor-plan-add-tables>`;
   }
 
   #sheet(draft: FloorPlanDraft, panel: unknown) {

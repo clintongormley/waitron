@@ -1868,6 +1868,8 @@ These open already savable:
   with, and pressing Pair approves the device;
 - each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
 - the canvas Duplicate dialog, holding `<name> (copy)`;
+- the floor plan editor's Add tables dialog, holding one table, four seats and the zone's name as
+  the prefix: pressing Add is the add (`apps/dashboard/src/screens/floor-plan-add-tables.ts`);
 - the routing cell editor on an inherited cell: Save pins the inherited choice as the cell's own
   (`savableAtOpen`, `packages/venue-service/src/dashboard/routing-cell-editor.ts`);
 - the option window when it opens showing a refusal the options list handed it: pressing Save

@@ -63,8 +63,10 @@ async function open(api: DashboardApi, theme: "light" | "dark") {
 }
 
 async function openAddTables(el: FloorPlanEditor) {
-  const panel = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
-  panel.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!.click();
+  el.shadowRoot!.querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!
+    .click();
+  const panel = el.shadowRoot!.querySelector("floor-plan-add-tables")!;
   await panel.updateComplete;
   const dialog = panel.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=add-tables]")!;
   await dialog.updateComplete;
@@ -78,9 +80,7 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     onTestFinished(() => setLocale(locale));
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
     const { dialog } = await openAddTables(el);
-    expect(dialog.querySelector<HTMLElement & { hint: string }>("[name=prefix]")!.hint).toBe(
-      "Terrace 1",
-    );
+    expect(dialog.querySelector("[data-preview]")!.textContent!.trim()).toBe("Terrace 1");
     await expectNoA11yViolations(host);
   });
 

@@ -6,8 +6,8 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { FloorPlanDraft } from "./floor-plan-draft.js";
-import "./floor-plan-tables-panel.js";
-import type { FloorPlanTablesPanel } from "./floor-plan-tables-panel.js";
+import "./floor-plan-add-tables.js";
+import type { FloorPlanAddTables } from "./floor-plan-add-tables.js";
 
 const draft: FloorPlanDraft = {
   tables: [
@@ -30,13 +30,13 @@ class PanelLeaveApp extends LitElement {
   #n = 0;
   readonly nextKey = () => `new:${++this.#n}`;
   override render() {
-    return html`<floor-plan-tables-panel
+    return html`<floor-plan-add-tables
         .draft=${draft}
         zoneName="Terrace"
         .nextKey=${this.nextKey}
         @floor-plan-change=${(e: CustomEvent<{ draft: FloorPlanDraft }>) =>
           this.changes.push(e.detail.draft)}
-      ></floor-plan-tables-panel
+      ></floor-plan-add-tables
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
@@ -50,9 +50,9 @@ afterEach(() => {
 async function fixture() {
   setLocale("en-GB");
   const { el: app } = await mountWidget<PanelLeaveApp>("floor-plan-panel-leave-test-app", {});
-  const panel = app.shadowRoot!.querySelector<FloorPlanTablesPanel>("floor-plan-tables-panel")!;
+  const panel = app.shadowRoot!.querySelector<FloorPlanAddTables>("floor-plan-add-tables")!;
   await panel.updateComplete;
-  panel.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!.click();
+  panel.show();
   await panel.updateComplete;
   const dialog = panel.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=add-tables]")!;
   await dialog.updateComplete;
@@ -63,7 +63,7 @@ async function fixture() {
 const field = (dialog: WtModal, name: string) =>
   dialog.querySelector<HTMLElement & { value: string }>(`[name=${name}]`)!;
 
-async function set(panel: FloorPlanTablesPanel, el: Element, value: string): Promise<void> {
+async function set(panel: FloorPlanAddTables, el: Element, value: string): Promise<void> {
   await chooseOption(el, value);
   await panel.updateComplete;
 }

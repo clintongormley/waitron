@@ -1,6 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import { navigationGuardFor, type WtButton, type WtFloorPlanCanvas } from "@waitron/ui";
+import {
+  leaveCoordinatorFor,
+  navigationGuardFor,
+  type WtButton,
+  type WtFloorPlanCanvas,
+} from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { DashboardApp } from "../dashboard-app.js";
 import { setLocale } from "../i18n/t.js";
@@ -266,4 +272,22 @@ it("an accepted save leaves without asking", async () => {
   close(el);
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);
+});
+
+it("a leave asked of the editor alone asks about a changed Add tables", async () => {
+  const { app } = await mount();
+  const el = editor(app);
+  el.shadowRoot!.querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!
+    .click();
+  const dialog = el.shadowRoot!.querySelector("floor-plan-add-tables")!;
+  await dialog.updateComplete;
+  await chooseOption(dialog.shadowRoot!.querySelector("[name=table-count]")!, "3");
+  await dialog.updateComplete;
+  const proceed = vi.fn();
+  // The editor's own scope names the editor element as its parent.
+  const outcome = leaveCoordinatorFor(el)!.request({ scopes: [el], reason: "navigation", proceed });
+  await choose(app, "keep");
+  expect(await outcome).toBe("kept");
+  expect(proceed).not.toHaveBeenCalled();
 });

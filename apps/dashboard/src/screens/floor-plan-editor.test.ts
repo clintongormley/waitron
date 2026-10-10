@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { WtButton, WtFloorPlanCanvas, WtSheet } from "@waitron/ui";
+import type { WtButton, WtFloorPlanCanvas, WtModal, WtSheet } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -458,11 +459,36 @@ const panelOf = (el: FloorPlanEditor) =>
     "floor-plan-tables-panel",
   )!;
 
+const addDialogOf = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-add-tables"]>(
+    "floor-plan-add-tables",
+  )!;
+const addModal = (el: FloorPlanEditor) =>
+  addDialogOf(el).shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=add-tables]")!;
+const addField = (el: FloorPlanEditor, name: string) =>
+  addModal(el).querySelector<HTMLElement & { value: string }>(`[name=${name}]`)!;
+
+async function openAddTables(el: FloorPlanEditor): Promise<void> {
+  panelOf(el).shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!.click();
+  await addDialogOf(el).updateComplete;
+  await addModal(el).updateComplete;
+}
+
+async function setAddField(el: FloorPlanEditor, name: string, value: string): Promise<void> {
+  await chooseOption(addField(el, name), value);
+  await addDialogOf(el).updateComplete;
+}
+
+async function addViaDialog(el: FloorPlanEditor, count: number): Promise<void> {
+  await openAddTables(el);
+  await setAddField(el, "table-count", String(count));
+  addModal(el).querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
+  await el.updateComplete;
+}
+
 async function addTablesHint(el: FloorPlanEditor): Promise<string> {
-  const panel = panelOf(el);
-  panel.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!.click();
-  await panel.updateComplete;
-  return panel.shadowRoot!.querySelector<HTMLElement & { hint: string }>("[name=prefix]")!.hint;
+  await openAddTables(el);
+  return addModal(el).querySelector("[data-preview]")!.textContent!.trim();
 }
 
 const venueTable = (id: string, label: string, zoneId: string | null, active: boolean) => ({
@@ -496,31 +522,71 @@ it("counts other zones' tables as taken, but not this zone's live or followed ta
         ]),
     }),
   );
-  expect(panelOf(el).zoneName).toBe("Terrace");
-  expect([...panelOf(el).takenElsewhere].sort()).toEqual(["Terrace 20", "Terrace 9"]);
+  expect(addDialogOf(el).zoneName).toBe("Terrace");
+  expect([...addDialogOf(el).takenElsewhere].sort()).toEqual(["Terrace 20", "Terrace 9"]);
   expect(await addTablesHint(el)).toBe("Terrace 21");
 });
 
-it("gives added tables keys no draft table holds, before and after a save", async () => {
-  const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: { "new:1": "m5" } });
-  const el = await open(stubApi({ saveFloorPlan }));
-  const panel = panelOf(el);
-  const first = panel.nextKey();
-  expect(first).toBe("new:1");
-  const draft = el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft;
-  panel.dispatchEvent(
-    new CustomEvent("floor-plan-change", {
-      detail: { draft: addTables(draft, [{ label: "T3", seats: 4, fixed: false }], () => first) },
-      bubbles: true,
-      composed: true,
-    }),
+it("gives added tables keys no draft table holds, through saves, undo and redo", async () => {
+  const saveFloorPlan = vi.fn().mockResolvedValue({
+    revision: 4,
+    ids: { m1: "m1", m2: "m2", "new:1": "m5", "new:2": "m6" },
+  });
+  const saved = terrace(4);
+  saved.tables.push(
+    { id: "m5", liveTableId: "l5", label: "Terrace 1", seats: 4, fixed: false, placement: null },
+    { id: "m6", liveTableId: "l6", label: "Terrace 2", seats: 4, fixed: false, placement: null },
   );
-  await el.updateComplete;
+  const getFloorPlan = vi.fn().mockResolvedValueOnce(terrace()).mockResolvedValue(saved);
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  const keysUnique = () => {
+    const keys = panelOf(el).draft.tables.map((t) => t.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    return keys;
+  };
+  await addViaDialog(el, 2);
+  expect(keysUnique()).toEqual(["m1", "m2", "new:1", "new:2"]);
   await press(el, "save");
-  await flush(el);
-  expect(saveFloorPlan).toHaveBeenCalledOnce();
-  const keys = panelOf(el).draft.tables.map((t) => t.key);
-  const next = panelOf(el).nextKey();
-  expect(keys).not.toContain(next);
-  expect(next).not.toBe(first);
+  await expect.poll(() => panelOf(el).draft.tables.map((t) => t.key)).toContain("m5");
+  expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6"]);
+  await addViaDialog(el, 2);
+  expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6", "new:3", "new:4"]);
+  await press(el, "undo");
+  expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6"]);
+  await addViaDialog(el, 1);
+  expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6", "new:5"]);
+  await press(el, "undo");
+  keysUnique();
+  await press(el, "redo");
+  expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6", "new:5"]);
 });
+
+const sizes: [[number, number], [number, number]][] = [
+  [
+    [1280, 800],
+    [390, 844],
+  ],
+  [
+    [390, 844],
+    [1280, 800],
+  ],
+];
+for (const [from, to] of sizes) {
+  it(`keeps Add tables open with its typed names when the page goes from ${from[0]} to ${to[0]} px`, async () => {
+    await viewport(...from);
+    const el = await open();
+    await expect.poll(() => sheet(el) !== null).toBe(from[0] < 600);
+    await openAddTables(el);
+    await setAddField(el, "table-count", "2");
+    await setAddField(el, "naming", "custom");
+    await setAddField(el, "table-name", "Patio 1");
+    const before = panelOf(el);
+    await page.viewport(...to);
+    await expect.poll(() => sheet(el) !== null).toBe(to[0] < 600);
+    expect(panelOf(el)).not.toBe(before);
+    await el.updateComplete;
+    expect(addModal(el).open).toBe(true);
+    expect(addField(el, "table-name").value).toBe("Patio 1");
+    expect(addField(el, "table-count").value).toBe("2");
+  });
+}
