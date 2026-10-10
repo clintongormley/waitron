@@ -32,7 +32,8 @@ async function actionState(el: TillTodaySeatsDialog) {
 const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
 const ready = { variant: "primary", disabled: false, innerDisabled: false };
 async function type(el: TillTodaySeatsDialog, value: string) {
-  const field = el.shadowRoot!.querySelector("wt-input")!;
+  const field =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!;
   await field.updateComplete;
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await el.updateComplete;
@@ -54,6 +55,10 @@ it("Join waits for a number when there is no suggestion", async () => {
   for (const seats of [null, 0]) {
     const el = await mount({ seats, action: "join" });
     expect(await actionState(el)).toEqual(quiet);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!
+        .value,
+    ).toBe("");
     await type(el, "6");
     expect(await actionState(el)).toEqual(ready);
     cleanupWidgets();
@@ -77,7 +82,9 @@ it("a press that reaches Save's handler with nothing changed sends nothing", asy
   actionButton(el).click();
   await el.updateComplete;
   expect(sent).toEqual([]);
-  expect(el.shadowRoot!.querySelector("wt-input")!.error).toBe("");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!.error,
+  ).toBe("");
 });
 
 it("after a save that leaves the dialog open, Save is quiet again", async () => {
@@ -86,5 +93,17 @@ it("after a save that leaves the dialog open, Save is quiet again", async () => 
   await type(el, "7");
   actionButton(el).click();
   expect(sent).toEqual([{ seats: 7 }]);
+  expect(await actionState(el)).toEqual(quiet);
+});
+
+it("the − and + buttons are changes like typing", async () => {
+  const el = await mount({ seats: 6, action: "save" });
+  const field =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!;
+  await field.updateComplete;
+  field.shadowRoot!.querySelector<HTMLButtonElement>("[data-step='1']")!.click();
+  expect(await actionState(el)).toEqual(ready);
+  expect(field.value).toBe("7");
+  field.shadowRoot!.querySelector<HTMLButtonElement>("[data-step='-1']")!.click();
   expect(await actionState(el)).toEqual(quiet);
 });

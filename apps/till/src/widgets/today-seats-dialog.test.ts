@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./today-seats-dialog.js";
@@ -14,7 +15,8 @@ async function mount(props: Partial<TillTodaySeatsDialog>): Promise<TillTodaySea
   });
   return el;
 }
-const field = (el: TillTodaySeatsDialog) => el.shadowRoot!.querySelector("wt-input")!;
+const field = (el: TillTodaySeatsDialog) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!;
 const nativeInput = (el: TillTodaySeatsDialog) =>
   field(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
 const action = (el: TillTodaySeatsDialog) =>
@@ -64,7 +66,7 @@ it("refuses a number outside 1 to 999 beside the field and below the form", asyn
   const seen = captured(el);
   expect(action(el).textContent!.trim()).toBe("Save");
 
-  for (const refused of ["0", "1000", "2.5"]) {
+  for (const refused of ["0", "1000"]) {
     await type(el, refused);
     action(el).click();
     await el.updateComplete;
@@ -81,6 +83,31 @@ it("refuses a number outside 1 to 999 beside the field and below the form", asyn
   expect(action(el).disabled).toBe(false);
   action(el).click();
   expect(seen.confirmed).toEqual([{ seats: 999 }]);
+});
+
+for (const typed of ["2.5", "1e2"]) {
+  it(`refuses ${typed} typed key by key`, async () => {
+    const el = await mount({ seats: 6 });
+    const seen = captured(el);
+    await type(el, "");
+    nativeInput(el).focus();
+    await userEvent.keyboard(typed);
+    await el.updateComplete;
+    expect(nativeInput(el).value).toBe(typed);
+
+    action(el).click();
+    await el.updateComplete;
+
+    expect(seen.confirmed).toEqual([]);
+    expect(field(el).error).toBe("Enter 1 to 999");
+    expect(bottom(el).error).toBe("Correct the highlighted fields to continue.");
+  });
+}
+
+it("a leading zero typed in front of the opened number is not a change", async () => {
+  const el = await mount({ seats: 6 });
+  await type(el, "06");
+  expect(action(el).disabled).toBe(true);
 });
 
 it("explains nothing before the first press", async () => {
@@ -112,6 +139,8 @@ it("speaks Spanish", async () => {
   setLocale("es-ES");
   const el = await mount({ seats: 8, action: "join" });
   expect(field(el).label).toBe("Plazas");
+  expect(field(el).decreaseLabel("Plazas")).toBe("Reducir Plazas");
+  expect(field(el).increaseLabel("Plazas")).toBe("Aumentar Plazas");
   expect(action(el).textContent!.trim()).toBe("Unir");
   expect(el.shadowRoot!.querySelector("[data-seats-cancel]")!.textContent!.trim()).toBe("Cancelar");
   await type(el, "0");

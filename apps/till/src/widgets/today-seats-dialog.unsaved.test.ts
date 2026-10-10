@@ -39,7 +39,8 @@ async function mount() {
   return { app, form };
 }
 async function fill(form: TillTodaySeatsDialog, value: string) {
-  const field = form.shadowRoot!.querySelector("wt-input")!;
+  const field =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!;
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   await userEvent.fill(page.elementLocator(input), value);
@@ -133,6 +134,9 @@ it("retained departed controls cannot confirm, cancel or replace the number", as
   expect(app.closes).toBe(0);
   app.shadowRoot!.appendChild(form);
   await form.updateComplete;
-  expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("9");
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!
+      .value,
+  ).toBe("9");
   expect(unload()).toBe(true);
 });

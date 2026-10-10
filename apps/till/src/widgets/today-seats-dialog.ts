@@ -11,7 +11,7 @@ import {
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-number-stepper.js";
 import { t } from "../i18n/t.js";
 
 export interface TodaySeatsDetail {
@@ -62,14 +62,17 @@ export class TillTodaySeatsDialog extends LitElement {
   override willUpdate(): void {
     if (!this.isConnected || !this.active || this.#scope) return;
     if (this.#baseline === undefined) {
-      this.#baseline = this.seats === null ? "" : String(this.seats);
+      this.#baseline = this.seats !== null && this.seats > 0 ? String(this.seats) : "";
       this.value = this.#baseline;
     }
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: this,
       current: () => this.value,
       snapshot: (value) => value,
-      equal: (a, b) => a.trim() === b.trim(),
+      equal: (a, b) => {
+        const [x, y] = [seatsFrom(a), seatsFrom(b)];
+        return x !== null && y !== null ? x === y : a.trim() === b.trim();
+      },
       restore: (value) => (this.value = value),
     });
     this.#leave = coordinator;
@@ -86,7 +89,7 @@ export class TillTodaySeatsDialog extends LitElement {
 
   override async firstUpdated(): Promise<void> {
     await this.renderRoot.querySelector<WtDialog>("wt-dialog")!.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>("wt-input")!.focus();
+    this.renderRoot.querySelector<HTMLElement>("wt-number-stepper")!.focus();
   }
 
   #actionState() {
@@ -151,12 +154,14 @@ export class TillTodaySeatsDialog extends LitElement {
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="fields">
-        <wt-input
+        <wt-number-stepper
           name="seats"
-          type="number"
-          autocomplete="off"
           required
+          .min=${1}
+          .max=${SEATS_MAX}
           .label=${t("floor.seats_label")}
+          .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
+          .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
           .value=${live(this.value)}
           .error=${invalid ? t("floor.seats_invalid") : ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
@@ -165,7 +170,7 @@ export class TillTodaySeatsDialog extends LitElement {
               event,
               this.shadowRoot!.querySelector<HTMLElement>("[data-seats-action]"),
             )}
-        ></wt-input>
+        ></wt-number-stepper>
         <wt-form-actions .error=${invalid ? t("form.fix_fields") : ""}>
           <wt-button
             slot="cancel"

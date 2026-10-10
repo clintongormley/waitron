@@ -292,9 +292,12 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 const FLOOR_POLL_LIMIT_MS = 25_000;
 
 // Icons shared primitives draw and their consuming app registers: wt-toast's `close`,
-// wt-combobox's, wt-row-actions' `kebab`, and the top bar's More menu's `hamburger`.
+// wt-combobox's, wt-row-actions' `kebab`, wt-number-stepper's `minus` and `plus`, and the top bar's
+// More menu's `hamburger`.
 registerIcons({
   close: CROSS_ICON_PATH,
+  minus: "M2.5 7.25H13.5V8.75H2.5Z",
+  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
   ...DROPDOWN_ICONS,
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
   kebab:

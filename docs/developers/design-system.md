@@ -2034,8 +2034,8 @@ These open already savable:
   option, or by Edit on an option with no refusal, it opens quiet;
 - the till floor's seats dialog when a merge opens it with a suggested number of seats above 0:
   pressing Join confirms the suggestion (`savableAtOpen`,
-  `apps/till/src/widgets/today-seats-dialog.ts`). With no suggestion it opens empty, and Join waits
-  for a number;
+  `apps/till/src/widgets/today-seats-dialog.ts`). With no suggestion, or one of 0, it opens
+  empty, and Join waits for a number;
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 
