@@ -4351,16 +4351,24 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     const { el, api } = await mountMove({ deviceMode: false, canMoveStation: false });
     expect(queueWidget(el)!.canMove).toBe(false);
     expect(moveButton(el)).toBeNull();
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("move-station", {
-        detail: { workingOrderId: "wo-1", lineId: "wol-1", name: "Paella", stationId: "st-1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
+    const escaped = vi.fn();
+    document.addEventListener("move-station", escaped);
+    try {
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("move-station", {
+          detail: { workingOrderId: "wo-1", lineId: "wol-1", name: "Paella", stationId: "st-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+    } finally {
+      document.removeEventListener("move-station", escaped);
+    }
+    expect(escaped).not.toHaveBeenCalled();
     expect(dialog(el)).toBeUndefined();
     expect(api.deviceStations).not.toHaveBeenCalled();
+    expect(api.listStations).toHaveBeenCalledOnce();
   });
 
   it("the merged view of several stations draws Move too", async () => {
