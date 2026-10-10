@@ -526,3 +526,21 @@ it("uses the phone name column for a short product name without reserving absent
     table(el).shadowRoot!.querySelector<HTMLElement>(".scroll")!.scrollWidth,
   ).toBeLessThanOrEqual(310);
 });
+
+it("A462 default Preview keeps Expand all and nested reopen state", async () => {
+  const el = await mount();
+  expect(row(el, "root")!.querySelector(".tree-toggle")).toBeNull();
+  const bulk = () => table(el).shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(bulk().textContent).toContain(t("folders.expand_all"));
+  bulk().click();
+  await settle(el);
+  expect(shown(el)).toEqual(["root", "drinks", "drinks/beer", "drinks/beer/mi", "juice"]);
+  await toggle(el, "drinks");
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+  await toggle(el, "drinks");
+  expect(shown(el)).toEqual(["root", "drinks", "drinks/beer", "drinks/beer/mi", "juice"]);
+  expect(bulk().textContent).toContain(t("folders.collapse_all"));
+  bulk().click();
+  await settle(el);
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+});

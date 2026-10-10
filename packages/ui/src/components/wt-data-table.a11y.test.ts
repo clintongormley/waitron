@@ -871,3 +871,82 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)("A462 cascade accessibility (%s)", (theme) => {
+  test.each([390, 1280])("native branch closure at %i px", async (width) => {
+    await page.viewport(width, 900);
+    try {
+      for (const language of ["en", "es"]) {
+        type Branch = { id: string; parent: string | null; name: string };
+        const el = (await mountThemed(
+          '<wt-data-table aria-label="Products"></wt-data-table>',
+          theme,
+        )) as WtDataTable<Branch>;
+        el.rows = [
+          {
+            id: "root",
+            parent: null,
+            name: language === "en" ? "All products" : "Todos los productos",
+          },
+          { id: "drinks", parent: "root", name: language === "en" ? "Drinks" : "Bebidas" },
+          { id: "beer", parent: "drinks", name: language === "en" ? "Beer" : "Cerveza" },
+          {
+            id: "bottle",
+            parent: "beer",
+            name: language === "en" ? "Beer bottle" : "Botella de cerveza",
+          },
+        ];
+        el.columns = [
+          {
+            key: "name",
+            label: language === "en" ? "Name" : "Nombre",
+            cell: (row) => row.name,
+            searchValue: (row) => row.name,
+          },
+        ];
+        el.rowKey = (row) => row.id;
+        el.rowParent = (row) => row.parent;
+        el.initiallyCollapsed = true;
+        el.collapseDescendants = true;
+        el.rowInitiallyExpanded = (row) => row.id === "root";
+        el.rowToggleLabel = (row, open) =>
+          `${language === "en" ? (open ? "Close" : "Open") : open ? "Cerrar" : "Abrir"} ${row.name}`;
+        el.flatTreeSearch = true;
+        await el.updateComplete;
+        for (const key of ["drinks", "beer"]) el.setExpanded(key, true);
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        const rootButton = el.shadowRoot!.querySelector<HTMLButtonElement>(
+          'tr[data-row-key="root"] .tree-toggle',
+        )!;
+        rootButton.focus();
+        await userEvent.keyboard("{Enter}");
+        await el.updateComplete;
+        expect(
+          [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+            row.getAttribute("data-row-key"),
+          ),
+        ).toEqual(["root"]);
+        expect(el.shadowRoot!.activeElement).toBe(
+          el.shadowRoot!.querySelector('tr[data-row-key="root"] .tree-toggle'),
+        );
+        await expectNoA11yViolations(host);
+        for (const state of ["closed", "reopened", "search"] as const) {
+          if (state === "reopened") el.setExpanded("root", true);
+          if (state === "search") el.searchTerm = language === "en" ? "beer" : "cerveza";
+          await el.updateComplete;
+          await new Promise(requestAnimationFrame);
+          expect(window.innerWidth).toBe(width);
+          expect(host.scrollWidth).toBeLessThanOrEqual(width);
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `__screenshots__/a462-task3/cascade-${width}-${theme}-${language}-${state}.png`,
+          });
+        }
+        cleanup();
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+});

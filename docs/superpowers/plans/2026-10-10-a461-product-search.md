@@ -387,3 +387,8 @@ For a beside/same-list drop, replace `undefined` with the asserted insertion ind
 - Consumer scan: inventories cover every production table template located under apps/packages, enclosing screens for widget consumers, till direct/indirect parents, and the separate unchanged preview. Changes stay opt-in; default consumers still get regression tests and actual dependency-scoped CI.
 - Claims: no runtime verification was performed by the plan writer. Every source-derived drag/menu/selection claim that execution relies on has a discriminating test/probe and a disposable-candidate negative control where critical. The historical A454 wording differs from the shipped table rule. The owner’s 2026-10-10 A461 queue confirms table-sort ties; the plan preserves that decision and defines stable till ties.
 - Scope: only this plan file is written now. No fiscal/schema/server implementation, no approval gate, no campaign work, and no implementation/test/commit/push/server command has been run in the planning session.
+
+_2026-10-10: [A462](2026-10-10-a462-table-toolbars.md) introduces an opt-in cascading closure
+policy in the shared table. Its Products and Structure adoption replaces search-only closure with
+closure of ordinary and saved descendants too; the historical A461 receipts above describe the
+earlier policy. Search openings still keep their ancestors when cleared._

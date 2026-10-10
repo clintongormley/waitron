@@ -9091,3 +9091,351 @@ test("A462 native select-all and row boxes paint from the same size and accent t
     expect(css.accentColor).toBe("rgb(11, 22, 33)");
   }
 });
+
+const a462TreeRows: TreeRow[] = [
+  { id: "root", parent: null, name: "All products" },
+  { id: "drinks", parent: "root", name: "Drinks" },
+  { id: "beer", parent: "drinks", name: "Beer" },
+  { id: "product", parent: "beer", name: "Beer bottle" },
+  { id: "variant", parent: "product", name: "Large" },
+  { id: "sibling", parent: "root", name: "Desserts" },
+  { id: "cake", parent: "sibling", name: "Cake" },
+];
+
+async function a462Cascade(props: Partial<WtDataTable<TreeRow>> = {}) {
+  return treeTable({
+    rows: a462TreeRows,
+    initiallyCollapsed: true,
+    collapseDescendants: true,
+    rowInitiallyExpanded: (row: TreeRow) => row.id === "root",
+    rowToggleLabel: (row: TreeRow, open: boolean) => `${open ? "Close" : "Open"} ${row.name}`,
+    rememberExpanded: true,
+    viewKey: "a462-tree",
+    ...props,
+  });
+}
+
+function a462Expanded(el: WtDataTable<TreeRow>) {
+  return ["root", "drinks", "beer", "product", "sibling"].map((key) => el.isExpanded(key));
+}
+
+test("A462 cascade seeds only the root open and closes hidden descendants", async () => {
+  const el = await a462Cascade();
+  expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+  expect(a462Expanded(el)).toEqual([true, false, false, false, false]);
+  for (const key of ["drinks", "beer", "product", "sibling"]) el.setExpanded(key, true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "product", "variant", "sibling", "cake"]);
+  el.searchTerm = "Desserts";
+  await el.updateComplete;
+  el.setExpanded("drinks", false);
+  el.setExpanded("drinks", true);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(a462Expanded(el)).toEqual([true, true, false, false, true]);
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling", "cake"]);
+  a461Toggle(el, "root");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root"]);
+  expect(a462Expanded(el)).toEqual([false, false, false, false, false]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="root"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+  expect(JSON.parse(localStorage.getItem("a462-tree:expanded")!)).toEqual([]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:collapsed") ?? "[]").sort()).toEqual([
+    "beer",
+    "drinks",
+    "product",
+    "root",
+    "sibling",
+  ]);
+  cleanup();
+  const remounted = await a462Cascade();
+  expect(treeKeys(remounted)).toEqual(["root"]);
+  remounted.setExpanded("root", true);
+  await remounted.updateComplete;
+  expect(treeKeys(remounted)).toEqual(["root", "drinks", "sibling"]);
+  remounted.rows = [...a462TreeRows];
+  await remounted.updateComplete;
+  expect(a462Expanded(remounted)).toEqual([true, false, false, false, false]);
+  await remounted.revealRow("variant");
+  expect(treeKeys(remounted)).toEqual(["root", "drinks", "beer", "product", "variant", "sibling"]);
+  expect(a462Expanded(remounted)).toEqual([true, true, true, true, false]);
+});
+
+test("A462 cascade keeps flat own results while retiring saved descendant openings", async () => {
+  const el = await a462Cascade({
+    flatTreeSearch: true,
+    searchTerm: "beer",
+    selectable: true,
+    selected: ["cake"],
+  });
+  el.setExpanded("beer", true);
+  el.setExpanded("product", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["beer", "product", "variant", "product", "variant"]);
+  a461Toggle(el, "beer");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["beer", "product"]);
+  expect(el.isExpanded("beer")).toBe(false);
+  expect(el.isExpanded("product")).toBe(false);
+  expect(el.selected).toEqual(["cake"]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:expanded")!)).toEqual(["drinks", "root"]);
+  el.searchTerm = "   ";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling"]);
+  el.searchTerm = "beer";
+  await el.updateComplete;
+  el.setExpanded("product", true);
+  await el.updateComplete;
+  el.searchTerm = "Beer bottle";
+  await el.updateComplete;
+  expect(el.isExpanded("product")).toBe(false);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(a462Expanded(el)).toEqual([true, true, true, true, false]);
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  cleanup();
+  const remounted = await a462Cascade();
+  expect(treeKeys(remounted)).toEqual(["root"]);
+  expect(a462Expanded(remounted)).toEqual([false, false, false, false, false]);
+});
+
+const a462FilterColumns: DataTableColumn<TreeRow>[] = [
+  {
+    ...treeColumns[0]!,
+    filter: {
+      label: "Kind",
+      allLabel: "All",
+      value: (row) => (row.id === "variant" ? "variant" : "other"),
+      options: [
+        { value: "variant", label: "Variant" },
+        { value: "other", label: "Other" },
+      ],
+    },
+  },
+];
+
+test("A462 cascade honours deliberate closures over filter-held paths", async () => {
+  const el = await a462Cascade({ columns: a462FilterColumns });
+  el.chooseFilter("name", ["variant"]);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "product", "variant"]);
+  expect(a462Expanded(el)).toEqual([true, true, true, true, false]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!.getAttribute("aria-expanded"),
+  ).toBe("true");
+  a461Toggle(el, "drinks");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks"]);
+  expect(a462Expanded(el)).toEqual([true, false, false, false, false]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+  el.chooseFilter("name", []);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+  el.chooseFilter("name", ["variant"]);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks"]);
+  a461Toggle(el, "root");
+  await el.updateComplete;
+  cleanup();
+  const remounted = await a462Cascade({ columns: a462FilterColumns });
+  expect(treeKeys(remounted)).toEqual(["root"]);
+  await remounted.revealRow("variant");
+  expect(treeKeys(remounted)).toEqual(["root", "drinks", "beer", "product", "variant"]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:collapsed")!)).toEqual(["sibling"]);
+});
+
+test("A462 cascade seeds late children once and does not reopen a refreshed root", async () => {
+  const el = await a462Cascade({ rows: [a462TreeRows[0]!] });
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  el.rows = [...a462TreeRows];
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root"]);
+  el.setExpanded("root", true);
+  el.setExpanded("drinks", true);
+  await el.updateComplete;
+  el.rows = [...a462TreeRows, { id: "new", parent: "variant", name: "New child" }];
+  await el.updateComplete;
+  expect(el.isExpanded("drinks")).toBe(true);
+  el.setExpanded("variant", true);
+  await el.updateComplete;
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  expect(el.isExpanded("variant")).toBe(false);
+});
+
+test("A462 cascade bounds cycles and uses graph keys rather than their prefixes", async () => {
+  const el = await a462Cascade({
+    rows: [
+      ...a462TreeRows,
+      { id: "drinks-copy", parent: "root", name: "Copy" },
+      { id: "copy-child", parent: "drinks-copy", name: "Child" },
+      { id: "orphan", parent: "missing", name: "Orphan" },
+      { id: "cycle-a", parent: "cycle-b", name: "Cycle A" },
+      { id: "cycle-b", parent: "cycle-a", name: "Cycle B" },
+    ],
+  });
+  for (const key of ["drinks", "beer", "drinks-copy", "cycle-a", "cycle-b"])
+    el.setExpanded(key, true);
+  el.setExpanded("drinks", false);
+  el.setExpanded("cycle-a", false);
+  el.setExpanded("missing", false);
+  await el.updateComplete;
+  expect(el.isExpanded("beer")).toBe(false);
+  expect(el.isExpanded("drinks-copy")).toBe(true);
+  expect(el.isExpanded("cycle-a")).toBe(false);
+  expect(el.isExpanded("cycle-b")).toBe(false);
+  expect(treeKeys(el)).toEqual([
+    "root",
+    "drinks",
+    "sibling",
+    "drinks-copy",
+    "copy-child",
+    "orphan",
+  ]);
+});
+
+test.each(["{", "5", '{"root":true}', '[5,"gone"]'])(
+  "A462 cascade invalid closed storage keeps first-visit defaults (%s)",
+  async (stored) => {
+    localStorage.setItem("a462-tree:collapsed", stored);
+    const el = await a462Cascade();
+    expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+    a461Toggle(el, "root");
+    await el.updateComplete;
+    expect(treeKeys(el)).toEqual(["root"]);
+  },
+);
+
+test("A462 cascade saved closure wins a conflicting open key", async () => {
+  localStorage.setItem("a462-tree:expanded", '["root","drinks","beer"]');
+  localStorage.setItem("a462-tree:collapsed", '[5,"root","beer"]');
+  const el = await a462Cascade();
+  expect(a462Expanded(el)).toEqual([false, true, false, false, false]);
+  expect(treeKeys(el)).toEqual(["root"]);
+  el.setExpanded("root", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling"]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:collapsed")!)).toEqual(["beer"]);
+});
+
+test.each(["blocked", "no-key", "no-remember"])(
+  "A462 cascade works without persistence (%s)",
+  async (mode) => {
+    localStorage.setItem("a462-tree:collapsed", '["root"]');
+    if (mode === "blocked") {
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+    }
+    const el = await a462Cascade({
+      ...(mode === "no-key" ? { viewKey: undefined } : {}),
+      ...(mode === "no-remember" ? { rememberExpanded: false } : {}),
+    });
+    expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+    el.setExpanded("drinks", true);
+    el.setExpanded("beer", true);
+    el.setExpanded("root", false);
+    await el.updateComplete;
+    expect(a462Expanded(el)).toEqual([false, false, false, false, false]);
+    el.setExpanded("root", true);
+    await el.updateComplete;
+    expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+  },
+);
+
+test("A462 default preserves descendants and ignores opted-in closed storage", async () => {
+  localStorage.setItem("test.tree:collapsed", '["food"]');
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    rememberExpanded: true,
+    viewKey: "test.tree",
+  });
+  el.setExpanded("food", true);
+  el.setExpanded("break", true);
+  el.setExpanded("food", false);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  el.setExpanded("food", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(el.isExpanded("break")).toBe(true);
+});
+
+test("A462 cascade closes one placement while preserving a distinct path and shared tick", async () => {
+  const el = await a462Cascade({
+    rows: [
+      ...a462TreeRows,
+      { id: "beer-copy", parent: "sibling", name: "Beer" },
+      { id: "product-copy", parent: "beer-copy", name: "Beer bottle" },
+      { id: "variant-copy", parent: "product-copy", name: "Large" },
+    ],
+    selectable: true,
+    selected: ["same-product"],
+    rowSelectionKey: (row) => (row.id.startsWith("product") ? "same-product" : row.id),
+    rowSelectionAllowed: (row) => row.id.startsWith("product"),
+    rowSelectable: (row) => row.id.startsWith("product"),
+  });
+  for (const key of ["drinks", "beer", "product", "sibling", "beer-copy", "product-copy"])
+    el.setExpanded(key, true);
+  await el.updateComplete;
+  el.setExpanded("drinks", false);
+  await el.updateComplete;
+  expect(el.isExpanded("beer")).toBe(false);
+  expect(el.isExpanded("product")).toBe(false);
+  expect(el.isExpanded("beer-copy")).toBe(true);
+  expect(el.isExpanded("product-copy")).toBe(true);
+  expect(treeKeys(el)).toEqual([
+    "root",
+    "drinks",
+    "sibling",
+    "cake",
+    "beer-copy",
+    "product-copy",
+    "variant-copy",
+  ]);
+  expect(el.selected).toEqual(["same-product"]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLInputElement>('tr[data-row-key="product-copy"] input')!
+      .checked,
+  ).toBe(true);
+});
+
+test("A462 cascade preserves noncollapsible branches while closing their descendants", async () => {
+  const el = await a462Cascade({ rowCollapsible: (row) => row.id !== "drinks" });
+  el.setExpanded("beer", true);
+  el.setExpanded("product", true);
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  expect(el.isExpanded("drinks")).toBe(true);
+  expect(el.isExpanded("beer")).toBe(false);
+  el.setExpanded("root", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="drinks"] .tree-toggle')).toBeNull();
+});
+
+test("A462 cascade flat always-open branch reports the expansion it draws", async () => {
+  const el = await a462Cascade({
+    flatTreeSearch: true,
+    searchTerm: "drinks",
+    rowCollapsible: (row) => row.id !== "drinks",
+  });
+  expect(treeKeys(el)).toEqual(["drinks", "beer"]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!.getAttribute("aria-expanded"),
+  ).toBe("true");
+  expect(el.isExpanded("drinks")).toBe(true);
+  el.setExpanded("drinks", false);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["drinks", "beer"]);
+  expect(el.isExpanded("drinks")).toBe(true);
+});

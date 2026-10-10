@@ -4671,3 +4671,20 @@ it.each(
     await page.viewport(previous[0]!, previous[1]!);
   }
 });
+
+it("A462 default Price overrides retains variants after closing and reopening their product", async () => {
+  const el = await mount({ rows: [lemonade] });
+  const toggle = () => toggleOf(el, "mi-lemonade")!;
+  toggle().click();
+  await table(el).updateComplete;
+  expect(row(el, "mi-lemonade:v-small")).not.toBeNull();
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
+  toggle().click();
+  await table(el).updateComplete;
+  expect(row(el, "mi-lemonade:v-small")).toBeNull();
+  toggle().click();
+  await table(el).updateComplete;
+  expect(row(el, "mi-lemonade:v-small")).not.toBeNull();
+  expect(row(el, "mi-lemonade:v-large")).not.toBeNull();
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
+});

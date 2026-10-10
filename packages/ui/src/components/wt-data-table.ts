@@ -831,9 +831,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Extra part names for a row's tree toggle button, after `tree-toggle`, so a screen can style
    * one kind of row's toggle apart from another's. */
   @property({ attribute: false }) rowToggleParts?: (row: Row) => string;
-  /** In tree mode, seed each branch as collapsed the first time that branch appears. A person can
-   * still expand it normally, and later row refreshes do not collapse it again. */
   @property({ type: Boolean }) initiallyCollapsed = false;
+  @property({ type: Boolean }) collapseDescendants = false;
+  @property({ attribute: false }) rowInitiallyExpanded: (row: Row) => boolean = () => false;
   @property({ attribute: "aria-label" }) override ariaLabel = "";
   /** When set, a leading column of checkboxes (plus a select-all header box) lets the caller pick
    * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change.
@@ -1007,6 +1007,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return this.#remembered;
   }
 
+  #deliberatelyClosed: Set<string> | null = null;
+
+  #closedChoices(): Set<string> {
+    if (this.#deliberatelyClosed) return this.#deliberatelyClosed;
+    let parsed: unknown = [];
+    if (this.collapseDescendants && this.rememberExpanded && this.viewKey) {
+      try {
+        parsed = JSON.parse(localStorage.getItem(`${this.viewKey}:collapsed`) ?? "[]");
+      } catch {
+        // A saved closure is optional when storage is unavailable.
+      }
+    }
+    this.#deliberatelyClosed = new Set(
+      Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === "string") : [],
+    );
+    return this.#deliberatelyClosed;
+  }
+
   /** The indent follows the tree's own width, not the window's; a flat table is not watched. */
   #observeScroll(): void {
     const scroll = this.rowParent ? this.renderRoot.querySelector(".scroll") : null;
@@ -1132,7 +1150,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
     )
       this.filtersOpen = false;
     if (!this.#offersChooser()) this.chooserOpen = false;
-    if (changed.has("viewKey") || changed.has("rememberExpanded")) this.#remembered = null;
+    if (
+      changed.has("viewKey") ||
+      changed.has("rememberExpanded") ||
+      changed.has("collapseDescendants")
+    ) {
+      this.#remembered = null;
+      this.#deliberatelyClosed = null;
+    }
     if (
       this.initiallyCollapsed &&
       this.rowParent &&
@@ -1146,7 +1171,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
         if (parent === null || !byKey.has(parent) || this.seededBranches.has(parent)) continue;
         this.seededBranches.add(parent);
         if (!this.rowCollapsible(byKey.get(parent)!)) continue;
-        if (this.#rememberedOpen().has(parent)) continue;
+        if (this.collapseDescendants && this.#closedChoices().has(parent)) {
+          next.add(parent);
+          seeded = true;
+          continue;
+        }
+        if (this.#rememberedOpen().has(parent) || this.rowInitiallyExpanded(byKey.get(parent)!))
+          continue;
         next.add(parent);
         seeded = true;
       }
@@ -1929,9 +1960,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return out;
   }
 
-  /** In tree mode a match's ancestors stay, so it is not shown as a false top-level row. With
-   * `searchOpensPath` and a search typed, every ancestor is held open and what passes the filters
-   * under a match stays reachable; otherwise only an ancestor kept solely for a match is held open. */
   #treeVisible(visible: readonly Row[], searchTyped: boolean): TreeShown<Row>["shown"] {
     const parentOf = this.rowParent!;
     const keys = this.rows.map((row, index) => this.rowKey(row, index));
@@ -2002,7 +2030,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     const { byKey, ranks } = this.#treeShown();
     const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
-    const walk = (parentKey: string, depth: number) => {
+    const walk = (parentKey: string, depth: number, visited = new Set<string>()) => {
       const children = childrenByParent.get(parentKey) ?? [];
       const parent = byKey.get(parentKey);
       const siblings =
@@ -2011,13 +2039,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
           : this.#sortByColumn(children, column, indexOf, ranks);
       for (const row of siblings) {
         const key = keyOf(row, indexOf.get(row)!);
+        if (visited.has(key)) continue;
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
         out.push({ row, key, depth, hasChildren });
-        if (
-          hasChildren &&
-          (!this.collapsed.has(key) || forcedOpen.has(key) || !this.rowCollapsible(row))
-        )
-          walk(key, depth + 1);
+        if (hasChildren && this.#ordinaryOpen(key, forcedOpen))
+          walk(key, depth + 1, new Set(visited).add(key));
       }
     };
     walk("", 0);
@@ -2061,7 +2087,34 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return byKey;
   }
 
+  #closureKeys(keys: readonly string[]): string[] {
+    const children = new Map<string, string[]>();
+    const byKey = this.#rowsByKey();
+    this.rows.forEach((row, index) => {
+      const parent = this.rowParent?.(row);
+      if (parent == null) return;
+      const below = children.get(parent) ?? [];
+      below.push(this.rowKey(row, index));
+      children.set(parent, below);
+    });
+    const seen = new Set<string>();
+    const pending = [...keys];
+    const branches: string[] = [];
+    while (pending.length > 0) {
+      const key = pending.pop()!;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const row = byKey.get(key);
+      const below = children.get(key) ?? [];
+      pending.push(...below);
+      if (row && this.rowCollapsible(row) && (below.length > 0 || keys.includes(key)))
+        branches.push(key);
+    }
+    return branches;
+  }
+
   #setOpen(keys: readonly string[], open: boolean): void {
+    if (!open && this.collapseDescendants) keys = this.#closureKeys(keys);
     if (this.#flatSearching()) {
       const next = new Set(this.searchExpanded);
       for (const key of keys) {
@@ -2069,38 +2122,52 @@ export class WtDataTable<Row = unknown> extends LitElement {
         else next.delete(key);
       }
       this.searchExpanded = next;
-      if (!open) return;
-      const byKey = this.#rowsByKey();
-      const persistent = new Set(keys);
-      for (const key of keys) {
-        let row = byKey.get(key);
-        while (row) {
-          const parent = this.rowParent!(row);
-          if (parent === null || persistent.has(parent)) break;
-          persistent.add(parent);
-          row = byKey.get(parent);
+      if (!open && !this.collapseDescendants) return;
+      if (open) {
+        const byKey = this.#rowsByKey();
+        const persistent = new Set(keys);
+        for (const key of keys) {
+          let row = byKey.get(key);
+          while (row) {
+            const parent = this.rowParent!(row);
+            if (parent === null || persistent.has(parent)) break;
+            persistent.add(parent);
+            row = byKey.get(parent);
+          }
         }
+        keys = [...persistent];
       }
-      keys = [...persistent];
     }
     const next = new Set(this.collapsed);
     const remembered = this.#rememberedOpen();
+    const closed = this.#closedChoices();
     for (const key of keys) {
       if (open) {
         next.delete(key);
         remembered.add(key);
+        closed.delete(key);
       } else {
         next.add(key);
         remembered.delete(key);
+        if (this.collapseDescendants) closed.add(key);
       }
     }
     this.collapsed = next;
     if (!this.rememberExpanded || !this.viewKey) return;
     try {
       localStorage.setItem(`${this.viewKey}:expanded`, JSON.stringify([...remembered]));
+      if (this.collapseDescendants)
+        localStorage.setItem(`${this.viewKey}:collapsed`, JSON.stringify([...closed]));
     } catch {
       // The remembered branches are a convenience; the table works without them.
     }
+  }
+
+  #ordinaryOpen(key: string, heldOpen: ReadonlySet<string>): boolean {
+    const row = this.#treeShown().byKey.get(key);
+    if (row && !this.rowCollapsible(row)) return true;
+    if (this.collapseDescendants && this.#closedChoices().has(key)) return false;
+    return !this.collapsed.has(key) || heldOpen.has(key);
   }
 
   #toggle(key: string): void {
@@ -2116,10 +2183,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   isExpanded(key: string): boolean {
-    return this.#flatSearching() ? this.searchExpanded.has(key) : !this.collapsed.has(key);
+    if (this.#flatSearching()) {
+      const row = this.#treeShown().byKey.get(key);
+      return (
+        (this.collapseDescendants && row !== undefined && !this.rowCollapsible(row)) ||
+        this.searchExpanded.has(key)
+      );
+    }
+    if (!this.collapseDescendants || !this.rowParent) return !this.collapsed.has(key);
+    return this.#ordinaryOpen(key, this.#treeShown().shown.heldOpen);
   }
 
-  /** Opens or closes one branch as its toggle would, without reporting it as a person's change. */
   setExpanded(key: string, expanded: boolean): void {
     const row = this.#rowsByKey().get(key);
     if (!expanded && row !== undefined && !this.rowCollapsible(row)) return;
@@ -2837,12 +2911,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ({ row, key, depth, hasChildren }) => {
                 const collapsible = this.rowCollapsible(row);
                 const held = heldOpen.has(key);
-                const expanded = !collapsible || this.isExpanded(key) || held;
+                const expanded =
+                  !collapsible || this.isExpanded(key) || (!this.collapseDescendants && held);
                 const cellContext = {
                   ancestorOnly: ancestorOnly.has(key),
                   ...(this.#flatSearching() ? { searchRoot: depth === 0 } : {}),
                 };
-                const branch = hasChildren && collapsible && !held;
+                const branch = hasChildren && collapsible && (!held || this.collapseDescendants);
                 const mode = this.rowActivation?.(row) ?? "click";
                 const toggles = mode === "toggle" && branch;
                 const clicks = mode === "click" && this.rowClick !== undefined;
