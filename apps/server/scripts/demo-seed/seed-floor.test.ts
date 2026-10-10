@@ -14,6 +14,9 @@ import { listSalePolicies } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readZonePlan } from "../../src/floor-plan.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
+import { createTable } from "../../src/tables.js";
+import type { TillConfig } from "../../src/till-config.js";
+import { DEMO_TABLES } from "./floor.js";
 import { seedFloor } from "./seed-floor.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
@@ -151,18 +154,29 @@ describe("seedFloor", () => {
       return { plans, today, todayZones };
     });
 
+    // A table turns about its centre, so its footprint is the box around the turned rectangle.
+    const footprint = ({ x, y, width, height, rotation }: Placement) => {
+      const turn = (rotation * Math.PI) / 180;
+      const cos = Math.abs(Math.cos(turn));
+      const sin = Math.abs(Math.sin(turn));
+      const halfWidth = (width * cos + height * sin) / 2;
+      const halfHeight = (width * sin + height * cos) / 2;
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      return {
+        left: cx - halfWidth,
+        right: cx + halfWidth,
+        top: cy - halfHeight,
+        bottom: cy + halfHeight,
+      };
+    };
     const overlapping = (rects: { label: string; placement: Placement }[]): string[] => {
       const pairs: string[] = [];
       for (const [i, a] of rects.entries()) {
         for (const b of rects.slice(i + 1)) {
-          const p = a.placement;
-          const q = b.placement;
-          if (
-            p.x < q.x + q.width &&
-            q.x < p.x + p.width &&
-            p.y < q.y + q.height &&
-            q.y < p.y + p.height
-          )
+          const p = footprint(a.placement);
+          const q = footprint(b.placement);
+          if (p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom)
             pairs.push(`${a.label}/${b.label}`);
         }
       }
@@ -200,6 +214,37 @@ describe("seedFloor", () => {
       { x: 53, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
       { x: 89, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
     ]);
+  });
+
+  it("sizes a table by how many it seats, and draws only a round table round", () => {
+    const placementOf = (label: string) => DEMO_TABLES.find((t) => t.label === label)!;
+    expect([placementOf("1"), placementOf("3"), placementOf("7"), placementOf("8")]).toMatchObject([
+      { capacity: 2, shape: "round", placement: { width: 6, height: 6, shape: "round" } },
+      { capacity: 4, shape: "square", placement: { width: 8, height: 8, shape: "rect" } },
+      { capacity: 6, shape: "rect", placement: { width: 10, height: 8, shape: "rect" } },
+      { capacity: 8, shape: "rect", placement: { width: 14, height: 8, shape: "rect" } },
+    ]);
+  });
+
+  it("refuses, naming it, a table in a seeded zone that the seed did not create", async () => {
+    const { locationId } = await provisionVenue();
+    const seeding = withTransaction(suite.db, async (tx) => {
+      const { rows } = await tx.execute<{ zone_id: string }>(
+        sql`select zone_id from zone_service_policies
+            where location_id = ${locationId} and is_counter_default limit 1`,
+      );
+      await createTable(tx, { locationId: brandLocationId(locationId) } as TillConfig, {
+        label: "Stray",
+        zoneId: rows[0]!.zone_id,
+      });
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
+    });
+    await expect(seeding).rejects.toThrow(/"Stray"/);
   });
 
   it.each(["en", "es"] as const)(

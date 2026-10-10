@@ -265,7 +265,12 @@ export async function seedFloor(
     await saveZonePlan(tx, cfg, [], zoneId, {
       revision: draft.revision,
       tables: draft.tables.map((table) => {
-        const seed = seeded.get(table.label)!;
+        const seed = seeded.get(table.label);
+        if (seed === undefined) {
+          throw new Error(
+            `seedFloor: zone ${zoneId} holds table "${table.label}", which the seed did not create`,
+          );
+        }
         return {
           liveTableId: table.liveTableId!,
           key: table.liveTableId!,
