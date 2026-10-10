@@ -187,14 +187,26 @@ export function placeTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
   });
 }
 
+const tableSet = (tableKeys: readonly string[]): string => JSON.stringify([...tableKeys].sort());
+
+/** A join the delete shrinks to the same tables as another goes, as the server refuses two: a
+ *  join the delete did not touch survives, else the first shrunk one. */
 export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
   const target = draft.tables.find((t) => t.key === key);
   if (target === undefined || isAdoptable(target)) return draft;
+  const untouched = new Set(
+    draft.joins.filter((j) => !j.tableKeys.includes(key)).map((j) => tableSet(j.tableKeys)),
+  );
+  const shrunk = new Set<string>();
   return {
     tables: draft.tables.filter((t) => t.key !== key),
     joins: draft.joins.flatMap((j) => {
+      if (!j.tableKeys.includes(key)) return [j];
       const tableKeys = j.tableKeys.filter((k) => k !== key);
-      return tableKeys.length < MIN_JOIN_TABLES ? [] : [{ ...j, tableKeys }];
+      const set = tableSet(tableKeys);
+      if (tableKeys.length < MIN_JOIN_TABLES || untouched.has(set) || shrunk.has(set)) return [];
+      shrunk.add(set);
+      return [{ ...j, tableKeys }];
     }),
   };
 }

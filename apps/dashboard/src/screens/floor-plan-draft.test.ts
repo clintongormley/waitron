@@ -299,6 +299,48 @@ describe("floor plan draft", () => {
     expect(two.joins).toEqual([]);
   });
 
+  it("drops a join the delete leaves the same as another, keeping one it did not shrink", () => {
+    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
+    const d: FloorPlanDraft = {
+      tables: [...open().tables, { ...m3, placement: null }],
+      joins: [
+        { key: "j2", seats: 8, tableKeys: ["m1", "m2", "m3"] },
+        { key: "j1", seats: 6, tableKeys: ["m2", "m1"] },
+      ],
+    };
+    expect(deleteTable(d, "m3").joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m2", "m1"] }]);
+  });
+
+  it("keeps the first of joins the delete shrinks to the same tables", () => {
+    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
+    const d: FloorPlanDraft = {
+      tables: [...open().tables, { ...m3, placement: null }],
+      joins: [
+        { key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] },
+        { key: "j2", seats: 9, tableKeys: ["m3", "m2", "m1"] },
+        { key: "j3", seats: 4, tableKeys: ["m1", "live:l9"] },
+      ],
+    };
+    expect(deleteTable(d, "m3").joins).toEqual([
+      { key: "j1", seats: 8, tableKeys: ["m1", "m2"] },
+      { key: "j3", seats: 4, tableKeys: ["m1", "live:l9"] },
+    ]);
+  });
+
+  it("puts back a booked table's dropped duplicate join, so the plan is as it was saved", () => {
+    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
+    const saved: FloorPlanDraft = {
+      tables: [...open().tables, { ...m3, placement: null }],
+      joins: [
+        { key: "j1", seats: 6, tableKeys: ["m1", "m2"] },
+        { key: "j2", seats: 8, tableKeys: ["m1", "m2", "m3"] },
+      ],
+    };
+    const restored = restoreTable(deleteTable(saved, "m3"), table(saved, "m3"), saved.joins);
+    expect(restored.joins).toEqual(saved.joins);
+    expect(sameDraft(restored, saved)).toBe(true);
+  });
+
   it("does not delete a table offered for adoption", () => {
     const d = open();
     expect(isAdoptable(table(d, "live:l9"))).toBe(true);
