@@ -19,7 +19,7 @@
 > as tasks with their files, interfaces and tests; each is expanded to step level in this file,
 > on that slice's own branch, after the slice before it lands, and the expansion gets one
 > fresh-context review before dispatch. Their steps would otherwise be written against code
-> slice 1 has not built yet.
+> slice 1 has not built yet. Slice 2 was expanded on 2026-10-10, after slice 1 landed (#1493).
 >
 > **Revised 2026-10-08**, twice: after a fresh-context review against the spec and the code
 > (which ran the behavioural trigger guard, drizzle-kit and the engine's foreign-key codes), and
@@ -124,7 +124,10 @@ The owner confirms or overrides these when reviewing the plan.
     plan" for a zone with no tables) in the zone row's menu
     (`packages/venue-service/src/dashboard/venue-operations-screen.ts:1536-1574`). Lane D's A366-6
     rebuilds that screen into the department page and carries the action across. The plan's
-    preview on the zone page arrives with A366-6, not here.
+    preview on the zone page arrives with A366-6, not here. (Amended 2026-10-10 at slice 2's
+    expansion: A366-6A, #1488, landed first and left `venue-operations-screen.ts` an 11-line shell,
+    so slice 2 puts the link in the zone's menu on the department page,
+    `packages/venue-service/src/dashboard/department-zones.ts:373-388`; slice 2 decision 17.)
 13. **The till's map still re-reads rather than being pushed to**: on tab select, after its own
     actions, as today (`apps/till/src/till-app.ts:4823`), and now also every 15 seconds while a
     map is showing, so two waiters see each other's moves. A push stream like the department
@@ -241,9 +244,13 @@ has its test in the task named.
 | `packages/module/src/module.ts` | 1 | the `tableRemoval` seat |
 | `packages/bookings/src/table-removal.ts` | 1 | bookings' part in a removal |
 | `packages/ui/src/floor-plan-geometry.ts` | 2 | grid, crop, fit, automatic names |
-| `packages/ui-core/src/history.ts` | 2 | undo/redo over draft snapshots |
+| `packages/ui/src/history.ts` | 2 | undo/redo over draft snapshots (moved from `packages/ui-core` at slice 2's expansion, slice 2 decision 11) |
 | `packages/ui/src/components/wt-floor-plan-canvas.ts` | 2 | the editor's canvas |
+| `packages/ui/src/components/wt-sheet.ts` | 2 | a sheet docked at the bottom of a narrow screen |
+| `apps/dashboard/src/screens/floor-plan-draft.ts` | 2 | the editor's draft: what it sends, when it changed, each edit |
 | `apps/dashboard/src/screens/floor-plan-editor.ts` | 2 | the full-page editor |
+| `apps/dashboard/src/screens/floor-plan-tables-panel.ts` | 2 | the tables list and Add tables |
+| `apps/dashboard/src/screens/floor-plan-table-panel.ts` | 2 | the selected table's panel |
 | `packages/ui/src/gestures.ts` | 3 | tap, double-tap, long-press, drag, pinch |
 | `packages/ui/src/components/wt-floor-map.ts` | 3 | the till's map |
 | `apps/till/src/widgets/table-details-sheet.ts` | 3, 4 | the long-press details sheet |
@@ -1144,48 +1151,991 @@ the head; the backlog's A429 entry says slice 1 landed and what it left.
 
 ## Slice 2 — the dashboard editor (spec §4)
 
-Branch `feat/floor-plan-editor`, after slice 1 lands. Tasks to be expanded to step level on the
-branch.
+Branch `feat/floor-plan-editor`, after slice 1 (landed as #1493). Expanded to step level on
+2026-10-10, unattended; every `file:line` in this slice was read at `main` `29801d74a`.
 
-- **Task 2.1: Plan geometry** — `packages/ui/src/floor-plan-geometry.ts` (pure, node tests):
-  `GRID_SQUARE_PX`, `snapToSquare`, `clampToGrid` (0–999), `bounds(tables)`, `cropToTables(tables,
-  margin = 2)`, `fitScale(crop, viewport)`, `firstFreeSpot(tables, size)`,
-  `rotatedRect(placement)`, `automaticNames(prefix, existingLabels, count)` (numbers on from the
-  highest number used with that prefix: "Terrace 6…15"). Tests include a prefix that is a prefix
-  of another ("Terrace" vs "Terrace bar 3"), an empty zone, and a rotated table's crop.
-- **Task 2.2: Undo and redo** — `packages/ui-core/src/history.ts`: a snapshot stack
-  (`push(state)`, `undo()`, `redo()`, `canUndo`, `canRedo`, `reset(state)`), with redo cleared on
-  a new push; node tests. The editor's draft scope compares the current snapshot with the opened
-  one, so undoing every change makes Save quiet again.
-- **Task 2.3: `wt-floor-plan-canvas`** — a new primitive: draws the grid and the tables
-  (`Placement` + label + fixed marker), grows the grid as tables move right or down, drag snaps
-  to the grid, arrow keys nudge the selected table one square, a rotation handle in 15° steps,
-  click selects; events `wt-table-select`, `wt-table-move`, `wt-table-rotate`. Token-painting
-  test, `*.a11y.test.ts` (both themes; selected and unselected), keyboard tests with dispatched
-  events (CLAUDE.md §4).
-- **Task 2.4: The editor page** — `apps/dashboard/src/screens/floor-plan-editor.ts`, a core
-  screen `floor-plan` (URL `/manage/floor-plan/<zoneId>`, in `UNLISTED_SCREENS`,
-  `dashboard-app.ts:238`, drawn full height like the catalogue's `.body.fill`, `:1410`): header
-  with the zone's name, Close, Undo, Redo, Save; `draftScopeFor` + `saveActionState`; Save sends
-  `saveFloorPlan`; on `floor_plan.out_of_date` a message offers to load the newer plan (nothing is
-  overwritten); a zone with no master plan opens on its live tables as the draft (decision 16); a
-  line under the header says the till changes at the next reset, with Reset on the till for
-  sooner; `floor-plan-editor.unsaved.test.ts`.
-- **Task 2.5: The side panel and Add tables** — tables list (placed greyed, tap an unplaced one to
-  place it at `firstFreeSpot`), and "Add [n] tables with [s] seats": automatic naming (prefix defaulting to the zone's
-  name) or custom naming,
-  Fixed in place; a taken name refused beside its field (`table.label_taken`, matched by label);
-  new tables arrive unplaced. A bottom sheet below 600 px wide (a `wt-*` sheet primitive if none
-  exists — add it to `packages/ui` with its two tests).
-- **Task 2.6: The selected table's panel** — name, seats (`wt-number-stepper`), shape, width and
-  height, rotation, Fixed in place, its saved joins with Add (which tables, seats) and Remove,
-  Remove from plan, Delete (it leaves the draft, and Undo brings it back; on Save a
-  `table.booked` refusal names the table, beside it in the panel — decision 4).
-- **Task 2.7: The entry point** — "Edit floor plan" / "Add a floor plan" in the zone row's menu on
-  Departments and zones (`venue-operations-screen.ts:1536-1574`), linking to the editor's URL;
-  needs `venue.configure` as well as the screen's own permission (hide it otherwise).
-- **Task 2.8: Look** — EN and ES, light and dark, 1280 px and 390 px: empty zone, a seeded zone, a
-  selected table, Add tables, a refusal; screenshots kept outside the repository.
+What the slice builds: two pure helpers in `packages/ui` (plan geometry, an undo history), two new
+primitives (`wt-floor-plan-canvas`, `wt-sheet`), and a full-page dashboard editor at
+`/manage/floor-plan/zone/<zoneId>` that reads and saves through slice 1's routes
+(`GET`/`PUT /management-api/zones/:id/floor-plan`, `apps/server/src/management-api.ts:1813-1835`),
+opened from the zone's menu on the department page. Nothing on the till changes in this slice.
+
+**What slice 1 built that the editor works with** (read, not run):
+
+- `readZonePlan` answers the master tables, each with its live table (`liveTableId`), then the
+  zone's active live tables that follow no master table and never did, as entries with `id: null`
+  and `placement: null`
+  (`apps/server/src/floor-plan.ts:114-174`, the adoptable ones at `:157-166`). So a zone with no
+  master plan opens with every table unplaced. A join reads as `{ id, seats, tableIds }` with
+  master ids (`:139-155`).
+- A save is `{ revision, tables: [{ id?, liveTableId?, key, label, seats, fixed, placement }],
+  joins: [{ seats, tableKeys }] }` (`floor-plan.ts:47-60`; the dashboard's copies are `FloorPlan`
+  and `FloorPlanSave`, `apps/dashboard/src/api/client.ts:611-645`). The route checks the shape
+  before permission (`management-api.ts:468-504`, called at `:1827`), then `checkZonePlanSave`
+  (`floor-plan.ts:283-350`). A GET answer is not a valid save as it stands (Task 1.14's amendment).
+- Refusals the editor must place, with their params: `floor_plan.out_of_date { zoneId, revision }`
+  (`floor-plan.ts:305-307`); `floor_plan.invalid { field }` naming `tables.<i>.<name>` or
+  `joins.<i>.<name>`, `<i>` being the entry's index in the save (`:176-232`); `table.label_taken
+  { label }`, the trimmed label (`:334-340`); `table.not_found { tableId }` (`:322-331`);
+  `table.booked { tableId }`, where `tableId` is the deleted master table's LIVE table
+  (`packages/bookings/src/table-removal.ts:29`, through `floor-plan.ts:342-348`). The dashboard's
+  wording for the first three is at `apps/dashboard/src/i18n/codes.ts:509-532`, and
+  `table.booked`'s at `packages/bookings/src/dashboard/strings.ts:98-101`. A rejected dashboard
+  request carries `{ code, params, status }` (`packages/dashboard-kit/src/request.ts:119-125`).
+- `saveZonePlan` answers `{ revision, ids }`, `ids` mapping each key to its master id
+  (`floor-plan.ts:360-466`); the dashboard client's `saveFloorPlan` and `getFloorPlan` are at
+  `client.ts:2790-2803`.
+
+### Slice 2 decisions (added at expansion)
+
+Each is the default this slice builds; the owner may override any at review.
+
+1. **The editor's address is `/manage/floor-plan/zone/<zoneId>`, not `/manage/floor-plan/<zoneId>`.**
+   The dashboard's path codec reads each value after a label (`packages/ui/src/url-state.ts:58-76`,
+   labels per screen in `apps/dashboard/src/navigation.ts:3-27`), so a bare id after the screen is
+   never read. A `back` query names the page Close returns to.
+2. **Close goes to `back` when it is a `/manage/` path on this origin, else to `/manage`.** Close is
+   a link, so the dashboard's own link handling (`apps/dashboard/src/dashboard-app.ts:1541-1571`)
+   takes it through the leave question. The editor is core code and never names a module's screen;
+   the department page passes its own address as `back` (Task 2.7).
+3. **Keys.** A master table's key is its id; an adoptable live table's is `live:<liveTableId>`; a
+   new table's is `new:<n>`, `n` counting from 1 per editor visit. A saved join's draft key is its
+   id, a new one's `join:<n>`. The save sends `id` only for a master entry and `liveTableId` only
+   for an adoptable one (the server also accepts a master entry carrying its own live table,
+   `floor-plan.ts:313-317`, but nothing needs it), and each join's `tableKeys` through the same keys.
+4. **After a successful save the editor stays open, reads the plan again, makes that the opened
+   state (Save quiet) and empties Undo and Redo.** New tables have master ids only after the save,
+   and an adopted table must be sent as a master entry the next time.
+5. **On `floor_plan.out_of_date`** the code's sentence shows with a "Load newer plan" button;
+   pressing it replaces the draft with a fresh read and empties Undo and Redo, writing nothing. The
+   press is the person's choice to drop their draft, so it does not ask again. Save stays enabled.
+6. **`table.booked` names a table the draft has deleted, so there is no field to put it beside.** The
+   message is "<name>: <the code's sentence>", the name taken from the plan as opened (matched by
+   `liveTableId`). Undo brings the table back. This replaces the task list's "beside it in the panel".
+7. **A refusal that names a table selects it.** `table.label_taken { label }` selects the draft table
+   whose trimmed name is that label; `floor_plan.invalid { field: "tables.<i>.<name>" }` selects the
+   draft's `<i>`th table (the save keeps the draft's order). When the panel shows the field named
+   (`label`, `seats`, `fixed`, `placement.shape`, `placement.width`, `placement.height`,
+   `placement.rotation`), the sentence goes under it and the generic "Correct the highlighted
+   fields to continue." (`form.fix_fields`, `apps/dashboard/src/i18n/strings.ts:592`) above the
+   buttons; for a field it does not show (`placement.x`, `id`, `key` …) the table is still
+   selected and the refusal's own sentence goes above the buttons. A `joins.<i>.…` refusal, and any
+   other, shows its own sentence above the buttons and selects nothing. It clears at the next change to that field or
+   the next Save. The editor's own checks at Save — every name non-empty once trimmed, and unique in
+   the draft — mark a field the same way and keep Save disabled until fixed (design-system.md →
+   Forms).
+8. **Names used elsewhere.** The editor reads the venue's tables once when it opens
+   (`listTables({ includeDisabled: true })`, `client.ts:2806`) and counts every name of a table in
+   ANOTHER zone as taken, for Add tables' check and its automatic numbering. A master name of another
+   zone that is not yet on today's plan is caught only by the server at Save (decision 7).
+9. **The editor reads its plan on opening, after a save and on Load newer plan, and subscribes to no
+   live updates.** `getFloorPlan`'s live-query entry (`apps/dashboard/src/api/live-queries.ts:324-330`)
+   stays unused in this slice; another person's save reaches the editor as `floor_plan.out_of_date`.
+   The zone's name comes from `listZones()` (`client.ts:2775-2777`), which lists active zones only;
+   for a zone it does not list the heading is "Floor plan".
+10. **Undo keeps every change since the editor opened (no limit, spec §4).** Typing into one field of
+    one table is one step: the history merges consecutive pushes that carry the same merge key.
+11. **The undo history lives in `packages/ui/src/history.ts`, not `packages/ui-core`.**
+    `@waitron/ui-core` is the account-controls package shared with Waitron Cloud
+    (`packages/ui-core/README.md:1-6`); `packages/ui` is mutation-tested at the same bar of 90. The
+    file map is amended to match.
+12. **The editor draws one grid square as 12 CSS pixels** (`GRID_SQUARE_PX`). The grid fills the
+    visible area and reaches at least 8 squares past the furthest table right and down. Names hide
+    below 28 px as decision 11 says, in the editor too (a 2 × 2 stool is 24 px); every table keeps
+    its name as its accessible name, and the tables list is the tap-sized way to select a table drawn
+    smaller than `--wt-tap-min`.
+13. **The side panel sits beside the canvas while the editor is 600 px wide or more; below that it
+    is a new `wt-sheet` docked at the bottom.** No sheet primitive exists (`packages/ui/src/components/`
+    holds none). Collapsed, the sheet shows its heading (the selected table's name, else "Tables");
+    expanded, its content scrolls within 60% of the viewport's height. Slice 3's details sheet may
+    reuse it.
+14. **Add tables opens in a `wt-modal` with 1 table, 4 seats, automatic naming with the zone's name
+    as the prefix, and Fixed in place off.** Add is enabled at open, as Duplicate is
+    (`saveActionState(…, { savableAtOpen: true })`, `apps/dashboard/src/screens/canvas-editor-screen.ts:1059`).
+    1 to 100 tables at once. The list sorts names with numbers in numeric order ("Terrace 2" before
+    "Terrace 10").
+15. **Placing an unplaced table puts it at `firstFreeSpot` as an 8 × 8 rectangle, not rotated**
+    (decision 9's new-table size, fixed or not). Remove from plan forgets its place and size.
+16. **The line under the header**: before a zone's first save, "The till takes this plan when you
+    save it."; after, "The till takes saved changes when the next business day starts." The task
+    list's "with Reset on the till for sooner" names a till button slice 4 builds; Task 4.5 adds
+    those words when it does (noted there).
+17. **The entry point is the zone's menu on the department page**,
+    `packages/venue-service/src/dashboard/department-zones.ts:373-388`. A366-6A (#1488) moved the
+    zone's page there; `venue-operations-screen.ts` is now an 11-line shell. "Edit floor plan" or
+    "Add a floor plan" is a link in that menu for every zone. The wording asks slice 1's read
+    whether the zone has any table, as a passive read through the module's own client; until it
+    answers, or if it fails, the link says "Edit floor plan". The module checks no permission: a
+    module's dashboard context carries none (`packages/dashboard-kit/src/contract.ts:14-17`); the
+    Departments screen needs `venue_service.manage`, granted from manager up
+    (`packages/venue-service/src/permissions.ts:5-7`), and every role from manager up holds
+    `venue.configure` (`packages/identity/src/permissions.ts:55-80`, read, not run); the editor
+    screen and its routes check `venue.configure` themselves. This replaces the task list's "hide it
+    otherwise".
+18. **The header's Close, Undo, Redo and Save sit in a `wt-form-actions`, whose `error` carries the
+    editor's one message**, so it shows on its own line above the buttons. That is the Forms rule's
+    "bottom message", at the top here because the editor's Save is in its header (spec §4).
+19. **The look pass (Task 2.8) photographs the editor from a Vitest browser file that is never
+    committed**, with fixture plans, not from a dev stack: the shared dev venue holds the owner's
+    real data (Task 1.16's amendment).
+
+### Task 2.1: Plan geometry
+
+**Files:**
+- Create: `packages/ui/src/floor-plan-geometry.ts`, `packages/ui/src/floor-plan-geometry.test.ts`
+- Modify: `packages/ui/src/index.ts` (export the module beside the floor exports, `:46-73`)
+
+`@waitron/ui` already exports a `Placement` type, the old permille one (`packages/ui/src/index.ts:66`,
+from `floor.ts`), so the grid placement here is `PlanPlacement`, the same shape as the dashboard
+client's `PlanPlacement` (`apps/dashboard/src/api/client.ts:599-609`). Every test in `packages/ui`
+runs in real Chromium (`packages/ui/vitest.config.ts`, `browser.enabled: true`); there is no Node
+project, so "node tests" in the earlier task list meant pure tests.
+
+**Interfaces:**
+- Produces:
+
+```ts
+export const GRID_SQUARE_PX = 12;          // slice 2 decision 12
+export const NEW_TABLE_SIZE = 8;           // decision 9
+export const NAME_MIN_PX = 28;             // decision 11
+export type PlanShape = "rect" | "round";
+export interface PlanPlacement { x: number; y: number; width: number; height: number; shape: PlanShape; rotation: number }
+/** An axis-aligned box in grid squares; may be fractional and, for a crop, negative. */
+export interface PlanRect { x: number; y: number; width: number; height: number }
+export function snapToSquare(px: number, squarePx?: number): number;      // Math.round(px / squarePx)
+export function clampToGrid(value: number): number;                       // whole, 0–999
+export function rotationFromAngle(degrees: number): number;                // nearest 15, 0–345
+export function rotatedRect(p: PlanPlacement): PlanRect;                   // box around the table turned about its centre
+export function bounds(placements: readonly PlanPlacement[]): PlanRect | null;
+export function cropToTables(placements: readonly PlanPlacement[], margin?: number): PlanRect | null; // margin 2, not clamped at 0
+export function fitScale(crop: PlanRect, viewport: { width: number; height: number }): number;       // px per square
+export function gridExtent(placements: readonly PlanPlacement[], visible: { columns: number; rows: number }, margin?: number): { columns: number; rows: number }; // margin 8
+export function firstFreeSpot(placed: readonly PlanPlacement[], size?: { width: number; height: number }, columns?: number): { x: number; y: number }; // size 8 × 8, columns 40
+export function showsName(p: Pick<PlanPlacement, "width" | "height">, squarePx: number): boolean;      // shorter side × squarePx ≥ 28
+export function automaticNames(prefix: string, existing: Iterable<string>, count: number): string[];
+```
+
+`firstFreeSpot` scans rows from `y = 0` down and, in each row, `x` from 0 to `max(columns,
+ceil(bounds.right)) - size.width`; a spot is free when the candidate, grown by one square on every
+side, overlaps no placed table's `rotatedRect` (touching edges do not overlap). Below every table a
+spot is always free. `automaticNames` trims the prefix; a label counts when it is exactly the prefix,
+one space and digits (an empty prefix: digits alone), compared character for character as the
+server compares names (`floor-plan.ts:278-282`); it numbers on from the highest such number.
+
+- [ ] **Step 1: Write the failing tests** in `floor-plan-geometry.test.ts`. Every case asserts exact
+  values, because `packages/ui` is mutation-tested and a `toBeTruthy` lets mutants live:
+
+```ts
+it("snaps pixels to the nearest whole square", () => { /* 17 → 1, 18 → 2, -7 → -1, with squarePx 12; 25 with squarePx 10 → 3 (2.5 rounds up) */ });
+it("clamps a coordinate to 0–999 in whole squares", () => { /* -3 → 0, 1000 → 999, 12.4 → 12, 0 → 0, 999 → 999 */ });
+it("turns an angle into a 15° step from 0 to 345", () => { /* 7 → 0, 8 → 15, 90 → 90, -10 → 345, 352 → 345, 353 → 0, 720 → 0 */ });
+it("leaves an unturned table's box as it is", () => { /* x 10 y 5 w 8 h 4 rot 0 → { x: 10, y: 5, width: 8, height: 4 } */ });
+it("turns a table about its centre", () => { /* x 10 y 10 w 8 h 4 rot 90 → { x: 12, y: 8, width: 4, height: 8 }; rot 180 → { x: 10, y: 10, width: 8, height: 4 } */ });
+it("boxes a table turned 45° around its corners", () => { /* x 0 y 0 w 8 h 4 rot 45: width and height 12·√2/2 ≈ 8.4853 (toBeCloseTo 4 places); centre stays at (4, 2) */ });
+it("bounds nothing as null and several tables as their union", () => { /* [] → null; (0,0,8,8) and (20,10,4,4) → { x: 0, y: 0, width: 24, height: 14 } */ });
+it("crops to the tables with a two-square margin, below 0 when a table touches the edge", () => { /* one table x 10 y 5 w 8 h 4 → { x: 8, y: 3, width: 12, height: 8 }; at (0,0,8,8) → { x: -2, y: -2, width: 12, height: 12 }; [] → null */ });
+it("crops a rotated table by its turned box", () => { /* x 10 y 10 w 8 h 4 rot 90 → { x: 10, y: 6, width: 8, height: 12 } */ });
+it("fits a crop to the space by its tighter side", () => { /* crop 12 × 8 in 600 × 300 → 37.5; in 600 × 800 → 50 */ });
+it("keeps the grid the visible size with no tables, and 8 squares past the furthest table", () => {
+  /* [] with visible 50 × 30 → 50 × 30; a table at x 200 y 3 w 8 h 4 → { columns: 216, rows: 30 };
+     a table at x 0 y 40 w 8 h 4 → { columns: 50, rows: 52 } */
+});
+it("finds the top-left spot of an empty plan", () => { /* [] → { x: 0, y: 0 } */ });
+it("leaves a one-square gap beside a table", () => { /* (0,0,8,8) → { x: 9, y: 0 } */ });
+it("moves to the next free row when a row is full", () => { /* (0,0,40,8) → { x: 0, y: 9 } */ });
+it("avoids a turned table's whole box", () => { /* (0,0,8,2) rot 90 occupies x 3–5, y -3–5 → { x: 6, y: 0 } (its unturned box would give 9) */ });
+it("shows a name at 28 px and hides it below", () => { /* 2 × 2 at 14 px → true; at 13.9 → false; 2 × 9 at 12 → false (shorter side 24 px); 3 × 3 at 12 → true */ });
+it("numbers on from the highest name with the prefix", () => {
+  /* ("Terrace", ["Terrace 1", "Terrace 5", "Terrace bar 3", "Terraces 9", "terrace 7"], 3)
+     → ["Terrace 6", "Terrace 7", "Terrace 8"] */
+});
+it("starts at 1 when no name has the prefix, and trims the prefix", () => { /* (" Bar ", ["T1"], 2) → ["Bar 1", "Bar 2"] */ });
+it("reads a leading zero as its number", () => { /* ("Terrace", ["Terrace 05"], 1) → ["Terrace 6"] */ });
+it("numbers bare digits when the prefix is empty", () => { /* ("", ["4", "T1", "12a"], 2) → ["5", "6"] */ });
+```
+
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/ui exec vitest run src/floor-plan-geometry.test.ts`.
+  Expected: the test file fails to load, because `./floor-plan-geometry.js` does not exist.
+- [ ] **Step 3: Implement** the module and its export. No DOM: these are plain functions.
+- [ ] **Step 4: Run** the same command (expected: PASS, read the `Tests` count); then
+  `pnpm --filter @waitron/ui exec stryker run --mutate src/floor-plan-geometry.ts` and read the
+  score Stryker prints for the file (expected: at least 90; a surviving mutant gets an exact-value
+  assertion, not an exclude). `packages/ui`'s floor bites only in the weekly run
+  (`docs/developers/ci-and-gates.md:323`), so this local run is the only notice before Monday. Then
+  `pnpm --filter @waitron/ui typecheck`, `pnpm --filter @waitron/ui lint` and
+  `pnpm exec prettier --check packages/ui/src/floor-plan-geometry.ts packages/ui/src/floor-plan-geometry.test.ts packages/ui/src/index.ts`.
+- [ ] **Step 5: Commit** — `git commit -s`, e.g. "Floor plan editor: grid geometry — snapping,
+  turned boxes, crop and fit, free spots and automatic names (A429 slice 2)".
+
+### Task 2.2: Undo and redo
+
+**Files:**
+- Create: `packages/ui/src/history.ts`, `packages/ui/src/history.test.ts`
+- Modify: `packages/ui/src/index.ts` (export `UndoHistory`)
+
+Named `UndoHistory`, not `History`, which is the DOM's type for `window.history`. Snapshots are
+stored as given; the editor passes immutable values, so nothing is copied here.
+
+**Interfaces:**
+- Produces:
+
+```ts
+export class UndoHistory<T> {
+  constructor(initial: T);
+  get current(): T;
+  get canUndo(): boolean;
+  get canRedo(): boolean;
+  /** Makes `state` current and empties Redo. When `mergeKey` equals the previous push's, and no
+   * undo, redo or reset came between, `state` replaces the current one instead of adding a step. */
+  push(state: T, mergeKey?: string): void;
+  /** The new current state, or undefined (and nothing changes) when there is nothing to undo. */
+  undo(): T | undefined;
+  redo(): T | undefined;
+  /** One state, no Undo, no Redo. */
+  reset(state: T): void;
+}
+```
+
+- [ ] **Step 1: Write the failing tests** in `history.test.ts`:
+
+```ts
+it("starts with its first state and nothing to undo or redo", () => { /* current "a"; canUndo false; canRedo false; undo() undefined; redo() undefined; current still "a" */ });
+it("undoes and redoes in order", () => { /* push b, push c; undo → "b"; undo → "a"; undo → undefined, current "a", canUndo false; redo → "b"; redo → "c"; canRedo false */ });
+it("a new push after Undo empties Redo", () => { /* push b; undo; push c: canRedo false; undo → "a" */ });
+it("merges pushes that carry the same key", () => { /* push(b, "label:t1"); push(c, "label:t1"): current "c"; undo → "a" */ });
+it("does not merge different keys, or a push with no key", () => { /* push(b, "k"); push(c, "x"); undo → "b". push(d); push(e): undo → "d" */ });
+it("does not merge across an undo", () => { /* push(b, "k"); push(c, "x"); undo (→ "b"); push(d, "k"); undo → "b" (a wrong merge would make it "a") */ });
+it("does not merge across a redo or a reset", () => { /* push(b, "k"); undo; redo; push(c, "k"); undo → "b". reset("z"); push(y, "k"); undo → "z" */ });
+it("resets to one state", () => { /* push b, push c, undo; reset("z"): current "z", canUndo false, canRedo false */ });
+it("keeps every step", () => { /* 500 pushes of 1…500 on 0; 500 undos reach 0; the 501st answers undefined */ });
+```
+
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/ui exec vitest run src/history.test.ts`.
+  Expected: the file fails to load; `./history.js` does not exist.
+- [ ] **Step 3: Implement** two arrays (past, future) and the last merge key, cleared by `undo`,
+  `redo` and `reset`.
+- [ ] **Step 4: Run** the same command (PASS, read the count);
+  `pnpm --filter @waitron/ui exec stryker run --mutate src/history.ts` (the file's score at least
+  90); typecheck, lint and `prettier --check` on the three files as in Task 2.1.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: an undo history that keeps every step and merges
+  typing (A429 slice 2)".
+
+### Task 2.3a: The canvas — drawing and selecting
+
+**Files:**
+- Create: `packages/ui/src/components/wt-floor-plan-canvas.ts`,
+  `packages/ui/src/components/wt-floor-plan-canvas.test.ts`,
+  `packages/ui/src/components/wt-floor-plan-canvas.a11y.test.ts`
+- Modify: `packages/ui/src/index.ts` (export the class and its types), `packages/ui/demo/main.ts`
+  (the workbench), `docs/developers/design-system.md` (a row in the primitives table, `:534-563`,
+  and a short paragraph: what it draws, its three events, that names hide below 28 px)
+
+**Interfaces:**
+- Consumes: Task 2.1's `PlanPlacement`, `GRID_SQUARE_PX`, `gridExtent`, `showsName`.
+- Produces:
+
+```ts
+export interface PlanCanvasTable { key: string; label: string; fixed: boolean; placement: PlanPlacement }
+export interface FloorPlanCanvasCopy { label: string; fixed: string; rotate: string } // rotate: "Rotate {name}"
+export interface TableSelect { key: string | null }
+export interface TableMove { key: string; x: number; y: number }      // Task 2.3b
+export interface TableRotate { key: string; rotation: number }         // Task 2.3b
+@customElement("wt-floor-plan-canvas")
+export class WtFloorPlanCanvas extends LitElement {
+  @property({ attribute: false }) tables: PlanCanvasTable[] = [];   // placed tables only
+  @property() selected: string | null = null;
+  @property({ attribute: false }) copy: Partial<FloorPlanCanvasCopy> = {}; // English defaults "Floor plan", "Fixed", "Rotate {name}"
+}
+// Events, each a CustomEvent named as below, carrying `detail`, bubbles: true, composed: true:
+// wt-table-select (TableSelect), wt-table-move (TableMove, Task 2.3b), wt-table-rotate (TableRotate, Task 2.3b)
+```
+
+Behaviour: a scrolling viewport (`part="viewport"`) holds the grid (`part="grid"`), sized
+`gridExtent(placements, visible) × GRID_SQUARE_PX`, where `visible` is the viewport's size in whole
+squares rounded up (a `ResizeObserver`); its lines are a background drawn from `--wt-color-border`.
+Each table is a `<button type="button" part="table">` positioned at `x × 12`, `y × 12`, sized
+`width × 12` by `height × 12`, turned with `rotate(<rotation>deg)` about its centre; round tables
+get `border-radius: 50%`, rectangles `--wt-radius-sm`. Its background reads
+`--wt-color-surface-lifted`, its border `--wt-color-border`, a selected table's border
+`--wt-color-primary`, and `aria-pressed` says which is selected. Its accessible name is its label,
+plus ", Fixed" (`copy.fixed`) for a fixed table, which also draws a corner marker
+(`part="fixed-marker"`). The visible name shows only when `showsName(placement, 12)`. The tables sit
+in a `role="group"` named `copy.label`. A click on a table stops the click and sends
+`wt-table-select { key }`; a click on empty grid sends `{ key: null }`. Selection is the parent's
+to keep: the canvas sends, the parent sets `selected`. The canvas reflects no `disabled`, and its
+tables are drawn at the plan's true size, below `--wt-tap-min` when small (slice 2 decision 12).
+
+- [ ] **Step 1: Write the failing tests.** Mount with `mount`/`mountInShadowRoot` from
+  `packages/ui/src/test-helpers.ts:11-48`; a token test as `wt-choice-row.test.ts:56-69` does (set
+  the token on `host`, read the computed style); the a11y file as
+  `wt-floor-canvas.a11y.test.ts:1-71` does, with `mountThemed` and `expectNoA11yViolations` in
+  both themes.
+
+```ts
+// wt-floor-plan-canvas.test.ts
+it("draws each table at its grid place and size", async () => { /* t1 at x 2 y 3 w 8 h 4: offset from the grid's corner 24, 36 px; 96 × 48 px */ });
+it("turns a table about its centre", async () => { /* rotation 90: transform matrix of rotate(90deg); transform-origin "48px 24px" */ });
+it("draws a round table as a circle when its sides match", async () => { /* round 8 × 8: border-radius 50%; rect: border-radius equals --wt-radius-sm */ });
+it("marks a fixed table and says so in its name", async () => { /* fixed t2: fixed-marker present; aria-label "T2, Fixed"; t1: no marker, aria-label "T1" */ });
+it("hides a name drawn under 28 px and keeps it as the accessible name", async () => { /* 2 × 2 "Bar 1": no visible text; aria-label "Bar 1"; 3 × 3: text "Bar 1" shows */ });
+it("fills the visible area with grid when there are no tables", async () => { /* host 600 × 360 px: grid 600 × 360 */ });
+it("draws 8 squares past the furthest table", async () => { /* host 600 px wide, a table at x 100 w 8: grid 1392 px wide */ });
+it("a click on a table asks to select it and stops the click", async () => {
+  /* mountInShadowRoot; document listener gets wt-table-select { key: "t1" }, bubbles, composed;
+     a click listener on the shadow host's parent sees no click */
+});
+it("a click on empty grid asks to clear the selection", async () => { /* detail { key: null } */ });
+it("Enter on a focused table selects it", async () => { /* focus t1's button; userEvent.keyboard("{Enter}") → { key: "t1" } */ });
+it("draws the selected table as pressed", async () => { /* selected "t1": aria-pressed "true" on t1, "false" on t2 */ });
+it("paints from tokens", async () => {
+  /* host sets --wt-color-surface-lifted rgb(1, 2, 3) → table background; --wt-color-primary
+     rgb(4, 5, 6) → the selected table's border colour; --wt-color-border rgb(7, 8, 9) appears in
+     the grid's computed background-image */
+});
+it("names the group from its copy", async () => { /* copy { label: "Plano" } → role group named "Plano" */ });
+
+// wt-floor-plan-canvas.a11y.test.ts — describe.each(["light", "dark"])
+test("no tables", …); test("tables, none selected", …); test("a table selected, one fixed, one too small for its name", …);
+```
+
+- [ ] **Step 2: Run and watch it fail** —
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-plan-canvas.test.ts src/components/wt-floor-plan-canvas.a11y.test.ts`.
+  Expected: both files fail to load.
+- [ ] **Step 3: Implement** (design-system.md → "Adding a primitive", `:2995-3023`: `baseStyles`
+  first, `delegatesFocus`, tokens only), add it to the workbench and the primitives table. Before
+  trusting the a11y test, remove the tables' `aria-label` and watch it fail, then restore it.
+- [ ] **Step 4: Run** the same command and then `pnpm --filter @waitron/ui exec vitest run src/no-hardcoded-chrome.test.ts`
+  (it finds new components itself), `pnpm exec vitest run scripts/style-token-names.test.ts`,
+  `pnpm --filter @waitron/ui exec stryker run --mutate src/components/wt-floor-plan-canvas.ts`
+  (read the file's score; expected at least 90), typecheck, lint and `prettier --check` on the
+  changed files. Expected: all pass.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: a canvas primitive that draws the plan's tables
+  on a grid and selects them (A429 slice 2)".
+
+### Task 2.3b: The canvas — dragging, nudging, turning and growing
+
+**Files:**
+- Modify: `packages/ui/src/components/wt-floor-plan-canvas.ts`, its `.test.ts` and `.a11y.test.ts`,
+  the design-system paragraph from Task 2.3a
+
+**Interfaces:**
+- Consumes: Task 2.1's `snapToSquare`, `clampToGrid`, `rotationFromAngle`, `gridExtent`.
+- Produces: the `wt-table-move` and `wt-table-rotate` events (Task 2.3a's types).
+
+Behaviour: pointerdown on a table starts a drag owned by that pointer (listeners on `window`, as
+`wt-floor-canvas.ts:385-434` does); while it moves, the table is drawn at
+`clampToGrid(start + snapToSquare(pointer delta))` on each axis, and the grid's extent is worked out
+from that drawn place, so the grid grows as the table goes right or down. Release sends one
+`wt-table-move { key, x, y }` when the place changed, and nothing when it did not. A pointer cancel
+puts the table back and sends nothing; a second pointer is ignored during a drag. Fixed tables move
+in the editor like any other (fixed is about today's plan). The arrow keys on a focused table send a
+move of one square (prevented and stopped), and nothing at an edge. The selected table shows a
+rotation handle (`part="rotate-handle"`, a `<button>` at least `--wt-tap-min` square, named
+`copy.rotate` with the table's name) above its top edge; dragging it sends, on release,
+`wt-table-rotate { key, rotation: rotationFromAngle(angle) }`, the angle measured clockwise from
+straight up around the table's centre (`atan2(dx, -dy)`); ArrowRight and ArrowLeft on the handle
+send ±15, wrapping at 0 and 345.
+
+- [ ] **Step 1: Write the failing tests**, with pointer events dispatched as
+  `wt-floor-canvas.test.ts:456-476` does (down on the token, move and up on `window`, one
+  `pointerId`) and keys pressed with `userEvent.keyboard` on a focused button:
+
+```ts
+it("a drag snaps to whole squares and moves on release", async () => {
+  /* t1 at (2, 3): down, move by (+30, +13) px, up → one wt-table-move { key: "t1", x: 5, y: 4 } (30/12 = 2.5 rounds to 3) */
+});
+it("draws the table where the drag has it before release", async () => { /* after the move, before up: t1's left offset 60 px, top 48 px; no event yet */ });
+it("a drag past the top or left edge stops at 0", async () => { /* move by (-100, -100) → { x: 0, y: 0 } */ });
+it("a drag that ends where it began sends nothing", async () => { /* move by (+5, +5) px → no wt-table-move */ });
+it("the grid grows while a table is dragged right and down", async () => { /* host 600 px; drag t1 by +1440 px → before release the grid is (122 + 8 + 8) × 12 = 1656 px wide */ });
+it("a pointer cancel puts the table back and sends nothing", async () => { /* … t1 back at 24, 36 px */ });
+it("a second pointer cannot take over a drag", async () => { /* down id 1, down id 2 on t2, move id 2: t2 does not move; up id 1 moves t1 */ });
+it("the arrow keys move a focused table one square", async () => { /* t1 (2, 3): ArrowRight → (3, 3); ArrowLeft → (1, 3); ArrowDown → (2, 4); ArrowUp → (2, 2); each keydown defaultPrevented */ });
+it("an arrow key at an edge sends nothing", async () => { /* table at (0, 0): ArrowLeft and ArrowUp → no event; at (999, 999): ArrowRight and ArrowDown → none */ });
+it("other keys do nothing", async () => { /* "a" → no event, not prevented */ });
+it("shows the rotation handle on the selected table only, named for it", async () => { /* selected "t1": one handle, named "Rotate T1"; copy.rotate "Girar {name}" → "Girar T1" */ });
+it("dragging the handle turns the table in 15° steps", async () => {
+  /* release right of the centre → rotation 90; below → 180; at 50° from up → 45; left → 270 */
+});
+it("the arrow keys on the handle turn by 15° and wrap", async () => { /* rotation 0: ArrowRight → 15, ArrowLeft → 345; rotation 345: ArrowRight → 0 */ });
+it("each event bubbles out of a shadow root", async () => { /* mountInShadowRoot; document hears wt-table-move and wt-table-rotate with their details */ });
+// a11y file: add "a selected table with its rotation handle" in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** — the Task 2.3a command. Expected: the new cases fail (no
+  move or rotate event is sent; no handle is drawn); the 2.3a cases still pass.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Task 2.3a command, then the same guards and the file's Stryker run as in
+  Task 2.3a. Expected: all pass, the file's score at least 90.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: drag a table to the grid, nudge it with the
+  arrow keys and turn it with a handle (A429 slice 2)".
+
+### Task 2.4a: The editor's draft
+
+**Files:**
+- Create: `apps/dashboard/src/screens/floor-plan-draft.ts`,
+  `apps/dashboard/src/screens/floor-plan-draft.test.ts`
+
+Pure functions over the editor's draft; every edit returns a new draft and leaves its input
+unchanged, so Task 2.2's history can keep each one.
+
+**Interfaces:**
+- Consumes: `FloorPlan`, `FloorPlanSave`, `PlanPlacement` (`apps/dashboard/src/api/client.ts:599-645`);
+  `firstFreeSpot`, `NEW_TABLE_SIZE` (Task 2.1).
+- Produces:
+
+```ts
+export interface DraftTable { key: string; id: string | null; liveTableId: string | null; label: string; seats: number | null; fixed: boolean; placement: PlanPlacement | null }
+export interface DraftJoin { key: string; seats: number; tableKeys: string[] }
+export interface FloorPlanDraft { tables: DraftTable[]; joins: DraftJoin[] }
+export function draftFromPlan(plan: FloorPlan): FloorPlanDraft;                      // keys per slice 2 decision 3
+export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPlanSave;
+/** Same tables by key with the same values, and the same joins as sets of members with their seats. */
+export function sameDraft(a: FloorPlanDraft, b: FloorPlanDraft): boolean;
+export function checkDraft(draft: FloorPlanDraft): { key: string; problem: "label_missing" | "label_repeated" } | null;
+export function patchTable(draft: FloorPlanDraft, key: string, patch: Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>): FloorPlanDraft;
+export function moveTable(draft: FloorPlanDraft, key: string, x: number, y: number): FloorPlanDraft;   // keeps size, shape and rotation; an unplaced table: unchanged
+export function rotateTable(draft: FloorPlanDraft, key: string, rotation: number): FloorPlanDraft;
+export function placeTable(draft: FloorPlanDraft, key: string): FloorPlanDraft;                         // slice 2 decision 15
+export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft;                        // also from every join; a join left with fewer than 2 goes
+export function addTables(draft: FloorPlanDraft, tables: { label: string; seats: number | null; fixed: boolean }[], nextKey: () => string): FloorPlanDraft; // appended, unplaced
+export function addJoin(draft: FloorPlanDraft, tableKeys: string[], seats: number, key: string): FloorPlanDraft;
+export function removeJoin(draft: FloorPlanDraft, joinKey: string): FloorPlanDraft;
+```
+
+- [ ] **Step 1: Write the failing tests** (fixture: master `m1` "T1" placed at (2, 3) 8 × 8 rect
+  with live `l1`, master `m2` "T2" unplaced with live `l2`, adoptable `{ id: null, liveTableId: "l9",
+  label: "T9" }`, join `j1` of `m1`, `m2` seats 6, revision 3):
+
+```ts
+it("keys master tables by id, adoptable ones by their live table, joins by id", () => {
+  /* keys ["m1", "m2", "live:l9"]; T9 has id null, liveTableId "l9"; joins [{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }] */
+});
+it("sends a save with a key per table and each join as keys", () => {
+  /* saveFromDraft(3, draft) toEqual { revision: 3, tables: [{ id: "m1", key: "m1", … }, { id: "m2", key: "m2", … },
+     { liveTableId: "l9", key: "live:l9", label: "T9", … }], joins: [{ seats: 6, tableKeys: ["m1", "m2"] }] };
+     "liveTableId" in the m1 entry is false; "id" in the l9 entry is false */
+});
+it("sends a new table with neither id nor live table", () => { /* after addTables: { key: "new:1", label, seats, fixed, placement: null }, no id key, no liveTableId key */ });
+it("counts a draft moved and moved back as unchanged", () => { /* sameDraft(open, moveTable(moveTable(open, "m1", 5, 4), "m1", 2, 3)) true */ });
+it("counts a seat, a name, a turn or Fixed as a change", () => { /* each patch → false */ });
+it("compares joins as sets", () => { /* j1 with tableKeys ["m2", "m1"] → true; seats 7 → false; a join removed → false */ });
+it("counts a deleted table added back as new as a change", () => { /* delete m1, add "T1" with the same values: key "new:1" → false */ });
+it("finds an empty or repeated name, first in table order", () => {
+  /* T2 "  " → { key: "m2", problem: "label_missing" }; T9 " T1 " → { key: "live:l9", problem: "label_repeated" }; fine → null */
+});
+it("moves a placed table and keeps its size, shape and turn", () => { /* moveTable(m1, 5, 4) → { x: 5, y: 4, width: 8, height: 8, shape: "rect", rotation: 0 }; input draft unchanged */ });
+it("leaves an unplaced table where it is when asked to move it", () => { /* moveTable(m2, 5, 4) → same draft value */ });
+it("places a table at the first free spot as an 8 × 8 rectangle", () => { /* placeTable(m2) → m2.placement { x: 11, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } (m1 spans x 2–10) */ });
+it("deletes a table from its joins, and a join left with one table goes", () => {
+  /* join m1+m2+l9: delete l9 → join m1+m2; join m1+m2: delete m2 → no joins */
+});
+it("adds tables unplaced with fresh keys", () => { /* nextKey yields new:1, new:2 → two tables, placement null, id null, liveTableId null, in that order after T9 */ });
+it("adds and removes a join", () => { /* addJoin(["m1", "live:l9"], 4, "join:1"); removeJoin("j1") → joins [{ key: "join:1", seats: 4, tableKeys: ["m1", "live:l9"] }] */ });
+```
+
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-draft.test.ts`.
+  Expected: the file fails to load.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command (PASS, read the count); `pnpm --filter @waitron/dashboard typecheck`,
+  `pnpm --filter @waitron/dashboard lint`, `prettier --check` on the two files.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: the draft — what it sends, when it has changed,
+  and each edit (A429 slice 2)".
+
+### Task 2.4b: The editor page — opening, editing, undo and leaving
+
+**Files:**
+- Create: `apps/dashboard/src/screens/floor-plan-editor.ts` (`dashboard-floor-plan-editor`),
+  `apps/dashboard/src/screens/floor-plan-editor.test.ts`,
+  `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`,
+  `apps/dashboard/src/screens/floor-plan-editor.a11y.test.ts`
+- Modify: `apps/dashboard/src/dashboard-app.ts` — import beside `canvas-editor-screen.js` (`:70`);
+  `"floor-plan"` in `CORE_SCREENS` (`:98-130`); `{ screen: "floor-plan", requiresPermission:
+  "venue.configure" }` in `UNLISTED_SCREENS` (`:243-247`); `fill` for `"floor-plan"` as for the
+  catalogue (`:1406`; the `.body.fill` rule is at `:596-600`); a `case "floor-plan"` in
+  `#renderScreen` beside `case "canvas-editor"` (`:2016-2019`). `apps/dashboard/src/navigation.ts`
+  — `"floor-plan": { zone: "zone" }` in `children` (`:6-27`). `apps/dashboard/src/i18n/strings.ts`
+  (EN and ES). `apps/dashboard/src/dashboard-app.test.ts` and `apps/dashboard/src/navigation.test.ts`
+  (one case each).
+
+**Interfaces:**
+- Consumes: `getFloorPlan`, `listZones`, `listTables` (`client.ts:2790`, `:2775`, `:2806`);
+  `UndoHistory` (Task 2.2); `wt-floor-plan-canvas` (Tasks 2.3a, 2.3b); Task 2.4a's functions;
+  `draftScopeFor`, `saveActionState` (`packages/ui/src/leave-controller.ts:115-147`);
+  `UrlStateController` with `dashboardPath`.
+- Produces: the page, and the contract its panels use (Tasks 2.5b, 2.6) — they dispatch, bubbling
+  and composed:
+
+```ts
+// floor-plan-change: { draft: FloorPlanDraft; mergeKey?: string } — the page pushes it onto its history
+// floor-plan-select: { key: string | null }
+```
+
+Behaviour: the page reads `zone` from its URL and `back` from the query (slice 2 decisions 1, 2),
+then loads the plan, the zone list and the table list; a load failure shows the code's sentence
+(`codeMessage(codeOf(error))`) in place of the canvas, with Close. It keeps an
+`UndoHistory<FloorPlanDraft>` and the opened draft. Its draft scope is taken in `willUpdate` while
+`isConnected` and the plan has loaded, as `canvas-editor-screen.ts:314-337` takes one
+(`equal: sameDraft`, `restore` resets the history to the restored draft and clears the selection),
+disposed on disconnect, with `requestUpdate()` on reconnect. The heading is the zone's name (decision
+9). The header's `wt-form-actions` holds Close (an `<a href=${back}>` drawn like a secondary button,
+as `wt-row-actions.ts:50-78` draws a slotted link), Undo and Redo (secondary, disabled while there
+is nothing to undo or redo) and Save (`saveActionState`; this task gives Save its look only, and
+Task 2.4c its handler). Under the header, decision 16's line. The canvas gets the draft's placed
+tables and the selection; `wt-table-move` and `wt-table-rotate` push `moveTable` and `rotateTable`;
+`wt-table-select` sets the selection. Undo or Redo that removes the selected table clears the
+selection. Strings (EN / ES): `floor_plan_editor.title` "Floor plan" / "Plano de sala";
+`floor_plan_editor.undo` "Undo" / "Deshacer"; `floor_plan_editor.redo` "Redo" / "Rehacer";
+`floor_plan_editor.first_note` "The till takes this plan when you save it." / "La caja usará este
+plano cuando lo guardes."; `floor_plan_editor.note` "The till takes saved changes when the next
+business day starts." / "La caja recibe los cambios guardados al empezar el siguiente día de
+actividad."; Close and Save reuse `action.close` and `action.save` (`strings.ts:475`, `:548`).
+
+- [ ] **Step 1: Write the failing tests.** Widget cases mount with `mountWidget` and a stubbed API,
+  the URL set first with `history.replaceState`; the leave cases mount the whole `dashboard-app` as
+  `apps/dashboard/src/dashboard-app.backup-unsaved.test.ts:13-60` does, at
+  `/manage/floor-plan/zone/z1?back=%2Fmanage%2Foverview`, with `venue.configure`, and use an
+  `unload()` helper as `canvas-editor-screen.unsaved.test.ts:95-99` does.
+
+```ts
+// floor-plan-editor.test.ts
+it("opens the zone the URL names, headed with its name", async () => { /* getFloorPlan("z1"); h1 "Terrace" */ });
+it("heads a zone the zone list lacks as Floor plan", async () => { /* listZones → [] → h1 "Floor plan" */ });
+it("draws placed tables and leaves unplaced ones off the canvas", async () => { /* canvas.tables keys ["m1"] */ });
+it("says the till takes a first plan on save, and a saved plan's changes the next business day", async () => { /* revision 0 → first_note text; revision 3 → note text */ });
+it("a move from the canvas changes the draft and wakes Save", async () => { /* dispatch wt-table-move { key: "m1", x: 5, y: 4 } from the canvas → canvas.tables[0].placement.x 5; Save variant "primary", enabled */ });
+it("Undo puts the move back and quiets Save; Redo brings it back", async () => { /* Undo → x 2, Save "secondary" and disabled, Redo enabled; Redo → x 5, Save "primary" */ });
+it("a change after Undo empties Redo", async () => { /* move, Undo, rotate → Redo disabled */ });
+it("a turn from the canvas turns the table", async () => { /* wt-table-rotate { key: "m1", rotation: 90 } → placement.rotation 90 */ });
+it("selecting a table is not a change", async () => { /* wt-table-select { key: "m1" } → canvas.selected "m1"; Save quiet; Undo disabled */ });
+it("takes a panel's change and merges typing", async () => {
+  /* dispatch floor-plan-change { draft: patchTable(d, "m1", { label: "T1a" }), mergeKey: "label:m1" } then
+     { label: "T1ab" } with the same key; one Undo → label "T1" */
+});
+it("Undo that removes the selected table clears the selection", async () => { /* select a table added by a floor-plan-change; Undo → canvas.selected null */ });
+it("a load failure shows its sentence and no canvas", async () => { /* getFloorPlan rejects { code: "zone.not_found" } → "That zone no longer exists"; no wt-floor-plan-canvas */ });
+it("Close links to the way back, or to /manage when it is not a dashboard path", async () => { /* back "/manage/overview" → href "/manage/overview"; back "https://evil.example/" → "/manage"; no back → "/manage" */ });
+
+// dashboard-app.test.ts, as the "/manage/email" case at :2918-2938
+it.each([["manager", "dashboard-floor-plan-editor"], ["supervisor", "dashboard-overview-screen"]])("opens the floor plan editor at /manage/floor-plan/zone/z1 as %s, only with venue.configure", …);
+// navigation.test.ts, as :93-103
+it("reads the floor plan editor's zone from its path", () => { /* /manage/floor-plan/zone/z1 → read("zone") "z1" */ });
+
+// floor-plan-editor.unsaved.test.ts (whole app)
+it("an untouched editor closes without asking", async () => { /* click Close → pathname "/manage/overview"; no question */ });
+it("Close asks after a move, and Keep stays with the move", async () => { /* pathname unchanged; m1 still at x 5 */ });
+it("Discard on Close leaves and writes nothing", async () => { /* pathname "/manage/overview"; saveFloorPlan not called */ });
+it("undoing every change closes without asking", async () => { /* move, Undo, Close → no question */ });
+it("a sidebar link asks before leaving a changed plan", async () => { /* … */ });
+it("opening another zone's editor asks first", async () => { /* navigationGuardFor(window)!.write(new URL("/manage/floor-plan/zone/z2", location.origin)) → question */ });
+it("the browser's unload prompt holds a changed plan", async () => { /* unload() true after a move; false after Undo */ });
+it("put back after a detached update, the editor still asks before Close discards a change", async () => {
+  /* reattachAfterDetachedUpdate(editor) (apps/dashboard/src/widgets/test-helpers.ts:88-97), then move, then Close → question
+     — #1422's reconnect case, modelled on recipe-screen.unsaved.test.ts:397-407 */
+});
+
+// floor-plan-editor.a11y.test.ts — describe.each(["light", "dark"]): a loaded plan; a table selected; a load failure
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-editor.test.ts src/screens/floor-plan-editor.unsaved.test.ts src/screens/floor-plan-editor.a11y.test.ts src/navigation.test.ts src/dashboard-app.test.ts -t "floor plan"`.
+  Expected: the three new files fail to load; the two new cases in the existing files fail (the
+  path opens the overview; `read("zone")` is null).
+- [ ] **Step 3: Implement.** With the reconnect case passing, delete the `isConnected` check in
+  `willUpdate` and watch that case fail, then restore it.
+- [ ] **Step 4: Run** the same command without `-t`, then `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`,
+  the dashboard's typecheck and lint, and `prettier --check` on the changed files. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: the page opens a zone's plan, moves and turns
+  tables with Undo and Redo, and asks before leaving changes (A429 slice 2)".
+
+### Task 2.4c: Saving, and placing a refusal
+
+**Files:**
+- Modify: `apps/dashboard/src/screens/floor-plan-editor.ts`, `apps/dashboard/src/i18n/strings.ts`
+  (EN and ES), `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`,
+  `apps/dashboard/src/screens/floor-plan-editor.a11y.test.ts`,
+  `docs/developers/design-system.md` (name the editor in the Forms list of pages that follow the
+  save rule, `:1759`)
+- Create: `apps/dashboard/src/screens/floor-plan-editor.save.test.ts`
+
+**Interfaces:**
+- Consumes: `saveFloorPlan` (`client.ts:2795-2803`); `saveFromDraft`, `checkDraft` (Task 2.4a).
+- Produces, for Task 2.6's panel: the page's `fieldError: { key: string; field: "label" | "seats" |
+  "fixed" | "width" | "height" | "shape" | "rotation"; message: string } | null` (a server field
+  `tables.<i>.placement.width` becomes `width`, and so on).
+
+Behaviour: Save returns at once while `saveActionState(scope).unchanged`, while saving, or while an
+earlier press found `checkDraft` failing and it still fails. Otherwise, if `checkDraft` fails, the
+page selects the table, sets `fieldError` on `label` ("Enter a name." / "Escribe un nombre." for
+`label_missing`; `table.label_taken`'s sentence for `label_repeated`) and the generic sentence above
+the buttons, and sends nothing. Else it sends `saveFromDraft(revision, draft)`. On success: decision
+4. On a refusal: decisions 5, 6 and 7; a `table.label_taken` whose label no draft table carries, and
+any other refusal, shows its own sentence above the buttons. A save's answer that arrives after the
+page has left, or after another load began, is ignored (a request counter, as
+`canvas-editor-screen.ts:832-871` keeps). New strings: `floor_plan_editor.load_newer` "Load newer
+plan" / "Cargar el plano más reciente"; `floor_plan_editor.name_missing` "Enter a name." / "Escribe
+un nombre."; `floor_plan_editor.booked` "{name}: {message}" (both languages).
+
+- [ ] **Step 1: Write the failing tests** in `floor-plan-editor.save.test.ts` (Task 2.4a's fixture
+  plan; a change is made by dispatching `floor-plan-change` from inside the page, so deletes and
+  renames need no panel yet):
+
+```ts
+it("a press that reaches an untouched Save's handler sends nothing and shows nothing", async () => { /* host .click() on Save, as canvas-editor-screen.save-state.test.ts:172-180 */ });
+it("Save sends the draft with a key per table and joins as keys", async () => {
+  /* move m1 to (5, 4); Save → saveFloorPlan("z1", saveFromDraft(3, the moved draft)) toEqual, with tables[0].placement.x 5 and joins [{ seats: 6, tableKeys: ["m1", "m2"] }] */
+});
+it("after a save the editor reads the plan again, with Save quiet and nothing to undo", async () => { /* getFloorPlan called twice; Save "secondary", disabled; Undo disabled */ });
+it("a save in progress keeps a second press from sending", async () => { /* deferred save; two presses; one call */ });
+it("an older copy offers the newer plan, keeping Save available", async () => {
+  /* reject { code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } } → message "Someone else changed this floor plan. Reload it and try again";
+     Load newer plan shown; Save enabled */
+});
+it("Load newer plan replaces the draft and writes nothing", async () => { /* second read has m1 at x 7 → canvas m1 x 7; Save quiet; Undo disabled; saveFloorPlan called once */ });
+it("a taken name selects its table and shows the generic sentence", async () => {
+  /* rename m2 to "Patio 1"; reject { code: "table.label_taken", params: { label: "Patio 1" } } → canvas.selected "m2";
+     page fieldError { key: "m2", field: "label", message: "A table with that name already exists" }; message "Correct the highlighted fields to continue."; Save enabled */
+});
+it("an invalid field selects the table at its index", async () => { /* { code: "floor_plan.invalid", params: { field: "tables.1.seats" } } → selected "m2", fieldError.field "seats" */ });
+it("a refusal about a join selects nothing and shows its own sentence", async () => { /* field "joins.0.tableKeys" → selection unchanged; message "Check the floor plan's tables and try again" */ });
+it("a booked table the draft deleted is named, and Undo brings it back", async () => {
+  /* delete m2; reject { code: "table.booked", params: { tableId: "l2" } } → message "T2: This table has an upcoming booking. Move the booking first"; Undo → m2 back */
+});
+it("a failure with no field shows the server's sentence and leaves Save enabled", async () => { /* reject { code: "server.internal" } */ });
+it("an empty name stops the save, selects its table and keeps Save disabled until fixed", async () => {
+  /* m2 label "  "; Save → no call; selected "m2"; fieldError { field: "label", message: "Enter a name." }; Save disabled;
+     label "T2b" → Save enabled; fieldError null */
+});
+it("a repeated name stops the save the same way", async () => { /* l9 renamed "T1" → selected "live:l9"; message under label "A table with that name already exists" */ });
+it("the next change to the refused field clears its sentence", async () => { /* after the taken-name refusal, rename m2 → fieldError null; the generic sentence goes */ });
+// floor-plan-editor.unsaved.test.ts (whole app):
+it("a departed save's answer cannot change a reconnected editor", async () => {
+  /* as recipe-screen.unsaved.test.ts:408 on: deferred save; remove and re-add the editor; resolve; Save still "primary"; the question still opens on Close */
+});
+it("an accepted save leaves without asking", async () => { /* move, Save, Close → no question */ });
+// a11y file: add "an older copy's message with Load newer plan" in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-editor.save.test.ts src/screens/floor-plan-editor.unsaved.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
+  Expected: the new cases fail (Save sends nothing).
+- [ ] **Step 3: Implement**, and add the editor to design-system.md's Forms list.
+- [ ] **Step 4: Run** the same command plus `src/screens/floor-plan-editor.test.ts`, the dashboard's
+  typecheck and lint, and `prettier --check` on the changed files. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: Save sends the plan, offers the newer plan when
+  someone else saved first, and points each refusal at its table (A429 slice 2)".
+
+### Task 2.5a: `wt-sheet`
+
+**Files:**
+- Create: `packages/ui/src/components/wt-sheet.ts`, `packages/ui/src/components/wt-sheet.test.ts`,
+  `packages/ui/src/components/wt-sheet.a11y.test.ts`
+- Modify: `packages/ui/src/index.ts`, `packages/ui/demo/main.ts`, `docs/developers/design-system.md`
+  (primitives table, `:534-563`, and a short paragraph)
+
+**Interfaces:**
+- Produces:
+
+```ts
+@customElement("wt-sheet")
+export class WtSheet extends LitElement {
+  @property() heading = "";
+  @property({ type: Boolean, reflect: true }) expanded = false;
+}
+// Event wt-sheet-toggle: { expanded: boolean }, bubbles: true, composed: true; the toggle's click is stopped.
+```
+
+Behaviour: a block with a top border (`--wt-color-border`) and the surface colour
+(`--wt-color-surface`). Its toggle (`part="toggle"`, a `<button>` at least `--wt-tap-min` tall,
+`aria-expanded`, `aria-controls` naming the body) shows the heading; pressing it flips `expanded`
+and sends `wt-sheet-toggle`. The body (`part="body"`, default slot) is hidden while collapsed;
+expanded, it scrolls within `60dvh`. Where it docks is its parent's choice. Every spacing reads a
+`--wt-space-*` token.
+
+- [ ] **Step 1: Write the failing tests:**
+
+```ts
+it("shows only its heading while collapsed", async () => { /* slotted text not visible; toggle text "Tables"; aria-expanded "false" */ });
+it("pressing the toggle opens it and tells the page", async () => {
+  /* mountInShadowRoot; document hears wt-sheet-toggle { expanded: true }; host.expanded true; aria-expanded "true"; a click listener on the host's parent sees no click */
+});
+it("pressing it again closes it", async () => { /* { expanded: false } */ });
+it("the page can open it", async () => { /* el.expanded = true → body visible; attribute "expanded" reflected */ });
+it("names the body it controls", async () => { /* toggle's aria-controls equals the body's id */ });
+it("scrolls a long body within 60% of the viewport's height", async () => { /* page.viewport(390, 800); 2000 px of content → body clientHeight 480; scrollHeight > clientHeight */ });
+it("its toggle is at least the tap size", async () => { /* toggle height ≥ 44 px (--wt-tap-min) */ });
+it("paints from tokens", async () => { /* host sets --wt-color-surface rgb(1, 2, 3) → background; --wt-color-border rgb(4, 5, 6) → top border colour */ });
+// a11y file — describe.each(["light", "dark"]): collapsed; expanded with content
+```
+
+- [ ] **Step 2: Run and watch it fail** —
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-sheet.test.ts src/components/wt-sheet.a11y.test.ts`.
+  Expected: both files fail to load.
+- [ ] **Step 3: Implement**; break the toggle's name on purpose and watch the a11y test fail, then
+  restore it.
+- [ ] **Step 4: Run** the same command, `src/no-hardcoded-chrome.test.ts`, `scripts/style-token-names.test.ts`,
+  the file's Stryker run (at least 90), typecheck, lint, `prettier --check`. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "A sheet primitive that docks at the bottom of a phone screen and
+  opens from its heading (A429 slice 2)".
+
+### Task 2.5b: The side panel and Add tables
+
+**Files:**
+- Create: `apps/dashboard/src/screens/floor-plan-tables-panel.ts` (`floor-plan-tables-panel`),
+  `apps/dashboard/src/screens/floor-plan-tables-panel.test.ts`,
+  `apps/dashboard/src/screens/floor-plan-tables-panel.unsaved.test.ts`
+- Modify: `apps/dashboard/src/screens/floor-plan-editor.ts` (the panel beside the canvas at 600 px
+  and over, inside a `wt-sheet` below, decided from the page's own width with a `ResizeObserver`),
+  `floor-plan-editor.test.ts`, `floor-plan-editor.a11y.test.ts`, `apps/dashboard/src/i18n/strings.ts`
+
+**Interfaces:**
+- Consumes: Task 2.4a's `placeTable`, `addTables`; Task 2.1's `automaticNames`; `wt-sheet` (Task
+  2.5a); `wt-modal`, `wt-number-stepper`, `wt-combobox`, `wt-input`, `wt-switch`, `wt-form-actions`.
+- Produces:
+
+```ts
+@customElement("floor-plan-tables-panel")
+export class FloorPlanTablesPanel extends LitElement {
+  @property({ attribute: false }) draft!: FloorPlanDraft;
+  @property() selected: string | null = null;
+  @property() zoneName = "";
+  @property({ attribute: false }) takenElsewhere: ReadonlySet<string> = new Set(); // slice 2 decision 8
+  @property({ attribute: false }) nextKey!: () => string;                          // the page's new:<n>
+}
+// sends floor-plan-change and floor-plan-select (Task 2.4b's contract)
+```
+
+Behaviour: a heading "Tables", then each draft table as a row button, sorted with numbers in order
+(`Intl.Collator(locale, { numeric: true })`), a placed table's row drawn muted and marked
+`data-placed`. Pressing an unplaced table sends `placeTable` and selects it; pressing a placed one
+selects it. "Add tables" opens a `wt-modal` (decision 14) with: Tables (`wt-number-stepper`,
+`name="table-count"`, 1–100, required), Seats (`wt-number-stepper`, `name="seats"`, 0–999,
+clearable, empty meaning none), Names (`wt-combobox`, `name="naming"`, Automatic or Custom, no
+search), then for Automatic a Prefix (`wt-input`, `name="prefix"`, the zone's name to start, its
+hint the names it will give: "Terrace 6 to Terrace 15"), for Custom one `wt-input` per table
+(`name="table-name"`, required), and Fixed in place (`wt-switch`, `name="fixed"`). Add checks each
+custom name: empty is "Enter a name.", and one repeated in the batch, already in the draft, or in
+`takenElsewhere` is `table.label_taken`'s sentence, beside its field, with the generic sentence in
+the dialog's `wt-form-actions`; Add then stays disabled until they are fixed. Automatic names count
+the draft's names and `takenElsewhere` as used. Add sends `addTables` and closes; Cancel and Escape
+add nothing. The dialog's input is its own draft scope, child of the page's
+(`savableAtOpen: true`). Strings (EN / ES): "Tables" / "Mesas"; "Add tables" / "Añadir mesas";
+"Number of tables" / "Número de mesas"; "Seats" reuses `floor.table_capacity` ("Plazas",
+`strings.ts:953`, `:3484`); "Names" / "Nombres"; "Automatic" / "Automáticos"; "Custom" /
+"Personalizados"; "Prefix" / "Prefijo"; "{first} to {last}" / "De {first} a {last}"; "Name {n}" /
+"Nombre {n}"; "Fixed in place" / "Fija en su sitio".
+
+- [ ] **Step 1: Write the failing tests:**
+
+```ts
+// floor-plan-tables-panel.test.ts — draft: m1 "Terrace 1" placed (0, 0) 8 × 8, m2 "Terrace 10" unplaced, m3 "Terrace 2" unplaced, "Terrace bar 3" unplaced
+it("lists the tables in numeric order, placed ones muted", async () => { /* rows "Terrace 1", "Terrace 2", "Terrace 10", "Terrace bar 3"; data-placed only on Terrace 1 */ });
+it("pressing an unplaced table places it at the first free spot and selects it", async () => {
+  /* floor-plan-change: m3.placement { x: 9, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 }; floor-plan-select { key: "m3" } */
+});
+it("pressing a placed table selects it and changes nothing", async () => { /* select { key: "m1" }; no change event */ });
+it("Add tables opens with one table, four seats and the zone's name as prefix", async () => { /* count "1", seats "4", naming "automatic", prefix "Terrace", hint "Terrace 11 to Terrace 11", Add primary and enabled */ });
+it("automatic names number on from the highest with the prefix", async () => {
+  /* count 3 → added labels "Terrace 11", "Terrace 12", "Terrace 13", seats 4, fixed false, placement null, keys new:1–3 */
+});
+it("a name used in another zone counts for the numbering", async () => { /* takenElsewhere {"Terrace 40"} → "Terrace 41" */ });
+it("custom naming shows one name field per table", async () => { /* count 3, Custom → three wt-input name="table-name", labelled "Name 1"–"Name 3" */ });
+it("a custom name in use is refused beside its field", async () => {
+  /* names "Patio 1", "Terrace 2" → second field's error "A table with that name already exists"; form message "Correct the highlighted fields to continue."; no change event; Add disabled;
+     second name "Patio 2" → error gone, Add enabled */
+});
+it("a custom name used in another zone, or twice in the batch, is refused the same way", async () => { /* … */ });
+it("an empty custom name asks for a name", async () => { /* "Enter a name." */ });
+it("Fixed in place adds fixed tables", async () => { /* fixed true on every added table */ });
+it("an empty seat count adds tables with no seats", async () => { /* seats null */ });
+it("Cancel adds nothing", async () => { /* no change event */ });
+
+// floor-plan-editor.test.ts
+it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 px", async () => {
+  /* page.viewport(1280, 800): aside holds floor-plan-tables-panel, no wt-sheet; page.viewport(390, 844): wt-sheet holds it, expanded false, heading "Tables"; restore the viewport */
+});
+it("the sheet's heading names the selected table", async () => { /* select m1 → heading "Terrace 1" */ });
+
+// floor-plan-tables-panel.unsaved.test.ts — inside a LeaveController test app, as canvas-editor-screen.unsaved.test.ts:31-44
+it("an untouched Add tables closes on Escape without asking", async () => { /* … */ });
+it("typed custom names ask before Escape, and Keep keeps them", async () => { /* … */ });
+it("a changed count asks before Cancel, and Discard closes without adding", async () => { /* … */ });
+
+// floor-plan-editor.a11y.test.ts: add "the tables list", "Add tables open, automatic", "Add tables open, custom, with a refused name", "the sheet collapsed and expanded at 390 px", in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-tables-panel.test.ts src/screens/floor-plan-tables-panel.unsaved.test.ts src/screens/floor-plan-editor.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
+  Expected: the two new files fail to load; the page's two new cases fail.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command, `scripts/native-form-fields.test.ts`, the dashboard's
+  typecheck and lint, `prettier --check`. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: the tables list, tap to place, and Add tables
+  with automatic or custom names (A429 slice 2)".
+
+### Task 2.6: The selected table's panel
+
+**Files:**
+- Create: `apps/dashboard/src/screens/floor-plan-table-panel.ts` (`floor-plan-table-panel`),
+  `apps/dashboard/src/screens/floor-plan-table-panel.test.ts`,
+  `apps/dashboard/src/screens/floor-plan-table-panel.unsaved.test.ts`
+- Modify: `floor-plan-editor.ts` (the panel above the tables list while a table is selected, given
+  `fieldError`), `floor-plan-editor.save.test.ts`, `floor-plan-editor.a11y.test.ts`, `strings.ts`
+
+**Interfaces:**
+- Consumes: Task 2.4a's `patchTable`, `placeTable`, `deleteTable`, `addJoin`, `removeJoin`; Task
+  2.4c's `fieldError`.
+- Produces:
+
+```ts
+@customElement("floor-plan-table-panel")
+export class FloorPlanTablePanel extends LitElement {
+  @property({ attribute: false }) draft!: FloorPlanDraft;
+  @property() tableKey = "";
+  @property({ attribute: false }) fieldError: { field: string; message: string } | null = null;
+  @property({ attribute: false }) nextJoinKey!: () => string;   // the page's join:<n>
+}
+// sends floor-plan-change (merge keys "<field>:<tableKey>" for typed fields) and floor-plan-select { key: null } after Delete
+```
+
+Behaviour, for the selected table: Name (`wt-input`, `name="table-name"`, required); Seats
+(`wt-number-stepper`, `name="seats"`, 0–999, clearable); Fixed in place (`wt-switch`,
+`name="fixed"`); for a placed table, Shape (`wt-combobox`, `name="shape"`, Rectangle or Round, no
+search), Width and Height (`wt-number-stepper`, `name="width"`, `name="height"`, 1–99) and Rotation
+(`wt-combobox`, `name="rotation"`, 0° to 345° in 15° steps, no search) — the canvas handle is the
+pointer's way, this the keyboard's; Joins: each join this table is in as "with T2 · seats 6" and
+Remove, then Add join, which opens a `wt-modal` with Tables (`wt-combobox multiple`,
+`name="join-tables"`, the zone's other tables) and Seats (`wt-number-stepper`, `name="join-seats"`,
+1–999, required); its Add waits, quiet and disabled, until at least one table and the seats are
+chosen, and its input is a draft scope of its own; Place (an unplaced table) or Remove from plan
+(a placed one, `patchTable(placement: null)`); Delete (danger, no question: Undo brings it back,
+spec §4). `fieldError` shows under the field it names. Strings (EN / ES): "Name" / "Nombre"; "Shape"
+/ "Forma"; "Rectangle" / "Rectángulo"; "Round" / "Redonda"; "Width" / "Ancho"; "Height" / "Largo";
+"Rotation" / "Giro"; "Joins" / "Uniones"; "with {tables} · seats {seats}" / "con {tables} · {seats}
+plazas"; "Add join" / "Añadir unión"; "Place" / "Colocar"; "Remove from plan" / "Quitar del plano".
+
+- [ ] **Step 1: Write the failing tests:**
+
+```ts
+// floor-plan-table-panel.test.ts — Task 2.4a's fixture, m1 selected
+it("shows the selected table's values", async () => { /* name "T1", seats "4", fixed off, shape "rect", width "8", height "8", rotation "0" */ });
+it("typing a name sends one merged change", async () => { /* typing "a" then "b" → two floor-plan-change events, mergeKey "label:m1", last label "T1ab" */ });
+it("an empty seat count sends no seats", async () => { /* clear → seats null */ });
+it("Fixed in place, shape, width, height and rotation each send their change", async () => { /* fixed true; shape "round"; width 10; height 6; rotation 45 */ });
+it("an unplaced table offers Place and no shape or size", async () => { /* select m2: no shape/width/height/rotation fields; Place → m2 placed at the first free spot */ });
+it("Remove from plan makes the table a spare", async () => { /* placement null */ });
+it("Delete removes the table and clears the selection", async () => { /* change: no m1, j1 gone (it had two tables); select { key: null } */ });
+it("lists the table's joins and removes one", async () => { /* "with T2 · seats 6"; Remove → joins [] */ });
+it("Add join waits for a table and the seats", async () => {
+  /* open: Add "secondary", disabled; choose T9 → still disabled; seats 4 → "primary", enabled; Add → join { tableKeys: ["m1", "live:l9"], seats: 4, key: "join:1" } */
+});
+it("shows a refusal under the field it names", async () => { /* fieldError { field: "seats", message: "…" } → seats stepper error; name field none */ });
+// floor-plan-editor.save.test.ts
+it("a taken name from Save shows under the table's name field", async () => { /* completes Task 2.4c's case: the panel's name field shows "A table with that name already exists" */ });
+it("Undo of a Delete brings back the table and its join", async () => { /* … */ });
+// floor-plan-table-panel.unsaved.test.ts — Add join: untouched Escape closes; a chosen table asks first
+// floor-plan-editor.a11y.test.ts: add "a placed table's panel", "an unplaced table's panel", "Add join open", "a refusal under a field", in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-table-panel.test.ts src/screens/floor-plan-table-panel.unsaved.test.ts src/screens/floor-plan-editor.save.test.ts src/screens/floor-plan-editor.a11y.test.ts`.
+  Expected: the new files fail to load; the new page cases fail.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command plus `src/screens/floor-plan-editor.test.ts`,
+  `scripts/native-form-fields.test.ts`, the dashboard's typecheck and lint, `prettier --check`.
+  Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Floor plan editor: the selected table's name, seats, shape, size,
+  turn, joins, Remove from plan and Delete (A429 slice 2)".
+
+### Task 2.7: The entry point
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/department-zones.ts` (the zone menu,
+  `:373-388`), `packages/venue-service/src/dashboard/client.ts` (`VenueServiceApi`, `:105-131`),
+  `packages/venue-service/src/dashboard/strings.ts` (EN beside `venue.rename`, `:306`; ES beside
+  `:1003`), `packages/venue-service/src/dashboard/department-zones.test.ts`,
+  `packages/venue-service/src/dashboard/department-zones.a11y.test.ts`,
+  `docs/developers/design-system.md` (one sentence under "Departments and zones", `:3498`)
+
+**Interfaces:**
+- Produces: `VenueServiceApi.zoneHasTables(zoneId: string): Promise<boolean>` — a passive
+  `GET /management-api/zones/:id/floor-plan`, answering `tables.length > 0` (adoptable live tables
+  count, slice 1's read).
+
+Behaviour (slice 2 decision 17): the zone menu gains, before Rename, a link
+`<a data-test="floor-plan" href="/manage/floor-plan/zone/<zoneId>?back=<this page's address>">`
+as the Opening hours dates menu does (`packages/venue-service/src/dashboard/hours-dates-list.ts:96-104`;
+`wt-row-actions` draws a slotted link like a secondary button, `wt-row-actions.ts:50-78`). The way
+back is the department page's zone address
+(`/manage/venue-operations/department/<departmentId>/view/zones/zone/<zoneId>`, the form
+`department-settings.ts:533` builds). A module links to a core screen by address, as
+`prep-stations-screen.ts:1139` links to `/manage/devices`. When the selected zone changes, the menu
+asks `zoneHasTables` for it (an answer for a zone no longer selected is dropped): `false` → "Add a
+floor plan" / "Añadir plano de sala"; otherwise, before the answer, or on a failure → "Edit floor
+plan" / "Editar plano de sala". With no `api` (as the existing tests mount it,
+`department-zones.test.ts:29-41`) it reads nothing.
+
+- [ ] **Step 1: Write the failing tests** in `department-zones.test.ts`:
+
+```ts
+it("the zone menu links Edit floor plan to the editor with the way back", async () => {
+  /* zone z2 of d1 → href "/manage/floor-plan/zone/z2?back=%2Fmanage%2Fvenue-operations%2Fdepartment%2Fd1%2Fview%2Fzones%2Fzone%2Fz2"; text "Edit floor plan" */
+});
+it("a zone with no tables says Add a floor plan", async () => { /* request stub answers { tables: [] } for /management-api/zones/z2/floor-plan → "Add a floor plan" */ });
+it("a zone with tables, or a failed read, says Edit floor plan", async () => { /* { tables: [one] } → Edit; a rejection → Edit */ });
+it("the read is passive", async () => { /* the stub sees options { passive: true } */ });
+it("a late answer for another zone is dropped", async () => {
+  /* z2's read deferred; select z1 (answers tables: [one]); resolve z2's with []: the menu still says "Edit floor plan" and links z1 */
+});
+it("names the link in Spanish", async () => { /* setLocale("es") → "Editar plano de sala" / "Añadir plano de sala" */ });
+// department-zones.a11y.test.ts: the zone menu open, with the link, in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/department-zones.test.ts src/dashboard/department-zones.a11y.test.ts`.
+  Expected: no `[data-test=floor-plan]` link.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command, `src/dashboard/department-zones.unsaved.test.ts`,
+  `pnpm exec vitest run scripts/module-seams.test.ts`, the package's typecheck and lint,
+  `prettier --check`. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Departments: a zone's menu opens its floor plan editor (A429 slice 2)".
+
+### Task 2.8: Look
+
+**Files:** none committed. A throwaway `apps/dashboard/src/screens/floor-plan-editor.look.test.ts`
+is written, run and deleted (slice 2 decision 19); screenshots go to
+`~/waitron-campaign/a429-2-shots/`, outside the repository.
+
+Mount the editor as Task 2.4b's tests do, with fixture plans: an empty zone (no tables at all), a
+zone like the demo seed's terrace (a dozen placed tables, two fixed 2 × 2 stools, one turned 45°,
+a join), a table selected, Add tables open in custom naming, and a refusal shown (`table.label_taken`
+under a name, and `floor_plan.out_of_date` with Load newer plan). Take each in English and Spanish
+(`setLocale`), light and dark (`applyTokens` with the theme, as `mountWidget`'s `theme` does), at
+1280 × 800 and 390 × 844 (`page.viewport`), the sheet both collapsed and expanded at 390, with
+`page.screenshot({ path })` to an absolute path under `~/waitron-campaign/a429-2-shots/`, named
+`<state>-<lang>-<theme>-<width>.png`. Also take the department page's zone menu open, in both
+languages and themes, from a venue-service test file written and deleted the same way.
+
+- [ ] **Step 1:** Write the throwaway files and run them
+  (`pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-editor.look.test.ts`).
+  Expected: every screenshot exists (`ls ~/waitron-campaign/a429-2-shots/ | wc -l` equals the count
+  taken).
+- [ ] **Step 2:** Open each screenshot and look: text cut off or overlapping, a name drawn on a
+  token too small for it, the header's buttons wrapping badly at 390 px, the sheet covering the
+  selected table, contrast in dark, Spanish strings longer than their space, product text that could
+  be shorter where its meaning is plain (owner rule).
+- [ ] **Step 3:** Fix what the look found, each fix test-first in the task file it belongs to (a
+  failing assertion, then the change), and rerun that file.
+- [ ] **Step 4:** Delete the throwaway files (`git status` shows none of them) and run every slice 2
+  test file named above, the guards named above, and the three packages' typecheck and lint.
+- [ ] **Step 5: Commit** the fixes, if any — e.g. "Floor plan editor: fixes from looking at it in
+  both languages, both themes, on a phone and a laptop (A429 slice 2)", the message listing what was
+  looked at and where the screenshots are.
+
+**Slice 2 done when:** the focused tests above pass; `/finish-branch` runs the full wave; CI is green
+on the head (`ui`'s mutation floor runs only weekly, so the per-file Stryker runs above are the
+check); design-system.md names both primitives and the editor; the backlog's A429 entry says slice
+2 landed and what it left.
 
 ## Slice 3 — the till's map (spec §5)
 
@@ -1255,7 +2205,9 @@ Branch `feat/floor-plan-today`, after slice 3.
 - **Task 4.5: The sheet's actions and the zone menu** — Split, Rotate, Change seats for today, Back
   to its saved place, Take off for today; the zone menu (⋮, `wt-row-actions`) with Add a spare
   table ("No spare tables — add some in the floor plan editor" when none), Taken off today with Put
-  back, and Reset to saved plan (asks first).
+  back, and Reset to saved plan (asks first). (Added at slice 2's expansion, slice 2 decision 16:
+  the dashboard editor's line under its header, `floor_plan_editor.note`, gains "or sooner with
+  Reset to saved plan on the till" once that button exists.)
 - **Task 4.6: Look** — as Task 3.6, plus a drag in progress and a merge.
 
 ## Slice 5 — removing the old pieces (spec §11)
