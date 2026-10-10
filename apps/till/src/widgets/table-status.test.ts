@@ -223,7 +223,7 @@ describe("till-table-status", () => {
     });
     await settled(el);
     expect(toast(el)!.open).toBe(true);
-    expect(toast(el)!.message).toBe("2 ready to serve · Bill requested");
+    expect(toast(el)!.message).toBe("2 ready · Bill requested");
     expect(toast(el)!.tone).toBe("info");
   });
 
@@ -234,7 +234,24 @@ describe("till-table-status", () => {
       tables: [row(p, { id: "t4", readyToServe: 1 }), row(p, { id: "t5", readyToServe: 1 })],
     });
     await settled(el);
-    expect(toast(el)!.message).toBe("1 ready to serve");
+    expect(toast(el)!.message).toBe("1 ready");
+  });
+
+  it("says the ready dishes in Spanish as the pin does", async () => {
+    setLocale("es-ES");
+    const p = party();
+    const { el } = await mount({ party: p, tables: [row(p, { readyToServe: 2 })] });
+    await settled(el);
+    expect(toast(el)!.message).toBe("2 listos");
+    expect(pin(el)!.textContent!.trim()).toBe("2 listos");
+  });
+
+  it("says one ready dish in Spanish", async () => {
+    setLocale("es-ES");
+    const p = party();
+    const { el } = await mount({ party: p, tables: [row(p, { readyToServe: 1 })] });
+    await settled(el);
+    expect(toast(el)!.message).toBe("1 listo");
   });
 
   it("says a forgotten order", async () => {

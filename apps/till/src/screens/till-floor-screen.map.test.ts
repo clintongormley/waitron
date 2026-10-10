@@ -121,6 +121,16 @@ describe("till-floor-screen on the new map", () => {
     expect(map.copy.label).toBe("Tables");
   });
 
+  it("hands the map the screen's reduced-motion setting, unset by default", async () => {
+    expect(mapOf(await mount()).reducedMotion).toBeUndefined();
+    cleanupWidgets();
+    const el = await mount({ reducedMotion: true });
+    expect(mapOf(el).reducedMotion).toBe(true);
+    el.reducedMotion = false;
+    await el.updateComplete;
+    expect(mapOf(el).reducedMotion).toBe(false);
+  });
+
   it("keeps the old canvas for a zone with no today's rows", async () => {
     const el = await mount({ tables: [placed("t1")] });
     expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();

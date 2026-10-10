@@ -545,15 +545,15 @@ export class TillFloorScreen extends LitElement {
     if (this.tables.some((table) => table.id === tableId)) this.details = { tableId };
   }
 
-  /** As the map names the table: a merge by all its drawn members' labels. */
+  /** As the map names the table: a merge by all its drawn members' labels, else its own label. */
   #detailsHeading(table: TableState): string {
     const joinId = table.today?.joinId ?? null;
-    if (joinId === null) return mapLabel([table.label]);
-    return mapLabel(
-      mapTables(this.#zone.visible)
-        .filter((drawn) => drawn.joinId === joinId)
-        .map((drawn) => drawn.label),
-    );
+    const members =
+      joinId === null
+        ? []
+        : mapTables(this.#zone.visible).filter((drawn) => drawn.joinId === joinId);
+    if (!members.some((drawn) => drawn.id === table.id)) return mapLabel([table.label]);
+    return mapLabel(members.map((drawn) => drawn.label));
   }
 
   #detailsSheet(): TemplateResult | typeof nothing {
@@ -837,6 +837,7 @@ export class TillFloorScreen extends LitElement {
           .tables=${onMap}
           .fitKey=${activeKey ?? ""}
           .copy=${{ label: t("floor.map_label") }}
+          .reducedMotion=${this.reducedMotion}
           @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
           @wt-table-details=${(event: Event) => this.#onDetails(event)}
         ></wt-floor-map>

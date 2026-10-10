@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
@@ -298,6 +298,69 @@ it("an arrow key pans by the zoomed scale", async () => {
   await press("ArrowRight");
   const box = await boxOf(el, "t2");
   expect([box.left, box.top, box.right, box.bottom].map(Math.round)).toEqual([333, 33, 600, 300]);
+});
+
+describe("arrowing to a table wider than the map", () => {
+  // Fitted at 25 px a square, the view's origin at (50, 75), the crop's centre at (10, 3). Ctrl+wheel
+  // ×4 about (200, 200) gives 100 px a square and the origin (-400, -300): `wide` 1000 px across
+  // from left 100, top 100 to 300. A plain wheel's deltaX then moves the view left by that much.
+  const a = t("a", { x: 0, y: 0, width: 2, height: 2 });
+  const b = t("b", { x: 18, y: 0, width: 2, height: 2 });
+  const wide = t("wide", { x: 5, y: 4, width: 10, height: 2 });
+
+  function wheelAt(el: WtFloorMap, x: number, y: number, init: WheelEventInit): void {
+    const corner = el.getBoundingClientRect();
+    el.dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        clientX: corner.left + x,
+        clientY: corner.top + y,
+        ...init,
+      }),
+    );
+  }
+
+  async function arrowToWide(deltaX: number) {
+    const el = await map([a, b, wide]);
+    wheelAt(el, 200, 200, { deltaY: -200, ctrlKey: true });
+    if (deltaX !== 0) wheelAt(el, 0, 0, { deltaX });
+    const before = await boxOf(el, "wide");
+    button(el, "b").focus({ preventScroll: true });
+    await press("ArrowRight");
+    expect(focused(el)).toBe("wide");
+    const after = await boxOf(el, "wide");
+    return [before, after].map((box) => [box.left, box.top, box.right, box.bottom].map(Math.round));
+  }
+
+  it("a gap on the left: its left edge comes to the map's left edge", async () => {
+    expect(await arrowToWide(0)).toEqual([
+      [100, 100, 1100, 300],
+      [0, 100, 1000, 300],
+    ]);
+  });
+
+  it("a gap on the right: its right edge comes to the map's right edge", async () => {
+    expect(await arrowToWide(600)).toEqual([
+      [-500, 100, 500, 300],
+      [-400, 100, 600, 300],
+    ]);
+  });
+
+  it("its left edge exactly on the map's left edge: nothing moves", async () => {
+    expect(await arrowToWide(100)).toEqual([
+      [0, 100, 1000, 300],
+      [0, 100, 1000, 300],
+    ]);
+  });
+
+  it("covering the whole map past both edges: nothing moves", async () => {
+    expect(await arrowToWide(300)).toEqual([
+      [-200, 100, 800, 300],
+      [-200, 100, 800, 300],
+    ]);
+  });
 });
 
 it("a keydown on a table still reaches the page", async () => {

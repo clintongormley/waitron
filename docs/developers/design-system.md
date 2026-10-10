@@ -625,9 +625,10 @@ set. The consuming app registers the `chevron-down` icon.
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice. It fits
 when it first draws tables, when `fitKey` changes and on a double tap on empty space (both taps
-there), whatever the view; it fits when it is resized only if no pan, pinch or wheel has moved the
-view since its last fit; a new `tables` alone keeps the view. A press that moves 8 px before the hold pans, wherever it started;
-two fingers zoom about their midpoint; the wheel pans and Ctrl+wheel zooms ×2 per 100 of `deltaY`
+there), whatever the view; it fits when it is resized only if there has been no pan, pinch or
+wheel event since its last fit, even one at a limit that moved nothing; a new `tables` alone keeps
+the view. A press that moves 8 px before the hold pans, wherever it started; two fingers zoom about
+their midpoint; the wheel pans and Ctrl+wheel zooms ×2 per 100 of `deltaY`
 about the pointer, the wheel event always prevented. Zoom runs from half to four times the fitted
 scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by `mapLabel`
 ("Terrace 4+5", "4+10"), whose `data-table-id` is its first member's in number order; each table is
@@ -659,8 +660,9 @@ of its events and never stops a `pointerdown` or `keydown`. One table is in the 
 draws it (a merge it has joined is the tab stop then), else the first in reading order (by the top of its box, then its left). On a focused
 table, ArrowRight and ArrowDown move to the next table in reading order, ArrowLeft and ArrowUp to
 the previous, Home and End to the first and last, stopping at the ends, unless Alt, Ctrl or Meta is held, which the map leaves to the browser; each
-is prevented, pans the target into view by the least distance (within the pan limit, and counting as a pan, so a
-resize then keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
+is prevented, pans the target into view by the least distance (a table wider than the map is
+moved only to close a gap at one edge; within the pan limit, and counting as a pan, so a resize then
+keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
 table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above the
 tables beside it, so its ring is not covered, and a dot above that. The host has no

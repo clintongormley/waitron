@@ -91,9 +91,15 @@ export const mapLabel = (labels: readonly string[]): string => partyTablesName(l
 const readingOrder = (groups: Group[]): Group[] =>
   groups.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
 
-/** How far a span from `start` to `end` must move to lie within 0 to `size`, the least distance. */
-const intoView = (start: number, end: number, size: number): number =>
-  start < 0 ? -start : end > size ? size - end : 0;
+/**
+ * How far a span from `start` to `end` moves for a view from 0 to `size`, the least distance. A span
+ * that fits moves to lie within it. A wider span covering it already moves nothing; one leaving a
+ * gap moves to close it: `start` to 0, or `end` to `size`.
+ */
+const intoView = (start: number, end: number, size: number): number => {
+  if (end - start > size) return start > 0 ? -start : end < size ? size - end : 0;
+  return start < 0 ? -start : end > size ? size - end : 0;
+};
 
 function groupsOf(tables: readonly FloorMapTable[]): Group[] {
   const byKey = new Map<string, FloorMapTable[]>();

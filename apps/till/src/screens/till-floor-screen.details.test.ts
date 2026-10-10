@@ -171,6 +171,23 @@ describe("till-floor-screen's details sheet", () => {
     expect(sheet.heading).toBe("Terrace 4+5");
   });
 
+  it("a merged table the map no longer draws keeps its own name on the open sheet", async () => {
+    const el = await mount([
+      table("t4", { today: today({ joinId: "j1", joinSeats: 6 }) }),
+      table("t5", { today: today({ joinId: "j1", joinSeats: 6 }) }),
+    ]);
+    const sheet = await askDetails(el, "t4");
+    expect(sheet.heading).toBe("Terrace 4+5");
+
+    el.tables = [
+      table("t4", { today: today({ joinId: "j1", joinSeats: 6, placement: null }) }),
+      table("t5", { today: today({ joinId: "j1", joinSeats: 6 }) }),
+    ];
+    await el.updateComplete;
+    await sheet.updateComplete;
+    expect(sheet.heading).toBe("Terrace 4");
+  });
+
   it("after a re-read removes the open sheet, the rest of the page takes a real click", async () => {
     const el = await mount([table("t4", { ...seated, party: party() }), table("t5")]);
     await askDetails(el, "t4");
