@@ -215,9 +215,8 @@ export interface PeriodLineText {
   readonly target: RouteTarget;
   /** "Lunch, Afternoon: Downstairs bar". */
   readonly text: string;
-  /** The line's periods whose menus no longer offer the row; only on a line its cell stores. */
-  readonly flaggedPeriods?: readonly string[];
-  /** "Not on Lunch menus", present with `flaggedPeriods`. */
+  /** "Not on Lunch menus": the line's periods whose menus no longer offer the row; only on a line
+   * its cell stores. */
   readonly flagText?: string;
 }
 
@@ -319,7 +318,6 @@ export function cellPeriodLines(
       ...(flagged.length === 0
         ? {}
         : {
-            flaggedPeriods: flagged.map(({ id }) => id),
             flagText: format("routing.period_not_on_menus", {
               periods: periodsText(flagged, model.periods, repeated),
             }),

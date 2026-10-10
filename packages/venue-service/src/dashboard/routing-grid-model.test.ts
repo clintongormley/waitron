@@ -953,7 +953,7 @@ describe("cellPeriodLines", () => {
       ),
     });
 
-    it("carries the line's flagged periods, in its order, and a mark naming them as the line does", () => {
+    it("marks the line, naming its flagged periods in its order as the line does", () => {
       const lines = cellPeriodLines(
         routing([
           flagged(categoryCell("drinks"), [
@@ -972,7 +972,6 @@ describe("cellPeriodLines", () => {
             periodIds: ["p-lunch", "p-afternoon", "p-dinner"],
             target: downstairs,
             text: "Lunch–Dinner: Downstairs bar",
-            flaggedPeriods: ["p-lunch", "p-dinner"],
             flagText: "Not on Lunch, Dinner menus",
           },
           { periodIds: ["p-supper"], target: kitchen, text: "Supper: Kitchen" },
