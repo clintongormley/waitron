@@ -622,7 +622,6 @@ it("scopes department receipt subscriptions by department and refreshes passivel
   expect(active).toHaveBeenCalledOnce();
 });
 
-
 it("venue-default refresh reads only its settings route and becomes passive", async () => {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
     async () => new Response(JSON.stringify({ settings: { headerSubtitle: "Restaurant" } })),
@@ -647,4 +646,3 @@ it("venue-default refresh reads only its settings route and becomes passive", as
     observed.unsubscribe();
   }
 });
-
