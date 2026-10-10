@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
+import { partyTablesName } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import { type FloorMapDot, type FloorMapFill, floorMapFillStyles } from "../floor-map-fills.js";
 import {
@@ -13,6 +14,7 @@ import {
   showsName,
 } from "../floor-plan-geometry.js";
 
+/** A merge's members carry the same `fill`, `dot` and `description`. */
 export interface FloorMapTable {
   id: string;
   label: string;
@@ -20,7 +22,7 @@ export interface FloorMapTable {
   fill: FloorMapFill;
   dot: FloorMapDot | null;
   joinId: string | null;
-  /** Read after the name: "Seated, 2 ready". A merge's members carry the same value. */
+  /** Read after the name: "Seated, 2 ready". */
   description: string;
 }
 
@@ -60,18 +62,7 @@ const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
 
 const collator = new Intl.Collator(undefined, { numeric: true });
 
-/** `partyTablesName`'s rule (`packages/shared/src/party-name.ts`) with "+" between the tables. */
-export function mapLabel(labels: readonly string[]): string {
-  const words = labels.map((label) => {
-    const space = label.indexOf(" ");
-    return space <= 0 ? null : { first: label.slice(0, space), rest: label.slice(space + 1) };
-  });
-  const first = words[0]?.first;
-  if (labels.length > 0 && words.every((word) => word !== null && word.first === first)) {
-    return `${first} ${words.map((word) => word!.rest).join("+")}`;
-  }
-  return labels.join("+");
-}
+export const mapLabel = (labels: readonly string[]): string => partyTablesName(labels, "+");
 
 function groupsOf(tables: readonly FloorMapTable[]): Group[] {
   const byKey = new Map<string, FloorMapTable[]>();
@@ -126,6 +117,7 @@ export class WtFloorMap extends LitElement {
       [part="shape"] {
         position: absolute;
         border: 1px solid var(--wt-color-field-line);
+        border-radius: var(--wt-radius-sm);
         pointer-events: auto;
       }
 
@@ -143,6 +135,7 @@ export class WtFloorMap extends LitElement {
 
       [part="dot"] {
         position: absolute;
+        z-index: 1;
         top: 0;
         right: 0;
         width: var(--wt-space-3);
@@ -215,8 +208,9 @@ export class WtFloorMap extends LitElement {
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("fitKey")) this.#needsFit = true;
+    if (!this.#needsFit || this.#size === null) return;
     const crop = cropToTables(this.tables.map((t) => t.placement));
-    if (!this.#needsFit || this.#size === null || crop === null) return;
+    if (crop === null) return;
     const scale = fitScale(crop, this.#size);
     this.#view = {
       scale,

@@ -90,7 +90,8 @@ it("draws a round table as a circle", async () => {
   const el = await map([t("r", "R", { shape: "round" }), t("s", "S", { x: 10 })]);
   expect(within(el, "shape", "r")!.dataset["shape"]).toBe("round");
   expect(getComputedStyle(within(el, "shape", "r")!).borderTopLeftRadius).toBe("50%");
-  expect(getComputedStyle(within(el, "shape", "s")!).borderTopLeftRadius).toBe("0px");
+  host.style.setProperty("--wt-radius-sm", "5px");
+  expect(getComputedStyle(within(el, "shape", "s")!).borderTopLeftRadius).toBe("5px");
 });
 
 it("draws a merge as one button named with its tables in number order", async () => {
@@ -220,6 +221,16 @@ it("shows a merge's dot whichever member carries it", async () => {
     t("ten", "10", { x: 8 }, { joinId: "j1", dot: "ready" }),
   ]);
   expect(within(el, "dot", "four")!.dataset["dot"]).toBe("ready");
+});
+
+it("draws a dot above a touching table listed after it", async () => {
+  const el = await map([t("a", "A", { x: 0 }, { dot: "ready" }), t("b", "B", { x: 8 })]);
+  const dot = within(el, "dot", "a")!;
+  // The dot takes no taps; letting it be hit here makes the hit test read the paint order.
+  dot.style.pointerEvents = "auto";
+  const box = dot.getBoundingClientRect();
+  const hit = el.shadowRoot!.elementFromPoint(box.right - 2, box.top + box.height / 2);
+  expect(hit).toBe(dot);
 });
 
 it("flashes the dot unless motion is reduced", async () => {

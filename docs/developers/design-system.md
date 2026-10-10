@@ -627,17 +627,17 @@ when it first draws tables, when `fitKey` changes and when it is resized; a new 
 the view. Tables sharing a `joinId` are one button covering their turned boxes, named by `mapLabel`
 ("Terrace 4+5", "4+10"), whose `data-table-id` is its first member's in number order; each table is
 drawn at its true size and angle, so a small one is below `--wt-tap-min`. Each shape is painted from
-its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line`, and the name in the fill's
+its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line` with `--wt-radius-sm`
+corners (a round one is a circle), and the name in the fill's
 `--wt-color-on-table-*`. A name is drawn only when the table's own shorter side, before turning (a
 merge's whole box), is at least 28 px, and is always the start of the button's accessible name,
 followed by ", " and `description`. A dot is a `--wt-space-3` circle on the button's top-right corner,
-`--wt-color-success` for ready and `--wt-color-danger` for forgotten, ringed in the surface colour;
-it flashes once a second unless motion is reduced. It sends no events yet. The host has no
-`delegatesFocus`, unlike "Adding a primitive" item 4: it holds many table buttons, and a click on
-empty space in a `delegatesFocus` host focused its first button (headless Chromium 153, the slice 3
-plan's review probe, decision 9 of `docs/superpowers/plans/2026-10-08-floor-plan.md`). It clips its
-overflow (`overflow: clip`) rather than hiding it, because the browser scrolled a hidden-overflow host
-when an off-screen table took focus (the same probe).
+`--wt-color-success` for ready and `--wt-color-danger` for forgotten, ringed in the surface colour and
+drawn above every table; it flashes once a second unless motion is reduced. It sends no events yet. The host has no
+`delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
+rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
+host focused its first button, and with `overflow: hidden` the browser scrolled the host when an
+off-screen table took focus.
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
 Alt+ArrowDown, Enter and Space open the list with the chosen row active (the first row when nothing
