@@ -52,6 +52,10 @@ export async function detachPrinterFromStation(
 ): Promise<void> {
   void cfg;
   await refuseDeletedPrinters(tx, [printerId]);
+  await removeMapping(tx, { stationId, printerId });
+}
+
+async function removeMapping(tx: Transaction, { stationId, printerId }: StationPrinter) {
   await tx
     .delete(stationPrinters)
     .where(and(eq(stationPrinters.stationId, stationId), eq(stationPrinters.printerId, printerId)));
@@ -76,7 +80,7 @@ export async function replaceStationPrinters(
     }
   }
   for (const row of current) {
-    if (!printerIds.includes(row.printerId)) await detachPrinterFromStation(tx, cfg, row);
+    if (!printerIds.includes(row.printerId)) await removeMapping(tx, row);
   }
 }
 
