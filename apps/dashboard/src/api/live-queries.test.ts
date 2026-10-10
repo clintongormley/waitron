@@ -622,3 +622,29 @@ it("scopes department receipt subscriptions by department and refreshes passivel
   expect(active).toHaveBeenCalledOnce();
 });
 
+
+it("venue-default refresh reads only its settings route and becomes passive", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ settings: { headerSubtitle: "Restaurant" } })),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const observed = api.liveData.observe(
+    dashboardQuery(api, "getVenueReceiptSettings", []),
+    () => {},
+  );
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    api.liveData.invalidate([{ type: "tenant_receipts" }]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+      "/management-api/receipt-settings",
+      "/management-api/receipt-settings",
+    ]);
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+  } finally {
+    observed.unsubscribe();
+  }
+});
+
