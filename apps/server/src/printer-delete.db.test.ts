@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
-  CORE_MIGRATIONS,
   deviceProfilePrinters,
   deviceProfiles,
   devices,
@@ -23,6 +22,7 @@ import {
   withTransaction,
   workingOrders,
 } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -47,8 +47,10 @@ import { venueModuleConfig } from "./provision.js";
 import { endDeactivatedInvoicePrintDeliveries } from "./invoice-print.js";
 import { resolveDevicePrinterId } from "@waitron/layouts";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
+import { deleteDevice } from "./device-delete.js";
+import type { TillConfig } from "./till-config.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const NOW = new Date("2026-10-10T10:00:00.000Z");
 const clock: TrustedClock = {
@@ -577,6 +579,61 @@ describe("the printer delete impact", () => {
         withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, id)),
       ).rejects.toMatchObject({ code: "printer.not_found", params: { id } });
     }
+  });
+
+  it("names a disabled device inheriting the printer as its profile's default, and not a deleted one", async () => {
+    const v = await seedVenue();
+    const [series] = await suite.db.select().from(invoiceSeries);
+    const tillCfg: TillConfig = {
+      nodeId: brandNodeId(series!.nodeId),
+      seriesId: seriesId(series!.id),
+      locationId: brandLocationId(v.cfg.locationId),
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      tipsEnabled: false,
+      simplifiedInvoiceLimit: null,
+    };
+    const [deli] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Deli", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    await suite.db.insert(deviceProfilePrinters).values({
+      deviceProfileId: deli!.id,
+      printerId: v.Z,
+      role: "receipt",
+      position: 0,
+      isDefault: true,
+    });
+    const deliDevice = async (label: string) =>
+      (
+        await suite.db
+          .insert(devices)
+          .values({
+            locationId: v.cfg.locationId,
+            deviceProfileId: deli!.id,
+            label,
+            tokenHash: randomUUID(),
+            active: false,
+          })
+          .returning({ id: devices.id })
+      )[0]!.id;
+    const gone = await deliDevice("Deli till");
+    const spare = await deliDevice("Deli spare");
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, tillCfg, gone, NOW));
+
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z));
+
+    expect(impact.removes.find((item) => item.key === "device_receipt_default")).toEqual({
+      key: "device_receipt_default",
+      count: 1,
+      targets: [{ id: spare, name: "Deli spare" }],
+    });
+    const goneRow = async () =>
+      (await suite.db.execute(sql`select * from devices where id = ${gone}`)).rows;
+    const kept = await goneRow();
+    expect(kept).toHaveLength(1);
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
+    expect(await goneRow()).toEqual(kept);
   });
 });
 

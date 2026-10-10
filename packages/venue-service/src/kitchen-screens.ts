@@ -160,7 +160,7 @@ export async function setProfileKitchenScreens(
   const onProfile = await tx
     .select({ id: devices.id, label: devices.label, locationId: devices.locationId })
     .from(devices)
-    .where(eq(devices.deviceProfileId, profileId))
+    .where(and(eq(devices.deviceProfileId, profileId), isNull(devices.deletedAt)))
     .orderBy(asc(devices.label), asc(devices.id));
   const locations = [...new Set(onProfile.map((device) => device.locationId))];
   const before = new Map<string, MutableScreens>();

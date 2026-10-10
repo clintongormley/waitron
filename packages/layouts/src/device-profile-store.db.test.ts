@@ -428,6 +428,39 @@ describe("device-profile store against a real migrated database", () => {
     expect(held).toEqual([{ active: false, deviceProfileId: created.id }]);
   });
 
+  it("retires a profile whose only device is deleted, exactly as one held by a disabled device, the device untouched", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Only deleted",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    // The columns `deleteDevice` (apps/server, out of this package's reach) sets on the row.
+    const deviceId = await seedBoundDevice(created.id, false);
+    await suite.db
+      .update(devices)
+      .set({ deletedAt: "2026-10-10T10:00:00.000Z", tokenHash: "" })
+      .where(eq(devices.id, deviceId));
+    const row = () => suite.db.execute(sql`select * from devices where id = ${deviceId}`);
+    const before = (await row()).rows;
+
+    await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
+
+    expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([]);
+    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toBeUndefined();
+    const [retired] = await suite.db
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, created.id));
+    expect(retired).toEqual({ id: created.id });
+    expect((await row()).rows).toEqual(before);
+  });
+
   it("frees a retired profile's name for a new profile", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");

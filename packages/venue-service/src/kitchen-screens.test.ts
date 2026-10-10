@@ -1490,6 +1490,40 @@ describe("a profile save narrowing its devices", () => {
     expect((await shown(venue, elsewhere))[0]!.stations).toEqual([slot(venue.pastry, "Pastry")]);
   });
 
+  /** Marks the device deleted and removes its kitchen screens: what `deleteDevice` (in
+   *  apps/server, out of this package's reach) leaves in these tables. */
+  async function deleted(deviceId: string) {
+    await db
+      .update(devices)
+      .set({ active: false, deletedAt: "2026-10-10T10:00:00.000Z" })
+      .where(eq(devices.id, deviceId));
+    await scoped((tx) => removeDeviceKitchenScreens(tx, deviceId));
+  }
+
+  it("narrows a switched-off device on the profile and reports nothing for a deleted one", async () => {
+    const { venue, line, all } = await narrowing();
+    await db.update(devices).set({ active: false }).where(eq(devices.id, line));
+    await deleted(all);
+
+    await expect(
+      set(venue, venue.kds, { station: { stationIds: [venue.grill, venue.cold], zoneIds: null } }),
+    ).resolves.toEqual([lost(line, "Line", { stations: [named(venue.pastry, "Pastry")] })]);
+    expect(await removalsOf(all)).toEqual([]);
+  });
+
+  it("backstop: written straight into the database, a deleted device's choice is not narrowed", async () => {
+    const { venue, line, all } = await narrowing();
+    await deleted(all);
+    await db
+      .insert(deviceKitchenScreens)
+      .values({ deviceId: all, screen: "station", everyStation: true, everyZone: false });
+
+    await expect(
+      set(venue, venue.kds, { station: { stationIds: [venue.grill, venue.cold], zoneIds: null } }),
+    ).resolves.toEqual([lost(line, "Line", { stations: [named(venue.pastry, "Pastry")] })]);
+    expect(await removalsOf(all)).toEqual([]);
+  });
+
   it("empties a display's only station without refusing it, keeping the station as no longer available", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, { station: every });
