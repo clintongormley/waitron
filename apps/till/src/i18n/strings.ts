@@ -796,6 +796,11 @@ export const en = {
   "table.submitted_held_one": "Held: 1 group.",
   "table.submitted_joined": "Added to a held group.",
   "table.submitted_close": "Close",
+  "table.flash_ready": "{n} ready to serve",
+  "table.flash_ready_one": "1 ready to serve",
+  "table.flash_forgotten": "Forgotten order",
+  "table.flash_close": "Close",
+  "table.status_pin": "Table details: {status}",
   "make_now.title": "Make now",
   "make_now.dismiss": "Done",
   "table.round_unconfirmed":
@@ -1932,6 +1937,11 @@ export const es: Record<StringKey, string> = {
   "table.submitted_held_one": "En espera: 1 grupo.",
   "table.submitted_joined": "Añadido a un grupo en espera.",
   "table.submitted_close": "Cerrar",
+  "table.flash_ready": "{n} listos para servir",
+  "table.flash_ready_one": "1 listo para servir",
+  "table.flash_forgotten": "Pedido olvidado",
+  "table.flash_close": "Cerrar",
+  "table.status_pin": "Detalles de la mesa: {status}",
   "make_now.title": "Preparar ahora",
   "make_now.dismiss": "Hecho",
   "table.round_unconfirmed":

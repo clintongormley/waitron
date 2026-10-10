@@ -77,6 +77,7 @@ import {
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
+import "../widgets/table-status.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
@@ -2555,6 +2556,7 @@ export class TillTableOrderScreen extends LitElement {
               </header>`
         }
         <div class="head-actions">
+          <till-table-status .tables=${this.tables} .party=${this.party}></till-table-status>
           <wt-button
             class="drawer-handle"
             data-open-drawer
