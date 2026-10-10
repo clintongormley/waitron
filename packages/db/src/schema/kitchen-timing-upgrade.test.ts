@@ -73,7 +73,7 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
   await db.run(sql`insert into printers (id, location_id, name, transport, local_key)
     values (${printerId}, ${locationId}, 'Grill printer', 'usb', 'grill-fixture')`);
   await db.insert(stationPrinters).values({ stationId, printerId });
-  // By hand: no schema object names `watchers` or `watcher_stations` any more, and the table
+  // By hand: `watchers` and `watcher_stations` exist only in the migrations, and the table
   // definitions name `device_profiles` and `devices` columns later migrations add.
   const now = new Date().toISOString();
   const watcherId = randomUUID();

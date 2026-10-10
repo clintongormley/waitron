@@ -1331,8 +1331,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **What a kitchen screen shows after its zone is switched off is unchecked.** Switching a zone off
   (`deactivateServiceZone`, `packages/venue-service/src/operations.ts`) clears its routing cells
-  and disables its tables; it no longer clears any watcher rows (the tables are gone), and it never
-  cleared kitchen screens' zone rows (`device_kitchen_screen_zones`,
+  and disables its tables; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
   `device_profile_kitchen_screen_zones`). What a pass screen or the device editor shows for that
   zone was read, not run. Left open by A366 slice 5 Part B.
 
