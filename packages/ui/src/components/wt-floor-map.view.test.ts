@@ -46,9 +46,9 @@ async function settled(el: WtFloorMap): Promise<void> {
   await el.updateComplete;
 }
 
-async function map(tables: FloorMapTable[], fakeTimers = true): Promise<WtFloorMap> {
+async function map(tables: FloorMapTable[], fakeTimers = true, style = ""): Promise<WtFloorMap> {
   const el = (await mountInShadowRoot(
-    '<wt-floor-map style="width: 600px; height: 300px"></wt-floor-map>',
+    `<wt-floor-map style="width: 600px; height: 300px; ${style}"></wt-floor-map>`,
   )) as WtFloorMap;
   el.tables = tables;
   await settled(el);
@@ -207,10 +207,31 @@ it("a click on a table then on empty space close by opens the table and does not
   expect((await boxOf(el, "t1")).left).toBe(200);
 });
 
+it("a tap on empty space then one on a table close by opens the table and does not fit", async () => {
+  const el = await map([t1]);
+  drag(el, [20, 20], [70, 20]);
+  await el.updateComplete;
+  // t1 now spans 200 to 500 across; (190, 150) is empty, 20 px from (210, 150).
+  tapAt(el, 190, 150);
+  tapAt(el, 210, 150);
+  expect(taps).toEqual([{ tableId: "t1" }]);
+  expect((await boxOf(el, "t1")).left).toBe(200);
+});
+
 it("pinching zooms about the fingers", async () => {
   const el = await map([t1]);
   pinch(el, [200, 150], [300, 150], [400, 150]);
   expect(await boxOf(el, "t1")).toEqual({ left: 100, top: 0, width: 600, height: 300 });
+});
+
+it("a pinch and Ctrl+wheel are measured from the map's own corner", async () => {
+  const el = await map([t1], true, "margin: 20px 0 0 40px");
+  pinch(el, [300, 100], [300, 200], [300, 300]);
+  expect(await boxOf(el, "t1")).toEqual({ left: 0, top: 50, width: 600, height: 300 });
+  tapAt(el, 20, 20);
+  tapAt(el, 20, 20);
+  wheel(el, 300, 150, { deltaY: -100, ctrlKey: true });
+  expect(await boxOf(el, "t1")).toEqual({ left: 0, top: 0, width: 600, height: 300 });
 });
 
 it("zoom stops at half and at four times the fitted size", async () => {
@@ -358,6 +379,8 @@ it("a drop over another table names it", async () => {
   expect(await boxOf(el, "t2")).toEqual({ left: 75, top: 75, width: 150, height: 150 });
   hold(el, 300, 150);
   move(el, 150, 150);
+  expect((await boxOf(el, "t1")).left).toBe(75);
+  expect((await boxOf(el, "t2")).left).toBe(75);
   up(el, 150, 150);
   expect(drops).toEqual([{ tableId: "t1", x: 6, y: 5, targetId: "t2" }]);
 });

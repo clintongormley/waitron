@@ -256,7 +256,7 @@ export class WtFloorMap extends LitElement {
     this.addEventListener("contextmenu", this.#onContextMenu);
     this.addEventListener("keydown", this.#onKeyDown);
     this.addEventListener("pointerdown", this.#onPointerDown);
-    this.addEventListener("wheel", this.#onWheel, { passive: false });
+    this.addEventListener("wheel", this.#onWheel);
   }
 
   override connectedCallback(): void {
@@ -313,7 +313,8 @@ export class WtFloorMap extends LitElement {
   readonly #onDoubleTap = (at: GesturePoint): void => {
     const id = idOf(at.target);
     if (id === null && this.#lastTapId === null) {
-      this.#needsFit = true;
+      // At once, so a pan or the wheel before the next render moves the fitted view.
+      this.#fitView();
       this.requestUpdate();
       return;
     }
@@ -346,7 +347,6 @@ export class WtFloorMap extends LitElement {
 
   #endDrag(): void {
     this.#clearHeld();
-    if (this.#drag === null) return;
     this.#drag = null;
     this.requestUpdate();
   }
@@ -366,7 +366,7 @@ export class WtFloorMap extends LitElement {
     const targetId =
       this.shadowRoot!.elementsFromPoint(at.x, at.y)
         .map(idOf)
-        .find((id) => id !== null && id !== drag.tableId) ?? null;
+        .find((id) => id !== drag.tableId) ?? null;
     this.dispatchEvent(
       new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
         detail: { tableId: drag.tableId, x: drag.x, y: drag.y, targetId },
@@ -382,8 +382,8 @@ export class WtFloorMap extends LitElement {
    */
   #moveView(ratio: number, mx: number, my: number, dx: number, dy: number): void {
     const view = this.#view;
-    const fit = this.#fit;
-    if (view === null || fit === null) return;
+    if (view === null) return;
+    const fit = this.#fit!;
     const scale = Math.min(
       fit.scale * MAX_ZOOM,
       Math.max(fit.scale * MIN_ZOOM, view.scale * ratio),
@@ -468,7 +468,11 @@ export class WtFloorMap extends LitElement {
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("fitKey")) this.#needsFit = true;
-    if (!this.#needsFit || this.#size === null) return;
+    if (this.#needsFit) this.#fitView();
+  }
+
+  #fitView(): void {
+    if (this.#size === null) return;
     const crop = cropToTables(this.tables.map((t) => t.placement));
     if (crop === null) return;
     const scale = fitScale(crop, this.#size);
