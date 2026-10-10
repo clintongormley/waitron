@@ -44,14 +44,13 @@ their full text.
   cash replay checks are built. The department draft/save editor is mounted on the receipt
   branch, with active-default selection, disabled-department maintenance and authored-draft
   previews and a separate preview-language picker. The independent venue defaults editor is
-  staged on that branch with its own
-  query/save scope, refusal and reconnect checks; mounting it on the page, separate
-  language/description actions, remaining page lifecycle checks and caller retirement remain.
+  mounted on that branch with its own query/save scope, refusal and reconnect checks;
+  its authored draft feeds preview and inherited department hints. Language/description have
+  separate actions. Remaining page lifecycle checks and caller retirement remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
-  The unlanded slice 7 branch has independent language and description actions. Mounting the
-  venue-default editor and removing the combined global/contact form remain in Part A.
+  Removing the legacy combined global/contact form remains in Part A.
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
   requests. Part A is built: combined tickets on shared printers, period choices in routing cells,

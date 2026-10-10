@@ -26,6 +26,89 @@ afterEach(() => {
   setLocale("en-GB");
 });
 type Screen = HTMLElementTagNameMap["dashboard-receipts-screen"];
+it("protects the mounted venue-default draft after an independent language save", async () => {
+  let stored = { headerSubtitle: "Venue default" };
+  const { screen } = await mount({
+    getVenueReceiptSettings: async () => ({ settings: { ...stored } }),
+    putVenueReceiptSettings: async (value) => {
+      stored = { headerSubtitle: value.headerSubtitle ?? "" };
+    },
+  });
+  const defaults = screen.shadowRoot!.querySelector<
+    HTMLElementTagNameMap["dashboard-venue-receipt-defaults-editor"]
+  >("dashboard-venue-receipt-defaults-editor")!;
+  await expect
+    .poll(() => defaults.shadowRoot?.querySelector("wt-input[name=headerSubtitle]"))
+    .toBeTruthy();
+  expect(unload()).toBe(false);
+  const subtitle = defaults.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "wt-input[name=headerSubtitle]",
+  )!;
+  await subtitle.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  await userEvent.fill(
+    page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
+    "Typed default",
+  );
+  expect(unload()).toBe(true);
+  await change(screen, "receiptLanguage", "ca-ES");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-test=language-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(unload()).toBe(true);
+  defaults.shadowRoot!.querySelector<HTMLElement>("[data-test=defaults-save]")!.click();
+  await expect.poll(() => stored.headerSubtitle).toBe("Typed default");
+  await expect.poll(() => unload()).toBe(false);
+});
+
+it("Keep preserves mounted defaults and Discard restores their own baseline before leaving", async () => {
+  const { app, screen } = await mount({
+    getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Venue default" } }),
+  });
+  const defaults = screen.shadowRoot!.querySelector<
+    HTMLElementTagNameMap["dashboard-venue-receipt-defaults-editor"]
+  >("dashboard-venue-receipt-defaults-editor")!;
+  await expect
+    .poll(() => defaults.shadowRoot?.querySelector("wt-input[name=headerSubtitle]"))
+    .toBeTruthy();
+  const subtitle = defaults.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "wt-input[name=headerSubtitle]",
+  )!;
+  await subtitle.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  await userEvent.fill(
+    page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
+    "Typed default",
+  );
+  let left = 0;
+  const request = () =>
+    app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {
+        left++;
+      },
+    });
+  const kept = request();
+  await choose(app, "keep");
+  expect(await kept).toBe("kept");
+  expect(left).toBe(0);
+  expect(subtitle.value).toBe("Typed default");
+  expect(unload()).toBe(true);
+  const discarded = request();
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  expect(left).toBe(1);
+  expect(subtitle.value).toBe("Venue default");
+  expect(unload()).toBe(false);
+});
+
 const preview = {
   preview: {
     widthDots: 512,

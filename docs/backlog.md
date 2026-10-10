@@ -1373,8 +1373,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   its contracts, scoped storage, routes, thermal/A4 composition and independent email contact
   selector, preview, till answers and media usage are built on Lane E's receipt branch. The
   department editor is now mounted there with department selection and authored-draft previews and a separate preview-language picker;
-  the independent venue defaults editor, remaining page lifecycle checks and branch review
-  remain open after landed 3A/6A. Core email consent removal stays separate.
+  the independent venue defaults editor is mounted and feeds draft previews and inherited hints.
+  Retiring the legacy combined form, remaining page lifecycle checks and branch review stay
+  open after landed 3A/6A. Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 

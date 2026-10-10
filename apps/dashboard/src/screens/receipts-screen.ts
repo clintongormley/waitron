@@ -21,6 +21,7 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "../widgets/image-upload.js";
 import "./department-receipt-editor.js";
+import "./venue-receipt-defaults-editor.js";
 import type {
   DashboardApi,
   PrintPaperWidth,
@@ -381,6 +382,7 @@ export class ReceiptsScreen extends LitElement {
   }[] = [];
   @state() private departmentLoadError = "";
   @state() private departmentDraft: DepartmentReceiptConfig | null = null;
+  @state() private venueDefaultsDraft: VenueReceiptSettings | null = null;
   #departmentGeneration = 0;
   @state() private previewDepartmentId: string | null = null;
   #departmentsLoaded = false;
@@ -409,6 +411,7 @@ export class ReceiptsScreen extends LitElement {
     this.#trimConnection++;
     this.#departmentGeneration++;
     this.#departmentsLoaded = false;
+    this.venueDefaultsDraft = null;
     this.#trimScope?.dispose();
     this.#trimScope = undefined;
     this.#languageScope?.dispose();
@@ -496,10 +499,20 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #venueDefaults(): VenueReceiptSettings {
+    if (this.venueDefaultsDraft !== null) return this.venueDefaultsDraft;
     const settings = this.#trim();
     delete settings.phone;
     delete settings.email;
     return settings;
+  }
+
+  #defaultsChanged(event: CustomEvent<{ settings: VenueReceiptSettings }>): void {
+    event.stopPropagation();
+    if (sameValue(this.venueDefaultsDraft, event.detail.settings)) return;
+    this.venueDefaultsDraft = structuredClone(event.detail.settings);
+    this.#departmentGeneration++;
+    this.#previewActive = true;
+    this.#schedulePreview();
   }
 
   #choosePreviewDepartment(departmentId: string): void {
@@ -696,7 +709,11 @@ export class ReceiptsScreen extends LitElement {
     }
     const client = this.#previewActive ? this.api : (this.api.background ?? this.api);
     this.#previewActive = false;
-    const config = this.#trim();
+    const config: ReceiptConfig = {
+      ...this.#venueDefaults(),
+      ...(this.phone.trim() ? { phone: this.phone.trim() } : {}),
+      ...(this.email.trim() ? { email: this.email.trim() } : {}),
+    };
     for (const field of ["phone", "email"] as const) {
       if (contactProblem(field, config[field] ?? "") !== "") delete config[field];
     }
@@ -1422,34 +1439,37 @@ export class ReceiptsScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const locationReady =
+      this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null;
     return html` ${
-      this.receiptLoadError !== null
-        ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
-        : nothing
-    }
-    ${
-      this.locationLoadFailed || this.languageLoadFailed
-        ? html`<p role="alert">${t("location_settings.load_error")}</p>`
-        : nothing
-    }
-    ${
-      this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
-        ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
-            >${t("location_settings.retry")}</wt-button
-          >`
-        : nothing
-    }
-    ${
-      this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null
-        ? html`<div class="layout">
-            <div class="form-column">
-              <section class="department-settings">${this.#renderDepartment()}</section>
-              ${this.#renderForm()}
-            </div>
-            ${this.#renderPreview()}
-          </div>`
-        : nothing
-    }`;
+        this.receiptLoadError !== null
+          ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
+          : nothing
+      }
+      ${
+        this.locationLoadFailed || this.languageLoadFailed
+          ? html`<p role="alert">${t("location_settings.load_error")}</p>`
+          : nothing
+      }
+      ${
+        this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
+          ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
+              >${t("location_settings.retry")}</wt-button
+            >`
+          : nothing
+      }
+      <div class="layout">
+        <div class="form-column">
+          ${locationReady ? html`<section class="department-settings">${this.#renderDepartment()}</section>` : nothing}
+          <dashboard-venue-receipt-defaults-editor
+            .api=${this.api}
+            .draftParent=${this}
+            @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
+          ></dashboard-venue-receipt-defaults-editor>
+          ${locationReady ? this.#renderForm() : nothing}
+        </div>
+        ${locationReady ? this.#renderPreview() : nothing}
+      </div>`;
   }
 }
 
