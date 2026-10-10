@@ -3133,6 +3133,14 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/device-profiles/${id}`, "DELETE");
   }
 
+  getDeviceDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/devices/${id}/delete-impact`, "GET");
+  }
+
+  deleteDevice(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/devices/${id}`, "DELETE");
+  }
+
   revokeDevice(id: string): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
   }

@@ -610,8 +610,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ya hay un dispositivo activo con ese nombre aquí. Elige otro",
   },
   "device.payment_in_progress": {
-    en: "A card payment on this device is still in progress. Change its profile once the payment finishes or is cancelled",
-    es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia su perfil cuando el pago termine o se cancele",
+    en: "A payment on this device is still in progress. Try again once it finishes or is cancelled",
+    es: "Hay un pago en curso en este dispositivo. Vuelve a intentarlo cuando termine o se cancele",
   },
   "device_profile.incompatible": {
     en: "That profile is for another kind of device. Untick it",
