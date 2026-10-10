@@ -16,7 +16,6 @@ import { authorizeManager } from "@waitron/identity";
 import {
   getPrintedReceipt,
   resolveDevicePrinterIds,
-  validateReceiptConfig,
   validateDepartmentReceipt,
   validateVenueReceiptSettings,
   type ReceiptConfig,
@@ -95,40 +94,6 @@ function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[
   )
     tail++;
   return { start, end: withField.length - tail };
-}
-
-function requireReceiptParameter(given: string[] | undefined): unknown {
-  if (given?.length !== 1) throw new AppError("management.request_invalid", { field: "receipt" });
-  try {
-    return JSON.parse(given[0]!);
-  } catch {
-    throw new AppError("management.request_invalid", { field: "receipt" });
-  }
-}
-
-function optionalPaperWidth(given: string[] | undefined): PaperWidth | undefined {
-  if (given === undefined) return undefined;
-  if (given.length !== 1) throw new AppError("management.request_invalid", { field: "paperWidth" });
-  return requireEnum(given[0], "paperWidth", printPaperWidth.enumValues);
-}
-
-function optionalDepartmentId(given: string[] | undefined): string | undefined {
-  if (given === undefined) return undefined;
-  if (given.length !== 1)
-    throw new AppError("management.request_invalid", { field: "departmentId" });
-  return requireUuidParam(given[0]!, "departmentId");
-}
-
-/** A language to draw in other than the saved one: one of those the venue's pack offers. */
-function optionalLanguage(
-  given: string[] | undefined,
-  choices: readonly string[],
-): string | undefined {
-  if (given === undefined) return undefined;
-  if (given.length !== 1 || !choices.includes(given[0]!)) {
-    throw new AppError("management.request_invalid", { field: "language" });
-  }
-  return given[0];
 }
 
 /** The paper setting of each active device's resolved, switched-on receipt printer, by device name. */
@@ -387,125 +352,6 @@ export function mountReceiptPreviewApi(
           email: markOf("email"),
           address: address.length ? without(draw(receipt, [])) : null,
           logo: logo === null ? null : without(draw(receipt, address, null)),
-        },
-      };
-      return c.json(response);
-    }),
-  );
-  app.get("/management-api/receipt-preview", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const requested = requireReceiptParameter(c.req.queries("receipt"));
-      const asked = optionalPaperWidth(c.req.queries("paperWidth"));
-      const departmentId = optionalDepartmentId(c.req.queries("departmentId"));
-      const {
-        issuer,
-        settings,
-        printer,
-        receipt,
-        venueAddress,
-        savedLogo,
-        language,
-        rules,
-        receiptHeader,
-      } = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        const receipt = validateReceiptConfig(requested);
-        // Provisioning writes the one taxpayer row before the management API is served.
-        const taxpayer = (await readTenant(tx))!;
-        const [department] =
-          departmentId === undefined
-            ? []
-            : await tx
-                .select({
-                  tradingName: departments.tradingName,
-                  printTradingName: departmentSalePolicies.printTradingName,
-                })
-                .from(departments)
-                .innerJoin(
-                  departmentSalePolicies,
-                  eq(departmentSalePolicies.departmentId, departments.id),
-                )
-                .where(
-                  and(
-                    eq(departments.id, departmentId),
-                    eq(departments.locationId, deps.cfg.locationId),
-                    eq(departments.active, true),
-                  ),
-                );
-        if (departmentId !== undefined && department === undefined) {
-          throw new AppError("department.not_found", { departmentId });
-        }
-        const settings = await activeReceiptSettings(tx, deps.cfg.locationId);
-        const printer = chooseSetting(settings, asked);
-        let saved: MonoRaster | null = null;
-        if (receipt.logo !== undefined) {
-          const stored = await getPrintedReceipt(tx, printer.paperWidth);
-          if (stored.receipt.logo === receipt.logo) saved = stored.logo;
-        }
-        return {
-          issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-          settings,
-          printer,
-          receipt,
-          venueAddress: await readReceiptAddress(tx, deps.cfg.locationId, receipt),
-          savedLogo: saved,
-          language: await readReceiptLanguage(tx, deps.cfg.locationId),
-          rules: await readVenueReceiptLanguageRules(tx, { locationId: deps.cfg.locationId }),
-          receiptHeader: department,
-        };
-      });
-      const locale = optionalLanguage(c.req.queries("language"), rules.choices) ?? language.locale;
-      const { logo: logoName } = receipt;
-      // Outside the transaction: drawing a logo decodes its image.
-      const logo =
-        logoName === undefined
-          ? null
-          : (savedLogo ??
-            (await drawPreviewLogo(logoCache, logoName, printer.paperWidth, {
-              exists: () => imageExists(deps.db, logoName),
-              bytes: async () => (await readImageBytes(deps.db, logoName))?.bytes ?? null,
-            })));
-      const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
-      const draw = (
-        trim: ReceiptConfig,
-        address: readonly string[] = venueAddress,
-        picture: MonoRaster | null = logo,
-      ) =>
-        previewPrintJob(
-          formatReceipt({
-            result: sample,
-            issuer,
-            receiptHeader,
-            receipt: trim,
-            venueAddress: address,
-            logo: picture,
-            invoiceLocale: locale,
-            printer,
-            simulated: deps.cfg.practiceMode,
-          }),
-          { widthDots },
-        );
-      const preview = draw(receipt);
-      const without = (drawn: PrintJobPreview) => addedBlocks(drawn.blocks, preview.blocks);
-      const markOf = (field: "headerSubtitle" | "footerMessage" | "phone" | "email") =>
-        receipt[field] ? without(draw({ ...receipt, [field]: undefined })) : null;
-      const response: ReceiptPreviewResponse = {
-        preview,
-        paperWidth: printer.paperWidth,
-        paperWidths: printPaperWidth.enumValues.filter((width) =>
-          settings.some((setting) => setting.paperWidth === width),
-        ),
-        marks: {
-          headerSubtitle: markOf("headerSubtitle"),
-          footerMessage: markOf("footerMessage"),
-          phone: markOf("phone"),
-          email: markOf("email"),
-          address: venueAddress.length > 0 ? without(draw(receipt, [])) : null,
-          logo: logo === null ? null : without(draw(receipt, venueAddress, null)),
         },
       };
       return c.json(response);

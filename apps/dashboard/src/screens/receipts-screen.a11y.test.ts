@@ -3,7 +3,19 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./receipts-screen.js";
 import type { ReceiptsScreen } from "./receipts-screen.js";
-import type { DashboardApi, ReceiptConfig, ReceiptPreview } from "../api/client.js";
+import type {
+  DashboardApi as ProductionApi,
+  ReceiptConfig,
+  ReceiptPreview,
+} from "../api/client.js";
+
+type DashboardApi = ProductionApi & {
+  drawReceipt(
+    config: ReceiptConfig,
+    width?: import("../api/client.js").PrintPaperWidth,
+    language?: string,
+  ): Promise<ReceiptPreview>;
+};
 
 function preview(config: ReceiptConfig): ReceiptPreview {
   const lines = ["Deli Test SL", ...(config.headerSubtitle ? [config.headerSubtitle] : [])];
@@ -49,7 +61,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
     }),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    previewReceipt: vi.fn(async (config: ReceiptConfig) => preview(config)),
+    drawReceipt: vi.fn(async (config: ReceiptConfig) => preview(config)),
     ...overrides,
   } as unknown as DashboardApi;
   api.getVenueReceiptSettings = vi.fn(async () => {
@@ -73,7 +85,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
   });
   api.putDepartmentReceipt = vi.fn().mockResolvedValue(undefined);
   api.previewReceiptDraft = vi.fn(async (draft) =>
-    api.previewReceipt({ ...draft.settings, ...draft.receipt } as ReceiptConfig),
+    api.drawReceipt({ ...draft.settings, ...draft.receipt } as ReceiptConfig),
   );
   return api;
 }
@@ -287,7 +299,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
 
   it("renders accessibly with the paper width dropdown shown", async () => {
     const api = stubApi({
-      previewReceipt: vi.fn(async (config: ReceiptConfig): Promise<ReceiptPreview> => ({
+      drawReceipt: vi.fn(async (config: ReceiptConfig): Promise<ReceiptPreview> => ({
         ...preview(config),
         paperWidths: ["58mm", "80mm"],
       })),

@@ -3,7 +3,7 @@ import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type {
-  DashboardApi,
+  DashboardApi as ProductionApi,
   PrintPaperWidth,
   ReceiptConfig,
   ReceiptLanguage,
@@ -13,6 +13,14 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ReceiptsScreen } from "./receipts-screen.js";
+
+type DashboardApi = ProductionApi & {
+  drawReceipt(
+    config: ReceiptConfig,
+    width?: import("../api/client.js").PrintPaperWidth,
+    language?: string,
+  ): Promise<import("../api/client.js").ReceiptPreview>;
+};
 
 const CHOICES = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
 const REASON = {
@@ -78,16 +86,16 @@ function stubApi(
     getReceiptLanguage: vi.fn().mockResolvedValue(language),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue(content),
-    previewReceipt: vi.fn(drawn),
+    drawReceipt: vi.fn(drawn),
     ...overrides,
   } as unknown as DashboardApi;
   api.previewReceiptDraft = vi.fn(async (draft) => {
     const config = draft.settings;
     return draft.language !== undefined
-      ? api.previewReceipt(config, draft.paperWidth, draft.language)
+      ? api.drawReceipt(config, draft.paperWidth, draft.language)
       : draft.paperWidth !== undefined
-        ? api.previewReceipt(config, draft.paperWidth)
-        : api.previewReceipt(config);
+        ? api.drawReceipt(config, draft.paperWidth)
+        : api.drawReceipt(config);
   });
   return api;
 }
@@ -198,9 +206,9 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
   it("redraws the preview in a newly picked language at once, saving nothing", async () => {
     const api = stubApi(madrid());
     const el = await mount(api);
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}]]);
     pickPreview(el, "gl-ES");
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, undefined, "gl-ES"]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}, undefined, "gl-ES"]]);
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma gl-ES"));
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
   });
@@ -211,11 +219,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     pickPreview(el, "gl-ES");
     pickPreview(el, "es-ES");
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma guardado"));
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([
-      [{}],
-      [{}, undefined, "gl-ES"],
-      [{}],
-    ]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}, undefined, "gl-ES"], [{}]]);
     await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
@@ -231,7 +235,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
         paperWidths: ["58mm", "80mm"] as PrintPaperWidth[],
       }),
     );
-    const api = stubApi(madrid(), undefined, { previewReceipt: twoWidths });
+    const api = stubApi(madrid(), undefined, { drawReceipt: twoWidths });
     const el = await mount(api);
     pickPreview(el, "eu-ES");
     await chooseOption(q(el, "wt-combobox[name=paperWidth]")!, "58mm");
@@ -252,7 +256,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(api.putReceiptLanguage).toHaveBeenCalledExactlyOnceWith("gl-ES");
     expect(api.putLocationSettings).not.toHaveBeenCalled();
     expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}]]);
     expect(q(el, "[role=status]")!.textContent).toBe(t("receipts.saved"));
     expect(select(el)!.value).toBe("gl-ES");
     expect(await shown(el)).toBe("Galician");
@@ -403,8 +407,8 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     liveData.invalidate([{ type: "locations" }]);
     await vi.waitFor(() => expect(select(el)!.value).toBe("eu-ES"));
     expect(await shown(el)).toBe("Basque");
-    await vi.waitFor(() => expect(background.previewReceipt).toHaveBeenCalledWith({}));
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}]]);
+    await vi.waitFor(() => expect(background.drawReceipt).toHaveBeenCalledWith({}));
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}]]);
     pick(el, "gl-ES");
     vi.mocked(background.getReceiptLanguage).mockResolvedValue(madrid("ca-ES"));
     liveData.invalidate([{ type: "locations" }]);
@@ -430,14 +434,14 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
             answer = resolve;
           }),
       ),
-      previewReceipt: drawStored,
+      drawReceipt: drawStored,
     });
     const api = Object.assign(
       stubApi(madrid(), undefined, {
         putReceiptLanguage: vi.fn(async (language: string) => {
           stored = language;
         }),
-        previewReceipt: drawStored,
+        drawReceipt: drawStored,
       }),
       { liveData, background },
     );
@@ -489,7 +493,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(q(el, "#receipt-language-error")).toBeNull();
     expect(await bottomOf(el)).toBe("");
     await vi.waitFor(() =>
-      expect(vi.mocked(background.previewReceipt).mock.calls.at(-1)).toEqual([{}]),
+      expect(vi.mocked(background.drawReceipt).mock.calls.at(-1)).toEqual([{}]),
     );
     q(el, "wt-input[name=operationDescription]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Comida" }, bubbles: true, composed: true }),
@@ -539,7 +543,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
       putReceiptLanguage: vi.fn(async (language: string) => {
         saved = language;
       }),
-      previewReceipt: vi.fn((config: ReceiptConfig, width?: PrintPaperWidth, language?: string) =>
+      drawReceipt: vi.fn((config: ReceiptConfig, width?: PrintPaperWidth, language?: string) =>
         Promise.resolve(drawn(config, width, language ?? saved)),
       ),
     });
@@ -558,7 +562,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     expect(q(el, "[data-test=receipt-language-value]")!.textContent!.trim()).toBe("Catalan");
     expect(q(el, "[data-test=use-fixed-language]")).toBeNull();
     expect(q(el, "[data-test=receipt-language-stored]")).toBeNull();
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}]]);
     await vi.waitFor(() => expect(paperText(el)).toContain("Idioma ca-ES"));
   });
 

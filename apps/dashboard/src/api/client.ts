@@ -2759,24 +2759,6 @@ export class DashboardApi {
     );
   }
 
-  /** Draws a sample receipt with this trim, at the given paper width and in the given receipt
-   * language if any; saves and prints nothing. */
-  previewReceipt(
-    receipt: ReceiptConfig,
-    paperWidth?: PrintPaperWidth,
-    language?: string,
-    departmentId?: string,
-  ): Promise<ReceiptPreview> {
-    const width = paperWidth === undefined ? "" : `&paperWidth=${encodeURIComponent(paperWidth)}`;
-    const drawnIn = language === undefined ? "" : `&language=${encodeURIComponent(language)}`;
-    const department =
-      departmentId === undefined ? "" : `&departmentId=${encodeURIComponent(departmentId)}`;
-    return this.#request<ReceiptPreview>(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}${department}`,
-      "GET",
-    );
-  }
-
   // ── Table service-status configuration ──────────────────────────────────────────────────────────
 
   listStatuses(): Promise<ServiceStatus[]> {

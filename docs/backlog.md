@@ -1384,8 +1384,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   receipt language and description each save independently. Department switches retain global
   drafts; reconnect preserves edits against their saved baselines. Stacked language headings
   label receipts/copies and warn from authored draft maps; known locale refusals focus and
-  scroll to their field. Venue-only previews still use the legacy GET route; migrating that
-  caller and retiring GET remain open. The complete managed-stack preview pass, remaining
+  scroll to their field. All draft previews use POST on that branch; the legacy GET route
+  and client method are retired. The complete managed-stack preview pass, remaining
   retained-consumer qualification and branch reviews also remain open.
   Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.

@@ -3,8 +3,16 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, ReceiptConfig } from "../api/client.js";
+import type { DashboardApi as ProductionApi, ReceiptConfig } from "../api/client.js";
 import { ReceiptsScreen } from "./receipts-screen.js";
+
+type DashboardApi = ProductionApi & {
+  drawReceipt(
+    config: ReceiptConfig,
+    width?: import("../api/client.js").PrintPaperWidth,
+    language?: string,
+  ): Promise<import("../api/client.js").ReceiptPreview>;
+};
 
 const PREVIEW = {
   preview: {
@@ -48,16 +56,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
     }),
     putReceiptLanguage: vi.fn().mockResolvedValue(undefined),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
+    drawReceipt: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;
   api.previewReceiptDraft = vi.fn(async (draft) => {
     const config = draft.settings;
     return draft.language !== undefined
-      ? api.previewReceipt(config, draft.paperWidth, draft.language)
+      ? api.drawReceipt(config, draft.paperWidth, draft.language)
       : draft.paperWidth !== undefined
-        ? api.previewReceipt(config, draft.paperWidth)
-        : api.previewReceipt(config);
+        ? api.drawReceipt(config, draft.paperWidth)
+        : api.drawReceipt(config);
   });
   return api;
 }

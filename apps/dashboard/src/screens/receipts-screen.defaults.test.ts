@@ -76,7 +76,6 @@ function fixture() {
     })),
     putReceiptLanguage: vi.fn(async () => {}),
     getContentLanguages: vi.fn(async () => ({ defaultLanguage: "es", languages: ["es", "ca"] })),
-    previewReceipt: vi.fn<DashboardApi["previewReceipt"]>(async () => paper()),
     previewReceiptDraft: vi.fn<DashboardApi["previewReceiptDraft"]>(async (value) =>
       paper(value.settings?.headerSubtitle),
     ),

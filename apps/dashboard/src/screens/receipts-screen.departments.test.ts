@@ -85,7 +85,6 @@ function apiFixture(rows = departments) {
     })),
     putReceiptLanguage: vi.fn(async () => {}),
     getContentLanguages: vi.fn(async () => ({ defaultLanguage: "es", languages: ["es"] })),
-    previewReceipt: vi.fn(async () => preview("Venue only")),
     previewReceiptDraft: vi.fn<DashboardApi["previewReceiptDraft"]>(async (draft) =>
       preview(
         draft.departmentId === null
@@ -162,7 +161,9 @@ describe("the receipt page's department context", () => {
         settings: { headerSubtitle: "Venue subtitle" },
       }),
     );
-    expect(api.previewReceipt).not.toHaveBeenCalled();
+    expect(
+      api.previewReceiptDraft.mock.calls.every(([draft]) => draft.departmentId === "bar"),
+    ).toBe(true);
   });
   it("selects the first active department when the designated default is disabled", async () => {
     url();
@@ -709,7 +710,11 @@ it("posts a venue-only authored preview without copying stored contact into the 
     }),
   );
   expect(api.previewReceiptDraft.mock.lastCall?.[0].receipt).toEqual({});
-  expect(api.previewReceipt).not.toHaveBeenCalled();
+  expect(
+    api.previewReceiptDraft.mock.calls.every(
+      ([draft]) => draft.departmentId === null && Object.keys(draft.receipt).length === 0,
+    ),
+  ).toBe(true);
 });
 
 it("makes a venue contact refresh passive without sending contact as an authored override", async () => {

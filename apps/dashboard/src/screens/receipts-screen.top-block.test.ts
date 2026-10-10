@@ -77,7 +77,6 @@ function stubApi(
     getVenueDepartments: vi
       .fn()
       .mockResolvedValue([{ id: "bar", name: "Bar", active: true, isDefault: true }]),
-    previewReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
     imageLibraryRequest: vi.fn().mockResolvedValue({ images: [], total: 0 }),
     ...overrides,
   } as unknown as DashboardApi;

@@ -162,7 +162,6 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listDepartments: async () => [],
-    previewReceipt: async () => preview,
     putVenueReceiptSettings: async () => {},
     putLocationSettings: async () => {},
     putReceiptLanguage: async () => {},

@@ -95,7 +95,6 @@ function stubApi() {
     getVenueDepartments: vi.fn(async () => [
       { id: "bar", name: "Bar", active: true, isDefault: true },
     ]),
-    previewReceipt: vi.fn(async () => preview()),
   };
   return api;
 }

@@ -384,3 +384,28 @@ it("keeps the venue-only page's stored contact in the drawn paper without submit
   expect(answer.marks.address).toBeNull();
   expect((await suite.db.select().from(tenantReceipts))[0]!.receipt).toEqual(contact);
 });
+
+it("retires GET previews while the authored POST still draws without saving or printing", async () => {
+  const app = new Hono();
+  mountReceiptPreviewApi(app, { db: suite.db, cfg: venue.cfg }, () => {});
+  const get = await app.request("/management-api/receipt-preview?receipt=%7B%7D", {
+    headers: { cookie: venue.managerCookie },
+  });
+  expect(get.status).toBe(404);
+  const response = await app.request("/management-api/receipt-preview", {
+    method: "POST",
+    headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+    body: JSON.stringify({
+      departmentId: null,
+      receipt: {},
+      settings: { headerSubtitle: "Unsaved POST", footerMessage: "Still a sample" },
+    }),
+  });
+  expect(response.status).toBe(200);
+  const answer = (await response.json()) as ReceiptPreviewResponse;
+  expect(lines(answer)).toContain("Unsaved POST");
+  expect(lines(answer)).toContain("Still a sample");
+  expect(await suite.db.select().from(tenantReceipts)).toEqual([]);
+  expect(await suite.db.select().from(printJobs)).toEqual([]);
+  expect(await suite.db.select().from(sales)).toEqual([]);
+});

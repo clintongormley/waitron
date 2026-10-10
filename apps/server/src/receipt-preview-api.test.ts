@@ -13,7 +13,11 @@ import {
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { emptyPrinterLists, setProfilePrinterLists, validateReceiptConfig } from "@waitron/layouts";
+import {
+  emptyPrinterLists,
+  setProfilePrinterLists,
+  validateVenueReceiptSettings,
+} from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -40,27 +44,32 @@ function app(cfg: Partial<TillConfig> = {}) {
   return app;
 }
 
-async function previewQuery(
-  query: string,
+async function previewRaw(
+  body: string,
   { cookie = venue.managerCookie, cfg = {} }: { cookie?: string; cfg?: Partial<TillConfig> } = {},
 ): Promise<Response> {
-  return app(cfg).request(`/management-api/receipt-preview${query}`, {
-    method: "GET",
-    headers: { cookie },
+  return app(cfg).request("/management-api/receipt-preview", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body,
   });
 }
 
 async function preview(
-  ask: { receipt?: unknown },
+  body: {
+    settings?: unknown;
+    departmentId?: unknown;
+    receipt?: unknown;
+    paperWidth?: unknown;
+    language?: unknown;
+  },
   options: { cookie?: string; cfg?: Partial<TillConfig> } = {},
 ): Promise<Response> {
-  const query =
-    "receipt" in ask ? `?receipt=${encodeURIComponent(JSON.stringify(ask.receipt))}` : "";
-  return previewQuery(query, options);
+  return previewRaw(JSON.stringify({ departmentId: null, receipt: {}, ...body }), options);
 }
 
 async function rendered(receipt: unknown, cfg: Partial<TillConfig> = {}) {
-  const response = await preview({ receipt }, { cfg });
+  const response = await preview({ settings: receipt }, { cfg });
   expect(response.status).toBe(200);
   return (await response.json()) as ReceiptPreviewResponse;
 }
@@ -134,36 +143,36 @@ async function withPrinters(
   }
 }
 
-describe("GET /management-api/receipt-preview", () => {
+describe("POST /management-api/receipt-preview", () => {
   it("requires a management session, and a manager's configuration permission", async () => {
-    expect((await preview({ receipt: {} }, { cookie: "" })).status).toBe(401);
-    expect((await preview({ receipt: {} }, { cookie: venue.staffCookie })).status).toBe(403);
+    expect((await preview({ settings: {} }, { cookie: "" })).status).toBe(401);
+    expect((await preview({ settings: {} }, { cookie: venue.staffCookie })).status).toBe(403);
   });
 
   it("refuses an unknown session before it checks the receipt's text, as the save does", async () => {
     const response = await preview(
-      { receipt: { footerMessage: 5 } },
+      { settings: { footerMessage: 5 } },
       { cookie: `${MANAGEMENT_COOKIE}=${randomUUID()}` },
     );
     expect(response.status).toBe(401);
   });
 
   it.each([
-    ["a request without a receipt", ""],
-    ["a receipt that is not JSON", `?receipt=${encodeURIComponent("{headerSubtitle:")}`],
-  ])("refuses %s as the save does", async (_, query) => {
-    const response = await previewQuery(query);
+    ["a request without settings", JSON.stringify({ departmentId: null, receipt: {} })],
+    ["a body that is not JSON", "{settings:"],
+  ])("refuses %s as a malformed body", async (_, body) => {
+    const response = await previewRaw(body);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "receipt" } },
+      error: { code: "management.request_invalid", params: { field: "body" } },
     });
   });
 
-  it("refuses a receipt given twice with the same code", async () => {
-    const response = await previewQuery("?receipt=%7B%7D&receipt=%7B%7D");
+  it("refuses settings that are not an object with the receipt validation code", async () => {
+    const response = await preview({ settings: [{}, {}] });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "receipt" } },
+      error: { code: "receipt.invalid", params: { reason: "not_object" } },
     });
   });
 
@@ -197,7 +206,7 @@ describe("GET /management-api/receipt-preview", () => {
       sql`update departments set trading_name = 'Deli Counter' where id = ${id}`,
     );
     try {
-      const response = await previewQuery(`?receipt=%7B%7D&departmentId=${encodeURIComponent(id)}`);
+      const response = await preview({ settings: {}, departmentId: id });
       expect(response.status).toBe(200);
       const lines = printedLines((await response.json()) as ReceiptPreviewResponse);
       expect(lines.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
@@ -210,23 +219,31 @@ describe("GET /management-api/receipt-preview", () => {
   });
 
   it("refuses malformed and unknown department choices", async () => {
-    const malformed = await previewQuery("?receipt=%7B%7D&departmentId=not-a-uuid");
+    const malformed = await preview({ settings: {}, departmentId: "not-a-uuid" });
     expect(malformed.status).toBe(400);
     expect((await malformed.json()).error.code).toBe("shared.invalid_id");
 
-    const unknown = await previewQuery(
-      "?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001",
-    );
+    const unknown = await preview({
+      settings: {},
+      departmentId: "aa000000-0000-4000-8000-000000000001",
+    });
     expect(unknown.status).toBe(404);
     expect((await unknown.json()).error.code).toBe("department.not_found");
 
-    const repeated = await previewQuery(
-      "?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001&departmentId=aa000000-0000-4000-8000-000000000001",
-    );
+    const repeated = await preview({
+      settings: {},
+      departmentId: [
+        "aa000000-0000-4000-8000-000000000001",
+        "aa000000-0000-4000-8000-000000000001",
+      ],
+    });
     expect(repeated.status).toBe(400);
     expect((await repeated.json()).error).toEqual({
-      code: "management.request_invalid",
-      params: { field: "departmentId" },
+      code: "shared.invalid_id",
+      params: {
+        kind: "departmentId",
+        value: ["aa000000-0000-4000-8000-000000000001", "aa000000-0000-4000-8000-000000000001"],
+      },
     });
   });
 
@@ -314,8 +331,8 @@ describe("GET /management-api/receipt-preview", () => {
   });
 
   describe("paper widths", () => {
-    const at = (query: string) =>
-      previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`).then(async (response) => {
+    const at = (paperWidth?: unknown) =>
+      preview({ settings: {}, paperWidth }).then(async (response) => {
         expect(response.status).toBe(200);
         return (await response.json()) as ReceiptPreviewResponse;
       });
@@ -328,7 +345,7 @@ describe("GET /management-api/receipt-preview", () => {
           { device: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
-          const result = await at("");
+          const result = await at();
           expect([result.paperWidths, result.paperWidth]).toEqual([["58mm", "80mm"], "80mm"]);
           expect([result.preview.widthDots, result.preview.columns]).toEqual([576, 42]);
         },
@@ -355,7 +372,7 @@ describe("GET /management-api/receipt-preview", () => {
               .update(devices)
               .set({ receiptPrinterId: shared!.printerId })
               .where(eq(devices.id, deviceId));
-            expect((await at("")).paperWidth).toBe("80mm");
+            expect((await at()).paperWidth).toBe("80mm");
           } finally {
             await suite.db.execute(sql`delete from devices where id = ${deviceId}`);
           }
@@ -370,7 +387,7 @@ describe("GET /management-api/receipt-preview", () => {
           { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
-          const result = await at("");
+          const result = await at();
           expect([result.paperWidths, result.paperWidth]).toEqual([["80mm"], "80mm"]);
         },
       );
@@ -392,7 +409,7 @@ describe("GET /management-api/receipt-preview", () => {
             })
             .returning({ id: printers.id });
           try {
-            const result = await at("");
+            const result = await at();
             expect([result.paperWidths, result.paperWidth]).toEqual([["80mm"], "80mm"]);
           } finally {
             await suite.db.execute(sql`delete from printers where id = ${unusedPrinter!.id}`);
@@ -425,7 +442,7 @@ describe("GET /management-api/receipt-preview", () => {
             receiptPrinterDefaultId: printer!.id,
           }),
         );
-        const result = await at("");
+        const result = await at();
         expect([result.paperWidths, result.paperWidth]).toEqual([["58mm"], "58mm"]);
       } finally {
         await suite.db.execute(
@@ -444,7 +461,7 @@ describe("GET /management-api/receipt-preview", () => {
           { device: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
-          const result = await at("&paperWidth=58mm");
+          const result = await at("58mm");
           expect(result.paperWidth).toBe("58mm");
           expect([result.preview.widthDots, result.preview.columns]).toEqual([360, 30]);
         },
@@ -458,7 +475,7 @@ describe("GET /management-api/receipt-preview", () => {
           { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
         ],
         async () => {
-          const result = await at("");
+          const result = await at();
           expect([result.paperWidths, result.paperWidth]).toEqual([["58mm", "80mm"], "58mm"]);
         },
       );
@@ -472,10 +489,10 @@ describe("GET /management-api/receipt-preview", () => {
           { device: "Caja 2", paperWidth: "58mm", resolution: "203dpi" },
         ],
         async () => {
-          const result = await at("&paperWidth=80mm");
+          const result = await at("80mm");
           expect(result.paperWidths).toEqual(["58mm", "80mm"]);
           expect(result.preview.widthDots).toBe(512);
-          expect((await at("")).preview.widthDots).toBe(512);
+          expect((await at()).preview.widthDots).toBe(512);
         },
       );
     });
@@ -484,14 +501,14 @@ describe("GET /management-api/receipt-preview", () => {
       await withPrinters(
         [{ device: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
         async () => {
-          const result = await at("");
+          const result = await at();
           expect([result.paperWidths, result.paperWidth]).toEqual([["58mm"], "58mm"]);
         },
       );
     });
 
     it("offers no width, and draws at 80 mm, when the location has no receipt printer", async () => {
-      const result = await at("");
+      const result = await at();
       expect([result.paperWidths, result.paperWidth]).toEqual([[], "80mm"]);
     });
 
@@ -502,29 +519,29 @@ describe("GET /management-api/receipt-preview", () => {
           { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
-          const result = await at("");
+          const result = await at();
           expect([result.paperWidths, result.paperWidth]).toEqual([["80mm"], "80mm"]);
         },
       );
     });
 
-    it("draws as if no width were asked for, and says which width it drew, when asked for a width no receipt printer has any more", async () => {
+    it("honours an explicit width with the default resolution when no receipt printer has it", async () => {
       await withPrinters(
         [{ device: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
         async () => {
-          const result = await at("&paperWidth=80mm");
-          expect(result.paperWidth).toBe("58mm");
-          expect([result.preview.widthDots, result.preview.columns]).toEqual([384, 30]);
+          const result = await at("80mm");
+          expect(result.paperWidth).toBe("80mm");
+          expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
         },
       );
     });
 
     it.each([
-      ["a width that is not a paper width", "&paperWidth=99mm"],
-      ["an empty width", "&paperWidth="],
-      ["a width given twice", "&paperWidth=58mm&paperWidth=58mm"],
-    ])("refuses %s", async (_, query) => {
-      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      ["a width that is not a paper width", "99mm"],
+      ["an empty width", ""],
+      ["an array of widths", ["58mm", "58mm"]],
+    ])("refuses %s", async (_, paperWidth) => {
+      const response = await preview({ settings: {}, paperWidth });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: { code: "management.request_invalid", params: { field: "paperWidth" } },
@@ -544,8 +561,8 @@ describe("GET /management-api/receipt-preview", () => {
   });
 
   describe("language", () => {
-    const at = async (query: string) => {
-      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+    const at = async (language?: unknown) => {
+      const response = await preview({ settings: {}, language });
       expect(response.status).toBe(200);
       return printedLines((await response.json()) as ReceiptPreviewResponse);
     };
@@ -553,7 +570,7 @@ describe("GET /management-api/receipt-preview", () => {
       lines.some((line) => line === label || line.startsWith(`${label} `));
 
     it("draws the sample in a language asked for, whatever the location has saved", async () => {
-      const lines = await at("&language=gl-ES");
+      const lines = await at("gl-ES");
       expect(labelled(lines, "Data")).toBe(true);
       expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
       expect(labelled(lines, "Fecha")).toBe(false);
@@ -562,16 +579,16 @@ describe("GET /management-api/receipt-preview", () => {
     it("follows the location's saved language when none is asked for", async () => {
       await setLocationLanguages(["gl-ES"]);
       try {
-        const lines = await at("");
+        const lines = await at();
         expect(labelled(lines, "Data")).toBe(true);
         expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
       } finally {
         await setLocationLanguages(["es-ES"]);
       }
-      expect(labelled(await at(""), "Fecha")).toBe(true);
+      expect(labelled(await at(), "Fecha")).toBe(true);
     });
 
-    it("draws in one transaction", async () => {
+    it("checks permission before reading the body, then draws from one transaction snapshot", async () => {
       let opened = 0;
       const counting = new Proxy(suite.db, {
         get(target, key) {
@@ -586,19 +603,20 @@ describe("GET /management-api/receipt-preview", () => {
       });
       const counted = new Hono();
       mountReceiptPreviewApi(counted, { db: counting, cfg: venue.cfg }, () => {});
-      const response = await counted.request(
-        `/management-api/receipt-preview?receipt=${encodeURIComponent("{}")}&language=gl-ES`,
-        { headers: { cookie: venue.managerCookie } },
-      );
-      expect([response.status, opened]).toEqual([200, 1]);
+      const response = await counted.request("/management-api/receipt-preview", {
+        method: "POST",
+        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+        body: JSON.stringify({ departmentId: null, receipt: {}, settings: {}, language: "gl-ES" }),
+      });
+      expect([response.status, opened]).toEqual([200, 2]);
     });
 
     it.each([
-      ["a language the pack does not offer", "&language=en-GB"],
-      ["an empty language", "&language="],
-      ["a language given twice", "&language=gl-ES&language=gl-ES"],
-    ])("refuses %s", async (_, query) => {
-      const response = await previewQuery(`?receipt=${encodeURIComponent("{}")}${query}`);
+      ["a language the pack does not offer", "en-GB"],
+      ["an empty language", ""],
+      ["an array of languages", ["gl-ES", "gl-ES"]],
+    ])("refuses %s", async (_, language) => {
+      const response = await preview({ settings: {}, language });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: { code: "management.request_invalid", params: { field: "language" } },
@@ -613,10 +631,11 @@ describe("GET /management-api/receipt-preview", () => {
       { db: suite.db, cfg: venue.cfg, receiptQrText: { caption: "CAP-X", legend: "LEG-Y" } },
       () => {},
     );
-    const response = await withWords.request(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent("{}")}`,
-      { method: "GET", headers: { cookie: venue.managerCookie } },
-    );
+    const response = await withWords.request("/management-api/receipt-preview", {
+      method: "POST",
+      headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+      body: JSON.stringify({ departmentId: null, receipt: {}, settings: {} }),
+    });
     expect(response.status).toBe(200);
     const result = (await response.json()) as ReceiptPreviewResponse;
     expect(pictures(result)).toHaveLength(1);
@@ -650,12 +669,12 @@ describe("GET /management-api/receipt-preview", () => {
   ])("refuses %s with the code and params a save would refuse it with", async (_, body) => {
     let saveRefusal: unknown;
     try {
-      validateReceiptConfig(body);
+      validateVenueReceiptSettings(body);
     } catch (error) {
       saveRefusal = error;
     }
     expect(isAppError(saveRefusal)).toBe(true);
-    const response = await preview({ receipt: body });
+    const response = await preview({ settings: body });
     expect(response.status).toBe(400);
     const { error } = (await response.json()) as { error: { code: string; params: unknown } };
     const expected = saveRefusal as { code: string; params: unknown };
@@ -687,12 +706,11 @@ describe("the receipt preview's top block", () => {
   const sizes = (result: ReceiptPreviewResponse) =>
     pictures(result).map((block) => (block.kind === "image" ? [block.width, block.height] : []));
 
-  it("draws the location's address, the phone and the email under the slogan, and marks each", async () => {
-    const result = await rendered({
-      headerSubtitle: "Desde 1990",
-      phone: "910 000 000",
-      email: "hola@deli.test",
-    });
+  it("draws the location's address and stored contact under the subtitle, and marks each", async () => {
+    await suite.db
+      .insert(tenantReceipts)
+      .values({ receipt: { phone: "910 000 000", email: "hola@deli.test" } });
+    const result = await rendered({ headerSubtitle: "Desde 1990" });
     const lines = printedLines(result);
     const name = lines.indexOf("Deli Test SL");
     expect(lines.slice(name - 1, name + 6)).toEqual([
@@ -756,10 +774,11 @@ describe("the receipt preview's top block", () => {
     const logo = await libraryImage(42);
     const mounted = app();
     const draw = async () => {
-      const response = await mounted.request(
-        `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify({ logo }))}`,
-        { headers: { cookie: venue.managerCookie } },
-      );
+      const response = await mounted.request("/management-api/receipt-preview", {
+        method: "POST",
+        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+        body: JSON.stringify({ departmentId: null, receipt: {}, settings: { logo } }),
+      });
       expect(response.status).toBe(200);
       return (await response.json()) as ReceiptPreviewResponse;
     };
@@ -775,10 +794,11 @@ describe("the receipt preview's top block", () => {
     const logo = await libraryImage(44);
     const mounted = app();
     const draw = async () => {
-      const response = await mounted.request(
-        `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify({ logo }))}`,
-        { headers: { cookie: venue.managerCookie } },
-      );
+      const response = await mounted.request("/management-api/receipt-preview", {
+        method: "POST",
+        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+        body: JSON.stringify({ departmentId: null, receipt: {}, settings: { logo } }),
+      });
       expect(response.status).toBe(200);
       return (await response.json()) as ReceiptPreviewResponse;
     };

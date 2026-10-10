@@ -54,8 +54,9 @@ their full text.
   warn from authored maps. Known locale refusals focus and scroll to their field; unknown
   locales stay in the action summary. Venue-only previews now use authored POST drafts,
   leaving stored global contact to the server. Automatic draft previews authenticate without
-  extending the session; explicit previews retain activity. The unused client/server GET path
-  and its remaining legacy test fixtures still need retirement. The complete managed-stack presentation pass and
+  extending the session; explicit previews retain activity. The legacy GET route and client
+  method are retired on that branch; their rendering, permissions, language, width, logo and
+  no-write checks now exercise POST. The complete managed-stack presentation pass and
   remaining retained-consumer qualification also remain open.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core

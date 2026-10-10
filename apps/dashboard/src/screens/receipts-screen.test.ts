@@ -4,12 +4,20 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type {
-  DashboardApi,
+  DashboardApi as ProductionApi,
   PrintPreviewBlock,
   ReceiptConfig,
   ReceiptPreview,
 } from "../api/client.js";
 import { RECEIPT_PREVIEW_QUIET_MS, ReceiptsScreen } from "./receipts-screen.js";
+
+type DashboardApi = ProductionApi & {
+  drawReceipt(
+    config: ReceiptConfig,
+    width?: import("../api/client.js").PrintPaperWidth,
+    language?: string,
+  ): Promise<import("../api/client.js").ReceiptPreview>;
+};
 import { NavigationGuard, type WtInput } from "@waitron/ui";
 
 /** A stand-in for the server's drawing: one text block a line, with the trim marked. */
@@ -76,7 +84,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
         return result;
       },
     ),
-    previewReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
+    drawReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
     ...overrides,
   } as unknown as DashboardApi;
   const departmentPreview = api.previewReceiptDraft;
@@ -84,10 +92,10 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     if (draft.departmentId !== null)
       return options === undefined ? departmentPreview(draft) : departmentPreview(draft, options);
     return draft.language !== undefined
-      ? api.previewReceipt(draft.settings, draft.paperWidth, draft.language)
+      ? api.drawReceipt(draft.settings, draft.paperWidth, draft.language)
       : draft.paperWidth !== undefined
-        ? api.previewReceipt(draft.settings, draft.paperWidth)
-        : api.previewReceipt(draft.settings);
+        ? api.drawReceipt(draft.settings, draft.paperWidth)
+        : api.drawReceipt(draft.settings);
   });
   return api;
 }
@@ -116,7 +124,7 @@ const paper = (el: ReceiptsScreen) => q(el, ".paper");
 const paperLines = (el: ReceiptsScreen) =>
   [...paper(el)!.querySelectorAll("pre")].map((pre) => pre.textContent!.trim());
 const previewCalls = (api: DashboardApi) =>
-  vi.mocked(api.previewReceipt).mock.calls.map(([config]) => config);
+  vi.mocked(api.drawReceipt).mock.calls.map(([config]) => config);
 
 function edit(el: ReceiptsScreen, name: string, value: string): void {
   q(el, `wt-input[name=${name}]`)!.dispatchEvent(
@@ -463,60 +471,60 @@ describe("the Receipts page's live preview", () => {
 
   it("keeps one preview in flight at a time, and sends only the latest text when it returns", async () => {
     let answer!: () => void;
-    const previewReceipt = vi.fn(async (config: ReceiptConfig) => {
-      if (previewReceipt.mock.calls.length === 2) {
+    const drawReceipt = vi.fn(async (config: ReceiptConfig) => {
+      if (drawReceipt.mock.calls.length === 2) {
         await new Promise<void>((resolve) => {
           answer = resolve;
         });
       }
       return fakePreview(config);
     });
-    const api = stubApi({ previewReceipt });
+    const api = stubApi({ drawReceipt });
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "uno");
-    await vi.waitFor(() => expect(previewReceipt).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(drawReceipt).toHaveBeenCalledTimes(2));
     edit(el, "headerSubtitle", "dos");
     await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
     edit(el, "headerSubtitle", "tres");
     await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
-    expect(previewReceipt).toHaveBeenCalledTimes(2);
+    expect(drawReceipt).toHaveBeenCalledTimes(2);
     answer();
-    await vi.waitFor(() => expect(previewReceipt).toHaveBeenCalledTimes(3));
-    expect(previewReceipt.mock.calls[2]![0]).toEqual({ headerSubtitle: "tres" });
+    await vi.waitFor(() => expect(drawReceipt).toHaveBeenCalledTimes(3));
+    expect(drawReceipt.mock.calls[2]![0]).toEqual({ headerSubtitle: "tres" });
     await vi.waitFor(() => expect(paperLines(el)).toContain("tres"));
     await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
-    expect(previewReceipt).toHaveBeenCalledTimes(3);
+    expect(drawReceipt).toHaveBeenCalledTimes(3);
   });
 
   it("sends the latest text once when a queued follow-up and a newer quiet timer both want it", async () => {
     let answer!: () => void;
-    const previewReceipt = vi.fn(async (config: ReceiptConfig) => {
-      if (previewReceipt.mock.calls.length === 2) {
+    const drawReceipt = vi.fn(async (config: ReceiptConfig) => {
+      if (drawReceipt.mock.calls.length === 2) {
         await new Promise<void>((resolve) => {
           answer = resolve;
         });
       }
       return fakePreview(config);
     });
-    const api = stubApi({ previewReceipt });
+    const api = stubApi({ drawReceipt });
     const { el } = await mount(api);
     edit(el, "headerSubtitle", "uno");
-    await vi.waitFor(() => expect(previewReceipt).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(drawReceipt).toHaveBeenCalledTimes(2));
     edit(el, "headerSubtitle", "dos");
     await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
     edit(el, "headerSubtitle", "tres");
     answer();
-    await vi.waitFor(() => expect(previewReceipt).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(drawReceipt).toHaveBeenCalledTimes(3));
     await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
     expect(previewCalls(api)).toEqual([{}, { headerSubtitle: "uno" }, { headerSubtitle: "tres" }]);
   });
 
   it("keeps the last preview and says it is out of date when a preview request fails", async () => {
-    const previewReceipt = vi
+    const drawReceipt = vi
       .fn()
       .mockImplementationOnce(async (config: ReceiptConfig) => fakePreview(config))
       .mockRejectedValue({ code: "receipt.invalid", params: { field: "headerSubtitle" } });
-    const { el } = await mount(stubApi({ previewReceipt }));
+    const { el } = await mount(stubApi({ drawReceipt }));
     edit(el, "headerSubtitle", "x".repeat(201));
     await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
     expect(q(el, "[data-test=preview-error]")!.textContent!.trim()).toBe(
@@ -525,7 +533,7 @@ describe("the Receipts page's live preview", () => {
     expect(paperLines(el)[1]).toBe("Deli Test SL");
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.error).toBe("");
     edit(el, "headerSubtitle", "ok");
-    previewReceipt.mockImplementation(async (config: ReceiptConfig) => fakePreview(config));
+    drawReceipt.mockImplementation(async (config: ReceiptConfig) => fakePreview(config));
     await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).toBeNull());
   });
 
@@ -850,13 +858,13 @@ describe("the Receipts page's refreshes from elsewhere", () => {
       edit(el, "headerSubtitle", "Mío");
       await vi.waitFor(() => expect(previewCalls(api)).toEqual([{}, { headerSubtitle: "Mío" }]));
       await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
-      expect(background.previewReceipt).not.toHaveBeenCalled();
+      expect(background.drawReceipt).not.toHaveBeenCalled();
     });
 
     it("sends text typed while another session's preview is in flight through the active client", async () => {
       const { el, api, background, savedElsewhere } = await mountWithBackground();
       const held = heldRead<ReceiptPreview>();
-      vi.mocked(background.previewReceipt).mockImplementation(held.read);
+      vi.mocked(background.drawReceipt).mockImplementation(held.read);
       savedElsewhere({ headerSubtitle: "Suyo" });
       await vi.waitFor(() => expect(previewCalls(background)).toHaveLength(1));
       typeFooter(el, "Gracias");
@@ -886,7 +894,7 @@ describe("the Receipts page's refreshes from elsewhere", () => {
         expect(previewCalls(api)).toEqual([{}, { headerSubtitle: "Mío", footerMessage: "Suyo" }]),
       );
       await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
-      expect(background.previewReceipt).not.toHaveBeenCalled();
+      expect(background.drawReceipt).not.toHaveBeenCalled();
     });
   });
 });
@@ -911,8 +919,8 @@ describe("the Receipts page's paper width", () => {
     const liveData = new LiveData();
     const drawer = () =>
       vi.fn(async (config: ReceiptConfig, width?: Width) => twoWidths(config, width));
-    const background = stubApi({ previewReceipt: drawer() });
-    const api = Object.assign(stubApi({ previewReceipt: drawer() }), { liveData, background });
+    const background = stubApi({ drawReceipt: drawer() });
+    const api = Object.assign(stubApi({ drawReceipt: drawer() }), { liveData, background });
     const { el } = await mount(api);
     const savedElsewhere = (receipt: ReceiptConfig) => {
       vi.mocked(background.getVenueReceiptSettings).mockResolvedValue({ settings: receipt });
@@ -975,17 +983,17 @@ describe("the Receipts page's paper width", () => {
     ]);
     expect(width.value).toBe("80mm");
     await chooseOption(width, "58mm");
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, "58mm"]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}, "58mm"]]);
   });
 
   it("redraws the preview at a chosen width at once, through the active client, saving nothing", async () => {
     const { el, api, background } = await mountTwoWidths();
     expect(paper(el)!.style.width).toBe("42ch");
     choose(el, "58mm");
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, "58mm"]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}, "58mm"]]);
     await vi.waitFor(() => expect(paper(el)!.style.width).toBe("30ch"));
     expect(widthSelect(el)!.value).toBe("58mm");
-    expect(background.previewReceipt).not.toHaveBeenCalled();
+    expect(background.drawReceipt).not.toHaveBeenCalled();
     expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   });
 
@@ -995,7 +1003,7 @@ describe("the Receipts page's paper width", () => {
     await vi.waitFor(() => expect(paper(el)!.style.width).toBe("30ch"));
     savedElsewhere({ headerSubtitle: "Suyo" });
     await vi.waitFor(() =>
-      expect(vi.mocked(background.previewReceipt).mock.calls).toEqual([
+      expect(vi.mocked(background.drawReceipt).mock.calls).toEqual([
         [{ headerSubtitle: "Suyo" }, "58mm"],
       ]),
     );
@@ -1007,18 +1015,18 @@ describe("the Receipts page's paper width", () => {
     const { el, api, background } = await mountTwoWidths();
     edit(el, "headerSubtitle", "Mío");
     choose(el, "58mm");
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([
       [{}],
       [{ headerSubtitle: "Mío" }, "58mm"],
     ]);
     await sleep(RECEIPT_PREVIEW_QUIET_MS + 100);
-    expect(api.previewReceipt).toHaveBeenCalledTimes(2);
-    expect(background.previewReceipt).not.toHaveBeenCalled();
+    expect(api.drawReceipt).toHaveBeenCalledTimes(2);
+    expect(background.drawReceipt).not.toHaveBeenCalled();
   });
 
   it("keeps the chosen width, and says the preview is out of date under it, when the redraw fails", async () => {
     const { el, api } = await mountTwoWidths();
-    vi.mocked(api.previewReceipt).mockRejectedValue({ code: "server.internal" });
+    vi.mocked(api.drawReceipt).mockRejectedValue({ code: "server.internal" });
     choose(el, "58mm");
     await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
     const select = widthSelect(el)!;
@@ -1034,14 +1042,14 @@ describe("the Receipts page's paper width", () => {
   it("keeps the latest chosen width when an earlier choice's drawing arrives and the latest one's redraw fails", async () => {
     const { el, api } = await mountTwoWidths();
     const held = heldRead<ReceiptPreview>();
-    vi.mocked(api.previewReceipt)
+    vi.mocked(api.drawReceipt)
       .mockImplementationOnce(held.read)
       .mockRejectedValueOnce({ code: "server.internal" });
     choose(el, "58mm");
     choose(el, "80mm");
     held.release(twoWidths({}, "58mm"));
     await vi.waitFor(() => expect(q(el, "[data-test=preview-error]")).not.toBeNull());
-    expect(vi.mocked(api.previewReceipt).mock.calls).toEqual([[{}], [{}, "58mm"], [{}, "80mm"]]);
+    expect(vi.mocked(api.drawReceipt).mock.calls).toEqual([[{}], [{}, "58mm"], [{}, "80mm"]]);
     expect(paper(el)!.style.width).toBe("30ch");
     const select = widthSelect(el)!;
     expect(select.value).toBe("80mm");
@@ -1055,7 +1063,7 @@ describe("the Receipts page's paper width", () => {
     "shows no width dropdown when the printers offer %s",
     async (_, widths) => {
       const api = stubApi({
-        previewReceipt: vi.fn(async (config: ReceiptConfig) => ({
+        drawReceipt: vi.fn(async (config: ReceiptConfig) => ({
           ...fakePreview(config),
           paperWidths: widths,
         })),

@@ -149,7 +149,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getReceiptLanguage: vi
       .fn()
       .mockResolvedValue({ language: "es-ES", choices: ["es-ES"], fixed: null }),
-    previewReceipt: vi.fn(() => new Promise(() => undefined)),
+    previewReceiptDraft: vi.fn(() => new Promise(() => undefined)),
     getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
     getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
     listPendingSwaps: vi.fn().mockResolvedValue([]),

@@ -330,17 +330,13 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
     const api = new DashboardApi("", fetchImpl);
 
-    await expect(api.previewReceipt({ headerSubtitle: "Calle Mayor 1" })).resolves.toEqual(answer);
-
-    expect(callsOf(fetchImpl)).toEqual([
-      [
-        `/management-api/receipt-preview?receipt=${encodeURIComponent(
-          JSON.stringify({ headerSubtitle: "Calle Mayor 1" }),
-        )}`,
-        "GET",
-        undefined,
-      ],
-    ]);
+    const draft = {
+      departmentId: null,
+      receipt: {},
+      settings: { headerSubtitle: "Calle Mayor 1" },
+    };
+    await expect(api.previewReceiptDraft(draft)).resolves.toEqual(answer);
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 
   it("asks for a preview at a chosen paper width", async () => {
@@ -348,18 +344,14 @@ describe("DashboardApi routes", () => {
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
     );
     const api = new DashboardApi("", fetchImpl);
-
-    await api.previewReceipt({ footerMessage: "Gracias" }, "58mm");
-
-    expect(callsOf(fetchImpl)).toEqual([
-      [
-        `/management-api/receipt-preview?receipt=${encodeURIComponent(
-          JSON.stringify({ footerMessage: "Gracias" }),
-        )}&paperWidth=58mm`,
-        "GET",
-        undefined,
-      ],
-    ]);
+    const draft = {
+      departmentId: null,
+      receipt: {},
+      settings: { footerMessage: "Gracias" },
+      paperWidth: "58mm" as const,
+    };
+    await api.previewReceiptDraft(draft);
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 
   it("asks for a preview in another receipt language, with no paper width unless one is given", async () => {
@@ -367,32 +359,32 @@ describe("DashboardApi routes", () => {
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
     );
     const api = new DashboardApi("", fetchImpl);
-
-    await api.previewReceipt({}, undefined, "gl-ES");
-    await api.previewReceipt({}, "58mm", "eu-ES");
-
-    const receipt = encodeURIComponent(JSON.stringify({}));
+    const first = { departmentId: null, receipt: {}, settings: {}, language: "gl-ES" };
+    const second = {
+      departmentId: null,
+      receipt: {},
+      settings: {},
+      paperWidth: "58mm" as const,
+      language: "eu-ES",
+    };
+    await api.previewReceiptDraft(first);
+    await api.previewReceiptDraft(second);
     expect(callsOf(fetchImpl)).toEqual([
-      [`/management-api/receipt-preview?receipt=${receipt}&language=gl-ES`, "GET", undefined],
-      [
-        `/management-api/receipt-preview?receipt=${receipt}&paperWidth=58mm&language=eu-ES`,
-        "GET",
-        undefined,
-      ],
+      ["/management-api/receipt-preview", "POST", first],
+      ["/management-api/receipt-preview", "POST", second],
     ]);
   });
 
   it("asks for the selected department's receipt preview without saving that choice", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ preview: {} }));
     const api = new DashboardApi("", fetchImpl);
-    await api.previewReceipt({}, undefined, undefined, "aa000000-0000-4000-8000-000000000001");
-    expect(callsOf(fetchImpl)).toEqual([
-      [
-        "/management-api/receipt-preview?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001",
-        "GET",
-        undefined,
-      ],
-    ]);
+    const draft = {
+      departmentId: "aa000000-0000-4000-8000-000000000001",
+      receipt: {},
+      settings: {},
+    };
+    await api.previewReceiptDraft(draft);
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 
   it("reads and saves the location's receipt language", async () => {
@@ -416,19 +408,24 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("marks a preview passive only when it goes through the background client", async () => {
+  it("keeps background POST previews active unless the preview explicitly requests passive activity", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
     );
     const api = new DashboardApi("", fetchImpl);
-
-    await api.previewReceipt({ footerMessage: "Gracias" });
-    await api.background.previewReceipt({ footerMessage: "Gracias" });
-
+    const draft = { departmentId: null, receipt: {}, settings: { footerMessage: "Gracias" } };
+    await api.previewReceiptDraft(draft);
+    await api.background.previewReceiptDraft(draft);
+    await api.background.previewReceiptDraft(draft, { passive: true });
     const headers = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).map(([, init]) =>
       new Headers(init.headers).get("x-waitron-live"),
     );
-    expect(headers).toEqual([null, "1"]);
+    expect(headers).toEqual([null, null, null]);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/receipt-preview", "POST", draft],
+      ["/management-api/receipt-preview", "POST", draft],
+      ["/management-api/receipt-preview", "POST", { ...draft, passive: true }],
+    ]);
   });
 
   it("unwraps the canvas and device-profile list envelopes, and addresses one profile by id", async () => {
