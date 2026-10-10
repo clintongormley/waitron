@@ -1,7 +1,6 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   AppError,
-  createLabelComparator,
   type DeleteImpact,
   type DeleteImpactItem,
   type DeleteTarget,
@@ -24,6 +23,7 @@ import {
   type PrintConfig,
 } from "@waitron/printing";
 import { readPrinterEquipment } from "@waitron/layouts";
+import { named } from "./delete-impact.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
 
 const ROLES = [
@@ -33,14 +33,6 @@ const ROLES = [
 ] as const;
 
 type Rules = { impact: DeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
-
-/** One item naming each distinct target once; its count is how many distinct rows it affects. */
-function named(key: string, targets: DeleteTarget[]): DeleteImpactItem {
-  const unique = [...new Map(targets.map((target) => [target.id, target])).values()];
-  const compare = createLabelComparator();
-  unique.sort((a, b) => compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return { key, count: unique.length, targets: unique };
-}
 
 /** The impact read and the delete both call this, so the delete acts on exactly what it reports. */
 async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string): Promise<Rules> {

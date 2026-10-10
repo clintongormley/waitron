@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -36,18 +36,13 @@ export const JOIN_TTL_MS = 15 * 60 * 1000;
  * must avoid. */
 export const PENDING_CAP = 10;
 
+const lapseCutoff = () => new Date(Date.now() - JOIN_TTL_MS).toISOString();
+
 /** Delete every lapsed request this node holds. Called at the head of every verb that reads or
  * counts them, so a lapsed row never occupies the cap, never blocks a number, and never appears in
  * the pending list. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
-  await tx
-    .delete(joinRequests)
-    .where(
-      and(
-        ownedBy(cfg),
-        lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()),
-      ),
-    );
+  await tx.delete(joinRequests).where(and(ownedBy(cfg), lt(joinRequests.createdAt, lapseCutoff())));
 }
 
 export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
@@ -640,7 +635,12 @@ export async function denyJoinRequest(
 }
 
 const returningOf = (cfg: TillConfig, deviceId: string) =>
-  and(ownedBy(cfg), eq(joinRequests.id, deviceId), eq(joinRequests.kind, "device"));
+  and(
+    ownedBy(cfg),
+    eq(joinRequests.id, deviceId),
+    eq(joinRequests.kind, "device"),
+    gte(joinRequests.createdAt, lapseCutoff()),
+  );
 
 /** Whether this node holds a pending request from the device to come back. */
 export async function hasReturningRequest(

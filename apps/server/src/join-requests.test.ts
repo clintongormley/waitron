@@ -1355,6 +1355,45 @@ describe("a returning disabled device", () => {
     expect(await suite.db.select().from(joinRequests)).toEqual(before);
   });
 
+  it("does not see or end the device's request once it has lapsed from the pending list", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await returningKnock(venue);
+    const lapsed = new Date(Date.now() - JOIN_TTL_MS - 60_000).toISOString();
+    await suite.db
+      .update(joinRequests)
+      .set({ createdAt: lapsed })
+      .where(eq(joinRequests.id, deviceId));
+    const before = await suite.db.select().from(joinRequests);
+    expect(before.map((row) => row.id)).toEqual([deviceId]);
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await suite.db.select().from(joinRequests)).toEqual(before);
+  });
+
+  it("neither counts nor ends a print agent's request that carries the device's id", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await disabledDevice(venue, await seedProfile("till"));
+    await suite.db.insert(joinRequests).values({
+      id: deviceId,
+      nodeId: cfg.nodeId,
+      locationId: cfg.locationId,
+      kind: "print_agent",
+      label: "Agent",
+      tokenHash: "x",
+      verificationNumber: "41",
+      decoyNumbers: ["42", "43"],
+    });
+    const before = await suite.db.select().from(joinRequests);
+    expect(before.map((row) => [row.id, row.kind])).toEqual([[deviceId, "print_agent"]]);
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await suite.db.select().from(joinRequests)).toEqual(before);
+  });
+
   it("proves a cookie only for a disabled device whose token it holds", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
