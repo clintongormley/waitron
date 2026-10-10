@@ -282,7 +282,8 @@ export class FloorPlanEditor extends LitElement {
   /** How far the phone sheet reaches up over the canvas, in px. */
   @state() private sheetOverlap = 0;
 
-  /** The field a refusal or the editor's own check points at, for the side panels. */
+  /** The field a save's refusal points at, else the first field whose typed text the editor's own
+   *  check refused. The panels are given every mark through `#panelErrors`. */
   get fieldError(): FloorPlanFieldError | null {
     const mark = this.mark ?? this.typedMarks[0] ?? null;
     return mark === null ? null : { key: mark.key, field: mark.field, message: mark.text() };

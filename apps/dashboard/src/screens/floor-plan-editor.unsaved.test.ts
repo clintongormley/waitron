@@ -336,3 +336,32 @@ it("a leave asked of the editor alone asks about a changed Add join", async () =
   expect(await outcome).toBe("kept");
   expect(proceed).not.toHaveBeenCalled();
 });
+
+it("Discard clears refused text standing in a field when the editor stays open", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(1280, 800);
+  onTestFinished(() => page.viewport(...before));
+  const { app } = await mount();
+  const el = editor(app);
+  canvasOf(el)!.dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
+  await panel.updateComplete;
+  const input = panel
+    .shadowRoot!.querySelector("[name=width]")!
+    .shadowRoot!.querySelector("input")!;
+  await userEvent.clear(input);
+  await userEvent.type(input, "8.");
+  await el.updateComplete;
+  expect(el.fieldError?.field).toBe("width");
+  const proceed = vi.fn();
+  const outcome = leaveCoordinatorFor(el)!.request({ scopes: [el], reason: "navigation", proceed });
+  await choose(app, "discard");
+  expect(await outcome).toBe("proceeded");
+  expect(proceed).toHaveBeenCalledOnce();
+  await el.updateComplete;
+  expect(el.fieldError).toBeNull();
+  expect(unload()).toBe(false);
+});
