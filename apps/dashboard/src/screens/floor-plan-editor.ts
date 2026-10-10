@@ -23,12 +23,14 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorPlan, FloorPlanSave } from "../api/client.js";
 import {
+  checkDraft,
   draftFromPlan,
   moveTable,
   rekeyDraft,
   rotateTable,
   sameDraft,
   saveFromDraft,
+  type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -45,9 +47,46 @@ const HOME = "/manage";
 
 /** The editor's one message, remembering whether a read or an action set it (CLAUDE.md §3). */
 interface EditorMessage {
-  code: string;
+  text: () => string;
   from: "read" | "action";
+  /** The generic sentence standing for a field's own; it goes when that field's mark goes. */
+  fix?: true;
 }
+
+/** A table field a side panel shows, so a refusal naming it can sit beside it. */
+export type FloorPlanField =
+  "label" | "seats" | "fixed" | "width" | "height" | "shape" | "rotation";
+
+export interface FloorPlanFieldError {
+  key: string;
+  field: FloorPlanField;
+  message: string;
+}
+
+interface FieldMark {
+  key: string;
+  field: FloorPlanField;
+  text: () => string;
+  /** A failure of the editor's own check keeps Save disabled; a request's refusal never does. */
+  from: "check" | "refusal";
+}
+
+const SERVER_FIELDS: Record<string, FloorPlanField> = {
+  label: "label",
+  seats: "seats",
+  fixed: "fixed",
+  "placement.width": "width",
+  "placement.height": "height",
+  "placement.shape": "shape",
+  "placement.rotation": "rotation",
+};
+
+function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
+  if (field === "label" || field === "seats" || field === "fixed") return table[field];
+  return table.placement?.[field] ?? null;
+}
+
+const actionMessage = (text: () => string): EditorMessage => ({ text, from: "action" });
 
 /** The server stores labels trimmed; tables sent with a padded label take the trimmed one. */
 function trimLabels(draft: FloorPlanDraft, sent: FloorPlanDraft = draft): FloorPlanDraft {
@@ -151,6 +190,13 @@ export class FloorPlanEditor extends LitElement {
   @state() private message: EditorMessage | null = null;
   @state() private outOfDate = false;
   @state() private saving = false;
+  @state() private mark: FieldMark | null = null;
+
+  /** The field a refusal or the editor's own check points at, for the side panels. */
+  get fieldError(): FloorPlanFieldError | null {
+    const mark = this.mark;
+    return mark === null ? null : { key: mark.key, field: mark.field, message: mark.text() };
+  }
 
   /** The body of the last save sent, so a refusal naming `tables.<i>` finds the key it meant. */
   protected sent: FloorPlanSave | null = null;
@@ -161,6 +207,9 @@ export class FloorPlanEditor extends LitElement {
   #zoneId: string | null = null;
   #request = 0;
   #saveRequest = 0;
+  #loadingNewer = false;
+  /** The refused field's value when the refusal arrived. */
+  #markedValue: unknown;
   #history: UndoHistory<FloorPlanDraft> | null = null;
   #opened: FloorPlanDraft | null = null;
   #scope?: DraftScope<FloorPlanDraft>;
@@ -188,6 +237,7 @@ export class FloorPlanEditor extends LitElement {
   override disconnectedCallback(): void {
     this.#saveRequest++;
     this.saving = false;
+    this.#loadingNewer = false;
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -204,6 +254,7 @@ export class FloorPlanEditor extends LitElement {
         this.draft = value;
         this.#history?.reset(value);
         this.selected = null;
+        this.#clearMark();
       },
     }).scope;
     this.#scope.commit(this.#opened!);
@@ -221,6 +272,9 @@ export class FloorPlanEditor extends LitElement {
     if (zoneId === this.#zoneId) return;
     this.#zoneId = zoneId;
     const request = ++this.#request;
+    this.#saveRequest++;
+    this.saving = false;
+    this.#loadingNewer = false;
     this.#disposeScope();
     this.plan = null;
     this.zoneName = null;
@@ -231,6 +285,7 @@ export class FloorPlanEditor extends LitElement {
     this.loadError = null;
     this.message = null;
     this.outOfDate = false;
+    this.mark = null;
     this.sent = null;
     if (zoneId !== null) void this.#load(zoneId, request);
   }
@@ -262,6 +317,7 @@ export class FloorPlanEditor extends LitElement {
     this.#history.push(next, mergeKey);
     this.draft = next;
     this.#clearReadMessage();
+    this.#followMark(next);
     this.#scope?.changed();
     this.requestUpdate();
   }
@@ -270,6 +326,7 @@ export class FloorPlanEditor extends LitElement {
     if (next === undefined) return;
     this.draft = next;
     this.#clearReadMessage();
+    this.#followMark(next);
     if (this.selected !== null && !next.tables.some((table) => table.key === this.selected)) {
       this.selected = null;
     }
@@ -283,11 +340,89 @@ export class FloorPlanEditor extends LitElement {
 
   #showReadFailure(error: unknown): void {
     if (this.message?.from === "action") return;
-    this.message = { code: codeOf(error), from: "read" };
+    const code = codeOf(error);
+    this.message = { text: () => codeMessage(code), from: "read" };
+  }
+
+  #setMark(mark: FieldMark): void {
+    this.mark = mark;
+    this.message = { ...actionMessage(() => t("form.fix_fields")), fix: true };
+  }
+
+  #clearMark(): void {
+    this.mark = null;
+    if (this.message?.fix) this.message = null;
+  }
+
+  #markCheck(draft: FloorPlanDraft): boolean {
+    const problem = checkDraft(draft);
+    if (problem === null) return false;
+    this.#setMark({
+      key: problem.key,
+      field: "label",
+      text: () =>
+        problem.problem === "label_missing"
+          ? t("floor_plan_editor.name_missing")
+          : codeMessage("table.label_taken"),
+      from: "check",
+    });
+    return true;
+  }
+
+  /** A check's mark follows the draft until it passes; a refusal's goes when its field changes. */
+  #followMark(next: FloorPlanDraft): void {
+    const mark = this.mark;
+    if (mark === null) return;
+    if (mark.from === "check") {
+      if (!this.#markCheck(next)) this.#clearMark();
+      return;
+    }
+    const table = next.tables.find((t) => t.key === mark.key);
+    if (table === undefined || fieldValue(table, mark.field) !== this.#markedValue) {
+      this.#clearMark();
+    }
+  }
+
+  #placeRefusal(code: string, params: Record<string, unknown>, body: FloorPlanSave): void {
+    const own = () => codeMessage(code);
+    const draft = this.draft!;
+    let key: string | undefined;
+    let serverField: string | undefined;
+    if (code === "table.label_taken" && typeof params.label === "string") {
+      const label = params.label;
+      key = draft.tables.find((t) => t.label.trim() === label)?.key;
+      serverField = "label";
+    } else if (code === "floor_plan.invalid" && typeof params.field === "string") {
+      const named = /^tables\.(\d+)\.(.+)$/.exec(params.field);
+      const sentKey = named === null ? undefined : body.tables[Number(named[1])]?.key;
+      key = draft.tables.find((t) => t.key === sentKey)?.key;
+      serverField = named?.[2];
+    } else if (code === "table.booked" && typeof params.tableId === "string") {
+      const tableId = params.tableId;
+      const label = this.plan!.tables.find((t) => t.liveTableId === tableId)?.label;
+      if (label !== undefined) {
+        this.message = actionMessage(() =>
+          t("floor_plan_editor.booked").replace("{name}", label).replace("{message}", own()),
+        );
+        return;
+      }
+    }
+    this.message = actionMessage(own);
+    if (key === undefined) return;
+    this.selected = key;
+    const field = serverField === undefined ? undefined : SERVER_FIELDS[serverField];
+    if (field === undefined) return;
+    const table = draft.tables.find((t) => t.key === key)!;
+    this.#markedValue = fieldValue(table, field);
+    this.#setMark({ key, field, text: own, from: "refusal" });
   }
 
   readonly #save = async (): Promise<void> => {
-    if (this.saving || saveActionState(this.#scope).unchanged) return;
+    if (this.saving || this.#loadingNewer || saveActionState(this.#scope).unchanged) return;
+    if (this.#markCheck(this.draft!)) {
+      this.selected = this.mark!.key;
+      return;
+    }
     // A scope exists only once a zone's plan is loaded, so both are set here.
     const zoneId = this.#zoneId!;
     const draft = this.draft!;
@@ -298,6 +433,7 @@ export class FloorPlanEditor extends LitElement {
     this.sent = body;
     this.saving = true;
     this.message = null;
+    this.mark = null;
     let answer: { revision: number; ids: Record<string, string> };
     try {
       answer = await this.api.saveFloorPlan(zoneId, body);
@@ -307,7 +443,8 @@ export class FloorPlanEditor extends LitElement {
       if (request !== this.#request) return;
       const code = codeOf(error);
       if (code === "floor_plan.out_of_date") this.outOfDate = true;
-      this.message = { code, from: "action" };
+      const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
+      this.#placeRefusal(code, params, body);
       return;
     }
     if (saveRequest !== this.#saveRequest) return;
@@ -329,6 +466,7 @@ export class FloorPlanEditor extends LitElement {
   };
 
   readonly #loadNewer = (): void => {
+    this.#loadingNewer = true;
     void this.#reread(this.#zoneId!, ++this.#request, true);
   };
 
@@ -338,14 +476,19 @@ export class FloorPlanEditor extends LitElement {
     try {
       plan = await this.api.getFloorPlan(zoneId);
     } catch (error) {
-      if (this.isConnected && request === this.#request) this.#showReadFailure(error);
+      if (this.isConnected && request === this.#request) {
+        this.#loadingNewer = false;
+        this.#showReadFailure(error);
+      }
       return;
     }
     if (!this.isConnected || request !== this.#request) return;
+    this.#loadingNewer = false;
     this.#clearReadMessage();
     if (replace) {
       this.outOfDate = false;
       this.message = null;
+      this.mark = null;
     } else if (!saveActionState(this.#scope).unchanged) {
       return;
     }
@@ -421,7 +564,7 @@ export class FloorPlanEditor extends LitElement {
     return html`
       <header>
         <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
-        <wt-form-actions .error=${this.message === null ? "" : codeMessage(this.message.code)}>
+        <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
           <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
             >${t("action.close")}</a
           >
@@ -455,7 +598,7 @@ export class FloorPlanEditor extends LitElement {
           <wt-button
             data-action="save"
             variant=${save.variant}
-            ?disabled=${save.unchanged}
+            ?disabled=${save.unchanged || this.mark?.from === "check"}
             @click=${this.#save}
             >${t("action.save")}</wt-button
           >
