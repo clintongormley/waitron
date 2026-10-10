@@ -565,7 +565,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-sheet`              | `heading` (the toggle's text), `expanded` (reflected; the page may set it); default slot (body); parts: `toggle`, `body` | `wt-sheet-toggle` (`{ expanded }`) |
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid of 12 px squares that fills its
-box and reaches at least 8 squares past the furthest table. Each table is a button at its true
+box and reaches at least 8 squares past the furthest table. A turned table reaching past the top or
+left edge gets extra squares above or left of it, so it can be scrolled wholly into view. Each table is a button at its true
 size and angle, so a small one is below `--wt-tap-min`; its name is drawn only when its shorter side
 is at least 28 px, and is always its accessible name, with ", Fixed" (`copy.fixed`) added for a fixed table. A
 click on a table or on empty grid sends `wt-table-select`, and the parent decides by setting

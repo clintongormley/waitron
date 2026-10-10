@@ -1186,3 +1186,74 @@ it("a pointer move inside the same square, or the same turn step, draws nothing 
   expect(updated).toHaveBeenCalledTimes(1);
   pointer(window, "pointercancel", 1, 0, 0);
 });
+
+it("a plan that fits shows no scrollbars with a turned table at the corner, and all of that table", async () => {
+  const el = await canvas([table("t1", "T1", { rotation: 45 })], { selected: "t1" });
+  await settled(el);
+  const viewport = viewportOf(el);
+  expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+  expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+  el.reveal("t1");
+  const grid = part(el, "grid").getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(grid.left);
+  expect(box.top).toBeGreaterThanOrEqual(grid.top);
+  expect(box.right).toBeLessThanOrEqual(grid.right);
+  expect(box.bottom).toBeLessThanOrEqual(grid.bottom);
+});
+
+it("keeps a steady height with a turned table in a box that takes its height from the plan", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  classicScrollbars(el);
+  el.tables = [table("t1", "T1", { x: 100, rotation: 45 })];
+  const heights: number[] = [];
+  for (let frame = 0; frame < 6; frame++) {
+    await settled(el);
+    heights.push(part(el, "grid").getBoundingClientRect().height);
+  }
+  expect(heights).toEqual(Array(6).fill(240));
+});
+
+it("drops the room for a turned corner table once it is turned back, moved or replaced", async () => {
+  const el = await canvas([table("t1", "T1", { rotation: 45 })]);
+  await settled(el);
+  el.tables = [table("t1", "T1")];
+  await settled(el);
+  expect(offset(el, "t1")).toEqual({ left: 0, top: 0 });
+
+  el.tables = [table("t1", "T1", { rotation: 45 })];
+  await settled(el);
+  el.tables = [table("t1", "T1", { x: 10, y: 10, rotation: 45 })];
+  await settled(el);
+  expect(offset(el, "t1").left).toBeCloseTo(120 + 48 - 48 * Math.SQRT2, 1);
+
+  el.tables = [table("t1", "T1", { rotation: 45 })];
+  await settled(el);
+  el.tables = [table("t2", "T2", { x: 10, y: 10 })];
+  await settled(el);
+  expect(offset(el, "t2")).toEqual({ left: 120, top: 120 });
+  expect(viewportOf(el).scrollWidth).toBe(viewportOf(el).clientWidth);
+  expect(viewportOf(el).scrollHeight).toBe(viewportOf(el).clientHeight);
+});
+
+it("a turned table dragged off the corner stays under the pointer, and its room goes on release", async () => {
+  const el = await canvas([table("t1", "T1", { y: 10, rotation: 45 })]);
+  await settled(el);
+  const before = button(el, "t1").getBoundingClientRect();
+  const at = dragBy(el, "t1", 60, 0);
+  await el.updateComplete;
+  const during = button(el, "t1").getBoundingClientRect();
+  expect(during.left).toBeCloseTo(before.left + 60, 1);
+  await release(el, at);
+  el.tables = [table("t1", "T1", { x: 5, y: 10, rotation: 45 })];
+  await settled(el);
+  expect(offset(el, "t1").left).toBeCloseTo(60 + 48 - 48 * Math.SQRT2, 1);
+  expect(viewportOf(el).scrollWidth).toBe(viewportOf(el).clientWidth);
+});
+
+it("names the rotate handle with a table name holding replacement patterns", async () => {
+  const el = await canvas([table("t1", "A$&B$'C")], { selected: "t1" });
+  expect(handles(el)[0]!.getAttribute("aria-label")).toBe("Rotate A$&B$'C");
+});
