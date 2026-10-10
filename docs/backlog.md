@@ -654,12 +654,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   as on Products. Every table's Select all checkbox lines up with the rows' checkboxes.
   [Detail](backlog/catalogue.md#a462--dashboard-table-toolbars-column-chooser-at-the-end-no-expand-all-closing-a-branch-closes-everything-in-it)
 
-- **A463 — Products list filters: Made at, Modifiers, Allergens and Dietary info; "Show archived"
-  replaces Status (owner, 2026-10-10; open).** New filters, in the order of the default columns.
-  The Status filter becomes a "Show archived" switch, and the Status column becomes Availability,
-  showing only Unavailable and Archived. Changes A435's decision 4.
-  [Detail](backlog/catalogue.md#a463--products-list-filters-made-at-modifiers-allergens-and-dietary-info-show-archived-replaces-status)
-
 - **A464 — a menu's Price overrides tab: a "Section" column, and Main category without the
   department (owner, 2026-10-10; open).** Rename "Appears under" to "Section". Main category reads
   "ALL DAY MENU", not "Santet Deli Co › ALL DAY MENU", and is blank for a product placed straight in
