@@ -18,7 +18,6 @@ const place = (over: Partial<PlanPlacement> = {}): PlanPlacement => ({
 
 const table = (key: string, over: Partial<PlanPlacement> = {}, fixed = false): PreviewTable => ({
   key,
-  label: key.toUpperCase(),
   fixed,
   placement: place(over),
 });
@@ -77,6 +76,14 @@ it("caps a tall plan at the max height and narrows it to keep its shape", async 
   expect(box.width).toBeCloseTo(40, 1);
 });
 
+it("takes the max height from an ancestor", async () => {
+  const el = await preview([table("t", { width: 4, height: 40 })], "width: 520px");
+  host.style.setProperty("--wt-floor-plan-preview-max-height", "220px");
+  const box = plan(el)!.getBoundingClientRect();
+  expect(box.height).toBeCloseTo(220, 1);
+  expect(box.width).toBeCloseTo(40, 1);
+});
+
 it("caps at four tap targets' height by default, read from the token", async () => {
   const el = await preview([table("t", { width: 4, height: 40 })], "width: 520px");
   host.style.setProperty("--wt-tap-min", "50px");
@@ -103,6 +110,33 @@ it("draws a round table as a circle and a rect one with the small radius", async
   host.style.setProperty("--wt-radius-sm", "5px");
   expect(getComputedStyle(drawn(el, "b")).borderTopLeftRadius).toBe("50%");
   expect(getComputedStyle(drawn(el, "a")).borderTopLeftRadius).toBe("5px");
+});
+
+it("keeps the fixed mark inside a round table", async () => {
+  const el = await preview(
+    [
+      table("round", { width: 6, height: 6, shape: "round" }, true),
+      table("small", { x: 10, width: 2, height: 2, shape: "round" }, true),
+    ],
+    "width: 260px; --wt-floor-plan-preview-max-height: 1000px",
+  );
+  for (const key of ["round", "small"]) {
+    const marker = drawn(el, key).querySelector<HTMLElement>('[part="fixed-marker"]')!;
+    const box = marker.getBoundingClientRect();
+    const hit = el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    expect(hit, key).toBe(marker);
+  }
+});
+
+it("clips the fixed mark to a table drawn smaller than the mark", async () => {
+  // One 1-square table crops to 5 squares, so 25 px draws it 5 px wide, under the 8 px mark.
+  const el = await preview([table("t", { width: 1, height: 1 }, true)], "width: 25px");
+  host.style.setProperty("--wt-space-2", "8px");
+  const marker = drawn(el, "t").querySelector<HTMLElement>('[part="fixed-marker"]')!;
+  const mark = marker.getBoundingClientRect();
+  const box = drawn(el, "t").getBoundingClientRect();
+  expect(mark.left).toBeLessThan(box.left - 1);
+  expect(el.shadowRoot!.elementFromPoint(mark.left + 1, mark.top + 1)).not.toBe(marker);
 });
 
 it("marks only the fixed table", async () => {

@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
+import { floorPlanTableStyles } from "../floor-plan-table-styles.js";
 import {
   GRID_SQUARE_PX,
   type PlanPlacement,
@@ -109,6 +110,7 @@ export class WtFloorPlanCanvas extends LitElement {
 
   static override styles = [
     baseStyles,
+    floorPlanTableStyles,
     css`
       :host {
         display: block;
@@ -131,25 +133,16 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       .table {
-        position: absolute;
         display: flex;
         align-items: center;
         justify-content: center;
         margin: 0;
         padding: 0;
-        overflow: hidden;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-lifted);
         color: var(--wt-color-text);
         font: inherit;
         font-size: var(--wt-font-size-sm);
         cursor: pointer;
         touch-action: none;
-      }
-
-      .table[data-shape="round"] {
-        border-radius: 50%;
       }
 
       .table[aria-pressed="true"] {
@@ -179,16 +172,6 @@ export class WtFloorPlanCanvas extends LitElement {
         text-wrap: nowrap;
       }
 
-      .fixed-marker {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: var(--wt-space-2);
-        height: var(--wt-space-2);
-        border-bottom-left-radius: var(--wt-radius-sm);
-        background: var(--wt-color-text-muted);
-      }
-
       .rotate-handle {
         position: absolute;
         display: flex;
@@ -205,13 +188,6 @@ export class WtFloorPlanCanvas extends LitElement {
         cursor: grab;
         touch-action: none;
         transform: translateX(-50%);
-      }
-
-      /* A circle clips the corner, so the mark sits where the circle still covers it. */
-      .table[data-shape="round"] .fixed-marker {
-        top: 15%;
-        right: 15%;
-        border-radius: 50%;
       }
     `,
   ];

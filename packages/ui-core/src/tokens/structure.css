@@ -84,6 +84,9 @@
      before quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
+  /* The tallest wt-floor-plan-preview draws; a page or panel may set its own. */
+  --wt-floor-plan-preview-max-height: calc(4 * var(--wt-tap-min));
+
   /* The narrowest box: both buttons and room for a three-digit number between them. */
   --wt-stepper-field-width: 88px;
   /* Below --wt-tap-min by an owner decision (A263): the number keeps the two buttons apart, and

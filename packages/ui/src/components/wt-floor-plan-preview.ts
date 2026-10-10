@@ -4,25 +4,26 @@ import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
 import { type PlanRect, cropToTables } from "../floor-plan-geometry.js";
+import { floorPlanTableStyles } from "../floor-plan-table-styles.js";
 import type { PlanCanvasTable } from "./wt-floor-plan-canvas.js";
 
-export type PreviewTable = Pick<PlanCanvasTable, "key" | "label" | "fixed" | "placement">;
+export type PreviewTable = Pick<PlanCanvasTable, "key" | "fixed" | "placement">;
 
 const percent = (part: number, whole: number): string => `${(part / whole) * 100}%`;
 
 /**
- * Read-only: no focus, no events. Positions are percentages of the crop, so the drawing scales with
- * its box and needs no measuring. `--wt-floor-plan-preview-max-height` caps the height; the width
- * shrinks with it to keep the plan's shape.
+ * Positions are percentages of the crop, so the drawing scales with its box and needs no measuring.
+ * `--wt-floor-plan-preview-max-height` caps the height; the width shrinks with it to keep the
+ * plan's shape.
  */
 @customElement("wt-floor-plan-preview")
 export class WtFloorPlanPreview extends LitElement {
   static override styles = [
     baseStyles,
+    floorPlanTableStyles,
     css`
       :host {
         display: block;
-        --wt-floor-plan-preview-max-height: calc(4 * var(--wt-tap-min));
       }
 
       .plan {
@@ -33,40 +34,11 @@ export class WtFloorPlanPreview extends LitElement {
         background: var(--wt-color-surface);
         box-shadow: inset 0 0 0 1px var(--wt-color-border);
       }
-
-      .table {
-        position: absolute;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-lifted);
-      }
-
-      .table[data-shape="round"] {
-        border-radius: 50%;
-      }
-
-      .fixed-marker {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: var(--wt-space-2);
-        height: var(--wt-space-2);
-        border-bottom-left-radius: var(--wt-radius-sm);
-        background: var(--wt-color-text-muted);
-      }
-
-      /* A circle clips the corner, so the mark sits where the circle still covers it. */
-      .table[data-shape="round"] .fixed-marker {
-        top: 15%;
-        right: 15%;
-        border-radius: 50%;
-      }
     `,
   ];
 
   @property({ attribute: false }) tables: PreviewTable[] = [];
 
-  /** The drawing's accessible name. */
   @property() label = "Floor plan";
 
   override render() {

@@ -9,19 +9,16 @@ afterEach(cleanup);
 const tables: PreviewTable[] = [
   {
     key: "t1",
-    label: "T1",
     fixed: false,
     placement: { x: 2, y: 2, width: 8, height: 4, shape: "rect", rotation: 0 },
   },
   {
     key: "t2",
-    label: "T2",
     fixed: true,
     placement: { x: 14, y: 2, width: 6, height: 6, shape: "round", rotation: 0 },
   },
   {
     key: "b1",
-    label: "Bar 1",
     fixed: true,
     placement: { x: 24, y: 2, width: 2, height: 2, shape: "rect", rotation: 45 },
   },
