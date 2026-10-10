@@ -3546,6 +3546,8 @@ Venue settings' Receipts tab. The Zones tab shows the selected zone's normal-wee
 that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
 show a day count. A week without closed ranges says the zone opens with its department. Named-day
 exceptions stay in Opening hours. Disabled zones have no hours summary or link.
+Beside it, Edit floor plan opens the zone's floor plan editor, whose Close returns to the zone; a
+disabled zone has no such link, and the zone's ⋮ menu does not offer it.
 Floor-plan previews remain separate work.
 
 How orders start chooses Table service or Counter service. Counter service has a separate

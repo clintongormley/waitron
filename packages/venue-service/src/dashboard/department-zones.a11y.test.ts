@@ -58,6 +58,9 @@ describe.each(["light", "dark"] as const)("Zones (%s)", (theme) => {
         menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
         await menu.updateComplete;
       }
+      if (state === "active")
+        for (const link of ["zone-opening-hours", "zone-floor-plan"])
+          expect(el.shadowRoot!.querySelector(`a[data-test=${link}]`)).not.toBeNull();
       await expectNoA11yViolations(host);
     },
   );

@@ -400,6 +400,13 @@ export class DepartmentZones extends LitElement {
                           >${t("venue.zone_opening_hours")}</a
                         >
                       </p>
+                      <p>
+                        <a
+                          data-test="zone-floor-plan"
+                          href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent(`/manage/venue-operations/department/${encodeURIComponent(department.id)}/view/zones/zone/${encodeURIComponent(row.id)}`)}`}
+                          >${t("venue.zone_floor_plan")}</a
+                        >
+                      </p>
                     </div>`
               }
               <dashboard-service-settings-fields

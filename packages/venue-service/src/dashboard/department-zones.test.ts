@@ -578,3 +578,41 @@ it("zone menus retain Rename under a disabled parent, call the command Disable, 
   expect(button("zone-z2").textContent).toContain("(Disabled)");
   expect(button("zone-z2").textContent).not.toContain("Inactive");
 });
+const floorPlanLink = () =>
+  el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-floor-plan]");
+it("the zone panel links Edit floor plan to the editor with the way back", async () => {
+  await mount("z2");
+  expect(floorPlanLink()!.getAttribute("href")).toBe(
+    "/manage/floor-plan/zone/z2?back=%2Fmanage%2Fvenue-operations%2Fdepartment%2Fd1%2Fview%2Fzones%2Fzone%2Fz2",
+  );
+  expect(floorPlanLink()!.textContent!.trim()).toBe("Edit floor plan");
+});
+it("follows the zone the page names", async () => {
+  await mount("z2");
+  el.zone = "z1";
+  await el.updateComplete;
+  expect(floorPlanLink()!.getAttribute("href")).toBe(
+    "/manage/floor-plan/zone/z1?back=%2Fmanage%2Fvenue-operations%2Fdepartment%2Fd1%2Fview%2Fzones%2Fzone%2Fz1",
+  );
+});
+it("a disabled zone shows no floor plan link", async () => {
+  await mount();
+  el.model = { ...el.model!, zones: el.model!.zones.map((z) => ({ ...z, active: false })) };
+  await el.updateComplete;
+  expect(floorPlanLink()).toBeNull();
+});
+it("the zone's ⋮ menu stays Rename, Move and Disable", async () => {
+  await mount();
+  const menu = el.shadowRoot!.querySelector("wt-row-actions")!;
+  expect([...menu.children].map((n) => n.getAttribute("data-test"))).toEqual([
+    "rename-zone",
+    "move-zone",
+    "disable-zone",
+  ]);
+  expect(menu.querySelector("[data-test=zone-floor-plan]")).toBeNull();
+});
+it("names the link in Spanish", async () => {
+  setLocale("es");
+  await mount();
+  expect(floorPlanLink()!.textContent!.trim()).toBe("Editar plano de sala");
+});
