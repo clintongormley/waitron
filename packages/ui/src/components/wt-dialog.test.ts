@@ -689,6 +689,106 @@ test("keeps the footer in view when the body outgrows the window after opening",
   expect(await bodyIsTabStop(el, cancel), "a body short again is a tab stop").toBe(false);
 });
 
+/** Ways content inside a fixed-size wrapper grows and shrinks back, neither the body nor the
+ * wrapper changing size. */
+const insideWrapper = [
+  [
+    "a style change",
+    (inner: HTMLElement) => (inner.style.height = "1800px"),
+    (inner: HTMLElement) => (inner.style.height = ""),
+  ],
+  [
+    "added content",
+    (inner: HTMLElement) => {
+      const added = document.createElement("div");
+      added.style.height = "1800px";
+      inner.append(added);
+    },
+    (inner: HTMLElement) => inner.lastElementChild!.remove(),
+  ],
+  [
+    "a text change",
+    (inner: HTMLElement) => (inner.firstChild!.textContent = "Line ".repeat(2000)),
+    (inner: HTMLElement) => (inner.firstChild!.textContent = "Line"),
+  ],
+] as const;
+
+test.each(insideWrapper)(
+  "makes the body a tab stop when content grows by %s inside a fixed-height wrapper",
+  async (_, grow, shrink) => {
+    const { el, body } = await openAtPhoneSize(
+      '<label>Note <input name="note" /></label><div style="height: 200px; width: 200px"><div style="min-height: 100px">Line</div></div>',
+    );
+    const field = el.querySelector("input")!;
+    const inner = el.querySelector<HTMLElement>("div > div")!;
+    expect(body.tabIndex, "before: tabIndex").toBe(-1);
+    // The ResizeObserver's first reports, which arrive a frame after it starts watching, are past.
+    await frame();
+    await frame();
+    grow(inner);
+    await frame();
+    expect(body.scrollHeight, "grown: scrollHeight").toBeGreaterThan(body.clientHeight);
+    await vi.waitFor(() => expect(body.tabIndex, "grown: tabIndex").toBe(0));
+    field.focus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(el.shadowRoot!.activeElement, "Shift+Tab from the field").toBe(body);
+
+    shrink(inner);
+    await frame();
+    expect(body.scrollHeight, "shrunk: scrollHeight").toBe(body.clientHeight);
+    await vi.waitFor(() => expect(body.tabIndex, "shrunk: tabIndex").toBe(-1));
+  },
+);
+
+test("still notices content growing inside a fixed-size wrapper after it is moved while open", async () => {
+  const { el, body } = await openAtPhoneSize(
+    '<div style="height: 200px; width: 200px"><div style="height: 100px">Line</div></div>',
+  );
+  const parent = el.parentNode!;
+  el.remove();
+  parent.append(el);
+  await frame();
+  await frame();
+  expect(body.tabIndex, "before: tabIndex").toBe(-1);
+  el.querySelector<HTMLElement>("div > div")!.style.height = "1800px";
+  await frame();
+  expect(body.scrollHeight, "grown: scrollHeight").toBeGreaterThan(body.clientHeight);
+  await vi.waitFor(() => expect(body.tabIndex, "grown: tabIndex").toBe(0));
+});
+
+test.each(["Escape", "open", "removal"] as const)(
+  "asks for one frame for many content changes while open, and none once closed by %s",
+  async (how) => {
+    const { el } = await openAtPhoneSize('<div style="height: 200px"><p>Line</p></div>');
+    const inner = el.querySelector("p")!;
+    const frames = vi.spyOn(window, "requestAnimationFrame");
+    onTestFinished(() => frames.mockRestore());
+    // Each awaited, so each reaches the observer in its own report.
+    const change = async () => {
+      inner.textContent = "Lines";
+      await Promise.resolve();
+      inner.style.color = "red";
+      await Promise.resolve();
+      inner.append(document.createElement("span"));
+      await Promise.resolve();
+    };
+    await change();
+    expect(frames, "while open").toHaveBeenCalledTimes(1);
+    await frame();
+
+    if (how === "removal") el.remove();
+    else {
+      const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
+      if (how === "Escape") await userEvent.keyboard("{Escape}");
+      else el.open = false;
+      await closed;
+    }
+    frames.mockClear();
+    await change();
+    expect(frames, "once closed").not.toHaveBeenCalled();
+  },
+);
+
 test.each(["Escape", "open"] as const)(
   "closed by %s, hands focus back to what had it when it opened, not to the button that opened it",
   async (how) => {

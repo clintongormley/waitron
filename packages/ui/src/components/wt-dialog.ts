@@ -171,10 +171,12 @@ export class WtDialog extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated) this.observeBody();
+    if (this.hasUpdated && this.open) this.watchContent();
   }
 
   override disconnectedCallback(): void {
     this.bodyResize.disconnect();
+    this.unwatchContent();
     this.openingGeneration++;
     this.pendingClose = undefined;
     super.disconnectedCallback();
@@ -253,11 +255,14 @@ export class WtDialog extends LitElement {
         this.syncBodyTabStop();
         this.dialog.showModal();
         this.syncBodyTabStop();
+        this.watchContent();
         // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
         // it; a body with something to focus hands it on.
         if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
           this.focusFirstContent();
       }
+      // Also when the browser has already closed the dialog itself, as on Escape.
+      if (!this.open) this.unwatchContent();
       if (!this.open && this.dialog.open) {
         this.dialog.close();
         // Now as well as on the close report a task later: a screen that hands focus back once
@@ -321,6 +326,31 @@ export class WtDialog extends LitElement {
     for (const each of this.bodySlot.assignedElements({ flatten: true })) {
       this.bodyResize.observe(each);
     }
+  }
+
+  /** Content growing inside a slotted element whose own size is fixed resizes nothing observed, so
+   * any change to the slotted content while open checks the body again, once a frame. */
+  private readonly contentChanges = new MutationObserver(() => {
+    this.contentFrame ||= requestAnimationFrame(() => {
+      this.contentFrame = 0;
+      this.syncBodyTabStop();
+    });
+  });
+  private contentFrame = 0;
+
+  private watchContent(): void {
+    this.contentChanges.observe(this, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+  }
+
+  private unwatchContent(): void {
+    this.contentChanges.disconnect();
+    cancelAnimationFrame(this.contentFrame);
+    this.contentFrame = 0;
   }
 
   private syncBodyTabStop(): void {
