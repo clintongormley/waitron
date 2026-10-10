@@ -1242,7 +1242,9 @@ what its rows draw there. Supply `rowControls` to render controls in the leading
 selection checkboxes, outside tree indentation. Name that column with `rowControlsLabel`. Keep
 its default baseline alignment for Products' wrapped names; Structure uses
 `rowControlsAlign="center"` for its name-and-note stacks. Put a full-width lower toolbar in the
-`toolbar-bottom` slot; Products forwards that slot for its selection bar.
+`toolbar-bottom` slot; Products forwards that slot for its selection bar. A control that is not
+a column's filter but belongs with the filters goes in the `filters-start` slot, at the top of the
+Filters panel: Products puts its Show archived switch there.
 
 In Select mode, put selection checkboxes and drag grips together in the leading column, before
 the tree arrow and indentation. Leave a blank grip on All products and a category being added;
@@ -3421,10 +3423,11 @@ cannot bring it back. Take it out of every live or scheduled menu and publish be
 a refusal names the menus that still include it. This also applies to variants and to products
 offered as extras or home-screen shortcuts.
 
-The Status filter starts on Active. Change it to Archived to find a retained product, then choose
-View to open its plain-text details panel. The panel has no Save or availability control and does
-not open the editor. A variant of an archived product is archived too. An Unavailable active
-product stays listed with its Unavailable badge.
+Archived products and variants are hidden until **Show archived**, a switch at the top of the
+Filters panel, is on. Choose View on an archived row to open its plain-text details panel. The
+panel has no Save or availability control and does not open the editor. A variant of an archived
+product is archived too. The Availability column reads Archived for an archived row, Unavailable
+for a sold-out active one, and is blank otherwise; an Unavailable active product stays listed.
 
 The editor hides variants archived before it opened. Archive on a saved variant stages the
 change: its row remains visible with **Archived when saved** and **Keep** until Save. Keep cancels

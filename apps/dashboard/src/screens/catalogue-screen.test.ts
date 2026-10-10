@@ -785,10 +785,12 @@ describe("catalogue-screen", () => {
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     const table = await productTable(el);
-    await chooseOption(
-      table.shadowRoot!.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!,
-      "",
-    );
+    const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
+    products
+      .shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!
+      .click();
+    await products.updateComplete;
     table.setExpanded("folder:c1", true);
     table.setExpanded("p1", true);
     await table.updateComplete;
