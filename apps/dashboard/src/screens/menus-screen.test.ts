@@ -870,25 +870,27 @@ async function emptyAdd(el: MenusScreen, action: string): Promise<void> {
   await settleStructure(el);
 }
 
-/** The keys of the rows drawn at the menu's own top level, in order. */
+/** The keys of the rows drawn at the menu's own top level, under the menu's own row, in order. */
 function topLevelKeys(el: MenusScreen): string[] {
-  return allInStructure(el, 'tbody tr[aria-level="1"]').map((row) => row.dataset.rowKey!);
+  return allInStructure(el, 'tbody tr[aria-level="2"]').map((row) => row.dataset.rowKey!);
 }
 
-/** The keys of the rows drawn directly under `key`'s row (`""`: the top level), in order. */
+/** The keys of the member rows drawn directly under `key`'s row (`""`: the top level), in order. */
 function childKeys(el: MenusScreen, key: string): string[] {
   const depth = key === "" ? 0 : key.split("/").length;
   return allInStructure(el, "tbody tr[data-row-key]")
     .map((row) => row.dataset.rowKey!)
     .filter(
       (shown) =>
-        shown.split("/").length === depth + 1 && (depth === 0 || shown.startsWith(`${key}/`)),
+        shown !== "root" &&
+        shown.split("/").length === depth + 1 &&
+        (depth === 0 || shown.startsWith(`${key}/`)),
     );
 }
 
 /** The menu's name, then the names down to the row marked current; the menu's name alone when
- * the tree is at the top level, which no row stands for; "" when a section is current but no row
- * is marked. */
+ * the tree is at the top level, which no row is marked for; "" when a section is current but no
+ * row is marked. */
 function currentPlace(el: MenusScreen): string {
   const key = inStructure(el, '[aria-current="true"]')?.closest("tr")?.dataset.rowKey;
   if (key === undefined) return structure(el).current.length === 0 ? structure(el).menuName : "";
@@ -901,7 +903,7 @@ function currentPlace(el: MenusScreen): string {
   ].join(" › ");
 }
 
-/** The key of the row marked current; `""` at the menu's top level, which no row stands for. */
+/** The key of the row marked current; `""` at the menu's top level, which no row is marked for. */
 function currentKey(el: MenusScreen): string {
   const marked = inStructure(el, '[aria-current="true"]');
   if (marked === null && structure(el).current.length === 0) return "";
@@ -2394,7 +2396,7 @@ it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the 
   const handle = () =>
     list.shadowRoot.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
   const order = () =>
-    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="1"]')].map((row) =>
+    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="2"]')].map((row) =>
       row.getAttribute("data-row-key"),
     );
   handle().focus();
@@ -4186,12 +4188,13 @@ describe("the Structure tree", () => {
       expect(box.getAttribute("slot")).toBe("toolbar-search");
       expect(box.assignedSlot).not.toBeNull();
       expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
-      expect(shownKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+      expect(shownKeys(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
 
       await typeSearch(el, "Lemonade");
       expect(structure(el).search).toBe("Lemonade");
       expect(box.value).toBe("Lemonade");
       expect(shownKeys(el)).toEqual([
+        "root",
         "m-drinks",
         "m-drinks/m-lemonade",
         "m-fav",
@@ -5520,6 +5523,7 @@ describe("the Structure tree", () => {
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const menus = allInStructure(el, 'wt-row-actions[data-test^="actions-"]');
     expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
+      "root",
       "m-burger",
       "m-drinks",
       "m-drinks/m-lager",

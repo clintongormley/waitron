@@ -163,9 +163,14 @@ function row(el: MenuStructureTable, key: string): HTMLElement | null {
   return inTable(el, `tr[data-row-key="${CSS.escape(key)}"]`);
 }
 
-/** The rows drawn, as their keys, in order. */
-function shown(el: MenuStructureTable): string[] {
+/** Every row drawn, as its key, in order: the menu's own row too. */
+function drawn(el: MenuStructureTable): string[] {
   return all(el, "tbody tr[data-row-key]").map((tr) => tr.dataset.rowKey!);
+}
+
+/** The member rows drawn, as their keys, in order: everything but the menu's own row. */
+function shown(el: MenuStructureTable): string[] {
+  return drawn(el).filter((key) => key !== "root");
 }
 
 function nameOf(el: MenuStructureTable, key: string): string {
@@ -204,17 +209,22 @@ function listen(el: MenuStructureTable, name: string): unknown[] {
 
 const menuLabel = (name: string) => t("menus.menu_prefix").replace("{name}", name);
 
-it("draws the menu's members as the top-level rows, in menu order, with no row for the menu itself", async () => {
+it("draws a row for the menu itself first, by its name, then its members a level below, in menu order", async () => {
   const el = await mount();
-  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  const root = row(el, "root")!;
+  expect(root.getAttribute("aria-level")).toBe("1");
+  expect(inTable(el, '[data-test="root-name"]')!.textContent!.trim()).toBe("Lunch Menu");
+  // It cannot close, so it draws no arrow and no toggle.
+  expect(root.querySelector(".row-activate, .tree-toggle")).toBeNull();
   for (const key of ["m-burger", "m-drinks", "m-fav"])
-    expect(row(el, key)!.getAttribute("aria-level")).toBe("1");
+    expect(row(el, key)!.getAttribute("aria-level")).toBe("2");
   expect(["m-burger", "m-drinks", "m-fav"].map((key) => nameOf(el, key))).toEqual([
     "Burger",
     "Drinks",
     "Favourites",
   ]);
-  expect(inTable(el, '[data-test="root-name"]')).toBeNull();
+  // The old menu row's wording.
   expect(table(el).shadowRoot!.textContent!).not.toContain(menuLabel("Lunch Menu"));
   // A top-level section has its arrow; a product has none.
   for (const key of ["m-drinks", "m-fav"])
@@ -251,7 +261,7 @@ it("starts with sections closed and opens and closes one by a click on its row, 
   expect(
     ["m-drinks/m-lager", "m-drinks/m-beer", "m-drinks/m-lemonade"].map((key) => nameOf(el, key)),
   ).toEqual(["Lager", "Beer", "Lemonade"]);
-  expect(row(el, "m-drinks/m-lager")!.getAttribute("aria-level")).toBe("2");
+  expect(row(el, "m-drinks/m-lager")!.getAttribute("aria-level")).toBe("3");
   const text = table(el).shadowRoot!.textContent!;
   for (const wrong of ["Bebidas", "Something to drink", "for guests", "COCINA"])
     expect(text).not.toContain(wrong);
@@ -344,7 +354,7 @@ it("offers the top-level adds in the toolbar's Add ⋮ and on each place an owne
     { action: "add-products", path: ["m-drinks"] },
     { action: "new-section", path: ["m-fav", "m-fav-drinks"] },
   ]);
-  expect(inTable(el, '[data-test="actions-root"]')).toBeNull();
+  expect(inTable(el, '[data-test="actions-root"]')).not.toBeNull();
 });
 
 it("keeps a button the host puts in the toolbar's end after the Add ⋮", async () => {
@@ -774,6 +784,9 @@ it("focuses the empty box's first add when the menu is empty", async () => {
   }
 });
 
+/** Sixty characters and no space, so only a break anywhere can wrap it. */
+const LONG_MENU_NAME = "Menú-de-mediodía-de-lunes-a-viernes-con-postre-y-café-diario";
+
 it("keeps every row's menu on a phone's screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -784,10 +797,13 @@ it("keeps every row's menu on a phone's screen", async () => {
       nodes: [...lunchNodes(), productNode("m-long", "p-long"), wines()],
       products: [...products, product("p-long", "Menú-del-mediodía-de-lunes-a-viernes-con-postre")],
       current: ["m-drinks"],
+      menuName: LONG_MENU_NAME,
     });
-    // Eight rows fit in the phone's height, so each menu can be found where it is drawn.
-    expect(shown(el)).toHaveLength(8);
-    expectRowMenusOnScreen(table(el), 8, 'wt-row-actions[data-test^="actions-"]');
+    // Nine rows, the menu's own among them, fit in the phone's height, so each menu can be found
+    // where it is drawn.
+    expect(drawn(el)).toHaveLength(9);
+    expectRowMenusOnScreen(table(el), 9, 'wt-row-actions[data-test^="actions-"]');
+    expect(inTable(el, '[data-test="actions-root"]')).not.toBeNull();
     // The toolbar's Add ⋮ too.
     const adds = own(el, "toolbar-adds")!.shadowRoot!.querySelector("button")!;
     const at = adds.getBoundingClientRect();
@@ -807,9 +823,11 @@ it("names a section it has no name for as no longer available", async () => {
   expect(shown(el)).toEqual(["m-lost"]);
 });
 
-it("names only the members, with no name drawn for the menu itself", async () => {
+it("names the menu once, on its own row, and each member by its own name", async () => {
   const el = await mount();
-  expect(all(el, '[data-test="root-name"]')).toEqual([]);
+  expect(all(el, '[data-test="root-name"]').map((name) => name.textContent!.trim())).toEqual([
+    "Lunch Menu",
+  ]);
   expect(all(el, '[data-test="name"]').map((name) => name.textContent!.trim())).toEqual([
     "Burger",
     "Drinks",
@@ -843,6 +861,13 @@ async function mountDeep(props: Partial<MenuStructureTable> = {}) {
   return el;
 }
 
+/** Where the menu's own name text starts. */
+function rootNameLeft(el: MenuStructureTable): number {
+  const text = document.createRange();
+  text.selectNodeContents(inTable(el, '[data-test="root-name"]')!);
+  return text.getBoundingClientRect().left;
+}
+
 /** Where a row's name text, grip slot and leading slot start, and where their middles are. */
 function pieces(el: MenuStructureTable, key: string) {
   const tr = row(el, key)!;
@@ -873,10 +898,13 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
       await page.viewport(width, 844);
       const el = await mountDeep({ reordering });
       const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
-      const step = rows.find(({ level }) => level === 2)!.name.left - rows[0]!.name.left;
+      expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
+      // The menu's own row is level 1, and the same step separates it from its members.
+      const root = rootNameLeft(el);
+      const step = rows.find(({ level }) => level === 3)!.name.left - rows[0]!.name.left;
       expect(step).toBeGreaterThan(0);
       for (const { key, level, name } of rows)
-        expect(name.left, key).toBeCloseTo(rows[0]!.name.left + (level - 1) * step, 0);
+        expect(name.left, key).toBeCloseTo(root + (level - 1) * step, 0);
       for (const current of rows) {
         const twin = rows.find(
           (other) => other.level === current.level && other.key !== current.key,
@@ -903,9 +931,12 @@ it("puts a real grip on every top-level row, the included menu's too, and starts
   const tokens = getComputedStyle(el);
   const tap = parseFloat(tokens.getPropertyValue("--wt-tap-min"));
   const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
+  const indent = parseFloat(tokens.getPropertyValue("--wt-space-4"));
   expect(tap).toBeGreaterThan(0);
-  // The control column precedes the name cell; the arrow and media slot stay inside it.
-  for (const offset of offsets) expect(offset).toBeCloseTo(2 * tap + gap, 0);
+  expect(indent).toBeGreaterThan(0);
+  // The control column precedes the name cell; the arrow and media slot stay inside it, one
+  // indent step in from the menu's own row.
+  for (const offset of offsets) expect(offset).toBeCloseTo(2 * tap + gap + indent, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
@@ -960,7 +991,7 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
 );
 
 it.each([1280, 390])(
-  "puts the Name heading over the first top-level name, also at phone width, where the tree's arrow slot narrows (%ipx)",
+  "puts the Name heading over the menu's own name, the first in the tree, also at phone width, where the tree's arrow slot narrows (%ipx)",
   async (width) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -970,7 +1001,7 @@ it.each([1280, 390])(
       expect(table(el).hasAttribute("narrow")).toBe(width === 390);
       const heading = inTable(el, 'thead [part~="tree-heading"]')!;
       expect(heading.textContent!.trim()).toBe(t("members.name"));
-      expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "m-burger").name.left, 0);
+      expect(heading.getBoundingClientRect().left).toBeCloseTo(rootNameLeft(el), 0);
     } finally {
       await page.viewport(before.width, before.height);
     }
@@ -1415,21 +1446,18 @@ const noDrop = { before: [], after: [], into: [] };
 
 describe("with reordering off", () => {
   it.each([1280, 390])(
-    "draws no grip or grip space on any row, and puts the Name heading over the first top-level name (%ipx)",
+    "draws no grip or grip space on any row, and puts the Name heading over the menu's own name (%ipx)",
     async (width) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       try {
         await page.viewport(width, 844);
         const el = await mountDeep({ reordering: false });
         for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
-        expect(all(el, "tbody tr[data-row-key]").length).toBe(DEEP_ROWS.length);
+        expect(all(el, "tbody tr[data-row-key]").length).toBe(DEEP_ROWS.length + 1);
         expect(all(el, '[part~="drag-grip"], [part~="grip-space"]')).toEqual([]);
         expect(table(el).hasAttribute("narrow")).toBe(width === 390);
         const heading = inTable(el, 'thead [part~="tree-heading"]')!;
-        expect(heading.getBoundingClientRect().left).toBeCloseTo(
-          pieces(el, "m-burger").name.left,
-          0,
-        );
+        expect(heading.getBoundingClientRect().left).toBeCloseTo(rootNameLeft(el), 0);
       } finally {
         await page.viewport(before.width, before.height);
       }
@@ -2535,10 +2563,9 @@ describe("without the Device Home Page", () => {
     const el = await mount();
     Object.assign(el, { home: handedHome });
     await settle(el);
-    expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+    expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
     for (const key of ["m-burger", "m-drinks", "m-fav"])
-      expect(row(el, key)!.getAttribute("aria-level"), key).toBe("1");
-    expect(all(el, '[data-test="root-name"]')).toEqual([]);
+      expect(row(el, key)!.getAttribute("aria-level"), key).toBe("2");
   });
 
   it("offers no shortcut add on any row", async () => {
@@ -3406,5 +3433,188 @@ describe("Select mode", () => {
     expect(bar.assignedSlot?.name).toBe("toolbar-bottom");
     expect(bar.assignedSlot!.assignedSlot?.name).toBe("toolbar-bottom");
     expect(bar.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+});
+
+describe("the menu's own row", () => {
+  const TOP_ADDS = ["new-section-top", "include-menu-top", "open-add-products-top"];
+
+  it("holds exactly the three top-level adds in its ⋮, each sending the top level's path", async () => {
+    const el = await mount();
+    const adds = listen(el, "wt-structure-add");
+    const menu = inTable(el, '[data-test="actions-root"]')!;
+    expect(menu.localName).toBe("wt-row-actions");
+    expect(menu.closest("tr")!.dataset.rowKey).toBe("root");
+    expect(menu.getAttribute("label")).toBe(`${t("members.actions")}: Lunch Menu`);
+    expect(menuItems(el, "root")).toEqual(TOP_ADDS);
+    const buttons = TOP_ADDS.map((test) =>
+      menu.querySelector<HTMLElement>(`[data-test="${test}"]`)!,
+    );
+    expect(buttons.map((button) => button.textContent!.trim())).toEqual([
+      t("menus.new_section"),
+      t("menus.include_menu"),
+      t("sections.add_products"),
+    ]);
+    for (const button of buttons) button.click();
+    expect(adds).toEqual([
+      { action: "new-section", path: [] },
+      { action: "include-menu", path: [] },
+      { action: "add-products", path: [] },
+    ]);
+  });
+
+  it("stays open through Collapse all and Expand all, and is never closed by key", async () => {
+    const el = await mount();
+    const button = () => inTable(el, ".expand-all")!;
+    expect(button().textContent!.trim()).toBe(t("folders.expand_all"));
+    button().click();
+    await settle(el);
+    expect(button().textContent!.trim()).toBe(t("folders.collapse_all"));
+    button().click();
+    await settle(el);
+    expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+    expect(row(el, "root")!.getAttribute("aria-expanded")).toBe("true");
+    expect(button().textContent!.trim()).toBe(t("folders.expand_all"));
+    await el.setExpanded("root", false);
+    await settle(el);
+    expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  });
+
+  it("takes no box in Select mode, so Select all ticks members only", async () => {
+    const el = await mount({ selecting: true });
+    expect(row(el, "root")).not.toBeNull();
+    expect(inTable(el, '[data-test="select-root"]')).toBeNull();
+    expect(inTable(el, '[data-test="select-m-burger"]')).not.toBeNull();
+    expect(el.shownSelectableKeys().has("root")).toBe(false);
+    expect(el.shownSelectableKeys().has("m-burger")).toBe(true);
+    const changes = listen(el, "wt-selection-change");
+    item(el, "select-all").click();
+    await settle(el);
+    const [{ selected }] = changes as [{ selected: string[] }];
+    expect(selected).toContain("m-burger");
+    expect(selected).not.toContain("root");
+  });
+
+  it("answers no search and no Available option, so it is drawn only above a match", async () => {
+    const el = await mount({ search: "Lemonade" });
+    expect(drawn(el)).toEqual([
+      "root",
+      "m-drinks",
+      "m-drinks/m-lemonade",
+      "m-fav",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    const noMatches = () =>
+      table(el).shadowRoot!.querySelector('p.message[role="status"]')?.textContent!.trim();
+    for (const term of ["zzz", "Lunch Menu"]) {
+      el.search = term;
+      await settle(el);
+      expect(drawn(el), term).toEqual([]);
+      expect(noMatches(), term).toBe(tableNoMatches());
+    }
+    el.search = "";
+    await settle(el);
+    // Every product is available.
+    const select = inTable(el, 'wt-combobox[data-filter="available"]')!;
+    await chooseOption(select, "yes");
+    await settle(el);
+    expect(drawn(el)[0]).toBe("root");
+    expect(drawn(el)).toContain("m-burger");
+    await chooseOption(select, "no");
+    await settle(el);
+    expect(drawn(el)).toEqual([]);
+    expect(noMatches()).toBe(tableNoMatches());
+  });
+
+  it("has no grip and takes no drop, so a release over it moves nothing", async () => {
+    const el = await mount();
+    const root = row(el, "root")!;
+    expect(root.querySelector('[part~="grip-space"]')).not.toBeNull();
+    expect(inTable(el, '[data-test="drag-root"]')).toBeNull();
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    for (const band of ["top", "middle", "bottom"] as const) {
+      pointer(from, "pointermove", root, at(el, "root", band));
+      await settle(el);
+      expect(marked(el, "dragging"), band).toEqual(["m-burger"]);
+      expect(drops(el), band).toEqual(noDrop);
+    }
+    pointer(from, "pointerup", root, at(el, "root", "middle"));
+    await settle(el);
+    expect(moves).toEqual([]);
+    expect(intos).toEqual([]);
+
+    // The same drag released over another top-level row's top quarter does move.
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks", "top");
+    pointer(from, "pointerup", nameAt(el, "m-drinks"), at(el, "m-drinks", "top"));
+    await settle(el);
+    expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 1 }]);
+    expect(intos).toEqual([]);
+  });
+
+  it("is no section to move out to: ArrowLeft on a top-level grip sends and announces nothing", async () => {
+    const el = await mount();
+    expect(row(el, "m-burger")!.getAttribute("aria-level")).toBe("2");
+    const moves = listen(el, "wt-member-move");
+    const intos = listen(el, "wt-member-move-into");
+    await press(el, "m-burger", "ArrowLeft");
+    expect(moves).toEqual([]);
+    expect(intos).toEqual([]);
+    expect(announced(el)).toBe("");
+    // ArrowLeft inside a section does move out.
+    await toggle(el, "m-drinks");
+    await press(el, "m-drinks/m-lemonade", "ArrowLeft");
+    expect(intos).toEqual([{ from: ["m-drinks"], memberId: "m-lemonade", to: [], position: 2 }]);
+  });
+
+  it("is never marked current, at the top level or with a section current", async () => {
+    const el = await mount();
+    const name = () => inTable(el, '[data-test="root-name"]')!;
+    const marks = () => all(el, '[aria-current], [part~="current"]');
+    expect(name().hasAttribute("aria-current")).toBe(false);
+    expect(name().part.contains("current")).toBe(false);
+    expect(marks()).toEqual([]);
+    el.current = ["m-drinks"];
+    await settle(el);
+    expect(name().hasAttribute("aria-current")).toBe(false);
+    expect(name().part.contains("current")).toBe(false);
+    expect(marks().map((mark) => mark.closest("tr")!.dataset.rowKey)).toEqual(["m-drinks"]);
+  });
+
+  // The table is as wide as its widest unbroken line until a filter locks its columns, so a name
+  // with no space scrolls the table rather than wrapping; the ⋮, pinned at the end, stays on screen.
+  it("draws a long menu name whole inside its own cell on a phone, keeping its ⋮ on screen", async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(390, 844);
+      expect(LONG_MENU_NAME).toHaveLength(60);
+      expect(LONG_MENU_NAME).not.toContain(" ");
+      const el = await mount({ menuName: LONG_MENU_NAME });
+      const name = inTable(el, '[data-test="root-name"]')!;
+      expect(name.textContent!.trim()).toBe(LONG_MENU_NAME);
+      expect(getComputedStyle(name).overflowWrap).toBe("anywhere");
+      const text = document.createRange();
+      text.selectNodeContents(name);
+      const cell = name.closest("td")!.getBoundingClientRect();
+      expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(cell.right + 0.5);
+      const menu = inTable(el, '[data-test="actions-root"]')!;
+      const trigger = menu.shadowRoot!.querySelector("button")!;
+      const button = trigger.getBoundingClientRect();
+      expect(button.width).toBeGreaterThan(0);
+      expect(button.left).toBeGreaterThanOrEqual(0);
+      expect(button.right).toBeLessThanOrEqual(window.innerWidth);
+      const hit = menu.shadowRoot!.elementFromPoint(
+        button.x + button.width / 2,
+        button.y + button.height / 2,
+      );
+      expect(hit !== null && trigger.contains(hit), "the root's ⋮ is covered").toBe(true);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
   });
 });
