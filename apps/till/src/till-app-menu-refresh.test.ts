@@ -2378,3 +2378,99 @@ for (const kind of ["counter", "table"] as const) {
     await expect.poll(() => widget()!.zoneKeepOpen!.closesAt).toBe("14:30");
   });
 }
+
+it.each(["counter", "table"] as const)(
+  "A461 search section tap changes %s menu through the app without changing basket",
+  async (kind) => {
+    const source = catalogue("v1", V1.offers);
+    const otherOffer = {
+      ...offer("offer-other", "Other dish", "7.00"),
+      menuId: "other",
+      menuName: "Other",
+    };
+    const other = {
+      ...source.menus[0]!,
+      id: "other",
+      name: "Other",
+      isDefault: false,
+      structure: {
+        members: [
+          {
+            kind: "section" as const,
+            sectionId: "other-parent",
+            internalName: "internal-parent",
+            names: { en: "Drinks" },
+            color: null,
+            image: null,
+            members: [
+              {
+                kind: "section" as const,
+                sectionId: "other-coffee",
+                internalName: "internal-coffee",
+                names: { en: "Coffee" },
+                color: null,
+                image: null,
+                members: [
+                  {
+                    kind: "product" as const,
+                    productId: otherOffer.productId,
+                    menuItemId: otherOffer.id,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    source.menus.push(other);
+    source.offers.push(otherOffer);
+    const reads = {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(source),
+      listZoneOffers: vi.fn().mockResolvedValue(source),
+    };
+    const { el } = await mountApp(kind === "counter" ? reads : tableStubs(source, reads));
+    if (kind === "counter") await toCounter(el);
+    else await toTable(el);
+    const shown = () =>
+      kind === "counter"
+        ? browser(el)
+        : tableScreen(el).shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    expect(shown().menu!.id).toBe("lunch");
+    shown().store.addProduct(
+      shown().products.find((p) => p.id === "Lemonade")!,
+      "1",
+    );
+    const basket = [...shown().store.lines];
+    const mounted = shown();
+    const input = shown()
+      .shadowRoot!.querySelector("wt-input")!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "coffee";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    await shown().updateComplete;
+    const tile = [
+      ...shown().shadowRoot!.querySelectorAll<HTMLElement>('wt-button[data-kind="section"]'),
+    ].find((t) => t.querySelector(".name")!.textContent === "Coffee");
+    expect(tile).toBeDefined();
+    tile!.shadowRoot!.querySelector("button")!.click();
+    await flush(el);
+    await shown().updateComplete;
+    expect(shown()).toBe(mounted);
+    expect(shown().menu!.id).toBe("other");
+    expect(shown().shadowRoot!.querySelector("nav.breadcrumb [aria-current]")).not.toBeNull();
+    expect(shown().shadowRoot!.querySelector("nav.breadcrumb [aria-current]")!.textContent).toBe(
+      "Coffee",
+    );
+    expect(
+      [...shown().shadowRoot!.querySelectorAll('[data-region="section"] .name')].map(
+        (n) => n.textContent,
+      ),
+    ).toEqual(["Other dish"]);
+    expect(shown().store.lines).toEqual(basket);
+    expect(
+      shown().shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
+    ).toBe("");
+  },
+);

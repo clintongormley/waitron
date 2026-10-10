@@ -8,7 +8,7 @@ import {
   registerIcons,
   visuallyHiddenStyles,
 } from "@waitron/ui";
-import { foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
+import { foldCache, foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
 import {
   HOME_GRID_COLUMNS,
   arrangeHome,
@@ -46,6 +46,10 @@ registerIcons({
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 type MenuIndex = HomeIndex<TillProduct>;
+
+type SearchResult =
+  | { kind: "product"; product: TillProduct }
+  | { kind: "section"; section: SectionNode; path: SectionStep[]; disabled: boolean };
 
 /**
  * A product member whose offer is not among `products` is left out, and so is one not sold
@@ -98,12 +102,14 @@ export class TillMenuBrowser extends LitElement {
     css`
       :host {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-4);
         align-content: start;
       }
 
       section {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-2);
       }
 
@@ -307,6 +313,8 @@ export class TillMenuBrowser extends LitElement {
   /** Every served menu's offers as till products, through the same diet lens as `products`. */
   @property({ attribute: false }) servedProducts: TillProduct[] = [];
 
+  @property({ attribute: false }) unfilteredServedProducts?: TillProduct[];
+
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /** Whether it shows the menu's Handheld display rather than its Till one. */
@@ -336,9 +344,18 @@ export class TillMenuBrowser extends LitElement {
 
   #trailShown: SectionNode[] = [];
 
+  #pendingSection?: { menuId: string; sourceId: string; path: SectionStep[] };
+
+  #otherUnfilteredIndexes = new WeakMap<
+    TillZoneMenu,
+    { products: TillProduct[]; index: MenuIndex }
+  >();
+
   /** Each indexed product with its name folded for search. Keyed by the index alone because
    * {@link productName} reads no language. */
   #searchable = new WeakMap<MenuIndex, [TillProduct, string][]>();
+
+  #sectionSearchName = foldCache<SectionNode>();
 
   #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
@@ -368,15 +385,59 @@ export class TillMenuBrowser extends LitElement {
     return index;
   }
 
+  #otherUnfilteredIndex(menu: TillZoneMenu): MenuIndex {
+    const products = this.unfilteredServedProducts ?? this.servedProducts;
+    const cached = this.#otherUnfilteredIndexes.get(menu);
+    if (cached?.products === products) return cached.index;
+    const index = indexMenu(menu, products);
+    this.#otherUnfilteredIndexes.set(menu, { products, index });
+    return index;
+  }
+
   /** The open section is judged before each render, so a menu that has lost it never draws it. */
   override willUpdate(): void {
     if (this.menu === undefined) return;
+    const pending = this.#pendingSection;
+    if (pending !== undefined) {
+      const target = orderableMenus(this.menus).find((menu) => menu.id === pending.menuId);
+      const arrived = this.menu.id === pending.menuId;
+      const index = arrived
+        ? this.#index(this.menu)
+        : target === undefined
+          ? undefined
+          : this.#otherIndex(target);
+      if (
+        target === undefined ||
+        index === undefined ||
+        !this.#pathAvailable(pending.path, index) ||
+        (!arrived && this.menu.id !== pending.sourceId)
+      ) {
+        this.#pendingSection = undefined;
+        this.notFound = true;
+        this.path = [];
+      } else if (arrived) {
+        this.#pendingSection = undefined;
+        this.#open(pending.path);
+      }
+    }
     const trail = sectionTrail(this.path, this.#index(this.menu));
     if (trail === null) {
       this.notFound = true;
       this.path = [];
     }
     this.#trailShown = trail ?? [];
+  }
+
+  #pathAvailable(path: SectionStep[], index: MenuIndex): boolean {
+    const section = sectionTrail(path, index)?.at(-1);
+    if (section === undefined) return false;
+    const holdsOffers = (members: readonly DocumentMember[]): boolean =>
+      members.some((member) =>
+        member.kind === "product"
+          ? index.products.has(member.productId)
+          : holdsOffers(member.members),
+      );
+    return holdsOffers(section.members);
   }
 
   #open(path: SectionStep[]): void {
@@ -392,6 +453,7 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #onSearch(event: CustomEvent<{ value: string }>): void {
+    this.#pendingSection = undefined;
     this.query = event.detail.value;
     this.notFound = false;
   }
@@ -420,7 +482,7 @@ export class TillMenuBrowser extends LitElement {
     </div>`;
   }
 
-  #matches(index: MenuIndex, search: NameSearch): TillProduct[] {
+  #productMatches(index: MenuIndex, search: NameSearch): TillProduct[] {
     let names = this.#searchable.get(index);
     if (names === undefined) {
       names = [...index.products.values()].map((product): [TillProduct, string] => [
@@ -430,6 +492,72 @@ export class TillMenuBrowser extends LitElement {
       this.#searchable.set(index, names);
     }
     return search(names);
+  }
+
+  #matches(index: MenuIndex, unfiltered: MenuIndex, search: NameSearch): SearchResult[] {
+    this.#productMatches(index, searchFor(""));
+    const productNames = new Map(this.#searchable.get(index)!);
+    const seen = new Set<string>();
+    const walk = (members: readonly DocumentMember[], path: SectionStep[]) => {
+      const list = shownMembers(members);
+      const paths = tilePaths(list, path);
+      const named: [SearchResult, string][] = [];
+      let populated = false;
+      let enabled = false;
+      list.forEach((member, position) => {
+        if (member.kind === "product") {
+          populated ||= unfiltered.products.has(member.productId);
+          const product = index.products.get(member.productId);
+          if (product === undefined) return;
+          enabled = true;
+          if (seen.has(member.productId)) return;
+          seen.add(member.productId);
+          named.push([{ kind: "product", product }, productNames.get(product)!]);
+        } else {
+          const opens = paths[position]!;
+          const children = walk(member.members, opens);
+          if (!children.populated) return;
+          populated = true;
+          enabled ||= children.enabled;
+          named.push(
+            [
+              { kind: "section", section: member, path: opens, disabled: !children.enabled },
+              this.#sectionSearchName(member, this.#sectionName(member)),
+            ],
+            ...children.named,
+          );
+        }
+      });
+      return { named, populated, enabled };
+    };
+    return search(walk(unfiltered.home, []).named);
+  }
+
+  #resultTile(result: SearchResult, mode: HomeTileMode, menuId: string): TemplateResult {
+    if (result.kind === "product")
+      return this.#productButton(result.product, mode, () => this.#pick(result.product));
+    return this.#sectionButton(
+      result.section,
+      mode,
+      result.disabled
+        ? undefined
+        : () => {
+            this.query = "";
+            if (this.menu!.id === menuId) this.#open(result.path);
+            else {
+              this.path = [];
+              this.notFound = false;
+              this.#pendingSection = { menuId, sourceId: this.menu!.id, path: result.path };
+              this.dispatchEvent(
+                new CustomEvent("menu-selected", {
+                  detail: { id: menuId },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+            }
+          },
+    );
   }
 
   #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
@@ -582,33 +710,34 @@ export class TillMenuBrowser extends LitElement {
    * regions fail axe's landmark-unique. */
   #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
     const search = searchFor(this.query);
-    const found = this.#matches(index, search);
+    const found = this.#matches(index, this.#unfilteredIndex(menu), search);
     const otherMenus = orderableMenus(this.menus).filter((other) => other.id !== menu.id);
     const others = otherMenus
-      .map((other) => ({ menu: other, found: this.#matches(this.#otherIndex(other), search) }))
+      .map((other) => ({
+        menu: other,
+        found: this.#matches(this.#otherIndex(other), this.#otherUnfilteredIndex(other), search),
+      }))
       .filter((other) => other.found.length > 0);
-    const tiles = (products: TillProduct[]) =>
+    const tiles = (results: SearchResult[], menuId: string) =>
       this.#grid(
-        products.map((product) =>
-          this.#productButton(product, display.tiles, () => this.#pick(product)),
-        ),
+        results.map((result) => this.#resultTile(result, display.tiles, menuId)),
         display,
       );
     const empty = (text: string) => html`<p class="empty">${text}</p>`;
     let body: TemplateResult;
     if (otherMenus.length === 0)
-      body = found.length === 0 ? empty(t("menu.no_results")) : tiles(found);
+      body = found.length === 0 ? empty(t("menu.no_results")) : tiles(found, menu.id);
     else if (found.length === 0 && others.length === 0) body = empty(t("menu.no_results_any_menu"));
     else
       body = html`<section data-menu=${menu.id}>
           <h3>${t("menu.results_this_menu").replace("{menu}", () => menu.name)}</h3>
-          ${found.length === 0 ? empty(t("menu.no_results_this_menu")) : tiles(found)}
+          ${found.length === 0 ? empty(t("menu.no_results_this_menu")) : tiles(found, menu.id)}
         </section>
         ${others.map(
           (other) =>
             html`<section data-menu=${other.menu.id}>
               <h3>${other.menu.name}</h3>
-              ${tiles(other.found)}
+              ${tiles(other.found, other.menu.id)}
             </section>`,
         )}`;
     return html`<section data-region="results" aria-labelledby="results-heading">

@@ -23,7 +23,7 @@ import {
   productArchivedName,
   vatClassName,
 } from "../i18n/domain.js";
-import { categoryWithDescendants } from "./category-form.js";
+import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { fillPlaceholders, productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
@@ -290,6 +290,19 @@ export class ProductList extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
+      wt-data-table::part(search-name-line) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--wt-space-2);
+        max-inline-size: var(--name-room);
+        overflow-wrap: anywhere;
+      }
+      wt-data-table::part(search-path) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        min-inline-size: 0;
+      }
       /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
          keeps its baseline and its square stays put. */
       wt-data-table::part(tree-toggle) {
@@ -391,7 +404,6 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   /** The content language a stored unit's abbreviation is read in. */
   @property() unitLanguage = "en";
-  /** The search box's text; while it lasts, the table holds every category above a match open. */
   @property() search = "";
   /** Whether a product can be made yet: the editor needs a content language and a unit. */
   @property({ type: Boolean }) canAddProduct = false;
@@ -511,7 +523,14 @@ export class ProductList extends LitElement {
       }
       drag.active = true;
       holdPageCursor();
-      this.#dragged = this.selected.includes(drag.key) ? [...this.selected] : [drag.key];
+      const visible = new Set(
+        [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
+          (row) => row.dataset.rowKey!,
+        ),
+      );
+      this.#dragged = this.selected.includes(drag.key)
+        ? this.selected.filter((key) => visible.has(key))
+        : [drag.key];
       this.ghost = this.#ghostOf(this.#dragged);
       this.#send("drag-items", { keys: this.#dragged });
       void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
@@ -538,7 +557,7 @@ export class ProductList extends LitElement {
     const changed = target !== this.#target;
     this.#target = target;
     this.#hoverOpen(over);
-    if (changed) this.#paint();
+    if (changed || target !== undefined) this.#paint();
   }
 
   readonly #endDrag = (event: PointerEvent): void => {
@@ -640,7 +659,7 @@ export class ProductList extends LitElement {
     if (!this.#pointerDrag?.active) return;
     for (const key of this.#dragged) markDragging(shownRow(root, key));
     if (this.#target === undefined) return;
-    markInto(shownRow(root, this.#target));
+    markInto(shownRow(root, this.#target, this.#pointer));
     const gap = this.#gap(this.#target);
     if (gap) markGap(root, gap);
   }
@@ -661,8 +680,10 @@ export class ProductList extends LitElement {
     const next = order[order.indexOf(moving) + 1];
     if (next) return { key: next.key, side: "before" };
     // With nothing drawn under the target, a gap after it would sit on the row the drop goes into.
-    const last = lastShownRow(root, target);
-    return last === target ? undefined : { key: last, side: "after" };
+    const last = lastShownRow(root, target, this.#pointer);
+    return !last || last.dataset.rowKey === target
+      ? undefined
+      : { key: last.dataset.rowKey!, side: "after", row: last };
   }
 
   #ghostOf(keys: readonly string[]): DragGhost {
@@ -845,7 +866,7 @@ export class ProductList extends LitElement {
     const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
     const names = [
       ...root.querySelectorAll<HTMLElement>(
-        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"]',
+        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"], [part~="search-name-line"]',
       ),
     ];
     const fitted = box ? [...names, box] : names;
@@ -1027,6 +1048,27 @@ export class ProductList extends LitElement {
       }`;
   }
 
+  #categoryPath(row: ListRow): string {
+    const id =
+      row.kind === "folder"
+        ? row.folder.parentId
+        : row.kind === "product"
+          ? row.product.primaryCategoryId
+          : null;
+    const parent = id === null ? undefined : this.#categoryById.get(id);
+    if (!parent) return "";
+    const categories =
+      row.kind === "folder"
+        ? this.categories.filter((category) => category.id !== row.folder.id)
+        : this.categories;
+    return categoryPath(parent, categories);
+  }
+
+  #searchPath(row: ListRow) {
+    const path = this.#categoryPath(row);
+    return path === "" ? nothing : html`<span part="search-path">${path}</span>`;
+  }
+
   #productColumns(): DataTableColumn<ProductRow>[] {
     return [
       {
@@ -1035,7 +1077,8 @@ export class ProductList extends LitElement {
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: ({ product }) =>
           [product.name, ...product.variants.map(({ name }) => name)].join(" "),
-        cell: ({ product, variant }, { ancestorOnly }) => {
+        cell: (row, { ancestorOnly, searchRoot }) => {
+          const { product, variant } = row;
           const { color, inheritedFrom } =
             product.color === null
               ? this.#inheritedColor(product.primaryCategoryId)
@@ -1062,7 +1105,13 @@ export class ProductList extends LitElement {
                   busy: false,
                   open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
-                  ><strong>${product.name}</strong>${this.#variantCount(product)}</span
+                  >${
+                    searchRoot
+                      ? html`<span part="search-name-line"
+                          ><strong>${product.name}</strong>${this.#searchPath(row)}</span
+                        >`
+                      : html`<strong>${product.name}</strong>`
+                  }${this.#variantCount(product)}</span
                 >
               </span>`;
         },
@@ -1399,7 +1448,10 @@ export class ProductList extends LitElement {
                       "folder-color",
                       { folderId: folder.id },
                     )}<span part="folder-name"
-                      ><span><strong>${folder.name}</strong>${after}</span></span
+                      ><span part=${context.searchRoot ? "search-name-line" : nothing}
+                        ><span><strong>${folder.name}</strong>${after}</span
+                        >${context.searchRoot ? this.#searchPath(row) : nothing}</span
+                      ></span
                     >`
             }</span
           >`;
@@ -1520,6 +1572,7 @@ export class ProductList extends LitElement {
 
   readonly #expandChange = (event: CustomEvent<{ key: string; expanded: boolean }>): void => {
     event.stopPropagation();
+    if (this.search.trim() !== "") return;
     const { key, expanded } = event.detail;
     if (key.startsWith("folder:"))
       this.#send("category-toggle", { categoryId: key.slice(7), open: expanded });
@@ -1563,7 +1616,7 @@ export class ProductList extends LitElement {
         aria-label=${t("catalogue.title")}
         viewKey="waitron.products.table"
         rememberExpanded
-        searchOpensPath
+        flatTreeSearch
         .stickyHeader=${this.stickyHeader}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}

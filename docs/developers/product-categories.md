@@ -11,8 +11,10 @@ The screen is one tree. Its first row, **All products**, holds every category an
 filed in none; each category opens in place, with its subcategories above its products. A click or
 Enter on a category's row opens or closes it, and the categories a person opens are remembered in
 that browser. Search finds a product by its name or a variant's name, and a category by its own
-name, and opens every category on the way to a match; a category that matches but holds no match
-stays open or closed as it was. Clearing the search restores what was open. Column filters and Show archived affect
+name. While you search, only those own matches appear in a flat list, closest first, each followed
+by its category path. A matching category starts collapsed; open it to see its contents while
+matching products also keep their flat result. Clearing search keeps the branches you opened
+and opens their parents too. Column filters and Show archived affect
 products; categories stay. The address names the category last opened, as
 `/manage/catalogue/category/<id>`; closing that category, or one above it, names the closed
 category's parent.
@@ -344,7 +346,7 @@ selected inside a selected category moves with that category rather than being f
 
 On a pointer device you can also drag rows, but only in **Select**, which shows each row's
 grip; outside it nothing can be dragged. Drag a product or a category (dragging a selected row
-carries every selected row with it) onto a category, onto a product (to file beside it) or onto **All products** (to file in no
+carries only visible selected rows with it) onto a category, onto a product (to file beside it) or onto **All products** (to file in no
 category). The row stays in place, faded, while a copy follows the pointer; the row the drop goes into
 is tinted, inside a primary-colour ring with a bar on its left edge, and, while that row is open
 and shows rows under it, a dashed gap shows where the row will land in the current sort; a closed category
@@ -353,7 +355,9 @@ Esc, or a drop where the drag started, moves nothing. A mouse drags from anywher
 finger drags only from the row's grip, so the rest of the row still scrolls. A keyboard does not
 drag: keyboard users, and touch users who prefer it, use the same selection actions.
 
-Searching or changing a filter clears the selection, so actions do not reach items you have hidden.
+Searching or changing a filter keeps your ticks, so you can gather rows from several searches.
+The selected count includes hidden ticks; Move includes them too. A drag carries only visible ticks
+and keeps the hidden ones selected. Select all adds or removes only rendered eligible rows.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
 toolbar and returns focus to **Select**, and so does pressing **Select** again. It reads Done rather than Cancel because a

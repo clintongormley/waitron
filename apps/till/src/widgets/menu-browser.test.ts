@@ -894,9 +894,12 @@ describe("till-menu-browser", () => {
         "Café",
         "Caña",
         "Jamón",
+        "Favourites (EN)",
+        "plain-internal",
         "Cola",
         "Tostada",
         "Lemonade",
+        "Comida (ES)",
       ]);
 
       await search(el, "");
@@ -1088,7 +1091,7 @@ describe("till-menu-browser", () => {
       await search(el, "pancake");
       expect(names(entries(el, "results"))).toEqual([]);
       await search(el, "co");
-      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      expect(names(entries(el, "results"))).toEqual(["Cola", "Comida (ES)"]);
       expect(groupSections(el)).toHaveLength(0);
     });
 
@@ -1096,7 +1099,12 @@ describe("till-menu-browser", () => {
       const { el } = await served();
       await search(el, "co");
       expect(groups(el)).toEqual([
-        { menu: "menu-lunch", heading: "Lunch (this menu)", names: ["Cola"], empty: null },
+        {
+          menu: "menu-lunch",
+          heading: "Lunch (this menu)",
+          names: ["Cola", "Comida (ES)"],
+          empty: null,
+        },
         {
           menu: "menu-drinks",
           heading: "Drinks",
@@ -1135,7 +1143,7 @@ describe("till-menu-browser", () => {
       const { el } = await served({ menus: [lunch()] });
       await search(el, "co");
       expect(groupSections(el)).toEqual([]);
-      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      expect(names(entries(el, "results"))).toEqual(["Cola", "Comida (ES)"]);
       expect(root(el).querySelector('[data-region="results"] h2')!.textContent!.trim()).toBe(
         "Search results",
       );
@@ -1974,7 +1982,15 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Drinks (EN)"));
       expect(names(entries(el, "section"))).toEqual(["Lemonade"]);
       await search(el, "a");
-      expect(names(entries(el, "results"))).toEqual(["Agua", "Jamón", "Tostada", "Lemonade"]);
+      expect(names(entries(el, "results"))).toEqual([
+        "Agua",
+        "Jamón",
+        "Favourites (EN)",
+        "plain-internal",
+        "Tostada",
+        "Lemonade",
+        "Comida (ES)",
+      ]);
     });
 
     it("shows a staff-only product as it shows a public one, and rings it up", async () => {
@@ -2579,4 +2595,428 @@ describe("Spanish pricing-unit labels", () => {
     expect(price).toBe(`1,50\u00a0€/${label}`);
     expect(price).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}/i);
   });
+});
+
+describe("A461 current-menu mixed search", () => {
+  const coffee = section("coffee", "internal-coffee", { en: "Coffee", es: "Café" }, [
+    member("espresso"),
+    member("iced"),
+    member("ice"),
+    member("ginger"),
+  ]);
+  const offered = [
+    product("iced", "Iced coffee"),
+    product("cake", "Coffee cake"),
+    product("espresso", "Espresso"),
+    product("ice", "Add ice"),
+    product("ginger", "Ginger tea"),
+  ];
+  const current = (members: DocumentMember[] = [member("cake"), coffee]) =>
+    lunch({ structure: { members }, ...withShortcuts([]) });
+
+  it("A461 till ranks products and sections together without pulling in section contents", async () => {
+    const { el } = await mount({ menu: current(), products: offered });
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual(["Coffee", "Coffee cake", "Iced coffee"]);
+    expect(entries(el, "results").map((tile) => tile.dataset.kind)).toEqual([
+      "section",
+      "product",
+      "product",
+    ]);
+    el.menu = current([
+      section("iced-section", "internal", { en: "Iced coffee" }, [member("espresso")]),
+      member("exact"),
+    ]);
+    el.products = [...offered, product("exact", "Coffee")];
+    await el.updateComplete;
+    expect(names(entries(el, "results"))).toEqual(["Coffee", "Iced coffee"]);
+    expect(entries(el, "results").map((tile) => tile.dataset.kind)).toEqual(["product", "section"]);
+  });
+
+  it.each([true, false])(
+    "A461 equal section/product ranks keep document order, section first %s",
+    async (sectionFirst) => {
+      const same = section("same", "internal", { en: "Coffee" }, [member("espresso")]);
+      const members = sectionFirst ? [same, member("exact")] : [member("exact"), same];
+      const { el } = await mount({
+        menu: current(members),
+        products: [...offered, product("exact", "Coffee")],
+      });
+      await search(el, "coffee");
+      expect(entries(el, "results").map((tile) => tile.dataset.kind)).toEqual(
+        sectionFirst ? ["section", "product"] : ["product", "section"],
+      );
+    },
+  );
+
+  it("A461 till section matching follows the displayed label and content-language changes", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es", "fr"] });
+    try {
+      const translated = section(
+        "translated",
+        "Private coffee",
+        { en: "Coffee", es: "Café", fr: "Café français" },
+        [member("espresso")],
+      );
+      const { el } = await mount({ menu: current([translated]), products: offered });
+      await search(el, "cafe");
+      expect(entries(el, "results")).toEqual([]);
+      setLocale("es-ES");
+      await el.updateComplete;
+      expect(names(entries(el, "results"))).toEqual(["Café"]);
+      setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
+      await el.updateComplete;
+      expect(names(entries(el, "results"))).toEqual(["Café français"]);
+      await search(el, "private");
+      expect(entries(el, "results")).toEqual([]);
+      await search(el, "espresso carta");
+      expect(entries(el, "results")).toEqual([]);
+      await search(el, "espresso KDS");
+      expect(entries(el, "results")).toEqual([]);
+    } finally {
+      setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
+    }
+  });
+
+  it("A461 till preserves whole-word, punctuation and blank query behavior", async () => {
+    const { el } = await mount({
+      menu: current([section("ginger", "internal", { en: "Ginger" }, [member("ginger")])]),
+      products: offered,
+    });
+    const before = names(entries(el, "structure"));
+    await search(el, "gin");
+    expect(names(entries(el, "results"))).toEqual(["Ginger", "Ginger tea"]);
+    await search(el, "gin ");
+    expect(entries(el, "results")).toEqual([]);
+    await search(el, "&");
+    expect(entries(el, "results")).toEqual([]);
+    await search(el, "   ");
+    expect(names(entries(el, "structure"))).toEqual(before);
+  });
+
+  it("A461 till search keeps diet-empty sections disabled and omits unoffered sections", async () => {
+    const extraOnly = section("extras", "internal", { en: "Coffee extras" }, [member("extra")]);
+    const absent = section("absent", "internal", { en: "Coffee absent" }, [member("missing")]);
+    const soldOut = section("sold", "internal", { en: "Coffee sold" }, [member("sold")]);
+    const all = [
+      ...offered,
+      product("extra", "Coffee extra", { ordering: "not_sold_separately" }),
+      product("sold", "Coffee sold out", { available: false }),
+    ];
+    const { el, store } = await mount({
+      menu: current([coffee, extraOnly, absent, soldOut]),
+      products: all.filter((p) => !offered.includes(p)),
+      unfilteredProducts: all,
+    });
+    const selected = vi.fn();
+    el.addEventListener("menu-selected", selected);
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual(["Coffee", "Coffee sold", "Coffee sold out"]);
+    const tile = entry(el, "results", "Coffee");
+    expect(tile.disabled).toBe(true);
+    const native = tile.shadowRoot!.querySelector("button")!;
+    expect(native.disabled).toBe(true);
+    native.click();
+    await el.updateComplete;
+    expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe(
+      "coffee",
+    );
+    expect(selected).not.toHaveBeenCalled();
+    expect(store.lines).toEqual([]);
+    expect(entry(el, "results", "Coffee sold").disabled).toBe(false);
+    expect(entry(el, "results", "Coffee sold out").disabled).toBe(true);
+  });
+
+  it("A461 section taps open nested and repeated visible copies without changing the basket", async () => {
+    const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
+    const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);
+    const direct = {
+      ...section("hidden", "internal", { en: "Coffee invisible" }, [first, second]),
+      direct: true,
+    } as DocumentMember;
+    const nested = section("parent", "internal", { en: "Drinks" }, [
+      section("nested", "internal", { en: "Coffee nested" }, [member("iced")]),
+    ]);
+    const { el, store } = await mount({
+      menu: current([direct, nested, member("cake")]),
+      products: offered,
+    });
+    store.addProduct(offered[0]!, "1");
+    const basket = [...store.lines];
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual([
+      "Coffee cake",
+      "Coffee first",
+      "Coffee second",
+      "Coffee nested",
+      "Iced coffee",
+    ]);
+    await tap(el, entry(el, "results", "Coffee second"));
+    expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe("");
+    expect(breadcrumb(el)).toBe("Home › Coffee second");
+    expect(names(entries(el, "section"))).toEqual(["Coffee cake"]);
+    expect(store.lines).toEqual(basket);
+    await search(el, "coffee");
+    await tap(el, entry(el, "results", "Coffee nested"));
+    expect(breadcrumb(el)).toBe("Home › Drinks › Coffee nested");
+    expect(names(entries(el, "section"))).toEqual(["Iced coffee"]);
+    expect(store.lines).toEqual(basket);
+    await search(el, "coffee");
+    expect(names(entries(el, "results")).filter((n) => n === "Coffee cake")).toHaveLength(1);
+  });
+});
+
+describe("A461 served-menu section search", () => {
+  const espresso = product("espresso", "Espresso", { catalogueId: "other", unitPrice: "7.00" });
+  const cake = product("cake", "Coffee cake", { catalogueId: "other" });
+  const current = lunch({ structure: { members: [member("cafe")] }, ...withShortcuts([]) });
+  const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
+  const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);
+  const other = {
+    ...current,
+    id: "other",
+    name: "Other",
+    isDefault: false,
+    structure: {
+      members: [
+        {
+          ...section("hidden", "internal", { en: "Coffee hidden" }, [first, second]),
+          direct: true,
+        } as DocumentMember,
+        section("parent", "internal", { en: "Drinks" }, [
+          section("nested", "internal", { en: "Coffee nested" }, [member("espresso")]),
+        ]),
+      ],
+    },
+  };
+  const setup = (props: Partial<TillMenuBrowser> = {}) =>
+    mount({
+      menu: current,
+      products: [cafe],
+      menus: [current, other],
+      servedProducts: [cafe, espresso, cake],
+      ...props,
+    });
+
+  it("A461 other menus show their own mixed ranked results and own offers", async () => {
+    const { el, store } = await setup();
+    await search(el, "coffee");
+    const groups = [...root(el).querySelectorAll<HTMLElement>("section[data-menu]")];
+    expect(groups.map((g) => g.dataset.menu)).toEqual([current.id, other.id]);
+    expect(names(entries(el, "results"))).toEqual([
+      "Coffee cake",
+      "Coffee first",
+      "Coffee second",
+      "Coffee nested",
+    ]);
+    await search(el, "espresso");
+    await tap(el, entry(el, "results", "Espresso"));
+    expect(store.lines[0]!.product.menuItemId).toBe(espresso.menuItemId);
+    expect(store.lines[0]!.product.unitPrice).toBe("7.00");
+    el.menus = [current, { ...other, orderable: false }];
+    await el.updateComplete;
+    expect(entries(el, "results")).toEqual([]);
+  });
+
+  it("A461 another menu with only a diet-disabled section still appears", async () => {
+    const { el, store } = await setup({
+      servedProducts: [cafe],
+      unfilteredServedProducts: [cafe, espresso, cake],
+    } as Partial<TillMenuBrowser>);
+    const selected = vi.fn();
+    el.addEventListener("menu-selected", selected);
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual([
+      "Coffee first",
+      "Coffee second",
+      "Coffee nested",
+    ]);
+    const tile = entry(el, "results", "Coffee second");
+    expect(tile.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    tile.shadowRoot!.querySelector("button")!.click();
+    await el.updateComplete;
+    expect(selected).not.toHaveBeenCalled();
+    expect(store.lines).toEqual([]);
+    expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe(
+      "coffee",
+    );
+  });
+
+  it.each(["Coffee second", "Coffee nested"])(
+    "A461 other-menu section tap waits for its owner and opens %s",
+    async (label) => {
+      const { el, store } = await setup();
+      store.addProduct(cafe, "1");
+      const basket = [...store.lines];
+      const events: CustomEvent<{ id: string }>[] = [];
+      el.addEventListener("menu-selected", (event) =>
+        events.push(event as CustomEvent<{ id: string }>),
+      );
+      await search(el, "coffee");
+      await tap(el, entry(el, "results", label));
+      expect(events).toHaveLength(1);
+      expect(events[0]!.detail).toEqual({ id: "other" });
+      expect(events[0]!.bubbles).toBe(true);
+      expect(events[0]!.composed).toBe(true);
+      expect(el.menu).toBe(current);
+      expect(notice(el)).toBeNull();
+      expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe(
+        "",
+      );
+      el.menu = other;
+      el.products = [espresso, cake];
+      await el.updateComplete;
+      expect(breadcrumb(el)).toBe(
+        label === "Coffee second" ? "Home › Coffee second" : "Home › Drinks › Coffee nested",
+      );
+      expect(names(entries(el, "section"))).toEqual(
+        label === "Coffee second" ? ["Coffee cake"] : ["Espresso"],
+      );
+      expect(store.lines).toEqual(basket);
+      el.menu = current;
+      el.products = [cafe];
+      await el.updateComplete;
+      el.menu = other;
+      el.products = [espresso, cake];
+      await el.updateComplete;
+      expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+    },
+  );
+
+  it("A461 a pending copy cancels when its own offers disappear while another copy remains", async () => {
+    const { el } = await setup();
+    await search(el, "coffee");
+    await tap(el, entry(el, "results", "Coffee second"));
+    el.servedProducts = [cafe, espresso];
+    await el.updateComplete;
+    el.servedProducts = [cafe, espresso, cake];
+    el.menu = other;
+    el.products = [espresso, cake];
+    await el.updateComplete;
+    expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+  });
+
+  it("A461 a pending section refuses a target that becomes unorderable as its input arrives", async () => {
+    const { el } = await setup();
+    await search(el, "coffee");
+    await tap(el, entry(el, "results", "Coffee second"));
+    const ended = { ...other, orderable: false };
+    el.menus = [current, ended];
+    el.menu = ended;
+    el.products = [espresso, cake];
+    await el.updateComplete;
+    expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+  });
+
+  it.each(["removed", "ended", "path-lost", "unrelated"])(
+    "A461 a pending section cancels when %s",
+    async (change) => {
+      const { el, store } = await setup();
+      await search(el, "coffee");
+      await tap(el, entry(el, "results", "Coffee second"));
+      if (change === "removed") el.menus = [current];
+      if (change === "ended") el.menus = [current, { ...other, orderable: false }];
+      if (change === "path-lost")
+        el.menus = [current, { ...other, structure: { members: [member("espresso")] } }];
+      if (change === "unrelated") el.menu = { ...current, id: "unrelated" };
+      await el.updateComplete;
+      el.menus = [current, other];
+      el.menu = other;
+      el.products = [espresso, cake];
+      await el.updateComplete;
+      expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+      expect(store.lines).toEqual([]);
+    },
+  );
+});
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A461 visual till mixed results $width $locale $theme", async ({ width, locale, theme }) => {
+  const before = currentLocale();
+  setLocale(locale);
+  setContentLanguages({
+    defaultLanguage: locale.startsWith("es") ? "es" : "en",
+    languages: ["en", "es"],
+  });
+  await page.viewport(width, 844);
+  expect(window.innerWidth).toBe(width);
+  try {
+    const mixed = section("coffee", "internal", { en: "Coffee", es: "Café" }, [member("iced")]);
+    const disabled = section(
+      "coffee-disabled",
+      "internal disabled",
+      {
+        en: "Coffee long disabled section " + "Unbroken".repeat(8),
+        es: "Café largo desactivado " + "SinEspacios".repeat(8),
+      },
+      [member("filtered")],
+    );
+    const icedName = locale.startsWith("es") ? "Café helado" : "Iced coffee";
+    const cakeName = locale.startsWith("es") ? "Tarta de café" : "Coffee cake";
+    const offers = [product("iced", icedName), product("filtered", "Filtered dish")];
+    const { el, host, store } = await mount({
+      handheld: width === 390,
+      menu: lunch({
+        structure: { members: [mixed, disabled, member("cake")] },
+        ...withShortcuts([]),
+      }),
+      products: [offers[0]!, product("cake", cakeName)],
+      unfilteredProducts: [...offers, product("cake", cakeName)],
+    });
+    host.setAttribute("data-theme", theme);
+    host.style.width = `${width === 1280 ? 780 : width}px`;
+    if (width === 1280) host.style.maxWidth = "780px";
+    const capture = async (state: string) => {
+      await el.updateComplete;
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      await page.screenshot({
+        element: el,
+        path: `.superpowers/a461-task9/till-${locale}-${theme}-${width}-${state}.png`,
+      });
+    };
+    await search(el, locale.startsWith("es") ? "cafe" : "coffee");
+    expect(entries(el, "results").filter((tile) => tile.dataset.kind === "section")).toHaveLength(
+      2,
+    );
+    const disabledTile = entries(el, "results").find((tile) => tile.disabled)!;
+    expect(disabledTile).toBeDefined();
+    await (disabledTile as HTMLElementTagNameMap["wt-button"]).updateComplete;
+    expect(disabledTile.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(
+      true,
+    );
+    await Promise.all(
+      entries(el, "results").map(
+        (tile) => (tile as HTMLElementTagNameMap["wt-button"]).updateComplete,
+      ),
+    );
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (width === 390)
+      for (const tile of entries(el, "results")) {
+        const rect = tile.getBoundingClientRect();
+        expect(rect.right).toBeLessThanOrEqual(width + 1);
+      }
+    await capture("mixed-disabled");
+    const enabled = entries(el, "results").find(
+      (tile) => tile.dataset.kind === "section" && !tile.disabled,
+    )!;
+    await tap(el, enabled);
+    expect(names(entries(el, "section"))).toContain(icedName);
+    expect(store.lines).toHaveLength(0);
+    await capture("opened");
+    await search(el, "zz-no-match");
+    expect(entries(el, "results")).toHaveLength(0);
+    await capture("no-match");
+    await search(el, "");
+    await capture("restored");
+  } finally {
+    setLocale(before);
+    await page.viewport(1280, 844);
+  }
 });

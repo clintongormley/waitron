@@ -830,7 +830,6 @@ export class MenusScreen extends LitElement {
    * name order. */
   protected override updated(changed: PropertyValues): void {
     this.#returnFocus();
-    if (changed.has("structure") || changed.has("products")) void this.#keepSelectionShown();
     if (!changed.has("layout") || this.layout !== "narrow") return;
     const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       'wt-data-table[data-test="menus"]',
@@ -853,7 +852,8 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
-    if (changed.has("structure")) this.#keepSelectionOwned();
+    if (changed.has("structure"))
+      this.#keepSelectionOwned(changed.get("structure") as MenuStructure | null | undefined);
     this.#trackMoveDraft();
     if (changed.has("structure") || changed.has("path")) {
       this.#resolvePath();
@@ -1553,6 +1553,59 @@ export class MenusScreen extends LitElement {
         this.busy = false;
         return;
       }
+      await this.#refresh();
+      if (destination.menuId === this.menuId && this.#holds(destination)) this.#edit(to);
+      else this.#reportSavedToLost(destination);
+      this.busy = false;
+    });
+  }
+
+  #dropSelected(keys: readonly string[], to: string[], position: number | undefined): void {
+    if (this.busy || keys.length === 0) return;
+    const menuId = this.menuId;
+    const canonical = this.#sentKeys(this.#inTreeOrder(keys));
+    if (keys.some((key) => !ownedKeys(this.structure?.nodes ?? []).includes(key))) return;
+    const captured = this.#selectedMembers(canonical);
+    const destinationId = this.#targetAt(to).listId;
+    this.memberError = null;
+    this.busy = true;
+    this.#writes.run(destinationId, async () => {
+      const current = this.#sentKeys(this.#inTreeOrder(keys));
+      const members = this.#selectedMembers(current).map(({ listId, memberId }) => ({
+        listId,
+        memberId,
+      }));
+      const resolves = trailOf(this.structure, to).length === to.length;
+      const destination = this.#targetAt(to);
+      if (
+        this.menuId !== menuId ||
+        !resolves ||
+        destination.listId !== destinationId ||
+        current.length !== canonical.length ||
+        current.some((key, index) => key !== canonical[index]) ||
+        members.some(
+          (member, index) =>
+            member.listId !== captured[index]?.listId ||
+            member.memberId !== captured[index]?.memberId,
+        ) ||
+        !this.#moveDestinations(current).some(({ value }) => value === destinationId)
+      ) {
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      try {
+        await this.api.moveSectionMembersInto(destinationId, members, position);
+      } catch (error) {
+        if (!this.#reportRefusedElsewhere(destination, error))
+          this.memberError = codeMessage(codeOf(error));
+        await this.#refresh(false);
+        this.busy = false;
+        return;
+      }
+      this.structureSelected = this.structureSelected.filter(
+        (key) => !canonical.includes(key) && this.#sentKeys([...canonical, key]).includes(key),
+      );
       await this.#refresh();
       if (destination.menuId === this.menuId && this.#holds(destination)) this.#edit(to);
       else this.#reportSavedToLost(destination);
@@ -2382,6 +2435,12 @@ export class MenusScreen extends LitElement {
         .search=${this.structureSearch}
         .selecting=${this.structureSelecting}
         .selected=${this.structureSelected}
+        .dragSelection=${(key: string, visible: ReadonlySet<string>) =>
+          this.structureSelected.includes(key)
+            ? this.#sentKeys(
+                this.#inTreeOrder(this.structureSelected.filter((each) => visible.has(each))),
+              )
+            : [key]}
         menuName=${this.#menuName()}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
           event.stopPropagation();
@@ -2389,7 +2448,6 @@ export class MenusScreen extends LitElement {
         }}
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
-          this.structureSelected = [];
         }}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
@@ -2422,6 +2480,13 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           const { path, memberId, to } = event.detail;
           this.#move(path, memberId, to);
+        }}
+        @wt-members-drop=${(
+          event: CustomEvent<{ keys: string[]; to: string[]; position?: number }>,
+        ) => {
+          event.stopPropagation();
+          const { keys, to, position } = event.detail;
+          this.#dropSelected(keys, to, position);
         }}
         @wt-member-move-into=${(
           event: CustomEvent<{
@@ -2497,7 +2562,6 @@ export class MenusScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.structureSearch = event.detail.value;
-            this.structureSelected = [];
           }}
         ></wt-input>
         ${this.structureSelecting ? this.#renderSelectionBar() : nothing}
@@ -2579,7 +2643,7 @@ export class MenusScreen extends LitElement {
 
   /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the menu still
    * owns. */
-  #keepSelectionOwned(): void {
+  #keepSelectionOwned(previous?: MenuStructure | null): void {
     // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
     if (this.structure?.nodes.length === 0) {
       this.structureReordering = false;
@@ -2587,20 +2651,22 @@ export class MenusScreen extends LitElement {
       this.structureSearch = "";
     }
     const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
+    const identity = (structure: MenuStructure | null | undefined, key: string) => {
+      const path = key.split("/");
+      return JSON.stringify([
+        listIdOf(structure ?? null, trailOf(structure ?? null, path.slice(0, -1))),
+        path.at(-1),
+      ]);
+    };
+    const replacements = new Map([...owned].map((key) => [identity(this.structure, key), key]));
+    const remap = (keys: string[]) =>
+      keys.map((key) =>
+        owned.has(key) ? key : (replacements.get(identity(previous, key)) ?? key),
+      );
+    this.structureSelected = remap(this.structureSelected);
+    if (this.removingSelected) this.removingSelected = remap(this.removingSelected);
+    if (this.movingSelected) this.movingSelected = remap(this.movingSelected);
     this.#keepSelection((key) => owned.has(key));
-  }
-
-  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the search and the
-   * Available filter still show (a closed section hides none), once the tree has drawn a change: a
-   * row renamed out of the search, or a product the filter now hides, can no longer be unticked. */
-  async #keepSelectionShown(): Promise<void> {
-    if (this.structureSelected.length === 0 && !this.removingSelected && !this.movingSelected)
-      return;
-    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
-    if (!tree) return;
-    await tree.updateComplete;
-    const shown = tree.shownSelectableKeys();
-    this.#keepSelection((key) => shown.has(key));
   }
 
   #keepSelection(keep: (key: string) => boolean): void {

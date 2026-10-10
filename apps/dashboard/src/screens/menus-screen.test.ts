@@ -4211,12 +4211,8 @@ describe("the Structure tree", () => {
       expect(structure(el).search).toBe("Lemonade");
       expect(box.value).toBe("Lemonade");
       expect(shownKeys(el)).toEqual([
-        "root",
-        "m-drinks",
         "m-drinks/m-lemonade",
-        "m-fav",
         "m-fav/m-fav-lemonade",
-        "m-fav/m-fav-drinks",
         "m-fav/m-fav-drinks/m-lemonade",
       ]);
     });
@@ -4343,8 +4339,11 @@ describe("the Structure tree", () => {
       expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
       expect(removeButton(el).disabled).toBe(false);
       expect(removeButton(el).variant).toBe("danger");
-      // Grips are Reorder's; Select alone draws none.
-      expect(allInStructure(el, '[data-test^="drag-"]')).toEqual([]);
+      expect(allInStructure(el, '[data-test^="drag-"]').map((grip) => grip.dataset.test)).toEqual([
+        "drag-m-burger",
+        "drag-m-drinks",
+        "drag-m-fav",
+      ]);
 
       await pressSelect(el);
       expect(rowBoxes(el)).toEqual([]);
@@ -4506,23 +4505,255 @@ describe("the Structure tree", () => {
       expect(rowBoxes(el).filter((box) => box.checked)).toEqual([]);
     });
 
-    it("clears the selection when the search changes and when a filter changes", async () => {
+    function a461Section(
+      memberId: string,
+      sectionId: string,
+      name: string,
+      children: MenuStructureNode[],
+    ): MenuStructureNode {
+      return {
+        memberId,
+        ref: { kind: "section", sectionId },
+        internalName: name,
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children,
+      };
+    }
+    const a461Nodes = () => [
+      a461Section("m-coffee", "s-coffee", "Coffee", [productNode("m-iced", "iced")]),
+      a461Section("m-desserts", "s-desserts", "Desserts", [productNode("m-cake", "cake")]),
+      a461Section("m-storage", "s-storage", "Storage", []),
+    ];
+    async function a461Gather(client: Api) {
+      client.getMenuStructure.mockResolvedValue(lunchWith(a461Nodes()));
+      client.listLibraryProducts.mockResolvedValue([
+        product("iced", "Iced coffee"),
+        product("cake", "Coffee cake"),
+      ]);
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      type(q(el, 'wt-input[name="structure-search"]')!, "Iced");
+      await settleStructure(el);
+      await tick(el, "m-coffee/m-iced");
+      type(q(el, 'wt-input[name="structure-search"]')!, "cake");
+      await settleStructure(el);
+      await tick(el, "m-desserts/m-cake");
+      expect(allInStructure(el, '[part~="drag-grip"]').length).toBeGreaterThan(0);
+      type(q(el, 'wt-input[name="structure-search"]')!, "");
+      await settleStructure(el);
+      structure(el).shadowRoot!.querySelector("wt-data-table")!.setExpanded("m-desserts", true);
+      await settleStructure(el);
+      expect(rowOf(el, "m-coffee/m-iced")).toBeNull();
+      return el;
+    }
+    async function a461PointerDrop(
+      el: MenusScreen,
+      key = "m-desserts/m-cake",
+      target = "m-storage",
+    ) {
+      const from = inStructure<HTMLButtonElement>(el, `[data-test="drag-${CSS.escape(key)}"]`);
+      expect(from).not.toBeNull();
+      const to = rowOf(el, target)!.querySelector<HTMLElement>('[data-test="name"]')!;
+      const send = (type: string, over: Element) => {
+        const box = over.getBoundingClientRect();
+        from!.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+            pointerId: 71,
+            clientX: box.left + 8,
+            clientY: box.top + box.height / 2,
+          }),
+        );
+      };
+      send("pointerdown", from!);
+      send("pointermove", to);
+      await settleStructure(el);
+      send("pointerup", to);
+    }
+    it("A461 Structure drag sends visible ticks and leaves hidden ticks selected", async () => {
+      const client = api();
+      const el = await a461Gather(client);
+      const drops: unknown[] = [];
+      structure(el).addEventListener("wt-members-drop", (event) =>
+        drops.push((event as CustomEvent).detail),
+      );
+      await a461PointerDrop(el);
+      await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+      expect(drops).toEqual([{ keys: ["m-desserts/m-cake"], to: ["m-storage"] }]);
+      expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
+        "s-storage",
+        [{ listId: "s-desserts", memberId: "m-cake" }],
+        undefined,
+      );
+      expect(client.moveSectionMember).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(structure(el).selected).toEqual(["m-coffee/m-iced"]));
+    });
+    it("A461 search drag ignores a hidden selected parent before grouping the visible child", async () => {
+      const client = api();
+      client.getMenuStructure.mockResolvedValue(
+        lunchWith([
+          ...a461Nodes().slice(0, 2),
+          a461Section("m-storage", "s-storage", "Iced storage", []),
+        ]),
+      );
+      client.listLibraryProducts.mockResolvedValue([
+        product("iced", "Iced coffee"),
+        product("cake", "Coffee cake"),
+      ]);
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      type(q(el, 'wt-input[name="structure-search"]')!, "coffee");
+      await settleStructure(el);
+      await tick(el, "m-coffee");
+      type(q(el, 'wt-input[name="structure-search"]')!, "iced");
+      await settleStructure(el);
+      await tick(el, "m-coffee/m-iced");
+      expect(rowOf(el, "m-coffee")).toBeNull();
+      await a461PointerDrop(el, "m-coffee/m-iced");
+      await vi.waitFor(() =>
+        expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
+          "s-storage",
+          [{ listId: "s-coffee", memberId: "m-iced" }],
+          undefined,
+        ),
+      );
+      await vi.waitFor(() => expect(structure(el).selected).toEqual(["m-coffee"]));
+    });
+
+    it("A461 batch drop keeps every tick on the exact domain refusal", async () => {
+      const client = api({
+        moveSectionMembersInto: vi
+          .fn()
+          .mockRejectedValue({ code: "menu_section.member_duplicate" }),
+      });
+      const el = await a461Gather(client);
+      await a461PointerDrop(el);
+      await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+      expect(structure(el).selected).toEqual(["m-coffee/m-iced", "m-desserts/m-cake"]);
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        t("menus.change_not_saved")
+          .replace("{name}", "Storage")
+          .replace("{reason}", codeMessage("menu_section.member_duplicate")),
+      );
+    });
+
+    it("A461 batch drop clears ticks carried within a selected section", async () => {
+      const client = api();
+      client.getMenuStructure.mockResolvedValue(
+        lunchWith([...lunchNodes(), a461Section("m-storage", "s-storage", "Storage", [])]),
+      );
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      emit(structure(el), "wt-selection-change", {
+        selected: ["m-drinks", "m-drinks/m-lager", "m-fav/m-fav-drinks/m-lager"],
+      });
+      await settleStructure(el);
+      emit(structure(el), "wt-members-drop", { keys: ["m-drinks"], to: ["m-storage"] });
+      await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+      expect(structure(el).selected).toEqual([]);
+    });
+    it("A461 batch drop sends a repeated placement once", async () => {
+      const client = api();
+      client.getMenuStructure.mockResolvedValue(
+        lunchWith([...lunchNodes(), a461Section("m-storage", "s-storage", "Storage", [])]),
+      );
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      emit(structure(el), "wt-members-drop", {
+        keys: ["m-drinks/m-lager", "m-fav/m-fav-drinks/m-lager"],
+        to: ["m-storage"],
+      });
+      await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+      expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
+        "s-storage",
+        [{ listId: "s-drinks", memberId: "m-lager" }],
+        undefined,
+      );
+    });
+    it("A461 batch drop canonicalizes repeated placements and carried descendants", async () => {
+      const client = api();
+      client.getMenuStructure.mockResolvedValue(
+        lunchWith([...lunchNodes(), a461Section("m-storage", "s-storage", "Storage", [])]),
+      );
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      emit(structure(el), "wt-members-drop", {
+        keys: ["m-drinks/m-lager", "m-fav/m-fav-drinks/m-lager", "m-drinks"],
+        to: ["m-storage"],
+      });
+      await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+      expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
+        "s-storage",
+        [{ listId: "root-lunch", memberId: "m-drinks" }],
+        undefined,
+      );
+    });
+
+    it("A461 keeps the selection when the search changes and when a filter changes", async () => {
       const el = await mountLunch();
       await pressSelect(el);
       await tick(el, "m-burger");
       emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "Burger" });
       await settleStructure(el);
-      expect(structure(el).selected).toEqual([]);
-      expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+      expect(structure(el).selected).toEqual(["m-burger"]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
 
       emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "" });
       await settleStructure(el);
-      await tick(el, "m-burger");
       expect(structure(el).selected).toEqual(["m-burger"]);
       await chooseOption(inStructure(el, 'wt-combobox[data-filter="available"]')!, "yes");
       await settleStructure(el);
-      expect(structure(el).selected).toEqual([]);
+      expect(structure(el).selected).toEqual(["m-burger"]);
       expect(structure(el).selecting).toBe(true);
+    });
+
+    it("A461 gathers a hidden section and item across searches and filters", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      type(q(el, 'wt-input[name="structure-search"]')!, "Drinks");
+      await settleStructure(el);
+      await pressSelect(el);
+      await tick(el, "m-drinks");
+      type(q(el, 'wt-input[name="structure-search"]')!, "Burger");
+      await settleStructure(el);
+      await tick(el, "m-burger");
+      expect(structure(el).selected).toEqual(["m-drinks", "m-burger"]);
+      await chooseOption(inStructure(el, 'wt-combobox[data-filter="available"]')!, "yes");
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-drinks", "m-burger"]);
+      inStructure<HTMLInputElement>(el, '[data-test="select-all"]')!.click();
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-drinks"]);
+      inStructure<HTMLInputElement>(el, '[data-test="select-all"]')!.click();
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-drinks", "m-burger"]);
+      await chooseOption(inStructure(el, 'wt-combobox[data-filter="available"]')!, "");
+      type(q(el, 'wt-input[name="structure-search"]')!, "");
+      await settleStructure(el);
+      expect(inStructure<HTMLInputElement>(el, '[data-test="select-m-drinks"]')!.checked).toBe(
+        true,
+      );
+      expect(inStructure<HTMLInputElement>(el, '[data-test="select-m-burger"]')!.checked).toBe(
+        true,
+      );
+      q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!.click();
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
+      expect(modal(el, "move-selected").getAttribute("heading")).toBe("Move 2 items");
+      await chooseOption(inModal(el, "move-selected", 'wt-combobox[name="destination"]'), "s-fav");
+      inModal(el, "move-selected", '[data-test="move-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("s-fav", [
+          { listId: "root-lunch", memberId: "m-burger" },
+          { listId: "root-lunch", memberId: "m-drinks" },
+        ]),
+      );
     });
 
     it("turns the mode off when another menu is opened", async () => {
@@ -4595,14 +4826,17 @@ describe("the Structure tree", () => {
       await toggleRow(el, "m-fav/m-fav-drinks");
       await pressSelect(el);
       await tick(el, "m-drinks/m-lemonade");
-      await tick(el, "m-fav/m-fav-drinks/m-lemonade");
+      expect(
+        inStructure<HTMLInputElement>(el, '[data-test="select-m-fav/m-fav-drinks/m-lemonade"]')!
+          .checked,
+      ).toBe(true);
     }
 
-    it("removes a member ticked in two places once, counting the ticks in the bar and the member in the confirm", async () => {
+    it("removes a member shown in two places once, counting one tick in the bar and confirm", async () => {
       const client = api();
       const el = await mountLunch(client);
       await tickLemonadeInBothPlaces(el);
-      expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
       await openRemove(el);
       const dialog = modal(el, "remove-selected");
       expect(dialog.getAttribute("heading")).toBe("Remove 1 item?");
@@ -4677,12 +4911,8 @@ describe("the Structure tree", () => {
       await pressSelect(el);
       inStructure(el, '[data-test="select-all"]')!.click();
       await settleStructure(el);
-      expect(structure(el).selected).toEqual([
-        "m-drinks/m-lemonade",
-        "m-fav/m-fav-lemonade",
-        "m-fav/m-fav-drinks/m-lemonade",
-      ]);
-      expect(text(q(el, '[data-test="selected-count"]'))).toBe("3 selected");
+      expect(structure(el).selected).toEqual(["m-drinks/m-lemonade", "m-fav/m-fav-lemonade"]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
       q(el, '[data-test="selection-move"]')!.click();
       await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
       await el.updateComplete;
@@ -4723,6 +4953,71 @@ describe("the Structure tree", () => {
         ]),
       );
       expect(writeCalls(client)).toEqual(["removeSectionMembers"]);
+    });
+
+    it("A461 loses hidden included children from ticks and an open Remove snapshot", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-drinks");
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await tick(el, "m-drinks/m-lemonade");
+      type(q(el, 'wt-input[name="structure-search"]')!, "Burger");
+      await settleStructure(el);
+      await openRemove(el);
+      const nodes = lunchNodes();
+      nodes[1] = { ...nodes[1]!, includedMenuId: "other-menu" };
+      nodes[2] = {
+        ...nodes[2]!,
+        children: nodes[2]!.children!.map((node) =>
+          node.memberId === "m-fav-drinks" ? { ...node, includedMenuId: "other-menu" } : node,
+        ),
+      };
+      client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() =>
+        expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 1 item?"),
+      );
+      expect(structure(el).selected).toEqual(["m-burger"]);
+      type(q(el, 'wt-input[name="structure-search"]')!, "Lemonade");
+      await settleStructure(el);
+      expect(rowOf(el, "m-drinks/m-lemonade")).not.toBeNull();
+      expect(inStructure(el, '[data-test="select-m-drinks/m-lemonade"]')).toBeNull();
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "root-lunch", memberId: "m-burger" },
+        ]),
+      );
+    });
+
+    it("A461 keeps the member tick and Remove snapshot when one repeated path is removed live", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      type(q(el, 'wt-input[name="structure-search"]')!, "Lager");
+      await settleStructure(el);
+      await pressSelect(el);
+      await tick(el, "m-drinks/m-lager");
+      await openRemove(el);
+      const nodes = lunchNodes().filter((node) => node.memberId !== "m-drinks");
+      client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() => expect(rowOf(el, "m-drinks/m-lager")).toBeNull());
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-fav/m-fav-drinks/m-lager"]);
+      expect(
+        (inStructure(el, '[data-test="select-m-fav/m-fav-drinks/m-lager"]') as HTMLInputElement)
+          .checked,
+      ).toBe(true);
+      expect(modal(el, "remove-selected").open).toBe(true);
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "s-drinks", memberId: "m-lager" },
+        ]),
+      );
     });
 
     it("trims the open Remove confirm when a live update takes a row away, and closes it once none is left", async () => {
@@ -4798,7 +5093,7 @@ describe("the Structure tree", () => {
       expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
     });
 
-    it("drops a selected section a live rename hides from the search, so Move cannot send it", async () => {
+    it("A461 keeps a selected section a live rename hides from search in Move", async () => {
       const live = new LiveData();
       const client = api({ liveData: live });
       const el = await mountLunch(client);
@@ -4807,6 +5102,8 @@ describe("the Structure tree", () => {
       await pressSelect(el);
       await tick(el, "m-drinks");
       expect(structure(el).selected).toEqual(["m-drinks"]);
+      q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!.click();
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
 
       const nodes = lunchNodes();
       const rename = (items: MenuStructureNode[]) => {
@@ -4822,17 +5119,16 @@ describe("the Structure tree", () => {
       await vi.waitFor(() => expect(structure(el).nodes[1]!.internalName).toBe("Beverages"));
       await settleStructure(el);
       expect(rowOf(el, "m-drinks")).toBeNull();
-      expect(structure(el).selected).toEqual([]);
-      expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+      expect(structure(el).selected).toEqual(["m-drinks"]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
       const move = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!;
-      expect(move.disabled).toBe(true);
-      move.click();
+      expect(move.disabled).toBe(false);
       await el.updateComplete;
-      expect(modal(el, "move-selected").open).toBe(false);
+      expect(modal(el, "move-selected").open).toBe(true);
       expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
     });
 
-    it("drops a selected product the Available filter hides after a live change, from the open Remove confirm too", async () => {
+    it("A461 keeps a selected product hidden by live availability in the open Remove confirm", async () => {
       const live = new LiveData();
       const client = api({ liveData: live });
       const el = await mountLunch(client);
@@ -4848,15 +5144,15 @@ describe("the Structure tree", () => {
         products.map((each) => (each.id === "p-burger" ? { ...each, available: false } : each)),
       );
       live.invalidate([{ type: "products" }]);
-      await vi.waitFor(() =>
-        expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 1 item?"),
-      );
+      await vi.waitFor(() => expect(rowOf(el, "m-burger")).toBeNull());
       await settleStructure(el);
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe("Remove 2 items?");
       expect(rowOf(el, "m-burger")).toBeNull();
-      expect(structure(el).selected).toEqual(["m-drinks/m-lemonade"]);
+      expect(structure(el).selected).toEqual(["m-burger", "m-drinks/m-lemonade"]);
       inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
       await vi.waitFor(() =>
         expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "root-lunch", memberId: "m-burger" },
           { listId: "s-drinks", memberId: "m-lemonade" },
         ]),
       );
@@ -10331,4 +10627,113 @@ it("A349 removes the explicit price-filter destination when returning to the men
   const el = await mount(api(), `${PRICES_PATH}/filter/clashes`);
   await click(el, "back");
   expect(location.pathname).toBe("/manage/menus");
+});
+
+it.each(["member", "destination", "menu"])(
+  "A461 batch drop rechecks a queued %s before sending",
+  async (changed) => {
+    const live = new LiveData();
+    const reordering = deferred<SectionMember[]>();
+    const client = api({
+      liveData: live,
+      moveSectionMember: vi
+        .fn()
+        .mockImplementationOnce(() => reordering.promise)
+        .mockResolvedValue([]),
+    });
+    const el = await mountLunch(client);
+    emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+    await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
+    emit(structure(el), "wt-members-drop", {
+      keys: ["m-drinks/m-lager", "m-burger"],
+      to: ["m-fav"],
+    });
+    if (changed === "menu") await visit(el, DINNER_PATH, "Dinner Menu");
+    else {
+      const nodes = lunchNodes();
+      if (changed === "member")
+        nodes[1]!.children = nodes[1]!.children!.filter((node) => node.memberId !== "m-lager");
+      else nodes.pop();
+      client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      await settleStructure(el);
+    }
+    emit(structure(el), "wt-member-move", { path: [], memberId: topLevelKeys(el)[0]!, to: 0 });
+    reordering.resolve([
+      productMember("m-burger", 0, "p-burger"),
+      sectionMember("m-drinks", 1, "s-drinks"),
+      sectionMember("m-fav", 2, "s-fav"),
+    ]);
+    await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
+  },
+);
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A461 visual Menus Structure $width $locale $theme", async ({ width, locale, theme }) => {
+  registerIcons(DASHBOARD_ICONS);
+  const before = currentLocale();
+  setLocale(locale);
+  onTestFinished(() => setLocale(before));
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  expect(window.innerWidth).toBe(width);
+  const client = api({
+    getMenuStructure: vi.fn().mockResolvedValue(
+      lunchWith([
+        productNode("m-burger", "p-burger"),
+        { ...drinksNode("m-drinks"), internalName: "Drinks" },
+        {
+          ...drinksNode("long-copy", "s-long"),
+          internalName: "Long section path " + "UnbrokenSection".repeat(8),
+        },
+      ]),
+    ),
+  });
+  const el = await mount(client, LUNCH_PATH, theme);
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  const capture = async (state: string) => {
+    await settleStructure(el);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    await page.screenshot({
+      element: el,
+      path: `.superpowers/a461-task9/menus-${locale}-${theme}-${width}-${state}.png`,
+    });
+  };
+  const search = async (value: string) => {
+    type(q(el, 'wt-input[name="structure-search"]')!, value);
+    await settleStructure(el);
+  };
+  q<HTMLElement>(el, '[data-test="select"]')!.click();
+  await settleStructure(el);
+  await search("Lemonade");
+  const boxes = allInStructure<HTMLInputElement>(el, "td.select input");
+  expect(boxes.length).toBeGreaterThan(0);
+  boxes[0]!.click();
+  await capture("long-path");
+  await search("Drinks");
+  expect(rowOf(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+  await capture("flat");
+  await toggleRow(el, "m-drinks");
+  expect(rowOf(el, "m-drinks/m-lemonade")).not.toBeNull();
+  await capture("opened");
+  await search("Burger");
+  expect(structure(el).selected.length).toBe(1);
+  await capture("hidden-selected");
+  await search("zz-no-match");
+  expect(allInStructure(el, "tbody tr[data-row-key]")).toHaveLength(0);
+  await capture("no-match");
+  await search("");
+  expect(structure(el).selected.length).toBe(1);
+  expect(inStructure(el, '[part~="search-path"]')).toBeNull();
+  await capture("restored");
 });

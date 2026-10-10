@@ -243,6 +243,114 @@ describe("product-list", () => {
     expect(await searchFor("bebidas")).toEqual(["folder:beb"]);
   });
 
+  it("A461 Products shows own matches with inline paths", async () => {
+    const { el, table, root } = await mountTree({
+      categories: [
+        { id: "drinks", name: "Drinks", parentId: null, color: null },
+        { id: "coffee", name: "Coffee", parentId: "drinks", color: null },
+        { id: "desserts", name: "Desserts", parentId: null, color: null },
+      ],
+      products: [
+        product({ id: "iced", name: "Iced coffee", primaryCategoryId: "coffee" }),
+        product({ id: "cake", name: "Coffee cake", primaryCategoryId: "desserts" }),
+        product({
+          id: "espresso",
+          name: "Espresso",
+          primaryCategoryId: "coffee",
+          customerName: { es: "Customer exclusive" },
+          kitchenName: "Kitchen exclusive",
+          variants: [{ ...bunVariant, name: "Double shot" }],
+        }),
+        product({ id: "ice", name: "Add ice", primaryCategoryId: "coffee" }),
+        product({ id: "ginger", name: "Ginger tea", primaryCategoryId: "coffee" }),
+      ],
+    });
+    const search = async (text: string) => {
+      el.search = text;
+      await el.updateComplete;
+      await table.updateComplete;
+    };
+    await search("coffee");
+    expect(rowKeys(root)).toEqual(["folder:coffee", "cake", "iced"]);
+    expect(productRows(root).map((row) => row.getAttribute("aria-level"))).toEqual(["1", "1", "1"]);
+    expect(
+      productRows(root).map((row) => row.querySelector('[part~="search-path"]')?.textContent),
+    ).toEqual(["Drinks", "Desserts", "Drinks › Coffee"]);
+    expect(productRows(root).every((row) => row.querySelector('[part~="search-name-line"]'))).toBe(
+      true,
+    );
+    expect(
+      root.querySelector('tr[data-row-key="folder:coffee"]')!.getAttribute("aria-expanded"),
+    ).toBe("false");
+    await search("double shot");
+    expect(rowKeys(root)).toEqual(["espresso"]);
+    await search("drinks");
+    expect(rowKeys(root)).toEqual(["folder:drinks"]);
+    for (const query of ["Customer exclusive", "Kitchen exclusive", "8.50", "8,50", "&", "gin "]) {
+      await search(query);
+      expect(rowKeys(root), query).toEqual([]);
+    }
+  });
+
+  it("A461 Products search expansion leaves category navigation alone", async () => {
+    const { el, table, root } = await mountTree({
+      categories: [drinks, { id: "coffee", name: "Coffee", parentId: "d", color: null }],
+      products: [
+        product({ id: "iced", name: "Iced coffee", primaryCategoryId: "coffee" }),
+        product({ id: "ice", name: "Add ice", primaryCategoryId: "coffee" }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    const toggles = vi.fn();
+    el.addEventListener("category-toggle", toggles);
+    el.search = "coffee";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(
+      root.querySelector('tr[data-row-key="folder:coffee"]')!.getAttribute("aria-expanded"),
+    ).toBe("false");
+    await openRow(el, "folder:coffee");
+    expect(rowKeys(root)).toEqual(["folder:coffee", "ice", "iced", "iced"]);
+    expect(root.querySelectorAll('tr[data-row-key="iced"]')).toHaveLength(2);
+    expect(toggles).not.toHaveBeenCalled();
+    el.search = "";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:coffee", "ice", "iced"]);
+    expect(root.querySelector('[part~="search-path"]')).toBeNull();
+    await openRow(el, "folder:coffee");
+    expect(toggles).toHaveBeenCalledOnce();
+    expect(toggles.mock.calls[0]![0].detail).toEqual({ categoryId: "coffee", open: false });
+  });
+
+  it("A461 Products paths stop at missing parents and cycles", async () => {
+    const { el, table, root } = await mountTree({
+      categories: [
+        { id: "orphan", name: "Orphan", parentId: "missing", color: null },
+        { id: "a", name: "Loop A", parentId: "b", color: null },
+        { id: "b", name: "Loop B", parentId: "a", color: null },
+      ],
+      products: [
+        product({ id: "bare", name: "Coffee bare", primaryCategoryId: null }),
+        product({ id: "missing", name: "Coffee missing", primaryCategoryId: "missing" }),
+        product({ id: "orphan-product", name: "Coffee orphan", primaryCategoryId: "orphan" }),
+        product({ id: "loop", name: "Coffee loop", primaryCategoryId: "a" }),
+      ],
+    });
+    el.search = "coffee";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["bare", "loop", "orphan-product", "missing"]);
+    const path = (key: string) =>
+      root.querySelector(`tr[data-row-key="${key}"] [part~="search-path"]`)?.textContent ?? "";
+    expect([path("bare"), path("missing"), path("orphan-product"), path("loop")]).toEqual([
+      "",
+      "",
+      "Orphan",
+      "Loop B › Loop A",
+    ]);
+  });
+
   it("names a switched-off station with no replacement instead of nowhere", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -2362,7 +2470,7 @@ describe("the product list at phone width", () => {
         expect(rowKeys(root)).toContain("croquetas");
         const texts = await nameTexts(root);
         expect(texts.map(({ text }) => text)).toContain(longProduct().name);
-        expectNamesClear(texts, [ROOT_KEY, "folder:long", "croquetas"]);
+        expectNamesClear(texts, ["croquetas"]);
       }),
   );
 
@@ -2539,7 +2647,7 @@ describe("the product list as a tree", () => {
     expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
   });
 
-  it("a search keeps the categories above a match open, finds a product by a variant's name, and clearing it restores what was open", async () => {
+  it("a search finds the product by a variant's name with its path, and clearing keeps that product and its category path open", async () => {
     const { el, root, table } = await mountTree({
       products: [
         ...treeProducts(),
@@ -2555,14 +2663,24 @@ describe("the product list as a tree", () => {
     el.search = "cup";
     await el.updateComplete;
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "bun"]);
+    expect(rowKeys(root)).toEqual(["bun"]);
+    expect(root.querySelector('[part~="search-path"]')!.textContent).toBe("Drinks › Beer");
     root.querySelector<HTMLButtonElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "bun", "bun:small"]);
+    expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
     el.search = "";
     await el.updateComplete;
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+    expect(rowKeys(root)).toEqual([
+      "folder:d",
+      "folder:b",
+      "bun",
+      "bun:small",
+      "lager",
+      "cola",
+      "folder:f",
+      "bread",
+    ]);
   });
 
   const menuItems = (menu: Element) =>
@@ -4475,6 +4593,7 @@ describe("a refresh during a drag", () => {
 
   it("offers no category, and sends nothing when released, after a refresh removed another selected product being dragged", async () => {
     const { el, root } = await mountTree({ selected: ["bread", "cola"] });
+    await openRow(el, "folder:d");
     const { offered, drops } = watch(el);
     press(nameOf(root, "bread"), "pointerdown");
     press(nameOf(root, "folder:d"), "pointermove");
@@ -5964,4 +6083,151 @@ describe("product-list filters (A463)", () => {
       expect(shown("d-both")).toBe(words.archived);
     },
   );
+});
+
+it("A461 pointer drop carries visible ticks and preserves hidden ticks", async () => {
+  const { el, root } = await mountTree({
+    selecting: true,
+    selected: ["iced", "cake"],
+    categories: [
+      drinks,
+      food,
+      { id: "storage", name: "Cake storage", parentId: null, color: null },
+    ],
+    products: [
+      product({ id: "iced", name: "Iced coffee", primaryCategoryId: "d" }),
+      product({ id: "cake", name: "Coffee cake", primaryCategoryId: "f" }),
+    ],
+    search: "cake",
+  });
+  const drops: unknown[] = [];
+  el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+  expect(root.querySelector('tr[data-row-key="iced"]')).toBeNull();
+  const from = root.querySelector<HTMLElement>('tr[data-row-key="cake"] [part~="product-cell"]')!;
+  const to = root.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:storage"] [part~="folder-cell"]',
+  )!;
+  const send = (type: string, over: Element) => {
+    const box = over.getBoundingClientRect();
+    from.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 51,
+        clientX: box.left + 8,
+        clientY: box.top + 8,
+      }),
+    );
+  };
+  send("pointerdown", from);
+  send("pointermove", to);
+  send("pointerup", to);
+  expect(drops).toEqual([{ keys: ["cake"], folderId: "storage" }]);
+  expect(el.selected).toEqual(["iced", "cake"]);
+});
+
+it.each([390, 1280])(
+  "A461 name and path share a line and wrap before Actions at %i",
+  async (width) => {
+    await page.viewport(width, 844);
+    expect(window.innerWidth).toBe(width);
+    setLocale("en-GB");
+    const { el, table, root } = await mountTree({
+      categories: [
+        {
+          ...drinks,
+          name:
+            width === 1280
+              ? "Drinks"
+              : "Long category name ".repeat(8) + "UnbrokenCategory".repeat(12),
+        },
+      ],
+      products: [product({ id: "coffee", name: "Iced coffee", primaryCategoryId: "d" })],
+      search: "coffee",
+      selecting: true,
+    });
+    el.style.width = "100%";
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const row = root.querySelector('tr[data-row-key="coffee"]')!;
+    const path = row.querySelector<HTMLElement>('[part~="search-path"]')!;
+    const line = row.querySelector<HTMLElement>('[part~="search-name-line"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(path);
+    const rects = [...range.getClientRects()];
+    const actions = row.querySelector("td:last-child")!.getBoundingClientRect();
+    expect(rects.length).toBeGreaterThan(0);
+    for (const rect of rects) expect(rect.right).toBeLessThanOrEqual(actions.left + 1);
+    const nameRange = document.createRange();
+    nameRange.selectNodeContents(line.firstChild!);
+    const name = nameRange.getBoundingClientRect();
+    if (width === 1280) expect(Math.abs(rects[0]!.bottom - name.bottom)).toBeLessThanOrEqual(3);
+    else {
+      expect(rects.length).toBeGreaterThan(1);
+      expect(rects.at(-1)!.top).toBeGreaterThan(name.top);
+    }
+    expect(row.querySelector('td.select input[type="checkbox"]')).not.toBeNull();
+    expect(row.querySelector("wt-row-actions")).not.toBeNull();
+    await table.updateComplete;
+  },
+);
+
+it("A461 path colour font and gap follow host tokens", async () => {
+  const { el, root } = await mountTree({ search: "cola" });
+  const path = root.querySelector<HTMLElement>('[part~="search-path"]')!;
+  const line = root.querySelector<HTMLElement>('[part~="search-name-line"]')!;
+  el.style.setProperty("--wt-color-text-muted", "rgb(13, 57, 91)");
+  el.style.setProperty("--wt-font-size-sm", "19px");
+  el.style.setProperty("--wt-space-2", "17px");
+  expect(getComputedStyle(path).color).toBe("rgb(13, 57, 91)");
+  expect(getComputedStyle(path).fontSize).toBe("19px");
+  expect(getComputedStyle(line).columnGap).toBe("17px");
+});
+
+it.each([0, 1])("A461 highlights the hovered Products copy %i", async (copy) => {
+  const { el, table, root } = await mountTree({
+    reordering: true,
+    search: "coffee",
+    categories: [
+      { id: "bar", name: "Coffee bar", parentId: null, color: null },
+      { id: "coffee", name: "Coffee", parentId: "bar", color: null },
+    ],
+    products: [
+      product({ id: "iced", name: "Iced coffee", primaryCategoryId: "coffee" }),
+      product({ id: "cake", name: "Coffee cake", primaryCategoryId: "bar" }),
+    ],
+  });
+  await openRow(el, "folder:bar");
+  const copies = () => [...root.querySelectorAll<HTMLElement>('tr[data-row-key="folder:coffee"]')];
+  expect(copies()).toHaveLength(2);
+  const from = root.querySelector<HTMLElement>('tr[data-row-key="cake"] .drag-grip')!;
+  const send = (type: string, over: Element) => {
+    const box = over.getBoundingClientRect();
+    from.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 91,
+        clientX: box.left + 8,
+        clientY: box.top + box.height / 2,
+      }),
+    );
+  };
+  const drops: unknown[] = [];
+  el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+  send("pointerdown", from);
+  send(
+    "pointermove",
+    copies()[copy]!.querySelector('td[data-col="name"]') ?? copies()[copy]!.querySelector("td")!,
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(copies().map((row) => row.querySelector('[part~="drop-target"]') !== null)).toEqual(
+    copy === 0 ? [true, false] : [false, true],
+  );
+  send("pointerup", copies()[copy]!);
+  expect(drops).toEqual([{ keys: ["cake"], folderId: "coffee" }]);
 });

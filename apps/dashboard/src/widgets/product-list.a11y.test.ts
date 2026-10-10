@@ -204,6 +204,40 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     }
   });
 
+  it("A461 flat matching categories and opened contents render accessibly", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products: [{ ...products[0]!, name: "Iced coffee", primaryCategoryId: "coffee" }],
+        categories: [
+          { id: "drinks", name: "Drinks", parentId: null, color: null },
+          { id: "coffee", name: "Coffee", parentId: "drinks", color: null },
+        ],
+        search: "coffee",
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const keys = () =>
+      [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+        row.getAttribute("data-row-key"),
+      );
+    expect(keys()).toEqual(["folder:coffee", "p1"]);
+    await expectNoA11yViolations(host);
+    table
+      .shadowRoot!.querySelector<HTMLButtonElement>(
+        'tr[data-row-key="folder:coffee"] .row-activate',
+      )!
+      .click();
+    await table.updateComplete;
+    expect(keys()).toEqual(["folder:coffee", "p1", "p1"]);
+    expect(
+      table.shadowRoot!.querySelector('tr[data-row-key="p1"]')!.getAttribute("aria-level"),
+    ).toBe("2");
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly", async () => {
     const { host } = await mountWidget<ProductList>("dashboard-product-list", { products }, theme);
     await expectNoA11yViolations(host);

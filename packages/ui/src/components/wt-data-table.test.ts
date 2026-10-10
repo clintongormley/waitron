@@ -8447,3 +8447,405 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
     }
   },
 );
+
+const a461Rows: TreeRow[] = [
+  { id: "drinks", parent: null, name: "Drinks" },
+  { id: "iced", parent: "coffee", name: "Iced coffee" },
+  { id: "ice", parent: "coffee", name: "Add ice" },
+  { id: "coffee", parent: "drinks", name: "Coffee" },
+  { id: "ginger", parent: "coffee", name: "Ginger tea" },
+  { id: "espresso", parent: "coffee", name: "Espresso" },
+  { id: "desserts", parent: null, name: "Desserts" },
+  { id: "cake", parent: "desserts", name: "Coffee cake" },
+];
+
+async function a461Table(props: Partial<WtDataTable<TreeRow>> = {}) {
+  return treeTable({
+    rows: a461Rows,
+    initiallyCollapsed: true,
+    flatTreeSearch: true,
+    searchTerm: "coffee",
+    sortKey: "name",
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+    ...props,
+  });
+}
+
+function a461Toggle(el: WtDataTable<TreeRow>, key: string) {
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    `tr[data-row-key="${key}"] .tree-toggle`,
+  )!.click();
+}
+
+test("A461 flat roots rank by own names ahead of grouping", async () => {
+  const contexts = new Map<string, boolean | undefined>();
+  const el = await a461Table({
+    rowGroup: (row) => (row.id === "iced" ? 0 : 1),
+    columns: [
+      {
+        ...treeColumns[0]!,
+        cell: (row, context) => {
+          contexts.set(row.id, context.searchRoot);
+          return row.name;
+        },
+      },
+    ],
+  });
+  expect(treeKeys(el)).toEqual(["coffee", "cake", "iced"]);
+  expect(
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("aria-level")),
+  ).toEqual(["1", "1", "1"]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="coffee"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+  expect(
+    el
+      .shadowRoot!.querySelector('tr[data-row-key="coffee"] .tree-toggle')!
+      .getAttribute("aria-label"),
+  ).toBe("Expand");
+  expect([...contexts.values()]).toEqual([true, true, true]);
+  expect(el.shownKeys()).toEqual(["coffee", "cake", "iced"]);
+});
+
+test("A461 opened matches coexist and openings persist in the saved tree", async () => {
+  const el = await a461Table({ searchTerm: "", rememberExpanded: true, viewKey: "a461-expansion" });
+  el.setExpanded("drinks", true);
+  await el.updateComplete;
+  el.searchTerm = "coffee";
+  await el.updateComplete;
+  a461Toggle(el, "coffee");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake", "iced"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="iced"]')!.getAttribute("aria-level")).toBe(
+    "2",
+  );
+  expect(el.shownKeys()).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake", "iced"]);
+  expect(el.isExpanded("coffee")).toBe(true);
+  expect(JSON.parse(localStorage.getItem("a461-expansion:expanded")!)).toContain("coffee");
+  a461Toggle(el, "coffee");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "cake", "iced"]);
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  el.searchTerm = "coff";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "cake", "iced"]);
+  expect(el.isExpanded("coffee")).toBe(false);
+  el.searchTerm = "   ";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual([
+    "desserts",
+    "drinks",
+    "coffee",
+    "ice",
+    "espresso",
+    "ginger",
+    "iced",
+  ]);
+  expect(JSON.parse(localStorage.getItem("a461-expansion:expanded")!)).toEqual(
+    expect.arrayContaining(["drinks", "coffee"]),
+  );
+  expect(el.isExpanded("drinks")).toBe(true);
+  expect(el.isExpanded("coffee")).toBe(true);
+});
+
+test("A461 Expand all only reaches matching roots and supports reveal and refresh", async () => {
+  const el = await a461Table();
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake", "iced"]);
+  expect(el.isExpanded("drinks")).toBe(false);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "cake", "iced"]);
+  await el.revealRow("espresso");
+  expect(treeKeys(el)).toContain("espresso");
+  el.rows = el.rows.filter((row) => row.id !== "coffee");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["cake", "iced"]);
+  el.rows = a461Rows;
+  await el.updateComplete;
+  expect(el.isExpanded("coffee")).toBe(false);
+});
+
+test("A461 higher-ranked descendant keeps its flat row beside its branch copy", async () => {
+  const el = await a461Table({
+    rows: [
+      { id: "parent", parent: null, name: "Coffee collection" },
+      { id: "child", parent: "parent", name: "Coffee" },
+    ],
+  });
+  expect(treeKeys(el)).toEqual(["child", "parent"]);
+  el.setExpanded("parent", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["child", "parent", "child"]);
+});
+
+test("A461 flat search preserves query boundaries, filters and visible select all", async () => {
+  const selection = vi.fn();
+  const el = await a461Table({ selectable: true });
+  el.addEventListener("wt-selection-change", selection);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  expect(selection.mock.calls[0]![0].detail.selected).toEqual(["coffee", "cake", "iced"]);
+  el.searchTerm = "gin ";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual([]);
+  el.searchTerm = "&";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual([]);
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
+  el.searchTerm = "coffee";
+  el.columns = [
+    {
+      ...treeColumns[0]!,
+      filter: {
+        label: "Kind",
+        allLabel: "Any kind",
+        value: (row) => (row.id === "ice" ? "hidden" : "keep"),
+        options: [
+          { value: "keep", label: "Keep" },
+          { value: "hidden", label: "Hidden" },
+        ],
+        initial: "keep",
+      },
+    },
+  ];
+  await el.updateComplete;
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "espresso", "ginger", "iced", "cake", "iced"]);
+});
+
+test("A461 roots tied on closeness use the chosen column sort", async () => {
+  const el = await a461Table({
+    rows: [
+      { id: "z", parent: null, name: "Z" },
+      { id: "a", parent: null, name: "A" },
+    ],
+    columns: [{ ...treeColumns[0]!, searchValue: () => "Coffee" }],
+  });
+  expect(treeKeys(el)).toEqual(["a", "z"]);
+  el.sortDirection = "descending";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["z", "a"]);
+});
+
+test("A461 flat search flag leaves flat tables and legacy trees alone", async () => {
+  const flat = await table({ flatTreeSearch: true, searchable: true });
+  expect(rowText(flat)).toEqual(["Bea2Edit", "Ada10Edit"]);
+  const tree = await a461Table({ flatTreeSearch: false, searchOpensPath: true });
+  expect(treeKeys(tree)).toEqual([
+    "drinks",
+    "coffee",
+    "iced",
+    "ice",
+    "espresso",
+    "ginger",
+    "desserts",
+    "cake",
+  ]);
+});
+
+test("A461 opened search branches preserve child order and context", async () => {
+  const context = new Map<string, { ancestorOnly: boolean; searchRoot?: boolean }>();
+  const el = await a461Table({
+    rows: [
+      { id: "coffee", parent: null, name: "Coffee" },
+      { id: "variant", parent: "coffee", name: "Large" },
+      { id: "context", parent: "coffee", name: "Hidden category" },
+      { id: "leaf", parent: "context", name: "Allowed" },
+      { id: "regular", parent: "coffee", name: "Regular" },
+    ],
+    rowKeepsChildOrder: (row) => row.id === "coffee",
+    rowJoinsParent: (row) => row.id === "variant",
+    columns: [
+      {
+        ...treeColumns[0]!,
+        cell: (row, value) => {
+          context.set(row.id, value);
+          return row.name;
+        },
+        filter: {
+          label: "Kind",
+          allLabel: "Any kind",
+          value: (row) => (row.id === "context" ? "hidden" : "keep"),
+          options: [
+            { value: "keep", label: "Keep" },
+            { value: "hidden", label: "Hidden" },
+          ],
+          initial: "keep",
+        },
+      },
+    ],
+  });
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "variant", "context", "regular"]);
+  expect(context.get("context")).toEqual({ ancestorOnly: true, searchRoot: false });
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="variant"]')!.classList.contains("joined"),
+  ).toBe(true);
+  el.setExpanded("context", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["coffee", "variant", "context", "leaf", "regular"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="leaf"]')!.getAttribute("aria-level")).toBe(
+    "3",
+  );
+  el.chooseFilter("name", []);
+  await el.updateComplete;
+  expect(el.isExpanded("coffee")).toBe(true);
+  expect(context.get("context")).toEqual({ ancestorOnly: false, searchRoot: false });
+});
+
+test("A461 retaining a hidden tick uses domain eligibility", async () => {
+  const selected = vi.fn();
+  const el = await a461Table({
+    rows: [
+      ...a461Rows,
+      { id: "hidden", parent: null, name: "Tea" },
+      { id: "readonly", parent: null, name: "Read only" },
+    ],
+    searchTerm: "cake",
+    selectable: true,
+    selected: ["hidden", "readonly", "removed"],
+    rowSelectable: (row) => row.id !== "hidden",
+    rowSelectionAllowed: (row) => row.id !== "readonly",
+  });
+  el.addEventListener("wt-selection-change", selected);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+  expect(selected.mock.calls[0]![0].detail.selected).toEqual(["hidden", "cake"]);
+  expect(selected.mock.calls[0]![0].bubbles).toBe(true);
+  expect(selected.mock.calls[0]![0].composed).toBe(true);
+  el.rowSelectionAllowed = undefined;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+  expect(selected.mock.calls[1]![0].detail.selected).toEqual(["readonly", "removed", "cake"]);
+});
+
+test("A461 select all changes only rendered selectable rows", async () => {
+  const el = await a461Table({
+    rows: [...a461Rows, { id: "hidden", parent: null, name: "Tea" }],
+    selectable: true,
+    selected: ["hidden"],
+    rowSelectable: (row) => !["hidden", "iced", "drinks", "desserts"].includes(row.id),
+    rowSelectionAllowed: () => true,
+  });
+  const changes: string[][] = [];
+  el.addEventListener("wt-selection-change", ((event: CustomEvent<{ selected: string[] }>) => {
+    changes.push(event.detail.selected);
+    el.selected = event.detail.selected;
+  }) as EventListener);
+  const all = () => el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!;
+  expect(all().checked).toBe(false);
+  expect(all().indeterminate).toBe(false);
+  all().click();
+  await el.updateComplete;
+  expect(changes[0]).toEqual(["hidden", "coffee", "cake"]);
+  expect(all().checked).toBe(true);
+  all().click();
+  await el.updateComplete;
+  expect(changes[1]).toEqual(["hidden"]);
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  all().click();
+  await el.updateComplete;
+  expect(changes[2]).toEqual(["hidden", "coffee", "ice", "espresso", "ginger", "cake"]);
+  el.searchTerm = "nothing matches";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="select-all"]')).toBeNull();
+  expect(el.selected).toEqual(["hidden", "coffee", "ice", "espresso", "ginger", "cake"]);
+});
+
+test("A461 retaining selection never admits a newly ticked domain-ineligible row", async () => {
+  const el = await a461Table({
+    selectable: true,
+    searchTerm: "cake",
+    rowSelectionAllowed: () => false,
+  });
+  const selected = vi.fn();
+  el.addEventListener("wt-selection-change", selected);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+  expect(selected.mock.calls[0]![0].detail.selected).toEqual([]);
+});
+
+test("A461 duplicate matches share native ticks and select all deduplicates", async () => {
+  const el = await a461Table({ selectable: true, rowSelectionAllowed: () => true });
+  el.addEventListener("wt-selection-change", ((event: CustomEvent<{ selected: string[] }>) => {
+    el.selected = event.detail.selected;
+  }) as EventListener);
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  const copies = () => [
+    ...el.shadowRoot!.querySelectorAll<HTMLInputElement>(
+      'tr[data-row-key="iced"] input[type="checkbox"]',
+    ),
+  ];
+  expect(copies()).toHaveLength(2);
+  copies()[0]!.click();
+  await el.updateComplete;
+  expect(copies().map((input) => input.checked)).toEqual([true, true]);
+  copies()[1]!.click();
+  await el.updateComplete;
+  expect(el.selected).toEqual([]);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  await el.updateComplete;
+  expect(el.selected).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake"]);
+});
+
+test("A461 opening a search child remembers its ancestors for the next visit", async () => {
+  localStorage.removeItem("a461-ancestors:expanded");
+  const el = await a461Table({ rememberExpanded: true, viewKey: "a461-ancestors" });
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  el.searchTerm = "cake";
+  await el.updateComplete;
+  expect(el.isExpanded("coffee")).toBe(false);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual([
+    "desserts",
+    "drinks",
+    "coffee",
+    "ice",
+    "espresso",
+    "ginger",
+    "iced",
+  ]);
+  const nextVisit = await a461Table({
+    searchTerm: "",
+    rememberExpanded: true,
+    viewKey: "a461-ancestors",
+  });
+  expect(nextVisit.isExpanded("drinks")).toBe(true);
+  expect(nextVisit.isExpanded("coffee")).toBe(true);
+  expect(treeKeys(nextVisit)).toEqual(treeKeys(el));
+});
+
+test("A461 distinct row paths can share one controlled selection", async () => {
+  const el = await table({
+    selectable: true,
+    rowSelectionKey: () => "a",
+    rowSelectionAllowed: () => true,
+  });
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent).detail.selected;
+  });
+  const box = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=select-${key}]`)!;
+  box("b").click();
+  await el.updateComplete;
+  expect(el.selected).toEqual(["a"]);
+  expect(box("a").checked).toBe(true);
+  expect(box("b").checked).toBe(true);
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.checked).toBe(
+    true,
+  );
+  box("a").click();
+  await el.updateComplete;
+  expect(el.selected).toEqual([]);
+  expect(box("b").checked).toBe(false);
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  await el.updateComplete;
+  expect(el.selected).toEqual(["a"]);
+});

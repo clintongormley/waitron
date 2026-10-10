@@ -228,7 +228,7 @@ export class CatalogueBrowser extends LitElement {
       this.#operationScope?.commit(this.#operationBaseline);
     }
     if (changed.has("summaries")) this.#operationScope?.changed();
-    if (changed.has("search")) this.selected = [];
+    if (changed.has("products") || changed.has("categories")) this.#keepSelectionOwned();
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories") || changed.has("products"))
@@ -283,6 +283,23 @@ export class CatalogueBrowser extends LitElement {
     this.#emit("open-category", { categoryId: parentId });
   }
 
+  #keepSelectionOwned(): void {
+    const products = new Set(this.products.map(({ id }) => id));
+    const categories = new Set(this.categories.map(({ id }) => id));
+    this.selected = this.selected.filter((key) =>
+      key.startsWith("folder:") ? categories.has(key.slice(7)) : products.has(key),
+    );
+    if ((!this.operation && !this.summaryLoading) || this.operationBusy) return;
+    this.operationSelection = {
+      productIds: this.operationSelection.productIds.filter((id) => products.has(id)),
+      categoryIds: this.operationSelection.categoryIds.filter((id) => categories.has(id)),
+    };
+    if (!this.operationSelection.productIds.length && !this.operationSelection.categoryIds.length)
+      this.operation = null;
+    if (this.destination && this.destination !== "top" && !categories.has(this.destination))
+      this.destination = "";
+  }
+
   #selection(keys = this.selected): CatalogueSelection {
     return {
       productIds: keys.filter((key) => !key.startsWith("folder:")),
@@ -327,13 +344,15 @@ export class CatalogueBrowser extends LitElement {
     this.summaryLoading = true;
     try {
       const summaries = await this.api.summariseFolders(selection.categoryIds);
-      if (selection.categoryIds.some((id) => !summaries.some((summary) => summary.id === id)))
+      const current = this.operationSelection;
+      if (!current.productIds.length && !current.categoryIds.length) return;
+      if (current.categoryIds.some((id) => !summaries.some((summary) => summary.id === id)))
         throw new Error("incomplete summary");
-      this.summaries = selection.categoryIds.map((id) =>
+      this.summaries = current.categoryIds.map((id) =>
         summaries.find((summary) => summary.id === id)!,
       );
       if (
-        !selection.productIds.length &&
+        !current.productIds.length &&
         this.summaries.every(
           (summary) => summary.folders === 0 && summary.products === 0 && summary.routes === 0,
         )
@@ -342,6 +361,8 @@ export class CatalogueBrowser extends LitElement {
         await this.#confirm("delete");
       } else this.operation = "delete";
     } catch {
+      if (!this.operationSelection.productIds.length && !this.operationSelection.categoryIds.length)
+        return;
       this.operation = "delete";
       this.summaryFailed = true;
       this.operationError = t("folders.summary_error");
@@ -887,11 +908,9 @@ export class CatalogueBrowser extends LitElement {
         }}
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
-          this.selected = [];
         }}
         @show-archived-change=${(event: Event) => {
           event.stopPropagation();
-          this.selected = [];
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();

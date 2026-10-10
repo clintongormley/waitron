@@ -1,12 +1,12 @@
 import { page } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -85,6 +85,32 @@ const shownDirectly = nodes.map((node) =>
 );
 
 describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) => {
+  it("A461 flat matches and expanded sections render accessibly", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      { nodes, products, menuName: "Lunch Menu", search: "Drinks", selecting: true },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const result = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="m-drinks"]')!;
+    expect(result.getAttribute("aria-expanded")).toBe("false");
+    await expectNoA11yViolations(host);
+    result.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="m-drinks/m-lager"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+    el.search = "rioja";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(
+      table.shadowRoot!.querySelector(
+        'tr[data-row-key="included-wine/wine-red/wine-rioja"] [part~="read-only"]',
+      ),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it.each(states)("renders %s accessibly", async (state) => {
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",
@@ -360,3 +386,48 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     await expectNoA11yViolations(host);
   });
 });
+
+it.each(
+  ["en", "es"].flatMap((locale) =>
+    ["light", "dark"].flatMap((theme) => [390, 1280].map((width) => ({ locale, theme, width }))),
+  ),
+)(
+  "A461 repeated checked paths render at $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const oldLocale = currentLocale();
+    setLocale(locale);
+    onTestFinished(() => setLocale(oldLocale));
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 844));
+    expect(window.innerWidth).toBe(width);
+    const drinks = section("m-drinks", "s-drinks", "Drinks", [productNode("m-lager", "p-lager")]);
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      {
+        nodes: [drinks, section("m-fav", "s-fav", "Favourites", [{ ...drinks, memberId: "copy" }])],
+        products,
+        menuName: "Lunch Menu",
+        selecting: true,
+        search: "lager",
+        selected: ["m-drinks/m-lager"],
+      },
+      theme as "light" | "dark",
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(
+      [...table.shadowRoot!.querySelectorAll<HTMLInputElement>('tbody input[type="checkbox"]')].map(
+        (box) => box.checked,
+      ),
+    ).toEqual([true, true]);
+    expect(
+      [...table.shadowRoot!.querySelectorAll('[part~="search-path"]')].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["Drinks", "Favourites › Drinks"]);
+    await expectNoA11yViolations(host);
+    await page.screenshot({
+      path: `__screenshots__/a461-final/repeated-${locale}-${theme}-${width}.png`,
+    });
+  },
+);

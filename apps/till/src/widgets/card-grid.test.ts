@@ -1131,11 +1131,30 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
       expect(groups(browser()).find((group) => group.menu === "lunch")?.names).toEqual([
         "Salad",
         "Steak",
+        "lunch mains",
       ]);
       el.selectedDiet = "vegan";
       await el.updateComplete;
       await browser().updateComplete;
-      expect(groups(browser()).find((group) => group.menu === "lunch")?.names).toEqual(["Salad"]);
+      expect(groups(browser()).find((group) => group.menu === "lunch")?.names).toEqual([
+        "Salad",
+        "lunch mains",
+      ]);
+      const disabled = browser().shadowRoot!.querySelector<HTMLElement>(
+        '[data-menu="lunch"] wt-button[data-filtered]',
+      )!;
+      expect(disabled.shadowRoot!.querySelector("button")!.disabled).toBe(true);
     });
   });
+});
+
+it("A461 card-grid forwards unfiltered served offers through both menu diet results", async () => {
+  const meatyBeer = { ...beer, diet: meaty };
+  const { browser } = await mountBrowser({
+    selectedDiet: "vegan",
+    products: [salad, steak, wine, meatyBeer],
+  });
+  const source = browser() as TillMenuBrowser & { unfilteredServedProducts: TillProduct[] };
+  expect(source.servedProducts).toEqual([salad, wine]);
+  expect(source.unfilteredServedProducts).toEqual([salad, steak, wine, meatyBeer]);
 });

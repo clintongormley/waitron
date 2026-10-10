@@ -1063,11 +1063,14 @@ it("writes the category a person opens into the address, and its parent when the
     { categoryId: null },
   ]);
 });
-it("search keeps the categories above a match open, and clearing it restores what was open", async () => {
+it("A461 flat search shows a category path and clearing it restores what was open", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "f");
   await typeSearch(el, "COL");
-  expect(await rowKeys(el)).toEqual(["folder:d", "cola"]);
+  expect(await rowKeys(el)).toEqual(["cola"]);
+  expect((await tableOf(el)).shadowRoot!.querySelector('[part="search-path"]')!.textContent).toBe(
+    "Drinks",
+  );
   await typeSearch(el, "");
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
 });
@@ -1100,7 +1103,7 @@ it("searches a folder's own name and a product's variant names, never a product'
   await typeSearch(el, "drinks cola");
   expect(await rowKeys(el)).toEqual([]);
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["folder:d", "with-variants"]);
+  expect(await rowKeys(el)).toEqual(["with-variants"]);
 });
 it("opens and closes a category from its row, and says which it will do", async () => {
   const el = await mountBrowser();
@@ -1594,11 +1597,11 @@ it("keeps a variant match on its parent until the manager expands it", async () 
     ],
   });
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["folder:d", "coffee"]);
+  expect(await rowKeys(el)).toEqual(["coffee"]);
   const table = await tableOf(el);
   table.shadowRoot!.querySelector<HTMLElement>(".tree-toggle")!.click();
   await table.updateComplete;
-  expect(await rowKeys(el)).toEqual(["folder:d", "coffee", "coffee:large"]);
+  expect(await rowKeys(el)).toEqual(["coffee", "coffee:large"]);
 });
 
 it.each(["en-GB", "es-ES"])(
@@ -1722,7 +1725,7 @@ it("keeps the All products row and every category when a column filter hides eve
   expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
 });
 it.each(["search", "filter", "show archived"])(
-  "clears selection on %s and keeps selection mode on",
+  "A461 keeps ticks on %s and keeps selection mode on",
   async (trigger) => {
     const el = await mountBrowser();
     await selectKeys(el, ["bread"]);
@@ -1730,11 +1733,9 @@ it.each(["search", "filter", "show archived"])(
     if (trigger === "filter") await chooseFilter(el, "modifiers", "has");
     if (trigger === "show archived") await showArchived(el);
     await el.updateComplete;
-    expect(count(el)).toBe("0 selected");
+    expect(count(el)).toBe("1 selected");
     expect((await tableOf(el)).selectable).toBe(true);
-    expect(
-      el.shadowRoot!.querySelector("[data-test=move]")!.getAttribute("disabled"),
-    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=move]")!.getAttribute("disabled")).toBeNull();
   },
 );
 it("requires a move destination, excludes selected folders and descendants, and clears after success", async () => {
@@ -3732,7 +3733,7 @@ it("shows a refused name at the bottom, not under a box opened since", async () 
 
 it("Add category clears a typed search, so its name box shows", async () => {
   const el = await mountBrowser();
-  await typeSearch(el, "cola");
+  await typeSearch(el, "drinks");
   await menuAction(el, "add-category-d");
   await nameBox(el);
   expect(
@@ -3888,7 +3889,7 @@ it("opens the Products table's Filters over the whole screen at phone width", as
   }
 });
 
-it("clears the selection when a filter is chosen in the panel beside the rows", async () => {
+it("A461 keeps the selection when a filter is chosen in the panel beside the rows", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3909,7 +3910,7 @@ it("clears the selection when a filter is chosen in the panel beside the rows", 
     )!;
     await userEvent.click(option);
     await el.updateComplete;
-    expect(count(el)).toBe("0 selected");
+    expect(count(el)).toBe("1 selected");
     expect(getComputedStyle(panel).display).not.toBe("none");
   } finally {
     await page.viewport(width, height);
@@ -4474,4 +4475,210 @@ it("names active descendant and variant extras only when deleting folder content
   el.extraLists = [];
   await el.updateComplete;
   expect(dialog(el)!.querySelector("[data-test=archive-extra-lists]")).toBeNull();
+});
+
+it("A461 gathers Products ticks across searches and only selects shown rows", async () => {
+  const el = await mountBrowser({
+    products: [
+      product("iced", "Iced coffee", "d"),
+      product("cake", "Coffee cake", "f"),
+      product("other", "Ginger tea", "d"),
+    ],
+  });
+  const box = async (key: string) =>
+    (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+      `tr[data-row-key="${key}"] input[type="checkbox"]`,
+    )!;
+  await typeSearch(el, "iced");
+  await selectKeys(el, ["iced"]);
+  await typeSearch(el, "cake");
+  (await box("cake")).click();
+  await tableOf(el);
+  expect(count(el)).toBe("2 selected");
+  const all = (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+    '[data-test="select-all"]',
+  )!;
+  all.click();
+  await tableOf(el);
+  expect(count(el)).toBe("1 selected");
+  all.click();
+  await tableOf(el);
+  expect(count(el)).toBe("2 selected");
+  await chooseFilter(el, "modifiers", "has");
+  expect(count(el)).toBe("2 selected");
+  await chooseFilter(el, "modifiers", "");
+  await typeSearch(el, "");
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  expect((await box("iced")).checked).toBe(true);
+  expect((await box("cake")).checked).toBe(true);
+  await press(el, "move");
+  await destination(el, "top");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["iced", "cake"], categoryIds: [] },
+      null,
+    ),
+  );
+});
+
+it("A461 Products live narrowing keeps ticks but deletion trims the open operation", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  await press(el, "move");
+  el.products = PRODUCTS.map((each) =>
+    each.id === "bread" ? { ...each, name: "Toast", available: false } : each,
+  );
+  await typeSearch(el, "bread");
+  expect(count(el)).toBe("1 selected");
+  expect(dialog(el)!.open).toBe(true);
+  el.products = el.products.filter((each) => each.id !== "bread");
+  await tableOf(el);
+  expect(count(el)).toBe("0 selected");
+  await vi.waitFor(() => expect(dialog(el)?.open ?? false).toBe(false));
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+
+it("A461 Products trims deleted categories and products from Move and resets a lost destination", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread", "folder:d"]);
+  await press(el, "move");
+  await destination(el, "f");
+  el.products = PRODUCTS.filter((each) => each.id !== "bread");
+  el.categories = CATEGORIES.filter((each) => each.id !== "f");
+  await tableOf(el);
+  expect(count(el)).toBe("1 selected");
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!
+      .disabled,
+  ).toBe(true);
+  await destination(el, "top");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["d"] },
+      null,
+    ),
+  );
+});
+
+it("A461 deleting a selected category during its summary read keeps the operation closed", async () => {
+  const el = await mountBrowser();
+  let answer!: (value: Awaited<ReturnType<DashboardApi["summariseFolders"]>>) => void;
+  vi.mocked(el.api.summariseFolders).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  el.categories = CATEGORIES.filter((each) => each.id !== "d");
+  await tableOf(el);
+  expect(count(el)).toBe("0 selected");
+  answer([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }]);
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="move"]')!
+        .disabled,
+    ).toBe(true),
+  );
+  await el.updateComplete;
+  expect(dialog(el)?.open ?? false).toBe(false);
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  "A461 pointer drag sends visible Products ticks and retains hidden ticks (clear search: %s)",
+  async (clear) => {
+    const el = await mountBrowser({
+      products: [product("iced", "Iced coffee", "d"), product("cake", "Coffee cake", "f")],
+      categories: [...CATEGORIES, folder("storage", "Cake storage", null)],
+    });
+    await typeSearch(el, "iced");
+    await selectKeys(el, ["iced"]);
+    await typeSearch(el, "cake");
+    const table = await tableOf(el);
+    table.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+    await tableOf(el);
+    if (clear) {
+      await typeSearch(el, "");
+      await toggleCategory(el, "f");
+    }
+    expect(await rowKeys(el)).not.toContain("iced");
+    const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+    const drops: unknown[] = [];
+    list.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+    drag(await nameCell(el, "cake"), await nameCell(el, "folder:storage"));
+    await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
+    expect(drops).toEqual([{ keys: ["cake"], folderId: "storage" }]);
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["cake"], categoryIds: [] },
+      "storage",
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-product-list")!.selected).toEqual(["iced"]),
+    );
+  },
+);
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A461 visual Products $width $locale $theme", async ({ width, locale, theme }) => {
+  const { page } = await import("vitest/browser");
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  setLocale(locale);
+  onTestFinished(() => setLocale("en-GB"));
+  expect(window.innerWidth).toBe(width);
+  const el = await mountBrowser({
+    categories: [
+      folder("d", "Drinks", null),
+      folder("coffee", "Coffee", "d"),
+      folder("desserts", "Desserts long spaced path " + "Unbroken".repeat(8), null),
+    ],
+    products: [
+      product("iced", "Iced coffee", "coffee"),
+      product("cake", "Coffee cake", "desserts"),
+      product("ice", "Add ice", "coffee"),
+    ],
+  });
+  el.parentElement!.setAttribute("data-theme", theme);
+  const capture = async (state: string) => {
+    await tableOf(el);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    await page.screenshot({
+      element: el,
+      path: `.superpowers/a461-task9/products-${locale}-${theme}-${width}-${state}.png`,
+    });
+  };
+  await press(el, "select");
+  await typeSearch(el, "iced");
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLInputElement>('tr[data-row-key="iced"] td.select input')!
+    .click();
+  await typeSearch(el, "coffee");
+  expect(await rowKeys(el)).toEqual(["folder:coffee", "cake", "iced"]);
+  await capture("flat");
+  await toggleCategory(el, "coffee");
+  expect(await rowKeys(el)).toContain("ice");
+  await capture("opened");
+  await typeSearch(el, "cake");
+  expect((await tableOf(el)).selected).toEqual(["iced"]);
+  await capture("hidden-selected");
+  await typeSearch(el, "zz-no-match");
+  expect(await rowKeys(el)).toEqual([]);
+  await capture("no-match");
+  await typeSearch(el, "");
+  expect((await tableOf(el)).selected).toEqual(["iced"]);
+  expect((await tableOf(el)).shadowRoot!.querySelector('[part~="search-path"]')).toBeNull();
+  await capture("restored");
 });

@@ -8,7 +8,7 @@ export interface DragGhost {
   folder: boolean;
 }
 
-export type DropGap = { key: string; side: "before" | "after" };
+export type DropGap = { key: string; side: "before" | "after"; row?: HTMLElement | null };
 
 /** For a host whose `wt-data-table` draws the rows being dragged. */
 export const treeDragStyles = css`
@@ -104,8 +104,23 @@ export function clearDragMarks(root: ShadowRoot): void {
     for (const element of root.querySelectorAll(`[part~="${name}"]`)) element.part.remove(name);
 }
 
-export function shownRow(root: ShadowRoot, key: string): HTMLElement | null {
-  return root.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(key)}"]`);
+export function shownRow(
+  root: ShadowRoot,
+  key: string,
+  point?: { x: number; y: number },
+): HTMLElement | null {
+  const rows = [...root.querySelectorAll<HTMLElement>(`tr[data-row-key="${CSS.escape(key)}"]`)];
+  return (
+    (point &&
+      rows.find((row) => {
+        const box = row.getBoundingClientRect();
+        return (
+          point.y >= box.top && point.y <= box.bottom && point.x >= box.left && point.x <= box.right
+        );
+      })) ||
+    rows[0] ||
+    null
+  );
 }
 
 export function markDragging(row: HTMLElement | null): void {
@@ -122,22 +137,29 @@ export function markInto(row: HTMLElement | null): void {
 }
 
 export function markGap(root: ShadowRoot, gap: DropGap): void {
-  for (const cell of root.querySelectorAll(`tr[data-row-key="${CSS.escape(gap.key)}"] > td`))
+  const cells = gap.row
+    ? gap.row.querySelectorAll(":scope > td")
+    : root.querySelectorAll(`tr[data-row-key="${CSS.escape(gap.key)}"] > td`);
+  for (const cell of cells)
     cell.part.add(gap.side === "before" ? "drop-gap-before" : "drop-gap-after");
 }
 
 /** The last row drawn inside the row's branch, or the row itself when nothing under it is drawn. */
-export function lastShownRow(root: ShadowRoot, key: string): string {
-  let last = key;
-  let level: number | null = null;
-  for (const row of root.querySelectorAll<HTMLElement>("tbody tr[data-row-key]")) {
-    const rowLevel = Number(row.getAttribute("aria-level"));
-    if (level === null) {
-      if (row.dataset.rowKey === key) level = rowLevel;
-      continue;
-    }
-    if (rowLevel <= level) break;
-    last = row.dataset.rowKey!;
+export function lastShownRow(
+  root: ShadowRoot,
+  key: string,
+  point?: { x: number; y: number },
+): HTMLElement | null {
+  let last = shownRow(root, key, point);
+  if (!last) return null;
+  const level = Number(last.getAttribute("aria-level"));
+  for (
+    let row = last.nextElementSibling;
+    row instanceof HTMLElement;
+    row = row.nextElementSibling
+  ) {
+    if (!row.matches("tr[data-row-key]") || Number(row.getAttribute("aria-level")) <= level) break;
+    last = row;
   }
   return last;
 }

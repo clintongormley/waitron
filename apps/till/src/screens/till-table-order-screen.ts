@@ -2484,6 +2484,7 @@ export class TillTableOrderScreen extends LitElement {
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
+  readonly #unfilteredSearchProducts = memoVisibleProducts();
 
   #hasDietData(): boolean {
     return hasDietData(this.products);
@@ -2508,6 +2509,13 @@ export class TillTableOrderScreen extends LitElement {
         ),
         "",
         this.selectedDiet,
+      )}
+      .unfilteredServedProducts=${this.#unfilteredSearchProducts(
+        this.products.filter((product) =>
+          this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
+        ),
+        "",
+        null,
       )}
       .store=${store}
       .handheld=${this.handheld}

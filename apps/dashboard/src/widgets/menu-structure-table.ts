@@ -36,6 +36,7 @@ import {
 } from "./tree-drag.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { countOf } from "./count-text.js";
+import { PATH_SEPARATOR } from "./category-form.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
@@ -187,6 +188,19 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(available) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(search-name-line) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--wt-space-2);
+        max-inline-size: var(--search-name-room);
+        overflow-wrap: anywhere;
+      }
+      wt-data-table::part(search-path) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        min-inline-size: 0;
+      }
       wt-data-table::part(note) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -250,12 +264,15 @@ export class MenuStructureTable extends LitElement {
   /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
   @property({ type: Boolean, reflect: true }) reordering = true;
-  /** The search box's text; while it lasts, the table holds every section above a match open. */
   @property() search = "";
   /** Whether rows the menu owns carry a box; the host owns which are ticked. */
   @property({ type: Boolean }) selecting = false;
   /** The ticked rows' keys. */
   @property({ attribute: false }) selected: string[] = [];
+  @property({ attribute: false }) dragSelection?: (
+    pressedKey: string,
+    visibleKeys: ReadonlySet<string>,
+  ) => readonly string[];
 
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
@@ -269,26 +286,82 @@ export class MenuStructureTable extends LitElement {
   /** Each list's order after moves the host has not answered yet, keyed by list, so every place a
    * section is shown agrees. */
   #order = new Map<string, string[]>();
-  /** The rows are not keyed, so a move leaves focus on whichever grip now sits where it was. */
-  #refocus: string | null = null;
+  #refocus: { key: string; copy: number } | null = null;
   /** A move into another list, answered by the host reading the menu again: the grip to focus
    * then, the one it left if the move did not happen, and whether new nodes have arrived. */
   #movedFocus: { key: string; fallback: string; read: boolean } | null = null;
   @state() private announcement = "";
-  #drag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null = null;
+  #drag: {
+    pointerId: number;
+    key: string;
+    x: number;
+    y: number;
+    active: boolean;
+    keys?: string[];
+  } | null = null;
   #target: Drop | undefined = undefined;
   #pointer = { x: 0, y: 0 };
   @state() private ghost: DragGhost | null = null;
   /** Whether a column filter is narrowing the rows, as the table last reported. */
   @state() private filtering = false;
 
+  #fitFrame = 0;
+  readonly #pathResize = new ResizeObserver(() => this.#schedulePathFit());
+  readonly #pathNarrow = new MutationObserver(() => this.#schedulePathFit());
+
+  #watchPathWidth(): void {
+    const table = this.#table()!;
+    this.#pathResize.observe(table);
+    this.#pathNarrow.observe(table, { attributes: true, attributeFilter: ["narrow"] });
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#watchPathWidth();
+  }
+
+  #schedulePathFit(): void {
+    if (this.#fitFrame) return;
+    this.#fitFrame = requestAnimationFrame(() => {
+      this.#fitFrame = 0;
+      const root = this.#table()!.shadowRoot!;
+      const scroll = root.querySelector<HTMLElement>(".scroll")!;
+      const lines = [...root.querySelectorAll<HTMLElement>('[part~="search-name-line"]')];
+      const rooms = lines.map((line) => {
+        const cell = line.closest("td")!;
+        const end = cell
+          .closest("tr")!
+          .querySelector('td[data-pinned="end"]')!
+          .getBoundingClientRect().left;
+        return Math.max(
+          0,
+          end -
+            line.getBoundingClientRect().left -
+            scroll.scrollLeft -
+            parseFloat(getComputedStyle(cell).paddingInlineEnd),
+        );
+      });
+      lines.forEach((line, index) =>
+        line.style.setProperty("--search-name-room", `${rooms[index]}px`),
+      );
+    });
+  }
+
   override disconnectedCallback(): void {
+    this.#pathResize.disconnect();
+    this.#pathNarrow.disconnect();
+    cancelAnimationFrame(this.#fitFrame);
+    this.#fitFrame = 0;
     if (this.#drag) this.#finishDrag();
     super.disconnectedCallback();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if ((changed.has("reordering") || changed.has("search")) && !this.#reorderable && this.#drag) {
+    if (
+      (((changed.has("reordering") || changed.has("selecting")) && !this.#reorderable) ||
+        changed.has("search")) &&
+      this.#drag
+    ) {
       const active = this.#drag.active;
       this.#finishDrag();
       if (active) blockClickAfterDrag(true);
@@ -317,9 +390,11 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override firstUpdated(): void {
+    this.#watchPathWidth();
     // Collapse all closes branches without telling anyone, so the table's own updates are watched.
     this.#table()!.addController({
       hostUpdated: () => {
+        this.#schedulePathFit();
         this.#checkCurrentShown();
         this.#restoreFocus();
         this.#restoreMovedFocus();
@@ -348,6 +423,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #checkCurrentShown(): void {
+    if (this.search.trim() !== "") return;
     const table = this.#table()!;
     const keys = this.#currentKeys();
     if (this.#revealing > 0 || this.#lostReported || keys.length === 0) return;
@@ -361,6 +437,7 @@ export class MenuStructureTable extends LitElement {
 
   readonly #expandChange = (event: CustomEvent<{ key: string; expanded: boolean }>): void => {
     event.stopPropagation();
+    if (this.search.trim() !== "") return;
     const { key, expanded } = event.detail;
     const row = this.#rowByKey.get(key);
     if (row === undefined || !this.#ownedSection(row)) return;
@@ -375,12 +452,12 @@ export class MenuStructureTable extends LitElement {
   };
 
   #restoreFocus(): void {
-    const key = this.#refocus;
-    if (key === null) return;
+    const pending = this.#refocus;
+    if (pending === null) return;
     this.#refocus = null;
     this.#table()
-      ?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${CSS.escape(key)}"]`)
-      ?.focus();
+      ?.shadowRoot?.querySelectorAll<HTMLElement>(`[data-test="drag-${CSS.escape(pending.key)}"]`)
+      [pending.copy]?.focus();
   }
 
   /** Waits for the menu read again and for the host to stop being busy, which disables every grip,
@@ -388,11 +465,22 @@ export class MenuStructureTable extends LitElement {
   #restoreMovedFocus(): void {
     const pending = this.#movedFocus;
     if (!pending?.read || this.busy || this.#revealing > 0) return;
+    const table = this.#table()!;
+    const key = this.#rowByKey.has(pending.key) ? pending.key : pending.fallback;
+    if (this.#rowByKey.has(key)) {
+      const path = key.split("/");
+      let opening = false;
+      for (let index = 1; index < path.length; index++) {
+        const parent = path.slice(0, index).join("/");
+        if (!table.isExpanded(parent)) {
+          table.setExpanded(parent, true);
+          opening = true;
+        }
+      }
+      if (opening) return;
+    }
     this.#movedFocus = null;
-    const root = this.#table()!.shadowRoot!;
-    const gripAt = (key: string) =>
-      root.querySelector<HTMLElement>(`[data-test="drag-${CSS.escape(key)}"]`);
-    (gripAt(pending.key) ?? gripAt(pending.fallback))?.focus();
+    table.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${CSS.escape(key)}"]`)?.focus();
   }
 
   #siblingRows(row: Row): Row[] {
@@ -422,7 +510,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #gripDown(event: PointerEvent, row: Row): void {
-    if (this.#drag || this.busy || event.button !== 0) return;
+    if (this.#drag || this.busy || !this.#reorderable || event.button !== 0) return;
     // Keep the press from selecting text or starting the browser's own drag.
     event.preventDefault();
     this.#drag = {
@@ -453,11 +541,38 @@ export class MenuStructureTable extends LitElement {
         this.#finishDrag();
         return;
       }
+      if (this.selected.includes(this.#selectionKey(drag.key)) && this.dragSelection) {
+        const visible = new Set(
+          [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
+            (row) => row.dataset.rowKey!,
+          ),
+        );
+        const visibleBySelection = new Map<string, string>();
+        for (const key of visible)
+          if (!visibleBySelection.has(this.#selectionKey(key)))
+            visibleBySelection.set(this.#selectionKey(key), key);
+        visibleBySelection.set(this.#selectionKey(drag.key), drag.key);
+        drag.keys = [
+          ...new Set(
+            this.dragSelection(this.#selectionKey(drag.key), new Set(visibleBySelection.keys())),
+          ),
+        ].flatMap((key) => {
+          const shown = visibleBySelection.get(key);
+          return shown ? [shown] : [];
+        });
+        if (!this.#dragRows(drag.keys)) {
+          this.#finishDrag();
+          return;
+        }
+      }
       drag.active = true;
       holdPageCursor();
       const ref = row.node.ref;
       this.ghost = {
-        label: row.name,
+        label:
+          (drag.keys?.length ?? 0) > 1
+            ? t("folders.drag_count").replace("{count}", String(drag.keys!.length))
+            : row.name,
         image:
           ref.kind === "product" ? (this.#productById.get(ref.productId)?.image ?? null) : null,
         folder: ref.kind === "section",
@@ -479,8 +594,11 @@ export class MenuStructureTable extends LitElement {
       (item): item is HTMLElement =>
         item instanceof HTMLElement && item.matches("tr[data-row-key]"),
     )?.dataset.rowKey;
-    const target = over === undefined ? undefined : this.#targetFor(this.#drag!.key, over);
-    if (sameDrop(target, this.#target)) return;
+    const target = over === undefined ? undefined : this.#dropFor(this.#drag!, over);
+    if (sameDrop(target, this.#target)) {
+      this.#paint();
+      return;
+    }
     this.#target = target;
     this.#paint();
   }
@@ -488,13 +606,46 @@ export class MenuStructureTable extends LitElement {
   readonly #endDrag = (event: PointerEvent): void => {
     const drag = this.#drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
-    const target = this.#target;
+    const target = this.#target && this.#dropFor(drag, this.#target.key);
     this.#finishDrag();
     if (!drag.active || event.type !== "pointerup") return;
     blockClickAfterDrag(false);
     const row = this.#movable(drag.key);
     const at = target && this.#rowByKey.get(target.key);
     if (row === undefined || this.busy || !target || !at) return;
+    if (drag.keys) {
+      const to = target.kind === "into" ? at.path : at.path.slice(0, -1);
+      let position: number | undefined;
+      if (target.kind !== "into") {
+        const siblings = this.#siblingRows(at).filter((other) => !drag.keys!.includes(other.key));
+        const after =
+          target.kind === "beside"
+            ? target.side === "after"
+            : this.#siblingRows(at).findIndex((other) => other.key === at.key) >
+              this.#siblingRows(at).findIndex((other) => other.key === row.key);
+        position = siblings.findIndex((other) => other.key === at.key) + (after ? 1 : 0);
+      }
+      let movedPath = [row.node.memberId];
+      for (const key of drag.keys) {
+        const moved = this.#movable(key)!;
+        if (moved.node.ref.kind !== "section") continue;
+        const sectionId = moved.node.ref.sectionId;
+        const ancestor = row.path.findIndex((_, index) => {
+          const ref = this.#rowByKey.get(row.path.slice(0, index + 1).join("/"))?.node.ref;
+          return ref?.kind === "section" && ref.sectionId === sectionId;
+        });
+        if (ancestor >= 0) {
+          movedPath = [moved.node.memberId, ...row.path.slice(ancestor + 1)];
+          break;
+        }
+      }
+      this.#movedFocus = { key: [...to, ...movedPath].join("/"), fallback: row.key, read: false };
+      this.#send(
+        "wt-members-drop",
+        position === undefined ? { keys: drag.keys, to } : { keys: drag.keys, to, position },
+      );
+      return;
+    }
     if (target.kind === "sibling") {
       const to = this.#siblingRows(row).findIndex((sibling) => sibling.key === target.key);
       if (to >= 0) this.#move(row, to);
@@ -533,10 +684,60 @@ export class MenuStructureTable extends LitElement {
     this.#paint();
   }
 
-  /** What a release over the row `over` would do. A closed or empty section the menu owns takes the
-   * member at its end over its middle half; elsewhere a sibling offers its own place in the list,
-   * and a row of another list the place beside it by the pointer's half. Branches are compared by whole member ids: `m-fav` does not hold
-   * `m-fav-drinks`. */
+  #dragRows(keys: readonly string[]): Row[] | undefined {
+    if (keys.length === 0) return undefined;
+    const rows = keys.map((key) => this.#movable(key));
+    return rows.every((row): row is Row => row !== undefined && !row.readOnly) ? rows : undefined;
+  }
+
+  #dropFor(drag: { key: string; keys?: string[] }, over: string): Drop | undefined {
+    if (!shownRow(this.#table()!.shadowRoot!, over, this.#pointer)) return undefined;
+    if (!drag.keys) return this.#targetFor(drag.key, over);
+    const rows = this.#dragRows(drag.keys);
+    const at = this.#rowByKey.get(over);
+    if (
+      !rows ||
+      !at ||
+      at.readOnly ||
+      rows.some(
+        (row) =>
+          over === row.key ||
+          over.startsWith(`${row.key}/`) ||
+          sectionIdsWithin(row.node).includes(at.list),
+      )
+    )
+      return undefined;
+    const height = this.#heightIn(over);
+    const into =
+      this.#ownedSection(at) &&
+      shownRow(this.#table()!.shadowRoot!, over, this.#pointer)?.getAttribute("aria-expanded") !==
+        "true" &&
+      height >= 0.25 &&
+      height < 0.75;
+    const destination = into && at.node.ref.kind === "section" ? at.node.ref.sectionId : at.list;
+    const children = into ? (at.node.children ?? []) : this.#siblingRows(at).map((row) => row.node);
+    const remaining = children.filter(
+      (node) =>
+        !rows.some((row) => row.list === destination && row.node.memberId === node.memberId),
+    );
+    const refs: MenuStructureNode[] = [];
+    for (const row of rows) {
+      if (
+        sectionIdsWithin(row.node).includes(destination) ||
+        (!this.#known(row.node.ref) && row.list !== destination) ||
+        holds(remaining, row.node.ref) ||
+        holds(refs, row.node.ref)
+      )
+        return undefined;
+      refs.push(row.node);
+    }
+    if (into) return { kind: "into", key: over };
+    const pressed = this.#movable(drag.key);
+    return pressed?.parentKey === at.parentKey
+      ? { kind: "sibling", key: over }
+      : { kind: "beside", key: over, side: height < 0.5 ? "before" : "after" };
+  }
+
   #targetFor(dragged: string, over: string): Drop | undefined {
     const row = this.#movable(dragged);
     const at = this.#rowByKey.get(over);
@@ -549,7 +750,8 @@ export class MenuStructureTable extends LitElement {
     const height = this.#heightIn(over);
     if (
       this.#canHold(at, row) &&
-      shownRow(this.#table()!.shadowRoot!, over)!.getAttribute("aria-expanded") !== "true" &&
+      shownRow(this.#table()!.shadowRoot!, over, this.#pointer)!.getAttribute("aria-expanded") !==
+        "true" &&
       height >= 0.25 &&
       height < 0.75
     )
@@ -577,7 +779,7 @@ export class MenuStructureTable extends LitElement {
   /** How far down the row's content the pointer is, from 0 to 1. A drawn gap pads the row's cells,
    * so the content box, not the row, keeps a pointer in the same band once the gap appears. */
   #heightIn(key: string): number {
-    const cell = shownRow(this.#table()!.shadowRoot!, key)!.querySelector("td")!;
+    const cell = shownRow(this.#table()!.shadowRoot!, key, this.#pointer)!.querySelector("td")!;
     const box = cell.getBoundingClientRect();
     const style = getComputedStyle(cell);
     const top = box.top + parseFloat(style.paddingTop);
@@ -590,8 +792,8 @@ export class MenuStructureTable extends LitElement {
     clearDragMarks(root);
     const drag = this.#drag;
     if (!drag?.active) return;
-    markDragging(shownRow(root, drag.key));
-    if (this.#target?.kind === "into") markInto(shownRow(root, this.#target.key));
+    for (const key of drag.keys ?? [drag.key]) markDragging(shownRow(root, key));
+    if (this.#target?.kind === "into") markInto(shownRow(root, this.#target.key, this.#pointer));
     const gap = this.#gap(drag.key);
     if (gap) markGap(root, gap);
   }
@@ -601,14 +803,18 @@ export class MenuStructureTable extends LitElement {
     const target = this.#target;
     if (target === undefined || target.kind === "into" || !row) return undefined;
     const root = this.#table()!.shadowRoot!;
-    if (target.kind === "beside")
-      return target.side === "before"
-        ? { key: target.key, side: "before" }
-        : { key: lastShownRow(root, target.key), side: "after" };
+    const before = () => ({
+      key: target.key,
+      side: "before" as const,
+      row: shownRow(root, target.key, this.#pointer),
+    });
+    const after = () => {
+      const row = lastShownRow(root, target.key, this.#pointer);
+      return { key: row?.dataset.rowKey ?? target.key, side: "after" as const, row };
+    };
+    if (target.kind === "beside") return target.side === "before" ? before() : after();
     const keys = this.#siblingRows(row).map((sibling) => sibling.key);
-    if (keys.indexOf(target.key) < keys.indexOf(dragged))
-      return { key: target.key, side: "before" };
-    return { key: lastShownRow(root, target.key), side: "after" };
+    return keys.indexOf(target.key) < keys.indexOf(dragged) ? before() : after();
   }
 
   #move(row: Row, to: number): void {
@@ -639,7 +845,12 @@ export class MenuStructureTable extends LitElement {
     const target = shown[at];
     if (target === undefined) return;
     this.#move(row, this.#siblings(row).indexOf(target.node.memberId));
-    this.#refocus = row.key;
+    const grips = [
+      ...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>(
+        `[data-test="drag-${CSS.escape(row.key)}"]`,
+      ),
+    ];
+    this.#refocus = { key: row.key, copy: grips.indexOf(event.currentTarget as HTMLElement) };
     this.announcement = t("action.reordered")
       .replace("{item}", row.name)
       .replace("{index}", String(at + 1))
@@ -784,6 +995,15 @@ export class MenuStructureTable extends LitElement {
   }
 
   #rowsMemo?: { inputs: readonly unknown[]; rows: TableRow[] };
+  #selectionKeys = new Map<string, string>();
+
+  #selectionKey(key: string): string {
+    const identity = this.#selectionKeys.get(key);
+    if (identity === undefined) return key;
+    return (
+      this.selected.find((selected) => this.#selectionKeys.get(selected) === identity) ?? identity
+    );
+  }
 
   /** The same array while what the rows are built from is unchanged, so a typed search does not
    * make the table fold every row again. An empty menu draws no row, so the table shows its empty
@@ -811,7 +1031,27 @@ export class MenuStructureTable extends LitElement {
     };
     const rows = members.length === 0 ? [] : [root, ...members];
     this.#rowsMemo = { inputs, rows };
+    const previousSelections = this.selected.flatMap((key) => {
+      const prior =
+        this.#rowByKey.get(key) ?? this.#rowByKey.get(this.#selectionKeys.get(key) ?? "");
+      return prior ? [[key, JSON.stringify([prior.list, prior.node.memberId])] as const] : [];
+    });
     this.#rowByKey = new Map(members.map((row) => [row.key, row]));
+    const identities = new Map<string, string>();
+    this.#selectionKeys = new Map(
+      members
+        .filter((row) => !row.readOnly)
+        .map((row) => {
+          const identity = JSON.stringify([row.list, row.node.memberId]);
+          const key = identities.get(identity) ?? row.key;
+          identities.set(identity, key);
+          return [row.key, key];
+        }),
+    );
+    for (const [key, identity] of previousSelections) {
+      const current = identities.get(identity);
+      if (current && !this.#selectionKeys.has(key)) this.#selectionKeys.set(key, current);
+    }
     return rows;
   }
 
@@ -888,10 +1128,8 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  /** A search draws closest matches first, not the menu's order, so nothing is reordered during
-   * one. */
   get #reorderable(): boolean {
-    return this.reordering && this.search.trim() === "";
+    return this.reordering || this.selecting;
   }
 
   #grip(row: Row) {
@@ -910,11 +1148,32 @@ export class MenuStructureTable extends LitElement {
     </button>`;
   }
 
-  #nameCell(row: Row) {
+  #sectionPath(row: Row): string {
+    const names: string[] = [];
+    const seen = new Set([row.key]);
+    let key = row.parentKey;
+    while (key !== ROOT_KEY && !seen.has(key)) {
+      seen.add(key);
+      const parent = this.#rowByKey.get(key);
+      if (!parent) break;
+      names.unshift(parent.name);
+      key = parent.parentKey;
+    }
+    return names.join(PATH_SEPARATOR);
+  }
+
+  #nameCell(row: Row, searchRoot: boolean) {
     const { node, key } = row;
+    const path = searchRoot ? this.#sectionPath(row) : "";
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
-      >${this.#nameSpan(row)}${
+      >${
+        searchRoot
+          ? html`<span part="search-name-line"
+              >${this.#nameSpan(row)}${path === "" ? nothing : html`<span part="search-path">${path}</span>`}</span
+            >`
+          : this.#nameSpan(row)
+      }${
         node.includedMenuId && !row.readOnly
           ? html`<span part="note" data-test=${`folder-setting-${key}`}
               >${t(
@@ -1114,8 +1373,10 @@ export class MenuStructureTable extends LitElement {
       {
         key: "name",
         label: t("members.name"),
-        cell: (row) => (row.kind === "root" ? this.#rootNameCell(row) : this.#nameCell(row)),
-        // The menu's own row is drawn only above a member that matches.
+        cell: (row, context) =>
+          row.kind === "root"
+            ? this.#rootNameCell(row)
+            : this.#nameCell(row, context.searchRoot === true),
         searchValue: (row) => (row.kind === "root" ? "" : row.name),
       },
       {
@@ -1181,7 +1442,7 @@ export class MenuStructureTable extends LitElement {
         filteredColumnLabel=${t("table.filtered_column")}
         filtersClearAllLabel=${t("table.filters_clear_all")}
         filtersCloseLabel=${t("table.filters_close")}
-        searchOpensPath
+        flatTreeSearch
         .searchTerm=${this.search}
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
@@ -1205,7 +1466,9 @@ export class MenuStructureTable extends LitElement {
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}
+        .rowSelectionKey=${(row: TableRow) => this.#selectionKey(row.key)}
         .rowSelectable=${(row: TableRow) => this.#rowSelectable(row)}
+        .rowSelectionAllowed=${(row: TableRow) => row.kind !== "root" && !row.readOnly}
         .selectionLabel=${(row: TableRow) =>
           row.kind === "root"
             ? row.name

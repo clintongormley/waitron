@@ -1,5 +1,10 @@
 # Every search follows one rule — design
 
+> 2026-10-10: [A461's plan](../plans/2026-10-10-a461-product-search.md) supersedes
+> Products and Menus Structure tree-search presentation and selection lifetime, and adds matching
+> sections to the till's results. Search closeness and table-sort ties remain unchanged.
+
+
 Status: approved in conversation 2026-10-09; this document awaits the owner's review.
 
 ## Why

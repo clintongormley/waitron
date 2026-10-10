@@ -4327,6 +4327,25 @@ describe("till-table-order-screen", () => {
       expect([...shortcuts].map((name) => name.textContent)).toEqual(["Cerveza"]);
     });
 
+    it("A461 table-order forwards unfiltered served offers through both menu diet results", async () => {
+      const veganFood: TillProduct = {
+        ...bocadillo,
+        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+      };
+      const meatDrink: TillProduct = {
+        ...cerveza,
+        diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+      };
+      const { el } = await mount({
+        ...bothMenus,
+        selectedDiet: "vegan",
+        products: [veganFood, meatDrink],
+      });
+      const source = grid(el) as TillMenuBrowser & { unfilteredServedProducts: TillProduct[] };
+      expect(source.servedProducts).toEqual([veganFood]);
+      expect(source.unfilteredServedProducts).toEqual([veganFood, meatDrink]);
+    });
+
     it("hands the browser the device kind and no column count", async () => {
       const { el } = await mount(bothMenus);
       expect(grid(el).columns).toBeUndefined();

@@ -2954,6 +2954,128 @@ it("releases on the menu sibling under the pointer after leaving the edge", asyn
   }
 });
 
+describe("A461 Structure search", () => {
+  it("A461 Structure flattens own matches and names each placement", async () => {
+    const coffee: MenuStructureNode = {
+      memberId: "m-coffee",
+      ref: { kind: "section", sectionId: "s-coffee" },
+      internalName: "Coffee",
+      names: { en: "Customer coffee" },
+      ownerMenuId: "menu-lunch",
+      children: [productNode("m-iced", "iced"), productNode("m-ice", "ice")],
+    };
+    const el = await mount({
+      selecting: true,
+      products: [
+        product("iced", "Iced coffee"),
+        product("cake", "Coffee cake"),
+        product("ice", "Add ice"),
+      ],
+      nodes: [
+        { ...drinksNode("m-drinks"), children: [coffee] },
+        { ...favourites(), internalName: "Desserts", children: [productNode("m-cake", "cake")] },
+      ],
+      search: "coffee",
+    });
+    expect(drawn(el)).toEqual(["m-drinks/m-coffee", "m-fav/m-cake", "m-drinks/m-coffee/m-iced"]);
+    expect(all(el, "tr[data-row-key]").map((row) => row.getAttribute("aria-level"))).toEqual([
+      "1",
+      "1",
+      "1",
+    ]);
+    expect(all(el, '[part~="search-path"]').map((span) => span.textContent)).toEqual([
+      "Drinks",
+      "Desserts",
+      "Drinks › Coffee",
+    ]);
+    expect(row(el, "m-drinks/m-coffee")!.getAttribute("aria-expanded")).toBe("false");
+    await toggle(el, "m-drinks/m-coffee");
+    expect(drawn(el)).toEqual([
+      "m-drinks/m-coffee",
+      "m-drinks/m-coffee/m-iced",
+      "m-drinks/m-coffee/m-ice",
+      "m-fav/m-cake",
+      "m-drinks/m-coffee/m-iced",
+    ]);
+    expect(all(el, 'tr[data-row-key="m-drinks/m-coffee/m-iced"]')).toHaveLength(2);
+    expect(row(el, "m-drinks/m-coffee/m-iced")!.getAttribute("aria-level")).toBe("2");
+
+    el.nodes = [
+      { ...drinksNode("m-drinks"), children: [coffee] },
+      { ...favourites(), internalName: "Desserts", children: [{ ...coffee, memberId: "copy" }] },
+    ];
+    el.search = "iced";
+    await settle(el);
+    expect(drawn(el)).toEqual(["m-drinks/m-coffee/m-iced", "m-fav/copy/m-iced"]);
+    expect(all(el, '[part~="search-path"]').map((span) => span.textContent)).toEqual([
+      "Drinks › Coffee",
+      "Desserts › Coffee",
+    ]);
+  });
+
+  it("A461 Structure read-only included results have their own path", async () => {
+    const el = await mount({ nodes: [wines()], selecting: true, search: "rioja" });
+    expect(drawn(el)).toEqual(["included-wine/wine-red/wine-rioja"]);
+    const found = row(el, "included-wine/wine-red/wine-rioja")!;
+    expect(found.querySelector('[part~="search-path"]')!.textContent).toBe(
+      `${menuLabel("Wines")} › Red wines`,
+    );
+    expect(found.querySelector('[part~="read-only"]')).not.toBeNull();
+    expect(found.querySelector('td.select input[type="checkbox"]')).toBeNull();
+    expect(found.querySelector("wt-row-actions")).toBeNull();
+  });
+
+  it("A461 Structure search expansion does not replace current path", async () => {
+    const current = ["m-drinks", "m-beer"];
+    const el = await mount({ current });
+    const before = drawn(el);
+    const changes = listen(el, "wt-structure-edit");
+    el.search = "drinks";
+    await settle(el);
+    expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+    await toggle(el, "m-drinks");
+    await toggle(el, "m-drinks");
+    el.search = "beer";
+    await settle(el);
+    await toggle(el, "m-drinks/m-beer");
+    await toggle(el, "m-drinks/m-beer");
+    expect(changes).toEqual([]);
+    expect(el.current).toEqual(current);
+    el.search = "";
+    await settle(el);
+    expect(drawn(el)).toEqual(before);
+    expect(table(el).isExpanded("m-drinks")).toBe(true);
+    expect(table(el).isExpanded("m-drinks/m-beer")).toBe(true);
+    expect(changes).toEqual([]);
+    await toggle(el, "m-drinks");
+    expect(changes).toEqual([{ path: [] }]);
+  });
+
+  it("A461 Structure availability narrows flat matches and expanded contents", async () => {
+    const el = await mount({
+      selecting: true,
+      products: products.map((p) => (p.id === "p-lemonade" ? { ...p, available: false } : p)),
+      search: "drinks",
+    });
+    const choice = inTable(el, 'wt-combobox[data-filter="available"]')!;
+    await chooseOption(choice, "yes");
+    await settle(el);
+    expect(drawn(el)).toEqual([]);
+    el.search = "lager";
+    await settle(el);
+    expect(drawn(el)).toEqual([
+      "m-drinks/m-lager",
+      "m-drinks/m-beer/m-lager-2",
+      "m-fav/m-fav-drinks/m-lager",
+      "m-fav/m-fav-drinks/m-beer/m-lager-2",
+    ]);
+    expect(all(el, "tr[data-row-key]").every((row) => row.getAttribute("aria-level") === "1")).toBe(
+      true,
+    );
+    expect(all(el, 'td.select input[type="checkbox"]')).toHaveLength(4);
+  });
+});
+
 describe("search and the Available filter", () => {
   async function search(el: MenuStructureTable, term: string): Promise<void> {
     el.search = term;
@@ -3009,20 +3131,25 @@ describe("search and the Available filter", () => {
     }
   });
 
-  it("finds a product inside a closed section by its staff name, opening the way to it", async () => {
+  it("finds a product inside a closed section by its staff name, showing its path", async () => {
     const el = await mount();
     expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
     await search(el, "lemonade");
     expect(shown(el)).toEqual([
-      "m-drinks",
       "m-drinks/m-lemonade",
-      "m-fav",
       "m-fav/m-fav-lemonade",
-      "m-fav/m-fav-drinks",
       "m-fav/m-fav-drinks/m-lemonade",
     ]);
-    for (const key of ["m-drinks", "m-fav", "m-fav/m-fav-drinks"])
-      expect(row(el, key)!.getAttribute("aria-expanded"), key).toBe("true");
+    expect(all(el, '[part~="search-path"]').map((span) => span.textContent)).toEqual([
+      "Drinks",
+      "Favourites",
+      "Favourites › Drinks",
+    ]);
+    expect(all(el, "tr[data-row-key]").map((row) => row.getAttribute("aria-level"))).toEqual([
+      "1",
+      "1",
+      "1",
+    ]);
     // The staff name, never the customer-facing or kitchen one.
     await search(el, "for guests");
     expect(shown(el)).toEqual([]);
@@ -3035,18 +3162,16 @@ describe("search and the Available filter", () => {
   it("finds a section and an included menu by the name the row shows", async () => {
     const el = await mount({ nodes: [...lunchNodes(), wines()] });
     await search(el, "beer");
-    expect(shown(el)).toEqual([
-      "m-drinks",
-      "m-drinks/m-beer",
-      "m-fav",
-      "m-fav/m-fav-drinks",
-      "m-fav/m-fav-drinks/m-beer",
+    expect(shown(el)).toEqual(["m-drinks/m-beer", "m-fav/m-fav-drinks/m-beer"]);
+    expect(all(el, "tr[data-row-key]").map((row) => row.getAttribute("aria-expanded"))).toEqual([
+      "false",
+      "false",
     ]);
     await search(el, menuLabel("Wines"));
     expect(shown(el)).toEqual(["included-wine"]);
   });
 
-  it("lists the closest matches first among the rows under each parent, and finishes a word on a trailing space", async () => {
+  it("lists the closest matches first across flat results, and finishes a word on a trailing space", async () => {
     const gins = [
       product("p-ginger", "Ginger Ale"),
       product("p-pink", "Pink Gin"),
@@ -3072,16 +3197,23 @@ describe("search and the Available filter", () => {
     await search(el, "gin");
     expect(shown(el)).toEqual([
       "m-bar",
-      "m-bar/m-bar-pink",
-      "m-bar/m-bar-ginger",
       "m-gt",
+      "m-bar/m-bar-pink",
       "m-ginger",
+      "m-bar/m-bar-ginger",
     ]);
     await search(el, "tonic gin");
     expect(shown(el)).toEqual(["m-gt"]);
-    // A section that matches keeps all its rows; the top-level Ginger Ale is what goes.
     await search(el, "gin ");
-    expect(shown(el)).toEqual(["m-bar", "m-bar/m-bar-pink", "m-bar/m-bar-ginger", "m-gt"]);
+    expect(shown(el)).toEqual(["m-bar", "m-gt", "m-bar/m-bar-pink"]);
+    await toggle(el, "m-bar");
+    expect(shown(el)).toEqual([
+      "m-bar",
+      "m-bar/m-bar-ginger",
+      "m-bar/m-bar-pink",
+      "m-gt",
+      "m-bar/m-bar-pink",
+    ]);
   });
 
   it("says nothing matches when the search finds no row", async () => {
@@ -3156,19 +3288,23 @@ describe("search and the Available filter", () => {
     expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
   });
 
-  it("draws no reorder grip while a search is typed, and draws them again once it is cleared", async () => {
+  it("draws reorder grips during search and removes them when reordering is off", async () => {
     const el = await mount();
     await search(el, "u");
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
-    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
+    expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
+      "drag-m-burger",
+      "drag-m-fav",
+    ]);
     expect(all(el, '[part~="grip-space"]')).toEqual([]);
     const nameLefts = () => shown(el).map((key) => nameAt(el, key).getBoundingClientRect().left);
     const searchingLefts = nameLefts();
     el.reordering = false;
     await settle(el);
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
+    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
     for (const [index, left] of nameLefts().entries())
-      expect(Math.abs(left - searchingLefts[index]!)).toBeLessThanOrEqual(1);
+      expect(left).toBeLessThan(searchingLefts[index]!);
     el.reordering = true;
     await settle(el);
     await search(el, "");
@@ -3245,7 +3381,7 @@ describe("Select mode while a search or filter hides rows", () => {
     ]);
     expect(await selectAll(el)).toEqual([
       {
-        selected: ["m-drinks/m-lemonade", "m-fav/m-fav-lemonade", "m-fav/m-fav-drinks/m-lemonade"],
+        selected: ["m-drinks/m-lemonade", "m-fav/m-fav-lemonade"],
       },
     ]);
   });
@@ -3318,7 +3454,7 @@ describe("Select mode while a search or filter hides rows", () => {
     const el = await mount({ selecting: true, nodes: [drinksNode("m-drinks"), stuff] });
     el.search = "drinks ";
     await settle(el);
-    expect(shown(el)).toContain("m-stuff");
+    expect(shown(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
     expect(boxKeys(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
     el.search = "beer";
     await settle(el);
@@ -3487,15 +3623,11 @@ describe("the menu's own row", () => {
     expect(selected).not.toContain("root");
   });
 
-  it("answers no search and no Available option, so it is drawn only above a match", async () => {
+  it("answers no search and no Available option, staying out of search and above filtered tree matches", async () => {
     const el = await mount({ search: "Lemonade" });
     expect(drawn(el)).toEqual([
-      "root",
-      "m-drinks",
       "m-drinks/m-lemonade",
-      "m-fav",
       "m-fav/m-fav-lemonade",
-      "m-fav/m-fav-drinks",
       "m-fav/m-fav-drinks/m-lemonade",
     ]);
     const noMatches = () =>
@@ -3741,4 +3873,430 @@ describe("the menu's own row", () => {
     expect(row(el, "root")!.querySelector('[part~="folder-frame"]')).not.toBeNull();
     expect(rootNameLeft(el)).toBeCloseTo(coloured, 0);
   });
+});
+
+describe("A461 selected pointer drag", () => {
+  async function gathered(selected = ["m-drinks/m-lager", "m-burger"]) {
+    return mount({
+      reordering: false,
+      selecting: true,
+      selected,
+      dragSelection: (key: string) => (selected.includes(key) ? selected : [key]),
+    });
+  }
+
+  it("A461 drag carries visible ticks while leaving hidden ticks alone", async () => {
+    const el = await gathered();
+    const batches = listen(el, "wt-members-drop");
+    const singles = listen(el, "wt-member-move-into");
+    expect(row(el, "m-drinks/m-lager")).toBeNull();
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    expect(ghost(el)!.textContent).toContain("Burger");
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([{ keys: ["m-burger"], to: ["m-fav"] }]);
+    expect(singles).toEqual([]);
+  });
+
+  it("A461 drop refuses a target cyclic for a hidden selected section", async () => {
+    const el = await gathered(["m-fav", "m-burger"]);
+    await toggle(el, "m-drinks");
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-drinks/m-beer", "middle");
+    expect(drops(el)).toEqual(noDrop);
+    pointer(from, "pointerup", nameAt(el, "m-drinks/m-beer"));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 drop rejects a duplicate ref carried by a hidden tick", async () => {
+    const el = await gathered(["m-drinks/m-lemonade", "m-burger"]);
+    await toggle(el, "m-drinks");
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    expect(drops(el)).toEqual(noDrop);
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 drop removes the moving set before the same-list insertion index", async () => {
+    const el = await gathered(["m-burger", "m-drinks"]);
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "bottom");
+    pointer(from, "pointerup", nameAt(el, "m-fav"), at(el, "m-fav", "bottom"));
+    expect(batches).toEqual([{ keys: ["m-burger", "m-drinks"], to: [], position: 1 }]);
+  });
+
+  it("A461 drop sends nothing when a dragged visible key disappears", async () => {
+    const el = await gathered();
+    await toggle(el, "m-drinks");
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    el.nodes = [productNode("m-burger", "p-burger"), favourites()];
+    await settle(el);
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 changing the query cancels an in-flight drag while keeping search grips", async () => {
+    const el = await gathered();
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    el.search = "Burger";
+    await settle(el);
+    expect(all(el, '[part~="drag-grip"]')).toHaveLength(1);
+    expect(ghost(el)).toBeNull();
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    expect(batches).toEqual([]);
+  });
+
+  it("A461 search drag carries visible ticks in one batch", async () => {
+    const el = await gathered();
+    el.nodes = [
+      productNode("m-burger", "p-burger"),
+      { ...favourites(), internalName: "Burger destination" },
+      drinksNode("m-drinks"),
+    ];
+    el.search = "burger";
+    await settle(el);
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([{ keys: ["m-burger"], to: ["m-fav"] }]);
+    expect(el.selected).toEqual(["m-drinks/m-lager", "m-burger"]);
+  });
+});
+
+it("A461 drag restores focus to a pressed descendant carried by its selected section", async () => {
+  const empty: MenuStructureNode = {
+    memberId: "m-empty",
+    ref: { kind: "section", sectionId: "s-empty" },
+    internalName: "Storage",
+    names: {},
+    image: null,
+    color: null,
+    ownerMenuId: "menu-lunch",
+    children: [],
+  };
+  const selected = ["m-drinks", "m-drinks/m-lager"];
+  const el = await mount({
+    nodes: [...lunchNodes(), empty],
+    reordering: false,
+    selecting: true,
+    selected,
+    dragSelection: () => ["m-drinks"],
+  });
+  await toggle(el, "m-drinks");
+  const from = grip(el, "m-drinks/m-lager");
+  from.focus();
+  pointer(from, "pointerdown");
+  await dragOver(el, from, "m-empty", "middle");
+  pointer(from, "pointerup", nameAt(el, "m-empty"));
+  el.nodes = [
+    productNode("m-burger", "p-burger"),
+    { ...empty, children: [drinksNode("m-drinks")] },
+  ];
+  el.current = ["m-empty"];
+  await settle(el);
+  expect(focusedInTable(el)).toBe("drag-m-empty/m-drinks/m-lager");
+});
+
+it("A461 drop rejects a destination hidden by a collapsed branch while dragging", async () => {
+  const el = await mount({
+    reordering: false,
+    selecting: true,
+    selected: ["m-burger"],
+    dragSelection: () => ["m-burger"],
+  });
+  await toggle(el, "m-drinks");
+  const batches = listen(el, "wt-members-drop");
+  const errors: string[] = [];
+  const capture = (event: ErrorEvent) => {
+    errors.push(event.message);
+    event.preventDefault();
+  };
+  window.addEventListener("error", capture);
+  onTestFinished(() => window.removeEventListener("error", capture));
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  await dragOver(el, from, "m-drinks/m-beer", "middle");
+  await toggle(el, "m-drinks");
+  expect(row(el, "m-drinks/m-beer")).toBeNull();
+  pointer(from, "pointerup");
+  expect(errors).toEqual([]);
+  expect(batches).toEqual([]);
+});
+
+it.each([390, 1280])(
+  "A461 Structure name and path share a line and wrap before Actions at %i",
+  async (width) => {
+    await page.viewport(width, 844);
+    expect(window.innerWidth).toBe(width);
+    const el = await mount({
+      selecting: true,
+      search: "Lemonade",
+      nodes: [
+        {
+          ...drinksNode("m-drinks"),
+          internalName:
+            width === 1280
+              ? "Drinks"
+              : "Long section name ".repeat(8) + "UnbrokenSection".repeat(12),
+          children: [productNode("m-lemonade", "p-lemonade")],
+        },
+      ],
+    });
+    el.style.width = "100%";
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const found = row(el, "m-drinks/m-lemonade")!;
+    const path = found.querySelector<HTMLElement>('[part~="search-path"]')!;
+    const line = found.querySelector<HTMLElement>('[part~="search-name-line"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(path);
+    const rects = [...range.getClientRects()];
+    const actions = found.querySelector("td:last-child")!.getBoundingClientRect();
+    expect(rects.length).toBeGreaterThan(0);
+    for (const rect of rects) expect(rect.right).toBeLessThanOrEqual(actions.left + 1);
+    const nameRange = document.createRange();
+    nameRange.selectNodeContents(line.querySelector('[part~="name"]')!);
+    const name = nameRange.getBoundingClientRect();
+    if (width === 1280) expect(Math.abs(rects[0]!.bottom - name.bottom)).toBeLessThanOrEqual(3);
+    else {
+      expect(rects.length).toBeGreaterThan(1);
+      expect(rects.at(-1)!.top).toBeGreaterThan(name.top);
+    }
+    expect(found.querySelector('td.select input[type="checkbox"]')).not.toBeNull();
+    expect(found.querySelector("wt-row-actions")).not.toBeNull();
+  },
+);
+
+it("A461 Structure path colour font and gap follow host tokens", async () => {
+  const el = await mount({ search: "Lemonade" });
+  const path = inTable<HTMLElement>(el, '[part~="search-path"]')!;
+  const line = inTable<HTMLElement>(el, '[part~="search-name-line"]')!;
+  el.style.setProperty("--wt-color-text-muted", "rgb(13, 57, 91)");
+  el.style.setProperty("--wt-font-size-sm", "19px");
+  el.style.setProperty("--wt-space-2", "17px");
+  expect(getComputedStyle(path).color).toBe("rgb(13, 57, 91)");
+  expect(getComputedStyle(path).fontSize).toBe("19px");
+  expect(getComputedStyle(line).columnGap).toBe("17px");
+});
+
+it("A461 Structure wraps new paths after resize and reconnect", async () => {
+  const el = await mount({
+    search: "Lemonade",
+    nodes: [
+      {
+        ...drinksNode("m-drinks"),
+        internalName: "Long section ".repeat(20),
+        children: [productNode("m-lemonade", "p-lemonade")],
+      },
+    ],
+  });
+  const host = el.parentElement!;
+  host.style.width = "1000px";
+  const bounded = async () => {
+    await settle(el);
+    await vi.waitFor(() => {
+      const found = row(el, "m-drinks/m-lemonade")!;
+      const range = document.createRange();
+      range.selectNodeContents(found.querySelector('[part~="search-path"]')!);
+      const end = found.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+      for (const rect of range.getClientRects()) expect(rect.right).toBeLessThanOrEqual(end + 1);
+    });
+  };
+  await bounded();
+  host.style.width = "370px";
+  await bounded();
+  el.remove();
+  await el.updateComplete;
+  host.append(el);
+  host.style.width = "700px";
+  await bounded();
+  el.nodes = [
+    {
+      ...drinksNode("m-drinks"),
+      internalName: "ReplacementUnbrokenPath".repeat(20),
+      children: [productNode("m-lemonade", "p-lemonade")],
+    },
+  ];
+  await bounded();
+});
+
+it("A461 repeated member paths share one tick and untick from either copy", async () => {
+  const el = await mount({ selecting: true, search: "lager" });
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+  });
+  const first = () => item(el, "select-m-drinks/m-lager") as HTMLInputElement;
+  const copy = () => item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement;
+  expect(drawn(el)).toContain("m-drinks/m-lager");
+  expect(drawn(el)).toContain("m-fav/m-fav-drinks/m-lager");
+  first().click();
+  await settle(el);
+  expect(first().checked).toBe(true);
+  expect(copy().checked).toBe(true);
+  expect(el.selected).toEqual(["m-drinks/m-lager"]);
+  copy().click();
+  await settle(el);
+  expect(first().checked).toBe(false);
+  expect(copy().checked).toBe(false);
+  expect(el.selected).toEqual([]);
+  item(el, "select-all").click();
+  await settle(el);
+  expect(el.selected).toEqual(["m-drinks/m-lager", "m-drinks/m-beer/m-lager-2"]);
+  expect(first().checked).toBe(true);
+  expect(copy().checked).toBe(true);
+});
+
+it("A461 dragging a selected repeated copy carries visible members once", async () => {
+  const selected = ["m-drinks/m-lager", "m-burger"];
+  const el = await mount({
+    selecting: true,
+    selected,
+    nodes: [
+      ...lunchNodes(),
+      {
+        memberId: "m-empty",
+        ref: { kind: "section", sectionId: "s-empty" },
+        internalName: "Empty",
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
+    ],
+    dragSelection: (key, visible) =>
+      selected.includes(key) ? selected.filter((each) => visible.has(each)) : [key],
+  });
+  await toggle(el, "m-fav");
+  await toggle(el, "m-fav/m-fav-drinks");
+  const batches = listen(el, "wt-members-drop");
+  const from = grip(el, "m-fav/m-fav-drinks/m-lager");
+  pointer(from, "pointerdown");
+  await dragOver(el, from, "m-empty", "middle");
+  pointer(from, "pointerup", nameAt(el, "m-empty"));
+  expect(batches).toEqual([{ keys: ["m-fav/m-fav-drinks/m-lager", "m-burger"], to: ["m-empty"] }]);
+});
+
+it("A461 reordering repeated parents keeps the existing member tick", async () => {
+  const el = await mount({ selecting: true, search: "lager", selected: ["m-drinks/m-lager"] });
+  el.nodes = [favourites(), drinksNode("m-drinks")];
+  await settle(el);
+  const checks = all<HTMLInputElement>(
+    el,
+    '[data-test="select-m-drinks/m-lager"], [data-test="select-m-fav/m-fav-drinks/m-lager"]',
+  );
+  expect(checks.map((box) => box.checked)).toEqual([true, true]);
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+  });
+  checks[0]!.click();
+  await settle(el);
+  expect(el.selected).toEqual([]);
+});
+
+it("A461 keeps a shared tick when its first owned path disappears", async () => {
+  const el = await mount({ selecting: true, search: "lager", selected: ["m-drinks/m-lager"] });
+  expect((item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement).checked).toBe(true);
+  el.nodes = [favourites()];
+  await settle(el);
+  const remaining = item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement;
+  expect(remaining.checked).toBe(true);
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+  });
+  remaining.click();
+  await settle(el);
+  expect(el.selected).toEqual([]);
+});
+
+it.each([
+  [0, "middle"],
+  [1, "middle"],
+  [0, "top"],
+  [1, "top"],
+] as const)("A461 drops at the hovered section copy %i (%s)", async (copy, band) => {
+  const section: MenuStructureNode = {
+    memberId: "m-lb",
+    ref: { kind: "section", sectionId: "s-lb" },
+    internalName: "Lager bar",
+    ownerMenuId: "menu-lunch",
+    children: [
+      {
+        memberId: "m-ls",
+        ref: { kind: "section", sectionId: "s-ls" },
+        internalName: "Lager",
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
+      productNode("m-lem", "p-lemonade"),
+    ],
+  };
+  const el = await mount({ nodes: [section], search: "lager", reordering: true });
+  await toggle(el, "m-lb");
+  const copies = () => all<HTMLElement>(el, 'tr[data-row-key="m-lb/m-ls"]');
+  expect(copies()).toHaveLength(2);
+  const from = grip(el, "m-lb/m-lem");
+  const sent = listen(el, band === "middle" ? "wt-member-move-into" : "wt-member-move");
+  pointer(from, "pointerdown");
+  const box = copies()[copy]!.getBoundingClientRect();
+  pointer(from, "pointermove", copies()[copy]!.querySelector('[data-test="name"]')!, {
+    clientY: box.top + box.height * (band === "middle" ? 0.5 : 0.125),
+  });
+  await settle(el);
+  expect(
+    copies().map(
+      (row) =>
+        row.querySelector(
+          band === "middle" ? '[part~="drop-target"]' : '[part~="drop-gap-before"]',
+        ) !== null,
+    ),
+  ).toEqual(copy === 0 ? [true, false] : [false, true]);
+  pointer(from, "pointerup", copies()[copy]!.querySelector('[data-test="name"]')!);
+  expect(sent).toEqual(
+    band === "middle"
+      ? [{ from: ["m-lb"], memberId: "m-lem", to: ["m-lb", "m-ls"] }]
+      : [{ path: ["m-lb"], memberId: "m-lem", to: 0 }],
+  );
+});
+
+it("A461 returns arrow-move focus to the indented search copy", async () => {
+  const el = await mount({ search: "lager", reordering: true });
+  el.nodes = [
+    {
+      ...drinksNode("m-drinks"),
+      internalName: "Lager bar",
+      children: [productNode("m-lager", "p-lager"), productNode("m-lemonade", "p-lemonade")],
+    },
+  ];
+  await settle(el);
+  await toggle(el, "m-drinks");
+  const copies = () => all<HTMLElement>(el, '[data-test="drag-m-drinks/m-lager"]');
+  expect(copies()).toHaveLength(2);
+  copies()[1]!.focus();
+  copies()[1]!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(table(el).shadowRoot!.activeElement).toBe(copies()[1]);
 });

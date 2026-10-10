@@ -12,6 +12,83 @@
 
 **Planning boundary:** This document is the only output of the plan-writing session. No implementation, tests, commits, pushes, development servers or campaign-file changes are authorized in that session. All checkboxes below describe future implementation work.
 
+## Owner amendments (2026-10-10, watcher receipt at 16:55)
+
+This dated amendment supersedes defaults 2–4 and 7, Review Focus 1–2/4 and the corresponding
+Task 1/3/4/6/9 acceptance checks below. The original source quotation remains historical.
+Implement these amendments before Task 10; do not finish or land the earlier defaults.
+
+Owner's answers, verbatim:
+
+- **Point 2:** “Opening "Coffee" while searching "coffee" shows ALL its contents indented
+  beneath it (Espresso, Iced coffee, Add ice, Ginger tea), AND "Iced coffee  Drinks › Coffee"
+  STAYS as its own flat result row too — a matching descendant is NOT suppressed as a root
+  when its branch is opened.” Every branch still starts collapsed for each new query.
+- **Point 3:** “A category or section opened during a search stays open in the tree after
+  the search is cleared (open its parents too, so it is visible), and that is remembered
+  like any other opening.” Search-only opening does not change the address's category/path.
+- **Point 4:** “On BOTH the Products screen and the Menus Structure table, a match gets
+  one flat row for EACH place it sits”; on the till/handheld “a product appears ONCE”.
+  “Keep each row's ticking/selection sensible for a product shown twice (one product,
+  one tick) — state the default you chose.”
+
+- **Point 7:** “Can drag while searching, but drags only visible items.” On both Products
+  and Menus Structure, dragging is allowed during search. A ticked row carries only
+  currently visible ticks; an unticked row carries itself. Move still takes every tick,
+  including hidden ticks. The Menus batch remains one request. State the distinction in
+  the PR and FYI.
+
+Executable follow-up:
+
+1. Trace shared table rendering, selection, focus, expansion storage and every changed
+   consumer. Test first that opened contents and ranked flat matches coexist, including
+   a higher-ranked child and native checkbox synchronization across copies. Preserve one
+   logical selection and deduplicated select-all/drag/API payloads.
+2. Test first that search openings survive query changes and clearing, with ancestors
+   opened and ordinary expansion remembered. Keep each new query's results initially
+   collapsed, and keep Products/Structure navigation unchanged by search-only toggles.
+3. Trace Products' category assignments and row keys through selection, variant rows,
+   drag, action menus and writes. Add per-placement search rows on both dashboard surfaces.
+   Default: copies share the underlying product/member selection; ticking any copy changes
+   every copy, while canonical move/remove requests contain each underlying identity once.
+   Ordinary tree behaviour stays outside this presentation change. Pin repeated placements,
+   secondary categories, distinct paths, hidden ticks, variant identity and stale targets.
+4. Trace drag inputs, targets, focus and queued move validation. Test first that both
+   dashboards permit search drags, exclude hidden ticks from dragged batches, deduplicate
+   visible copies and preserve hidden ticks after a drag. Keep the Move action's full-set
+   behaviour. Preserve cyclic/stale/refusing whole-batch checks and one Menus request.
+5. Change only assertions specifically superseded by these answers; retain unrelated
+   assertions and record every before/after check in the final PR. Re-run affected a11y,
+   default consumers and the dashboard visual matrix. Till deduplication needs a focused
+   regression; repeat till visuals only if its code or fixtures change.
+6. Replace current prose about transient restoration, primary-only paths and suppression.
+   Retire A461 from the backlog only after these amendments pass; final PR explicitly says
+   that search openings persist after clearing. Then run Task 10 normally.
+
+### Amendment execution checkpoint (2026-10-10)
+
+Amendments 2, 3 and 7 are implemented on the candidate branch. Search openings add
+those branches and their ancestors to ordinary remembered expansion. Closing a branch
+while searching collapses only that query's presentation; it does not undo the remembered
+opening. This preserves the current category/path when search is cleared; close the branch
+in the ordinary tree to remove its remembered opening. Each new query still starts collapsed.
+Visible-only drag selection is filtered before Menu membership grouping; successful dragging
+clears the carried members and leaves unrelated hidden ticks. Move/Remove still use the full
+selection.
+
+**Owner settled amendment 4 (2026-10-10, watcher receipt at 17:47): option A.**
+Show every existing placement without schema or route changes. Products has one category per
+product, so it has one flat result. Menu Structure has one result per member path. Repeated
+views of the same list/member share one tick and one request entry; distinct memberships remain
+separate choices, so moving or removing one does not change another placement. The widget maps
+those repeated views to the existing selected path, or the first owned path when unticked,
+and maps a drag back to a visible path.
+The shared table's optional `rowSelectionKey` separates this identity from the display row key.
+A product in more than one category is separate backlog work, as the owner requested.
+
+Task 9's first visual/layout receipts were collected against the earlier defaults. They
+remain evidence for the measured wrapping fixes, but do not validate this amendment.
+
 ## Global Constraints
 
 - Owner requirements, verbatim: “While a search is typed, the Products list is a flat list of the rows whose own name matches”; “Rows in a matching category are not shown unless their own name matches.” Explicitly opening a matching category is the exception described below.

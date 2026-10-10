@@ -14,6 +14,47 @@ afterEach(cleanup);
 type Row = { id: string; name: string; status: string };
 
 describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (theme) => {
+  test.each(["roots", "opened", "empty"])("A461 flat tree search %s", async (state) => {
+    type SearchRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Products"></wt-data-table>',
+      theme,
+    )) as WtDataTable<SearchRow>;
+    el.rows = [
+      { id: "drinks", parent: null, name: "Drinks" },
+      { id: "coffee", parent: "drinks", name: "Coffee" },
+      { id: "iced", parent: "coffee", name: "Iced coffee" },
+      { id: "ice", parent: "coffee", name: "Add ice" },
+    ];
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, searchValue: (row) => row.name },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    el.rowToggleLabel = (row, expanded) => `${expanded ? "Collapse" : "Expand"} ${row.name}`;
+    el.flatTreeSearch = true;
+    el.searchable = true;
+    el.searchLabel = "Search products";
+    el.initiallyCollapsed = true;
+    await el.updateComplete;
+    const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    search.value = state === "empty" ? "&" : "coffee";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await el.updateComplete;
+    if (state === "opened") {
+      el.setExpanded("coffee", true);
+      await el.updateComplete;
+    }
+    expect(el.shownKeys()).toEqual(
+      state === "empty"
+        ? []
+        : state === "opened"
+          ? ["coffee", "iced", "ice", "iced"]
+          : ["coffee", "iced"],
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test.each([false, true])("leading row controls with selection %s", async (selectable) => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',

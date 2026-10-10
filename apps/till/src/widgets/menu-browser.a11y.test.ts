@@ -443,6 +443,32 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("A461 mixed product and section results have no violations", async () => {
+    const { el, host } = await mount(theme, {
+      products: products.map((each) =>
+        each.id === "p-cana" ? { ...each, name: "Beer glass" } : each,
+      ),
+    });
+    await search(el, "beer");
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-region="results"] wt-button')].map((tile) =>
+        tile.getAttribute("data-kind"),
+      ),
+    ).toEqual(["section", "product"]);
+    await expectNoA11yViolations(host);
+  });
+
+  it("A461 diet-disabled matching sections have no violations", async () => {
+    const { el, host } = await mount(theme, {
+      products: products.filter((each) => each.id !== "p-cana"),
+      unfilteredProducts: products,
+    });
+    await search(el, "beer");
+    const tile = button(el, "Beer (EN)");
+    expect(tile.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   it("the Not found notice has no violations", async () => {
     const { el, host } = await mount(theme);
     button(el, "Drinks (EN)").click();
