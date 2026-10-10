@@ -55,6 +55,12 @@ describe("orders filter in the address", () => {
     expect(withStatus(dated, "unpaid")).toEqual({ ...dated, status: "unpaid" });
   });
 
+  it("keeps a search's trailing space from an address and drops a blank one", () => {
+    expect(readOrdersFilter(reader({ q: "gin " })).q).toBe("gin ");
+    expect(readOrdersFilter(reader({ q: "   " })).q).toBeUndefined();
+    expect(readOrdersFilter(reader({ q: `${"x".repeat(100)} ` })).q).toBe(`${"x".repeat(100)} `);
+  });
+
   it("accepts Paid for staff because the server limits older finished bills", () => {
     expect(readOrdersFilter(reader({ status: "paid" })).status).toBe("paid");
   });

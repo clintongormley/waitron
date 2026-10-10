@@ -174,7 +174,9 @@ export class OrdersScreen extends LitElement {
 
   #text(field: "table" | "q", value: string, immediate = false): void {
     clearTimeout(this.#textTimer);
-    const apply = () => this.#apply({ ...this.filter, [field]: value.trim() || undefined });
+    const kept = field === "q" ? value : value.trim();
+    const apply = () =>
+      this.#apply({ ...this.filter, [field]: value.trim() === "" ? undefined : kept });
     if (immediate) apply();
     else this.#textTimer = setTimeout(apply, 400);
   }

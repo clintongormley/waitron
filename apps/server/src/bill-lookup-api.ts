@@ -64,8 +64,9 @@ export function mountBillLookupApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   app.get("/api/bills/lookup", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const q = c.req.query("q")?.trim() ?? "";
-      if (q === "" || q.length > 100)
+      const q = c.req.query("q") ?? "";
+      const typed = q.trim().length;
+      if (typed === 0 || typed > 100)
         throw new AppError("management.request_invalid", { field: "q" });
       const bills = await withTransaction(deps.db, async (tx) =>
         lookUpBills(tx, q, await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId)),

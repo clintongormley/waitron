@@ -184,6 +184,36 @@ describe("Orders routes", () => {
     expect((await page(`after=${encodeURIComponent(plain.json.next!)}`)).status).toBe(200);
   });
 
+  it("keeps a search's trailing space, measures it trimmed, and treats spaces alone as no search", async () => {
+    const tabs: Record<string, string> = {};
+    for (const name of ["Gin", "Ginger Club"]) {
+      const party = await seatedWith(venue);
+      const named = await send(
+        venue.app,
+        venue.cookie,
+        "PUT",
+        `/api/parties/${party.partyId}/name`,
+        { name, expectedPartyRevision: party.revision },
+      );
+      expect(named.status).toBe(200);
+      tabs[name] = party.tabId;
+    }
+    const ids = async (query: string) => {
+      const answer = (await get(venue.supervisorDashboard, `?anyDate=true&limit=200&${query}`)) as {
+        status: number;
+        json: { rows: { id: string }[] };
+      };
+      expect(answer.status).toBe(200);
+      return answer.json.rows.map((row) => row.id);
+    };
+    const finished = await ids("q=gin%20");
+    expect(finished).toContain(tabs.Gin);
+    expect(finished).not.toContain(tabs["Ginger Club"]);
+    expect(await ids("q=gin")).toEqual(expect.arrayContaining([tabs.Gin, tabs["Ginger Club"]]));
+    expect(await ids("q=%20%20")).toEqual(await ids(""));
+    expect(await ids(`q=${"x".repeat(100)}%20%20`)).toEqual([]);
+  });
+
   it("answers not found for malformed and unknown ids", async () => {
     for (const id of ["not-a-uuid", randomUUID()]) {
       expect(await get(venue.supervisorDashboard, `/${id}`)).toMatchObject({

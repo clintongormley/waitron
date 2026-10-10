@@ -29,11 +29,11 @@ export async function lookUpInvoices(
   q: string,
   inZones?: OrderZoneCondition,
 ): Promise<InvoiceLookupRow[]> {
-  const invoice = /^([^/\s]+)\s*\/\s*(\d{1,9})$/.exec(q);
-  const pattern = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+  const invoice = /^([^/\s]+)\s*\/\s*(\d{1,9})$/.exec(q.trim());
+  const rank = sql`waitron_search_rank(${q}, ${sales.counterpartyLegalName})`;
   const search = invoice
     ? and(eq(invoiceSeries.code, invoice[1]!), eq(sales.invoiceNumber, Number(invoice[2])))
-    : sql`${sales.counterpartyLegalName} like ${pattern} escape ${"\\"}`;
+    : sql`${rank} is not null`;
   const rows = await tx
     .select({
       workingOrderId: workingOrders.id,
@@ -58,7 +58,7 @@ export async function lookUpInvoices(
         inZones?.(sql`${workingOrders.id}`),
       ),
     )
-    .orderBy(desc(sales.issuedAt), sql`"sales".rowid desc`)
+    .orderBy(...(invoice ? [] : [rank]), desc(sales.issuedAt), sql`"sales".rowid desc`)
     .limit(20);
   return rows.map((row) => ({
     workingOrderId: row.workingOrderId,
@@ -73,8 +73,9 @@ export function mountInvoiceLookupApi(app: Hono, deps: TillApiDeps, log: Logger,
   app.get("/api/invoices/lookup", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const q = c.req.query("q")?.trim() ?? "";
-      if (q === "" || q.length > 100)
+      const q = c.req.query("q") ?? "";
+      const typed = q.trim().length;
+      if (typed === 0 || typed > 100)
         throw new AppError("management.request_invalid", { field: "q" });
       const invoices = await withTransaction(deps.db, async (tx) =>
         lookUpInvoices(

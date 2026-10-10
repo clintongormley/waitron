@@ -57,6 +57,11 @@ function optionalText(raw: string | undefined, field: string): string | undefine
   return trimmed === "" ? undefined : trimmed;
 }
 
+/** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
+function optionalSearch(raw: string | undefined): string | undefined {
+  return optionalText(raw, "q") === undefined ? undefined : raw;
+}
+
 /** A ranked cursor belongs to a word search, and a word search takes only a ranked cursor. */
 function requireCursor(
   raw: string | undefined,
@@ -92,7 +97,7 @@ export function parseOrdersQuery(query: (name: string) => string | undefined): {
   const limit = query("limit");
   if (limit !== undefined && (!PAGE_SIZE.test(limit) || Number(limit) > MAX_ORDER_PAGE_SIZE))
     throw invalid("limit");
-  const search = optionalText(query("q"), "q");
+  const search = optionalSearch(query("q"));
   return {
     dates,
     filter: {

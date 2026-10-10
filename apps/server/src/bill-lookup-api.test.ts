@@ -183,8 +183,8 @@ describe("till bill lookup", () => {
   });
 
   it("finds a debt by its order number and orders results newest first", async () => {
-    const first = await namedDebt("Number search first");
-    const second = await namedDebt("Number search second");
+    const first = await namedDebt("Number search one");
+    const second = await namedDebt("Number search two");
     const [row] = venue.db.all<{ orderNumber: number }>(
       sql`select order_number as orderNumber from working_orders where id = ${second.tabId}`,
     );
@@ -195,6 +195,51 @@ describe("till bill lookup", () => {
     expect(names.bills.map((bill) => bill.workingOrderId).indexOf(second.tabId)).toBeLessThan(
       names.bills.map((bill) => bill.workingOrderId).indexOf(first.tabId),
     );
+  });
+
+  it("finds a debt by every word in any order, ignoring accents and capitals", async () => {
+    const party = await namedDebt("José García");
+    const ids = (q: string) =>
+      lookUp(q).then((answer) =>
+        (answer.json as { bills: { workingOrderId: string }[] }).bills.map(
+          (bill) => bill.workingOrderId,
+        ),
+      );
+    expect(await ids("garcia jose")).toContain(party.tabId);
+    expect(await ids("GARCÍA")).toContain(party.tabId);
+    expect(await ids("garcia pedro")).not.toContain(party.tabId);
+  });
+
+  it("lists the closest match first, ahead of a newer looser one", async () => {
+    const closest = await namedDebt("Ranked tonic");
+    const looser = await namedDebt("Ranked tonicwater");
+    const answer = (await lookUp("ranked tonic")).json as { bills: { workingOrderId: string }[] };
+    expect(answer.bills.map((bill) => bill.workingOrderId)).toEqual([closest.tabId, looser.tabId]);
+  });
+
+  it("finds nothing for a search of only punctuation", async () => {
+    await namedDebt("Smith & Sons");
+    const answer = await lookUp("&");
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ bills: [] });
+  });
+
+  it("keeps a trailing space, so it finishes the last word", async () => {
+    const gin = await namedDebt("Gin");
+    const ginger = await namedDebt("Ginger Club");
+    const ids = ((await lookUp("gin ")).json as { bills: { workingOrderId: string }[] }).bills.map(
+      (bill) => bill.workingOrderId,
+    );
+    expect(ids).toContain(gin.tabId);
+    expect(ids).not.toContain(ginger.tabId);
+    const typing = (
+      (await lookUp("gin")).json as { bills: { workingOrderId: string }[] }
+    ).bills.map((bill) => bill.workingOrderId);
+    expect(typing).toEqual(expect.arrayContaining([gin.tabId, ginger.tabId]));
+    expect(await lookUp(`${"x".repeat(100)}  `)).toMatchObject({
+      status: 200,
+      json: { bills: [] },
+    });
   });
 
   it("fills the twenty results from collectible bills after excluding a full credit", async () => {
