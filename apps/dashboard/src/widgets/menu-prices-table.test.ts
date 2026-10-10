@@ -399,20 +399,17 @@ it("finds a product by its name", async () => {
   expect(shown(el)).toEqual(["mi-lemonade"]);
 });
 
-it.each(["Cerveza", "Bebidas / Cerveza", "Bebidas › Cerveza", "Bebidas > Cerveza"])(
-  "does not find a product by its main category, typed as %s",
-  async (term) => {
-    const el = await mount();
-    await search(el, "lager");
-    expect(shown(el)).toEqual(["mi-lager"]);
-    await search(el, term);
-    expect(shown(el)).toEqual([]);
-  },
-);
-
-it("does not find a product by text that runs from one spelling of its category's path into the next", async () => {
+it.each([
+  "Cerveza",
+  "Bebidas / Cerveza",
+  "Bebidas › Cerveza",
+  "Bebidas > Cerveza",
+  "Cerveza Bebidas",
+])("does not find a product by its main category, typed as %s", async (term) => {
   const el = await mount();
-  await search(el, "Cerveza Bebidas");
+  await search(el, "lager");
+  expect(shown(el)).toEqual(["mi-lager"]);
+  await search(el, term);
   expect(shown(el)).toEqual([]);
 });
 
@@ -424,6 +421,8 @@ it("does not find a product whose main category is missing, or that has none, by
     ],
   });
   expect(column(el, "category")).toEqual([t("categories.none"), t("editor.missing_choice")]);
+  await search(el, "lager");
+  expect(shown(el)).toEqual(["mi-lager"]);
   await search(el, t("editor.missing_choice"));
   expect(shown(el)).toEqual([]);
   await search(el, t("categories.none"));

@@ -85,7 +85,6 @@ it("keeps decimal differences smaller than floating-point precision in the name 
 
 it("names a category by the path of names down to it, joined by the shared separator or the one it is given", () => {
   expect(categoryPath(child, [food, child])).toBe("Food › Sandwiches");
-  expect(categoryPath(child, [food, child], " / ")).toBe("Food / Sandwiches");
   expect(categoryPath(food, [food, child])).toBe("Food");
 });
 

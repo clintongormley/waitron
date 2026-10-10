@@ -230,9 +230,7 @@ describe("product-list", () => {
     ]) {
       expect(await searchFor(other), other).toEqual([]);
     }
-    const byFolder = await searchFor("bebidas");
-    expect(byFolder).toContain("folder:beb");
-    expect(byFolder).not.toContain("agua");
+    expect(await searchFor("bebidas")).toEqual(["folder:beb"]);
   });
 
   it("names a switched-off station with no replacement instead of nowhere", async () => {

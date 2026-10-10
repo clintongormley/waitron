@@ -3109,6 +3109,16 @@ describe("search and the Available filter", () => {
     ]);
   });
 
+  it("keeps the reorder grips drawn while a search of only spaces is typed", async () => {
+    const el = await mount();
+    await search(el, "   ");
+    expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
+      "drag-m-burger",
+      "drag-m-drinks",
+      "drag-m-fav",
+    ]);
+  });
+
   it("ends a drag held when a search of only punctuation is typed, sending no move once it is cleared", async () => {
     const el = await mount();
     const moves = listen(el, "wt-member-move");

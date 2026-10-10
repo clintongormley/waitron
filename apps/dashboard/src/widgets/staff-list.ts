@@ -9,6 +9,8 @@ import { currentLocale, t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
 
+const personKey = (person: PersonSummary): string => person.personId;
+
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
@@ -32,10 +34,11 @@ export class StaffList extends LitElement {
 
   #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<PersonSummary>[] };
 
-  /** The same array while the language is unchanged, so a typed search does not make the table fold
-   * every row again. Cells read `currentPersonId` when drawn, so it needs no place here. */
+  /** The same array while the language and signed-in person are unchanged, so a typed search does
+   * not make the table fold every row again. The table redraws its cells only when one of its own
+   * properties changes, so `currentPersonId`, which a cell reads, has to be one of the inputs. */
   #columns(): DataTableColumn<PersonSummary>[] {
-    const inputs = [currentLocale()];
+    const inputs = [currentLocale(), this.currentPersonId];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
     const columns: DataTableColumn<PersonSummary>[] = [
@@ -156,7 +159,7 @@ export class StaffList extends LitElement {
         .rows=${this.people}
         .searchTerm=${this.searchTerm}
         .columns=${this.#columns()}
-        .rowKey=${(person: PersonSummary) => person.personId}
+        .rowKey=${personKey}
         .emptyMessage=${this.emptyMessage ?? t("staff.empty")}
         ><slot name="empty-action" slot="empty-action"></slot
       ></wt-data-table>

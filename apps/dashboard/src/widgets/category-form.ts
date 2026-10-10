@@ -24,12 +24,11 @@ export function categoryAncestors(
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
-  separator = PATH_SEPARATOR,
 ): string {
   return categoryAncestors(category, categories)
     .map(({ name }) => name)
     .reverse()
-    .join(separator);
+    .join(PATH_SEPARATOR);
 }
 
 export function categoryWithDescendants(
