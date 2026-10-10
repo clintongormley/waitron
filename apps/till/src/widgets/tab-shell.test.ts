@@ -692,7 +692,7 @@ describe("till-tab-shell at phone width", () => {
     });
   });
 
-  it("leaves the wide header as it was: brand, and every button straight in the session row", async () => {
+  it("draws the wide header whole: brand, and every button straight in the session row in priority order", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
       expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
@@ -876,7 +876,6 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
-  /** The demo counter's bar, as the owner saw it in A395's screenshots. */
   const demoCounter: Partial<TillTabShell> = {
     tabs,
     activeTabKey: "counter",
@@ -1114,31 +1113,28 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
-  it.each([[1024, "in More"]] as const)(
-    "keeps an open More open, and the same status region, when the transfer count changes at %i wide (transfers %s)",
-    async (width, where) => {
-      await withLocale("en-GB", () =>
-        atViewport(width, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
-          await settle(el);
-          const menu = menuOf(el)!;
-          expect(menu.querySelector("[data-open-transfers]") !== null).toBe(where === "in More");
-          const [status] = statuses(el);
-          await userEvent.click(triggerOf(el));
-          await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
-          el.transferCount = 3;
-          await settle(el);
-          expect(menuOf(el)).toBe(menu);
-          expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
-          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-          expect(statuses(el)).toEqual([status]);
-          expect(status!.textContent).toContain(
-            t("department_transfer.open").replace("{count}", "3"),
-          );
-        }),
-      );
-    },
-  );
+  it("keeps an open More open, and the same status region, when the transfer count changes while the transfers are in More", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1024, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        expect(menu.querySelector("[data-open-transfers]")).not.toBeNull();
+        const [status] = statuses(el);
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        el.transferCount = 3;
+        await settle(el);
+        expect(menuOf(el)).toBe(menu);
+        expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+        expect(statuses(el)).toEqual([status]);
+        expect(status!.textContent).toContain(
+          t("department_transfer.open").replace("{count}", "3"),
+        );
+      }),
+    );
+  });
 
   it("waits for an open More to close before giving items back to a wider bar", async () => {
     await withLocale("en-GB", () =>
