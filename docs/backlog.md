@@ -4910,9 +4910,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   ("This device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted
   printer has its own "That printer no longer exists". Owner to choose whether readers get one too.
   Left open by A435 step 3 (#1520), whose plan kept the existing sentence.
-- **Unchecked: pairing a new reader can undo the SumUp registration it just made** when a later step
-  of the pair route (`apps/server/src/payments-api.ts`) fails, calling SumUp directly, and an adoption
-  running at the same time is not told. Believed to predate A435 step 3 (#1520); not reproduced.
+- **Unchecked: pairing a new reader can undo the SumUp registration it just made** when SumUp is
+  disconnected during the add (the "Disconnected mid-add" branch of the add-reader route,
+  `apps/server/src/payments-api.ts`), and an adoption running at the same time is not told.
+  Believed to predate A435 step 3 (#1520); not reproduced.
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
