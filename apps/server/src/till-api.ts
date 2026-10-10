@@ -12,7 +12,7 @@ import {
   thousandthsToDecimal,
   tillProviderForReader,
 } from "@waitron/shared";
-import type { FloorAnnotator } from "@waitron/module";
+import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
   locations,
   newId,
@@ -172,6 +172,7 @@ import {
 import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
+import { ensureToday } from "./floor-today-store.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -228,6 +229,7 @@ export interface TillApiDeps {
   clock: TrustedClock;
   cfg: TillConfig;
   floorAnnotators?: readonly FloorAnnotator[];
+  tableRemovals?: readonly TableRemoval[];
   secureCookies: boolean;
   /**
    * Only ever the practice-mode local simulator; a real card sale routes through {@link pool} by
@@ -1016,6 +1018,8 @@ function refuseKitchenSignIn(device: DeviceBinding): void {
 
 /** Mount the till routes with the shared error boundary. */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+  const catchUpFloor = (tx: Transaction) =>
+    ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
   const simulator = deps.cardProvider;
   if (simulator instanceof SimulatorPaymentProvider) {
@@ -2194,6 +2198,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
+        await catchUpFloor(tx);
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         return (await listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? [])).filter(
           (table) => inScope(scope, table.zoneId),
@@ -2256,6 +2261,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ guestCount?: unknown }>(c);
       const guestCount = requireGuestCount(body.guestCount);
       const result = await withTransaction(deps.db, async (tx) => {
+        await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         return seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
       });
@@ -2274,6 +2280,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         "expectedPartyRevision",
       );
       const result = await withTransaction(deps.db, async (tx) => {
+        await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return finishTable(tx, { partyId, expectedPartyRevision, operatorId: personId });
       });
@@ -2345,6 +2352,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const command = tableActionCommand(personId, body);
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
+          await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
           return act(tx, sendCfg, partyId, tableId, command);
         });
@@ -2374,6 +2382,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       );
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
+        await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,

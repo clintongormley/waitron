@@ -61,6 +61,7 @@ import {
   ALL_MODULE_PERMISSIONS,
   enabledAlertSources,
   enabledFloorAnnotators,
+  enabledTableRemovals,
   VENUE_SERVICE,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
@@ -1421,6 +1422,7 @@ async function bootServer(
       cfg: till,
       // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
+      tableRemovals: enabledTableRemovals(setsToMigrate),
       secureCookies,
       cardProvider,
       pool: cardPool,
