@@ -1011,6 +1011,44 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "Log out"],
+    ["es-ES", "Salir"],
+  ] as const)(
+    "labels Log out %s's short word, on the bar and inside More",
+    async (locale, label) => {
+      await withLocale(locale, async () => {
+        await atViewport(ROOMY_WIDTH, async () => {
+          const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          expect(menuOf(el)).toBeNull();
+          const onBar = el.shadowRoot!.querySelector<HTMLElement>("header .session > .logout")!;
+          expect(onBar.textContent!.trim()).toBe(label);
+          host.remove();
+        });
+        await atViewport(390, async () => {
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          const inMenu = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
+          expect(inMenu.textContent!.trim()).toBe(label);
+        });
+      });
+    },
+  );
+
+  it("keeps Find a bill, Pass and Kitchen on the demo counter's Spanish bar at 800 wide", async () => {
+    await withLocale("es-ES", () =>
+      atViewport(800, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", demoCounter);
+        await settle(el);
+        expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
+        const moved = inMore(el);
+        for (const key of ["find-bill", "expo", "station"]) expect(moved).not.toContain(key);
+        expectOneRow(el);
+      }),
+    );
+  });
+
   it("keeps More in the bar's order, showing only the items that left", async () => {
     await atViewport(1024, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
