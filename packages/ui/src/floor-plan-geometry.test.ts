@@ -11,7 +11,6 @@ import {
   fitScale,
   gridExtent,
   rotatedRect,
-  rotationFromAngle,
   showsName,
   snapToSquare,
   type PlanPlacement,
@@ -42,16 +41,6 @@ describe("floor plan geometry", () => {
     expect(clampToGrid(12.4)).toBe(12);
     expect(clampToGrid(0)).toBe(0);
     expect(clampToGrid(999)).toBe(999);
-  });
-
-  it("turns an angle into a 15° step from 0 to 345", () => {
-    expect(rotationFromAngle(7)).toBe(0);
-    expect(rotationFromAngle(8)).toBe(15);
-    expect(rotationFromAngle(90)).toBe(90);
-    expect(rotationFromAngle(-10)).toBe(345);
-    expect(rotationFromAngle(352)).toBe(345);
-    expect(rotationFromAngle(353)).toBe(0);
-    expect(rotationFromAngle(720)).toBe(0);
   });
 
   it("leaves an unturned table's box as it is", () => {
@@ -163,6 +152,27 @@ describe("floor plan geometry", () => {
     expect(firstFreeSpot([table(0, 20, 8, 8)])).toEqual({ x: 0, y: 0 });
   });
 
+  it("moves across to free columns when the band's rows run out of the coordinate range", () => {
+    const column = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 999].map((y) =>
+      table(0, y, 99, 99),
+    );
+    expect(firstFreeSpot(column)).toEqual({ x: 100, y: 0 });
+  });
+
+  it("only offers a spot where the whole box stays inside the coordinate range", () => {
+    expect(firstFreeSpot([table(0, 0, 991, 8)], { width: 8, height: 8 }, 1000)).toEqual({
+      x: 0,
+      y: 9,
+    });
+  });
+
+  it("answers the top-left corner when nothing inside the range is free", () => {
+    const full = Array.from({ length: 11 }, (_, i) =>
+      Array.from({ length: 11 }, (_, j) => table(i * 99, j * 99, 99, 99)),
+    ).flat();
+    expect(firstFreeSpot(full)).toEqual({ x: 0, y: 0 });
+  });
+
   it("shows a name at 28 px and hides it below", () => {
     expect(showsName({ width: 2, height: 2 }, 14)).toBe(true);
     expect(showsName({ width: 2, height: 2 }, 13.9)).toBe(false);
@@ -198,5 +208,12 @@ describe("floor plan geometry", () => {
       automaticNames("Bar", ["Bar  4", "Bar 3a", "Bar 2", "xBar 9", "Bar 7 ", "Bar "], 1),
     ).toEqual(["Bar 3"]);
     expect(automaticNames("", [" 9", "9 ", "3"], 1)).toEqual(["4"]);
+  });
+
+  it("never repeats a name past the largest whole number JavaScript counts exactly", () => {
+    const existing = ["T 9007199254740992"];
+    const names = automaticNames("T", existing, 2);
+    expect(names).toEqual(["T 9007199254740993", "T 9007199254740994"]);
+    expect(new Set([...existing, ...names]).size).toBe(3);
   });
 });

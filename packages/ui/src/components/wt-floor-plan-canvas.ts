@@ -9,10 +9,11 @@ import {
   clampToGrid,
   gridExtent,
   rotatedRect,
-  rotationFromAngle,
   showsName,
   snapToSquare,
 } from "../floor-plan-geometry.js";
+import { ROTATION_STEP, snapRotation } from "../floor.js";
+import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import { registerIcons } from "./wt-icon.js";
 
 registerIcons({
@@ -58,8 +59,6 @@ const DEFAULT_COPY: FloorPlanCanvasCopy = {
 
 const px = (squares: number): string => `${squares * GRID_SQUARE_PX}px`;
 
-const ROTATE_KEY_STEP = 15;
-
 /** How far to scroll so `start..end` lies inside `from..to`, keeping `start` when it cannot fit. */
 function nearest(start: number, end: number, from: number, to: number): number {
   if (start < from) return start - from;
@@ -96,7 +95,7 @@ interface Draft {
  */
 @customElement("wt-floor-plan-canvas")
 export class WtFloorPlanCanvas extends LitElement {
-  static override shadowRootOptions = { ...LitElement.shadowRootOptions, delegatesFocus: true };
+  static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [
     baseStyles,
@@ -438,11 +437,11 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #onHandleKey(e: KeyboardEvent, t: PlanCanvasTable): void {
     const step =
-      e.key === "ArrowRight" ? ROTATE_KEY_STEP : e.key === "ArrowLeft" ? -ROTATE_KEY_STEP : 0;
+      e.key === "ArrowRight" ? ROTATION_STEP : e.key === "ArrowLeft" ? -ROTATION_STEP : 0;
     if (step === 0) return;
     e.preventDefault();
     e.stopPropagation();
-    this.#rotate(t.key, rotationFromAngle(t.placement.rotation + step));
+    this.#rotate(t.key, snapRotation(t.placement.rotation + step));
   }
 
   #onPointerDown(e: PointerEvent, t: PlanCanvasTable, kind: Drag["kind"]): void {
@@ -476,7 +475,7 @@ export class WtFloorPlanCanvas extends LitElement {
       return;
     }
     const turn = this.#angleAround(p, e.clientX, e.clientY) - drag.startAngle;
-    const rotation = rotationFromAngle(p.rotation + turn);
+    const rotation = snapRotation(p.rotation + turn);
     this.draft = { key: drag.table.key, placement: { ...p, rotation } };
   };
 

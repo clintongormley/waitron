@@ -92,7 +92,6 @@ export {
   fitScale,
   gridExtent,
   rotatedRect,
-  rotationFromAngle,
   showsName,
   snapToSquare,
 } from "./floor-plan-geometry.js";

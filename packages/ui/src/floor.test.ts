@@ -62,10 +62,15 @@ test("snapRotation snaps to the nearest 15 degrees and wraps at 360", () => {
   expect(snapRotation(22)).toBe(15);
   expect(snapRotation(360)).toBe(0);
   expect(snapRotation(375)).toBe(15);
+  expect(snapRotation(90)).toBe(90);
+  expect(snapRotation(352)).toBe(345);
+  expect(snapRotation(353)).toBe(0);
+  expect(snapRotation(720)).toBe(0);
 });
 
 test("snapRotation normalizes a negative rotation into the [0, 360) contract", () => {
   expect(snapRotation(-8)).toBe(345);
+  expect(snapRotation(-10)).toBe(345);
   expect(snapRotation(-7)).toBe(0);
   expect(snapRotation(-15)).toBe(345);
   expect(snapRotation(-360)).toBe(0);

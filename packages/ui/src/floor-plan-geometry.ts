@@ -3,7 +3,6 @@ export const NEW_TABLE_SIZE = 8;
 export const NAME_MIN_PX = 28;
 
 const GRID_MAX = 999;
-const ROTATION_STEP = 15;
 const CROP_MARGIN = 2;
 const EXTENT_MARGIN = 8;
 const FREE_SPOT_COLUMNS = 40;
@@ -35,11 +34,6 @@ export function snapToSquare(px: number, squarePx: number = GRID_SQUARE_PX): num
 
 export function clampToGrid(value: number): number {
   return Math.min(GRID_MAX, Math.max(0, Math.round(value)));
-}
-
-export function rotationFromAngle(degrees: number): number {
-  const stepped = Math.round(degrees / ROTATION_STEP) * ROTATION_STEP;
-  return ((stepped % 360) + 360) % 360;
 }
 
 export function rotatedRect(p: PlanPlacement): PlanRect {
@@ -121,6 +115,11 @@ function overlaps(a: PlanRect, b: PlanRect): boolean {
   );
 }
 
+/**
+ * The first spot, row by row, where a `size` box keeps a square's gap from every table and lies
+ * wholly inside the coordinate range. Rows are searched `columns` wide (or as wide as the tables
+ * reach) before the rest of the range; a plan with no such spot answers (0, 0).
+ */
 export function firstFreeSpot(
   placed: readonly PlanPlacement[],
   size: { width: number; height: number } = { width: NEW_TABLE_SIZE, height: NEW_TABLE_SIZE },
@@ -128,14 +127,31 @@ export function firstFreeSpot(
 ): { x: number; y: number } {
   const boxes = placed.map(rotatedRect);
   const box = bounds(placed);
-  const lastX = Math.max(0, Math.max(columns, Math.ceil(box ? box.x + box.width : 0)) - size.width);
-  // Terminates: a row below every table's box is free at x = 0.
-  for (let y = 0; ; y++) {
-    for (let x = 0; x <= lastX; x++) {
+  const lastX = GRID_MAX - size.width;
+  const lastY = GRID_MAX - size.height;
+  const band = Math.max(0, Math.max(columns, Math.ceil(box ? box.x + box.width : 0)) - size.width);
+  return (
+    scanFree(boxes, size, Math.min(band, lastX), lastY) ??
+    scanFree(boxes, size, lastX, lastY) ?? { x: 0, y: 0 }
+  );
+}
+
+function scanFree(
+  boxes: readonly PlanRect[],
+  size: { width: number; height: number },
+  lastX: number,
+  lastY: number,
+): { x: number; y: number } | null {
+  for (let y = 0; y <= lastY; y++) {
+    for (let x = 0; x <= lastX;) {
       const grown = { x: x - 1, y: y - 1, width: size.width + 2, height: size.height + 2 };
-      if (!boxes.some((b) => overlaps(grown, b))) return { x, y };
+      const hit = boxes.find((b) => overlaps(grown, b));
+      if (hit === undefined) return { x, y };
+      // Every x short of a square's gap past the hit box's right edge still overlaps it.
+      x = Math.max(x + 1, Math.ceil(hit.x + hit.width + 1 - OVERLAP_EPSILON));
     }
   }
+  return null;
 }
 
 export function showsName(p: Pick<PlanPlacement, "width" | "height">, squarePx: number): boolean {
@@ -153,11 +169,12 @@ export function automaticNames(
 ): string[] {
   const trimmed = prefix.trim();
   const lead = trimmed === "" ? "" : `${trimmed} `;
-  let highest = 0;
+  // BigInt, because past Number.MAX_SAFE_INTEGER adding one can give back the same number.
+  let highest = 0n;
   for (const label of existing) {
     if (!label.startsWith(lead)) continue;
     const rest = label.slice(lead.length);
-    if (/^\d+$/.test(rest)) highest = Math.max(highest, Number(rest));
+    if (/^\d+$/.test(rest) && BigInt(rest) > highest) highest = BigInt(rest);
   }
-  return Array.from({ length: count }, (_, i) => `${lead}${highest + i + 1}`);
+  return Array.from({ length: count }, (_, i) => `${lead}${highest + BigInt(i + 1)}`);
 }
