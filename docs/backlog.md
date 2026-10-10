@@ -1867,8 +1867,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   trigger accepts an empty label. Left open by A429 slice 1 (#1493).
   [Detail](backlog/till.md#small-floor-plan-refusals-still-missing)
 
-- **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1
-  lands).** [Detail](backlog/till.md#a414--device-screens-on-a-phone)
+- **A phone's Chrome drew a white page for the box (2026-10-08; watch, not a job yet).** Quitting
+  and reopening Chrome fixed it; what to capture if it recurs is in the detail.
+  [Detail](backlog/till.md#a-phones-chrome-drew-a-white-page-for-the-box-watch-not-a-job-yet)
 
 - **A436 — a kitchen display with someone signed in, logged out only after a long idle time** (owner,
   2026-10-08, answering the A366 slice 5 plan; open). The owner: "kitchen

@@ -3,7 +3,16 @@ import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import {
+  LitElement,
+  type PropertyValues,
+  type TemplateResult,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
+import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -394,6 +403,12 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-4);
         min-height: 100%;
         padding: var(--wt-space-4);
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .screen {
+          padding-inline: 0;
+        }
       }
 
       .head {

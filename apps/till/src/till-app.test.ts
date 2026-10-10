@@ -1320,24 +1320,30 @@ describe("till-app", () => {
     });
     const { el } = await mountWidget<TillApp>("till-app", { api });
     await flush(el);
-    expect(
-      el.shadowRoot!.querySelector("wt-demo-bar")?.shadowRoot!.querySelector("strong")?.textContent,
-    ).toBe("Preparación");
+    expect(el.shadowRoot!.querySelector("wt-demo-bar")).toBeNull();
+    expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
   });
 
-  it("shows the shared navigation on the device setup screen in preparation mode", async () => {
+  it("shows no demo navigation on the device in preparation mode", async () => {
     const api = stubApi({
       getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
     });
     const { el } = await mountWidget<TillApp>("till-app", { api });
     await flush(el);
-    const bar = el.shadowRoot!.querySelector("wt-demo-bar");
-    expect(bar).not.toBeNull();
-    expect(modeIndicator(el)).toBeNull();
-    expect(bar!.shadowRoot!.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe(
-      "Dispositivo",
-    );
-    expect(bar!.shadowRoot!.querySelector('a[href="/manage"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-demo-bar")).toBeNull();
+    expect(el.shadowRoot!.querySelector('a[href="/manage"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('a[href="/manage/email"]')).toBeNull();
+    expect(modeIndicator(el)).not.toBeNull();
+  });
+
+  it("shows the Demo label without a Demo bar", async () => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "demo" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-demo-bar")).toBeNull();
+    expect(modeIndicator(el)?.textContent?.trim()).toBe("Demostración");
   });
 
   it("keeps the Live label without a Demo bar", async () => {

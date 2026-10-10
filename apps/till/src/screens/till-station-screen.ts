@@ -1,4 +1,13 @@
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import {
+  LitElement,
+  type PropertyValues,
+  type TemplateResult,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
+import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
@@ -97,6 +106,12 @@ export class TillStationScreen extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-4);
         padding: var(--wt-space-4);
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .screen {
+          padding-inline: 0;
+        }
       }
 
       .head {

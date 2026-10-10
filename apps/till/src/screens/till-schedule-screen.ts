@@ -11,6 +11,7 @@ import {
   baseStyles,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
+import { screenCardStyles } from "../widgets/screen-card-styles.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -72,6 +73,7 @@ function wallClock(iso: string, offsetMinutes: number): { date: string; time: st
 export class TillScheduleScreen extends LitElement {
   static override styles = [
     baseStyles,
+    screenCardStyles,
     css`
       :host {
         display: block;
@@ -371,7 +373,7 @@ export class TillScheduleScreen extends LitElement {
 
   override render() {
     return html`
-      <wt-card class="screen">
+      <div class="screen">
         <header class="head">
           <h1 class="title">${t("schedule.title")}</h1>
           <wt-button class="back" variant="secondary" @click=${() => this.#back()}>
@@ -384,7 +386,7 @@ export class TillScheduleScreen extends LitElement {
             : nothing
         }
         ${this.#body()}
-      </wt-card>
+      </div>
     `;
   }
 

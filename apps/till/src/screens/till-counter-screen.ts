@@ -121,6 +121,10 @@ export class TillCounterScreen extends LitElement {
         .screen {
           height: auto;
         }
+
+        .body.grid-body {
+          padding-inline: 0;
+        }
       }
 
       .service-zone {

@@ -2384,8 +2384,9 @@ check); design-system.md names both primitives and the editor; the backlog's A42
 
 ## Slice 3 — the till's map (spec §5)
 
-Branch `feat/floor-plan-till-map`, after slice 2. Coordinate with A182 (canvases retired) and
-A414 (device screens on a phone) if either has started.
+Branch `feat/floor-plan-till-map`, after slice 2. Coordinate with A182 (canvases retired) if it has started.
+The floor screen's `.screen` drops its side padding at phone width (A414);
+`apps/till/src/screens/device-screens.phone-margin.test.ts` holds it, so keep that selector or move the case.
 
 - **Task 3.1: Gestures** — `packages/ui/src/gestures.ts`: one pointer state machine telling tap,
   double-tap, long-press (500 ms, under 8 px of movement), long-press-then-drag and drag-on-empty
