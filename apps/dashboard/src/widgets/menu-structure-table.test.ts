@@ -4197,3 +4197,20 @@ it("A461 dragging a selected repeated copy carries visible members once", async 
   pointer(from, "pointerup", nameAt(el, "m-empty"));
   expect(batches).toEqual([{ keys: ["m-fav/m-fav-drinks/m-lager", "m-burger"], to: ["m-empty"] }]);
 });
+
+it("A461 reordering repeated parents keeps the existing member tick", async () => {
+  const el = await mount({ selecting: true, search: "lager", selected: ["m-drinks/m-lager"] });
+  el.nodes = [favourites(), drinksNode("m-drinks")];
+  await settle(el);
+  const checks = all<HTMLInputElement>(
+    el,
+    '[data-test="select-m-drinks/m-lager"], [data-test="select-m-fav/m-fav-drinks/m-lager"]',
+  );
+  expect(checks.map((box) => box.checked)).toEqual([true, true]);
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+  });
+  checks[0]!.click();
+  await settle(el);
+  expect(el.selected).toEqual([]);
+});

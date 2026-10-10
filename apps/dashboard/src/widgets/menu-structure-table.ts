@@ -985,7 +985,11 @@ export class MenuStructureTable extends LitElement {
   #selectionKeys = new Map<string, string>();
 
   #selectionKey(key: string): string {
-    return this.#selectionKeys.get(key) ?? key;
+    const identity = this.#selectionKeys.get(key);
+    if (identity === undefined) return key;
+    return (
+      this.selected.find((selected) => this.#selectionKeys.get(selected) === identity) ?? identity
+    );
   }
 
   /** The same array while what the rows are built from is unchanged, so a typed search does not

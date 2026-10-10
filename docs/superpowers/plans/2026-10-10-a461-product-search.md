@@ -81,7 +81,8 @@ Show every existing placement without schema or route changes. Products has one 
 product, so it has one flat result. Menu Structure has one result per member path. Repeated
 views of the same list/member share one tick and one request entry; distinct memberships remain
 separate choices, so moving or removing one does not change another placement. The widget maps
-those repeated views to the first owned path for selection and maps a drag back to a visible path.
+those repeated views to the existing selected path, or the first owned path when unticked,
+and maps a drag back to a visible path.
 The shared table's optional `rowSelectionKey` separates this identity from the display row key.
 A product in more than one category is separate backlog work, as the owner requested.
 
