@@ -380,22 +380,22 @@ describe("what a kitchen display's lever refuses", () => {
     expect((await groupRow(held.groupId)).state).toBe("held");
   });
 
-  it("refuses a kitchen display running a station screen", async () => {
+  it("refuses a kitchen display running a station screen with 400 on Fire, Ready and Away", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
     const grill = await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Grill" }));
     const station = await f.device("Grill screen", f.runner, { stationId: grill.id });
-    for (const path of [
-      coursePath(held.tabId, f.mains, "fire"),
-      groupPath(held.partyId, held.groupId, "fire"),
-    ]) {
+    for (const path of (["fire", "ready", "away"] as const).flatMap((verb) => [
+      coursePath(held.tabId, f.mains, verb),
+      groupPath(held.partyId, held.groupId, verb),
+    ])) {
       const answer = await send(f.app, station.cookie, path, {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(f.v, held.partyId),
       });
       expect({ path, status: answer.status, error: answer.body.error }).toEqual({
         path,
-        status: 403,
+        status: 400,
         error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
       });
     }

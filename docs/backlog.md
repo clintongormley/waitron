@@ -1619,6 +1619,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   follows has settled.
   [Detail](backlog/kitchen.md#prep-stations-settings-cell-saves-have-the-shape-a261-4-changed-for-routing-cells)
 
+- **Prep stations' Settings tab's bottom message says "Fix the fields marked above." where every
+  other form says "Correct the highlighted fields to continue."** (`prep.settings_fix_fields`,
+  `packages/venue-service/src/dashboard/strings.ts`, against `form.fix_fields` in
+  `apps/dashboard/src/i18n/strings.ts`). Left open by A366 slice 5 Part B (#1502). The owner
+  chose the shared message on 2026-10-10; queued as A465.
+
 - **A routing choice a refresh drops names one reason, chosen when it is dropped** — left open by
   A375 (#1382, its review, 2026-10-07): if its zone and its category both go and only the zone comes
   back, the message still names the zone; and only a returning zone or product has a test that the
