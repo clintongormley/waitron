@@ -589,8 +589,9 @@ operator's session is still open on that device, then the device is still active
 or it is refused `session.required` or `device.unauthorized` (`assertStillSignedIn`,
 `apps/server/src/till-session.ts`, called first in `beginBillPayment`,
 `apps/server/src/bill-payments.ts`; cases in `apps/server/src/bill-payments.signed-in.test.ts`).
-The counter sale, `/api/pay`, collecting a placed order and refunds do not yet
-(`docs/backlog/payments.md`). Enabling
+The counter sale, `/api/pay` and collecting a placed order do not yet, and a bill refund re-checks
+only that its session is still open (`authorize`, `packages/identity/src/authorize.ts`, refusing
+`session.not_open`; `docs/backlog/payments.md`). Enabling
 still ends any session open on the device, a second line for a device turned off outside the
 Disable route. A
 knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,

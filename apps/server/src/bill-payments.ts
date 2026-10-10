@@ -183,7 +183,8 @@ export interface BillBalance {
 
 export interface BillPaymentResult {
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending) or
-   * `network_unavailable` (failed, nothing charged). A retry answers the state it finds. */
+   * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
+   * till (the first sign-in or a later one) answers the state it finds. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;
@@ -1243,8 +1244,8 @@ const REFUSED_START: ReadonlySet<string> = new Set([
  *    offline fails it; any other answer leaves it pending, for the loop to settle from the
  *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
  *
- * While the operator is still signed in, a retry of a payment already taken answers its state and
- * never collects again.
+ * A retry of a payment already taken, whose own sign-in is open on an active till (the first sign-in
+ * or a later one), answers its state and never collects again.
  */
 export async function takeReaderBillPayment(
   deps: ReaderBillPaymentDeps,

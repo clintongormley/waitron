@@ -678,12 +678,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const id = c.req.param("id");
       // A malformed id names no device, exactly as an absent one does.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      // Revoke flips `active = false`, NEVER a hard DELETE: a device is a durable identity.
-      await gated(sessionId, async (tx) => {
-        if (!(await disableDevice(tx, id))) {
-          throw new AppError("device.not_found", { deviceId: id });
-        }
-      });
+      await gated(sessionId, (tx) => disableDevice(tx, id));
       return c.body(null, 204);
     }),
   );

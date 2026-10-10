@@ -185,7 +185,7 @@ session left open, or after the session was ended) printed:
 
 The first three take only the operator's person id, not the session id, so they have nothing to
 check a sign-out against; the fix is A471's: pass `{ personId, sessionId }` and call
-`assertStillSignedIn` first in the write's transaction. Found by A471.
+`assertStillSignedIn` first in the write's transaction. Left open by A471.
 
 ## Decisions and deliberate limits
 

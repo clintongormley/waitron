@@ -3030,7 +3030,7 @@ describe("a Disable committed after the session check", () => {
     racing.use("/api/working-orders/:id/payments", async (c, next) => {
       const parse = c.req.json.bind(c.req);
       c.req.json = async () => {
-        expect(await inTx((tx) => disableDevice(tx, device.deviceId))).toBe(true);
+        await inTx((tx) => disableDevice(tx, device.deviceId));
         disabled = true;
         return parse();
       };

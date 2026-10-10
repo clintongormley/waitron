@@ -46,8 +46,7 @@ import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import "./errors.js";
 
-// Each case pays from a till of its own, with its own printer, because most of them switch that
-// till off.
+// The retained fixture runs synchronous work across cases; let the venue watchdog tick between them.
 afterEach(() => yieldTurn());
 
 const LOCALE = "es-ES";
@@ -225,7 +224,7 @@ function wholeBill(method: "cash" | "card"): BillPaymentRequest {
 }
 
 async function disable(deviceId: string): Promise<void> {
-  expect(await inTx((tx) => disableDevice(tx, deviceId))).toBe(true);
+  await inTx((tx) => disableDevice(tx, deviceId));
 }
 
 /** Switched off with no Disable: its sessions stay open. */
@@ -433,5 +432,67 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const after = await writes(billId, till);
     expect(after.billPayments).toMatchObject([{ state: "received" }]);
     expect(after.sales).toHaveLength(1);
+  });
+
+  /** Disables the till, which ends `till`'s sign-in, switches it back on and signs OPERATOR in again. */
+  async function signBackIn(till: Till): Promise<Till["operator"]> {
+    await disable(till.cfg.origin.deviceId);
+    await suite.db
+      .update(devices)
+      .set({ active: true })
+      .where(eq(devices.id, till.cfg.origin.deviceId));
+    const sessionId = await openTillSession(suite.db, {
+      deviceId: till.cfg.origin.deviceId,
+      personId: OPERATOR,
+    });
+    return { personId: OPERATOR, sessionId };
+  }
+
+  it("answers a cash retry under a new sign-in after a Disable with the first payment, writing nothing", async () => {
+    const till = await freshTill();
+    const billId = await bill();
+    const request = wholeBill("cash");
+    const first = await takeBillPayment(fiscal(), till.cfg, billId, request, till.operator);
+    const taken = await writes(billId, till);
+    expect(taken.billPayments).toMatchObject([{ state: "received" }]);
+    expect(taken.sales).toHaveLength(1);
+    const operator = await signBackIn(till);
+
+    const retry = await takeBillPayment(fiscal(), till.cfg, billId, request, operator);
+
+    expect(retry.outcome).toBe("received");
+    expect(retry.payment.id).toBe(first.payment.id);
+    expect(await writes(billId, till)).toEqual(taken);
+  });
+
+  it("answers a reader card retry under a new sign-in after a Disable with the first payment, asking the reader once", async () => {
+    const till = await freshTill();
+    const billId = await bill();
+    const provider = new FakePaymentProvider(suite.db);
+    const request = { ...wholeBill("card"), entry: "reader" as const, externalRef: undefined };
+    const first = await takeReaderBillPayment(
+      { ...fiscal(), provider },
+      till.cfg,
+      billId,
+      request,
+      till.operator,
+    );
+    const taken = await writes(billId, till);
+    expect(taken.billPayments).toMatchObject([{ state: "received" }]);
+    expect(taken.sales).toHaveLength(1);
+    const operator = await signBackIn(till);
+
+    const retry = await takeReaderBillPayment(
+      { ...fiscal(), provider },
+      till.cfg,
+      billId,
+      request,
+      operator,
+    );
+
+    expect(retry.outcome).toBe("received");
+    expect(retry.payment.id).toBe(first.payment.id);
+    expect(provider.collectCalls).toHaveLength(1);
+    expect(await writes(billId, till)).toEqual(taken);
   });
 });
