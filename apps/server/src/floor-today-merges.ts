@@ -9,7 +9,13 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, touchingPlace, type JoinSide } from "@waitron/shared";
-import { refuseUnfree, refuseUnmovable, todayOf, type Today } from "./floor-today-table.js";
+import {
+  refuseHeld,
+  refuseUnfree,
+  refuseUnmovable,
+  todayOf,
+  type Today,
+} from "./floor-today-table.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -69,6 +75,19 @@ export async function leaveMergesRestoring(
     await putBack(tx, member);
   }
   await leaveMerges(tx, tableIds);
+}
+
+/** The table's merge ends, every member going back to where it stood before; no party may hold one. A table in no merge is left alone. */
+export async function splitFreeMerge(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const { merge } = await todayOf(tx, cfg, tableId);
+  if (merge === null) return;
+  const members = merge.members.map((m) => m.tableId);
+  await refuseHeld(tx, members);
+  await leaveMergesRestoring(tx, members);
 }
 
 /** Every member of `tableId`'s merge, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
@@ -141,13 +160,13 @@ export async function writeMerge(
   const moving = await todayOf(tx, cfg, args.movingId);
   const target = await todayOf(tx, cfg, args.targetId);
   refuseUnmovable(moving, target);
-  if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
-  if (args.free) await refuseUnfree(tx, [moving.tableId, target.tableId]);
   const { zoneId } = target;
   if (moving.zoneId === null) {
     throw new AppError("table.not_in_floor_plan", { tableId: moving.tableId });
   }
   if (zoneId === null) throw new AppError("table.not_in_floor_plan", { tableId: target.tableId });
+  if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
+  if (args.free) await refuseUnfree(tx, [moving.tableId, target.tableId]);
   if (zoneId !== moving.zoneId) {
     throw new AppError("service_zone.join_mismatch", {
       orderZoneId: zoneId,

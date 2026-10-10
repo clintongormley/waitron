@@ -170,6 +170,28 @@ describe("today's merges", () => {
     expect(await mergeOf(v, table.a!)).toBeNull();
   });
 
+  it("refuses a table with no zone before one that is merged or held", async () => {
+    const { table } = await threeTables();
+    await merge(table.b!, table.a!, "right", 8);
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, table.b!)),
+    );
+    await expect(merge(table.b!, table.c!, "right", 8)).rejects.toMatchObject({
+      code: "table.not_in_floor_plan",
+      params: { tableId: table.b },
+    });
+
+    const held = await threeTables();
+    await seat(v, held.table.a!);
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, held.table.a!)),
+    );
+    await expect(merge(held.table.a!, held.table.b!, "right", 8)).rejects.toMatchObject({
+      code: "table.not_in_floor_plan",
+      params: { tableId: held.table.a },
+    });
+  });
+
   it("grows a merge with a third table, working its seats out again", async () => {
     const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
     await merge(table.b!, table.a!, "right", 8);

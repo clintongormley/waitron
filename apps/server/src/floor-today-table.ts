@@ -52,8 +52,8 @@ export function refuseUnmovable(...tables: readonly Today[]): void {
   }
 }
 
-/** A party at any of the tables, then any of them needing clearing. */
-export async function refuseUnfree(tx: Transaction, tableIds: readonly string[]): Promise<void> {
+/** A party at any of the tables. */
+export async function refuseHeld(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   for (const tableId of tableIds) {
     const [held] = await tx
       .select({ id: partyTables.id })
@@ -61,6 +61,11 @@ export async function refuseUnfree(tx: Transaction, tableIds: readonly string[])
       .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
     if (held !== undefined) throw new AppError("tab.already_open", { tableId });
   }
+}
+
+/** A party at any of the tables, then any of them needing clearing. */
+export async function refuseUnfree(tx: Transaction, tableIds: readonly string[]): Promise<void> {
+  await refuseHeld(tx, tableIds);
   for (const tableId of tableIds) {
     const [table] = await tx
       .select({ needsClearingSince: diningTables.needsClearingSince })

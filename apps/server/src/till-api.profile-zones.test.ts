@@ -109,6 +109,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/today/place                        | table                  | refuses POST /api/tables/:id/today/place             |
  * | POST /api/tables/:id/today/seats                        | table                  | refuses POST /api/tables/:id/today/seats             |
  * | POST /api/tables/:id/today/back                         | table                  | refuses POST /api/tables/:id/today/back              |
+ * | POST /api/tables/:id/today/merge                        | table; body target     | refuses .../today/merge (table), (target)            |
+ * | POST /api/tables/:id/today/split                        | table                  | refuses POST /api/tables/:id/today/split             |
  * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
@@ -743,6 +745,27 @@ const ROUTES: readonly Row[] = [
     "POST /api/tables/:id/today/back",
     "POST",
     (x) => `/api/tables/${x.deliTable}/today/back`,
+    () => ({}),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/merge (table)",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/merge`,
+    (x) => ({ targetId: x.restFreeTable, side: "right" }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/merge (target)",
+    "POST",
+    (x) => `/api/tables/${x.restFreeTable}/today/merge`,
+    (x) => ({ targetId: x.deliTable, side: "right" }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/split",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/split`,
     () => ({}),
     deliTableZone,
   ],

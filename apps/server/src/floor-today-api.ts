@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { floorPlans, floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, isUuid, JOIN_SIDES, type JoinSide } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { asObject } from "./bill-payments-api.js";
 import {
@@ -16,6 +16,7 @@ import {
   seatsToday,
   takeOffToday,
 } from "./floor-today-store.js";
+import { splitFreeMerge, writeMerge } from "./floor-today-merges.js";
 import type { Logger } from "./logger.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -38,21 +39,50 @@ async function seatsOf(c: Context): Promise<number> {
 }
 
 type TableWrite = (tx: Transaction, tableId: string) => Promise<void>;
+/** A write and the other tables its zone check covers. */
+type TablesWrite = { write: TableWrite; others: readonly string[] };
 
-/** Today's changes to one table, and the zone reset; each answers 204. */
+async function mergeBody(
+  c: Context,
+  tableId: string,
+): Promise<{ targetId: string; side: JoinSide; seats: number | null }> {
+  const body = asObject(await readRawJsonBody<unknown>(c));
+  const target = body.targetId;
+  if (typeof target !== "string" || !isUuid(target))
+    throw new AppError("table.not_found", { tableId: String(target) });
+  const targetId = target.toLowerCase();
+  if (targetId === tableId) throw invalid("targetId");
+  const side = body.side;
+  if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("side");
+  const seats = body.seats === undefined ? null : whole(body.seats, "seats", 1, 999);
+  return { targetId, side: side as JoinSide, seats };
+}
+
+/** Today's changes to one table, merging and splitting, and the zone reset; each answers 204. */
 export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const removals = deps.tableRemovals ?? [];
 
-  const tableRoute = (change: string, read: (c: Context) => TableWrite | Promise<TableWrite>) =>
+  const tableRoute = (
+    change: string,
+    read: (
+      c: Context,
+      tableId: string,
+    ) => TableWrite | TablesWrite | Promise<TableWrite | TablesWrite>,
+  ) =>
     app.post(`/api/tables/:id/today/${change}`, (c) =>
       run(c, log, async () => {
         const session = await requireSession(deps, c, { action: "take-orders" });
         const id = c.req.param("id");
         if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
         const tableId = id.toLowerCase();
-        const write = await read(c);
+        const parsed = await read(c, tableId);
+        const { write, others } =
+          typeof parsed === "function" ? { write: parsed, others: [] } : parsed;
         await withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ tableId }]);
+          await checkZones(tx, deps.cfg, session, [
+            { tableId },
+            ...others.map((other) => ({ tableId: other })),
+          ]);
           await ensureToday(tx, deps.cfg, removals, deps.clock.now().instant);
           await write(tx, tableId);
         });
@@ -76,6 +106,15 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     return (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats);
   });
   tableRoute("back", () => (tx, tableId) => backToSaved(tx, deps.cfg, tableId));
+  tableRoute("merge", async (c, tableId) => {
+    const { targetId, side, seats } = await mergeBody(c, tableId);
+    return {
+      write: (tx, movingId) =>
+        writeMerge(tx, deps.cfg, { movingId, targetId, side, seats, free: true }),
+      others: [targetId],
+    };
+  });
+  tableRoute("split", () => (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId));
 
   app.post("/api/zones/:id/today/reset", (c) =>
     run(c, log, async () => {
