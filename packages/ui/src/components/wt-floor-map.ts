@@ -276,8 +276,8 @@ export class WtFloorMap extends LitElement {
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     const root = super.createRenderRoot();
-    // A listener on the host missed a press moving focus between two tables (the "a press on
-    // another table while one is focused" case).
+    // A listener on the host misses focus moving between two tables, by a press, a script or an
+    // arrow key: both ends are inside this shadow root.
     root.addEventListener("focusin", this.#onFocusIn);
     return root;
   }

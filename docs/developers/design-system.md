@@ -208,8 +208,9 @@ hold that two palette colours are told apart by eye: the light standard fill, fo
 about 1.2:1 against `--wt-color-surface`, which is why the words carry the meaning.
 
 The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
-`--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`),
-which styles any element carrying `data-fill="<fill>"`:
+`--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
+Lit stylesheet that styles an element carrying `data-fill="<fill>"` inside a shadow root whose
+styles include it, as `wt-floor-map`'s do:
 
 | Fill                        | Light     | Text on it | Dark      | Text on it |
 | --------------------------- | --------- | ---------- | --------- | ---------- |
@@ -623,9 +624,9 @@ set. The consuming app registers the `chevron-down` icon.
 
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice. It fits
-when it first draws tables, when `fitKey` changes, on a double tap on empty space (both taps there)
-and when it is resized, unless a pan, a pinch or the wheel has moved the view since its last fit; a
-new `tables` alone keeps the view. A press that moves 8 px before the hold pans, wherever it started;
+when it first draws tables, when `fitKey` changes and on a double tap on empty space (both taps
+there), whatever the view; it fits when it is resized only if no pan, pinch or wheel has moved the
+view since its last fit; a new `tables` alone keeps the view. A press that moves 8 px before the hold pans, wherever it started;
 two fingers zoom about their midpoint; the wheel pans and Ctrl+wheel zooms ×2 per 100 of `deltaY`
 about the pointer, the wheel event always prevented. Zoom runs from half to four times the fitted
 scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by `mapLabel`
@@ -658,8 +659,7 @@ of its events and never stops a `pointerdown` or `keydown`. One table is in the 
 draws it (a merge it has joined is the tab stop then), else the first in reading order (by the top of its box, then its left). On a focused
 table, ArrowRight and ArrowDown move to the next table in reading order, ArrowLeft and ArrowUp to
 the previous, Home and End to the first and last, stopping at the ends, unless Alt, Ctrl or Meta is held, which the map leaves to the browser; each
-is prevented, pans
-the target into view by the least distance (within the pan limit, and counting as a pan, so a
+is prevented, pans the target into view by the least distance (within the pan limit, and counting as a pan, so a
 resize then keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
 table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above the

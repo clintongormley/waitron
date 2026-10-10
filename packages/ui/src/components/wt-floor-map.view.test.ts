@@ -207,6 +207,17 @@ it("a click on a table then on empty space close by opens the table and does not
   expect((await boxOf(el, "t1")).left).toBe(200);
 });
 
+it("a touch tap on a table then on empty space close by opens the table and does not fit", async () => {
+  const el = await map([t1]);
+  drag(el, [20, 20], [70, 20]);
+  // t1 now spans 200 to 500 across; (190, 150) is empty, 20 px from (210, 150).
+  await el.updateComplete;
+  tapAt(el, 210, 150);
+  tapAt(el, 190, 150);
+  expect(taps).toEqual([{ tableId: "t1" }]);
+  expect((await boxOf(el, "t1")).left).toBe(200);
+});
+
 it("a tap on empty space then one on a table close by opens the table and does not fit", async () => {
   const el = await map([t1]);
   drag(el, [20, 20], [70, 20]);

@@ -434,7 +434,7 @@ export class TillFloorScreen extends LitElement {
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
   /** The table whose details sheet is open, read afresh from `tables` on each render. */
-  @state() private details: { tableId: string; heading: string } | null = null;
+  @state() private details: { tableId: string } | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -457,7 +457,8 @@ export class TillFloorScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // The timers stopped while the screen was off the page; a time already past redraws at once.
+    // The timers stopped while the screen was off the page. A reminder that fell due meanwhile
+    // redraws at once; the floor's re-read waits a full 15 s.
     if (this.hasUpdated) {
       this.#watchReminders();
       this.#watchFloor();
@@ -538,28 +539,30 @@ export class TillFloorScreen extends LitElement {
     this.#emit("open-table", { tableId: table.id, seated: false, guestCount });
   }
 
-  /** Headed as the map names the table: a merge by all its drawn members' labels. */
   #onDetails(event: Event): void {
     event.stopPropagation();
     const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
-    const found = this.tables.find((table) => table.id === tableId);
-    if (found === undefined) return;
-    const joinId = found.today?.joinId ?? null;
-    const labels =
-      joinId === null
-        ? [found.label]
-        : mapTables(this.#zone.visible)
-            .filter((table) => table.joinId === joinId)
-            .map((table) => table.label);
-    this.details = { tableId, heading: mapLabel(labels) };
+    if (this.tables.some((table) => table.id === tableId)) this.details = { tableId };
+  }
+
+  /** As the map names the table: a merge by all its drawn members' labels. */
+  #detailsHeading(table: TableState): string {
+    const joinId = table.today?.joinId ?? null;
+    if (joinId === null) return mapLabel([table.label]);
+    return mapLabel(
+      mapTables(this.#zone.visible)
+        .filter((drawn) => drawn.joinId === joinId)
+        .map((drawn) => drawn.label),
+    );
   }
 
   #detailsSheet(): TemplateResult | typeof nothing {
     const details = this.details;
     if (details === null) return nothing;
+    const table = this.tables.find((candidate) => candidate.id === details.tableId)!;
     return html`<till-table-details-sheet
-      .table=${this.tables.find((table) => table.id === details.tableId)!}
-      .heading=${details.heading}
+      .table=${table}
+      .heading=${this.#detailsHeading(table)}
       .now=${this.#drawnAt}
       @details-close=${(event: Event) => {
         event.stopPropagation();

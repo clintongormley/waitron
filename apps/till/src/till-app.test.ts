@@ -6572,7 +6572,7 @@ describe("till-app", () => {
 
     // Passes on a rule that applies every answer too; it fails a rule that drops an answer once a
     // newer read has started.
-    it("an action's refresh is applied when an older poll answers first", async () => {
+    it("an older poll that answers first is shown, then the action's refresh replaces it", async () => {
       const { el, answerA, answerB } = await twoDeferredRefreshes();
 
       answerA.resolve([tableA]);

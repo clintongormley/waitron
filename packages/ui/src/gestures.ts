@@ -26,8 +26,9 @@ export interface GestureHandlers {
   pan?(by: { dx: number; dy: number }): void;
   /** Two pointers: their distance's ratio since the last call, their midpoint now (client px), and how far it moved. */
   pinch?(change: { ratio: number; x: number; y: number; dx: number; dy: number }): void;
-  /** The gesture ended without its own end: a pointercancel at any point, or a second pointer
-   * arriving during a hold or a hold's drag. */
+  /** The gesture ended without its own end: a pointercancel at any point, a second pointer
+   * arriving during a hold or a hold's drag, or a pointerdown reusing a pointer id the gesture
+   * still tracks. Not sent once a pinch has lost a pointer. */
   cancel?(): void;
 }
 

@@ -38,12 +38,6 @@ export function combinedStatus(statuses: readonly StandInStatus[]): StandInStatu
   return { fill, dot };
 }
 
-/**
- * A merge's words read each count from one member, never a sum: the server repeats a party's
- * signals on every table it sits at (`packages/shared/src/table-signals.ts`) and its counts too,
- * because the `tab` subquery of the floor read groups by `pt.table_id`
- * (`apps/server/src/working-order.ts`).
- */
 interface Sources {
   members: readonly TableState[];
   status: StandInStatus;
@@ -51,6 +45,12 @@ interface Sources {
   dotFrom: TableState | undefined;
 }
 
+/**
+ * A merge's words read each count from one member, never a sum: the server repeats a party's
+ * signals on every table it sits at (`packages/shared/src/table-signals.ts`) and its counts too,
+ * because the `tab` subquery of the floor read groups by `pt.table_id`
+ * (`apps/server/src/working-order.ts`).
+ */
 function sources(tables: TableState | readonly TableState[]): Sources {
   const members: readonly TableState[] = Array.isArray(tables) ? tables : [tables as TableState];
   const status = combinedStatus(members.map(standInStatus));
@@ -81,7 +81,10 @@ function dotWords(table: TableState, dot: FloorMapDot): string {
 
 /** The fill's words, then the dot's: "Seated, 2 ready". Pass a merge's members together. */
 export function statusWords(tables: TableState | readonly TableState[]): string {
-  const { status, fillFrom, dotFrom } = sources(tables);
+  return wordsOf(sources(tables));
+}
+
+function wordsOf({ status, fillFrom, dotFrom }: Sources): string {
   const fill = fillWords(fillFrom, status.fill);
   return dotFrom === undefined ? fill : `${fill}, ${dotWords(dotFrom, status.dot!)}`;
 }
@@ -118,15 +121,15 @@ export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
     const today = table.today;
     if (today === null || today.placement === null || today.takenOff) continue;
     const members = today.joinId === null ? [table] : merges.get(today.joinId)!;
-    const status = combinedStatus(members.map(standInStatus));
+    const from = sources(members);
     mapped.push({
       id: table.id,
       label: table.label,
       placement: today.placement,
-      fill: status.fill,
-      dot: status.dot,
+      fill: from.status.fill,
+      dot: from.status.dot,
       joinId: today.joinId,
-      description: statusWords(members),
+      description: wordsOf(from),
     });
   }
   return mapped;

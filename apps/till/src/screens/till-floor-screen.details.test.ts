@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
@@ -154,6 +155,39 @@ describe("till-floor-screen's details sheet", () => {
     el.tables = [table("t4", { ...seated, party: party() }), table("t5")];
     await el.updateComplete;
     expect(sheetOf(el)).toBeNull();
+  });
+
+  it("a re-read that merges the open sheet's table renames the sheet", async () => {
+    const el = await mount([table("t4"), table("t5")]);
+    const sheet = await askDetails(el, "t4");
+    expect(sheet.heading).toBe("Terrace 4");
+
+    el.tables = [
+      table("t4", { today: today({ joinId: "j1", joinSeats: 6 }) }),
+      table("t5", { today: today({ joinId: "j1", joinSeats: 6 }) }),
+    ];
+    await el.updateComplete;
+    await sheet.updateComplete;
+    expect(sheet.heading).toBe("Terrace 4+5");
+  });
+
+  it("after a re-read removes the open sheet, the rest of the page takes a real click", async () => {
+    const el = await mount([table("t4", { ...seated, party: party() }), table("t5")]);
+    await askDetails(el, "t4");
+    const elsewhere = document.createElement("button");
+    elsewhere.textContent = "Elsewhere";
+    const clicked = vi.fn();
+    elsewhere.addEventListener("click", clicked);
+    document.body.append(elsewhere);
+    try {
+      el.tables = [table("t5")];
+      await el.updateComplete;
+      expect(sheetOf(el)).toBeNull();
+      await userEvent.click(elsewhere);
+      expect(clicked).toHaveBeenCalledTimes(1);
+    } finally {
+      elsewhere.remove();
+    }
   });
 
   it("Close in the sheet closes it, and the request goes no further", async () => {

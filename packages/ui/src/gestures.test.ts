@@ -462,6 +462,16 @@ describe("Gestures", () => {
     down(1, 10, 10, { pointerType: "pen", ctrlKey: true });
     up(1, 10, 10);
     expect(handlers.tap).toHaveBeenCalledWith({ target: b, x: 10, y: 10, pointerType: "pen" });
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    down(2, 100, 100, { pointerType: "touch", ctrlKey: true });
+    up(2, 100, 100);
+    expect(handlers.tap).toHaveBeenLastCalledWith({
+      target: b,
+      x: 100,
+      y: 100,
+      pointerType: "touch",
+    });
+    expect(handlers.tap).toHaveBeenCalledTimes(2);
   });
 
   it("a press reusing a tracked pointer's id ends the stale gesture and starts afresh", () => {
