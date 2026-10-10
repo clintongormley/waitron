@@ -22,7 +22,6 @@ import type {
   TillSaleLine,
   TillSaleResult,
 } from "../api/client.js";
-import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface TicketIssuer {
@@ -454,13 +453,6 @@ export class TillTicketView extends LitElement {
   @property() invoiceLocale = "es-ES";
   /** True for Demo and Preparation transactions. This warning is outside the fiscal core below. */
   @property({ type: Boolean }) simulated = false;
-  /**
-   * The owner-authored NON-FISCAL trim. The art. 7.1 core is NEVER read from or gated on this prop, so no
-   * `ReceiptConfig` field can suppress or reorder a mandated element.
-   */
-  @property({ attribute: false }) receipt?: ReceiptConfig;
-  /** The location's address as the receipt prints it; none prints no address. */
-  @property({ attribute: false }) venueAddress: readonly string[] = [];
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
   @property({ attribute: false }) originalReceiptPrint?: OriginalReceiptPrint;
@@ -527,10 +519,10 @@ export class TillTicketView extends LitElement {
         <header class="issuer">
           ${r.invoiceType === "F1" ? html`<p class="venue">${labels.fullInvoice}</p>` : nothing}
           ${
-            this.receipt?.logo
+            r.receiptTrim?.logo
               ? html`<img
                   class="logo"
-                  src=${`/media/${encodeURIComponent(this.receipt.logo)}`}
+                  src=${`/media/${encodeURIComponent(r.receiptTrim.logo)}`}
                   alt=""
                 />`
               : nothing
@@ -542,23 +534,23 @@ export class TillTicketView extends LitElement {
               ? html`<p class="venue">${r.receiptHeader.tradingName.trim()}</p>`
               : nothing
           }
+          ${
+            r.receiptTrim?.headerSubtitle
+              ? html`<p class="header-subtitle">${r.receiptTrim.headerSubtitle}</p>`
+              : nothing
+          }
           <p class="venue">${issuer.venueName}</p>
           ${
-            this.receipt?.headerSubtitle
-              ? html`<p class="header-subtitle">${this.receipt.headerSubtitle}</p>`
-              : nothing
-          }
-          ${
-            r.invoiceType === "F1" && r.issuer?.domicile
+            r.venueReceiptSettings.printAddress === false
               ? nothing
-              : this.venueAddress.map((line) => html`<p class="contact">${line}</p>`)
+              : r.venueAddress.map((line) => html`<p class="contact">${line}</p>`)
           }
           ${
-            this.receipt?.phone
-              ? html`<p class="contact">${labels.phone} ${this.receipt.phone}</p>`
+            r.receiptTrim?.phone
+              ? html`<p class="contact">${labels.phone} ${r.receiptTrim.phone}</p>`
               : nothing
           }
-          ${this.receipt?.email ? html`<p class="contact">${this.receipt.email}</p>` : nothing}
+          ${r.receiptTrim?.email ? html`<p class="contact">${r.receiptTrim.email}</p>` : nothing}
           <p class="nif">${labels.nif}: ${issuer.nif}</p>
           ${
             r.invoiceType === "F1" && r.issuer?.domicile
@@ -683,8 +675,8 @@ export class TillTicketView extends LitElement {
         <div class="tender">${renderTender(r, format, labels)}</div>
 
         ${
-          this.receipt?.footerMessage
-            ? html`<p class="footer-message">${this.receipt.footerMessage}</p>`
+          r.receiptTrim?.footerMessage
+            ? html`<p class="footer-message">${r.receiptTrim.footerMessage}</p>`
             : nothing
         }
       </article>

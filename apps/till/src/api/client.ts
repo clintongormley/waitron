@@ -24,12 +24,13 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
 
-import type { CanvasDef, CapabilityFlag, NavigationScreen, ReceiptConfig } from "../layout.js";
+import type { CanvasDef, CapabilityFlag, NavigationScreen } from "../layout.js";
 import type {
   ExtraSelection,
   KitchenSignal,
   OptionSelection,
   OptionSnapshot,
+  ReceiptPresentation,
   StationThresholds,
   TableSignal,
   TimingBand,
@@ -80,8 +81,7 @@ export interface ReadOptions {
 /**
  * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
- * for a till with no integrated reader). `receipt` is the owner-authored receipt trim, or the built-in
- * default.
+ * for a till with no integrated reader).
  */
 export interface TillInfo {
   locale: string;
@@ -118,9 +118,6 @@ export interface TillInfo {
   /** The venue's ACTIVE card readers, `[]` when none; feeds the payment-time reader picker. */
   activeReaders: TillActiveReader[];
   tipsEnabled: boolean;
-  receipt: ReceiptConfig;
-  /** This location's address as the receipt prints it, one line each; none when it prints none. */
-  venueAddress: string[];
   /**
    * The CALLING device's layout canvas — its assigned one, or the form-factor default the server falls
    * back to (a cookieless request gets the `till` default).
@@ -827,7 +824,7 @@ export type TenderBlock =
     };
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
-export interface TillSaleResult {
+export interface TillSaleResult extends ReceiptPresentation {
   issuedOffsetMinutes?: number;
   operationDate?: string;
   invoiceType?: "F1" | "F2";

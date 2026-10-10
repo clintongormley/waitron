@@ -46,7 +46,6 @@ import {
   readReceiptLanguage,
 } from "@waitron/catalogue";
 import {
-  getReceipt,
   getCanvas,
   getCanvasForFormFactor,
   getDeviceProfile,
@@ -208,7 +207,6 @@ import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import { geographyOf } from "./venue-locale.js";
-import { receiptAddressLines } from "./venue-address.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -1202,10 +1200,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({
             bumpMode: locations.bumpMode,
             fireControl: locations.fireControl,
-            addressLine1: locations.addressLine1,
-            addressLine2: locations.addressLine2,
-            postalCode: locations.postalCode,
-            city: locations.city,
             province: locations.province,
           })
           .from(locations)
@@ -1215,8 +1209,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           name: course.name,
           displayOrder: course.displayOrder,
         }));
-        const receipt = await getReceipt(tx);
-        const venueAddress = receiptAddressLines(receipt, loc);
         let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
         let inactivityTimeoutSeconds: number | null = null;
@@ -1267,8 +1259,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
           courses,
-          receipt,
-          venueAddress,
           canvas,
           capabilities,
           inactivityTimeoutSeconds,
@@ -1311,8 +1301,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             ? [{ id: DEMO_READER_ID, name: "Demo card reader", provider: "simulator" }]
             : boot.activeReaders,
         tipsEnabled: deps.cfg.tipsEnabled,
-        receipt: boot.receipt,
-        venueAddress: boot.venueAddress,
         canvas: boot.canvas,
         capabilities: boot.capabilities,
         inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,

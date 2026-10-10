@@ -221,14 +221,7 @@ import type {
 import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
 import { type KitchenScreenNotice, kitchenDisplayScreen } from "./kitchen-screen-notice.js";
-import type {
-  CanvasDef,
-  CapabilityFlag,
-  DeviceKind,
-  NavigationScreen,
-  ReceiptConfig,
-  TabDef,
-} from "./layout.js";
+import type { CanvasDef, CapabilityFlag, DeviceKind, NavigationScreen, TabDef } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
@@ -2005,9 +1998,6 @@ export class TillApp extends LitElement {
   /** The card grid hides a card whose required capability is absent, except `tender-pay`, which also
    * takes cash. */
   @state() private capabilities: CapabilityFlag[] = [];
-  /** The non-fiscal receipt trim; `{}` when the server omits it. */
-  @state() private receipt: ReceiptConfig = {};
-  @state() private venueAddress: string[] = [];
   /** The non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: CounterError;
   /** What a complete submission of a draft did, said once the till is back on the floor. */
@@ -2349,8 +2339,6 @@ export class TillApp extends LitElement {
       this.#store.simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
       this.activeReaders = till.activeReaders ?? [];
       this.defaultReaderId = till.defaultReaderId;
-      this.receipt = till.receipt ?? {};
-      this.venueAddress = till.venueAddress ?? [];
       this.#applyProfileSetup(till);
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
       // destinations, so the tab is published only when the shell opens.
@@ -8882,8 +8870,6 @@ export class TillApp extends LitElement {
           .result=${this.result}
           .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
-          .receipt=${this.receipt}
-          .venueAddress=${this.venueAddress}
           .originalReceiptAvailable=${this.originalReceiptAvailable}
           .originalReceiptPrint=${this.originalReceiptPrint}
           .originalReceiptBusy=${this.originalReceiptBusy}
