@@ -39,6 +39,7 @@ import {
   rowInModel,
   visibleRoutingRows,
   type CellPeriodLines,
+  type PeriodLineText,
 } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
@@ -221,7 +222,8 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      .cell .note {
+      .cell .note,
+      .cell .warning {
         margin: 0;
       }
       .station.inherited,
@@ -425,7 +427,7 @@ export class RoutingGrid extends LitElement {
     label: string,
     target: RouteTarget | null,
     station: { text: string; inherited: boolean },
-    lines: { texts: readonly string[]; inherited: boolean },
+    lines: { shown: readonly PeriodLineText[]; inherited: boolean },
     note: string | null,
   ) {
     return html`<button
@@ -439,8 +441,13 @@ export class RoutingGrid extends LitElement {
       }}
     >
       <span class=${station.inherited ? "station inherited" : "station"}>${station.text}</span>
-      ${lines.texts.map(
-        (line) => html`<span class=${lines.inherited ? "line inherited" : "line"}>${line}</span>`,
+      ${lines.shown.map(
+        (line) =>
+          html`<span class=${lines.inherited ? "line inherited" : "line"}>${line.text}</span>${
+              line.flagText === undefined
+                ? nothing
+                : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
+            }`,
       )}
       ${this.#extraNote(note, { inName: true })}
     </button>`;
@@ -460,7 +467,6 @@ export class RoutingGrid extends LitElement {
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const periodLines = this.#periodLines(entry.row, zone.id, waiting);
-    const lines = periodLines.lines.map((line) => line.text);
     const text = this.#targetText(shown ?? inherited);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
@@ -469,7 +475,7 @@ export class RoutingGrid extends LitElement {
         value: text,
         state: t(shown === null ? "routing.inherited" : "routing.set_here"),
       }),
-      ...lines,
+      ...periodLines.lines.flatMap((line) => [line.text, line.flagText ?? null]),
       note,
     );
     return html`${this.#button(
@@ -477,7 +483,7 @@ export class RoutingGrid extends LitElement {
       label,
       shown,
       { text, inherited: shown === null },
-      { texts: lines, inherited: periodLines.inherited },
+      { shown: periodLines.lines, inherited: periodLines.inherited },
       note,
     )}${this.#error(address)}${
       disabled === null
@@ -527,7 +533,7 @@ export class RoutingGrid extends LitElement {
       }),
       note,
     );
-    return html`${this.#button(address, label, target, { text, inherited: false }, { texts: [], inherited: false }, note)}${this.#error(address)}${repair}`;
+    return html`${this.#button(address, label, target, { text, inherited: false }, { shown: [], inherited: false }, note)}${this.#error(address)}${repair}`;
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */

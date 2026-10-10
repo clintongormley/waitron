@@ -12,7 +12,7 @@ import {
   type RoutingPeriod,
   type RoutingRow,
 } from "../routing.js";
-import type { PeriodLine } from "../routing-types.js";
+import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
 import { format } from "./hours-view.js";
 
 interface Hidden {
@@ -215,6 +215,10 @@ export interface PeriodLineText {
   readonly target: RouteTarget;
   /** "Lunch, Afternoon: Downstairs bar". */
   readonly text: string;
+  /** The line's periods whose menus no longer offer the row; only on a line its cell stores. */
+  readonly flaggedPeriods?: readonly string[];
+  /** "Not on Lunch menus", present with `flaggedPeriods`. */
+  readonly flagText?: string;
 }
 
 export interface CellPeriodLines {
@@ -250,6 +254,8 @@ function periodsText(
     : format("routing.period_more", { first: named(first), count: String(periods.length - 1) });
 }
 
+type StoredLine = NonNullable<RoutingModelCell["periods"]>[number];
+
 /** A choice not yet saved: its target, and its lines when it has any; a null target clears. */
 export interface WaitingChoice {
   readonly target: RouteTarget | null;
@@ -273,8 +279,15 @@ export function cellPeriodLines(
   const categoryOf = new Map(model.products.map(({ id, categoryId }) => [id, categoryId]));
   const zoneDepartment = new Map(model.zones.map(({ id, departmentId }) => [id, departmentId]));
 
-  const linesOf = (stored: readonly PeriodLine[], zoneId: string | null): PeriodLineText[] => {
-    const byTarget = new Map<string, { target: RouteTarget; periods: RoutingPeriod[] }>();
+  const linesOf = (
+    stored: readonly StoredLine[],
+    zoneId: string | null,
+    own: boolean,
+  ): PeriodLineText[] => {
+    const byTarget = new Map<
+      string,
+      { target: RouteTarget; periods: RoutingPeriod[]; flagged: RoutingPeriod[] }
+    >();
     const departmentId = zoneId === null ? undefined : (zoneDepartment.get(zoneId) ?? null);
     const applies = (periodId: string) =>
       departmentId === undefined ||
@@ -282,12 +295,13 @@ export function cellPeriodLines(
     const known = stored
       .filter(({ periodId }) => order.has(periodId) && applies(periodId))
       .sort((a, b) => order.get(a.periodId)! - order.get(b.periodId)!);
-    for (const { periodId, target } of known) {
+    for (const { periodId, target, notOffered } of known) {
       const key = targetKey(target);
       const period = model.periods[order.get(periodId)!]!;
-      const line = byTarget.get(key);
-      if (line === undefined) byTarget.set(key, { target, periods: [period] });
-      else line.periods.push(period);
+      const line = byTarget.get(key) ?? { target, periods: [], flagged: [] };
+      byTarget.set(key, line);
+      line.periods.push(period);
+      if (own && notOffered === true) line.flagged.push(period);
     }
     const names = new Map<string, Set<string>>();
     for (const { periodId } of known) {
@@ -295,13 +309,21 @@ export function cellPeriodLines(
       names.set(name, (names.get(name) ?? new Set()).add(id));
     }
     const repeated = new Set([...names].filter(([, ids]) => ids.size > 1).map(([name]) => name));
-    return [...byTarget.values()].map(({ target, periods }) => ({
+    return [...byTarget.values()].map(({ target, periods, flagged }) => ({
       periodIds: periods.map(({ id }) => id),
       target,
       text: format("routing.period_line", {
         periods: periodsText(periods, model.periods, repeated),
         target: targetText(target),
       }),
+      ...(flagged.length === 0
+        ? {}
+        : {
+            flaggedPeriods: flagged.map(({ id }) => id),
+            flagText: format("routing.period_not_on_menus", {
+              periods: periodsText(flagged, model.periods, repeated),
+            }),
+          }),
     }));
   };
 
@@ -313,10 +335,10 @@ export function cellPeriodLines(
         : waiting.target === null
           ? undefined
           : (waiting.periods ?? []);
-    if (own !== undefined) return { inherited: false, lines: linesOf(own, zoneId) };
+    if (own !== undefined) return { inherited: false, lines: linesOf(own, zoneId, true) };
     const category = row.kind === "product" ? (categoryOf.get(row.productId) ?? null) : null;
     const { decidedBy } = selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
     const deciding = decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
-    return { inherited: true, lines: linesOf(deciding?.periods ?? [], zoneId) };
+    return { inherited: true, lines: linesOf(deciding?.periods ?? [], zoneId, false) };
   };
 }

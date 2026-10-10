@@ -1009,6 +1009,88 @@ describe("venue-routing-grid", () => {
       );
     });
 
+    describe("a stored line whose period's menus no longer offer the row", () => {
+      /** Drinks × Every zone stores Lunch and Staff lunch, each to its own station unless `shared`. */
+      const flagged = (notOffered: string[], shared = false) => ({
+        ...timed(),
+        cells: timed().cells.map((stored) =>
+          cellKey(stored) === cellKey(drinks)
+            ? {
+                ...stored,
+                periods: [
+                  { periodId: "lunch", target: station("kitchen") },
+                  { periodId: "staff", target: station(shared ? "kitchen" : "bar") },
+                ].map((line) =>
+                  notOffered.includes(line.periodId)
+                    ? { ...line, notOffered: true as const }
+                    : line,
+                ),
+              }
+            : stored,
+        ),
+      });
+      /** The button's lines and marks, in the order drawn. */
+      const drawn = (el: RoutingGrid, row: string, zone: string) =>
+        [...combo(el, row, zone)!.querySelectorAll(".line, [data-test='period-flag']")].map(
+          (node) => `${node.matches(".line") ? "line" : "flag"}: ${node.textContent!.trim()}`,
+        );
+
+      it("draws the mark under its own line in the warning colour, and names it after that line", async () => {
+        const { el } = await mount(flagged(["lunch"]));
+        expect(drawn(el, "c:drinks", "every")).toEqual([
+          "line: Lunch: Kitchen",
+          "flag: Not on Lunch menus",
+          "line: Staff lunch: Bar",
+        ]);
+        const own = combo(el, "c:drinks", "every")!;
+        expect(own.getAttribute("aria-label")).toBe(
+          "Drinks, Every zone: Bar, set here. Lunch: Kitchen. Not on Lunch menus. Staff lunch: Bar",
+        );
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-warning)";
+        el.parentElement!.append(probe);
+        const mark = own.querySelector("[data-test='period-flag']")!;
+        expect(getComputedStyle(mark).color).toBe(getComputedStyle(probe).color);
+        expect(getComputedStyle(mark).color).not.toBe(getComputedStyle(own).color);
+        probe.remove();
+      });
+
+      it("names both flagged periods of one line in one mark", async () => {
+        const { el } = await mount(flagged(["lunch", "staff"], true));
+        expect(drawn(el, "c:drinks", "every")).toEqual([
+          "line: Lunch, Staff lunch: Kitchen",
+          "flag: Not on Lunch, Staff lunch menus",
+        ]);
+      });
+
+      it("draws no mark where the menus still offer the line, nor under a line a child inherits", async () => {
+        const { el } = await mount(flagged([]));
+        expect(drawn(el, "c:drinks", "every")).toEqual([
+          "line: Lunch: Kitchen",
+          "line: Staff lunch: Bar",
+        ]);
+        el.model = flagged(["lunch"]);
+        root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+        await el.updateComplete;
+        expect(drawn(el, "p:cola", "every")).toEqual([
+          "line: Lunch: Kitchen",
+          "line: Staff lunch: Bar",
+        ]);
+        expect(combo(el, "p:cola", "every")!.getAttribute("aria-label")).toBe(
+          "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen. Staff lunch: Bar",
+        );
+      });
+
+      it("says the mark in Spanish", async () => {
+        setLocale("es");
+        const { el } = await mount(flagged(["lunch"]));
+        expect(drawn(el, "c:drinks", "every")[1]).toBe("flag: No está en los menús de Lunch");
+        expect(combo(el, "c:drinks", "every")!.getAttribute("aria-label")).toContain(
+          "Lunch: Kitchen. No está en los menús de Lunch. Staff lunch: Bar",
+        );
+      });
+    });
+
     it("opens the editor with the cell's place, choice, lines, products and zone department", async () => {
       const { el } = await mount(timed());
       root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();

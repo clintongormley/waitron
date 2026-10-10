@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { currentLocale, setLocale } from "@waitron/dashboard-kit";
 import {
   selectRoutingCell,
   selectionRulesFromModel,
@@ -935,6 +936,102 @@ describe("cellPeriodLines", () => {
     expect(of(row, null, { target: null })).toEqual({
       inherited: true,
       lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+    });
+  });
+
+  describe("a stored line whose period's menus no longer offer the row", () => {
+    const startLocale = currentLocale();
+    beforeEach(() => setLocale("en"));
+    afterEach(() => setLocale(startLocale));
+    const flagged = (
+      cell: RoutingCell,
+      lines: [string, RouteTarget, boolean][],
+    ): RoutingModel["cells"][number] => ({
+      ...cell,
+      periods: lines.map(([periodId, target, notOffered]) =>
+        notOffered ? { periodId, target, notOffered: true } : { periodId, target },
+      ),
+    });
+
+    it("carries the line's flagged periods, in its order, and a mark naming them as the line does", () => {
+      const lines = cellPeriodLines(
+        routing([
+          flagged(categoryCell("drinks"), [
+            ["p-dinner", downstairs, true],
+            ["p-afternoon", downstairs, false],
+            ["p-lunch", downstairs, true],
+            ["p-supper", kitchen, false],
+          ]),
+        ]),
+        targetText,
+      )(drinks, null);
+      expect(lines).toEqual({
+        inherited: false,
+        lines: [
+          {
+            periodIds: ["p-lunch", "p-afternoon", "p-dinner"],
+            target: downstairs,
+            text: "Lunch–Dinner: Downstairs bar",
+            flaggedPeriods: ["p-lunch", "p-dinner"],
+            flagText: "Not on Lunch, Dinner menus",
+          },
+          { periodIds: ["p-supper"], target: kitchen, text: "Supper: Kitchen" },
+        ],
+      });
+    });
+
+    it("names a flagged period's department where its name repeats among the cell's lines", () => {
+      const named = (id: string, departmentName: string, name: string): RoutingPeriod => ({
+        ...period(id, departmentName.toLowerCase(), name),
+        departmentName,
+      });
+      const lines = cellPeriodLines(
+        {
+          ...routing([
+            flagged(categoryCell("drinks"), [
+              ["dining-lunch", downstairs, false],
+              ["bar-lunch", kitchen, true],
+            ]),
+          ]),
+          periods: [named("dining-lunch", "Dining", "Lunch"), named("bar-lunch", "Bar", "Lunch")],
+        },
+        targetText,
+      )(drinks, null);
+      expect(lines.lines.map((line) => line.flagText)).toEqual([
+        undefined,
+        "Not on Lunch (Bar) menus",
+      ]);
+    });
+
+    it("says the mark in Spanish", () => {
+      setLocale("es");
+      const lines = cellPeriodLines(
+        routing([
+          flagged(categoryCell("drinks"), [
+            ["p-lunch", downstairs, true],
+            ["p-dinner", downstairs, true],
+          ]),
+        ]),
+        targetText,
+      )(drinks, null);
+      expect(lines.lines[0]!.flagText).toBe("No está en los menús de Lunch, Dinner");
+    });
+
+    it("gives a line inherited from that cell no mark", () => {
+      const of = cellPeriodLines(
+        routing([flagged(categoryCell("drinks"), [["p-lunch", downstairs, true]])]),
+        targetText,
+      );
+      expect(of(drinks, null).lines[0]!.flagText).toBe("Not on Lunch menus");
+      for (const inherited of [
+        of(drinks, "terrace"),
+        of({ kind: "product", productId: "mojito" }, null),
+      ]) {
+        expect(inherited).toEqual({
+          inherited: true,
+          lines: [{ periodIds: ["p-lunch"], target: downstairs, text: "Lunch: Downstairs bar" }],
+        });
+      }
     });
   });
 

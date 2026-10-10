@@ -93,6 +93,30 @@ const extrasNotes = routing({
   ],
 });
 
+/** Drinks × Every zone stores a Lunch line Lunch's menus no longer offer; Mojito inherits it. */
+const flaggedLine = routing({
+  periods: [
+    {
+      id: "lunch",
+      departmentId: "dining",
+      departmentName: "Dining",
+      name: "Lunch",
+      colour: "blue",
+      productIds: [],
+    },
+  ],
+  cells: [
+    {
+      row: { kind: "category", categoryId: "drinks" },
+      zoneId: null,
+      target: { kind: "station", stationId: "bar" },
+      periods: [
+        { periodId: "lunch", target: { kind: "station", stationId: "kitchen" }, notOffered: true },
+      ],
+    },
+  ],
+});
+
 const states: Record<
   string,
   {
@@ -102,6 +126,8 @@ const states: Record<
     refusal?: RoutingGrid["refusal"];
     /** Cells and whether each must carry the extras note before the scan. */
     notes?: Record<string, boolean>;
+    /** Cells and whether each must carry a period line's not-on-menus mark before the scan. */
+    flags?: Record<string, boolean>;
   }
 > = {
   "extras notes": {
@@ -117,6 +143,14 @@ const states: Record<
   "extras notes, read-only default": {
     model: routing({ canMakeDefault: false }),
     notes: { 'td[data-row="all"][data-zone="every"]': true },
+  },
+  "flagged period line": {
+    model: flaggedLine,
+    expand: true,
+    flags: {
+      'td[data-row="c:drinks"][data-zone="every"]': true,
+      'td[data-row="p:mojito"][data-zone="every"]': false,
+    },
   },
   collapsed: { model: routing() },
   expanded: { model: routing(), expand: true },
@@ -173,6 +207,11 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       const note = el.shadowRoot!.querySelector(`${selector} [data-test="extra-note"]`);
       if ((note !== null) !== carries)
         throw new Error(`${selector}: extras note ${carries ? "missing" : "unexpected"}`);
+    }
+    for (const [selector, carries] of Object.entries(state.flags ?? {})) {
+      const flag = el.shadowRoot!.querySelector(`${selector} [data-test="period-flag"]`);
+      if ((flag !== null) !== carries)
+        throw new Error(`${selector}: not-on-menus mark ${carries ? "missing" : "unexpected"}`);
     }
     await expectNoA11yViolations(host);
   });
