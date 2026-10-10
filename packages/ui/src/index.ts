@@ -88,6 +88,7 @@ export {
   snapToSquare,
 } from "./floor-plan-geometry.js";
 export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.js";
+export { UndoHistory } from "./history.js";
 export { submitOnEnter } from "./submit-on-enter.js";
 export {
   ContentLanguageController,
