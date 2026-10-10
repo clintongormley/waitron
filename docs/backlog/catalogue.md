@@ -3,49 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Menus and the catalogue". This file holds
 their full text.
 
-## A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch closes everything in it
-
-Owner, 2026-10-10, from screenshots of Products, a menu's Structure and Price overrides tabs, and
-Modifiers → Extras. Five changes; the owner's answers of 2026-10-10 to the first draft's open
-points are folded in.
-
-**1. The Customise columns button sits at the right-hand end of every table's toolbar**, after the
-search field. Today `wt-data-table` draws Filters, `toolbar-start`, Expand all, `toolbar-end`,
-Customise, then search, and design-system.md (Tables, the toolbar-order paragraph) puts search last
-on purpose, so Tab crosses the buttons on the first line before reaching search on its own line
-when the table is narrow. Moving Customise after search changes that rule: at each width, the order
-Tab follows must still match what is drawn, and the "Tab follows" cases in
-`packages/ui/src/components/wt-data-table.test.ts` and
-`apps/dashboard/src/widgets/catalogue-browser.test.ts` change with it. Owner, 2026-10-10: "we'll
-almost never use this button, so it goes on the right" — at every width it is the last control,
-drawn and reached by Tab after search; where search takes its own line, Customise ends that line.
-
-**2. No Expand all or Collapse all on Products or a menu's Structure tab.** The top row ("All
-products"; the menu's own name on Structure) opens and closes everything instead. Today that row
-cannot be closed at all: both tables pass `rowCollapsible` returning false for the root row
-(`apps/dashboard/src/widgets/product-list.ts`, `apps/dashboard/src/widgets/menu-structure-table.ts`),
-so the top row needs a chevron. Owner, 2026-10-10: opening the top row opens only its own level,
-like any other branch. Closing it closes every level, by point 3, so on both tables it is how to
-collapse everything. A menu's Preview tab (`apps/dashboard/src/widgets/menu-document-tree.ts`) keeps
-its Expand all (owner, 2026-10-10), so `wt-data-table` keeps the feature. The entry "The Menus Structure tree notices Collapse all only by watching its table
-redraw" below then needs revisiting: closing the top row still closes many branches at once.
-
-**3. Closing a branch closes every branch inside it**, on Products and on a menu's Structure tab,
-so opening it again shows its categories or sections closed rather than as they were left.
-
-**4. A menu's Structure tab has one button for Reorder and Select.** Pressing it shows the
-checkboxes and the drag handles together, as Products already does (`catalogue-browser.ts` passes
-one `selecting` state to both `.selecting` and `.reordering`); today `menus-screen.ts` keeps
-`structureReordering` and `structureSelecting` apart.
-
-**5. The header's Select all checkbox lines up with the rows' checkboxes, on every table** (owner,
-2026-10-10: "do this everywhere"). Seen on Products at phone width with select mode on: the rows'
-checkboxes sit at the start of the controls column with the drag handle after them, while the
-header's checkbox sits further right, over the gap between them. The header and the rows are drawn
-by `wt-data-table` (the select-all cell and the row-controls cell), so fix it there, with and
-without drag handles, and pin the alignment in a test that measures both boxes.
-
-
 ## `mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently from run to run
 
 - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
@@ -220,14 +177,13 @@ press, the 5 px start, the target under the pointer, Escape, the release and the
 `apps/dashboard/src/widgets/menu-structure-table.ts`). A shared helper, told how to map a row to a
 target, would serve both.
 
-## The Menus Structure tree notices Collapse all only by watching its table redraw — OPEN (W88)
+## The Menus Structure tree notices silent branch closure by watching its table redraw — OPEN (W88)
 
-**The Menus Structure tree notices Collapse all only by watching its table redraw — OPEN (W88).**
-`wt-data-table` sends no event when Expand all or Collapse all opens or closes branches (only
-`wt-expand-change` for one branch a person toggles), so `menu-structure-table.ts` adds a Lit
-controller to the table and checks after every table update whether the current row is still
-shown. An event from the table for "these branches changed" would be cleaner; it means a change in
-`packages/ui`.
+`wt-data-table.setExpanded` is silent. Structure's table controller checks whether a silent closure
+hid the current path; it also refits paths, restores focus after redraws and moves, and repaints an
+active drag. A462 replaces the bulk button with root closure but retains those duties. A shared
+notification for programmatic branch changes could replace the current-path check, rather than
+the whole controller.
 
 ## An included menu can show its sections directly (A322, #1372): left open
 
@@ -822,6 +778,15 @@ From **Allergens and nutrition (#370, #377, #385) — what is left open.**
   and decides whether the product editor keeps both summaries.
 
 ## Decisions and deliberate limits
+
+**Table toolbars and closure (A462, owner 2026-10-10).** Customise follows search and stays last
+at every width. Header and row checkboxes share their leading alignment. Products and Structure
+start with their root open, have no Expand all button, and open only the chosen branch's own level.
+Closing a branch closes its descendants, including hidden paths. Preview keeps Expand all.
+Structure uses one Select mode for checkboxes and drag handles. Search openings and their parents
+survive clearing unless deliberately closed; after clearing, a closed current Structure path
+returns editing to its nearest open parent. Products remembers deliberate closures across reloads.
+[Implementation plan](../superpowers/plans/2026-10-10-a462-table-toolbars.md).
 
 **Product search (A461, owner 2026-10-10).** Products and Menu Structure show flat own matches
 with inline paths. Each new query starts branches collapsed. Opening one shows its contents

@@ -815,13 +815,12 @@ function rowOf(el: MenusScreen, key: string): HTMLElement | null {
   return inStructure(el, `tr[data-row-key="${CSS.escape(key)}"]`);
 }
 
-function reorderToggle(el: MenusScreen): HTMLButtonElement {
-  return q<HTMLButtonElement>(el, '[data-test="reorder"]')!;
+function modeToggle(el: MenusScreen): HTMLButtonElement {
+  return q<HTMLButtonElement>(el, '[data-test="select"]')!;
 }
 
-/** Turns the Structure tree's Reorder mode on or off, as a click on its toggle does. */
-async function pressReorder(el: MenusScreen): Promise<void> {
-  reorderToggle(el).click();
+async function pressMode(el: MenusScreen): Promise<void> {
+  modeToggle(el).click();
   await settleStructure(el);
 }
 
@@ -2144,7 +2143,7 @@ it("creates a section at the menu's top level from the root row's ⋮, and gives
   expect(structureRows(el).shadowRoot.activeElement).toBe(rootAdds(el));
 });
 
-it("turns Reorder off and puts focus on the empty box's first add when removing the last member empties the menu", async () => {
+it("turns Select and reorder off and puts focus on the empty box's first add when removing the last member empties the menu", async () => {
   let removed = false;
   const client = api({
     getMenuStructure: vi.fn(async () =>
@@ -2156,8 +2155,8 @@ it("turns Reorder off and puts focus on the empty box's first add when removing 
   });
   const el = await mountLunch(client);
   await vi.waitFor(() => expect(rowOf(el, "m-burger")).not.toBeNull());
-  await pressReorder(el);
-  expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("true");
+  await pressMode(el);
+  expect(modeToggle(el).getAttribute("aria-pressed")).toBe("true");
   await rowAction(el, "m-burger", "remove");
   await vi.waitFor(() =>
     expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("root-lunch", "m-burger"),
@@ -2172,8 +2171,8 @@ it("turns Reorder off and puts focus on the empty box's first add when removing 
   expect(structure(el).shadowRoot!.activeElement?.getAttribute("data-test")).toBe(
     "new-section-empty",
   );
-  expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
-  expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+  expect(modeToggle(el).getAttribute("aria-pressed")).toBe("false");
+  expect(q(el, '[data-test="selection-done"]')).toBeNull();
 });
 
 it("keeps the new-section form open and explains a refused section", async () => {
@@ -2421,7 +2420,7 @@ it("edits section details and deletes its owned descendants while keeping includ
 it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the moved row", async () => {
   const client = api();
   const el = await mountLunch(client);
-  await pressReorder(el);
+  await pressMode(el);
   const list = structureRows(el);
   const handle = () =>
     list.shadowRoot.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
@@ -3207,7 +3206,7 @@ it("moves a product into the section above it with ArrowRight on its grip, and f
   const client = api();
   const el = await mountLunch(client);
   await editDrinks(el);
-  await pressReorder(el);
+  await pressMode(el);
   const list = structureRows(el);
   const grip = (key: string) =>
     list.shadowRoot.querySelector<HTMLButtonElement>(`[data-test="drag-${CSS.escape(key)}"]`);
@@ -4000,7 +3999,7 @@ describe("the Structure tree", () => {
     expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-fav", "m-fav-lemonade");
 
     await settleStructure(el);
-    await pressReorder(el);
+    await pressMode(el);
     const grip = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]')!;
     grip.focus();
     grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -4032,7 +4031,7 @@ describe("the Structure tree", () => {
     await toggleRow(el, "m-drinks");
     await toggleRow(el, "m-fav");
     await toggleRow(el, "m-fav/m-fav-drinks");
-    await pressReorder(el);
+    await pressMode(el);
     const grip = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-drinks/m-lager"]')!;
     grip.focus();
     grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -4066,7 +4065,7 @@ describe("the Structure tree", () => {
     );
   });
 
-  describe("Reorder mode", () => {
+  describe("combined Select and reorder mode", () => {
     beforeEach(() => {
       const before = currentLocale();
       setLocale("en");
@@ -4075,25 +4074,25 @@ describe("the Structure tree", () => {
 
     const grips = (el: MenusScreen) => allInStructure(el, '[data-test^="drag-"]');
 
-    it("starts with no grip on any row and the Reorder toggle not pressed", async () => {
+    it("starts with no grip on any row and the Select toggle not pressed", async () => {
       const el = await mountLunch();
       await toggleRow(el, "m-drinks");
       expect(grips(el)).toEqual([]);
-      expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
-      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+      expect(modeToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(q(el, '[data-test="selection-done"]')).toBeNull();
     });
 
-    it("offers Reorder as an icon button with a tooltip; pressed, every owned row has a grip, and an arrow on one moves it", async () => {
+    it("offers Select as an icon button with a tooltip; pressed, every owned row has a grip, and an arrow on one moves it", async () => {
       const client = api();
       const el = await mountLunch(client);
       await toggleRow(el, "m-drinks");
-      const toggle = reorderToggle(el);
+      const toggle = modeToggle(el);
       expect(toggle.localName).toBe("button");
       expect(toggle.getAttribute("type")).toBe("button");
       expect(toggle.getAttribute("slot")).toBe("toolbar-start");
-      expect(toggle.getAttribute("aria-label")).toBe("Reorder");
+      expect(toggle.getAttribute("aria-label")).toBe("Select");
       const tooltip = toggle.querySelector<HTMLElement>(".icon-tooltip")!;
-      expect(tooltip.textContent!.trim()).toBe("Reorder");
+      expect(tooltip.textContent!.trim()).toBe("Select");
       expect(tooltip.getAttribute("aria-hidden")).toBe("true");
       // The shared icon-button look, so the styles reached this screen: a native button's border
       // is 2px outset, and an unstyled tooltip is always shown.
@@ -4103,7 +4102,7 @@ describe("the Structure tree", () => {
       expect(toggle.assignedSlot).not.toBeNull();
       expect(toggle.getBoundingClientRect().width).toBeGreaterThan(0);
 
-      await pressReorder(el);
+      await pressMode(el);
       expect(toggle.getAttribute("aria-pressed")).toBe("true");
       const owned = allInStructure(el, 'tbody tr[data-row-key^="m-"]');
       expect(owned.map((tr) => tr.dataset.rowKey)).toEqual([
@@ -4129,24 +4128,26 @@ describe("the Structure tree", () => {
       );
     });
 
-    it("names Reorder in Spanish", async () => {
+    it("names Select in Spanish", async () => {
       setLocale("es");
       const el = await mountLunch();
-      expect(reorderToggle(el).getAttribute("aria-label")).toBe("Reordenar");
-      expect(reorderToggle(el).querySelector(".icon-tooltip")!.textContent!.trim()).toBe(
-        "Reordenar",
+      expect(modeToggle(el).getAttribute("aria-label")).toBe("Seleccionar");
+      expect(modeToggle(el).querySelector(".icon-tooltip")!.textContent!.trim()).toBe(
+        "Seleccionar",
       );
-      await pressReorder(el);
-      expect(text(q(el, '[data-test="reorder-done"]'))).toBe("Listo");
+      await pressMode(el);
+      expect(text(q(el, '[data-test="selection-done"]'))).toBe("Listo");
     });
 
     it("leaves the mode by Done, handing focus back to the toggle, and by a second press", async () => {
       const el = await mountLunch();
-      await pressReorder(el);
-      const done = q(el, '[data-test="reorder-done"]')!;
+      await pressMode(el);
+      const done = q(el, '[data-test="selection-done"]')!;
       expect(done.localName).toBe("wt-button");
-      expect(done.getAttribute("slot")).toBe("toolbar-end");
-      expect(done.assignedSlot).not.toBeNull();
+      expect(done.closest('[data-test="selection-bar"]')!.getAttribute("slot")).toBe(
+        "toolbar-bottom",
+      );
+      expect(done.closest('[data-test="selection-bar"]')!.assignedSlot).not.toBeNull();
       expect(done.getBoundingClientRect().width).toBeGreaterThan(0);
       expect(text(done)).toBe("Done");
       expect(grips(el).length).toBeGreaterThan(0);
@@ -4154,20 +4155,20 @@ describe("the Structure tree", () => {
       await userEvent.keyboard("{Enter}");
       await settleStructure(el);
       expect(grips(el)).toEqual([]);
-      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
-      expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
-      expect(el.shadowRoot!.activeElement).toBe(reorderToggle(el));
+      expect(q(el, '[data-test="selection-done"]')).toBeNull();
+      expect(modeToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(el.shadowRoot!.activeElement).toBe(modeToggle(el));
 
-      await pressReorder(el);
+      await pressMode(el);
       expect(grips(el).length).toBeGreaterThan(0);
-      await pressReorder(el);
+      await pressMode(el);
       expect(grips(el)).toEqual([]);
-      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+      expect(q(el, '[data-test="selection-done"]')).toBeNull();
     });
 
     it("turns the mode off when another menu is opened", async () => {
       const el = await mountLunch();
-      await pressReorder(el);
+      await pressMode(el);
       expect(structure(el).reordering).toBe(true);
       history.pushState(null, "", DINNER_PATH);
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -4175,8 +4176,8 @@ describe("the Structure tree", () => {
       await vi.waitFor(() => expect(structure(el)).not.toBeNull());
       await settleStructure(el);
       expect(structure(el).reordering).toBe(false);
-      expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
-      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+      expect(modeToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(q(el, '[data-test="selection-done"]')).toBeNull();
     });
   });
 
@@ -4236,7 +4237,7 @@ describe("the Structure tree", () => {
       },
     );
 
-    it("keeps the search through a refresh after a write, and through Done on Reorder", async () => {
+    it("keeps the search through a refresh after a write, and through Done on Select", async () => {
       const client = api();
       const el = await mountLunch(client);
       await typeSearch(el, "Lemonade");
@@ -4253,8 +4254,8 @@ describe("the Structure tree", () => {
       expect(structure(el).search).toBe("Lemonade");
       expect(shownKeys(el)).not.toContain("m-burger");
 
-      await pressReorder(el);
-      q(el, '[data-test="reorder-done"]')!.click();
+      await pressMode(el);
+      q(el, '[data-test="selection-done"]')!.click();
       await settleStructure(el);
       expect(structure(el).reordering).toBe(false);
       expect(searchBox(el).value).toBe("Lemonade");
@@ -4303,7 +4304,7 @@ describe("the Structure tree", () => {
       await el.updateComplete;
     }
 
-    it("offers Select as an icon button beside Reorder; pressed, rows carry boxes and the bar shows", async () => {
+    it("offers Select as the only mode icon button; pressed, rows carry boxes and the bar shows", async () => {
       const el = await mountLunch();
       const toggle = selectToggle(el);
       expect(toggle.localName).toBe("button");
@@ -4314,7 +4315,7 @@ describe("the Structure tree", () => {
       expect(toggle.getAttribute("aria-label")).toBe("Select");
       expect(toggle.querySelector(".icon-tooltip")!.textContent!.trim()).toBe("Select");
       expect(toggle.getAttribute("aria-pressed")).toBe("false");
-      expect(toggle.previousElementSibling).toBe(reorderToggle(el));
+      expect(q(el, '[data-test="reorder"]')).toBeNull();
       expect(toggle.assignedSlot).not.toBeNull();
       expect(toggle.getBoundingClientRect().width).toBeGreaterThan(0);
       expect(rowBoxes(el)).toEqual([]);
@@ -5473,7 +5474,7 @@ describe("the Structure tree", () => {
 
     it("opens for browsing, and offers no ⋮ or grip on anything inside it", async () => {
       const { el } = await mountWithWines();
-      await pressReorder(el);
+      await pressMode(el);
       await toggleRow(el, "included-wine");
       expect(childKeys(el, "included-wine")).toEqual([
         "included-wine/wine-red",
@@ -5884,7 +5885,7 @@ describe("the Structure tree", () => {
         removeSectionMember: vi.fn(() => held.promise),
       });
       const el = await mountLunch(client);
-      await pressReorder(el);
+      await pressMode(el);
       await toggleRow(el, "m-drinks");
       if (write === "an add") {
         await rowAction(el, "m-drinks", "open-add-products");
@@ -9938,6 +9939,9 @@ it.each(["light", "dark"] as const)(
 );
 
 it("shows the current clash count from the menus status read", async () => {
+  const before = currentLocale();
+  setLocale("en");
+  onTestFinished(() => setLocale(before));
   const client = api({
     getMenuStatuses: vi.fn().mockResolvedValue({
       ...statuses(),
@@ -10736,4 +10740,129 @@ it.each(
   expect(structure(el).selected.length).toBe(1);
   expect(inStructure(el, '[part~="search-path"]')).toBeNull();
   await capture("restored");
+});
+
+it.each(["en", "es"])("A462 Structure has one Select mode in %s", async (locale) => {
+  const before = currentLocale();
+  setLocale(locale);
+  onTestFinished(() => setLocale(before));
+  const el = await mountLunch();
+  const select = q<HTMLButtonElement>(el, '[data-test="select"]')!;
+  expect(select.getAttribute("aria-label")).toBe(locale === "es" ? "Seleccionar" : "Select");
+  expect(q(el, '[data-test="reorder"]')).toBeNull();
+  await userEvent.click(select);
+  await settleStructure(el);
+  expect(structure(el).selecting).toBe(true);
+  expect(structure(el).reordering).toBe(true);
+  expect(inStructure(el, '[data-test="select-m-burger"]')).not.toBeNull();
+  expect(inStructure(el, '[data-test="drag-m-burger"]')).not.toBeNull();
+  inStructure<HTMLInputElement>(el, '[data-test="select-m-burger"]')!.click();
+  await settleStructure(el);
+  expect(structure(el).selected).toEqual(["m-burger"]);
+  q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-done"]')!.click();
+  await settleStructure(el);
+  expect(structure(el).selected).toEqual([]);
+  expect(structure(el).selecting).toBe(false);
+  expect(structure(el).reordering).toBe(false);
+  expect(inStructure(el, '[data-test="select-m-burger"]')).toBeNull();
+  expect(inStructure(el, '[data-test="drag-m-burger"]')).toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(select);
+});
+
+it("A462 Structure root updates editor without reopening the root", async () => {
+  const shownKeys = (el: MenusScreen) =>
+    allInStructure(el, "tbody tr[data-row-key]").map((row) => row.dataset.rowKey);
+  const live = new LiveData();
+  const client = api({ liveData: live });
+  const el = await mountLunch(client);
+  await editDrinks(el);
+  await toggleRow(el, "m-drinks/m-beer");
+  expect(currentPlace(el)).toBe("Lunch Menu › Drinks › Beer");
+  const chevron = inStructure<HTMLButtonElement>(el, 'tr[data-row-key="root"] .tree-toggle');
+  expect(chevron).not.toBeNull();
+  chevron!.click();
+  await settleStructure(el);
+  expect(currentPlace(el)).toBe("Lunch Menu");
+  expect(shownKeys(el)).toEqual(["root"]);
+  expect(structure(el).current).toEqual([]);
+  client.getMenuStructure.mockResolvedValue(lunchWith(lunchNodes().slice(1)));
+  live.invalidate([{ type: "section_members" }]);
+  await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+  await settleStructure(el);
+  expect(shownKeys(el)).toEqual(["root"]);
+  expect(structure(el).current).toEqual([]);
+  inStructure<HTMLButtonElement>(el, 'tr[data-row-key="root"] .tree-toggle')!.click();
+  await settleStructure(el);
+  expect(shownKeys(el)).toEqual(["root", "m-drinks", "m-fav"]);
+});
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en", "es"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A462 Structure visual $width $locale $theme", async ({ width, locale, theme }) => {
+  registerIcons(DASHBOARD_ICONS);
+  const before = currentLocale();
+  const previousTheme = document.documentElement.getAttribute("data-theme");
+  setLocale(locale);
+  document.documentElement.setAttribute("data-theme", theme);
+  onTestFinished(() => {
+    setLocale(before);
+    if (previousTheme === null) document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", previousTheme);
+  });
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  expect(window.innerWidth).toBe(width);
+  const el = await mount(api(), LUNCH_PATH, theme);
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  const capture = async (state: string) => {
+    await settleStructure(el);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width);
+    const color = getComputedStyle(inStructure(el, '[data-test="root-name"]')!).color;
+    expect(color).toBe(theme === "dark" ? "rgb(236, 238, 242)" : "rgb(22, 24, 29)");
+    await expectNoA11yViolations(el.parentElement!);
+    await page.screenshot({
+      element: el,
+      path: `.superpowers/a462-task5/structure-${width}-${locale}-${theme}-${state}.png`,
+    });
+  };
+  const select = q<HTMLButtonElement>(el, '[data-test="select"]')!;
+  select.focus();
+  await userEvent.keyboard("{Enter}");
+  await settleStructure(el);
+  expect(structure(el).selecting).toBe(true);
+  expect(structure(el).reordering).toBe(true);
+  await capture("select");
+  await editDrinks(el);
+  await toggleRow(el, "m-drinks/m-beer");
+  inStructure<HTMLButtonElement>(el, 'tr[data-row-key="root"] .tree-toggle')!.focus();
+  await userEvent.keyboard("{Enter}");
+  await settleStructure(el);
+  expect(currentPlace(el)).toBe("Lunch Menu");
+  expect(allInStructure(el, "tbody tr[data-row-key]").map((row) => row.dataset.rowKey)).toEqual([
+    "root",
+  ]);
+  await capture("closed");
+  const live = new LiveData();
+  const client = api({ liveData: live });
+  cleanupWidgets();
+  const empty = await mount(client, LUNCH_PATH, theme);
+  await vi.waitFor(() => expect(structure(empty)).not.toBeNull());
+  client.getMenuStructure.mockResolvedValue(lunchWith([]));
+  live.invalidate([{ type: "section_members" }]);
+  await vi.waitFor(() => expect(structure(empty).nodes).toEqual([]));
+  await settleStructure(empty);
+  expect(structure(empty).selecting).toBe(false);
+  expect(structure(empty).reordering).toBe(false);
+  await expectNoA11yViolations(empty.parentElement!);
+  await page.screenshot({
+    element: empty,
+    path: `.superpowers/a462-task5/structure-${width}-${locale}-${theme}-empty.png`,
+  });
 });

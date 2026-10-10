@@ -631,11 +631,8 @@ export class MenusScreen extends LitElement {
   /** The member ids followed from the menu's top level to the list being edited. */
   @state() private path: string[] = [];
   @state() private busy = false;
-  /** Whether the Structure tree shows its grips; each menu opens with it off. */
-  @state() private structureReordering = false;
   @state() private structureSearch = "";
   @state() private structureSelecting = false;
-  /** The Structure tree's ticked rows, as row keys. */
   @state() private structureSelected: string[] = [];
   /** The row keys the open Remove confirm sends, or null while it is shut. */
   @state() private removingSelected: string[] | null = null;
@@ -1247,7 +1244,6 @@ export class MenusScreen extends LitElement {
     this.statusError = false;
     this.statusResetRequired = false;
     this.path = [];
-    this.structureReordering = false;
     this.structureSearch = "";
     this.structureSelecting = false;
     this.structureSelected = [];
@@ -2426,7 +2422,7 @@ export class MenusScreen extends LitElement {
         .menuColor=${structure.root?.color ?? null}
         .current=${this.path}
         .busy=${this.busy}
-        .reordering=${this.structureReordering}
+        .reordering=${this.structureSelecting}
         .search=${this.structureSearch}
         .selecting=${this.structureSelecting}
         .selected=${this.structureSelected}
@@ -2514,23 +2510,6 @@ export class MenusScreen extends LitElement {
           type="button"
           slot="toolbar-start"
           class="icon-button"
-          data-test="reorder"
-          aria-label=${t("menus.reorder")}
-          aria-pressed=${String(this.structureReordering)}
-          @click=${() => {
-            this.structureReordering = !this.structureReordering;
-          }}
-          @pointerenter=${trackIconTooltip}
-          @pointerleave=${trackIconTooltip}
-          @focus=${trackIconTooltip}
-          @blur=${trackIconTooltip}
-        >
-          <wt-icon name="grip"></wt-icon
-          ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span></button
-        ><button
-          type="button"
-          slot="toolbar-start"
-          class="icon-button"
           data-test="select"
           aria-label=${t("folders.select")}
           aria-pressed=${String(this.structureSelecting)}
@@ -2560,18 +2539,7 @@ export class MenusScreen extends LitElement {
           }}
         ></wt-input>
         ${this.structureSelecting ? this.#renderSelectionBar() : nothing}
-        ${
-          this.structureReordering
-            ? html`<wt-button
-                slot="toolbar-end"
-                data-test="reorder-done"
-                variant="secondary"
-                @click=${() => void this.#leaveReordering()}
-                >${t("action.done")}</wt-button
-              >`
-            : nothing
-        }</dashboard-menu-structure-table
-      >`;
+      </dashboard-menu-structure-table>`;
   }
 
   #renderSelectionBar() {
@@ -2641,7 +2609,6 @@ export class MenusScreen extends LitElement {
   #keepSelectionOwned(previous?: MenuStructure | null): void {
     // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
     if (this.structure?.nodes.length === 0) {
-      this.structureReordering = false;
       this.structureSelecting = false;
       this.structureSearch = "";
     }
@@ -2835,19 +2802,11 @@ export class MenusScreen extends LitElement {
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
 
-  /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
   async #leaveSelecting(): Promise<void> {
     this.structureSelected = [];
     this.structureSelecting = false;
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
-  }
-
-  /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
-  async #leaveReordering(): Promise<void> {
-    this.structureReordering = false;
-    await this.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>('[data-test="reorder"]')?.focus();
   }
 
   #renderPrices() {

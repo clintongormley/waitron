@@ -552,11 +552,11 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible Structure tab in Reorder mode, the toggle pressed and Done shown", async () => {
+  it("accessible Structure tab in combined Select and reorder mode, the toggle pressed and Done shown", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    q(el, '[data-test="reorder"]').click();
-    await vi.waitFor(() => expect(q(el, '[data-test="reorder-done"]')).not.toBeNull());
-    expect(q(el, '[data-test="reorder"]').getAttribute("aria-pressed")).toBe("true");
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() => expect(q(el, '[data-test="selection-done"]')).not.toBeNull());
+    expect(q(el, '[data-test="select"]').getAttribute("aria-pressed")).toBe("true");
     await vi.waitFor(() =>
       expect(treeRows(el).querySelector('[part~="drag-grip"]')).not.toBeNull(),
     );
@@ -624,9 +624,9 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible Reorder tooltip on keyboard focus", async () => {
+  it("accessible Select tooltip on keyboard focus", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    const toggle = q(el, '[data-test="reorder"]');
+    const toggle = q(el, '[data-test="select"]');
     (document.activeElement as HTMLElement | null)?.blur();
     for (let i = 0; i < 30 && el.shadowRoot!.activeElement !== toggle; i += 1)
       await userEvent.tab();

@@ -1064,13 +1064,13 @@ button): the menu's name in bold, then its counts, such as "3 sections, 12 produ
 and product counted once, those inside included menus too. The menu's colour chip is drawn before
 the name only when the menu has a colour; it is a picture, not a button, since the colour is edited
 in the menu's settings. That row's ⋮ holds the menu's own adds — Add section, Include a menu and Add
-products. It cannot close, has no checkbox in Select mode and no grip in Reorder mode, nothing can
+products. Its chevron opens its own level; closing it closes every descendant. It starts open,
+has no checkbox or grip in Select mode, nothing can
 be dropped on it, and no search or filter matches it, so while one is set the row is drawn only
 above a match. Under it the menu's members are the top-level rows,
 in menu order, with no sort, and any of them can close. While the menu is empty the table draws no
 rows and no toolbar, so its empty box says
-"Nothing is on this menu yet." with the same three adds as buttons under it, and Reorder and Select
-turn off. A row's key
+"Nothing is on this menu yet." with the same three adds as buttons under it, and Select turns off. A row's key
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
 of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
 section from whichever place it was chosen, and makes that row the current one, whose name is drawn
@@ -1082,8 +1082,8 @@ tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) wi
 "Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
 and photo, each following the included menu until it is changed; and "Remove from this menu". The
 rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
-Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
-In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
+Select mode each keeps an unseen grip-sized space. Only an owned row has a grip.
+In Select mode, put every grip in one leading column before the tree arrow and indentation.
 Reserve that column on read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
 holds a section's colour square or a product's colour square or photo. A photo has a ring in the product's own colour, falling back to its category's inherited
@@ -1103,8 +1103,8 @@ selected. Move and Remove use all ticks. A changed query cancels a held drag. Wh
 the Available filter hides rows, ArrowUp and ArrowDown move past the next drawn sibling.
 The search clears when another menu opens or the menu empties.
 
-Beside Reorder is a Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
-mode every row the menu owns has a box named "<name>, in <list>" (rows inside an included menu have
+The toolbar has one Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
+mode every row the menu owns has a box and a drag handle named "<name>, in <list>" (rows inside an included menu have
 none), and a bar under the toolbar shows how many rows are ticked with three buttons: **Move to
 section…**, **Remove from menu** and Done, which leaves the mode and puts focus back on Select.
 Select and Done cannot be pressed while a change is being saved. While a search or filter is on, a section
@@ -1129,14 +1129,14 @@ which moves the member rows themselves, so a moved product keeps the menu's pric
 included menu keeps its folder setting (`moveMembersInto`, `packages/catalogue/src/sections.ts`).
 Copying products into another section is not built.
 
-The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
-it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
-buttons with a tooltip", below), pressed (`aria-pressed`) while the mode is on. While it is on, a
-Done button at the toolbar's end turns it off and puts focus back on Reorder, since Done itself
-disappears; pressing Reorder again turns it off too. Opening a menu, or going back to the list,
-turns it off, so each menu opens with it off (`structureReordering`,
-`apps/dashboard/src/screens/menus-screen.ts`). Outside the mode no row has a grip, so neither a
-pointer nor the keyboard can move a member.
+The grips show only in Select mode, alongside the checkboxes. Done leaves both selection and
+reordering and returns focus to Select; pressing Select again also leaves the mode. Opening
+another menu, returning to the list or emptying the menu clears the mode. A live re-read keeps it
+(`structureSelecting`, `apps/dashboard/src/screens/menus-screen.ts`). Products and Structure have
+no Expand all button. Closing any branch closes its descendants, including those hidden by a
+search or filter; opening it shows only its own level. Preview keeps Expand all. Closing a current
+Structure branch returns editing to its parent, or to the menu when its root closes. Search
+closures reconcile the current path when you clear the search.
 
 A grip moves a member anywhere in its own menu, not only among its siblings (owner decision
 2026-10-07, A338: "if i drag a product in the menu into a different section, it doesn't move"). A
@@ -1613,7 +1613,7 @@ nothing about contents; otherwise offer moving their contents up as the default,
 ### Icon buttons with a tooltip (`iconButtonStyles`, `trackIconTooltip`)
 
 The `wt-data-table` Filters button, the Products Select button and the Structure tab's
-Reorder and Select buttons each take the `icon-button` class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
+Select button all take the `icon-button` class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
 least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
 `--wt-color-primary` border, `--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon —
 while the button's `aria-pressed` or `aria-expanded` is `true`; disabled, it is drawn at

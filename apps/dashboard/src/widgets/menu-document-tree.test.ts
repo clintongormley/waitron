@@ -544,3 +544,29 @@ it("A462 default Preview keeps Expand all and nested reopen state", async () => 
   await settle(el);
   expect(shown(el)).toEqual(["root", "drinks", "juice"]);
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en", "es"] as const).flatMap((language) =>
+      (["light", "dark"] as const).map((theme) => ({ width, language, theme })),
+    ),
+  ),
+)("A462 Preview visual $width $language $theme", async ({ width, language, theme }) => {
+  setLocale(language);
+  await page.viewport(width, 844);
+  expect(window.innerWidth).toBe(width);
+  const el = await mount(fixture(), theme);
+  const bulk = () => table(el).shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  bulk().click();
+  await settle(el);
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+  expect(bulk().textContent).toContain(t("folders.collapse_all"));
+  expect(row(el, "root")!.querySelector(".tree-toggle")).toBeNull();
+  expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width);
+  await page.screenshot({
+    element: el,
+    path: `__screenshots__/a462-task5/preview-${width}-${language}-${theme}.png`,
+  });
+});
