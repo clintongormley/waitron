@@ -726,6 +726,38 @@ describe("saveZonePlan", () => {
     return { z, t1, bar, live, result };
   }
 
+  it("inserts the new tables and the joins in the same statements, however many there are", async () => {
+    async function statementsFor(tables: number, joins: number): Promise<number> {
+      const z = await zone();
+      await save(z, { revision: 0, tables: [], joins: [] });
+      const keys = Array.from({ length: tables }, (_, i) => `k${i}`);
+      const input: ZonePlanSave = {
+        revision: 1,
+        tables: keys.map((key) => entry(key, fresh(key))),
+        joins: Array.from({ length: joins }, (_, i) => ({
+          seats: 4,
+          tableKeys: [keys[2 * i]!, keys[2 * i + 1]!],
+        })),
+      };
+      const counted = await inTx(v, async (tx) => {
+        const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+        try {
+          const saved = await saveZonePlan(tx, v.cfg, NONE, z, input, NOW);
+          return { saved, statements: prepare.mock.calls.length };
+        } finally {
+          prepare.mockRestore();
+        }
+      });
+      const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+      expect(plan.tables.map((t) => t.id).sort()).toEqual(Object.values(counted.saved.ids).sort());
+      expect(plan.joins).toHaveLength(joins);
+      for (const join of plan.joins) expect(join.tableIds).toHaveLength(2);
+      return counted.statements;
+    }
+
+    expect(await statementsFor(5, 2)).toBe(await statementsFor(2, 1));
+  });
+
   it("accepts the plan it read sent back unchanged, each table with its own live table", async () => {
     const z = await zone();
     const first = await save(z, {

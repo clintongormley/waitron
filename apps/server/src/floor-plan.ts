@@ -8,8 +8,9 @@ import {
   floorResetTables,
   floorTodayZones,
   floorZones,
+  newId,
+  type Transaction,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
@@ -416,17 +417,15 @@ export async function saveZonePlan(
   }
   // A Map, because a draft key is any string: on a plain object `__proto__` sets the prototype.
   const ids = new Map<string, string>();
+  const created: (typeof floorPlanTables.$inferInsert)[] = [];
   for (const table of tables) {
-    if (table.id !== undefined) {
-      ids.set(table.key, table.id);
-      continue;
+    const id = table.id ?? newId();
+    ids.set(table.key, id);
+    if (table.id === undefined) {
+      created.push({ id, planId, label: table.label.trim(), ...masterColumns(table) });
     }
-    const [row] = await tx
-      .insert(floorPlanTables)
-      .values({ planId, label: table.label.trim(), ...masterColumns(table) })
-      .returning({ id: floorPlanTables.id });
-    ids.set(table.key, row!.id);
   }
+  if (created.length > 0) await tx.insert(floorPlanTables).values(created);
   for (const table of tables) {
     if (table.id === undefined) continue;
     const next = { label: table.label.trim(), ...masterColumns(table) };
@@ -435,14 +434,16 @@ export async function saveZonePlan(
     await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
   }
 
-  for (const join of input.joins) {
-    const [row] = await tx
-      .insert(floorPlanJoins)
-      .values({ planId, seats: join.seats })
-      .returning({ id: floorPlanJoins.id });
-    for (const key of join.tableKeys) {
-      await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId: ids.get(key)! });
-    }
+  if (input.joins.length > 0) {
+    const joinRows = input.joins.map((join) => ({ id: newId(), planId, seats: join.seats }));
+    await tx.insert(floorPlanJoins).values(joinRows);
+    await tx
+      .insert(floorPlanJoinTables)
+      .values(
+        input.joins.flatMap((join, i) =>
+          join.tableKeys.map((key) => ({ joinId: joinRows[i]!.id, planTableId: ids.get(key)! })),
+        ),
+      );
   }
 
   for (const table of tables) {

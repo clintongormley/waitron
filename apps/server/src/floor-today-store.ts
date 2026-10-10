@@ -117,15 +117,17 @@ async function resetZoneFor(
     live,
   );
   await tx.delete(floorResetTables).where(eq(floorResetTables.zoneId, zoneId));
-  for (const target of targets) {
-    await tx.insert(floorResetTables).values({
-      zoneId,
-      tableId: target.tableId,
-      planTableId: target.planTableId,
-      ...targetRow(target),
-      remove: target.remove,
-      pending: true,
-    });
+  if (targets.length > 0) {
+    await tx.insert(floorResetTables).values(
+      targets.map((target) => ({
+        zoneId,
+        tableId: target.tableId,
+        planTableId: target.planTableId,
+        ...targetRow(target),
+        remove: target.remove,
+        pending: true,
+      })),
+    );
   }
   await catchUpZone(tx, cfg, removals, zoneId, now);
 }
