@@ -23,8 +23,10 @@ class ReceiptLeaveApp extends LitElement {
   }
 }
 customElements.define("receipt-leave-test-app", ReceiptLeaveApp);
+const originalUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
   setLocale("en-GB");
 });
 type Screen = HTMLElementTagNameMap["dashboard-receipts-screen"];
@@ -191,7 +193,12 @@ function field(screen: Screen, name: string) {
       ? defaultsRoot(screen)
       : screen.shadowRoot!;
   return root.querySelector<
-    HTMLElement & { value: string; checked: boolean; image: string | null }
+    HTMLElement & {
+      value: string;
+      checked: boolean;
+      image: string | null;
+      updateComplete?: Promise<boolean>;
+    }
   >(`[name=${name}], [data-test=${name}]`)!;
 }
 async function change(screen: Screen, name: string, value: string | boolean | null) {
@@ -698,7 +705,7 @@ it("successful language and description writes abort a pending leave question", 
   expect(left).toBe(0);
   await expect.poll(() => unload()).toBe(false);
 });
-it("disconnect releases language and description protection and reconnect loads their baselines again", async () => {
+it("disconnect releases language and description protection and reconnect preserves their guarded drafts", async () => {
   const { app, screen } = await mount();
   await change(screen, "receiptLanguage", "ca-ES");
   await change(screen, "operationDescription", "Dinner");
@@ -706,8 +713,11 @@ it("disconnect releases language and description protection and reconnect loads 
   screen.remove();
   expect(unload()).toBe(false);
   app.shadowRoot!.prepend(screen);
-  await expect.poll(() => field(screen, "operationDescription").value).toBe("Restaurant service");
-  await expect.poll(() => field(screen, "receiptLanguage").value).toBe("es-ES");
+  await expect.poll(() => field(screen, "operationDescription").value).toBe("Dinner");
+  await expect.poll(() => field(screen, "receiptLanguage").value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+  await change(screen, "operationDescription", "Restaurant service");
+  await change(screen, "receiptLanguage", "es-ES");
   expect(unload()).toBe(false);
 });
 for (const part of ["language", "description"] as const) {
@@ -737,7 +747,7 @@ for (const part of ["language", "description"] as const) {
     await expect.poll(() => writes).toBe(1);
     screen.remove();
     app.shadowRoot!.prepend(screen);
-    await expect.poll(() => field(screen, name).value).toBe(original);
+    await expect.poll(() => field(screen, name).value).toBe(edited);
     await change(screen, name, edited);
     write.resolve();
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -871,7 +881,7 @@ it("a successful description and language save stays clean after a subsequent fa
 });
 
 for (const accepted of [true, false]) {
-  it(`an older ${accepted ? "accepted" : "refused"} language write leaves the clean reconnected values and status alone`, async () => {
+  it(`an older ${accepted ? "accepted" : "refused"} language write leaves the dirty reconnected values and status alone`, async () => {
     const language = deferred<void>();
     let writes = 0;
     const { app, screen } = await mount({
@@ -885,11 +895,11 @@ for (const accepted of [true, false]) {
     await expect.poll(() => writes).toBe(1);
     screen.remove();
     app.shadowRoot!.prepend(screen);
-    await expect.poll(() => field(screen, "receiptLanguage").value).toBe("es-ES");
+    await expect.poll(() => field(screen, "receiptLanguage").value).toBe("ca-ES");
     if (accepted) language.resolve();
     else language.reject({ code: "connection.failed" });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(field(screen, "receiptLanguage").value).toBe("es-ES");
+    expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
     expect(
       (
         screen.shadowRoot!.querySelector("[data-test=language-actions]")! as HTMLElement & {
@@ -897,6 +907,8 @@ for (const accepted of [true, false]) {
         }
       ).error,
     ).toBe("");
+    expect(unload()).toBe(true);
+    await change(screen, "receiptLanguage", "es-ES");
     expect(unload()).toBe(false);
   });
 }
@@ -964,5 +976,151 @@ it("the independent description action commits only description protection", asy
     .toBe(true);
   expect(unload()).toBe(true);
   await change(screen, "receiptLanguage", "es-ES");
+  expect(unload()).toBe(false);
+});
+
+async function pickA10(control: HTMLElementTagNameMap["wt-combobox"], value: string) {
+  const { page, userEvent } = await import("vitest/browser");
+  await control.updateComplete;
+  await userEvent.click(page.elementLocator(control.shadowRoot!.querySelector("button.trigger")!));
+  const label = control.options.find((option) => option.value === value)!.label;
+  await expect
+    .poll(() => control.shadowRoot!.querySelector("#panel")!.matches(":popover-open"))
+    .toBe(true);
+  const row = [...control.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+    (option) => option.textContent!.trim() === label,
+  )!;
+  await userEvent.click(page.elementLocator(row));
+}
+async function chooseA10(app: ReceiptLeaveApp, decision: "keep" | "discard") {
+  const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => warning.open).toBe(true);
+  await warning.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  const modal = warning.shadowRoot!.querySelector("wt-modal")!;
+  const closed = new Promise<void>((resolve) =>
+    modal.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(
+    page.elementLocator(warning.shadowRoot!.querySelector(`[data-choice=${decision}]`)!),
+  );
+  await closed;
+  await expect.poll(() => warning.open).toBe(false);
+}
+async function typeReceiptField(screen: Screen, name: string, value: string) {
+  const control = field(screen, name);
+  await control.updateComplete;
+  const { page, userEvent } = await import("vitest/browser");
+  await userEvent.fill(
+    page.elementLocator(control.shadowRoot!.querySelector("input,textarea")!),
+    value,
+  );
+}
+for (const [name, typed, saved] of [
+  ["receiptLanguage", "ca-ES", "es-ES"],
+  ["operationDescription", "Dinner service", "Restaurant service"],
+] as const) {
+  it(`A10 reconnect keeps ${name} visibly dirty against its saved baseline`, async () => {
+    const { app, screen } = await mount();
+    if (name === "receiptLanguage") {
+      await pickA10(
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "[name=receiptLanguage]",
+        )!,
+        typed,
+      );
+    } else await typeReceiptField(screen, name, typed);
+    const { reattachAfterDetachedUpdate } = await import("../widgets/test-helpers.js");
+    await reattachAfterDetachedUpdate(screen);
+    await expect.poll(() => field(screen, name)?.value).toBe(typed);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(unload()).toBe(true);
+    const request = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await chooseA10(app, "discard");
+    expect(await request).toBe("proceeded");
+    await expect.poll(() => field(screen, name)?.value).toBe(saved);
+    expect(unload()).toBe(false);
+  });
+}
+it("A10 department Keep retains every draft and Discard switches only the department", async () => {
+  history.replaceState(null, "", "/manage/venue-settings/view/receipts?departmentId=bar");
+  const { app, screen } = await mount({
+    getVenueDepartments: async () => [
+      { id: "bar", name: "Bar", active: true, isDefault: true },
+      { id: "deli", name: "Deli", active: true, isDefault: false },
+    ],
+  });
+  await expect.poll(() => departmentRoot(screen)?.querySelector("[name=email]")).toBeTruthy();
+  await typeReceiptField(screen, "email", "bar@example.com");
+  await typeReceiptField(screen, "headerSubtitle", "Unsaved venue");
+  await typeReceiptField(screen, "operationDescription", "Dinner service");
+  await pickA10(
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=receiptLanguage]",
+    )!,
+    "ca-ES",
+  );
+  const picker =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+  await pickA10(picker, "deli");
+  await chooseA10(app, "keep");
+  expect(picker.value).toBe("bar");
+  expect(field(screen, "email").value).toBe("bar@example.com");
+  expect(field(screen, "headerSubtitle").value).toBe("Unsaved venue");
+  expect(field(screen, "operationDescription").value).toBe("Dinner service");
+  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
+  await pickA10(picker, "deli");
+  await chooseA10(app, "discard");
+  await expect
+    .poll(
+      () => screen.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.departmentId,
+    )
+    .toBe("deli");
+  await expect.poll(() => field(screen, "email")?.value).toBe("");
+  expect(field(screen, "headerSubtitle").value).toBe("Unsaved venue");
+  expect(field(screen, "operationDescription").value).toBe("Dinner service");
+  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+});
+
+it("A10 reconnect keeps department and defaults alongside independent location drafts", async () => {
+  const { app, screen } = await mount();
+  await expect.poll(() => departmentRoot(screen)?.querySelector("[name=email]")).toBeTruthy();
+  await typeReceiptField(screen, "email", "bar@example.com");
+  await typeReceiptField(screen, "headerSubtitle", "Draft venue");
+  await typeReceiptField(screen, "operationDescription", "Dinner service");
+  await pickA10(
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=receiptLanguage]",
+    )!,
+    "ca-ES",
+  );
+  const { reattachAfterDetachedUpdate } = await import("../widgets/test-helpers.js");
+  await reattachAfterDetachedUpdate(screen);
+  await expect.poll(() => field(screen, "email")?.value).toBe("bar@example.com");
+  expect(field(screen, "headerSubtitle").value).toBe("Draft venue");
+  expect(field(screen, "operationDescription").value).toBe("Dinner service");
+  expect(field(screen, "receiptLanguage").value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+  const kept = app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
+  await chooseA10(app, "keep");
+  expect(await kept).toBe("kept");
+  expect(field(screen, "email").value).toBe("bar@example.com");
+  expect(field(screen, "headerSubtitle").value).toBe("Draft venue");
+  const discarded = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  await chooseA10(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await expect.poll(() => field(screen, "email")?.value).toBe("");
+  expect(field(screen, "headerSubtitle").value).toBe("Welcome");
+  expect(field(screen, "operationDescription").value).toBe("Restaurant service");
+  expect(field(screen, "receiptLanguage").value).toBe("es-ES");
   expect(unload()).toBe(false);
 });

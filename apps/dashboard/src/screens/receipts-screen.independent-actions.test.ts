@@ -325,20 +325,22 @@ for (const part of ["language", "description"] as const)
       await el.updateComplete;
       parent.append(el);
       await vi.waitFor(async () =>
-        expect(await state(el, part)).toEqual({ variant: "secondary", disabled: true }),
+        expect(await state(el, part)).toEqual({ variant: "primary", disabled: false }),
       );
       if (accepted) held.resolve();
       else held.reject({ code: "connection.failed" });
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;
-      expect(await state(el, part)).toEqual({ variant: "secondary", disabled: true });
+      expect(await state(el, part)).toEqual({ variant: "primary", disabled: false });
       expect(bottom(el, part)).toBe("");
       expect(el.shadowRoot!.querySelector(`[data-test=${part}-section] [role=status]`)).toBeNull();
-      expect(description(el).value).toBe("Restaurant service");
+      expect(description(el).value).toBe(
+        part === "description" ? "Submitted" : "Restaurant service",
+      );
       expect(
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
           "wt-combobox[name=receiptLanguage]",
         )!.value,
-      ).toBe("es-ES");
+      ).toBe(part === "language" ? "ca-ES" : "es-ES");
     });
   }

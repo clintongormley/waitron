@@ -335,3 +335,63 @@ it.each(["en-GB", "es-ES"])(
     ).toBe(t("form.fix_fields"));
   },
 );
+
+for (const refused of [false, true]) {
+  it(`A10 an obsolete department read's ${refused ? "refusal" : "snapshot"} cannot replace the selected editor`, async () => {
+    const { el, api } = await mount();
+    const old = deferred<DepartmentReceiptSettings>();
+    api.getDepartmentReceipt.mockImplementationOnce(() => old.promise);
+    api.liveData.invalidate([{ type: "department_receipts" }]);
+    await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+    api.getDepartmentReceipt.mockResolvedValue({
+      ...settings,
+      receipt: { email: "deli@example.com" },
+    });
+    el.departmentId = "deli";
+    await expect.poll(() => field(el, "email")?.value).toBe("deli@example.com");
+    await edit(el, "email", "draft@example.com");
+    if (refused) old.reject({ code: "department.not_found" });
+    else old.resolve(settings);
+    await old.promise.catch(() => undefined);
+    await el.updateComplete;
+    expect(field(el, "email").value).toBe("draft@example.com");
+    expect(el.shadowRoot!.querySelector("[data-test=department-load-error]")).toBeNull();
+    expect(await state(el)).toEqual({ variant: "primary", disabled: false });
+    expect(api.liveData.interests).toContainEqual({ type: "department_receipts" });
+    el.remove();
+    expect(api.liveData.interests).toEqual([]);
+  });
+}
+it("A10 a former department's accepted write cannot commit a new department draft", async () => {
+  const { el, api } = await mount();
+  const pending = deferred<void>();
+  api.putDepartmentReceipt.mockImplementationOnce(() => pending.promise);
+  await edit(el, "email", "bar@example.com");
+  save(el).click();
+  await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
+  expect(api.putDepartmentReceipt.mock.calls[0]).toEqual([
+    "bar",
+    {
+      ...settings.receipt,
+      email: "bar@example.com",
+    },
+  ]);
+  api.getDepartmentReceipt.mockResolvedValue({
+    ...settings,
+    receipt: { email: "deli@example.com" },
+  });
+  el.departmentId = "deli";
+  await expect.poll(() => field(el, "email")?.value).toBe("deli@example.com");
+  await edit(el, "email", "new-draft@example.com");
+  pending.resolve();
+  await pending.promise;
+  await el.updateComplete;
+  expect(field(el, "email").value).toBe("new-draft@example.com");
+  expect(await state(el)).toEqual({ variant: "primary", disabled: false });
+  const { reattachAfterDetachedUpdate } = await import("../widgets/test-helpers.js");
+  await reattachAfterDetachedUpdate(el);
+  expect(field(el, "email").value).toBe("new-draft@example.com");
+  expect(await state(el)).toEqual({ variant: "primary", disabled: false });
+  await edit(el, "email", "deli@example.com");
+  expect(await state(el)).toEqual({ variant: "secondary", disabled: true });
+});

@@ -1681,6 +1681,7 @@ export class DashboardApp extends LitElement {
           accepted.href === next.href
             ? [receipt]
             : [];
+        if (except.length) return receipt!.requestDepartmentNavigation(proceed, signal);
         return this.leave.coordinator.request({
           scopes,
           except,

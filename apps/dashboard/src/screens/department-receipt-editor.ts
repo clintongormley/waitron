@@ -80,6 +80,9 @@ export class DepartmentReceiptEditor extends LitElement {
   #saved: DepartmentReceiptConfig = {};
   #scope?: DraftScope<DepartmentReceiptConfig>;
   #identity = {};
+  get draftOwner(): object {
+    return this.#identity;
+  }
   #context = "";
   #epoch = 0;
   #revision = 0;
@@ -371,7 +374,7 @@ export class DepartmentReceiptEditor extends LitElement {
                   label=${t("receipts.logo")}
                   .image=${this.draft.logo ?? null}
                   .inheritedImage=${defaults.logo ?? null}
-                  .draftParent=${this.draftParent ?? this}
+                  .draftParent=${this.#identity}
                   .disabled=${this.saving}
                   .invalid=${!!this.errors.logo}
                   @image-changed=${(event: CustomEvent<{ image: string | null }>) => {

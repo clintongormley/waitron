@@ -9,7 +9,7 @@ import {
   type VenueReceiptSettings,
 } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, navigationGuardFor } from "@waitron/ui";
-import { draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
+import { draftScopeFor, leaveCoordinatorFor, saveActionState, type DraftScope } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { observeNavigation } from "@waitron/ui/src/navigation-guard.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -193,6 +193,8 @@ export class ReceiptsScreen extends LitElement {
   #connection = 0;
   #languageScope?: DraftScope<string>;
   #descriptionScope?: DraftScope<string>;
+  #savedDescription = "";
+  #savedLanguage = "";
 
   #shownLanguage(): string {
     return this.pickedLanguage ?? this.receiptLanguage!.language;
@@ -213,6 +215,7 @@ export class ReceiptsScreen extends LitElement {
         this.#redrawInSavedLanguage();
       },
     }).scope;
+    this.#languageScope.commit(this.#savedLanguage);
   }
 
   #registerDescription(): void {
@@ -229,6 +232,7 @@ export class ReceiptsScreen extends LitElement {
         this.refusal = "";
       },
     }).scope;
+    this.#descriptionScope.commit(this.#savedDescription);
   }
 
   readonly #receiptQueries = new DashboardQueries(
@@ -328,6 +332,8 @@ export class ReceiptsScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    if (this.receiptLanguage !== null) this.#registerLanguage();
+    if (this.locationLoaded) this.#registerDescription();
     void this.#load();
     void this.#loadDepartments();
     void this.#loadContentLanguages();
@@ -338,17 +344,10 @@ export class ReceiptsScreen extends LitElement {
     this.#connection++;
     this.#departmentGeneration++;
     this.#departmentsLoaded = false;
-    this.venueDefaultsDraft = null;
     this.#languageScope?.dispose();
     this.#languageScope = undefined;
     this.#descriptionScope?.dispose();
     this.#descriptionScope = undefined;
-    this.pickedLanguage = null;
-    this.receiptLanguage = null;
-    this.description = "";
-    this.locationLoaded = false;
-    this.#dirty = false;
-    this.receiptLoaded = false;
     this.languageSaving = false;
     this.descriptionSaving = false;
     this.languageSaved = false;
@@ -440,15 +439,36 @@ export class ReceiptsScreen extends LitElement {
     this.#schedulePreview();
   }
 
+  requestDepartmentNavigation(proceed: () => void, signal?: AbortSignal) {
+    const editor = this.shadowRoot?.querySelector("dashboard-department-receipt-editor");
+    const coordinator = leaveCoordinatorFor(this);
+    if (coordinator) {
+      return coordinator.request({
+        scopes: editor ? [editor.draftOwner] : [],
+        reason: "navigation",
+        proceed,
+        signal,
+      });
+    }
+    proceed();
+    return Promise.resolve("proceeded" as const);
+  }
+
   #choosePreviewDepartment(departmentId: string): void {
+    const picker = this.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=departmentId]",
+    );
+    if (picker) picker.value = this.previewDepartmentId ?? "";
     if (!this.departments.some((department) => department.id === departmentId)) return;
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     url.searchParams.set("departmentId", departmentId);
     if (guard) void guard.write(url);
     else {
-      history.pushState(history.state, "", url);
-      this.#restorePreviewDepartment();
+      void this.requestDepartmentNavigation(() => {
+        history.pushState(history.state, "", url);
+        this.#restorePreviewDepartment();
+      });
     }
   }
 
@@ -478,6 +498,8 @@ export class ReceiptsScreen extends LitElement {
           const previousLanguage = this.receiptLanguage === null ? null : this.#shownLanguage();
           const savedElsewhere =
             this.receiptLanguage !== null && this.receiptLanguage.language !== value.language;
+          if (this.receiptLanguage === null || wasClean || value.fixed !== null)
+            this.#savedLanguage = value.language;
           this.receiptLanguage = value;
           this.languageLoadFailed = false;
           // A fixed language has no dropdown left to take back a pick or show its refusal.
@@ -559,7 +581,10 @@ export class ReceiptsScreen extends LitElement {
             this.#descriptionScope !== undefined && !this.#descriptionScope.isDirty();
           const previousDescription = this.description;
           const adopt = !this.#dirty && !this.descriptionSaving && saves === this.#saves;
-          if (adopt) this.description = value.operationDescription;
+          if (adopt) {
+            this.description = value.operationDescription;
+            this.#savedDescription = this.description;
+          }
           this.#registerDescription();
           if (adopt && wasClean && previousDescription !== this.description)
             this.#descriptionScope?.commit(this.description);
@@ -722,6 +747,7 @@ export class ReceiptsScreen extends LitElement {
       this.#redrawInSavedLanguage();
     }
     if (picked === language) this.pickedLanguage = null;
+    this.#savedLanguage = language;
     if (scope === this.#languageScope) scope?.commit(language);
     return true;
   }
@@ -788,6 +814,7 @@ export class ReceiptsScreen extends LitElement {
       return;
     }
     if (connection !== this.#connection || scope !== this.#descriptionScope) return;
+    this.#savedDescription = submitted;
     scope.commit(submitted);
     this.#dirty = scope.isDirty();
     this.#saves++;
