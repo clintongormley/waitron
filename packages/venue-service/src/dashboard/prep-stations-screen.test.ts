@@ -1321,7 +1321,8 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
-  expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add station");
+  expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add");
+  expect(q(el, '[data-test="new-station"]')!.getAttribute("aria-label")).toBe("Add station");
   expect(
     [...q(el, '[slot="actions"]')!.children].map((child) => child.getAttribute("data-test")),
   ).toEqual(["new-station"]);
@@ -1536,11 +1537,11 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   }
 });
 
-it("at 390 px in Spanish, the tab row fades its cut end and keeps the selected tab whole", async () => {
+it("at 320 px in Spanish, the tab row fades its cut end and keeps the selected tab whole", async () => {
   setLocale("es");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
-  el.parentElement!.style.width = "390px";
+  el.parentElement!.style.width = "320px";
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   await new Promise(requestAnimationFrame);
@@ -1562,6 +1563,41 @@ it("at 390 px in Spanish, the tab row fades its cut end and keeps the selected t
     bounds.right - 1,
   );
 });
+
+it.each([
+  { locale: "en", name: "Add station" },
+  { locale: "es", name: "Añadir estación" },
+] as const)(
+  "at 390 px, the Stations tab shows every tab and its add button whole ($locale)",
+  async ({ locale, name }) => {
+    setLocale(locale);
+    history.replaceState(null, "", "/manage/prep-stations");
+    const el = await mount(api());
+    el.parentElement!.style.width = "390px";
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const strip = tabs.shadowRoot!.querySelector<HTMLElement>("[role=tablist]")!;
+    const bounds = strip.getBoundingClientRect();
+    const row = tabs.shadowRoot!.querySelector('[part="tab-row"]')!.getBoundingClientRect();
+    expect(tabs.value).toBe("stations");
+    expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+    expect(tabs.dataset.overflow).toBeUndefined();
+    for (const tab of tabs.shadowRoot!.querySelectorAll("[role=tab]")) {
+      const box = tab.getBoundingClientRect();
+      expect(box.left, tab.textContent!).toBeGreaterThanOrEqual(bounds.left - 1);
+      expect(box.right, tab.textContent!).toBeLessThanOrEqual(bounds.right + 1);
+    }
+    const add = q(el, '[data-test="new-station"]')!;
+    const addBox = add.getBoundingClientRect();
+    expect(addBox.left).toBeGreaterThanOrEqual(row.left - 1);
+    expect(addBox.right).toBeLessThanOrEqual(row.right + 1);
+    const inner = add.shadowRoot!.querySelector("button")!;
+    expect(inner.scrollWidth).toBeLessThanOrEqual(inner.clientWidth);
+    expect(inner.getAttribute("aria-label")).toBe(name);
+  },
+);
 
 it.each([
   { locale: "en", theme: "light", width: 390 },

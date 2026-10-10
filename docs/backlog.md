@@ -1572,12 +1572,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   listed on every station; a watcher set to follow every station used to cover a new station at
   once. Consider an "add to every station" control. Left open by A366 slice 5 Part B (decision P2).
 
-- **In Spanish at a 390 px window, Prep stations' Stations tab cuts "Ajustes" off before "Añadir
-  estación".** With A457's shorter "Rutas", the three tabs need 270 px and the tab strip gets 243
-  (measured 2026-10-10 in Chromium, the 390 px case's setup), because the action area keeps up to
-  half the row, and the A424 rule (`docs/developers/design-system.md`) forbids wrapping the action.
-  Owner question pending. Left open by A366 slice 5 Part B.
-
 - **The server accepts a routing period line naming the cell's own plain station**; it routes
   nothing differently (`validatePeriodLines`, `packages/venue-service/src/routing-store.ts`). Left
   open by A366 slice 4 Part A.

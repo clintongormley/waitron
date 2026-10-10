@@ -3299,9 +3299,10 @@ strip shows its start: in Spanish at a 390 px window (a 310 px screen), Printers
 impresión" tab is cut that way beside "Añadir un agente" (the "shows the selected tab whole at
 every window width except the Spanish Agents tab on a phone" case in
 `apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations shows its one add button,
-Add station, on Stations alone, and caps its action area at half the row through the
-`tab-actions` part so its tabs keep that half whatever the font (the "shows Add station on the
-Stations tab alone" and "keeps half of a … px tab row for the tabs" cases in
+labelled "Add" and named "Add station" to a screen reader, on Stations alone, and caps its action
+area at half the row through the `tab-actions` part so its tabs keep that half whatever the font
+(the "shows Add station on the Stations tab alone", "keeps half of a … px tab row for the tabs" and
+"at 390 px, the Stations tab shows every tab and its add button whole" cases in
 `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.
 A tab whose list is a tree puts its adds in the tree rather than the tab's `actions` slot: the Products tree in its All products row's ⋮, and a menu's
