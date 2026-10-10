@@ -1333,6 +1333,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   `device_profile_kitchen_screen_zones`). What a pass screen or the device editor shows for that
   zone was read, not run. Left open by A366 slice 5 Part B.
 
+- **Test stubs answer the Zones tab's floor plan read with something that is not a plan.** Several
+  tests that mount the Departments screen (17 cases in `apps/dashboard/src/dashboard-app.test.ts`
+  among them) answer every request with one body, so the zone panel's floor plan read
+  (`watchZoneFloorPlan`, `packages/venue-service/src/dashboard/client.ts`) gets a non-plan. The panel
+  now builds the preview's table list only when a plan arrives, which tolerates them; building it
+  on every redraw raised 33 unhandled errors. Give those stubs a real answer for that read. The
+  Zones tab's recovery test also passes when its recovery step does nothing, because a good read
+  clears the alert anyway (the hours read works the same way). Left open by A366 slice 6 Part C (#1510).
+
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
