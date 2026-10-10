@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  diningTables,
   floorZones,
   kitchenCourses,
   kitchenStations,
@@ -1715,6 +1716,30 @@ describe("/management-api/tables", () => {
         error: { code: "table.zone_inactive", params: { tableId, zoneId } },
       });
       expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
+    });
+
+    it("PATCH rename and DELETE on a planned table → 409 table.in_floor_plan, and the table is unchanged", async () => {
+      const { tableId } = await tableInServiceZone();
+      await suite.db
+        .update(diningTables)
+        .set({ planned: true })
+        .where(eq(diningTables.id, tableId));
+      const before = (await listAll()).find((t) => t.id === tableId);
+      const rename = await req(
+        `/tables/${tableId}`,
+        { method: "PATCH", body: JSON.stringify({ label: unique("renamed") }) },
+        managerCookie,
+      );
+      expect(rename.status).toBe(409);
+      expect(await rename.json()).toMatchObject({
+        error: { code: "table.in_floor_plan", params: { tableId } },
+      });
+      const disable = await req(`/tables/${tableId}`, { method: "DELETE" }, managerCookie);
+      expect(disable.status).toBe(409);
+      expect(await disable.json()).toMatchObject({
+        error: { code: "table.in_floor_plan", params: { tableId } },
+      });
+      expect((await listAll()).find((t) => t.id === tableId)).toEqual(before);
     });
 
     it("PATCH active: true under a disabled department → 409 table.zone_inactive, even once the zone itself is enabled", async () => {

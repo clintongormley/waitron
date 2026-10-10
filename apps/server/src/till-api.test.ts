@@ -3818,6 +3818,28 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     });
   });
 
+  it("refuses placing a planned table in another zone with 409 table.in_floor_plan", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { id: otherZoneId } = await withTransaction(suite.db, (tx) =>
+      createZone(tx, cfg, { name: `Patio-${randomUUID()}` }),
+    );
+    const { id: tableId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `planned-${randomUUID().slice(0, 8)}`, zoneId: otherZoneId }),
+    );
+    await suite.db.execute(sql`update dining_tables set planned = 1 where id = ${tableId}`);
+    const response = await app.request(`/api/tables/${tableId}/placement`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      body: JSON.stringify(place()),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "table.in_floor_plan", params: { tableId } },
+    });
+    expect(await placementOf(tableId)).toMatchObject({ pos_x: null, zone_id: otherZoneId });
+  });
+
   it("a MANAGER operator places a table (204, placement landed); a STAFF operator is 403", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

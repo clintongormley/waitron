@@ -20,6 +20,7 @@ import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { catchUpZone, ensureToday, resetZone, todayBusinessDay } from "./floor-today-store.js";
 import { finishTable } from "./parties.js";
+import { deactivateZone } from "./tables.js";
 import {
   commandFor,
   inTx,
@@ -692,5 +693,26 @@ describe("building today's plan from a zone's master plan", () => {
     };
 
     await expect(reset(z, [broken])).rejects.toThrow("disk on fire");
+  });
+});
+
+describe("a disabled zone", () => {
+  it("is left out of the next day's reset, so its tables stay off, while an active zone resets", async () => {
+    const off = await zone();
+    const on = await zone();
+    const offTable = await v.table("Off 1", off);
+    const onTable = await v.table("On 1", on);
+    await masterOf(off, [{ label: "Off 1", live: offTable }]);
+    await masterOf(on, [{ label: "On 1", live: onTable }]);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => deactivateZone(tx, v.cfg, off));
+    expect((await tableRow(v, offTable)).active).toBe(false);
+
+    const nextDay = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, nextDay));
+
+    expect((await tableRow(v, offTable)).active).toBe(false);
+    expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", generation: 1 });
+    expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
   });
 });

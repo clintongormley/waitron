@@ -148,9 +148,10 @@ export async function updateTable(
     capacity?: number | null;
     active?: boolean;
   } = {};
-  if (input.label !== undefined || input.zoneId !== undefined || input.active !== undefined) {
-    await refuseFloorPlanChange(tx, id, input);
-  }
+  const current =
+    input.label !== undefined || input.zoneId !== undefined || input.active !== undefined
+      ? await refuseFloorPlanChange(tx, id, input)
+      : undefined;
   if (input.label !== undefined) patch.label = input.label;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.active !== undefined) patch.active = input.active;
@@ -159,12 +160,8 @@ export async function updateTable(
     await requireZone(tx, input.zoneId);
   }
   if (input.active === true || (input.zoneId !== undefined && input.active !== false)) {
-    const [table] = await tx
-      .select({ zoneId: diningTables.zoneId, active: diningTables.active })
-      .from(diningTables)
-      .where(eq(diningTables.id, id));
-    const zoneId = input.zoneId ?? table?.zoneId ?? null;
-    if (table !== undefined && (input.active ?? table.active) && zoneId !== null) {
+    const zoneId = input.zoneId ?? current?.zoneId ?? null;
+    if (current !== undefined && (input.active ?? current.active) && zoneId !== null) {
       await requireZoneInService(tx, id, zoneId);
     }
   }
@@ -191,13 +188,14 @@ export async function updateTable(
 /**
  * A planned table's name, zone and on/off state belong to its zone's floor plan: a reset would
  * revert a change made here. Compared by value, because the old floor screen resends the
- * unchanged name with every capacity edit and the current zone with every placement.
+ * unchanged name with every capacity edit and the current zone with every placement. Returns the
+ * row it read, so `updateTable` need not read it again.
  */
 async function refuseFloorPlanChange(
   tx: Transaction,
   id: string,
   input: { label?: string; zoneId?: string; active?: boolean },
-): Promise<void> {
+): Promise<{ zoneId: string | null; active: boolean } | undefined> {
   const [table] = await tx
     .select({
       label: diningTables.label,
@@ -207,7 +205,7 @@ async function refuseFloorPlanChange(
     })
     .from(diningTables)
     .where(eq(diningTables.id, id));
-  if (table === undefined || !table.planned) return;
+  if (table === undefined || !table.planned) return table;
   if (
     (input.label !== undefined && input.label !== table.label) ||
     (input.zoneId !== undefined && input.zoneId !== table.zoneId) ||
@@ -215,6 +213,7 @@ async function refuseFloorPlanChange(
   ) {
     throw new AppError("table.in_floor_plan", { tableId: id });
   }
+  return table;
 }
 
 /** Deactivate, never hard-delete, because the table has order history. */
