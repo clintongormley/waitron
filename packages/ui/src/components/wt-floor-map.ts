@@ -10,9 +10,11 @@ import {
   type PlanPlacement,
   type PlanRect,
   bounds,
+  clampToGrid,
   cropToTables,
   fitScale,
   showsName,
+  snapToSquare,
 } from "../floor-plan-geometry.js";
 
 /** A merge's members carry the same `fill`, `dot` and `description`. */
@@ -52,6 +54,26 @@ interface View {
   x: number;
   y: number;
 }
+
+/** The last fit: its scale, and the crop's centre in grid squares. */
+interface Fit {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+/** The held group's first member, drawn moved by whole squares. */
+interface Drag {
+  tableId: string;
+  dx: number;
+  dy: number;
+  x: number;
+  y: number;
+}
+
+const MIN_ZOOM = 1 / 2;
+const MAX_ZOOM = 4;
+const WHEEL_DOUBLING = 100;
 
 interface Group {
   key: string;
@@ -202,10 +224,17 @@ export class WtFloorMap extends LitElement {
 
   #needsFit = true;
 
+  #fit: Fit | null = null;
+
+  /** Set by a pan, a pinch or the wheel; a resize then keeps the view. */
+  #touched = false;
+
+  #drag: Drag | null = null;
+
   #observer = new ResizeObserver(([entry]) => {
     const size = entry!.contentBoxSize[0]!;
     this.#size = { width: size.inlineSize, height: size.blockSize };
-    this.#needsFit = true;
+    if (!this.#touched) this.#needsFit = true;
     this.requestUpdate();
   });
 
@@ -227,6 +256,7 @@ export class WtFloorMap extends LitElement {
     this.addEventListener("contextmenu", this.#onContextMenu);
     this.addEventListener("keydown", this.#onKeyDown);
     this.addEventListener("pointerdown", this.#onPointerDown);
+    this.addEventListener("wheel", this.#onWheel, { passive: false });
   }
 
   override connectedCallback(): void {
@@ -244,8 +274,18 @@ export class WtFloorMap extends LitElement {
         const id = idOf(at.target);
         if (id !== null) this.#send("wt-table-details", id);
       },
-      holdDrop: () => this.#clearHeld(),
-      cancel: () => this.#clearHeld(),
+      holdDrag: this.#onHoldDrag,
+      holdDrop: (at) => {
+        const drag = this.#drag;
+        this.#endDrag();
+        if (drag !== null) this.#sendDrop(drag, at);
+      },
+      cancel: () => this.#endDrag(),
+      pan: ({ dx, dy }) => this.#moveView(1, 0, 0, dx, dy),
+      pinch: ({ ratio, x, y, dx, dy }) => {
+        const box = this.getBoundingClientRect();
+        this.#moveView(ratio, x - box.left - dx, y - box.top - dy, dx, dy);
+      },
     });
   }
 
@@ -255,7 +295,7 @@ export class WtFloorMap extends LitElement {
     this.#gestures!.disconnect();
     this.#gestures = null;
     this.#dropPendingTap();
-    this.#clearHeld();
+    this.#endDrag();
   }
 
   readonly #onTap = (at: GesturePoint): void => {
@@ -272,6 +312,11 @@ export class WtFloorMap extends LitElement {
 
   readonly #onDoubleTap = (at: GesturePoint): void => {
     const id = idOf(at.target);
+    if (id === null && this.#lastTapId === null) {
+      this.#needsFit = true;
+      this.requestUpdate();
+      return;
+    }
     if (id !== this.#lastTapId) {
       this.#onTap(at);
       return;
@@ -298,6 +343,79 @@ export class WtFloorMap extends LitElement {
     this.#held?.removeAttribute("data-held");
     this.#held = null;
   }
+
+  #endDrag(): void {
+    this.#clearHeld();
+    if (this.#drag === null) return;
+    this.#drag = null;
+    this.requestUpdate();
+  }
+
+  readonly #onHoldDrag = ({ dx, dy }: { dx: number; dy: number }): void => {
+    const id = this.#held?.dataset["tableId"];
+    const first = this.tables.find((table) => table.id === id);
+    if (first === undefined) return;
+    const scale = this.#view!.scale;
+    const x = clampToGrid(first.placement.x + snapToSquare(dx, scale));
+    const y = clampToGrid(first.placement.y + snapToSquare(dy, scale));
+    this.#drag = { tableId: first.id, dx: x - first.placement.x, dy: y - first.placement.y, x, y };
+    this.requestUpdate();
+  };
+
+  #sendDrop(drag: Drag, at: GesturePoint): void {
+    const targetId =
+      this.shadowRoot!.elementsFromPoint(at.x, at.y)
+        .map(idOf)
+        .find((id) => id !== null && id !== drag.tableId) ?? null;
+    this.dispatchEvent(
+      new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
+        detail: { tableId: drag.tableId, x: drag.x, y: drag.y, targetId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /**
+   * Scales the view by `ratio` about (mx, my), host px, then moves it by (dx, dy); the scale stays
+   * within MIN_ZOOM to MAX_ZOOM of the fit, and the crop's centre within the host.
+   */
+  #moveView(ratio: number, mx: number, my: number, dx: number, dy: number): void {
+    const view = this.#view;
+    const fit = this.#fit;
+    if (view === null || fit === null) return;
+    const scale = Math.min(
+      fit.scale * MAX_ZOOM,
+      Math.max(fit.scale * MIN_ZOOM, view.scale * ratio),
+    );
+    const change = scale / view.scale;
+    const size = this.#size!;
+    const x = mx + dx - (mx - view.x) * change;
+    const y = my + dy - (my - view.y) * change;
+    this.#view = {
+      scale,
+      x: Math.min(size.width, Math.max(0, x + fit.x * scale)) - fit.x * scale,
+      y: Math.min(size.height, Math.max(0, y + fit.y * scale)) - fit.y * scale,
+    };
+    this.#touched = true;
+    this.requestUpdate();
+  }
+
+  readonly #onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    if (!e.ctrlKey) {
+      this.#moveView(1, 0, 0, -e.deltaX, -e.deltaY);
+      return;
+    }
+    const box = this.getBoundingClientRect();
+    this.#moveView(
+      2 ** (-e.deltaY / WHEEL_DOUBLING),
+      e.clientX - box.left,
+      e.clientY - box.top,
+      0,
+      0,
+    );
+  };
 
   /** Enter or Space on a focused table; a pointer's own click is left to the gesture. */
   readonly #onClick = (e: MouseEvent): void => {
@@ -354,6 +472,8 @@ export class WtFloorMap extends LitElement {
     const crop = cropToTables(this.tables.map((t) => t.placement));
     if (crop === null) return;
     const scale = fitScale(crop, this.#size);
+    this.#fit = { scale, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
+    this.#touched = false;
     this.#view = {
       scale,
       x: (this.#size.width - crop.width * scale) / 2 - crop.x * scale,
@@ -383,6 +503,7 @@ export class WtFloorMap extends LitElement {
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const label = mapLabel(members.map((m) => m.label));
     const named = showsName(members.length === 1 ? first.placement : box, view.scale);
+    const drag = this.#drag?.tableId === first.id ? this.#drag : null;
     const dot = members.find((m) => m.dot !== null)?.dot ?? null;
     return html`<button
       type="button"
@@ -391,8 +512,8 @@ export class WtFloorMap extends LitElement {
       data-fill=${first.fill}
       aria-label=${`${label}, ${first.description}`}
       style=${styleMap({
-        left: px(view.x + box.x * view.scale),
-        top: px(view.y + box.y * view.scale),
+        left: px(view.x + (box.x + (drag?.dx ?? 0)) * view.scale),
+        top: px(view.y + (box.y + (drag?.dy ?? 0)) * view.scale),
         width: px(box.width * view.scale),
         height: px(box.height * view.scale),
       })}
