@@ -9892,7 +9892,7 @@ describe("Deleting a printer", () => {
     expect(linesOf(el)).toEqual([
       "3 trabajos de impresión pendientes",
       "1 recibo de factura sin imprimir",
-      "Handheld Ana dejará de llevarla",
+      "Handheld Ana deja de llevarla",
       "Cajón de 1 dispositivo: Handheld Ana",
       "Cajón en 1 perfil: Camareros",
       "Cajón predeterminado de 1 perfil: Camareros",

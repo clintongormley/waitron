@@ -102,7 +102,7 @@ describe("a printer's delete dialog copy, in Spanish", () => {
     [item("print_jobs", [], 1), "1 trabajo de impresión pendiente"],
     [item("invoice_receipts", [], 2), "2 recibos de factura sin imprimir"],
     [item("invoice_receipts", [], 1), "1 recibo de factura sin imprimir"],
-    [item("portable_holder"), "Handheld Ana dejará de llevarla"],
+    [item("portable_holder"), "Handheld Ana deja de llevarla"],
     [
       item("device_receipt", [bar, ana]),
       "Impresora de tickets de 2 dispositivos: Bar till, Handheld Ana",
