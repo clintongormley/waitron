@@ -1081,6 +1081,15 @@ describe("venue-routing-grid", () => {
         );
       });
 
+      it("hands the mark to the editor opened on that cell, which notes it under the line", async () => {
+        const { el } = await mount(flagged(["lunch"]));
+        const editor = await openEditor(el, combo(el, "c:drinks", "every")!);
+        const notes = [...editor.shadowRoot!.querySelectorAll("[data-test=period-line]")].map(
+          (line) => line.querySelector("[data-test=period-flag]")?.textContent?.trim() ?? null,
+        );
+        expect(notes).toEqual(["Not on Lunch menus", null]);
+      });
+
       it("says the mark in Spanish", async () => {
         setLocale("es");
         const { el } = await mount(flagged(["lunch"]));

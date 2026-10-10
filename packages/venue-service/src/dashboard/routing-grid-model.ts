@@ -231,7 +231,7 @@ export interface CellPeriodLines {
  * Three or more periods read "first–last" only when they run on in their one department's order.
  * A name repeated anywhere among the cell's lines carries its department.
  */
-function periodsText(
+export function periodsText(
   periods: readonly RoutingPeriod[],
   all: readonly RoutingPeriod[],
   repeated: ReadonlySet<string>,

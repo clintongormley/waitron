@@ -124,3 +124,15 @@ it("keeps Save working after a refusal and quiet while saving", async () => {
   el.busy = true;
   expect((await saveState(el)).disabled).toBe(true);
 });
+
+it("opens a cell holding only a line its menus no longer offer quiet, and saves it after another edit", async () => {
+  const el = await mount({ periods: [{ periodId: "lunch", target: down, notOffered: true }] });
+  const seen = saves(el);
+  expect(el.shadowRoot!.querySelector("[data-test=period-flag]")).not.toBeNull();
+  expect(await saveState(el)).toEqual(quiet);
+  await pickTarget(el, "station:down");
+  expect(await saveState(el)).toEqual(ready);
+  saveButton(el).click();
+  await el.updateComplete;
+  expect(seen).toEqual([{ target: down, periods: [{ periodId: "lunch", target: down }] }]);
+});

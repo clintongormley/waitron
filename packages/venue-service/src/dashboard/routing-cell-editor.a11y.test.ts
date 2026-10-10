@@ -14,7 +14,7 @@ const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue
 const down = { kind: "station", stationId: "down" } as const;
 
 describe.each(["light", "dark"] as const)("Routing cell editor (%s)", (theme) => {
-  test.each(["empty", "two lines", "refusal"])("%s", async (state) => {
+  test.each(["empty", "two lines", "refusal", "flagged line"])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
       "<routing-cell-editor></routing-cell-editor>",
@@ -38,7 +38,11 @@ describe.each(["light", "dark"] as const)("Routing cell editor (%s)", (theme) =>
         ? { inheritedFrom: "All categories", periods: [{ periodId: "dinner", target: down }] }
         : {
             periods: [
-              { periodId: "breakfast", target: down },
+              {
+                periodId: "breakfast",
+                target: down,
+                ...(state === "flagged line" ? { notOffered: true as const } : {}),
+              },
               { periodId: "lunch", target: { kind: "no_preparation" } },
             ],
           }),
@@ -57,6 +61,10 @@ describe.each(["light", "dark"] as const)("Routing cell editor (%s)", (theme) =>
           "[name=line-periods]",
         )[1]!.error,
       ).toBe("Lunch offers none of these products.");
+    if (state === "flagged line")
+      expect(el.shadowRoot!.querySelector("[data-test=period-flag]")?.textContent?.trim()).toBe(
+        "Not on Breakfast menus",
+      );
     await expectNoA11yViolations(host);
   });
 });
