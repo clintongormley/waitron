@@ -451,10 +451,68 @@ describe("Gestures", () => {
     expect(handlers.tap).toHaveBeenCalledWith({ target: b, x: 10, y: 10, pointerType: "mouse" });
   });
 
-  it("a touch reported with a non-zero button still presses", () => {
-    down(1, 10, 10, { button: 1, ctrlKey: true });
+  it("a pen's barrel button starts nothing", () => {
+    down(1, 10, 10, { pointerType: "pen", button: 2 });
+    expect(gestures.active).toBe(false);
+    up(1, 10, 10, { pointerType: "pen", button: 2 });
+    expect(handlers.tap).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl held with a touch or pen still presses", () => {
+    down(1, 10, 10, { pointerType: "pen", ctrlKey: true });
+    up(1, 10, 10);
+    expect(handlers.tap).toHaveBeenCalledWith({ target: b, x: 10, y: 10, pointerType: "pen" });
+  });
+
+  it("a press reusing a tracked pointer's id ends the stale gesture and starts afresh", () => {
+    down(1, 10, 10, { pointerType: "mouse" });
+    down(1, 50, 60, { pointerType: "mouse" });
+    expect(handlers.cancel).toHaveBeenCalledTimes(1);
+    expect(gestures.active).toBe(true);
+    up(1, 50, 60, { pointerType: "mouse" });
+    expect(handlers.tap).toHaveBeenCalledTimes(1);
+    expect(handlers.tap).toHaveBeenCalledWith({ target: b, x: 50, y: 60, pointerType: "mouse" });
+    expect(gestures.active).toBe(false);
+  });
+
+  it("a reused id during a pinch starts afresh, and the old second pointer is forgotten", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    down(1, 10, 10);
+    expect(handlers.cancel).toHaveBeenCalledTimes(1);
+    move(2, 400, 150);
+    expect(handlers.pinch).not.toHaveBeenCalled();
+    move(1, 30, 10);
+    expect(handlers.pan).toHaveBeenCalledWith({ dx: 20, dy: 0 });
+  });
+
+  it("a reused id after a pinch is spent starts afresh without a cancel", () => {
+    down(1, 200, 150);
+    down(2, 300, 150);
+    up(2, 300, 150);
+    down(1, 10, 10);
+    expect(handlers.cancel).not.toHaveBeenCalled();
     up(1, 10, 10);
     expect(handlers.tap).toHaveBeenCalledTimes(1);
+  });
+
+  it("a reused id closes the double-tap window", () => {
+    tapAt(10, 10);
+    down(1, 10, 10);
+    down(1, 10, 10);
+    up(1, 10, 10);
+    expect(handlers.doubleTap).not.toHaveBeenCalled();
+    expect(handlers.tap).toHaveBeenCalledTimes(2);
+  });
+
+  it("a reused id clears the stale hold", () => {
+    down(1, 10, 10);
+    vi.advanceTimersByTime(300);
+    down(1, 10, 10);
+    vi.advanceTimersByTime(300);
+    expect(handlers.holdStart).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(200);
+    expect(handlers.holdStart).toHaveBeenCalledTimes(1);
   });
 
   it("never stops or prevents a press", () => {
@@ -479,7 +537,7 @@ describe("Gestures", () => {
     expect(handlers.tap).toHaveBeenCalledTimes(1);
   });
 
-  it("the target is the innermost element pressed", () => {
+  it("a press on the host itself names the host as its target", () => {
     down(1, 10, 10, {}, hostEl);
     up(1, 10, 10);
     expect(handlers.tap).toHaveBeenCalledWith({
@@ -529,6 +587,9 @@ describe("Gestures", () => {
     down(2, 100, 10);
     move(2, 200, 10);
     dispatch(window, "pointercancel", 2, 200, 10);
+    up(1, 10, 10);
+    down(1, 10, 10);
+    down(1, 10, 10);
     up(1, 10, 10);
     expect(gestures.active).toBe(false);
   });

@@ -79,7 +79,14 @@ export class Gestures {
   }
 
   readonly #onDown = (e: PointerEvent): void => {
-    if (e.pointerType === "mouse" && (e.button !== 0 || e.ctrlKey)) return;
+    if (e.button !== 0 || (e.pointerType === "mouse" && e.ctrlKey)) return;
+    // A pointerup that never arrived leaves its id tracked, and a mouse always reuses id 1.
+    if (this.#pointers.has(e.pointerId)) {
+      if (this.#state !== "spent") this.#handlers.cancel?.();
+      this.#closeTapWindow();
+      this.#pointers.clear();
+      this.#end();
+    }
     const spot = { x: e.clientX, y: e.clientY };
     if (this.#state === "idle") {
       this.#state = "pressed";
