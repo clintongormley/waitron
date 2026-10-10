@@ -12,6 +12,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listSalePolicies } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
+import { readZonePlan } from "../../src/floor-plan.js";
+import type { Placement } from "../../src/floor-reset-plan.js";
 import { seedFloor } from "./seed-floor.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
@@ -106,6 +108,98 @@ describe("seedFloor", () => {
 
     expect(res.statuses.map((s) => s.label)).toEqual(["VIP", "Allergy at this table", "Birthday"]);
     expect(new Set(res.statuses.map((s) => s.color)).size).toBe(3);
+  });
+
+  it("gives every zone with tables a saved master plan and today's plan, every table placed and none overlapping", async () => {
+    const { locationId } = await provisionVenue();
+    const cfg = {
+      nodeId: "unused",
+      seriesId: "unused",
+      locationId: brandLocationId(locationId),
+    } as unknown as Parameters<typeof readZonePlan>[1];
+
+    const res = await withTransaction(suite.db, async (tx) => {
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
+      const { rows: zones } = await tx.execute<{ zone_id: string }>(
+        sql`select distinct zone_id from dining_tables where location_id = ${locationId}`,
+      );
+      const plans = [];
+      for (const { zone_id } of zones) plans.push(await readZonePlan(tx, cfg, zone_id));
+      const { rows: today } = await tx.execute<{
+        label: string;
+        zone_id: string;
+        fixed: number;
+        x: number | null;
+        y: number | null;
+        width: number | null;
+        height: number | null;
+        shape: string | null;
+        rotation: number | null;
+      }>(
+        sql`select d.label, d.zone_id, t.fixed, t.x, t.y, t.width, t.height, t.shape, t.rotation
+            from dining_tables d join floor_today_tables t on t.table_id = d.id
+            where d.location_id = ${locationId}`,
+      );
+      const { rows: todayZones } = await tx.execute<{ zone_id: string }>(
+        sql`select zone_id from floor_today_zones`,
+      );
+      return { plans, today, todayZones };
+    });
+
+    const overlapping = (rects: { label: string; placement: Placement }[]): string[] => {
+      const pairs: string[] = [];
+      for (const [i, a] of rects.entries()) {
+        for (const b of rects.slice(i + 1)) {
+          const p = a.placement;
+          const q = b.placement;
+          if (
+            p.x < q.x + q.width &&
+            q.x < p.x + p.width &&
+            p.y < q.y + q.height &&
+            q.y < p.y + p.height
+          )
+            pairs.push(`${a.label}/${b.label}`);
+        }
+      }
+      return pairs;
+    };
+
+    expect(res.plans).toHaveLength(3);
+    expect(res.todayZones.map((z) => z.zone_id).sort()).toEqual(
+      res.plans.map((p) => p.zoneId).sort(),
+    );
+    expect(res.plans.flatMap((p) => p.tables)).toHaveLength(16);
+    expect(res.today).toHaveLength(16);
+    for (const plan of res.plans) {
+      expect(plan.revision).toBeGreaterThanOrEqual(1);
+      for (const table of plan.tables) {
+        expect(table.id).not.toBeNull();
+        expect(table.liveTableId).not.toBeNull();
+        expect(table.placement).not.toBeNull();
+        expect(table.fixed).toBe(table.label.startsWith("B"));
+      }
+      const placed = plan.tables.map((t) => ({ label: t.label, placement: t.placement! }));
+      expect(overlapping(placed)).toEqual([]);
+      const todays = res.today
+        .filter((t) => t.zone_id === plan.zoneId)
+        .map((t) => ({ label: t.label, placement: t as unknown as Placement }));
+      expect(overlapping(todays)).toEqual([]);
+    }
+    for (const t of res.today) {
+      expect([t.x, t.y, t.width, t.height, t.shape, t.rotation]).not.toContain(null);
+      expect(t.fixed).toBe(t.label.startsWith("B") ? 1 : 0);
+    }
+    const bar = res.plans.flatMap((p) => p.tables).filter((t) => t.label.startsWith("B"));
+    expect(bar.map((t) => t.placement)).toEqual([
+      { x: 17, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+      { x: 53, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+      { x: 89, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+    ]);
   });
 
   it.each(["en", "es"] as const)(

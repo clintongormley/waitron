@@ -24,6 +24,7 @@ import {
 } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createTable, setTablePlacement } from "../../src/tables.js";
+import { readZonePlan, saveZonePlan } from "../../src/floor-plan.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import type { DemoDataSet } from "./data-set.js";
@@ -253,6 +254,28 @@ export async function seedFloor(
       posY: table.posY,
       shape: table.shape,
       rotation: table.rotation,
+    });
+  }
+
+  const seeded = new Map(floor.tables.map((table) => [table.label, table]));
+  for (const zoneId of zoneIds.values()) {
+    const draft = await readZonePlan(tx, cfg, zoneId);
+    if (draft.tables.length === 0) continue;
+    // No removal seats: a first save that only adopts live tables deletes none.
+    await saveZonePlan(tx, cfg, [], zoneId, {
+      revision: draft.revision,
+      tables: draft.tables.map((table) => {
+        const seed = seeded.get(table.label)!;
+        return {
+          liveTableId: table.liveTableId!,
+          key: table.liveTableId!,
+          label: table.label,
+          seats: table.seats,
+          fixed: seed.fixed,
+          placement: seed.placement,
+        };
+      }),
+      joins: [],
     });
   }
 
