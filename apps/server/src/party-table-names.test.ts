@@ -4,7 +4,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { partyTables } from "@waitron/db";
 import { finishTable } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables, splitTable } from "./table-actions.js";
 import { listOrders, type OrderListFilter } from "./orders-list.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { updateTable } from "./tables.js";
@@ -64,6 +64,36 @@ describe("a closing party keeps its table names", () => {
     await finish(partyId);
     expect((await partyRow(v, partyId)).tableNames).toEqual(["Terrace 4", "Terrace 5"]);
     expect(await membershipRows(partyId)).toEqual([]);
+  });
+
+  it("lists the tables by when they joined, not by when their rows were written", async () => {
+    const t1 = await v.table("Order 1");
+    const t2 = await v.table("Order 2");
+    const { partyId } = await seat(v, t1);
+    await join(v, partyId, t2);
+    // No till path writes a later-joined table first, so the first row is moved after the second.
+    await inTx(v, (tx) =>
+      tx
+        .update(partyTables)
+        .set({ joinedAt: new Date(Date.now() + 60_000).toISOString() })
+        .where(eq(partyTables.tableId, t1)),
+    );
+    await finish(partyId);
+    expect((await partyRow(v, partyId)).tableNames).toEqual(["Order 2", "Order 1"]);
+  });
+
+  it("lists a table that left the party and came back once", async () => {
+    const t1 = await v.table("Return 1");
+    const t2 = await v.table("Return 2");
+    const { partyId } = await seat(v, t1);
+    await join(v, partyId, t2);
+    const sent = await commandFor(v, partyId);
+    const split = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, t2, null, sent));
+    await finish(split.partyId);
+    await join(v, partyId, t2);
+    expect((await membershipRows(partyId)).filter((row) => row.tableId === t2)).toHaveLength(2);
+    await finish(partyId);
+    expect((await partyRow(v, partyId)).tableNames).toEqual(["Return 1", "Return 2"]);
   });
 
   it("keeps the old name on the closed party, its listed bill and its reprinted receipt after the table is renamed", async () => {
