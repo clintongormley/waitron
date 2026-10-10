@@ -3084,18 +3084,35 @@ describe("a routing cell's period choices on the routes", () => {
   });
 });
 
-describe("station overview for venue viewers", () => {
-  it("has no read-only overview route, and a supervisor still cannot read routing", async () => {
+describe("what a supervisor reaches of prep stations", () => {
+  it("answers 404 for the removed read-only overview route, to a manager and a supervisor", async () => {
     const f = await fixture();
     for (const cookie of [f.managerCookie, f.supervisorCookie])
       expect(
         (await send(f.app, "GET", "/management-api/venue-service/stations/overview", cookie))
           .status,
       ).toBe(404);
+  });
+  it("refuses a supervisor's routing read", async () => {
+    const f = await fixture();
     expect(
       (await send(f.app, "GET", "/management-api/venue-service/routing", f.supervisorCookie))
         .status,
     ).toBe(403);
+  });
+  it("has no management route for a supervisor to change a station's state today", async () => {
+    const f = await fixture();
+    expect(
+      (
+        await send(
+          f.app,
+          "PUT",
+          `/management-api/venue-service/stations/${f.stationId}/today`,
+          f.supervisorCookie,
+          { state: "closed" },
+        )
+      ).status,
+    ).toBe(404);
   });
 });
 
