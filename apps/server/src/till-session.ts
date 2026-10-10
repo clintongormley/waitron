@@ -131,3 +131,28 @@ export async function requireSession(
     device: toDeviceBinding(row.deviceId, row),
   };
 }
+
+/** Inside a write's own transaction: `sessionId` is still `personId`'s open session on `deviceId`
+ * (else `session.required`), and the device is still active and not deleted (else `device.unauthorized`). */
+export async function assertStillSignedIn(
+  tx: Transaction,
+  ids: { deviceId: string; sessionId: string; personId: string },
+): Promise<void> {
+  const [session] = await tx
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.id, ids.sessionId),
+        eq(sessions.deviceId, ids.deviceId),
+        eq(sessions.personId, ids.personId),
+        isNull(sessions.endedAt),
+      ),
+    );
+  if (session === undefined) throw new AppError("session.required", {});
+  const [device] = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, ids.deviceId), eq(devices.active, true), isNull(devices.deletedAt)));
+  if (device === undefined) throw new AppError("device.unauthorized", {});
+}

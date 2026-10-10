@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { devices, withTransaction, workingOrders, type Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { loginWithPin } from "@waitron/identity";
+import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
 import { deviceOrigin, locationId as brandLocationId } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
@@ -32,6 +33,18 @@ export async function seedSessionDevice(
       capabilities: [...CAPABILITY_FLAGS],
     })
   ).deviceId;
+}
+
+/** Opens a shift session for `personId` on `deviceId` and answers its id. */
+export async function openTillSession(
+  db: Database,
+  opts: { deviceId: string; personId: string },
+): Promise<string> {
+  const [row] = await db
+    .insert(sessions)
+    .values({ ...opts, tokenHash: hashSessionToken(randomUUID()) })
+    .returning({ id: sessions.id });
+  return row!.id;
 }
 
 /**
