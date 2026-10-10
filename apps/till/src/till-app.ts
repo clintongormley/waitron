@@ -1430,6 +1430,7 @@ export class TillApp extends LitElement {
     this.#battery?.stop();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#stopFloorPoll();
     this.#draftSync?.drop();
     this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
@@ -5037,7 +5038,7 @@ export class TillApp extends LitElement {
    * replaced. */
   #floorPoll?: AbortController;
 
-  /** One poll read out at a time, cut off at {@link FLOOR_POLL_LIMIT_MS}. */
+  /** One uncancelled poll read out at a time, cut off at {@link FLOOR_POLL_LIMIT_MS}. */
   async #pollFloor(): Promise<void> {
     if (this.#floorPoll !== undefined) return;
     const poll = new AbortController();
