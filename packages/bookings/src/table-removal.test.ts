@@ -97,6 +97,17 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("does not refuse for a seated or no-show booking today", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "T6");
+    await insertBooking(v, { tableId: t, date: "2026-09-16", status: "seated" });
+    await insertBooking(v, { tableId: t, date: "2026-09-16", status: "no_show" });
+
+    await expect(
+      inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, v, t, AFTER_MADRID_MIDNIGHT)),
+    ).resolves.toBeUndefined();
+  });
+
   it("reads today in the default zone when the venue's zone is one Intl rejects", async () => {
     const v = await setupVenue("Not/AZone");
     const t = await makeTable(v, "T5");
@@ -122,5 +133,17 @@ describe("BOOKINGS_TABLE_REMOVAL.release", () => {
     expect(released).toMatchObject({ tableId: null, tableLabel: "Terrace 4" });
     const untouched = await inTx((tx) => getBooking(tx, v, kept));
     expect(untouched).toMatchObject({ tableId: other, tableLabel: null });
+  });
+
+  it("lets go of a booking for the table whose location is another venue's", async () => {
+    const v = await setupVenue();
+    const elsewhere = await setupVenue();
+    const t = await makeTable(v, "Terrace 6");
+    const stray = await insertBooking(elsewhere, { tableId: t, date: "2026-09-01" });
+
+    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, v, t, "Terrace 6"));
+
+    const released = await inTx((tx) => getBooking(tx, elsewhere, stray));
+    expect(released).toMatchObject({ tableId: null, tableLabel: "Terrace 6" });
   });
 });

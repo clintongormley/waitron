@@ -1,8 +1,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
-import { DEFAULT_TIME_ZONE, locations } from "@waitron/db";
 import type { FloorAnnotator } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
-import { safeTimeZone, venueWallClock } from "./wall-clock.js";
+import { venueWallClockAt } from "./wall-clock.js";
 
 /** How long a `booked` reservation stays on the floor after its time, for a guest running late. */
 const RESERVATION_GRACE_MINUTES = 30;
@@ -29,12 +28,7 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
     for (const id of tableIds) result.set(id, { reservedTime: null });
     if (tableIds.length === 0) return result;
 
-    const [loc] = await tx
-      .select({ timeZone: locations.timeZone })
-      .from(locations)
-      .where(eq(locations.id, cfg.locationId));
-    const timeZone = safeTimeZone(loc?.timeZone ?? DEFAULT_TIME_ZONE);
-    const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
+    const { date: venueToday, time: venueNow } = await venueWallClockAt(tx, cfg.locationId, now);
     const graceFloor = reservationGraceFloor(venueNow);
 
     const rows = await tx
