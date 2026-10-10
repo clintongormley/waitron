@@ -17,6 +17,12 @@ it("folds case and accents, so jamon finds Jamón", () => {
   expect(foldForSearch("Jamón Ibérico")).toBe("jamon iberico");
 });
 
+it("folds a capital I the same whatever language the process runs in", () => {
+  // Fails only when run under a Turkish locale (LANG=tr_TR.UTF-8): a text still holding a character
+  // beyond Latin-1 after folding is the one lowercased by the process's language.
+  expect(foldForSearch("ISABEL İBIZA €5")).toBe("isabel ibiza €5");
+});
+
 describe("searchFor", () => {
   it("finds a name holding every typed word, whatever lies between them", () => {
     expect(find("gin tonic", "Gin & Tónic", "Gin")).toEqual(["Gin & Tónic"]);

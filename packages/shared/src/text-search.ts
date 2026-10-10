@@ -1,5 +1,5 @@
 export function foldForSearch(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
 const WORD = "[\\p{L}\\p{N}]";
