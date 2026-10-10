@@ -83,10 +83,7 @@ async function mastersOf(tx: Transaction, planId: string) {
 }
 
 /** Each master table's live table, for the masters that have one. */
-export async function followersOf(
-  tx: Transaction,
-  masterIds: string[],
-): Promise<Map<string, string>> {
+async function followersOf(tx: Transaction, masterIds: string[]): Promise<Map<string, string>> {
   if (masterIds.length === 0) return new Map();
   const rows = await tx
     .select({ id: diningTables.id, planTableId: diningTables.planTableId })
@@ -265,10 +262,22 @@ async function namesTaken(
   return new Set([...masters.map((m) => m.label), ...blocking.map((t) => t.label)]);
 }
 
+type MasterRow = typeof floorPlanTables.$inferSelect;
+
+/** What a passed check read, for the save to reuse. */
+interface CheckedZonePlanSave {
+  plan: Awaited<ReturnType<typeof planOf>>;
+  /** The plan's tables, by label. */
+  masters: MasterRow[];
+  /** The save's tables, each master entry's `liveTableId` dropped when it names that table's own live table. */
+  tables: ZonePlanSave["tables"];
+}
+
 /**
  * Every check of a save; throws the first refusal, writes nothing. Labels compare by exact
  * characters, as the `dining_tables` and `floor_plan_tables` unique keys do (plain `text`, the
- * engine's default binary collation).
+ * engine's default binary collation). A master entry may carry its own live table, as
+ * `readZonePlan` sends it; that is not an adoption.
  */
 export async function checkZonePlanSave(
   tx: Transaction,
@@ -278,20 +287,38 @@ export async function checkZonePlanSave(
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<void> {
+  await checkSave(tx, cfg, removals, zoneId, input, now);
+}
+
+async function checkSave(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  zoneId: string,
+  input: ZonePlanSave,
+  now: Date,
+): Promise<CheckedZonePlanSave> {
   await requireZone(tx, cfg, zoneId);
   const plan = await planOf(tx, zoneId);
   const revision = plan?.revision ?? 0;
   if (input.revision !== revision) {
     throw new AppError("floor_plan.out_of_date", { zoneId, revision });
   }
-  checkEntries(input);
-
-  const masterIds = new Set(
-    plan === undefined ? [] : (await mastersOf(tx, plan.id)).map((m) => m.id),
+  const masters = plan === undefined ? [] : await mastersOf(tx, plan.id);
+  const masterIds = new Set(masters.map((m) => m.id));
+  const followers = await followersOf(tx, [
+    ...new Set([...masterIds, ...input.tables.flatMap((t) => t.id ?? [])]),
+  ]);
+  const tables = input.tables.map(({ liveTableId, ...table }): ZonePlanSave["tables"][number] =>
+    table.id !== undefined && liveTableId === followers.get(table.id)
+      ? table
+      : { ...table, ...(liveTableId === undefined ? {} : { liveTableId }) },
   );
+  checkEntries({ ...input, tables });
+
   const adoptable = new Set((await adoptableOf(tx, cfg, zoneId)).map((t) => t.id));
   const adopted = new Set<string>();
-  for (const table of input.tables) {
+  for (const table of tables) {
     if (table.id !== undefined && !masterIds.has(table.id)) {
       throw new AppError("table.not_found", { tableId: table.id });
     }
@@ -305,21 +332,20 @@ export async function checkZonePlanSave(
 
   const taken = await namesTaken(tx, cfg, zoneId, adopted);
   const seen = new Set<string>();
-  for (const table of input.tables) {
+  for (const table of tables) {
     const label = table.label.trim();
     if (seen.has(label) || taken.has(label)) throw new AppError("table.label_taken", { label });
     seen.add(label);
   }
 
-  const kept = new Set(input.tables.map((t) => t.id));
-  const deleted = [...masterIds].filter((id) => !kept.has(id));
-  const followers = await followersOf(tx, deleted);
-  const liveIds = deleted.flatMap((masterId) => followers.get(masterId) ?? []);
+  const kept = new Set(tables.map((t) => t.id));
+  const liveIds = masters.flatMap((m) => (kept.has(m.id) ? [] : (followers.get(m.id) ?? [])));
   const refusals = await refusedByAModule(tx, cfg, removals, liveIds, now);
   for (const liveId of liveIds) {
     const refusal = refusals.get(liveId);
     if (refusal !== undefined) throw refusal;
   }
+  return { plan, masters, tables };
 }
 
 function masterColumns(table: ZonePlanSave["tables"][number]) {
@@ -338,9 +364,10 @@ export async function saveZonePlan(
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<{ revision: number; ids: Record<string, string> }> {
-  await checkZonePlanSave(tx, cfg, removals, zoneId, input, now);
+  const checked = await checkSave(tx, cfg, removals, zoneId, input, now);
+  const { masters, tables } = checked;
   const savedAt = now.toISOString();
-  let plan = await planOf(tx, zoneId);
+  let plan = checked.plan;
   if (plan === undefined) {
     [plan] = await tx
       .insert(floorPlans)
@@ -360,8 +387,7 @@ export async function saveZonePlan(
     await tx.delete(floorPlanJoins).where(inArray(floorPlanJoins.id, joinIds));
   }
 
-  const masters = await mastersOf(tx, planId);
-  const kept = new Set(input.tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
+  const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   if (deleted.length > 0) {
     // `planned` stays true, so the next reset removes the live table.
@@ -380,17 +406,17 @@ export async function saveZonePlan(
   // another row is giving up never meets the unique (plan_id, label) key halfway.
   const masterOf = new Map(masters.map((m) => [m.id, m]));
   const spare = spareLabels(
-    input.tables.flatMap((t) =>
+    tables.flatMap((t) =>
       t.id !== undefined && masterOf.get(t.id)!.label !== t.label.trim() ? [t.id] : [],
     ),
-    new Set([...masters.map((m) => m.label), ...input.tables.map((t) => t.label.trim())]),
+    new Set([...masters.map((m) => m.label), ...tables.map((t) => t.label.trim())]),
   );
   for (const [id, label] of spare) {
     await tx.update(floorPlanTables).set({ label }).where(eq(floorPlanTables.id, id));
   }
   // A Map, because a draft key is any string: on a plain object `__proto__` sets the prototype.
   const ids = new Map<string, string>();
-  for (const table of input.tables) {
+  for (const table of tables) {
     if (table.id !== undefined) {
       ids.set(table.key, table.id);
       continue;
@@ -401,7 +427,7 @@ export async function saveZonePlan(
       .returning({ id: floorPlanTables.id });
     ids.set(table.key, row!.id);
   }
-  for (const table of input.tables) {
+  for (const table of tables) {
     if (table.id === undefined) continue;
     const next = { label: table.label.trim(), ...masterColumns(table) };
     const current = masterOf.get(table.id)!;
@@ -419,7 +445,7 @@ export async function saveZonePlan(
     }
   }
 
-  for (const table of input.tables) {
+  for (const table of tables) {
     if (table.liveTableId === undefined) continue;
     await tx
       .update(diningTables)

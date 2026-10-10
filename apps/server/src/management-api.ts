@@ -127,7 +127,7 @@ import {
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
-import { followersOf, readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import {
   createWatcher,
@@ -1826,19 +1826,9 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       const input = parseZonePlanSave(await readJsonBody<unknown>(c));
       const now = new Date();
-      const saved = await withVenueAuth(deps, sessionId, async (tx) => {
-        // The read shape sends each master table with its own live table; that one is not an adoption.
-        const own = await followersOf(
-          tx,
-          input.tables.flatMap((t) => (t.id === undefined ? [] : [t.id])),
-        );
-        const tables = input.tables.map(({ liveTableId, ...table }) =>
-          table.id !== undefined && liveTableId === own.get(table.id)
-            ? table
-            : { ...table, ...(liveTableId === undefined ? {} : { liveTableId }) },
-        );
-        return saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, { ...input, tables }, now);
-      });
+      const saved = await withVenueAuth(deps, sessionId, (tx) =>
+        saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, input, now),
+      );
       return c.json(saved);
     }),
   );

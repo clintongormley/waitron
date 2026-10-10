@@ -726,6 +726,44 @@ describe("saveZonePlan", () => {
     return { z, t1, bar, live, result };
   }
 
+  it("accepts the plan it read sent back unchanged, each table with its own live table", async () => {
+    const z = await zone();
+    const first = await save(z, {
+      revision: 0,
+      tables: [entry("a", fresh("Trip a")), entry("b", fresh("Trip b"), { placement: null })],
+      joins: [{ seats: 6, tableKeys: ["a", "b"] }],
+    });
+    const read = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(read.tables.every((t) => t.id !== null && t.liveTableId !== null)).toBe(true);
+    const live = await liveStateOf(z);
+    const keyOf = new Map(read.tables.map((t, i) => [t.id!, `k${i}`]));
+
+    const second = await save(z, {
+      revision: read.revision,
+      tables: read.tables.map((t) => ({
+        id: t.id!,
+        liveTableId: t.liveTableId!,
+        key: keyOf.get(t.id!)!,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement: t.placement,
+      })),
+      joins: read.joins.map((j) => ({
+        seats: j.seats,
+        tableKeys: j.tableIds.map((id) => keyOf.get(id)!),
+      })),
+    });
+
+    expect(second.revision).toBe(first.revision + 1);
+    const after = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(after.tables).toEqual(read.tables);
+    expect(after.joins.map(({ seats, tableIds }) => ({ seats, tableIds }))).toEqual(
+      read.joins.map(({ seats, tableIds }) => ({ seats, tableIds })),
+    );
+    expect(await liveStateOf(z)).toEqual(live);
+  });
+
   it("saves a first plan, links the live tables and builds today's plan", async () => {
     const { z, t1, bar, live, result } = await firstSaved();
 
