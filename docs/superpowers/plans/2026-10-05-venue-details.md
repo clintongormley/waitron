@@ -1,5 +1,11 @@
 # Venue details implementation plan (A261 step 7)
 
+> **2026-10-10, A366 slice 7:** C10 and the W111 reprint receipt below describe the earlier
+> current-address path. The [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md)
+> keeps one venue-wide address switch for thermal and till presentation and omits the optional
+> current venue address on A4. Filed taxpayer domicile and recipient address remain separate
+> invoice facts. Part A remains on Lane E's unlanded receipt branch.
+
 > **2026-10-09, A366 slice 2:** this earlier account of address-owned local entries, their cap
 > or individually coloured special dates is historical. Local holidays are now own named days
 > without an entry cap; named-day kinds and public facts determine Calendar fills. See

@@ -179,6 +179,12 @@ row, already named after the venue (A254 §2).
 
 ## 5. Receipts
 
+> **2026-10-10, A366 slice 7:** this section's header position, single global editor and
+> preview picker describe the earlier design. Follow the
+> [slice 7 plan](../plans/2026-10-08-a366-slice-7-receipts-per-department.md) for department
+> translations, a subtitle above the legal name, live venue defaults and independent save
+> scopes. Part A is being built on Lane E's receipt branch; the department-page host is Part B.
+
 Mockups: `receipt-trading-name.html` (option A) and `receipts-under-venue.html`.
 
 - **The trading name prints first**, above the legal name, when its department's *Print it* switch
