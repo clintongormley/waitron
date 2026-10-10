@@ -309,6 +309,8 @@ Watchers tabs go.
   default one, sends the extra to that station (owner, 2026-10-07, A371). Only such an empty cell,
   and a No preparation cell, say so, for example "Downstairs bar (default) — as an extra, follows
   its dish"; a cell that names the default station does not.
+  _(2026-10-09: the owner dropped this note; no cell says how an extra is made — slice 4 plan
+  decision 33, built in A455.)_
 
 ### 9.4 Device profiles and devices
 

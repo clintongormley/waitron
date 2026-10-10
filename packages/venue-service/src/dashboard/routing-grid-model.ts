@@ -215,8 +215,8 @@ export interface PeriodLineText {
   readonly target: RouteTarget;
   /** "Lunch, Afternoon: Downstairs bar". */
   readonly text: string;
-  /** "Not on Lunch menus": the line's periods whose menus no longer offer the row; only on a line
-   * its cell stores. */
+  /** "Not on Lunch menus": the line's periods whose menus reach none of the row's active products;
+   * only on a line its cell stores. */
   readonly flagText?: string;
 }
 

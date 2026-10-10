@@ -26,7 +26,6 @@ export interface RoutingCellEditorCell {
   label: string;
   /** The cell's own choice, or the inherited one; null when nothing decides it. */
   target: RouteTarget | null;
-  /** `notOffered`: the line's period's menus no longer offer the row. */
   periods?: readonly (PeriodLine & { notOffered?: true })[];
   /** Where an inherited choice comes from; absent for a stored cell. */
   inheritedFrom?: string;
@@ -451,7 +450,7 @@ export class RoutingCellEditor extends LitElement {
       }));
   }
 
-  /** "Not on Breakfast menus" for a stored line nobody edited whose periods' menus dropped the row. */
+  /** "Not on Breakfast menus" for a stored line nobody edited whose periods' menus reach none of the row's products. */
   private flagText(line: Line, repeated: Set<string>): string | undefined {
     if (this.inherited || this.isDefaultCell || this.edited.has(line.id)) return undefined;
     const flagged = new Set(
