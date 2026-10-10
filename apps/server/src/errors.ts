@@ -726,6 +726,8 @@ declare module "@waitron/shared" {
     /**
      * A device's active profile cannot change while a card payment it started is still unresolved
      * (`payments.state` `attempting` or `initiated`): the payment finishes or is cancelled first.
+     * A device cannot be deleted while such a payment, or a pending bill payment or bill refund it
+     * started, is unresolved (`deleteDevice`).
      */
     "device.payment_in_progress": Record<string, never>;
     /**

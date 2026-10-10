@@ -58,6 +58,7 @@ import {
   selectDeviceEquipment,
   type EquipmentRole,
 } from "./device-equipment.js";
+import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -685,6 +686,33 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         await releaseDevice(tx, id);
       });
       return c.body(null, 204);
+    }),
+  );
+
+  // ── Delete a device (device.manage) ─────────────────────────────────────────────────────────────────
+  app.get("/management-api/devices/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      return c.json(
+        await gated(sessionId, (tx) => {
+          if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+          return readDeviceDeleteImpact(tx, deps.cfg, id);
+        }),
+      );
+    }),
+  );
+
+  app.delete("/management-api/devices/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      const impact = await gated(sessionId, (tx) => {
+        if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+        return deleteDevice(tx, deps.cfg, id, deps.now?.());
+      });
+      deps.pairingMode.dropClaim(id);
+      return c.json(impact);
     }),
   );
 
