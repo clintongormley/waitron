@@ -85,6 +85,32 @@ const shownDirectly = nodes.map((node) =>
 );
 
 describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) => {
+  it("A461 flat matches and expanded sections render accessibly", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      { nodes, products, menuName: "Lunch Menu", search: "Drinks", selecting: true },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const result = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="m-drinks"]')!;
+    expect(result.getAttribute("aria-expanded")).toBe("false");
+    await expectNoA11yViolations(host);
+    result.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="m-drinks/m-lager"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+    el.search = "rioja";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(
+      table.shadowRoot!.querySelector(
+        'tr[data-row-key="included-wine/wine-red/wine-rioja"] [part~="read-only"]',
+      ),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it.each(states)("renders %s accessibly", async (state) => {
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",

@@ -2954,6 +2954,127 @@ it("releases on the menu sibling under the pointer after leaving the edge", asyn
   }
 });
 
+describe("A461 Structure search", () => {
+  it("A461 Structure flattens own matches and names each placement", async () => {
+    const coffee: MenuStructureNode = {
+      memberId: "m-coffee",
+      ref: { kind: "section", sectionId: "s-coffee" },
+      internalName: "Coffee",
+      names: { en: "Customer coffee" },
+      ownerMenuId: "menu-lunch",
+      children: [productNode("m-iced", "iced"), productNode("m-ice", "ice")],
+    };
+    const el = await mount({
+      selecting: true,
+      products: [
+        product("iced", "Iced coffee"),
+        product("cake", "Coffee cake"),
+        product("ice", "Add ice"),
+      ],
+      nodes: [
+        { ...drinksNode("m-drinks"), children: [coffee] },
+        { ...favourites(), internalName: "Desserts", children: [productNode("m-cake", "cake")] },
+      ],
+      search: "coffee",
+    });
+    expect(drawn(el)).toEqual(["m-drinks/m-coffee", "m-fav/m-cake", "m-drinks/m-coffee/m-iced"]);
+    expect(all(el, "tr[data-row-key]").map((row) => row.getAttribute("aria-level"))).toEqual([
+      "1",
+      "1",
+      "1",
+    ]);
+    expect(all(el, '[part~="search-path"]').map((span) => span.textContent)).toEqual([
+      "Drinks",
+      "Desserts",
+      "Drinks › Coffee",
+    ]);
+    expect(row(el, "m-drinks/m-coffee")!.getAttribute("aria-expanded")).toBe("false");
+    await toggle(el, "m-drinks/m-coffee");
+    expect(drawn(el)).toEqual([
+      "m-drinks/m-coffee",
+      "m-drinks/m-coffee/m-iced",
+      "m-drinks/m-coffee/m-ice",
+      "m-fav/m-cake",
+    ]);
+    expect(all(el, 'tr[data-row-key="m-drinks/m-coffee/m-iced"]')).toHaveLength(1);
+    expect(row(el, "m-drinks/m-coffee/m-iced")!.getAttribute("aria-level")).toBe("2");
+
+    el.nodes = [
+      { ...drinksNode("m-drinks"), children: [coffee] },
+      { ...favourites(), internalName: "Desserts", children: [{ ...coffee, memberId: "copy" }] },
+    ];
+    el.search = "iced";
+    await settle(el);
+    expect(drawn(el)).toEqual(["m-drinks/m-coffee/m-iced", "m-fav/copy/m-iced"]);
+    expect(all(el, '[part~="search-path"]').map((span) => span.textContent)).toEqual([
+      "Drinks › Coffee",
+      "Desserts › Coffee",
+    ]);
+  });
+
+  it("A461 Structure read-only included results have their own path", async () => {
+    const el = await mount({ nodes: [wines()], selecting: true, search: "rioja" });
+    expect(drawn(el)).toEqual(["included-wine/wine-red/wine-rioja"]);
+    const found = row(el, "included-wine/wine-red/wine-rioja")!;
+    expect(found.querySelector('[part~="search-path"]')!.textContent).toBe(
+      `${menuLabel("Wines")} › Red wines`,
+    );
+    expect(found.querySelector('[part~="read-only"]')).not.toBeNull();
+    expect(found.querySelector('td.select input[type="checkbox"]')).toBeNull();
+    expect(found.querySelector("wt-row-actions")).toBeNull();
+  });
+
+  it("A461 Structure search expansion does not replace current path", async () => {
+    const current = ["m-drinks", "m-beer"];
+    const el = await mount({ current });
+    const before = drawn(el);
+    const changes = listen(el, "wt-structure-edit");
+    el.search = "drinks";
+    await settle(el);
+    expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+    await toggle(el, "m-drinks");
+    await toggle(el, "m-drinks");
+    el.search = "beer";
+    await settle(el);
+    await toggle(el, "m-drinks/m-beer");
+    await toggle(el, "m-drinks/m-beer");
+    expect(changes).toEqual([]);
+    expect(el.current).toEqual(current);
+    el.search = "";
+    await settle(el);
+    expect(drawn(el)).toEqual(before);
+    expect(table(el).isExpanded("m-drinks")).toBe(true);
+    expect(table(el).isExpanded("m-drinks/m-beer")).toBe(true);
+    expect(changes).toEqual([]);
+    await toggle(el, "m-drinks");
+    expect(changes).toEqual([{ path: [] }]);
+  });
+
+  it("A461 Structure availability narrows flat matches and expanded contents", async () => {
+    const el = await mount({
+      selecting: true,
+      products: products.map((p) => (p.id === "p-lemonade" ? { ...p, available: false } : p)),
+      search: "drinks",
+    });
+    const choice = inTable(el, 'wt-combobox[data-filter="available"]')!;
+    await chooseOption(choice, "yes");
+    await settle(el);
+    expect(drawn(el)).toEqual([]);
+    el.search = "lager";
+    await settle(el);
+    expect(drawn(el)).toEqual([
+      "m-drinks/m-lager",
+      "m-drinks/m-beer/m-lager-2",
+      "m-fav/m-fav-drinks/m-lager",
+      "m-fav/m-fav-drinks/m-beer/m-lager-2",
+    ]);
+    expect(all(el, "tr[data-row-key]").every((row) => row.getAttribute("aria-level") === "1")).toBe(
+      true,
+    );
+    expect(all(el, 'td.select input[type="checkbox"]')).toHaveLength(4);
+  });
+});
+
 describe("search and the Available filter", () => {
   async function search(el: MenuStructureTable, term: string): Promise<void> {
     el.search = term;
@@ -3009,20 +3130,25 @@ describe("search and the Available filter", () => {
     }
   });
 
-  it("finds a product inside a closed section by its staff name, opening the way to it", async () => {
+  it("finds a product inside a closed section by its staff name, showing its path", async () => {
     const el = await mount();
     expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
     await search(el, "lemonade");
     expect(shown(el)).toEqual([
-      "m-drinks",
       "m-drinks/m-lemonade",
-      "m-fav",
       "m-fav/m-fav-lemonade",
-      "m-fav/m-fav-drinks",
       "m-fav/m-fav-drinks/m-lemonade",
     ]);
-    for (const key of ["m-drinks", "m-fav", "m-fav/m-fav-drinks"])
-      expect(row(el, key)!.getAttribute("aria-expanded"), key).toBe("true");
+    expect(all(el, '[part~="search-path"]').map((span) => span.textContent)).toEqual([
+      "Drinks",
+      "Favourites",
+      "Favourites › Drinks",
+    ]);
+    expect(all(el, "tr[data-row-key]").map((row) => row.getAttribute("aria-level"))).toEqual([
+      "1",
+      "1",
+      "1",
+    ]);
     // The staff name, never the customer-facing or kitchen one.
     await search(el, "for guests");
     expect(shown(el)).toEqual([]);
@@ -3035,18 +3161,16 @@ describe("search and the Available filter", () => {
   it("finds a section and an included menu by the name the row shows", async () => {
     const el = await mount({ nodes: [...lunchNodes(), wines()] });
     await search(el, "beer");
-    expect(shown(el)).toEqual([
-      "m-drinks",
-      "m-drinks/m-beer",
-      "m-fav",
-      "m-fav/m-fav-drinks",
-      "m-fav/m-fav-drinks/m-beer",
+    expect(shown(el)).toEqual(["m-drinks/m-beer", "m-fav/m-fav-drinks/m-beer"]);
+    expect(all(el, "tr[data-row-key]").map((row) => row.getAttribute("aria-expanded"))).toEqual([
+      "false",
+      "false",
     ]);
     await search(el, menuLabel("Wines"));
     expect(shown(el)).toEqual(["included-wine"]);
   });
 
-  it("lists the closest matches first among the rows under each parent, and finishes a word on a trailing space", async () => {
+  it("lists the closest matches first across flat results, and finishes a word on a trailing space", async () => {
     const gins = [
       product("p-ginger", "Ginger Ale"),
       product("p-pink", "Pink Gin"),
@@ -3072,16 +3196,17 @@ describe("search and the Available filter", () => {
     await search(el, "gin");
     expect(shown(el)).toEqual([
       "m-bar",
-      "m-bar/m-bar-pink",
-      "m-bar/m-bar-ginger",
       "m-gt",
+      "m-bar/m-bar-pink",
       "m-ginger",
+      "m-bar/m-bar-ginger",
     ]);
     await search(el, "tonic gin");
     expect(shown(el)).toEqual(["m-gt"]);
-    // A section that matches keeps all its rows; the top-level Ginger Ale is what goes.
     await search(el, "gin ");
-    expect(shown(el)).toEqual(["m-bar", "m-bar/m-bar-pink", "m-bar/m-bar-ginger", "m-gt"]);
+    expect(shown(el)).toEqual(["m-bar", "m-gt", "m-bar/m-bar-pink"]);
+    await toggle(el, "m-bar");
+    expect(shown(el)).toEqual(["m-bar", "m-bar/m-bar-ginger", "m-bar/m-bar-pink", "m-gt"]);
   });
 
   it("says nothing matches when the search finds no row", async () => {
@@ -3318,7 +3443,7 @@ describe("Select mode while a search or filter hides rows", () => {
     const el = await mount({ selecting: true, nodes: [drinksNode("m-drinks"), stuff] });
     el.search = "drinks ";
     await settle(el);
-    expect(shown(el)).toContain("m-stuff");
+    expect(shown(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
     expect(boxKeys(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
     el.search = "beer";
     await settle(el);
@@ -3487,15 +3612,11 @@ describe("the menu's own row", () => {
     expect(selected).not.toContain("root");
   });
 
-  it("answers no search and no Available option, so it is drawn only above a match", async () => {
+  it("answers no search and no Available option, staying out of search and above filtered tree matches", async () => {
     const el = await mount({ search: "Lemonade" });
     expect(drawn(el)).toEqual([
-      "root",
-      "m-drinks",
       "m-drinks/m-lemonade",
-      "m-fav",
       "m-fav/m-fav-lemonade",
-      "m-fav/m-fav-drinks",
       "m-fav/m-fav-drinks/m-lemonade",
     ]);
     const noMatches = () =>

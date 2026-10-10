@@ -36,6 +36,7 @@ import {
 } from "./tree-drag.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { countOf } from "./count-text.js";
+import { PATH_SEPARATOR } from "./category-form.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
@@ -187,6 +188,18 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(available) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(search-name-line) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--wt-space-2);
+        overflow-wrap: anywhere;
+      }
+      wt-data-table::part(search-path) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        min-inline-size: 0;
+      }
       wt-data-table::part(note) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -250,7 +263,6 @@ export class MenuStructureTable extends LitElement {
   /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
   @property({ type: Boolean, reflect: true }) reordering = true;
-  /** The search box's text; while it lasts, the table holds every section above a match open. */
   @property() search = "";
   /** Whether rows the menu owns carry a box; the host owns which are ticked. */
   @property({ type: Boolean }) selecting = false;
@@ -348,6 +360,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #checkCurrentShown(): void {
+    if (this.search.trim() !== "") return;
     const table = this.#table()!;
     const keys = this.#currentKeys();
     if (this.#revealing > 0 || this.#lostReported || keys.length === 0) return;
@@ -361,6 +374,7 @@ export class MenuStructureTable extends LitElement {
 
   readonly #expandChange = (event: CustomEvent<{ key: string; expanded: boolean }>): void => {
     event.stopPropagation();
+    if (this.search.trim() !== "") return;
     const { key, expanded } = event.detail;
     const row = this.#rowByKey.get(key);
     if (row === undefined || !this.#ownedSection(row)) return;
@@ -910,11 +924,32 @@ export class MenuStructureTable extends LitElement {
     </button>`;
   }
 
-  #nameCell(row: Row) {
+  #sectionPath(row: Row): string {
+    const names: string[] = [];
+    const seen = new Set([row.key]);
+    let key = row.parentKey;
+    while (key !== ROOT_KEY && !seen.has(key)) {
+      seen.add(key);
+      const parent = this.#rowByKey.get(key);
+      if (!parent) break;
+      names.unshift(parent.name);
+      key = parent.parentKey;
+    }
+    return names.join(PATH_SEPARATOR);
+  }
+
+  #nameCell(row: Row, searchRoot: boolean) {
     const { node, key } = row;
+    const path = searchRoot ? this.#sectionPath(row) : "";
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
-      >${this.#nameSpan(row)}${
+      >${
+        searchRoot
+          ? html`<span part="search-name-line"
+              >${this.#nameSpan(row)}${path === "" ? nothing : html`<span part="search-path">${path}</span>`}</span
+            >`
+          : this.#nameSpan(row)
+      }${
         node.includedMenuId && !row.readOnly
           ? html`<span part="note" data-test=${`folder-setting-${key}`}
               >${t(
@@ -1114,8 +1149,10 @@ export class MenuStructureTable extends LitElement {
       {
         key: "name",
         label: t("members.name"),
-        cell: (row) => (row.kind === "root" ? this.#rootNameCell(row) : this.#nameCell(row)),
-        // The menu's own row is drawn only above a member that matches.
+        cell: (row, context) =>
+          row.kind === "root"
+            ? this.#rootNameCell(row)
+            : this.#nameCell(row, context.searchRoot === true),
         searchValue: (row) => (row.kind === "root" ? "" : row.name),
       },
       {
@@ -1181,7 +1218,7 @@ export class MenuStructureTable extends LitElement {
         filteredColumnLabel=${t("table.filtered_column")}
         filtersClearAllLabel=${t("table.filters_clear_all")}
         filtersCloseLabel=${t("table.filters_close")}
-        searchOpensPath
+        flatTreeSearch
         .searchTerm=${this.search}
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
