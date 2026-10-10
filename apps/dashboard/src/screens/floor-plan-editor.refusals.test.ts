@@ -316,6 +316,48 @@ it("a fix that leaves another name failing moves the mark to it", async () => {
   expect(button(el, "save").disabled).toBe(true);
 });
 
+it("typing into the marked table keeps the mark there while its name repeats another", async () => {
+  const el = await open(stubApi());
+  const start = renamed(renamed(opened(), "m1", ""), "live:l9", "T");
+  await change(el, start);
+  await press(el, "save");
+  expect(el.fieldError?.key).toBe("m1");
+  await change(el, renamed(start, "m1", "T"));
+  expect(el.fieldError).toEqual({
+    key: "m1",
+    field: "label",
+    message: "A table with that name already exists",
+  });
+  expect(canvas(el).selected).toBe("m1");
+  expect(button(el, "save").disabled).toBe(true);
+  await change(el, renamed(start, "m1", "T1"));
+  expect(el.fieldError).toBeNull();
+  expect(canvas(el).selected).toBe("m1");
+  expect(button(el, "save").disabled).toBe(false);
+});
+
+it("once the marked table passes, the mark and selection move to the next empty name", async () => {
+  const el = await open(stubApi());
+  const start = renamed(renamed(opened(), "m1", ""), "m2", "");
+  await change(el, start);
+  await press(el, "save");
+  expect(el.fieldError?.key).toBe("m1");
+  await change(el, renamed(start, "m1", "T"));
+  expect(el.fieldError).toEqual({ key: "m2", field: "label", message: "Enter a name." });
+  expect(canvas(el).selected).toBe("m2");
+});
+
+it("deleting the marked table moves the mark to the next failing name", async () => {
+  const el = await open(stubApi());
+  const start = renamed(renamed(opened(), "m2", ""), "live:l9", "T1");
+  await change(el, start);
+  await press(el, "save");
+  expect(el.fieldError?.key).toBe("m2");
+  await change(el, deleteTable(start, "m2"));
+  expect(el.fieldError?.key).toBe("live:l9");
+  expect(canvas(el).selected).toBe("live:l9");
+});
+
 it("the next change to the refused field clears its sentence", async () => {
   const el = await open(refusing(taken));
   const patio = renamed(opened(), "m2", "Patio 1");

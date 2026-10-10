@@ -86,6 +86,20 @@ function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
   return table.placement?.[field] ?? null;
 }
 
+/** The marked table keeps its mark while it fails at all, even when `checkDraft` blames another. */
+function tableProblem(
+  draft: FloorPlanDraft,
+  key: string,
+): "label_missing" | "label_repeated" | null {
+  const table = draft.tables.find((t) => t.key === key);
+  if (table === undefined) return null;
+  const label = table.label.trim();
+  if (label === "") return "label_missing";
+  return draft.tables.some((t) => t.key !== key && t.label.trim() === label)
+    ? "label_repeated"
+    : null;
+}
+
 const actionMessage = (text: () => string): EditorMessage => ({ text, from: "action" });
 
 /** The server stores labels trimmed; tables sent with a padded label take the trimmed one. */
@@ -357,6 +371,11 @@ export class FloorPlanEditor extends LitElement {
   #markCheck(draft: FloorPlanDraft): boolean {
     const problem = checkDraft(draft);
     if (problem === null) return false;
+    this.#markProblem(problem);
+    return true;
+  }
+
+  #markProblem(problem: NonNullable<ReturnType<typeof checkDraft>>): void {
     this.#setMark({
       key: problem.key,
       field: "label",
@@ -366,7 +385,6 @@ export class FloorPlanEditor extends LitElement {
           : codeMessage("table.label_taken"),
       from: "check",
     });
-    return true;
   }
 
   /** A check's mark follows the draft until it passes; a refusal's goes when its field changes. */
@@ -374,8 +392,10 @@ export class FloorPlanEditor extends LitElement {
     const mark = this.mark;
     if (mark === null) return;
     if (mark.from === "check") {
-      if (!this.#markCheck(next)) this.#clearMark();
-      else if (this.mark!.key !== mark.key) this.selected = this.mark!.key;
+      const own = tableProblem(next, mark.key);
+      if (own !== null) this.#markProblem({ key: mark.key, problem: own });
+      else if (this.#markCheck(next)) this.selected = this.mark!.key;
+      else this.#clearMark();
       return;
     }
     const table = next.tables.find((t) => t.key === mark.key);
