@@ -86,6 +86,9 @@ deleted while its provider's account is disconnected.
 - **Query-flag precedent.** The course delete takes `?disable=true`. The server parses it with
   `queryFlag` (`apps/server/src/report-api.ts:85-89`, used at `management-api.ts:2253`), and the
   client builds it the same way (`client.ts:2931-2936`).
+  _2026-10-11: #1521 (`8f2af6f95`), in this branch's base, removed the course delete's
+  `?disable=true` and `removeCourse`, which decision 12 also cites; `queryFlag` is now used by
+  `orders-api.ts`, `report-api.ts` and this route._
 
 ## Decisions this plan makes
 
@@ -120,6 +123,9 @@ Each line is what will be built. The owner may overrule any of them.
    dashboard sends it only when the impact it is showing at the moment of the press holds a
    `provider_registration_kept` line. Without it, a disconnected still-paired reader is refused
    `reader.provider_disconnected` (409), exactly as today, with nothing written.
+   _2026-10-11, finish-branch review: `queryFlag` also accepts `false`, which the route reads as no
+   acceptance and answers as it does without the flag (409); only a value other than `true` or
+   `false` is refused 400._
 5. **A dialog opened while the provider was connected re-reads its impact when the delete answers
    `reader.provider_disconnected`.** It shows no message of its own. The dialog shows "Checking
    what will change…" with Delete quiet and disabled while it reads; the old impact's lines stay

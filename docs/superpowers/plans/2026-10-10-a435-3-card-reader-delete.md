@@ -83,6 +83,9 @@ Each line is the default that will be built. The owner may overrule any of them 
    Enable, Unpair, a second Delete and adopting it are refused `reader.unpair_in_progress`; an
    adoption whose provider list was requested before an Unpair or Delete dropped the reader there
    is refused `reader.not_listed`._
+   _2026-10-10, A435 step 3b: when (a) plans no provider call, the same transaction also makes the
+   delete's writes (`startCardReaderDelete`, `apps/server/src/card-reader-delete.ts`), with no
+   second rules read; only a reader unpaired at its provider still takes three transactions._
 2. **A provider that cannot unpair (Stripe) does not block the delete.** Stripe's seat declares
    `canUnpair: false` (`packages/payments-stripe/src/card-provider.ts:191`) and its `remove` makes
    no call (`:234-236`), and the Unpair route refuses it (`payments-api.ts:645-646`). Default: the
@@ -150,6 +153,9 @@ Each line is the default that will be built. The owner may overrule any of them 
 14. **The open dialog does not re-read when a provider is connected or disconnected**:
     `tenant_credentials` is not a live resource (`apps/dashboard/src/api/live-queries.ts:80`). The
     delete recomputes it anyway.
+    _2026-10-10, A435 step 3b: it still does not re-read live, but a Delete refused
+    `reader.provider_disconnected` reads the impact again (`#confirmDelete`,
+    `apps/dashboard/src/screens/payments-screen.ts`)._
 15. **No configuration-transfer change.** The payments module exports only `payment_policy`
     (`packages/payments/src/configuration-transfer.ts:1-4`), so no reader, choice or profile list
     travels.

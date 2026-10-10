@@ -3577,7 +3577,10 @@ it back unless it was also unpaired. **Delete** is permanent, and is refused whi
 reader still paired at a provider that can unpair it (SumUp) is unpaired there first; while that
 provider's account is not connected, the delete removes it from Waitron only and the confirmation
 says it stays registered at the provider; an unpair that fails leaves the reader disabled but not
-deleted. While a Delete or an Unpair of a reader is running, Enable, Unpair,
+deleted. A Delete refused `reader.provider_disconnected`, because the account was disconnected after the
+dialog read its impact, shows no message: the dialog reads the impact again and then says the
+reader stays registered at the provider. If the account went during the provider call, the
+reader is left disabled. While a Delete or an Unpair of a reader is running, Enable, Unpair,
 another Delete and adopting it are refused (`reader.unpair_in_progress`), and an adoption whose
 provider list was requested before an Unpair or Delete dropped the reader there is refused
 `reader.not_listed`. A Stripe reader is deleted without contacting Stripe. Delete takes the
