@@ -2449,6 +2449,86 @@ describe("TillApi", () => {
     );
   });
 
+  it("joinTables sends a merge only when it is given", async () => {
+    const answer = { partyId: "v1", mainBillId: "wo-4", merged: false };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+    const revisions = { expectedPartyRevision: 3, otherPartyId: null };
+
+    await expect(
+      api.joinTables("v1", "tbl-9", "merge", revisions, {
+        moving: "tbl-9",
+        target: "tbl-1",
+        side: "left",
+        seats: 6,
+      }),
+    ).resolves.toEqual(answer);
+    await api.joinTables("v1", "tbl-9", "merge", revisions, {
+      moving: "tbl-1",
+      target: "tbl-9",
+      side: "top",
+    });
+    await api.joinTables("v1", "tbl-9", "separate", revisions);
+
+    const bodies = fetchStub.mock.calls.map(
+      (call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)) as unknown,
+    );
+    expect(bodies).toEqual([
+      {
+        tableId: "tbl-9",
+        bills: "merge",
+        expectedPartyRevision: 3,
+        otherPartyId: null,
+        merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
+      },
+      {
+        tableId: "tbl-9",
+        bills: "merge",
+        expectedPartyRevision: 3,
+        otherPartyId: null,
+        merge: { moving: "tbl-1", target: "tbl-9", side: "top" },
+      },
+      { tableId: "tbl-9", bills: "separate", expectedPartyRevision: 3, otherPartyId: null },
+    ]);
+  });
+
+  it("sends each of today's changes to its route", async () => {
+    const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.moveToday("t1", { x: 4, y: 12 })).resolves.toBeUndefined();
+    await expect(api.rotateToday("t1")).resolves.toBeUndefined();
+    await expect(api.takeOffToday("t1")).resolves.toBeUndefined();
+    await expect(api.putBackToday("t1")).resolves.toBeUndefined();
+    await expect(api.placeSpareToday("t2", { x: 0, y: 30 })).resolves.toBeUndefined();
+    await expect(api.setSeatsToday("t1", 6)).resolves.toBeUndefined();
+    await expect(api.backToSavedToday("t1")).resolves.toBeUndefined();
+    await expect(
+      api.mergeToday("t1", { targetId: "t2", side: "right", seats: 8 }),
+    ).resolves.toBeUndefined();
+    await expect(api.mergeToday("t1", { targetId: "t2", side: "bottom" })).resolves.toBeUndefined();
+    await expect(api.splitToday("t1")).resolves.toBeUndefined();
+    await expect(api.resetZoneToday("z1")).resolves.toBeUndefined();
+
+    const sent = fetchStub.mock.calls.map((call) => {
+      const [path, init] = call as unknown as [string, RequestInit];
+      return [path, init.method, JSON.parse(String(init.body)) as unknown];
+    });
+    expect(sent).toEqual([
+      ["/api/tables/t1/today/move", "POST", { x: 4, y: 12 }],
+      ["/api/tables/t1/today/rotate", "POST", {}],
+      ["/api/tables/t1/today/take-off", "POST", {}],
+      ["/api/tables/t1/today/put-back", "POST", {}],
+      ["/api/tables/t2/today/place", "POST", { x: 0, y: 30 }],
+      ["/api/tables/t1/today/seats", "POST", { seats: 6 }],
+      ["/api/tables/t1/today/back", "POST", {}],
+      ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "right", seats: 8 }],
+      ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "bottom" }],
+      ["/api/tables/t1/today/split", "POST", {}],
+      ["/api/zones/z1/today/reset", "POST", {}],
+    ]);
+  });
+
   it("splitTable POSTs the table, the chosen bill or null, and the revision to the party's /split-table route", async () => {
     const answer = { partyId: "v-new", mainBillId: null };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
@@ -3009,6 +3089,18 @@ describe("TillApi: a seated party", () => {
     await new TillApi("", fetchStub).seatTable("tbl-1", null);
 
     expect(fetchStub).toHaveBeenCalledWith("/api/tables/tbl-1/seat", post({ guestCount: null }));
+  });
+
+  it("seatAtTables sends the other tables with the guest count", async () => {
+    const answer = { partyId: "v1", tabId: "wo-1", revision: 2, orderNumber: 12 };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+    await expect(new TillApi("", fetchStub).seatAtTables("t1", 2, ["t2"])).resolves.toEqual(answer);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/t1/seat",
+      post({ guestCount: 2, withTableIds: ["t2"] }),
+    );
   });
 
   it("finishTable POSTs the revision it read to the party's /finish route", async () => {

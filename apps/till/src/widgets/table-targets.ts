@@ -2,7 +2,7 @@ import { css, html, nothing, type TemplateResult } from "lit";
 import { partyTablesName } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableActionRevisions, TableParty, TableState } from "../api/client.js";
 
 /** The styles {@link tableTarget} needs. */
 export const tableTargetStyles = css`
@@ -33,6 +33,17 @@ export type SeatedRead = Pick<TableParty, "id" | "revision"> | null;
 
 export function seatedRead(table: TableState): SeatedRead {
   return table.party === null ? null : { id: table.party.id, revision: table.party.revision };
+}
+
+/** What a move or join sends of who it read at its target table: that party and its revision, null
+ * for a table read free, and nothing for a table of the acting party itself. */
+export function otherPartyRead(
+  seated: SeatedRead,
+  ownPartyId: string | null,
+): Pick<TableActionRevisions, "otherPartyId" | "expectedOtherPartyRevision"> {
+  if (seated === null) return { otherPartyId: null };
+  if (seated.id === ownPartyId) return {};
+  return { otherPartyId: seated.id, expectedOtherPartyRevision: seated.revision };
 }
 
 /** The labels of the party's tables that `tables` lists, "Mesa 4, 5". */
