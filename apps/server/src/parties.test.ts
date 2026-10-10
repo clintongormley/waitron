@@ -367,7 +367,8 @@ describe("finish table", () => {
     const closed = await partyRow(suite, partyId);
     expect(closed).toMatchObject({ state: "closed", closedBy: OPERATOR, revision: 2 });
     expect(closed.closedAt).not.toBeNull();
-    expect((await membershipsOf(partyId))[0]!.leftAt).not.toBeNull();
+    expect(await membershipsOf(partyId)).toEqual([]);
+    expect(closed.tableNames).toEqual(["Mesa 4"]);
     expect((await tableRow(suite, mesa4)).statusId).toBeNull();
     expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
   });
@@ -476,7 +477,8 @@ describe("finish table", () => {
       expect((await tableRow(suite, table)).statusId).toBeNull();
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
     }
-    expect((await membershipsOf(partyId)).every((m) => m.leftAt !== null)).toBe(true);
+    expect(await membershipsOf(partyId)).toEqual([]);
+    expect([...(await partyRow(suite, partyId)).tableNames!].sort()).toEqual(["Mesa 4", "Mesa 5"]);
   });
 });
 
@@ -1027,7 +1029,8 @@ describe("merge (D2)", () => {
     expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toMatchObject({
       partyId: t.partyId,
     });
-    expect((await membershipsOf(s.partyId)).every((m) => m.leftAt !== null)).toBe(true);
+    expect(await membershipsOf(s.partyId)).toEqual([]);
+    expect((await partyRow(suite, s.partyId)).tableNames).toEqual(["Mesa 6"]);
   });
 
   it("moves the absorbed party's tables to T when T joins them, keeping their status", async () => {
@@ -1046,7 +1049,11 @@ describe("merge (D2)", () => {
     for (const table of [mesa6, mesa9]) {
       expect((await tableRow(suite, table)).statusId).toBe(statusId);
     }
-    expect((await membershipsOf(s.partyId)).every((m) => m.leftAt !== null)).toBe(true);
+    expect(await membershipsOf(s.partyId)).toEqual([]);
+    expect([...(await partyRow(suite, s.partyId)).tableNames!].sort()).toEqual([
+      "Mesa 6",
+      "Mesa 9",
+    ]);
     expect((await floorRow(venue, mesa6)).party).toMatchObject({
       id: t.partyId,
       tableIds: expect.arrayContaining([mesa4, mesa6, mesa9]),
@@ -1393,7 +1400,12 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     for (const table of [s.tableId, t.tableId]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
     }
-    expect((await membershipsOf(t.partyId)).every((m) => m.leftAt !== null)).toBe(true);
+    expect(await membershipsOf(t.partyId)).toEqual([]);
+    const labels = [
+      (await tableRow(suite, t.tableId)).label,
+      (await tableRow(suite, s.tableId)).label,
+    ];
+    expect([...(await partyRow(suite, t.partyId)).tableNames!].sort()).toEqual(labels.sort());
   });
 });
 
