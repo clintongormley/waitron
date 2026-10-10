@@ -54,4 +54,10 @@ describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)"
     await mountCanvas(theme, { tables, selected: "t1" });
     await expectNoA11yViolations(host);
   });
+
+  test("a selected table with its rotation handle", async () => {
+    const lowered = tables.map((t) => ({ ...t, placement: { ...t.placement, y: 8 } }));
+    await mountCanvas(theme, { tables: lowered, selected: "b1" });
+    await expectNoA11yViolations(host);
+  });
 });

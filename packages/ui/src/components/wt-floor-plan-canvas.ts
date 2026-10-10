@@ -6,9 +6,18 @@ import { baseStyles } from "../base-styles.js";
 import {
   GRID_SQUARE_PX,
   type PlanPlacement,
+  clampToGrid,
   gridExtent,
+  rotatedRect,
+  rotationFromAngle,
   showsName,
+  snapToSquare,
 } from "../floor-plan-geometry.js";
+import { registerIcons } from "./wt-icon.js";
+
+registerIcons({
+  "floor-plan-rotate": "M8 3a5 5 0 1 0 4.33 2.5l1.3-.75A6.5 6.5 0 1 1 8 1.5V0l3 2.25L8 4.5z",
+});
 
 export interface PlanCanvasTable {
   key: string;
@@ -46,6 +55,28 @@ const DEFAULT_COPY: FloorPlanCanvasCopy = {
 };
 
 const px = (squares: number): string => `${squares * GRID_SQUARE_PX}px`;
+
+const ROTATE_KEY_STEP = 15;
+
+const ARROWS: Record<string, { dx: number; dy: number }> = {
+  ArrowRight: { dx: 1, dy: 0 },
+  ArrowLeft: { dx: -1, dy: 0 },
+  ArrowDown: { dx: 0, dy: 1 },
+  ArrowUp: { dx: 0, dy: -1 },
+};
+
+interface Drag {
+  kind: "move" | "rotate";
+  table: PlanCanvasTable;
+  pointerId: number;
+  startX: number;
+  startY: number;
+}
+
+interface Draft {
+  key: string;
+  placement: PlanPlacement;
+}
 
 /**
  * Controlled: it never changes `tables` or `selected`, only asks through `wt-table-select`; the
@@ -94,6 +125,7 @@ export class WtFloorPlanCanvas extends LitElement {
         font: inherit;
         font-size: var(--wt-font-size-sm);
         cursor: pointer;
+        touch-action: none;
       }
 
       .table[data-shape="round"] {
@@ -121,6 +153,24 @@ export class WtFloorPlanCanvas extends LitElement {
         background: var(--wt-color-text-muted);
       }
 
+      .rotate-handle {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--wt-color-primary);
+        border-radius: 50%;
+        background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-primary-text);
+        cursor: grab;
+        touch-action: none;
+        transform: translateX(-50%);
+      }
+
       /* A circle clips the corner, so the mark sits where the circle still covers it. */
       .table[data-shape="round"] .fixed-marker {
         top: 15%;
@@ -137,6 +187,10 @@ export class WtFloorPlanCanvas extends LitElement {
   @property({ attribute: false }) copy: Partial<FloorPlanCanvasCopy> = {};
 
   @state() private visible = { columns: 0, rows: 0 };
+
+  @state() private draft: Draft | null = null;
+
+  #drag: Drag | null = null;
 
   #observer = new ResizeObserver(([entry]) => {
     // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
@@ -162,12 +216,17 @@ export class WtFloorPlanCanvas extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#observer.disconnect();
+    this.#endDrag();
+  }
+
+  #placementOf(t: PlanCanvasTable): PlanPlacement {
+    return this.draft?.key === t.key ? this.draft.placement : t.placement;
   }
 
   override render(): TemplateResult {
     const copy = this.#copy;
     const extent = gridExtent(
-      this.tables.map((t) => t.placement),
+      this.tables.map((t) => this.#placementOf(t)),
       this.visible,
     );
     const gridStyle = styleMap({
@@ -196,7 +255,7 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   #renderTable(t: PlanCanvasTable, copy: FloorPlanCanvasCopy): TemplateResult {
-    const p = t.placement;
+    const p = this.#placementOf(t);
     const style = styleMap({
       left: px(p.x),
       top: px(p.y),
@@ -215,11 +274,122 @@ export class WtFloorPlanCanvas extends LitElement {
         aria-label=${t.fixed ? `${t.label}, ${copy.fixed}` : t.label}
         style=${style}
         @click=${(e: Event) => this.#onTableClick(e, t.key)}
+        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "move")}
+        @keydown=${(e: KeyboardEvent) => this.#onTableKey(e, t)}
       >
         ${showsName(p, GRID_SQUARE_PX) ? html`<span class="name">${t.label}</span>` : nothing}
         ${t.fixed ? html`<span class="fixed-marker" part="fixed-marker"></span>` : nothing}
       </button>
+      ${t.key === this.selected ? this.#renderHandle(t, p, copy) : nothing}
     `;
+  }
+
+  #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
+    const box = rotatedRect(p);
+    const style = styleMap({
+      left: px(box.x + box.width / 2),
+      top: `calc(${px(box.y)} - var(--wt-tap-min) - var(--wt-space-1))`,
+    });
+    return html`
+      <button
+        type="button"
+        class="rotate-handle"
+        part="rotate-handle"
+        aria-label=${copy.rotate.replace("{name}", t.label)}
+        style=${style}
+        @click=${(e: Event) => e.stopPropagation()}
+        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "rotate")}
+        @keydown=${(e: KeyboardEvent) => this.#onHandleKey(e, t)}
+      >
+        <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
+      </button>
+    `;
+  }
+
+  #onTableKey(e: KeyboardEvent, t: PlanCanvasTable): void {
+    const arrow = ARROWS[e.key];
+    if (arrow === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const x = clampToGrid(t.placement.x + arrow.dx);
+    const y = clampToGrid(t.placement.y + arrow.dy);
+    if (x !== t.placement.x || y !== t.placement.y) this.#move(t.key, x, y);
+  }
+
+  #onHandleKey(e: KeyboardEvent, t: PlanCanvasTable): void {
+    const step =
+      e.key === "ArrowRight" ? ROTATE_KEY_STEP : e.key === "ArrowLeft" ? -ROTATE_KEY_STEP : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.#rotate(t.key, rotationFromAngle(t.placement.rotation + step));
+  }
+
+  #onPointerDown(e: PointerEvent, t: PlanCanvasTable, kind: Drag["kind"]): void {
+    // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
+    if (this.#drag !== null) return;
+    e.preventDefault();
+    this.#drag = { kind, table: t, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY };
+    window.addEventListener("pointermove", this.#onPointerMove);
+    window.addEventListener("pointerup", this.#onPointerUp);
+    window.addEventListener("pointercancel", this.#onPointerCancel);
+  }
+
+  // The window listeners below are attached only while `#drag` is set.
+  readonly #onPointerMove = (e: PointerEvent): void => {
+    const drag = this.#drag!;
+    if (e.pointerId !== drag.pointerId) return;
+    const p = drag.table.placement;
+    if (drag.kind === "move") {
+      const x = clampToGrid(p.x + snapToSquare(e.clientX - drag.startX));
+      const y = clampToGrid(p.y + snapToSquare(e.clientY - drag.startY));
+      this.draft = { key: drag.table.key, placement: { ...p, x, y } };
+      return;
+    }
+    const grid = this.renderRoot.querySelector(".grid")!.getBoundingClientRect();
+    const dx = e.clientX - (grid.left + (p.x + p.width / 2) * GRID_SQUARE_PX);
+    const dy = e.clientY - (grid.top + (p.y + p.height / 2) * GRID_SQUARE_PX);
+    const rotation = rotationFromAngle((Math.atan2(dx, -dy) * 180) / Math.PI);
+    this.draft = { key: drag.table.key, placement: { ...p, rotation } };
+  };
+
+  readonly #onPointerUp = (e: PointerEvent): void => {
+    const drag = this.#drag!;
+    if (e.pointerId !== drag.pointerId) return;
+    const draft = this.draft;
+    this.#endDrag();
+    if (draft === null) return;
+    const from = drag.table.placement;
+    const to = draft.placement;
+    if (drag.kind === "rotate") {
+      if (to.rotation !== from.rotation) this.#rotate(draft.key, to.rotation);
+    } else if (to.x !== from.x || to.y !== from.y) {
+      this.#move(draft.key, to.x, to.y);
+    }
+  };
+
+  readonly #onPointerCancel = (e: PointerEvent): void => {
+    if (e.pointerId === this.#drag!.pointerId) this.#endDrag();
+  };
+
+  #endDrag(): void {
+    this.#drag = null;
+    this.draft = null;
+    window.removeEventListener("pointermove", this.#onPointerMove);
+    window.removeEventListener("pointerup", this.#onPointerUp);
+    window.removeEventListener("pointercancel", this.#onPointerCancel);
+  }
+
+  #move(key: string, x: number, y: number): void {
+    const detail: TableMove = { key, x, y };
+    this.dispatchEvent(new CustomEvent("wt-table-move", { detail, bubbles: true, composed: true }));
+  }
+
+  #rotate(key: string, rotation: number): void {
+    const detail: TableRotate = { key, rotation };
+    this.dispatchEvent(
+      new CustomEvent("wt-table-rotate", { detail, bubbles: true, composed: true }),
+    );
   }
 
   #onTableClick(e: Event, key: string): void {

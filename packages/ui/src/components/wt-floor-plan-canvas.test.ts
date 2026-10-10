@@ -2,7 +2,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { PlanPlacement } from "../floor-plan-geometry.js";
-import type { PlanCanvasTable, TableSelect, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
+import type {
+  PlanCanvasTable,
+  TableMove,
+  TableRotate,
+  TableSelect,
+  WtFloorPlanCanvas,
+} from "./wt-floor-plan-canvas.js";
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
@@ -144,7 +150,8 @@ it("fills a box that is not a whole number of squares without overflowing it", a
 
 /**
  * Stands in for classic scrollbars, which take room inside the viewport's box: this headless
- * Chromium draws none that do, even under a `::-webkit-scrollbar` width.
+ * Chromium draws none that do, even under a `::-webkit-scrollbar` width. Unlike a real scrollbar,
+ * which appears only on overflow, this 15 px border is always there.
  */
 function classicScrollbars(el: WtFloorPlanCanvas): void {
   const style = document.createElement("style");
@@ -317,4 +324,350 @@ it("passes focus to its first table", async () => {
   const el = await canvas([table("t1", "T1"), table("t2", "T2", { x: 10 })]);
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(button(el, "t1"));
+});
+
+function moves(target: EventTarget): TableMove[] {
+  const seen: TableMove[] = [];
+  target.addEventListener("wt-table-move", (e) => seen.push((e as CustomEvent<TableMove>).detail));
+  return seen;
+}
+
+function rotates(target: EventTarget): TableRotate[] {
+  const seen: TableRotate[] = [];
+  target.addEventListener("wt-table-rotate", (e) =>
+    seen.push((e as CustomEvent<TableRotate>).detail),
+  );
+  return seen;
+}
+
+function pointer(
+  target: EventTarget,
+  type: string,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+): void {
+  target.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      pointerId,
+      clientX,
+      clientY,
+    }),
+  );
+}
+
+/** Presses on `key`'s table and moves the same pointer by (dx, dy) px, without releasing it. */
+function dragBy(el: WtFloorPlanCanvas, key: string, dx: number, dy: number, pointerId = 1) {
+  const box = button(el, key).getBoundingClientRect();
+  const x = box.left + 5;
+  const y = box.top + 5;
+  pointer(button(el, key), "pointerdown", pointerId, x, y);
+  pointer(window, "pointermove", pointerId, x + dx, y + dy);
+  return { x: x + dx, y: y + dy };
+}
+
+async function release(el: WtFloorPlanCanvas, at: { x: number; y: number }, pointerId = 1) {
+  pointer(window, "pointerup", pointerId, at.x, at.y);
+  await el.updateComplete;
+}
+
+function offset(el: WtFloorPlanCanvas, key: string): { left: number; top: number } {
+  const grid = part(el, "grid").getBoundingClientRect();
+  const box = button(el, key).getBoundingClientRect();
+  return { left: box.left - grid.left, top: box.top - grid.top };
+}
+
+it("a drag snaps to whole squares and moves on release", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  await release(el, dragBy(el, "t1", 30, 13));
+  expect(seen).toEqual([{ key: "t1", x: 5, y: 4 }]);
+});
+
+it("draws the table where the drag has it before release", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  dragBy(el, "t1", 30, 13);
+  await el.updateComplete;
+  expect(offset(el, "t1")).toEqual({ left: 60, top: 48 });
+  expect(seen).toEqual([]);
+});
+
+it("a drag past the top or left edge stops at 0", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  await release(el, dragBy(el, "t1", -100, -100));
+  expect(seen).toEqual([{ key: "t1", x: 0, y: 0 }]);
+});
+
+it("a drag straight down moves the table down", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  await release(el, dragBy(el, "t1", 0, 24));
+  expect(seen).toEqual([{ key: "t1", x: 2, y: 5 }]);
+});
+
+it("takes the pointer's press so the page does not act on it", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const down = new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 1 });
+  button(el, "t1").dispatchEvent(down);
+  pointer(window, "pointercancel", 1, 0, 0);
+  expect(down.defaultPrevented).toBe(true);
+});
+
+it("a drag ends at release", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const at = dragBy(el, "t1", 24, 0);
+  await release(el, at);
+  pointer(window, "pointermove", 1, at.x + 120, at.y);
+  await el.updateComplete;
+  expect(offset(el, "t1")).toEqual({ left: 24, top: 36 });
+  pointer(window, "pointerup", 1, at.x + 120, at.y);
+  expect(seen).toEqual([{ key: "t1", x: 4, y: 3 }]);
+});
+
+it("another pointer's cancel leaves the drag going", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const at = dragBy(el, "t1", 24, 0);
+  pointer(window, "pointercancel", 2, at.x, at.y);
+  await release(el, at);
+  expect(seen).toEqual([{ key: "t1", x: 4, y: 3 }]);
+});
+
+it("a drag ends when the canvas is removed", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const at = dragBy(el, "t1", 24, 0);
+  const parent = el.parentNode!;
+  el.remove();
+  parent.appendChild(el);
+  await el.updateComplete;
+  expect(offset(el, "t1")).toEqual({ left: 24, top: 36 });
+  await release(el, at);
+  expect(seen).toEqual([]);
+});
+
+it("a drag that ends where it began sends nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  await release(el, dragBy(el, "t1", 5, 5));
+  expect(seen).toEqual([]);
+});
+
+it("the grid grows while a table is dragged right and down", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  await settled(el);
+  dragBy(el, "t1", 1440, 1440);
+  await el.updateComplete;
+  const grid = part(el, "grid").getBoundingClientRect();
+  expect(grid.width).toBe((122 + 8 + 8) * 12);
+  expect(grid.height).toBe((123 + 8 + 8) * 12);
+});
+
+it("a pointer cancel puts the table back and sends nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const at = dragBy(el, "t1", 30, 13);
+  pointer(window, "pointercancel", 1, at.x, at.y);
+  await el.updateComplete;
+  expect(offset(el, "t1")).toEqual({ left: 24, top: 36 });
+  pointer(window, "pointerup", 1, at.x, at.y);
+  expect(seen).toEqual([]);
+});
+
+it("a second pointer cannot take over a drag", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 }), table("t2", "T2", { x: 20 })]);
+  const seen = moves(el);
+  const first = dragBy(el, "t1", 24, 0, 1);
+  const second = dragBy(el, "t2", 60, 60, 2);
+  await el.updateComplete;
+  expect(offset(el, "t2")).toEqual({ left: 240, top: 0 });
+  expect(offset(el, "t1")).toEqual({ left: 48, top: 36 });
+  await release(el, second, 2);
+  expect(seen).toEqual([]);
+  await release(el, first, 1);
+  expect(seen).toEqual([{ key: "t1", x: 4, y: 3 }]);
+});
+
+it("the arrow keys move a focused table one square", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  let outside = 0;
+  host.addEventListener("keydown", () => outside++);
+  const prevented: boolean[] = [];
+  button(el, "t1").addEventListener("keydown", (e) => prevented.push(e.defaultPrevented));
+  button(el, "t1").focus();
+  await userEvent.keyboard("{ArrowRight}{ArrowLeft}{ArrowDown}{ArrowUp}");
+  expect(seen).toEqual([
+    { key: "t1", x: 3, y: 3 },
+    { key: "t1", x: 1, y: 3 },
+    { key: "t1", x: 2, y: 4 },
+    { key: "t1", x: 2, y: 2 },
+  ]);
+  expect(prevented).toEqual([true, true, true, true]);
+  expect(outside).toBe(0);
+});
+
+it("an arrow key at an edge sends nothing", async () => {
+  const el = await canvas([
+    table("low", "L", { x: 0, y: 0 }),
+    table("high", "H", { x: 999, y: 999 }),
+  ]);
+  const seen = moves(el);
+  button(el, "low").focus();
+  await userEvent.keyboard("{ArrowLeft}{ArrowUp}");
+  button(el, "high").focus();
+  await userEvent.keyboard("{ArrowRight}{ArrowDown}");
+  expect(seen).toEqual([]);
+});
+
+it("other keys do nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const prevented: boolean[] = [];
+  host.addEventListener("keydown", (e) => prevented.push(e.defaultPrevented));
+  button(el, "t1").focus();
+  await userEvent.keyboard("a");
+  expect(seen).toEqual([]);
+  expect(prevented).toEqual([false]);
+});
+
+const handles = (el: WtFloorPlanCanvas) =>
+  el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[part~="rotate-handle"]');
+
+it("shows the rotation handle on the selected table only, beside its button", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 10 }), table("t2", "T2", { x: 20 })], {
+    selected: "t1",
+  });
+  const found = handles(el);
+  expect(found).toHaveLength(1);
+  const handle = found[0]!;
+  expect(handle.tagName).toBe("BUTTON");
+  expect(handle.getAttribute("aria-label")).toBe("Rotate T1");
+  expect(button(el, "t1").contains(handle)).toBe(false);
+  el.selected = null;
+  await el.updateComplete;
+  expect(handles(el)).toHaveLength(0);
+  el.selected = "t1";
+  el.copy = { rotate: "Girar {name}" };
+  await el.updateComplete;
+  expect(handles(el)[0]!.getAttribute("aria-label")).toBe("Girar T1");
+});
+
+it("draws the handle at least a tap target square, above the table", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 10 })], { selected: "t1" });
+  host.style.setProperty("--wt-tap-min", "50px");
+  host.style.setProperty("--wt-space-1", "6px");
+  const handle = handles(el)[0]!.getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(handle.width).toBeGreaterThanOrEqual(50);
+  expect(handle.height).toBeGreaterThanOrEqual(50);
+  expect(box.top - handle.bottom).toBe(6);
+  expect(handle.left + handle.width / 2).toBeCloseTo(box.left + box.width / 2);
+  const icon = handles(el)[0]!.querySelector("wt-icon")!;
+  await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
+});
+
+it("dragging the handle turns the table in 15° steps", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = rotates(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  const r = 80;
+  const turnTo = async (x: number, y: number) => {
+    const handle = handles(el)[0]!;
+    const h = handle.getBoundingClientRect();
+    pointer(handle, "pointerdown", 1, h.left + 5, h.top + 5);
+    pointer(window, "pointermove", 1, x, y);
+    await release(el, { x, y });
+  };
+  await turnTo(cx + r, cy);
+  await turnTo(cx, cy + r);
+  const a = (50 * Math.PI) / 180;
+  await turnTo(cx + r * Math.sin(a), cy - r * Math.cos(a));
+  await turnTo(cx - r, cy);
+  await turnTo(cx, cy - r);
+  expect(seen).toEqual([
+    { key: "t1", rotation: 90 },
+    { key: "t1", rotation: 180 },
+    { key: "t1", rotation: 45 },
+    { key: "t1", rotation: 270 },
+  ]);
+});
+
+it("a tap on the handle does not turn the table", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, rotation: 90 })], {
+    selected: "t1",
+  });
+  const seen = rotates(el);
+  const selections = selects(el);
+  await userEvent.click(handles(el)[0]!);
+  expect(seen).toEqual([]);
+  expect(selections).toEqual([]);
+});
+
+it("the arrow keys on the handle turn by 15° and wrap", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = rotates(el);
+  const moved = moves(el);
+  let outside = 0;
+  host.addEventListener("keydown", () => outside++);
+  const prevented: boolean[] = [];
+  handles(el)[0]!.addEventListener("keydown", (e) => prevented.push(e.defaultPrevented));
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowRight}{ArrowLeft}");
+  expect(prevented).toEqual([true, true]);
+  expect(outside).toBe(0);
+  el.tables = [table("t1", "T1", { x: 10, y: 10, rotation: 345 })];
+  await el.updateComplete;
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  expect(seen).toEqual([
+    { key: "t1", rotation: 15 },
+    { key: "t1", rotation: 345 },
+    { key: "t1", rotation: 0 },
+  ]);
+  expect(moved).toEqual([]);
+});
+
+it("other keys on the handle do nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = rotates(el);
+  const prevented: boolean[] = [];
+  host.addEventListener("keydown", (e) => prevented.push(e.defaultPrevented));
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowUp}a");
+  expect(seen).toEqual([]);
+  expect(prevented).toEqual([false, false]);
+});
+
+it("each event bubbles out of a shadow root", async () => {
+  const el = await canvas(
+    [table("t1", "T1", { x: 10, y: 10 })],
+    { selected: "t1" },
+    mountInShadowRoot,
+  );
+  const moved: CustomEvent[] = [];
+  const turned: CustomEvent[] = [];
+  document.addEventListener("wt-table-move", (e) => moved.push(e as CustomEvent), { once: true });
+  document.addEventListener("wt-table-rotate", (e) => turned.push(e as CustomEvent), {
+    once: true,
+  });
+  button(el, "t1").focus();
+  await userEvent.keyboard("{ArrowRight}");
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  expect(moved.map((e) => e.detail)).toEqual([{ key: "t1", x: 11, y: 10 }]);
+  expect(turned.map((e) => e.detail)).toEqual([{ key: "t1", rotation: 15 }]);
+  for (const e of [...moved, ...turned]) {
+    expect(e.bubbles).toBe(true);
+    expect(e.composed).toBe(true);
+  }
 });
