@@ -278,10 +278,11 @@ describe("Deleting a card reader", () => {
   });
 
   it("a delete refused because the provider was disconnected after the dialog opened reads the impact again, then accepts the notice it shows", async () => {
+    const reread = deferred<DeleteImpact>();
     const getReaderDeleteImpact = vi
       .fn()
       .mockResolvedValueOnce(counterImpact)
-      .mockResolvedValue(keptImpact);
+      .mockReturnValue(reread.promise);
     const deleteReader = vi
       .fn()
       .mockRejectedValueOnce(coded("reader.provider_disconnected"))
@@ -297,6 +298,14 @@ describe("Deleting a card reader", () => {
     await vi.waitFor(() => expect(getReaderDeleteImpact).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(dialogOf(el)!.open).toBe(true);
+    expect(dialogOf(el)!.loading).toBe(true);
+    expect(dialogOf(el)!.actionError).toBe("");
+    expect(confirmOf(el).getAttribute("variant")).toBe("secondary");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    reread.resolve(keptImpact);
+    await flush(el);
+    expect(dialogOf(el)!.open).toBe(true);
     expect(dialogOf(el)!.actionError).toBe("");
     expect(linesOf(el)).toEqual([
       "Acme Pay isn't connected, so the reader stays registered at Acme Pay. Remove it there too.",
@@ -307,6 +316,44 @@ describe("Deleting a card reader", () => {
     await flush(el);
     expect(deleteReader).toHaveBeenNthCalledWith(2, "counter", { acceptRegistrationKept: true });
   });
+
+  it.each(["closed", "reopened on another reader"] as const)(
+    "a delete refused as disconnected after its dialog was %s reads no impact again",
+    async (after) => {
+      const sent = deferred<DeleteImpact>();
+      const api = client({
+        deleteReader: vi
+          .fn()
+          .mockReturnValueOnce(sent.promise)
+          .mockResolvedValue(impactOf("terrace", "Terrace")),
+      });
+      const el = await mount(api);
+      await openDelete(el, "counter");
+      confirmOf(el).click();
+      await flush(el);
+      vi.mocked(api.listReaders).mockResolvedValue([terrace, unpaired]);
+      api.liveData!.invalidate([{ type: "card_readers", id: "counter" }]);
+      await vi.waitFor(() => expect(dialogOf(el)?.open ?? false).toBe(false));
+      await flush(el);
+      if (after === "reopened on another reader") await openDelete(el, "terrace");
+      const reads = vi.mocked(api.getReaderDeleteImpact).mock.calls.length;
+
+      sent.reject(coded("reader.provider_disconnected"));
+      await flush(el);
+      await flush(el);
+
+      expect(api.getReaderDeleteImpact).toHaveBeenCalledTimes(reads);
+      if (after === "closed") {
+        expect(dialogOf(el)?.open ?? false).toBe(false);
+        return;
+      }
+      expect(dialogOf(el)!.open).toBe(true);
+      expect(dialogOf(el)!.impact?.target.id).toBe("terrace");
+      expect(dialogOf(el)!.loading).toBe(false);
+      expect(dialogOf(el)!.submitting).toBe(false);
+      expect(dialogOf(el)!.actionError).toBe("");
+    },
+  );
 
   it("a payment in progress is shown and keeps Delete disabled", async () => {
     const el = await mount(
