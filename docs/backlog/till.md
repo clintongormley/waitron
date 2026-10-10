@@ -205,7 +205,7 @@ screen is designed.
 
 - **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,
   the bar moves items into the More menu one at a time, only as many as it needs to stay on one
-  row. Since A425 the bar draws its actions in priority order and More takes them from the right:
+  row. It draws its actions in priority order (A425) and moves them into More from the right:
   the Waitron name is hidden first, then Transfers (count and button together), Equipment,
   Profile, Allergens, My schedule, Kitchen, Pass, Find a bill, and last the operator's name with
   Log out (`design-system.md`). Tabs and the language chooser never leave; once everything
@@ -215,10 +215,10 @@ screen is designed.
   - **Open, decided as built:** a change in the pending-transfer count alone never brings items
     back onto the bar, so when the count shrinks or goes away, items can stay in More although they
     would now fit, until the next resize or other change refits the bar.
-  - **Open: three cases run close to their 15 s limit locally.** The "fits as a fresh bar does when
+  - **Open: three cases run close to, and sometimes past, their 15 s limit locally.** The "fits as a fresh bar does when
     …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
     owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
-    changes" case timed out at 15.4 s on main's code as well as on A425's branch. Find what makes
+    changes" case timed out at 15.4 s both before and after A425's order change. Find what makes
     them slow rather than raising the limit.
   - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
     any one leaves every test passing): the phone-width early return in `#release`, the return

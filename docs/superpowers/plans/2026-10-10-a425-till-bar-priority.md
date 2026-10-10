@@ -31,8 +31,8 @@ Light review path (no migration, no risk trigger), one pull request, branch
    transfers pending" / "More, 1 transfer pending" and "Más, traspasos pendientes: {n}" / "Más,
    traspasos pendientes: 1", so the bar and More's name use one word for the same thing.
 6. **Consequences the owner should see in the FYI** (not separate decisions, but say them in the
-   PR): transfers now leave FIRST, so above phone width More exists only once the transfers are in
-   it — a bar with More AND the transfers still on it no longer occurs; the pending count is then
+   PR): transfers now leave FIRST, so above phone width, on a till that has the transfers, More
+   exists only once the transfers are in it — a bar with More AND the transfers still on it no longer occurs; the pending count is then
    read from the badge on More and the one status region outside it (as #1435 built for that
    case). On a phone the count moves from the top of More to just above the operator's name.
    Operator name + Log out keep their trailing place (decision 3), which departs from a literal
@@ -63,6 +63,11 @@ Each keeps what it proves; only what the new order makes impossible goes, and is
   1600 and never lands on 1024: the new 1024/800 case also asserts that what is in More is the
   start of the new leaving order.
 
+As built (2026-10-10): the "leaves the wide header as it was" case is now titled "draws the wide
+header whole: brand, and every button straight in the session row in priority order", and with the
+1280 row dropped the "keeps an open More open" case is a plain `it` titled "…when the transfer count
+changes while the transfers are in More".
+
 ## Task 1 — tests first, then the order and the label (one implementer)
 
 Files: `apps/till/src/widgets/tab-shell.ts`, `apps/till/src/widgets/tab-shell.test.ts`,
@@ -74,6 +79,8 @@ Files: `apps/till/src/widgets/tab-shell.ts`, `apps/till/src/widgets/tab-shell.te
    the test's commit message what the failing run prints today (expected: at least one of
    `.find-bill` / `.station` / `.expo` found inside More while `[data-open-transfers]` is on the
    bar, at 800 px at least). Run it and confirm it fails for that reason.
+   As built (2026-10-10): `full` at 1024; the demo counter's bar (`demoCounter`) at 1024 and 800;
+   in Spanish at 800 Kitchen also leaves.
 2. **A second failing case:** the bar's button reads "Transfers" in en-GB and "Traspasos" in es-ES,
    and the transfers dialog heading key still reads "Department transfers" /
    "Traspasos entre departamentos" (assert `t("department_transfer.title")` unchanged and the

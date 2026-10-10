@@ -1806,6 +1806,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   leaves every test passing): the phone-width early return in `#release`, the return after re-adding
   a step in `#fit`, and the unobserve of a replaced language chooser. Left open by A395 (#1435).
 
+- **Three till top-bar cases run close to, and sometimes past, their 15 s limit locally.** The
+  "fits as a fresh bar does when …" cases in `apps/till/src/widgets/tab-shell.test.ts`; find what
+  makes them slow rather than raising the limit. Left open by A425.
+  [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
+
 - **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).** A unit with no
   enabled text has an empty label; the tile and basket-refresh price templates still append a slash.
   Render those empty-label cases before choosing their display.
