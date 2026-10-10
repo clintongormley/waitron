@@ -25,6 +25,14 @@ import {
   type StationTiming,
 } from "./routing.js";
 
+// Former schedule values remain in fixtures to catch a routing consumer reading them again.
+type FormerStationTiming = StationTiming & {
+  fallbackId?: string | null;
+  hours?: readonly { weekday: number; opensAt: string; closesAt: string }[];
+  weekSet?: boolean;
+  dates?: ReadonlyMap<string, readonly { opensAt: string; closesAt: string }[]>;
+};
+
 const station = (stationId: string) => ({ kind: "station" as const, stationId });
 const noPreparation = { kind: "no_preparation" as const };
 const all: RoutingRow = { kind: "all" };
@@ -59,7 +67,7 @@ const base: RoutingRules = {
   parentOf,
   activeStationIds: new Set(["bar", "cocktailBar", "mainBar", "terraceBar", "kitchen"]),
   defaultStationId: "kitchen",
-  timing: new Map(),
+  timing: new Map<string, FormerStationTiming>(),
 };
 const mojito = { productId: "mojito", routedProductId: "mojito", categoryId: "cocktails" };
 const lager = { productId: "lager", routedProductId: "lager", categoryId: "beer" };
@@ -105,7 +113,7 @@ describe("chooseMaker", () => {
       ]),
       activeStationIds: new Set([barId, terraceBarId, kitchenId]),
       defaultStationId: null,
-      timing: new Map(),
+      timing: new Map<string, FormerStationTiming>(),
     };
     const coffee = {
       productId: "flat-white",
@@ -353,7 +361,7 @@ describe("chooseMaker", () => {
     });
   });
 
-  it("a closed or disabled chosen station follows its fallback chain, never the next routing row", () => {
+  it("a closed or disabled chosen station reaches a daily destination or the default, never the next routing row", () => {
     const rules: RoutingRules = {
       ...base,
       activeStationIds: new Set(["bar", "mainBar", "kitchen"]),
@@ -363,17 +371,19 @@ describe("chooseMaker", () => {
       ),
     };
     expect(chooseMaker(rules, mojito, null, null)).toEqual({
-      route: null,
+      route: station("kitchen"),
       decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
-      noReplacement: true,
+      noReplacement: false,
     });
     const withFallback = {
       ...rules,
-      timing: new Map([["cocktailBar", { fallbackId: "mainBar", hours: [], today: null }]]),
+      timing: new Map<string, FormerStationTiming>([
+        ["cocktailBar", { fallbackId: "mainBar", hours: [], today: null }],
+      ]),
     };
     expect(chooseMaker(withFallback, mojito, null, null)).toEqual({
-      route: station("mainBar"),
+      route: station("kitchen"),
       decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
       noReplacement: false,
@@ -381,39 +391,54 @@ describe("chooseMaker", () => {
     const closedByHand: RoutingRules = {
       ...rules,
       activeStationIds: new Set(["bar", "cocktailBar", "mainBar", "kitchen"]),
-      timing: new Map([
-        ["cocktailBar", { fallbackId: "mainBar", hours: [], today: "closed" as const }],
-        ["mainBar", { fallbackId: "cocktailBar", hours: [], today: "closed" as const }],
+      timing: new Map<string, FormerStationTiming>([
+        [
+          "cocktailBar",
+          { fallbackId: "mainBar", hours: [], today: "closed" as const, todaySendsTo: "mainBar" },
+        ],
+        [
+          "mainBar",
+          {
+            fallbackId: "cocktailBar",
+            hours: [],
+            today: "closed" as const,
+            todaySendsTo: "cocktailBar",
+          },
+        ],
       ]),
     };
     expect(chooseMaker(closedByHand, mojito, null, at(FRI, "20:00"))).toEqual({
-      route: null,
+      route: station("kitchen"),
       decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [
         { stationId: "cocktailBar", why: "closed_by_hand" },
         { stationId: "mainBar", why: "closed_by_hand" },
       ],
-      noReplacement: true,
+      noReplacement: false,
     });
   });
 
-  it("follows a switched-off station's fallback", () => {
+  it("sends a switched-off station to the default despite its former fallback", () => {
     const rules = {
       ...base,
       activeStationIds: new Set(["bar", "mainBar", "kitchen"]),
-      timing: new Map([["cocktailBar", { fallbackId: "mainBar", hours: [], today: null }]]),
+      timing: new Map<string, FormerStationTiming>([
+        ["cocktailBar", { fallbackId: "mainBar", hours: [], today: null }],
+      ]),
     };
     expect(chooseMaker(rules, mojito, null, null)).toEqual({
-      route: station("mainBar"),
+      route: station("kitchen"),
       decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
       noReplacement: false,
     });
-    expect(chooseMaker({ ...rules, timing: new Map() }, mojito, null, null)).toEqual({
-      route: null,
+    expect(
+      chooseMaker({ ...rules, timing: new Map<string, FormerStationTiming>() }, mojito, null, null),
+    ).toEqual({
+      route: station("kitchen"),
       decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
-      noReplacement: true,
+      noReplacement: false,
     });
   });
 
@@ -807,7 +832,7 @@ const at = (weekday: number, timeOfDay: string): RoutingMoment => ({ weekday, ti
 const FRI = 5,
   SAT = 6;
 
-describe("opening hours", () => {
+describe("former station hours do not close stations", () => {
   const rules: RoutingRules = {
     ...base,
     activeStationIds: new Set([
@@ -817,7 +842,7 @@ describe("opening hours", () => {
       "late",
       "midnight",
     ]),
-    timing: new Map([
+    timing: new Map<string, FormerStationTiming>([
       [
         "upstairs",
         {
@@ -846,23 +871,23 @@ describe("opening hours", () => {
   };
   const open = (id: string, m: RoutingMoment | null) => stationStatus(rules, id, m);
 
-  it("includes the opening minute and excludes the closing minute", () => {
-    expect(open("upstairs", at(FRI, "19:00"))).toEqual({ open: true, why: "in_hours" });
-    expect(open("upstairs", at(FRI, "20:59"))).toEqual({ open: true, why: "in_hours" });
-    expect(open("upstairs", at(FRI, "21:00"))).toEqual({ open: false, why: "out_of_hours" });
-    expect(open("upstairs", at(SAT, "20:00"))).toEqual({ open: false, why: "out_of_hours" });
+  it("stays open before, during and after its former hours", () => {
+    expect(open("upstairs", at(FRI, "19:00"))).toEqual({ open: true, why: "open" });
+    expect(open("upstairs", at(FRI, "20:59"))).toEqual({ open: true, why: "open" });
+    expect(open("upstairs", at(FRI, "21:00"))).toEqual({ open: true, why: "open" });
+    expect(open("upstairs", at(SAT, "20:00"))).toEqual({ open: true, why: "open" });
   });
 
-  it("keeps past-midnight hours open on the next day up to closing", () => {
-    expect(open("late", at(FRI, "21:59")).open).toBe(false);
+  it("stays open on either side of its former midnight closing", () => {
+    expect(open("late", at(FRI, "21:59")).open).toBe(true);
     expect(open("late", at(FRI, "23:30")).open).toBe(true);
     expect(open("late", at(SAT, "01:59")).open).toBe(true);
-    expect(open("late", at(SAT, "02:00")).open).toBe(false);
+    expect(open("late", at(SAT, "02:00")).open).toBe(true);
     expect(open("midnight", at(FRI, "23:59")).open).toBe(true);
-    expect(open("midnight", at(SAT, "00:00")).open).toBe(false);
+    expect(open("midnight", at(SAT, "00:00")).open).toBe(true);
     const saturday = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         [
           "late",
           {
@@ -876,11 +901,11 @@ describe("opening hours", () => {
     expect(stationStatus(saturday, "late", at(0, "01:00")).open).toBe(true);
   });
 
-  it("uses no hours and the default before schedule closures", () => {
-    expect(open("downstairs", at(FRI, "04:00"))).toEqual({ open: true, why: "no_hours" });
+  it("stays open with no schedule and keeps the active default open", () => {
+    expect(open("downstairs", at(FRI, "04:00"))).toEqual({ open: true, why: "open" });
     const kitchenHours = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         [
           "kitchen",
           {
@@ -897,10 +922,10 @@ describe("opening hours", () => {
     });
   });
 
-  it("uses today's by-hand change, except when time does not apply", () => {
+  it("applies a daily close only to a timed read and treats reopening as open", () => {
     const closed = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         [
           "upstairs",
           {
@@ -917,7 +942,7 @@ describe("opening hours", () => {
     });
     const opened = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         [
           "upstairs",
           {
@@ -930,23 +955,25 @@ describe("opening hours", () => {
     };
     expect(stationStatus(opened, "upstairs", at(SAT, "12:00"))).toEqual({
       open: true,
-      why: "opened_by_hand",
+      why: "open",
     });
     expect(stationStatus(closed, "upstairs", null)).toEqual({
       open: true,
-      why: "time_not_applied",
+      why: "open",
     });
     expect(stationStatus(base, "retired", null)).toEqual({ open: false, why: "switched_off" });
   });
 });
 
-describe("opening hours by calendar date", () => {
+describe("former station date schedules do not close stations", () => {
   const MON = 1,
     TUE = 2;
-  const schedule = (timing: Partial<StationTiming>): RoutingRules => ({
+  const schedule = (timing: Partial<FormerStationTiming>): RoutingRules => ({
     ...base,
     activeStationIds: new Set([...base.activeStationIds, "late"]),
-    timing: new Map([["late", { fallbackId: null, hours: [], today: null, ...timing }]]),
+    timing: new Map<string, FormerStationTiming>([
+      ["late", { fallbackId: null, hours: [], today: null, ...timing }],
+    ]),
   });
   const on = (civilDate: string, weekday: number, timeOfDay: string): RoutingMoment => ({
     civilDate,
@@ -955,9 +982,7 @@ describe("opening hours by calendar date", () => {
   });
   const status = (rules: RoutingRules, moment: RoutingMoment | null) =>
     stationStatus(rules, "late", moment);
-  const inHours = { open: true, why: "in_hours" };
-  const outOfHours = { open: false, why: "out_of_hours" };
-  const noHours = { open: true, why: "no_hours" };
+  const openState = { open: true, why: "open" };
   // Monday 22:00 to Tuesday 02:00 in a configured week where every other day is Closed.
   const mondayNight = {
     weekSet: true,
@@ -966,28 +991,28 @@ describe("opening hours by calendar date", () => {
   // Tuesday 6 October 2026, the day after Monday 5 October.
   const tuesday = (time: string) => on("2026-10-06", TUE, time);
 
-  it("keeps Monday's overnight tail on Tuesday, even when Tuesday is Closed", () => {
-    expect(status(schedule(mondayNight), tuesday("00:30"))).toEqual(inHours);
+  it("stays open across former overnight tails and date closures", () => {
+    expect(status(schedule(mondayNight), tuesday("00:30"))).toEqual(openState);
     const closedTuesday = schedule({ ...mondayNight, dates: new Map([["2026-10-06", []]]) });
-    expect(status(closedTuesday, tuesday("00:30"))).toEqual(inHours);
-    expect(status(closedTuesday, tuesday("01:59"))).toEqual(inHours);
-    expect(status(closedTuesday, tuesday("02:00"))).toEqual(outOfHours);
+    expect(status(closedTuesday, tuesday("00:30"))).toEqual(openState);
+    expect(status(closedTuesday, tuesday("01:59"))).toEqual(openState);
+    expect(status(closedTuesday, tuesday("02:00"))).toEqual(openState);
   });
 
-  it("drops Monday's tail when Monday itself is Closed or has other hours", () => {
+  it("ignores former Closed dates and replacement date hours", () => {
     expect(
       status(schedule({ ...mondayNight, dates: new Map([["2026-10-05", []]]) }), tuesday("00:30")),
-    ).toEqual(outOfHours);
+    ).toEqual(openState);
     const earlyMonday = schedule({
       ...mondayNight,
       dates: new Map([["2026-10-05", [{ opensAt: "12:00", closesAt: "16:00" }]]]),
     });
-    expect(status(earlyMonday, tuesday("00:30"))).toEqual(outOfHours);
-    expect(status(earlyMonday, on("2026-10-05", MON, "15:59"))).toEqual(inHours);
-    expect(status(earlyMonday, on("2026-10-05", MON, "22:00"))).toEqual(outOfHours);
+    expect(status(earlyMonday, tuesday("00:30"))).toEqual(openState);
+    expect(status(earlyMonday, on("2026-10-05", MON, "15:59"))).toEqual(openState);
+    expect(status(earlyMonday, on("2026-10-05", MON, "22:00"))).toEqual(openState);
   });
 
-  it("reads each date's own hours across a month end, a year end and Sunday into Monday", () => {
+  it("stays open across month, year and week boundaries despite former hours", () => {
     const rules = schedule({
       weekSet: true,
       hours: [],
@@ -999,61 +1024,61 @@ describe("opening hours by calendar date", () => {
         ["2026-10-11", [{ opensAt: "23:00", closesAt: "02:00" }]],
       ]),
     });
-    expect(status(rules, on("2026-11-01", 0, "00:30"))).toEqual(inHours);
-    expect(status(rules, on("2026-11-01", 0, "01:00"))).toEqual(outOfHours);
-    expect(status(rules, on("2026-11-01", 0, "12:30"))).toEqual(inHours);
-    expect(status(rules, on("2027-01-01", 5, "02:59"))).toEqual(inHours);
-    expect(status(rules, on("2027-01-01", 5, "03:00"))).toEqual(outOfHours);
-    expect(status(rules, on("2026-10-12", MON, "01:30"))).toEqual(inHours);
-    expect(status(rules, on("2026-10-13", TUE, "01:30"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-11-01", 0, "00:30"))).toEqual(openState);
+    expect(status(rules, on("2026-11-01", 0, "01:00"))).toEqual(openState);
+    expect(status(rules, on("2026-11-01", 0, "12:30"))).toEqual(openState);
+    expect(status(rules, on("2027-01-01", 5, "02:59"))).toEqual(openState);
+    expect(status(rules, on("2027-01-01", 5, "03:00"))).toEqual(openState);
+    expect(status(rules, on("2026-10-12", MON, "01:30"))).toEqual(openState);
+    expect(status(rules, on("2026-10-13", TUE, "01:30"))).toEqual(openState);
   });
 
-  it("includes the opening minute and excludes the closing minute of a special date", () => {
+  it("stays open before, during and after its former hours of a special date", () => {
     const rules = schedule({
       dates: new Map([["2026-10-09", [{ opensAt: "12:00", closesAt: "14:00" }]]]),
     });
-    expect(status(rules, on("2026-10-09", 5, "11:59"))).toEqual(outOfHours);
-    expect(status(rules, on("2026-10-09", 5, "12:00"))).toEqual(inHours);
-    expect(status(rules, on("2026-10-09", 5, "13:59"))).toEqual(inHours);
-    expect(status(rules, on("2026-10-09", 5, "14:00"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-10-09", 5, "11:59"))).toEqual(openState);
+    expect(status(rules, on("2026-10-09", 5, "12:00"))).toEqual(openState);
+    expect(status(rules, on("2026-10-09", 5, "13:59"))).toEqual(openState);
+    expect(status(rules, on("2026-10-09", 5, "14:00"))).toEqual(openState);
   });
 
-  it("tells a week with no hours set from a week that is Closed every day", () => {
-    expect(status(schedule({ weekSet: false, hours: [] }), tuesday("12:00"))).toEqual(noHours);
-    expect(status(schedule({ weekSet: true, hours: [] }), tuesday("12:00"))).toEqual(outOfHours);
+  it("stays open with both an unset and a formerly Closed week", () => {
+    expect(status(schedule({ weekSet: false, hours: [] }), tuesday("12:00"))).toEqual(openState);
+    expect(status(schedule({ weekSet: true, hours: [] }), tuesday("12:00"))).toEqual(openState);
   });
 
-  it("applies a special date to a station with no weekly hours on that date only", () => {
+  it("ignores special-date hours with no weekly schedule", () => {
     const rules = schedule({
       weekSet: false,
       dates: new Map([["2026-10-09", [{ opensAt: "22:00", closesAt: "01:00" }]]]),
     });
-    expect(status(rules, on("2026-10-09", 5, "12:00"))).toEqual(outOfHours);
-    expect(status(rules, on("2026-10-10", 6, "00:30"))).toEqual(inHours);
-    expect(status(rules, on("2026-10-10", 6, "01:00"))).toEqual(noHours);
-    expect(status(rules, on("2026-10-08", 4, "12:00"))).toEqual(noHours);
+    expect(status(rules, on("2026-10-09", 5, "12:00"))).toEqual(openState);
+    expect(status(rules, on("2026-10-10", 6, "00:30"))).toEqual(openState);
+    expect(status(rules, on("2026-10-10", 6, "01:00"))).toEqual(openState);
+    expect(status(rules, on("2026-10-08", 4, "12:00"))).toEqual(openState);
   });
 
-  it("opens all day from midnight up to the next midnight", () => {
+  it("stays open after a former all-day date ends", () => {
     const rules = schedule({
       weekSet: true,
       dates: new Map([["2026-10-09", [{ opensAt: "00:00", closesAt: "00:00" }]]]),
     });
-    expect(status(rules, on("2026-10-09", 5, "00:00"))).toEqual(inHours);
-    expect(status(rules, on("2026-10-09", 5, "23:59"))).toEqual(inHours);
-    expect(status(rules, on("2026-10-10", 6, "00:00"))).toEqual(outOfHours);
+    expect(status(rules, on("2026-10-09", 5, "00:00"))).toEqual(openState);
+    expect(status(rules, on("2026-10-09", 5, "23:59"))).toEqual(openState);
+    expect(status(rules, on("2026-10-10", 6, "00:00"))).toEqual(openState);
   });
 
-  it("previews the standard week alone for a moment that names no date", () => {
+  it("ignores former hours in an undated timed read", () => {
     const rules = schedule({ ...mondayNight, dates: new Map([["2026-10-05", []]]) });
-    expect(status(rules, { weekday: TUE, timeOfDay: "00:30" })).toEqual(inHours);
+    expect(status(rules, { weekday: TUE, timeOfDay: "00:30" })).toEqual(openState);
   });
 
-  it("keeps the switch, the default, an unreadable clock and today's by-hand change ahead of a special date", () => {
+  it("keeps the switch, default and daily close independent of former dates", () => {
     const closedDate = new Map([["2026-10-06", []]]);
     expect(
       status(schedule({ weekSet: true, dates: closedDate, today: "open" }), tuesday("12:00")),
-    ).toEqual({ open: true, why: "opened_by_hand" });
+    ).toEqual({ open: true, why: "open" });
     expect(
       status(
         schedule({
@@ -1065,7 +1090,7 @@ describe("opening hours by calendar date", () => {
     ).toEqual({ open: false, why: "closed_by_hand" });
     expect(status(schedule({ weekSet: true, dates: closedDate }), null)).toEqual({
       open: true,
-      why: "time_not_applied",
+      why: "open",
     });
     const asDefault = {
       ...schedule({ weekSet: true, dates: closedDate }),
@@ -1077,58 +1102,66 @@ describe("opening hours by calendar date", () => {
   });
 });
 
-describe("fallbacks", () => {
+describe("daily destinations and the default", () => {
   const rules: RoutingRules = {
     ...base,
     cells: cells([category("drinks"), null, station("upstairs")]),
     activeStationIds: new Set(["upstairs", "downstairs", "kitchen", "a", "b"]),
-    timing: new Map([
+    timing: new Map<string, FormerStationTiming>([
       [
         "upstairs",
         {
           fallbackId: "downstairs",
           hours: [{ weekday: FRI, opensAt: "19:00", closesAt: "21:00" }],
-          today: null,
+          today: "closed",
+          todaySendsTo: "downstairs",
         },
       ],
       ["downstairs", { fallbackId: null, hours: [], today: null }],
-      ["a", { fallbackId: "b", hours: [], today: "closed" }],
-      ["b", { fallbackId: "a", hours: [], today: "closed" }],
+      ["a", { fallbackId: "b", hours: [], today: "closed", todaySendsTo: "b" }],
+      ["b", { fallbackId: "a", hours: [], today: "closed", todaySendsTo: "a" }],
     ]),
   };
 
-  it("sends work from an out-of-hours station to its first open fallback", () => {
+  it("sends work from a closed-for-today station to its chosen destination", () => {
     expect(chooseMaker(rules, lager, null, at(FRI, "22:00"))).toEqual({
       route: station("downstairs"),
       decidedBy: decidedByCell(category("drinks"), null),
-      fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
+      fallbacks: [{ stationId: "upstairs", why: "closed_by_hand" }],
       noReplacement: false,
     });
-    expect(chooseMaker(rules, lager, null, at(FRI, "20:00")).route).toEqual(station("upstairs"));
+    expect(
+      chooseMaker(
+        { ...rules, timing: new Map<string, FormerStationTiming>() },
+        lager,
+        null,
+        at(FRI, "20:00"),
+      ).route,
+    ).toEqual(station("upstairs"));
   });
 
-  it("returns a dead end when every fallback is closed", () => {
+  it("reaches the default when the chosen destination is closed", () => {
     const closed = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         ...rules.timing,
         ["downstairs", { fallbackId: null, hours: [], today: "closed" as const }],
       ]),
     };
     expect(chooseMaker(closed, lager, null, at(FRI, "22:00"))).toEqual({
-      route: null,
+      route: station("kitchen"),
       decidedBy: decidedByCell(category("drinks"), null),
       fallbacks: [
-        { stationId: "upstairs", why: "out_of_hours" },
+        { stationId: "upstairs", why: "closed_by_hand" },
         { stationId: "downstairs", why: "closed_by_hand" },
       ],
-      noReplacement: true,
+      noReplacement: false,
     });
   });
 
-  it("stops a fallback loop before revisiting a station", () => {
+  it("stops a daily-destination loop before revisiting a station", () => {
     expect(followFallbacks(rules, "a", at(FRI, "20:00"))).toEqual({
-      stationId: null,
+      stationId: "kitchen",
       steps: [
         { stationId: "a", why: "closed_by_hand" },
         { stationId: "b", why: "closed_by_hand" },
@@ -1136,10 +1169,10 @@ describe("fallbacks", () => {
     });
   });
 
-  it("reaches the default only through an explicit fallback", () => {
+  it("reaches the default without a configured fallback", () => {
     const toKitchen = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         ...rules.timing,
         ["a", { fallbackId: "kitchen", hours: [], today: "closed" as const }],
       ]),
@@ -1170,8 +1203,8 @@ describe("fallbacks", () => {
 
   it("finds where a station's work would go if it closed", () => {
     expect(closedSendsTo(rules, "upstairs", at(FRI, "20:00"))).toBe("downstairs");
-    expect(closedSendsTo(rules, "downstairs", at(FRI, "20:00"))).toBeNull();
-    expect(closedSendsTo(rules, "a", at(FRI, "20:00"))).toBeNull();
+    expect(closedSendsTo(rules, "downstairs", at(FRI, "20:00"))).toBe("kitchen");
+    expect(closedSendsTo(rules, "a", at(FRI, "20:00"))).toBe("kitchen");
     expect(closedSendsTo(rules, "kitchen", at(FRI, "20:00"))).toBe("kitchen");
   });
 });
@@ -1181,7 +1214,7 @@ describe("today's chosen station destination", () => {
     ...base,
     cells: cells([category("drinks"), null, station("grill")]),
     activeStationIds: new Set(["grill", "bar", "pastry", "kitchen"]),
-    timing: new Map([
+    timing: new Map<string, FormerStationTiming>([
       ["grill", { fallbackId: "pastry", hours: [], today: "closed", todaySendsTo: "bar" }],
       ["bar", { fallbackId: null, hours: [], today: null }],
     ]),
@@ -1197,10 +1230,10 @@ describe("today's chosen station destination", () => {
     expect(closedSendsTo(rules, "grill", at(FRI, "20:00"))).toBe("bar");
   });
 
-  it("continues through the chosen destination's scheduled fallback", () => {
+  it("continues through the chosen destination's daily choice", () => {
     const closedBar: RoutingRules = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         ...rules.timing,
         [
           "bar",
@@ -1208,8 +1241,8 @@ describe("today's chosen station destination", () => {
             fallbackId: "pastry",
             hours: [],
             weekSet: true,
-            today: null,
-            todaySendsTo: "grill",
+            today: "closed",
+            todaySendsTo: "pastry",
           },
         ],
       ]),
@@ -1218,7 +1251,7 @@ describe("today's chosen station destination", () => {
       stationId: "pastry",
       steps: [
         { stationId: "grill", why: "closed_by_hand" },
-        { stationId: "bar", why: "out_of_hours" },
+        { stationId: "bar", why: "closed_by_hand" },
       ],
     });
     expect(closedSendsTo(closedBar, "grill", at(FRI, "20:00"))).toBe("pastry");
@@ -1244,7 +1277,7 @@ describe("today's chosen station destination", () => {
   it("ends a cycle of today's destinations at the active default", () => {
     const cycle: RoutingRules = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         ...rules.timing,
         ["bar", { fallbackId: null, hours: [], today: "closed", todaySendsTo: "grill" }],
       ]),
@@ -1274,16 +1307,16 @@ describe("today's chosen station destination", () => {
     },
   );
 
-  it("keeps the configured fallback for a close without a destination", () => {
+  it("uses the default for a close without a destination", () => {
     const legacy: RoutingRules = {
       ...rules,
-      timing: new Map([
+      timing: new Map<string, FormerStationTiming>([
         ...rules.timing,
         ["grill", { fallbackId: "pastry", hours: [], today: "closed", todaySendsTo: null }],
       ]),
     };
-    expect(chooseMaker(legacy, lager, null, at(FRI, "20:00")).route).toEqual(station("pastry"));
-    expect(closedSendsTo(legacy, "grill", at(FRI, "20:00"))).toBe("pastry");
+    expect(chooseMaker(legacy, lager, null, at(FRI, "20:00")).route).toEqual(station("kitchen"));
+    expect(closedSendsTo(legacy, "grill", at(FRI, "20:00"))).toBe("kitchen");
   });
 
   it("does not apply today's destination while the clock cannot be read", () => {
@@ -1291,7 +1324,7 @@ describe("today's chosen station destination", () => {
       route: station("grill"),
       fallbacks: [],
     });
-    expect(closedSendsTo(rules, "grill", null)).toBe("pastry");
+    expect(closedSendsTo(rules, "grill", null)).toBe("kitchen");
   });
 });
 
@@ -1424,7 +1457,9 @@ describe("chooseExtraMaker", () => {
   it("walks the extra's fallbacks before comparing its station with its dish's", () => {
     const rules = {
       ...extrasRules,
-      timing: new Map([["fryer", { fallbackId: "kitchen", hours: [], today: "closed" as const }]]),
+      timing: new Map<string, FormerStationTiming>([
+        ["fryer", { fallbackId: "kitchen", hours: [], today: "closed" as const }],
+      ]),
     };
     expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "grill")).toEqual({
       outcome: { kind: "made", stationId: "kitchen" },
@@ -1439,7 +1474,10 @@ describe("chooseExtraMaker", () => {
   it("keeps an extra with its dish when none of its stations is open", () => {
     const rules = {
       ...extrasRules,
-      timing: new Map([["fryer", { fallbackId: null, hours: [], today: "closed" as const }]]),
+      defaultStationId: null,
+      timing: new Map<string, FormerStationTiming>([
+        ["fryer", { fallbackId: null, hours: [], today: "closed" as const }],
+      ]),
     };
     expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "grill")).toEqual({
       outcome: { kind: "follows_dish", why: "no_replacement" },
@@ -1465,13 +1503,16 @@ describe("a public holiday", () => {
     weekday: MON,
     timeOfDay,
   });
-  const timing: StationTiming = {
+  const timing: FormerStationTiming = {
     fallbackId: "mainBar",
     hours: [{ weekday: MON, opensAt: "18:00", closesAt: "23:00" }],
     today: null,
     weekSet: true,
   };
-  const rules: RoutingRules = { ...base, timing: new Map([["cocktailBar", timing]]) };
+  const rules: RoutingRules = {
+    ...base,
+    timing: new Map<string, FormerStationTiming>([["cocktailBar", timing]]),
+  };
 
   it("is a national holiday in Seville through the real Spanish pack, and the ordinary Monday is not", () => {
     const spain = getCountryPack("ES")!.holidayCalendar!;
@@ -1481,7 +1522,7 @@ describe("a public holiday", () => {
     expect(facts(ORDINARY)).toEqual([]);
   });
 
-  it("leaves a station on its Monday hours, and every route as on an ordinary Monday", () => {
+  it("does not change an open station or its routes merely because it is a holiday", () => {
     for (const time of ["12:00", "18:00", "22:59", "23:00"]) {
       expect(stationStatus(rules, "cocktailBar", on(HOLIDAY, time))).toEqual(
         stationStatus(rules, "cocktailBar", on(ORDINARY, time)),
@@ -1492,31 +1533,36 @@ describe("a public holiday", () => {
     }
     expect(stationStatus(rules, "cocktailBar", on(HOLIDAY, "20:00"))).toEqual({
       open: true,
-      why: "in_hours",
+      why: "open",
     });
     expect(chooseMaker(rules, mojito, null, on(HOLIDAY, "20:00")).route).toEqual(
       station("cocktailBar"),
     );
     expect(chooseMaker(rules, mojito, null, on(HOLIDAY, "12:00")).route).toEqual(
-      station("mainBar"),
+      station("cocktailBar"),
     );
   });
 
-  it("closes a station on the holiday only through a special date the venue saved", () => {
+  it("closes a station only through its current daily close, regardless of the holiday", () => {
     const closedHoliday: RoutingRules = {
       ...base,
-      timing: new Map([["cocktailBar", { ...timing, dates: new Map([[HOLIDAY, []]]) }]]),
+      timing: new Map<string, FormerStationTiming>([
+        [
+          "cocktailBar",
+          { ...timing, today: "closed", todaySendsTo: "mainBar", dates: new Map([[HOLIDAY, []]]) },
+        ],
+      ]),
     };
     expect(stationStatus(closedHoliday, "cocktailBar", on(HOLIDAY, "20:00"))).toEqual({
       open: false,
-      why: "out_of_hours",
+      why: "closed_by_hand",
     });
     expect(chooseMaker(closedHoliday, mojito, null, on(HOLIDAY, "20:00")).route).toEqual(
       station("mainBar"),
     );
-    expect(stationStatus(closedHoliday, "cocktailBar", on(ORDINARY, "20:00"))).toEqual({
+    expect(stationStatus(rules, "cocktailBar", on(ORDINARY, "20:00"))).toEqual({
       open: true,
-      why: "in_hours",
+      why: "open",
     });
   });
 });
@@ -1572,7 +1618,7 @@ describe("changeReach", () => {
     parentOf: tree,
     activeStationIds: new Set(["s1", "s2"]),
     defaultStationId: "s1",
-    timing: new Map<string, StationTiming>([
+    timing: new Map<string, FormerStationTiming>([
       ["offWithFallback", { fallbackId: "s2", hours: [], today: null }],
       ["offAlone", { fallbackId: null, hours: [], today: null }],
     ]),

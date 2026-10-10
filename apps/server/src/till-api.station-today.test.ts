@@ -5,10 +5,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   kitchenStations,
   ticketItems,
+  workingOrderLines,
+  workingOrders,
   locations,
   devices,
   deviceProfiles,
   withTransaction,
+  parties,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -23,11 +26,11 @@ import {
 import { locationId } from "@waitron/shared";
 import {
   setRoutingCell,
-  setStationFallback,
   setStationToday,
   stationDayStates,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
+import { placeGroups, fireGroup } from "./order-groups.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -36,7 +39,13 @@ import { createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { send } from "./testing/bill-venue.js";
-import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import {
+  inTx,
+  orderForParty,
+  seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -119,7 +128,280 @@ const rows = () => suite.db.select().from(stationDayStates);
 const call = (method: string, path: string, body?: unknown, cookie = managerCookie) =>
   send(app, cookie, method, path, body);
 
+async function stationDish(station = grill) {
+  await inTx(v, (tx) =>
+    setRoutingCell(
+      tx,
+      v.cfg,
+      { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
+      { kind: "station", stationId: station },
+    ),
+  );
+  const group = await seat(v, await v.table(`Dish ${randomUUID()}`));
+  await orderForParty(v, group.partyId, ["Burger"], group.tabId);
+  const [item] = await suite.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, group.tabId));
+  expect(item).toBeDefined();
+  expect(item!.stationId).toBe(station);
+  return item!;
+}
+
 describe("the till's station day", () => {
+  it.each(["queued", "preparing", "ready", "held"] as const)(
+    "counts an unfinished %s dish before closing",
+    async (state) => {
+      const item = await stationDish();
+      await suite.db
+        .update(ticketItems)
+        .set(state === "held" ? { firedAt: null } : { state })
+        .where(eq(ticketItems.id, item.id));
+      const answer = await call("GET", today());
+      expect(answer.status).toBe(200);
+      expect(answer.json.openDishCount).toBe(1);
+    },
+  );
+  it.each(["away", "served", "collected", "abandoned", "made_here"] as const)(
+    "leaves %s work out of the closing count",
+    async (kind) => {
+      const item = await stationDish();
+      const at = new Date().toISOString();
+      if (kind === "away")
+        await suite.db.update(ticketItems).set({ awayAt: at }).where(eq(ticketItems.id, item.id));
+      else if (kind === "made_here")
+        await suite.db
+          .update(ticketItems)
+          .set({ madeHere: true })
+          .where(eq(ticketItems.id, item.id));
+      else if (kind === "served")
+        await suite.db
+          .update(workingOrderLines)
+          .set({ servedQuantity: 1000 })
+          .where(eq(workingOrderLines.id, item.workingOrderLineId));
+      else
+        await suite.db
+          .update(workingOrders)
+          .set(kind === "collected" ? { collectedAt: at } : { status: "abandoned" })
+          .where(eq(workingOrders.id, item.workingOrderId));
+      const answer = await call("GET", today());
+      expect(answer.status).toBe(200);
+      expect(answer.json.openDishCount).toBe(0);
+    },
+  );
+  it("counts only the source station's unfinished dishes", async () => {
+    await stationDish();
+    await stationDish(pastry);
+    const answer = await call("GET", today());
+    expect(answer.status).toBe(200);
+    expect(answer.json.openDishCount).toBe(1);
+  });
+
+  it("refuses closing after an unread waiting dish arrives without an explicit choice", async () => {
+    expect((await call("GET", today())).json.openDishCount).toBe(0);
+    const item = await stationDish();
+    const answer = await call("PUT", today(), close());
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "openDishes" },
+    });
+    expect(await rows()).toEqual([]);
+    expect(
+      (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0]!.stationId,
+    ).toBe(grill);
+  });
+  it.each([null, [], "", "discard", true])(
+    "refuses an invalid open-dish choice %j even with no dishes",
+    async (openDishes) => {
+      const answer = await call("PUT", today(), { ...close(), openDishes });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "openDishes" },
+      });
+      expect(await rows()).toEqual([]);
+    },
+  );
+  it.each(["queued", "held"] as const)(
+    "sends %s work to the chosen destination in the closing transaction",
+    async (state) => {
+      const item = await stationDish();
+      if (state === "held")
+        await suite.db
+          .update(ticketItems)
+          .set({ firedAt: null })
+          .where(eq(ticketItems.id, item.id));
+      const answer = await call("PUT", today(), {
+        state: "closed",
+        sendsToStationId: pastry,
+        openDishes: "send",
+      });
+      expect(answer.status).toBe(204);
+      expect(await rows()).toEqual([
+        expect.objectContaining({ stationId: grill, open: false, sendsToStationId: pastry }),
+      ]);
+      const [moved] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id));
+      expect(moved).toMatchObject({
+        stationId: pastry,
+        state: "queued",
+        firedAt: state === "held" ? null : item.firedAt,
+      });
+      expect(moved!.stationChosenAt).not.toBeNull();
+      const [line] = await suite.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, item.workingOrderLineId));
+      expect(line!.makeAtStationId).toBe(pastry);
+    },
+  );
+  it.each(["queued", "held", "preparing", "ready"] as const)(
+    "leaves %s work at the closed station to finish",
+    async (state) => {
+      const item = await stationDish();
+      await suite.db
+        .update(ticketItems)
+        .set(state === "held" ? { firedAt: null } : { state })
+        .where(eq(ticketItems.id, item.id));
+      const answer = await call("PUT", today(), { ...close(), openDishes: "leave" });
+      expect(answer.status).toBe(204);
+      expect(await rows()).toEqual([
+        expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
+      ]);
+      const [kept] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id));
+      expect(kept).toMatchObject({
+        stationId: grill,
+        state: state === "held" ? "queued" : state,
+        firedAt: state === "held" ? null : item.firedAt,
+      });
+      expect(kept!.stationChosenAt).not.toBeNull();
+    },
+  );
+  it("sends only waiting source work and leaves started and other stations' work untouched", async () => {
+    const waiting = await stationDish();
+    const preparing = await stationDish();
+    const ready = await stationDish();
+    const other = await stationDish(pastry);
+    await suite.db
+      .update(ticketItems)
+      .set({ state: "preparing" })
+      .where(eq(ticketItems.id, preparing.id));
+    await suite.db.update(ticketItems).set({ state: "ready" }).where(eq(ticketItems.id, ready.id));
+    const answer = await call("PUT", today(), { ...close(), openDishes: "send" });
+    expect(answer.status).toBe(204);
+    for (const [id, expected] of [
+      [waiting.id, bar],
+      [preparing.id, grill],
+      [ready.id, grill],
+      [other.id, pastry],
+    ]) {
+      const [item] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, id!));
+      expect(item!.stationId).toBe(expected);
+    }
+  });
+  it("keeps explicitly retained held work at Grill when its group is later fired", async () => {
+    await inTx(v, (tx) =>
+      setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
+        { kind: "station", stationId: grill },
+      ),
+    );
+    const seated = await seat(v, await v.table("Held at closure"));
+    const submitted = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, seated.partyId, {
+        groups: [{ release: "hold", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] }],
+        operatorId: manager,
+        billId: seated.tabId,
+      }),
+    );
+    const [item] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, seated.tabId));
+    expect(item).toMatchObject({ stationId: grill, firedAt: null, state: "queued" });
+    expect((await call("PUT", today(), { ...close(), openDishes: "leave" })).status).toBe(204);
+    const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, seated.partyId, submitted.groups[0]!.id, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party!.revision,
+        operatorId: manager,
+      }),
+    );
+    const [after] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item!.id));
+    expect(after!.stationId).toBe(grill);
+    expect(after!.firedAt).not.toBeNull();
+  });
+  it.each(["away", "served", "collected", "abandoned", "made_here", "partly_served"] as const)(
+    "sending at closure leaves %s records untouched",
+    async (kind) => {
+      const excluded = await stationDish();
+      const moving = await stationDish();
+      const at = new Date().toISOString();
+      if (kind === "away")
+        await suite.db
+          .update(ticketItems)
+          .set({ awayAt: at })
+          .where(eq(ticketItems.id, excluded.id));
+      else if (kind === "made_here")
+        await suite.db
+          .update(ticketItems)
+          .set({ madeHere: true })
+          .where(eq(ticketItems.id, excluded.id));
+      else if (kind === "served" || kind === "partly_served")
+        await suite.db
+          .update(workingOrderLines)
+          .set({ servedQuantity: kind === "served" ? 1000 : 500 })
+          .where(eq(workingOrderLines.id, excluded.workingOrderLineId));
+      else
+        await suite.db
+          .update(workingOrders)
+          .set(kind === "collected" ? { collectedAt: at } : { status: "abandoned" })
+          .where(eq(workingOrders.id, excluded.workingOrderId));
+      const [before] = await suite.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.id, excluded.id));
+      expect((await call("PUT", today(), { ...close(), openDishes: "send" })).status).toBe(204);
+      expect(
+        (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, excluded.id)))[0],
+      ).toEqual(before);
+      expect(
+        (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, moving.id)))[0]!
+          .stationId,
+      ).toBe(bar);
+    },
+  );
+
+  it("a rejected destination leaves dishes and closure unchanged", async () => {
+    const item = await stationDish();
+    await inTx(v, (tx) => setStationToday(tx, v.cfg, pastry, "closed", new Date(), bar));
+    const before = await rows();
+    const answer = await call("PUT", today(), {
+      state: "closed",
+      sendsToStationId: pastry,
+      openDishes: "send",
+    });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "station.destination_invalid" });
+    expect(await rows()).toEqual(before);
+    expect(
+      (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
+    ).toEqual(item);
+  });
+  it("an unauthorized close cannot send waiting work", async () => {
+    const item = await stationDish();
+    const answer = await call("PUT", today(), { ...close(), openDishes: "send" }, staffCookie);
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await rows()).toEqual([]);
+    expect(
+      (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
+    ).toEqual(item);
+  });
+
   it("stores the chosen destination and reports why Grill is closed", async () => {
     expect((await call("PUT", today(), close())).status).toBe(204);
     expect(await rows()).toEqual([
@@ -242,6 +524,7 @@ describe("the till's station day", () => {
     const choices = await call("GET", today(), undefined, staffCookie);
     expect(choices.status).toBe(200);
     expect(choices.json).toEqual({
+      openDishCount: 0,
       destinations: [
         { id: bar, name: "Bar", isDefault: true },
         { id: pastry, name: "Pastry", isDefault: false },
@@ -315,7 +598,6 @@ describe("the till's station day", () => {
     expect(await rows()).toEqual([]);
   });
   it("routes a dish sent from the till to the chosen station", async () => {
-    await inTx(v, (tx) => setStationFallback(tx, v.cfg, grill, pastry));
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
@@ -386,6 +668,40 @@ describe("the kitchen display's station day", () => {
     );
   });
 
+  it("reports its unfinished dishes before the manager closes it", async () => {
+    await stationDish();
+    const answer = await deviceCall("GET", path());
+    expect(answer.status).toBe(200);
+    expect(answer.json.openDishCount).toBe(1);
+  });
+  it("requires the kitchen manager's open-dish choice before closing", async () => {
+    const item = await stationDish();
+    const answer = await deviceCall("PUT", path(), authorizedClose());
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "openDishes" },
+    });
+    expect(await rows()).toEqual([]);
+    expect(
+      (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
+    ).toEqual(item);
+  });
+  it.each(["send", "leave"] as const)(
+    "the kitchen manager can %s its waiting work while closing",
+    async (openDishes) => {
+      const item = await stationDish();
+      const answer = await deviceCall("PUT", path(), { ...authorizedClose(), openDishes });
+      expect(answer.status).toBe(204);
+      expect(await rows()).toEqual([
+        expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
+      ]);
+      const [after] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id));
+      expect(after!.stationId).toBe(openDishes === "send" ? bar : grill);
+      expect(after!.stationChosenAt).not.toBeNull();
+    },
+  );
+
   it("closes its station with a manager PIN and reports the destination and reason", async () => {
     expect((await deviceCall("PUT", path(), authorizedClose())).status).toBe(204);
     expect(await rows()).toEqual([
@@ -436,7 +752,7 @@ describe("the kitchen display's station day", () => {
         open: false,
         isDefault: false,
         byHand: null,
-        sendsTo: null,
+        sendsTo: { id: bar, name: "Bar" },
         why: "switched_off",
       },
     });
@@ -445,6 +761,7 @@ describe("the kitchen display's station day", () => {
     const answer = await deviceCall("GET", path());
     expect(answer.status).toBe(200);
     expect(answer.json).toEqual({
+      openDishCount: 0,
       destinations: [
         { id: bar, name: "Bar", isDefault: true },
         { id: pastry, name: "Pastry", isDefault: false },

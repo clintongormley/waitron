@@ -11,7 +11,7 @@ import { rangeDates } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { occursOn, repeatKey, type NamedDayKind } from "./named-day-rules.js";
 import type { VenueScope } from "./operations.js";
-import { specialDateHours, specialDates } from "./schema/hours.js";
+import { specialDates } from "./schema/hours.js";
 
 export interface NamedDayOccurrence {
   id: string;
@@ -90,20 +90,6 @@ export async function readNamedDaysModel(
   const read = await readHolidays(tx, cfg, from, to);
   const area = await readHolidayAreaModel(tx, cfg);
   const named = await namedDaysOn(tx, cfg, dates);
-  const stationRows = await tx
-    .select({ id: specialDateHours.specialDateId })
-    .from(specialDateHours)
-    .innerJoin(specialDates, eq(specialDates.id, specialDateHours.specialDateId))
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        inArray(
-          specialDates.id,
-          [...named.values()].map(({ id }) => id),
-        ),
-      ),
-    );
-  const stationDays = new Set(stationRows.map(({ id }) => id));
   const days = await readCalendarDays(tx, cfg, from, to, holidays ?? (async () => read.facts));
   return {
     timeZone: clock.timeZone,
@@ -123,7 +109,6 @@ export async function readNamedDaysModel(
               repeats: occurrence.repeats,
               ownHours: occurrence.ownHours,
               closeWholeVenue: occurrence.closeWholeVenue,
-              hasStationHours: stationDays.has(occurrence.id),
             };
       const closed = day.tone === "closed";
       return {

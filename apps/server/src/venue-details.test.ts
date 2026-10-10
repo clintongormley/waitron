@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -903,16 +902,11 @@ describe("venue detail consumer reads", () => {
       const rows = await tx
         .insert(kitchenStations)
         .values([
-          { locationId: venue.cfg.locationId, name: "Weekly station" },
+          { locationId: venue.cfg.locationId, name: "Ordinary station" },
           { locationId: venue.cfg.locationId, name: "Old-day override" },
           { locationId: venue.cfg.locationId, name: "New-day override" },
         ])
         .returning({ id: kitchenStations.id });
-      for (const row of rows.slice(0, 3)) {
-        await seedStationWeek(tx, venue.cfg, row.id, [
-          { weekday: 5, opensAt: "23:00", closesAt: "23:59" },
-        ]);
-      }
       await tx.insert(stationDayStates).values([
         { stationId: rows[1]!.id, businessDay: "2026-10-02", open: false },
         { stationId: rows[2]!.id, businessDay: "2026-10-01", open: false },
@@ -951,13 +945,10 @@ describe("venue detail consumer reads", () => {
       },
     ]);
     const retained = () => ({
-      weekCells: suite.db.all(sql`select * from hours_week_cells order by id`),
-      weekPeriods: suite.db.all(sql`select * from hours_week_periods order by id`),
       overrides: suite.db.all(sql`select * from station_day_states order by id`),
       bookings: suite.db.all(sql`select * from bookings order by id`),
     });
     const before = retained();
-    expect([before.weekCells.length, before.weekPeriods.length]).toEqual([21, 3]);
     const readCurrent = () =>
       withTransaction(suite.db, async (tx) => {
         const states = await stationStates(tx, venue.cfg, at);
@@ -970,7 +961,7 @@ describe("venue detail consumer reads", () => {
         };
       });
     expect(await readCurrent()).toEqual({
-      open: [false, false, false, true],
+      open: [true, false, true, true],
       annotation: { reservedTime: "02:00" },
     });
     const initial = await read();

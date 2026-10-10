@@ -19,7 +19,7 @@ import { createCategory, createProduct } from "@waitron/catalogue";
 import { hashPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import { setRoutingCell, setStationFallback, setStationToday } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { takeBillPayment } from "./bill-payments.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -1491,7 +1491,16 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const original = await station("Old bar");
     const fallback = await station("New bar");
     await routeTo(made.productId, original);
-    await inTx(v, (tx) => setStationFallback(tx, v.cfg, original, fallback));
+    await inTx(v, async (tx) => {
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.locationId, v.cfg.locationId));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, fallback));
+    });
     const id = randomUUID();
     await parkOrder({ db: suite.db }, v.cfg, {
       id,

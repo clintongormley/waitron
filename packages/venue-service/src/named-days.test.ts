@@ -2,14 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import {
-  CORE_MIGRATIONS,
-  catalogues,
-  kitchenStations,
-  locations,
-  tenants,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { readCalendarDays } from "./hours.js";
@@ -22,7 +15,7 @@ import {
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import * as namedDayReads from "./named-days.js";
 import { namedDaysBetween, namedDaysOn } from "./named-days.js";
-import { specialDateHours, specialDates } from "./schema/hours.js";
+import { specialDates } from "./schema/hours.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments, departmentSalePolicies } from "./schema/service.js";
 
@@ -271,7 +264,6 @@ describe("named-days Calendar model", () => {
           repeats: false,
           ownHours: true,
           closeWholeVenue: false,
-          hasStationHours: false,
         },
         holidays: [holiday],
         tone: "public_holiday",
@@ -302,7 +294,6 @@ describe("named-days Calendar model", () => {
           repeats: true,
           ownHours: false,
           closeWholeVenue: false,
-          hasStationHours: false,
         },
         holidays: [],
         tone: "own_holiday",
@@ -350,27 +341,27 @@ describe("named-days Calendar model", () => {
   });
 });
 
-it("reports retained station hours on a one-off day in both Calendar and Opening hours", async () => {
+it("shows the same one-off named day in Calendar and Opening hours", async () => {
   const f = await fixture();
   const row = await day(f, "2026-12-25");
-  await run(async (tx) => {
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ locationId: f.cfg.locationId, name: "Kitchen", isDefault: true })
-      .returning();
-    await tx
-      .insert(specialDateHours)
-      .values({ specialDateId: row.id, stationId: station!.id, mode: "closed" });
-  });
   const model = await run((tx) =>
     namedDayReads.readNamedDaysModel(tx, f.cfg, "2026-12-25", "2026-12-25", now),
   );
-  expect(model.days[0]!.namedDay!.hasStationHours).toBe(true);
+  const expected = {
+    id: row.id,
+    date: "2026-12-25",
+    name: "Navidad",
+    kind: "working_day",
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: false,
+  };
+  expect(model.days[0]!.namedDay).toEqual(expected);
   expect(
     (await run((tx) => readOpeningHoursModel(tx, f.cfg, now))).namedDays.find(
       ({ id }) => id === row.id,
-    )!.hasStationHours,
-  ).toBe(true);
+    ),
+  ).toEqual(expected);
 });
 
 it("returns the country's area options and the chosen venue area without inventing a geography", async () => {

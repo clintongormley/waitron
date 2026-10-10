@@ -1,6 +1,6 @@
 // Browser-safe: the dashboard loads this, so it must not import `@waitron/reporting`.
 import { addDays } from "./hours-rules.js";
-import type { HourPeriod, LocalDate } from "./hours-types.js";
+import type { LocalDate } from "./hours-types.js";
 
 const MINUTE_MS = 60_000;
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -53,7 +53,7 @@ const CLOCK_TIME = /^\d{2}:\d{2}$/;
  */
 export function repeatedTimes(
   date: LocalDate,
-  periods: readonly Pick<HourPeriod, "opensAt" | "closesAt">[],
+  periods: readonly { opensAt: string; closesAt: string }[],
   timeZone: string,
 ): string[] {
   const times = new Set<string>();

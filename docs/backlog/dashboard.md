@@ -581,6 +581,8 @@ there is no copy to keep in step.
 The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIFIED**.
 **Next action:** measure the browser's media preference and the selected `<picture>` source
 against `data-wt-theme` in the live dashboard before deciding a fix.
+A366-4B's 2026-10-09 sidebar captures also show a dark wordmark with the root and fixture host
+set to the dark theme. The media preference and selected source were not measured there either.
 
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 

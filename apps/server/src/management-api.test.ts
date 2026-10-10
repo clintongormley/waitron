@@ -3,7 +3,7 @@ import { AppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   diningTables,
   floorZones,
@@ -24,10 +24,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, registerModulePermissions } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import {
-  WEEK_DISPLAY_ORDER,
   deleteSpecialDate,
-  readWeekHours,
-  replaceWeekHours,
+  readSpecialDate,
   saveSpecialDate,
   stationStates,
 } from "@waitron/venue-service";
@@ -2551,121 +2549,108 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(list.find((s) => s.id === second)!.isDefault).toBe(false);
   });
 
-  it("ignores a saved Closed week while its station is the default, refuses a stale editor's save, and resumes the week on demotion", async () => {
+  it("keeps a station open through default changes until it is deactivated", async () => {
     const cfg = { locationId: brandLocationId(venue.locationId) };
     const first = await createStation(unique("Swap default"), { isDefault: true });
     const second = await createStation(unique("Swap closed"));
-    const subject = { kind: "station" as const, id: second };
     // Tuesday 6 October 2026, 12:00 in Madrid.
     const at = new Date("2026-10-06T10:00:00Z");
-    const weekOf = (mode: "closed" | "all_day") =>
-      WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: { mode, periods: [] as [] } }));
-    await withTransaction(suite.db, (tx) =>
-      replaceWeekHours(tx, cfg, subject, weekOf("closed"), at),
-    );
     const state = async () =>
       (await withTransaction(suite.db, (tx) => stationStates(tx, cfg, at))).get(second);
-    const storedWeek = () => withTransaction(suite.db, (tx) => readWeekHours(tx, cfg, subject));
-    expect(await state()).toMatchObject({ open: false, isDefault: false, active: true });
+    expect(await state()).toMatchObject({ open: true, isDefault: false, active: true });
 
     expect(
       (await req(`/stations/${second}/default`, { method: "POST" }, managerCookie)).status,
     ).toBe(204);
     expect(await state()).toMatchObject({ open: true, isDefault: true, active: true });
-    const kept = await storedWeek();
-    expect(kept.map((day) => day.cell.mode)).toEqual(Array(7).fill("closed"));
-    // An editor opened before the switch still holds the week; its save is refused and writes nothing.
-    await expect(
-      withTransaction(suite.db, (tx) => replaceWeekHours(tx, cfg, subject, weekOf("all_day"), at)),
-    ).rejects.toMatchObject({ code: "station.always_open", params: { stationId: second } });
-    expect(await storedWeek()).toEqual(kept);
-
     expect(
       (await req(`/stations/${first}/default`, { method: "POST" }, managerCookie)).status,
     ).toBe(204);
-    expect(await state()).toMatchObject({ open: false, isDefault: false, active: true });
+    expect(await state()).toMatchObject({ open: true, isDefault: false, active: true });
     expect((await req(`/stations/${second}`, { method: "DELETE" }, managerCookie)).status).toBe(
       204,
     );
     expect(await state()).toMatchObject({ open: false, isDefault: false, active: false });
   });
 
-  it("refuses a new default with 400 hours.invalid, changing nothing, while the default it replaces would resume clashing hours", async () => {
-    const cfg = { locationId: brandLocationId(venue.locationId) };
-    const kitchen = await createStation(unique("Resume kitchen"), { isDefault: true });
-    const barName = unique("Resume bar");
-    const bar = await createStation(barName);
-    const subject = { kind: "station" as const, id: bar };
-    const at = new Date("2026-10-06T10:00:00Z");
-    // Dates far enough ahead to stay current whenever the suite runs.
-    const barDate = (date: string, opensAt: string, closesAt: string) => ({
-      date,
-      name: unique("Resume date"),
-      colour: "red" as const,
-      closeWholeVenue: false,
-      cells: [
-        {
-          subject,
-          cell: { mode: "periods" as const, periods: [{ id: randomUUID(), opensAt, closesAt }] },
-        },
-      ],
-    });
-    await withTransaction(suite.db, async (tx) => {
-      await replaceWeekHours(
-        tx,
-        cfg,
-        subject,
-        WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: { mode: "closed", periods: [] } })),
-        at,
+  it.each(["existing", "new"] as const)(
+    "replaces the default using the %s-station action while preserving named dates",
+    async (choice) => {
+      const cfg = { locationId: brandLocationId(venue.locationId) };
+      const kitchen = await createStation(unique("Resume kitchen"), { isDefault: true });
+      const barName = unique("Resume bar");
+      const bar = await createStation(barName);
+      const at = new Date("2026-10-06T10:00:00Z");
+      // Dates far enough ahead to stay current whenever the suite runs.
+      const barDate = (date: string) => ({
+        date,
+        name: unique("Resume date"),
+        colour: "red" as const,
+        closeWholeVenue: false,
+      });
+      const earlier = await withTransaction(suite.db, (tx) =>
+        saveSpecialDate(tx, cfg, null, barDate("2096-06-09"), at),
       );
-      await saveSpecialDate(tx, cfg, null, barDate("2096-06-09", "22:00", "03:00"), at);
-    });
-    const later = await withTransaction(suite.db, (tx) =>
-      saveSpecialDate(tx, cfg, null, barDate("2096-06-12", "01:00", "05:00"), at),
-    );
-    expect((await req(`/stations/${bar}/default`, { method: "POST" }, managerCookie)).status).toBe(
-      204,
-    );
-    await withTransaction(suite.db, (tx) =>
-      saveSpecialDate(
-        tx,
-        cfg,
-        later.id,
-        { ...barDate("2096-06-10", "01:00", "05:00"), name: later.name, cells: [] },
-        at,
-      ),
-    );
+      const later = await withTransaction(suite.db, (tx) =>
+        saveSpecialDate(tx, cfg, null, barDate("2096-06-12"), at),
+      );
+      expect(
+        (await req(`/stations/${bar}/default`, { method: "POST" }, managerCookie)).status,
+      ).toBe(204);
+      await withTransaction(suite.db, (tx) =>
+        saveSpecialDate(tx, cfg, later.id, { ...barDate("2096-06-10"), name: later.name }, at),
+      );
 
-    const refusal = {
-      error: {
-        code: "hours.invalid",
-        params: { field: "date", date: "2096-06-10", subjectId: bar },
-      },
-    };
-    const swap = await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie);
-    expect(swap.status).toBe(400);
-    expect(await swap.json()).toEqual(refusal);
-    const newName = unique("Resume new default");
-    const created = await req(
-      "/stations",
-      { method: "POST", body: JSON.stringify({ name: newName, isDefault: true }) },
-      managerCookie,
-    );
-    expect(created.status).toBe(400);
-    expect(await created.json()).toEqual(refusal);
-    let list = await listStations();
-    expect(list.find((s) => s.id === bar)!.isDefault).toBe(true);
-    expect(list.find((s) => s.id === kitchen)!.isDefault).toBe(false);
-    expect(list.some((s) => s.name === newName)).toBe(false);
-
-    await withTransaction(suite.db, (tx) => deleteSpecialDate(tx, cfg, later.id, at));
-    expect(
-      (await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie)).status,
-    ).toBe(204);
-    list = await listStations();
-    expect(list.find((s) => s.id === kitchen)!.isDefault).toBe(true);
-    expect(list.find((s) => s.name === barName)!.isDefault).toBe(false);
-  });
+      let removed = false;
+      const removeDate = async () => {
+        if (removed) return;
+        await withTransaction(suite.db, async (tx) => {
+          await deleteSpecialDate(tx, cfg, later.id, at);
+          await deleteSpecialDate(tx, cfg, earlier.id, at);
+        });
+        removed = true;
+      };
+      onTestFinished(removeDate);
+      const before = await listStations();
+      const keptDate = await withTransaction(suite.db, (tx) => readSpecialDate(tx, cfg, later.id));
+      const newName = unique("Resume new default");
+      let next = kitchen;
+      if (choice === "existing") {
+        const swap = await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie);
+        expect(swap.status).toBe(204);
+        expect(await swap.text()).toBe("");
+      } else {
+        const created = await req(
+          "/stations",
+          { method: "POST", body: JSON.stringify({ name: newName, isDefault: true }) },
+          managerCookie,
+        );
+        expect(created.status).toBe(201);
+        const body = (await created.json()) as { id: string };
+        expect(body.id).toEqual(expect.any(String));
+        next = body.id;
+      }
+      const list = await listStations();
+      expect(list.filter((s) => s.isDefault).map((s) => s.id)).toEqual([next]);
+      expect(list.find((s) => s.id === bar)).toEqual({
+        ...before.find((s) => s.id === bar)!,
+        isDefault: false,
+      });
+      expect(list.find((s) => s.id === kitchen)!.isDefault).toBe(choice === "existing");
+      expect(list.some((s) => s.name === newName)).toBe(choice === "new");
+      expect(list).toHaveLength(before.length + (choice === "new" ? 1 : 0));
+      expect(await withTransaction(suite.db, (tx) => readSpecialDate(tx, cfg, later.id))).toEqual(
+        keptDate,
+      );
+      await removeDate();
+      expect(
+        (await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie)).status,
+      ).toBe(204);
+      const restored = await listStations();
+      expect(restored.find((s) => s.id === kitchen)!.isDefault).toBe(true);
+      expect(restored.find((s) => s.name === barName)!.isDefault).toBe(false);
+    },
+  );
 
   it("POST /:id/default on an unknown or malformed id → 404 station.not_found", async () => {
     const unknown = await req(

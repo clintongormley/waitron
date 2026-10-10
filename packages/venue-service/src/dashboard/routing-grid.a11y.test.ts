@@ -18,8 +18,7 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
       {
         stationId: "old",
         status: { open: false, why: "switched_off" },
-        nextTransition: null,
-        hours: [],
+
         fallbackStationId: "kitchen",
         today: null,
         closedSendsTo: "kitchen",

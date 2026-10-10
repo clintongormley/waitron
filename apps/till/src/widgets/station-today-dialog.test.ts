@@ -82,3 +82,59 @@ it("clears a rejected destination's field and summary on a different choice", as
   expect(field.error).toBe("");
   expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
 });
+
+it("warns about unfinished dishes and blocks closing until their disposition is chosen", async () => {
+  const el = await mount({ openDishCount: 3 });
+  expect(el.shadowRoot!.textContent).toContain("3 unfinished dishes");
+  const choice = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="openDishes"]',
+  );
+  expect(choice).not.toBeNull();
+  expect(choice!.required).toBe(true);
+  expect(choice!.value).toBe("");
+  expect(choice!.options).toEqual([
+    { value: "send", label: "Send waiting dishes there" },
+    { value: "leave", label: "Leave them here to finish" },
+  ]);
+  expect(el.shadowRoot!.textContent).toContain("Started dishes stay here.");
+  const heard: unknown[] = [];
+  el.addEventListener("station-today-confirm", (e) => heard.push((e as CustomEvent).detail));
+  const submit = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-submit]")!;
+  expect([submit.variant, submit.disabled]).toEqual(["secondary", true]);
+  submit.click();
+  expect(heard).toEqual([]);
+  choice!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "leave" } }));
+  await el.updateComplete;
+  expect([submit.variant, submit.disabled]).toEqual(["primary", false]);
+  submit.click();
+  expect(heard).toEqual([{ sendsToStationId: "pass", openDishes: "leave" }]);
+});
+it.each(["en", "es"] as const)(
+  "one %s dialog sends waiting dishes to the chosen destination",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      const el = await mount({ openDishCount: 1 });
+      expect(el.shadowRoot!.querySelectorAll("wt-dialog").length).toBe(1);
+      expect(el.shadowRoot!.textContent).toContain(
+        locale === "en" ? "1 unfinished dish" : "1 plato pendiente",
+      );
+      const dest = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="sendsToStationId"]',
+      )!;
+      const choice = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="openDishes"]',
+      );
+      expect(choice).not.toBeNull();
+      dest.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
+      choice!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "send" } }));
+      await el.updateComplete;
+      const heard: unknown[] = [];
+      el.addEventListener("station-today-confirm", (e) => heard.push((e as CustomEvent).detail));
+      el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+      expect(heard).toEqual([{ sendsToStationId: "bar", openDishes: "send" }]);
+    } finally {
+      setLocale("en");
+    }
+  },
+);

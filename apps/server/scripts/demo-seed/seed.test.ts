@@ -20,7 +20,7 @@ import {
   readContentLanguages,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { readWeekHours, resolveMakers, setRoutingCell } from "@waitron/venue-service";
+import { resolveMakers, setRoutingCell } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
@@ -271,7 +271,6 @@ describe("seedDemoRestaurant", () => {
       const downstairs = zones.find((zone) => zone.name === "Downstairs bar")!;
       const upstairs = zones.find((zone) => zone.name === "Upstairs bar")!;
       const downstairsStation = stations.find((station) => station.name === "Downstairs bar")!;
-      const upstairsStation = stations.find((station) => station.name === "Upstairs bar")!;
       const kitchen = stations.find((station) => station.name === "Kitchen")!;
 
       expect(
@@ -298,7 +297,7 @@ describe("seedDemoRestaurant", () => {
         ),
       ).toEqual(
         new Map([
-          [drink.id, { kind: "made", route: { kind: "station", stationId: upstairsStation.id } }],
+          [drink.id, { kind: "made", route: { kind: "station", stationId: downstairsStation.id } }],
           [dish.id, { kind: "made", route: { kind: "station", stationId: kitchen.id } }],
         ]),
       );
@@ -327,7 +326,7 @@ describe("seedDemoRestaurant", () => {
     });
   });
 
-  it("opens Upstairs bar on Friday and Saturday evenings and routes closed evenings to Downstairs bar", async () => {
+  it("keeps drinks downstairs without station hours or an evening period", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -349,63 +348,46 @@ describe("seedDemoRestaurant", () => {
         join kitchen_stations s on s.id = c.station_id
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'
         order by c.weekday`);
-      expect(hours).toEqual([
-        { weekday: 5, opens_at: "19:00:00", closes_at: "21:00:00" },
-        { weekday: 6, opens_at: "19:00:00", closes_at: "21:00:00" },
-      ]);
+      expect(hours).toEqual([]);
       const { rows: fallbacks } = await tx.execute<{ name: string }>(sql`
         select fallback.name from station_fallbacks f
         join kitchen_stations s on s.id = f.station_id
         join kitchen_stations fallback on fallback.id = f.fallback_station_id
         where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'`);
-      expect(fallbacks).toEqual([{ name: "Downstairs bar" }]);
+      expect(fallbacks).toEqual([]);
 
-      const { rows: subjects } = await tx.execute<{
-        kind: "department" | "station";
-        id: string;
-        name: string;
-      }>(sql`
-        select 'department' as kind, id, name from departments where location_id = ${venue.locationId}
-        union all
-        select 'station', id, name from kitchen_stations
-        where location_id = ${venue.locationId} and name = 'Upstairs bar'
-        order by name`);
+      const { rows: subjects } = await tx.execute<{ id: string; name: string }>(sql`
+        select id, name from departments where location_id = ${venue.locationId} order by name`);
       const weeks: Record<string, string[]> = {};
       for (const subject of subjects) {
-        if (subject.kind === "department") {
-          const { rows: ranges } = await tx.execute<{
-            weekday: number;
-            starts_at: string;
-            ends_at: string;
-          }>(sql`
+        const { rows: ranges } = await tx.execute<{
+          weekday: number;
+          starts_at: string;
+          ends_at: string;
+        }>(sql`
             select t.weekday, s.starts_at, s.ends_at from menu_day_timetables t
             join menu_slots s on s.timetable_id = t.id
             where t.department_id = ${subject.id} and t.weekday is not null
             order by t.weekday, s.starts_at`);
-          weeks[subject.name] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
-            const slots = ranges.filter((range) => range.weekday === weekday);
-            return slots.length === 0
-              ? "closed"
-              : slots
-                  .map((slot) => `${slot.starts_at.slice(0, 5)}-${slot.ends_at.slice(0, 5)}`)
-                  .join(",");
-          });
-        } else {
-          weeks[subject.name] = (
-            await readWeekHours(tx, cfg, { kind: "station", id: subject.id })
-          ).map(({ cell }) =>
-            cell.mode === "periods"
-              ? cell.periods.map((period) => `${period.opensAt}-${period.closesAt}`).join(",")
-              : cell.mode,
-          );
-        }
+        weeks[subject.name] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
+          const slots = ranges.filter((range) => range.weekday === weekday);
+          return slots.length === 0
+            ? "closed"
+            : slots
+                .map((slot) => `${slot.starts_at.slice(0, 5)}-${slot.ends_at.slice(0, 5)}`)
+                .join(",");
+        });
       }
       // Sunday first.
       expect(weeks).toEqual({
         Deli: ["closed", ...Array<string>(6).fill("09:00-18:00")],
         "Restaurant and bar": Array<string>(7).fill("09:00-00:00"),
-        "Upstairs bar": [...Array<string>(5).fill("closed"), "19:00-21:00", "19:00-21:00"],
       });
+
+      const { rows: periods } = await tx.execute<{ name: string }>(sql`
+        select p.name from menu_periods p join departments d on d.id = p.department_id
+        where d.location_id = ${venue.locationId} order by d.name`);
+      expect(periods).toEqual([{ name: "Open" }, { name: "Open" }]);
 
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones
@@ -415,7 +397,7 @@ describe("seedDemoRestaurant", () => {
       const { products } = await listAvailableProducts(tx, venue.locationId);
       const drink = products.find((product) => product.name === "Negroni")!;
       for (const [instant, stationName] of [
-        ["2026-10-02T18:00:00Z", "Upstairs bar"],
+        ["2026-10-02T18:00:00Z", "Downstairs bar"],
         ["2026-10-06T18:00:00Z", "Downstairs bar"],
       ] as const) {
         const station = stations.find((candidate) => candidate.name === stationName)!;
@@ -672,10 +654,10 @@ describe("seedDemoRestaurant", () => {
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
     expect(read.cocktailCells).toEqual([{ station_name: "Downstairs bar" }]);
     expect(read.cocktailRoutes).toEqual([
-      { category: "Cocktails", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
-      { category: "Coffee", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
-      { category: "Soft drinks", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
-      { category: "Wine and beer", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+      { category: "Cocktails", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
+      { category: "Coffee", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
+      { category: "Soft drinks", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
+      { category: "Wine and beer", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
     ]);
 
     // The cooking list as it is STORED, behind the `offeredModifiers` read above.

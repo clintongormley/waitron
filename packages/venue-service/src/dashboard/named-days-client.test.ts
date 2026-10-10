@@ -48,7 +48,6 @@ describe("NamedDaysApi", () => {
       expect(live.interests).toEqual(
         [
           "special_dates",
-          "special_date_hours",
           "menu_day_timetables",
           "menu_slots",
           "departments",
@@ -68,41 +67,12 @@ describe("NamedDaysApi", () => {
   });
 });
 
-it("preserves non-default station hours when editing metadata and passes real request validation", async () => {
+it("edits calendar metadata without reading or resending retained station cells", async () => {
   const { parseSpecialDateInput } = await import("../hours-rules.js");
-  const cells = [
-    {
-      subject: { kind: "station", id: "bar" },
-      cell: {
-        mode: "periods",
-        periods: [
-          { id: "00000000-0000-4000-8000-000000000001", opensAt: "12:00", closesAt: "16:00" },
-        ],
-      },
-    },
-    { subject: { kind: "station", id: "default" }, cell: { mode: "closed", periods: [] } },
-  ];
   const requests: unknown[][] = [];
   const api = new clients.NamedDaysApi((async (path, method, body, options) => {
     requests.push([path, method, body, options]);
-    if (method === "GET")
-      return {
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        civilDate: "2026-10-07",
-        clockReadable: true,
-        departments: [],
-        subjects: [
-          { kind: "station", id: "bar", name: "Bar", active: true, isDefault: false },
-          { kind: "station", id: "default", name: "Default", active: true, isDefault: true },
-        ],
-        week: [],
-        days: [],
-        specialDates: [],
-        specialCells: [{ specialDateId: "source", cells }],
-        holidayCoverage: [],
-        holidaySources: [],
-      };
+    if (method === "GET") throw new Error("station source offline");
     parseSpecialDateInput(body);
     return {};
   }) as DashboardRequest);
@@ -114,75 +84,36 @@ it("preserves non-default station hours when editing metadata and passes real re
     ownHours: false,
     closeWholeVenue: false,
   };
-  await (
-    api.saveDay as unknown as (id: string, value: typeof input, source: unknown) => Promise<unknown>
-  )("source", input, {
-    id: "source",
-    date: "2026-10-01",
-    name: "Original",
-    kind: "holiday",
-    repeats: false,
-    ownHours: false,
-    closeWholeVenue: false,
-    hasStationHours: true,
-  });
+  await api.saveDay("source", input);
   expect(requests).toEqual([
-    [
-      "/management-api/venue-service/hours?from=2026-10-01&to=2026-10-01",
-      "GET",
-      undefined,
-      { passive: true },
-    ],
-    [
-      "/management-api/venue-service/special-dates/source",
-      "PUT",
-      { ...input, cells: [cells[0]] },
-      undefined,
-    ],
+    ["/management-api/venue-service/special-dates/source", "PUT", input, undefined],
   ]);
 });
-it("a failed station-source read prevents a metadata write", async () => {
+it("a failed calendar write preserves its refusal without a station-source read", async () => {
   const methods: unknown[] = [];
   const api = new clients.NamedDaysApi((async (_path, method) => {
     methods.push(method);
-    throw new Error("source offline");
+    throw new Error("write offline");
   }) as DashboardRequest);
   await expect(
-    (api.saveDay as unknown as (id: string, input: unknown, source: unknown) => Promise<unknown>)(
-      "source",
-      {
-        date: "2026-10-02",
-        name: "Edited",
-        kind: "holiday",
-        repeats: false,
-        ownHours: false,
-        closeWholeVenue: false,
-      },
-      { id: "source", date: "2026-10-01", hasStationHours: true },
-    ),
-  ).rejects.toThrow("source offline");
-  expect(methods).toEqual(["GET"]);
+    api.saveDay("source", {
+      date: "2026-10-02",
+      name: "Edited",
+      kind: "holiday",
+      repeats: false,
+      ownHours: false,
+      closeWholeVenue: false,
+    }),
+  ).rejects.toThrow("write offline");
+  expect(methods).toEqual(["PUT"]);
 });
-it("a station read that settles after its editor leaves cannot begin the write", async () => {
+it("an editor that has left cannot begin a calendar write", async () => {
   const methods: unknown[] = [];
-  let finish!: (value: unknown) => void;
-  let current = true;
   const api = new clients.NamedDaysApi((async (_path, method) => {
     methods.push(method);
-    if (method === "GET")
-      return new Promise<unknown>((resolve) => {
-        finish = resolve;
-      });
     return {};
   }) as DashboardRequest);
-  const saving = (
-    api.saveDay as unknown as (
-      id: string,
-      input: unknown,
-      source: unknown,
-      current: () => boolean,
-    ) => Promise<unknown>
-  )(
+  await api.saveDay(
     "source",
     {
       date: "2026-10-02",
@@ -192,45 +123,17 @@ it("a station read that settles after its editor leaves cannot begin the write",
       ownHours: false,
       closeWholeVenue: false,
     },
-    { id: "source", date: "2026-10-01", hasStationHours: true },
-    () => current,
+    () => false,
   );
-  await expect.poll(() => methods).toEqual(["GET"]);
-  current = false;
-  finish({ subjects: [], specialCells: [] });
-  await saving;
-  expect(methods).toEqual(["GET"]);
+  expect(methods).toEqual([]);
 });
 
-it("preserves current station cells when the calendar snapshot says there are none", async () => {
+it("calendar metadata edits need no station-cell snapshot", async () => {
   const { parseSpecialDateInput } = await import("../hours-rules.js");
-  const cell = {
-    subject: { kind: "station" as const, id: "bar" },
-    cell: {
-      mode: "periods" as const,
-      periods: [
-        { id: "00000000-0000-4000-8000-000000000001", opensAt: "12:00", closesAt: "16:00" },
-      ],
-    },
-  };
   const requests: unknown[][] = [];
   const api = new clients.NamedDaysApi((async (path, method, body, options) => {
     requests.push([path, method, body, options]);
-    if (method === "GET")
-      return {
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        civilDate: "2026-10-07",
-        clockReadable: true,
-        departments: [],
-        subjects: [{ kind: "station", id: "bar", name: "Bar", active: true, isDefault: false }],
-        week: [],
-        days: [],
-        specialDates: [],
-        specialCells: [{ specialDateId: "source", cells: [cell] }],
-        holidayCoverage: [],
-        holidaySources: [],
-      };
+    if (method === "GET") throw new Error("no station-cell snapshot");
     parseSpecialDateInput(body);
     return {};
   }) as DashboardRequest);
@@ -242,29 +145,9 @@ it("preserves current station cells when the calendar snapshot says there are no
     ownHours: false,
     closeWholeVenue: false,
   };
-  await api.saveDay("source", input, {
-    id: "source",
-    date: "2026-10-01",
-    name: "Original",
-    kind: "holiday",
-    repeats: false,
-    ownHours: false,
-    closeWholeVenue: false,
-    hasStationHours: false,
-  });
+  await api.saveDay("source", input);
   expect(requests).toEqual([
-    [
-      "/management-api/venue-service/hours?from=2026-10-01&to=2026-10-01",
-      "GET",
-      undefined,
-      { passive: true },
-    ],
-    [
-      "/management-api/venue-service/special-dates/source",
-      "PUT",
-      { ...input, cells: [cell] },
-      undefined,
-    ],
+    ["/management-api/venue-service/special-dates/source", "PUT", input, undefined],
   ]);
 });
 
@@ -322,5 +205,68 @@ it("the replacement named-day watch rereads after a write with live data and wit
     api.rereadWatches();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(request).toHaveBeenCalledTimes(2);
+  }
+});
+
+it("retired station rows do not start another Calendar read", async () => {
+  const live = new LiveData();
+  const request = vi.fn(async () => model);
+  const apply = vi.fn();
+  const stop = new clients.NamedDaysApi(request as DashboardRequest, live).watchNamedDays(
+    "2026-10-01",
+    "2026-10-31",
+    apply,
+    vi.fn(),
+    vi.fn(),
+  );
+  try {
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    live.invalidate([
+      { type: "special_date_hours" },
+      { type: "special_date_hours_periods" },
+      { type: "hours_week_cells" },
+      { type: "hours_week_periods" },
+      { type: "station_fallbacks" },
+      { type: "station_day_states" },
+    ]);
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledTimes(1);
+    live.invalidate([{ type: "special_dates" }]);
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
+it("a Calendar reread leaves a station-only observer's snapshot alone", async () => {
+  const live = new LiveData();
+  let stationReads = 0;
+  const station = live.observe(
+    {
+      key: "station-only-control",
+      dependencies: [{ type: "kitchen_stations" }],
+      read: async () => ++stationReads,
+    },
+    () => {},
+  );
+  const request = vi.fn(async () => model);
+  const apply = vi.fn();
+  const api = new clients.NamedDaysApi(request as DashboardRequest, live);
+  const stop = api.watchNamedDays("2026-10-01", "2026-10-31", apply, vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(station.snapshot.value).toBe(1));
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    api.rereadWatches();
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(stationReads).toBe(1);
+    expect(station.snapshot.value).toBe(1);
+    live.invalidate([{ type: "kitchen_stations" }]);
+    await vi.waitFor(() => expect(station.snapshot.value).toBe(2));
+    expect(apply).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+    station.unsubscribe();
   }
 });

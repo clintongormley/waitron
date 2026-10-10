@@ -320,33 +320,54 @@ describe("POST /api/dead-ends/draft", () => {
       );
       await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
     });
-    const response = await ana("POST", "/api/dead-ends/draft", {
-      partyId: party.partyId,
-      draftId: draft.id,
-      lineIds: [draft.lines[0]!.id],
-    });
-    expect(response.status).toBe(200);
-    expect(response.json).toMatchObject({
-      sends: true,
-      deadEnds: [
-        {
-          key: draft.lines[0]!.id,
-          name: "Caña",
-          quantity: "1.000",
-          stationId: bar!.id,
-          stationName: bar!.name,
-          why: "closed",
-        },
-      ],
-      stations: expect.arrayContaining([{ id: bar!.id, name: bar!.name, open: false }]),
-    });
-    await inTx(venue, async (tx) => {
-      await clearRoutingCell(tx, venue.cfg, {
-        row: { kind: "product", productId: beer!.id },
-        zoneId: null,
+    const [defaultStation] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.isDefault, true)),
+    );
+    await inTx(venue, (tx) =>
+      tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, defaultStation!.id)),
+    );
+    try {
+      const response = await ana("POST", "/api/dead-ends/draft", {
+        partyId: party.partyId,
+        draftId: draft.id,
+        lineIds: [draft.lines[0]!.id],
       });
-      await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
-    });
+      expect(response.status).toBe(200);
+      expect(response.json).toMatchObject({
+        sends: true,
+        deadEnds: [
+          {
+            key: draft.lines[0]!.id,
+            name: "Caña",
+            quantity: "1.000",
+            stationId: bar!.id,
+            stationName: bar!.name,
+            why: "closed",
+          },
+        ],
+        stations: expect.arrayContaining([{ id: bar!.id, name: bar!.name, open: false }]),
+      });
+    } finally {
+      await inTx(venue, async (tx) => {
+        await clearRoutingCell(tx, venue.cfg, {
+          row: { kind: "product", productId: beer!.id },
+          zoneId: null,
+        });
+        await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
+      });
+      await inTx(venue, (tx) =>
+        tx
+          .update(kitchenStations)
+          .set({ active: true })
+          .where(eq(kitchenStations.id, defaultStation!.id)),
+      );
+    }
   });
 });
 
@@ -394,21 +415,44 @@ describe("a draft's chosen station at submission", () => {
         .where(eq(ticketItems.workingOrderId, party.tabId)),
     );
     expect(items.map((item) => item.stationId)).toContain(bar!.id);
-    const another = await newDraft(ana, party.partyId, [dish("Caña")]);
-    const refused = await ana(
-      "POST",
-      `/api/parties/${party.partyId}/drafts/${another.id}/submit`,
-      await submitBody(party.partyId, another),
+    const [defaultStation] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.isDefault, true)),
     );
-    expect(refused.status).toBe(409);
-    expect(refused.json).toMatchObject({ code: "station.no_replacement" });
-    await inTx(venue, async (tx) => {
-      await clearRoutingCell(tx, venue.cfg, {
-        row: { kind: "product", productId: beer!.id },
-        zoneId: null,
+    await inTx(venue, (tx) =>
+      tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, defaultStation!.id)),
+    );
+    try {
+      const another = await newDraft(ana, party.partyId, [dish("Caña")]);
+      const before = await snapshot();
+      const refused = await ana(
+        "POST",
+        `/api/parties/${party.partyId}/drafts/${another.id}/submit`,
+        await submitBody(party.partyId, another),
+      );
+      expect(refused.status).toBe(409);
+      expect(refused.json).toMatchObject({ code: "station.no_replacement" });
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await clearRoutingCell(tx, venue.cfg, {
+          row: { kind: "product", productId: beer!.id },
+          zoneId: null,
+        });
+        await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
       });
-      await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
-    });
+      await inTx(venue, (tx) =>
+        tx
+          .update(kitchenStations)
+          .set({ active: true })
+          .where(eq(kitchenStations.id, defaultStation!.id)),
+      );
+    }
   });
 });
 

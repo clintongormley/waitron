@@ -30,9 +30,9 @@ const view: PrepStationsView = {
     stationTimes: [
       {
         stationId: "bar",
-        nextTransition: null,
+
         status: { open: true, why: "default" },
-        hours: [],
+
         fallbackStationId: null,
         today: null,
         closedSendsTo: "bar",

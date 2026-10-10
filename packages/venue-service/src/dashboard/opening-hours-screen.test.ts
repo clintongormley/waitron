@@ -1147,7 +1147,6 @@ it("passes the chosen named day to All departments", async () => {
     kind: "working_day" as const,
     repeats: false,
     ownHours: true,
-    hasStationHours: false,
     closeWholeVenue: false,
   };
   const el = await mount((async () =>
@@ -1309,12 +1308,12 @@ describe("Calendar named-day actions", () => {
     repeats: true,
     ownHours: false,
     closeWholeVenue: false,
-    hasStationHours: false,
   };
   async function calendarMount(closed = false) {
     history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
     const writes: unknown[][] = [];
     let reads = 0;
+    let stationReads = 0;
     const day = { ...source, closeWholeVenue: closed };
     const el = await mount((async (path, method, body) => {
       if (method !== "GET") {
@@ -1323,7 +1322,8 @@ describe("Calendar named-day actions", () => {
         writes.push([path, method, body]);
         return { id: "new" };
       }
-      if (path.includes("/hours?"))
+      if (path.includes("/hours?")) {
+        stationReads++;
         return {
           timeZone: "Europe/Madrid",
           clockReadable: true,
@@ -1338,6 +1338,7 @@ describe("Calendar named-day actions", () => {
           holidayCoverage: [],
           holidaySources: [],
         };
+      }
       if (path.includes("/named-days?")) {
         reads++;
         return {
@@ -1389,7 +1390,7 @@ describe("Calendar named-day actions", () => {
     await expect
       .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13']"))
       .not.toBeNull();
-    return { el, cal, day, writes, reads: () => reads };
+    return { el, cal, day, writes, reads: () => reads, stationReads: () => stationReads };
   }
   async function action(cal: HTMLElementTagNameMap["hours-calendar"], date: string, kind: string) {
     const trigger = cal.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`);
@@ -1420,6 +1421,33 @@ describe("Calendar named-day actions", () => {
     );
     await form.updateComplete;
   }
+  it("copies the stored named day to new dates without reading station hours", async () => {
+    const { el, cal, writes, stationReads } = await calendarMount();
+    await action(cal, "2026-10-13", "copy");
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("named-day-copy")!;
+    await form.updateComplete;
+    form.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-10-20" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-copy]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates/annual%2Fday/duplicate",
+          "POST",
+          { dates: ["2026-10-20"] },
+        ],
+      ]);
+    await expect.poll(() => el.shadowRoot!.querySelector("named-day-copy")).toBeNull();
+    expect(stationReads()).toBe(0);
+  });
   it("Edit on a repeating occurrence opens the stored record and saves to its id", async () => {
     const { el, cal, writes, reads } = await calendarMount();
     await action(cal, "2026-10-13", "edit");
@@ -1441,7 +1469,6 @@ describe("Calendar named-day actions", () => {
             repeats: true,
             ownHours: false,
             closeWholeVenue: false,
-            cells: [],
           },
         ],
       ]);
@@ -1481,7 +1508,6 @@ describe("Calendar named-day actions", () => {
               repeats: true,
               ownHours: true,
               closeWholeVenue: false,
-              cells: [],
             },
           ],
         ]);
@@ -1509,7 +1535,6 @@ describe("Calendar named-day actions", () => {
             repeats: false,
             ownHours: true,
             closeWholeVenue: false,
-            cells: [],
           },
         ],
       ]);
@@ -1535,7 +1560,6 @@ describe("Calendar named-day actions", () => {
             repeats: false,
             ownHours: false,
             closeWholeVenue: false,
-            cells: [],
           },
         ],
       ]);

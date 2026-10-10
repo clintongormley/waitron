@@ -51,8 +51,7 @@ import { seedNode } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { readWeekHours, replaceWeekHours } from "./hours.js";
-import type { WeekDay } from "./hours-types.js";
+
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { routingCells } from "./schema/routing.js";
 import { zoneSalePolicies } from "./schema/service.js";
@@ -1101,9 +1100,13 @@ describe("routing outcomes and menu readiness", () => {
     });
   });
 
-  it("treats a category cell naming a switched-off station without a fallback as a dead end", async () => {
+  it("treats a category cell naming a switched-off station without an active default as a dead end", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.locationId, cfg.locationId));
       const kitchen = await insertStation(tx, cfg.locationId, "Kitchen");
       const closedGrill = await insertStation(tx, cfg.locationId, "Closed grill");
       const parent = await createCategory(tx, { name: "Food" });
@@ -1575,92 +1578,30 @@ describe("departments", () => {
     ]);
   });
 
-  it("refuses station hours and department deactivation outside this venue, and an unset week clears station hours", async () => {
+  it("refuses department deactivation outside this venue and keeps the foreign department active", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
     const there = { locationId: brandLocationId(await seedLocation("Second venue")) };
-    const at = new Date("2026-10-06T10:00:00Z");
-    await scoped(async (tx) => {
+    const elsewhere = await scoped(async (tx) => {
       await createDepartment(tx, here, {
         name: "Restaurant",
         orderStart: "table",
       });
-      const elsewhere = await createDepartment(tx, there, {
+      return createDepartment(tx, there, {
         name: "Elsewhere",
         orderStart: "table",
       });
-      const [station, foreignStation] = await tx
-        .insert(kitchenStations)
-        .values([
-          { locationId: here.locationId, name: "Pass" },
-          { locationId: there.locationId, name: "Elsewhere pass" },
-        ])
-        .returning();
-      const openingHours = (): WeekDay[] =>
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          weekday,
-          cell:
-            weekday === 1
-              ? {
-                  mode: "periods",
-                  periods: [{ id: randomUUID(), opensAt: "09:00", closesAt: "17:00" }],
-                }
-              : { mode: "closed", periods: [] },
-        }));
-      const unset: WeekDay[] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-        weekday,
-        cell: { mode: "not_set", periods: [] },
-      }));
-      const asStation = (id: string) => ({ kind: "station" as const, id });
-      await replaceWeekHours(tx, here, asStation(station!.id), openingHours(), at);
-      await replaceWeekHours(tx, there, asStation(foreignStation!.id), openingHours(), at);
-      const stored = await readWeekHours(tx, there, asStation(foreignStation!.id));
-
-      for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
-        await expect(
-          rejection(
-            replaceWeekHours(
-              tx,
-              here,
-              asStation(departmentId === elsewhere.id ? foreignStation!.id : UNKNOWN_ID),
-              unset,
-              at,
-            ),
-          ),
-        ).resolves.toEqual({ code: "hours.invalid", params: { field: "subject" } });
-        await expect(rejection(deactivateDepartment(tx, here, departmentId))).resolves.toEqual({
-          code: "department.not_found",
-          params: { departmentId },
-        });
-      }
-      expect(stored.map(({ weekday, cell }) => [weekday, cell.mode])).toEqual([
-        [0, "closed"],
-        [1, "periods"],
-        [2, "closed"],
-        [3, "closed"],
-        [4, "closed"],
-        [5, "closed"],
-        [6, "closed"],
-      ]);
-      expect(stored[1]!.cell.periods.map(({ opensAt, closesAt }) => [opensAt, closesAt])).toEqual([
-        ["09:00", "17:00"],
-      ]);
-      await expect(readWeekHours(tx, there, asStation(foreignStation!.id))).resolves.toEqual(
-        stored,
-      );
-      await expect(listDepartments(tx, there)).resolves.toEqual([
-        expect.objectContaining({ id: elsewhere.id, active: true }),
-      ]);
-
-      await replaceWeekHours(tx, here, asStation(station!.id), unset, at);
-      await expect(readWeekHours(tx, here, asStation(station!.id))).resolves.toEqual(unset);
-      expect(
-        (
-          await tx.execute<{ n: number }>(
-            sql`select count(*) as n from hours_week_cells where station_id = ${station!.id}`,
-          )
-        ).rows,
-      ).toEqual([{ n: 0 }]);
     });
+    for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
+      await expect(
+        rejection(scoped((tx) => deactivateDepartment(tx, here, departmentId))),
+      ).resolves.toEqual({
+        code: "department.not_found",
+        params: { departmentId },
+      });
+    }
+    await expect(scoped((tx) => listDepartments(tx, there))).resolves.toEqual([
+      expect.objectContaining({ id: elsewhere.id, active: true }),
+    ]);
   });
 
   it("refuses to remove the venue's last active department", async () => {

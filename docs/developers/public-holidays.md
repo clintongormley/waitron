@@ -77,7 +77,7 @@ retired colour. It also carries dated department schedules and zone closed times
 source hashes and shipped data versions come from the receiving build's pack.
 
 `validateHolidayConfiguration` validates geographies and area choices against the receiving packs;
-`validateHoursConfiguration` validates named days, their occurrences and station cells. Named-day
+`validateNamedDaysConfiguration` validates named-day fields and colliding occurrences. Named-day
 and zone configuration tests are in `packages/venue-service/src/configuration-transfer.test.ts`.
 Retiring the old table and colour requires a venue reset; it does not migrate the old local entries
 into named days. Historical plans describe the earlier allowance and address-owned entries; their

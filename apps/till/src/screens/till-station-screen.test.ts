@@ -3990,7 +3990,10 @@ describe("operator station-today controls", () => {
           );
           return new Response(null, { status: 204 });
         }
-        return json({ destinations: [{ id: "st-1", name: "Pass", isDefault: true }] });
+        return json({
+          destinations: [{ id: "st-1", name: "Pass", isDefault: true }],
+          openDishCount: 0,
+        });
       }
       throw new Error(`Unexpected station request: ${path}`);
     });
@@ -4053,7 +4056,7 @@ describe("operator station-today controls", () => {
   it("resolves the stored destination id to its station name", async () => {
     const { line, pickBar } = await mountToday(true);
     await pickBar();
-    expect(line()).toBe("Closed for today. New dishes go to Pass.");
+    expect(line()).toBe("Closed for today → Pass");
   });
   it("closes through the real widget and refreshes the picker and status without changing the pick", async () => {
     const { el, host, control, line, pickBar, writes } = await mountToday();
@@ -4067,7 +4070,7 @@ describe("operator station-today controls", () => {
     const dialog = control()!.shadowRoot!.querySelector("till-station-today-dialog")!;
     await dialog.updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
-    await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+    await expect.poll(line).toBe("Closed for today → Pass");
     expect(writes).toEqual([{ state: "closed", sendsToStationId: "st-1" }]);
     expect(el.shadowRoot!.querySelector('[data-station="st-2"]')!.textContent!.trim()).toBe(
       "Bar · Closed",
@@ -4079,7 +4082,7 @@ describe("operator station-today controls", () => {
     const { el, control, line, pickBar, writes } = await mountToday(true);
     await pickBar();
     control()!.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
-    await expect.poll(line).toBe("Opened for today.");
+    await expect.poll(line).toBe("Open");
     expect(writes).toEqual([{ state: "open" }]);
     expect(el.shadowRoot!.querySelector('[data-station="st-2"]')!.textContent!.trim()).toBe("Bar");
   });
@@ -4103,7 +4106,7 @@ describe("operator station-today controls", () => {
       closeFromElsewhere();
       await vi.advanceTimersByTimeAsync(15_000);
       vi.useRealTimers();
-      await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+      await expect.poll(line).toBe("Closed for today → Pass");
     } finally {
       vi.useRealTimers();
     }
@@ -4159,6 +4162,7 @@ describe("kitchen display station-today controls", () => {
           return new Response(null, { status: 204 });
         }
         return json({
+          openDishCount: 0,
           destinations: [{ id: "pass", name: "Pass", isDefault: true }],
           authorizers: [{ personId: "manager", displayName: "Ana" }],
         });
@@ -4197,7 +4201,7 @@ describe("kitchen display station-today controls", () => {
     "renders device status above its queue (cold boot answer: %s)",
     async (initial) => {
       const { el, control, line, calls } = await kitchen(true, initial);
-      expect(line()).toBe("Closed for today. New dishes go to Pass.");
+      expect(line()).toBe("Closed for today → Pass");
       expect(control()!.deviceMode).toBe(true);
       expect(
         control()!.compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -4230,7 +4234,7 @@ describe("kitchen display station-today controls", () => {
         );
       if (failed)
         await expect.poll(() => el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
-      else await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+      else await expect.poll(line).toBe("Closed for today → Pass");
       expect(calls.at(-1)!.path).toBe("/api/device/station-screen");
       expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
       expect(control()!.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
@@ -4246,7 +4250,7 @@ describe("kitchen display station-today controls", () => {
       closeElsewhere();
       await vi.advanceTimersByTimeAsync(15_000);
       vi.useRealTimers();
-      await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+      await expect.poll(line).toBe("Closed for today → Pass");
     } finally {
       vi.useRealTimers();
     }

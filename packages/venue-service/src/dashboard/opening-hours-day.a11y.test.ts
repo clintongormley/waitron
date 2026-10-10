@@ -49,7 +49,6 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                   kind: "working_day" as const,
                   repeats: false,
                   ownHours: true,
-                  hasStationHours: false,
                   closeWholeVenue: state === "closed",
                 },
               ]

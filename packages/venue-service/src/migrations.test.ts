@@ -43,7 +43,6 @@ const TABLES = [
   "menu_period_staff_menus",
   "device_profile_service_access",
   "device_profile_zones",
-  "station_fallbacks",
   "station_day_states",
   "period_extensions",
   "routing_cells",
@@ -168,13 +167,20 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect(carrying).toEqual([]);
   });
 
+  it("leaves no station-hours or fallback table behind", async () => {
+    const left = await db.execute<{ name: string }>(sql`select name from sqlite_master
+      where type = 'table' and name in ('hours_week_cells', 'hours_week_periods',
+        'special_date_hours', 'special_date_hours_periods', 'station_fallbacks')`);
+    expect(left.rows).toEqual([]);
+  });
+
   it("leaves no interval-list hours table behind", async () => {
     const left = await db.execute<{ name: string }>(
       sql`select name from sqlite_master where name in ('station_hours', 'department_hours',
         'station_hours_interval_key', 'department_hours_interval_key')`,
     );
     expect(left.rows).toEqual([]);
-    expect((await columnsOf("hours_week_cells")).length).toBeGreaterThan(0);
+    expect((await columnsOf("special_dates")).length).toBeGreaterThan(0);
   });
 
   it("leaves no profile station or watcher list behind", async () => {
@@ -237,13 +243,6 @@ describe("the venue-service migration set carries no tenant column", () => {
         foreignKeys: [
           "(device_profile_id) -> device_profile_service_access(device_profile_id) on delete cascade",
           "(zone_id) -> floor_zones(id)",
-        ],
-      },
-      station_fallbacks: {
-        primaryKey: ["station_id"],
-        foreignKeys: [
-          "(fallback_station_id) -> kitchen_stations(id)",
-          "(station_id) -> kitchen_stations(id)",
         ],
       },
       station_day_states: {

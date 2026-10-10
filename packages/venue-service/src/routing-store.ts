@@ -20,7 +20,6 @@ import {
   chooseExtraMakerBeside,
   closedSendsTo,
   selectRoutingCell,
-  stationDayHours,
   stationStatus,
   targetKey,
   type ChangeReach,
@@ -29,16 +28,10 @@ import {
   type RouteTarget,
   type RoutingRules,
   type RoutingMoment,
-  type StationTransition,
-  type StationStatus,
 } from "./routing.js";
 import { readLocationClock } from "@waitron/reporting";
-import { clockChangesBetween, venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
-import { localTimeOccurrences } from "./hours-occurrences.js";
-import { readStationSchedules, stationsRestrictedFrom } from "./hours.js";
-import { addDays, weekdayOf } from "./hours-rules.js";
-import type { LocalDate } from "./hours-types.js";
-import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
+import { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
+import { stationDayStates } from "./schema/station-times.js";
 import type {
   CellAddress,
   PeriodLine,
@@ -394,28 +387,14 @@ async function clockAt(tx: Transaction, cfg: VenueScope, at: Date) {
   return { clock, moment: venueLocalMoment(at, clock) };
 }
 
-/**
- * What a snapshot reads beyond the rules themselves: the business day whose by-hand changes apply,
- * and the dates whose special hours apply.
- */
 interface SnapshotScope {
-  ignoreToday?: true;
   businessDay: string | null;
-  dates: { from: LocalDate; to: LocalDate } | null;
 }
 
-const UNTIMED: SnapshotScope = { businessDay: null, dates: null };
+const UNTIMED: SnapshotScope = { businessDay: null };
 
-/**
- * The scope for a status at `moment`, which reads its own date and the day before, whose hours can
- * run past midnight; `daysAhead` reads further dates for the next change.
- */
-function scopeAt(moment: VenueLocalMoment | null, daysAhead = 0): SnapshotScope {
-  if (moment === null) return UNTIMED;
-  return {
-    businessDay: moment.businessDay,
-    dates: { from: addDays(moment.civilDate, -1), to: addDays(moment.civilDate, daysAhead) },
-  };
+function scopeAt(moment: VenueLocalMoment | null): SnapshotScope {
+  return { businessDay: moment?.businessDay ?? null };
 }
 
 async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope = UNTIMED) {
@@ -450,16 +429,8 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   const stationIds = stations.map((row) => row.id);
-  const schedules = await readStationSchedules(tx, cfg, stationIds, scope.dates);
-  const fallbacks =
-    stationIds.length === 0
-      ? []
-      : await tx
-          .select()
-          .from(stationFallbacks)
-          .where(inArray(stationFallbacks.stationId, stationIds));
   const dayStates =
-    stationIds.length === 0 || businessDay === null || scope.ignoreToday
+    stationIds.length === 0 || businessDay === null
       ? []
       : await tx
           .select()
@@ -468,12 +439,10 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
             and(
               inArray(stationDayStates.stationId, stationIds),
               eq(stationDayStates.businessDay, businessDay),
+              eq(stationDayStates.open, false),
             ),
           );
-  const fallbackByStation = new Map(fallbacks.map((row) => [row.stationId, row.fallbackStationId]));
-  const todayByStation = new Map(
-    dayStates.map((row) => [row.stationId, row.open ? ("open" as const) : ("closed" as const)]),
-  );
+  const todayByStation = new Map(dayStates.map((row) => [row.stationId, "closed" as const]));
   const destinationByStation = new Map(
     dayStates.map((row) => [row.stationId, row.sendsToStationId]),
   );
@@ -481,8 +450,6 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     stations.map((station) => [
       station.id,
       {
-        ...schedules.get(station.id)!,
-        fallbackId: fallbackByStation.get(station.id) ?? null,
         today: todayByStation.get(station.id) ?? null,
         todaySendsTo: destinationByStation.get(station.id) ?? null,
       },
@@ -508,23 +475,12 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
   return { rules, folders, stations };
 }
 
-export async function scheduledStationStatus(
-  tx: Transaction,
-  cfg: VenueScope,
-  stationId: string,
-  at: Date,
-): Promise<StationStatus> {
-  const { moment } = await clockAt(tx, cfg, at);
-  const { rules } = await snapshot(tx, cfg, { ...scopeAt(moment), ignoreToday: true });
-  return stationStatus(rules, stationId, moment);
-}
-
 export async function loadRoutingRules(
   tx: Transaction,
   cfg: VenueScope,
   businessDay: string | null,
 ): Promise<RoutingRules> {
-  return (await snapshot(tx, cfg, { businessDay, dates: null })).rules;
+  return (await snapshot(tx, cfg, { businessDay })).rules;
 }
 
 export async function previewRoutingChange(
@@ -1009,15 +965,11 @@ function stationTodayState(
   moment: RoutingMoment | null,
 ): Pick<StationTodayState, "open" | "byHand" | "sendsTo" | "why"> {
   const status = stationStatus(rules, stationId, moment);
-  const why =
-    status.why === "in_hours" || status.why === "no_hours" || status.why === "time_not_applied"
-      ? "open"
-      : status.why;
   return {
     open: status.open,
     byHand: rules.timing.get(stationId)?.today ?? null,
     sendsTo: status.open ? null : closedSendsTo(rules, stationId, moment),
-    why,
+    why: status.why,
   };
 }
 
@@ -1103,10 +1055,8 @@ export async function routingModel(
   at: Date,
 ): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, cfg, at);
-  const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment, NEXT_CHANGE_DAYS));
+  const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment));
   const cutover = clock.dayCutover.slice(0, 5);
-  const nextChange = nextChangeFinder(rules, at, clock, moment);
-  const restricted = await stationsRestrictedFrom(tx, cfg, moment?.civilDate ?? null);
   const zoneDepartment = await zoneDepartments(tx, cfg);
   const zones = (await activeZones(tx, cfg)).map((zone) => ({
     ...zone,
@@ -1161,90 +1111,12 @@ export async function routingModel(
     stationTimes: stations.map(({ id }) => ({
       stationId: id,
       status: stationStatus(rules, id, moment),
-      nextTransition: nextChange(id),
-      hours: [...(rules.timing.get(id)?.hours ?? [])],
-      weekSet: rules.timing.get(id)?.weekSet ?? false,
-      specialDateRestricts: restricted.wholeVenue || restricted.stationIds.has(id),
-      fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
+      fallbackStationId: null,
       today: rules.timing.get(id)?.today ?? null,
       closedSendsTo: closedSendsTo(rules, id, moment),
     })),
     todayEnds:
       moment === null ? null : { timeOfDay: cutover, tomorrow: moment.timeOfDay >= cutover },
     clockReadable: moment !== null,
-  };
-}
-
-/** How far ahead the next scheduled change is looked for, in calendar dates. */
-const NEXT_CHANGE_DAYS = 7;
-const DAY_MS = 86_400_000;
-
-/**
- * Finds each station's next scheduled change after `at` within {@link NEXT_CHANGE_DAYS}: the first
- * real instant, at an opening, a closing or a clock change, where its scheduled state differs from
- * now's. A closing the clock skips takes effect at the first minute that exists. A station
- * switched off, the default, or changed by hand today has none.
- */
-function nextChangeFinder(
-  rules: RoutingRules,
-  at: Date,
-  clock: VenueClock,
-  now: VenueLocalMoment | null,
-): (stationId: string) => StationTransition | null {
-  if (now === null) return () => null;
-  const last = addDays(now.civilDate, NEXT_CHANGE_DAYS);
-  const clockChanges = clockChangesBetween(
-    at,
-    new Date(at.getTime() + (NEXT_CHANGE_DAYS + 2) * DAY_MS),
-    clock.timeZone,
-  ).map((instant) => instant.getTime());
-  const occurrences = new Map<string, number[]>();
-  const instantsOf = (date: LocalDate, time: string) => {
-    const key = `${date} ${time}`;
-    if (!occurrences.has(key))
-      occurrences.set(
-        key,
-        localTimeOccurrences(date, time, clock.timeZone).map((instant) => instant.getTime()),
-      );
-    return occurrences.get(key)!;
-  };
-  const moments = new Map<number, VenueLocalMoment>();
-  const momentAt = (instant: number) => {
-    let moment = moments.get(instant);
-    if (moment === undefined) {
-      moment = venueLocalMoment(new Date(instant), clock)!;
-      moments.set(instant, moment);
-    }
-    return moment;
-  };
-  return (stationId) => {
-    const current = stationStatus(rules, stationId, now);
-    if (current.why !== "in_hours" && current.why !== "out_of_hours" && current.why !== "no_hours")
-      return null;
-    const timing = rules.timing.get(stationId)!;
-    const candidates = new Set(clockChanges);
-    for (let date = addDays(now.civilDate, -1); date <= last; date = addDays(date, 1)) {
-      // A date with hours can follow one with none, or the reverse, with no period edge between.
-      const midnight = instantsOf(date, "00:00")[0];
-      if (midnight !== undefined) candidates.add(midnight);
-      for (const { opensAt, closesAt } of stationDayHours(timing, date, weekdayOf(date)) ?? []) {
-        const opening = opensAt.slice(0, 5);
-        const closing = closesAt.slice(0, 5);
-        for (const instant of instantsOf(date, opening)) candidates.add(instant);
-        const closingDate = opening >= closing ? addDays(date, 1) : date;
-        for (const instant of instantsOf(closingDate, closing)) candidates.add(instant);
-      }
-    }
-    for (const instant of [...candidates].filter((i) => i > at.getTime()).sort((a, b) => a - b)) {
-      const moment = momentAt(instant);
-      if (moment.civilDate > last) break;
-      if (stationStatus(rules, stationId, moment).open !== current.open)
-        return {
-          weekday: moment.weekday,
-          timeOfDay: moment.timeOfDay,
-          daysAhead: (Date.parse(moment.civilDate) - Date.parse(now.civilDate)) / DAY_MS,
-        };
-    }
-    return null;
   };
 }

@@ -21,7 +21,6 @@ export function dayFixture(): OpeningHoursModel {
         kind: "working_day" as const,
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         closeWholeVenue: false,
       },
     ],

@@ -66,10 +66,9 @@ import {
 import type { RouteTarget } from "./routing.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
-import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
-import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
+import { deleteSpecialDate, saveSpecialDate } from "./hours.js";
+import type { LocalDate, SpecialDateInput } from "./hours-types.js";
 import type { CellAddress, PeriodLine, RoutingChange } from "./routing-types.js";
-import { setStationFallback } from "./station-times.js";
 import {
   listDepartmentTransferProfiles,
   readDepartmentTransferSettings,
@@ -113,7 +112,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "route.period_invalid": 409,
   "station.not_found": 404,
   "station.destination_invalid": 400,
-  "station.fallback_loop": 409,
   "time_zone.unreadable": 409,
   "hours.invalid": 400,
   "special_date.not_found": 404,
@@ -320,22 +318,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return fn(tx);
       });
 
-    app.get("/management-api/venue-service/hours", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const at = new Date();
-        const from = c.req.query("from") ?? "";
-        const to = c.req.query("to") ?? "";
-        return c.json(
-          await viewed(sessionId, async (tx) => {
-            const read = await readHolidays(tx, ctx.cfg, from, to);
-            const model = await readHoursModel(tx, ctx.cfg, from, to, at, async () => read.facts);
-            return { ...model, holidayCoverage: read.coverage, holidaySources: read.sources };
-          }),
-        );
-      }),
-    );
-
     app.get("/management-api/venue-service/named-days", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -366,24 +348,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           return saveHolidayArea(tx, ctx.cfg, body);
         });
         return geography === null ? c.body(null, 204) : c.json(geography);
-      }),
-    );
-
-    app.put("/management-api/venue-service/hours/week", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const at = new Date();
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        await gated(sessionId, (tx) =>
-          replaceWeekHours(
-            tx,
-            ctx.cfg,
-            body.subject as HoursSubject,
-            body.days as readonly WeekDay[],
-            at,
-          ),
-        );
-        return c.body(null, 204);
       }),
     );
 
@@ -478,24 +442,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           target === null
             ? clearRoutingCell(tx, ctx.cfg, address)
             : setRoutingCell(tx, ctx.cfg, address, target, periods),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/stations/:stationId/fallback", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        if (body.fallbackStationId === undefined)
-          throw new AppError("management.request_invalid", { field: "fallbackStationId" });
-        const fallbackStationId =
-          body.fallbackStationId === null
-            ? null
-            : requireBodyUuid(body.fallbackStationId, "fallbackStationId");
-        await gated(sessionId, (tx) =>
-          setStationFallback(tx, ctx.cfg, stationId, fallbackStationId),
         );
         return c.body(null, 204);
       }),

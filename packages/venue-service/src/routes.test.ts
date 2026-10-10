@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -1424,47 +1425,49 @@ describe("venue service management routes", () => {
     expect(Object.keys((await listed.json()) as object)).not.toContain("hours");
   });
 
-  it("saves and clears a fallback while refusing loops and a missing key", async () => {
+  it("the retired station fallback route answers 404 without changing routing", async () => {
     const fx = await fixture();
     const path = `/management-api/venue-service/stations/${fx.stationId}/fallback`;
     const [another] = await db
       .insert(kitchenStations)
       .values({ locationId: fx.locationId, name: "Second bar" })
       .returning({ id: kitchenStations.id });
-    expect(
-      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: another!.id }))
-        .status,
-    ).toBe(204);
-    const saved = (await (
-      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
-    ).json()) as { stationTimes: { stationId: string; fallbackStationId: string | null }[] };
-    expect(
-      saved.stationTimes.find((station) => station.stationId === fx.stationId)?.fallbackStationId,
-    ).toBe(another!.id);
-    const missing = await send(fx.app, "PUT", path, fx.managerCookie, {});
-    expect(missing.status).toBe(400);
-    expect(await missing.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "fallbackStationId" } },
-    });
-    const loop = await send(fx.app, "PUT", path, fx.managerCookie, {
-      fallbackStationId: fx.stationId,
-    });
-    expect(loop.status).toBe(409);
-    expect(await loop.json()).toMatchObject({ error: { code: "station.fallback_loop" } });
-    const other = await fixture();
-    expect(
-      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: other.stationId }))
-        .status,
-    ).toBe(409);
-    expect(
-      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: null })).status,
-    ).toBe(204);
-    const cleared = (await (
-      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
-    ).json()) as { stationTimes: { stationId: string; fallbackStationId: string | null }[] };
-    expect(
-      cleared.stationTimes.find((station) => station.stationId === fx.stationId)?.fallbackStationId,
-    ).toBeNull();
+    const readRouting = async () => {
+      const response = await send(
+        fx.app,
+        "GET",
+        "/management-api/venue-service/routing",
+        fx.managerCookie,
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    const before = await readRouting();
+    for (const body of [
+      { fallbackStationId: another!.id },
+      { fallbackStationId: null },
+      { fallbackStationId: fx.stationId },
+      { fallbackStationId: randomUUID() },
+      { fallbackStationId: "invalid" },
+      {},
+    ]) {
+      expect((await send(fx.app, "PUT", path, fx.managerCookie, body)).status).toBe(404);
+      expect(await readRouting()).toEqual(before);
+    }
+    for (const id of [randomUUID(), "invalid"]) {
+      expect(
+        (
+          await send(
+            fx.app,
+            "PUT",
+            `/management-api/venue-service/stations/${id}/fallback`,
+            fx.managerCookie,
+            { fallbackStationId: another!.id },
+          )
+        ).status,
+      ).toBe(404);
+      expect(await readRouting()).toEqual(before);
+    }
   });
 
   it("the retired dashboard station today route answers 404 without changing its state", async () => {

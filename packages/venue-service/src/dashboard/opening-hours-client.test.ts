@@ -55,7 +55,6 @@ describe("OpeningHoursApi", () => {
           "menu_day_timetables",
           "menu_slots",
           "special_dates",
-          "special_date_hours",
           "departments",
           "catalogues",
           "locations",
@@ -163,4 +162,32 @@ it("encodes zone closing-time writes and preserves their bodies", async () => {
     [`${base}/zones/z%2F1/closed-week`, "PUT", { days }],
     [`${base}/special-dates/s%2F1/zone-closed-times/z%2F1`, "PUT", { ranges }],
   ]);
+});
+
+it.each([
+  "hours_week_cells",
+  "hours_week_periods",
+  "special_date_hours",
+  "special_date_hours_periods",
+  "station_fallbacks",
+])("Opening hours ignores retired %s changes and still applies a period refresh", async (type) => {
+  const live = new LiveData();
+  let current = model;
+  const request = vi.fn(async () => current);
+  const api = new OpeningHoursApi(request as DashboardRequest, live);
+  const received: OpeningHoursModel[] = [];
+  const stop = api.watchOpeningHours((value) => received.push(value), vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(received).toEqual([model]));
+    current = { ...model, dayCutover: "07:00" };
+    live.invalidate([{ type }]);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(received).toEqual([model]);
+    live.invalidate([{ type: "menu_periods" }]);
+    await vi.waitFor(() => expect(received).toEqual([model, current]));
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
 });

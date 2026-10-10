@@ -15,11 +15,8 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { HoursModel } from "../hours-types.js";
-import { repeatedTimes } from "../hours-occurrences.js";
-import type { NamedDaysApi } from "./named-days-client.js";
 import { isLocalDate } from "../hours-rules.js";
-import { format, formatDate, isDefaultStation, keyOf, storedCells } from "./hours-view.js";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 @customElement("named-day-copy")
@@ -57,11 +54,6 @@ export class NamedDayCopy extends LitElement {
     date?: string;
     closeWholeVenue?: boolean;
   };
-  @property({ attribute: false }) api?: NamedDaysApi;
-  @state() private hours?: HoursModel;
-  @state() private readError = "";
-  private detach?: () => void;
-  private watched?: object;
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   @state() private dates = [""];
   @state() private attempted = false;
@@ -77,9 +69,6 @@ export class NamedDayCopy extends LitElement {
     this.requestUpdate();
   }
   override disconnectedCallback() {
-    this.detach?.();
-    this.detach = undefined;
-    this.watched = undefined;
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -88,9 +77,6 @@ export class NamedDayCopy extends LitElement {
   }
   protected override willUpdate() {
     if (!this.open) {
-      this.detach?.();
-      this.detach = undefined;
-      this.watched = undefined;
       this.scope?.dispose();
       this.scope = undefined;
       this.leave = undefined;
@@ -102,11 +88,6 @@ export class NamedDayCopy extends LitElement {
       this.scope?.dispose();
       this.scope = undefined;
       this.leave = undefined;
-      this.detach?.();
-      this.detach = undefined;
-      this.watched = undefined;
-      this.hours = undefined;
-      this.readError = "";
       this.identity = {};
       this.generation = {};
       this.dayId = this.day?.id;
@@ -129,49 +110,6 @@ export class NamedDayCopy extends LitElement {
       this.leave = coordinator;
       scope.commit(this.baseline);
     }
-  }
-  protected override updated() {
-    if (
-      !this.open ||
-      !this.isConnected ||
-      !this.api ||
-      !this.day?.date ||
-      this.watched === this.generation
-    )
-      return;
-    const generation = this.generation;
-    this.watched = generation;
-    this.detach = this.api.watchDayHours(
-      this.day.date,
-      (model) => {
-        if (!this.isConnected || generation !== this.generation) return;
-        this.hours = model;
-        this.readError = "";
-      },
-      () => {
-        if (this.isConnected && generation === this.generation)
-          this.readError = t("hours.load_error");
-      },
-    );
-  }
-  private repeatNotes(date: string) {
-    const model = this.hours;
-    if (!model || !model.clockReadable || this.day.closeWholeVenue || !isLocalDate(date))
-      return nothing;
-    const cells = storedCells(model, this.day.id);
-    return model.subjects
-      .filter((subject) => subject.active && !isDefaultStation(subject))
-      .flatMap((subject) => {
-        const cell = cells.find((entry) => keyOf(entry.subject) === keyOf(subject))?.cell;
-        return cell?.mode === "periods"
-          ? repeatedTimes(date, cell.periods, model.timeZone).map(
-              (time) =>
-                html`<p data-test="duplicate-repeat-note">
-                  ${format("hours.duplicate_time_repeats", { subject: subject.name, date: formatDate(date), time })}
-                </p>`,
-            )
-          : [];
-      });
   }
   private errors() {
     return this.dates.map((date, index) =>
@@ -259,42 +197,40 @@ export class NamedDayCopy extends LitElement {
       >
         <div class="form">
           <p>${t("named.copy_note")}</p>
-          ${this.readError ? html`<p role="alert" data-test="copy-read-error">${this.readError}</p>` : nothing}
           ${this.dates.map(
             (date, index) =>
               html`<div class="target">
-                  <wt-input
-                    type="date"
-                    required
-                    name=${`dates.${index}`}
-                    label=${format("hours.target_date", { n: String(index + 1) })}
-                    .value=${date}
-                    .error=${this.error(index)}
-                    ?disabled=${this.busy}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      if (current())
-                        this.changed(
-                          this.dates.map((v, i) => (i === index ? event.detail.value : v)),
-                        );
-                    }}
-                  ></wt-input>
-                  ${
-                    this.dates.length > 1
-                      ? html`<wt-button
-                          variant="secondary"
-                          data-test=${`remove-target-${index}`}
-                          aria-label=${format("hours.remove_target", { n: String(index + 1) })}
-                          ?disabled=${this.busy}
-                          @click=${() => {
-                            if (current()) this.changed(this.dates.filter((_, i) => i !== index));
-                          }}
-                          >${t("hours.remove")}</wt-button
-                        >`
-                      : nothing
-                  }
-                </div>
-                ${this.repeatNotes(date)}`,
+                <wt-input
+                  type="date"
+                  required
+                  name=${`dates.${index}`}
+                  label=${format("hours.target_date", { n: String(index + 1) })}
+                  .value=${date}
+                  .error=${this.error(index)}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (current())
+                      this.changed(
+                        this.dates.map((v, i) => (i === index ? event.detail.value : v)),
+                      );
+                  }}
+                ></wt-input>
+                ${
+                  this.dates.length > 1
+                    ? html`<wt-button
+                        variant="secondary"
+                        data-test=${`remove-target-${index}`}
+                        aria-label=${format("hours.remove_target", { n: String(index + 1) })}
+                        ?disabled=${this.busy}
+                        @click=${() => {
+                          if (current()) this.changed(this.dates.filter((_, i) => i !== index));
+                        }}
+                        >${t("hours.remove")}</wt-button
+                      >`
+                    : nothing
+                }
+              </div>`,
           )}
           <div>
             <wt-button

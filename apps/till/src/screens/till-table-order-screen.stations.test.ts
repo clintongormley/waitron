@@ -17,7 +17,7 @@ const bar: Station = {
   open: false,
   byHand: null,
   sendsTo: null,
-  why: "out_of_hours" as const,
+  why: "closed_by_hand" as const,
 };
 const kitchen: Station = {
   id: "kitchen",

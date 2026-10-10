@@ -69,8 +69,7 @@ import {
   updateMenuPeriod,
 } from "./menu-timetable.js";
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
-import { closeStationForToday, setStationFallback, setStationToday } from "./station-times.js";
-import { seedStationWeek } from "./testing/station-week.js";
+import { closeStationForToday, setStationToday } from "./station-times.js";
 import { saveSpecialDate } from "./hours.js";
 import { specialDates } from "./schema/hours.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
@@ -211,9 +210,13 @@ describe("maker descriptions and the deciding cell", () => {
       await setCategoryCell(tx, f.cfg, f.cocktails, station(f.bar));
       expect(Object.isFrozen((await loadRoutingRules(tx, f.cfg, null)).cells)).toBe(true);
     }));
-  it("names the unavailable station when an inactive maker has no fallback", async () =>
+  it("names the unavailable station when no active default remains", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.bar));
       await setCategoryCell(tx, f.cfg, f.cocktails, {
         kind: "station",
         stationId: f.terraceBar,
@@ -481,6 +484,7 @@ describe("maker descriptions and the deciding cell", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
       const resolver = await routingAt(tx, f.cfg, new Date("2026-10-02T22:00:00Z"));
       expect((await resolver.makers(f.terrace, [f.mojito])).get(f.mojito)).toEqual({
         kind: "no_replacement",
@@ -927,7 +931,7 @@ describe("resolveMakers", () => {
       });
     }));
 
-  it("folds scheduled open reasons and preserves manual and switched-off reasons", async () =>
+  it("reports today-only and switched-off state", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       const at = new Date("2026-10-02T18:00:00Z");
@@ -935,9 +939,6 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
@@ -947,8 +948,8 @@ describe("resolveMakers", () => {
       await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
       expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
         open: true,
-        why: "opened_by_hand",
-        byHand: "open",
+        why: "open",
+        byHand: null,
         sendsTo: null,
       });
       await tx
@@ -965,11 +966,11 @@ describe("resolveMakers", () => {
         open: false,
         why: "switched_off",
         byHand: null,
-        sendsTo: null,
+        sendsTo: f.bar,
       });
     }));
 
-  it("sends a closed station's work to its fallback, and an open one's to itself", async () =>
+  it("sends a station closed for today to its destination, and an open one to itself", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -977,10 +978,6 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
           f.mojito,
@@ -989,6 +986,7 @@ describe("resolveMakers", () => {
         kind: "made",
         route: { kind: "station", stationId: f.terraceBar },
       });
+      await closeStationForToday(tx, f.cfg, f.terraceBar, f.bar, new Date("2026-10-02T20:00:00Z"));
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
           f.mojito,
@@ -999,9 +997,13 @@ describe("resolveMakers", () => {
       });
     }));
 
-  it("answers no_replacement for a closed station with no fallback", async () =>
+  it("answers no_replacement for a closed station with no active default", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.bar));
       await tx
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
@@ -1022,7 +1024,6 @@ describe("resolveMakers", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await tx
         .update(kitchenStations)
         .set({ active: false })
@@ -1044,9 +1045,6 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
           f.mojito,
@@ -1063,9 +1061,6 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       const states = await stationStates(tx, f.cfg, new Date("2026-10-02T20:00:00Z"));
       expect(states.get(f.bar)).toEqual({
         open: true,
@@ -1077,13 +1072,13 @@ describe("resolveMakers", () => {
         why: "default",
       });
       expect(states.get(f.terraceBar)).toEqual({
-        open: false,
+        open: true,
         isDefault: false,
         active: true,
         name: "Terrace Bar",
         byHand: null,
         sendsTo: null,
-        why: "out_of_hours",
+        why: "open",
       });
       expect(states.get(f.switchedOff)).toEqual({
         open: false,
@@ -1091,7 +1086,7 @@ describe("resolveMakers", () => {
         active: false,
         name: "Off",
         byHand: null,
-        sendsTo: null,
+        sendsTo: f.bar,
         why: "switched_off",
       });
     }));
@@ -1218,9 +1213,13 @@ describe("routing previews", () => {
   const storedCells = (tx: Transaction) => tx.select().from(routingCells).orderBy(routingCells.id);
   const allCategories = { kind: "all" as const };
 
-  it("marks a preview that exposes a disabled station with no fallback as no replacement", async () =>
+  it("marks a disabled-station preview as no replacement when no default remains", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.bar));
       await setCategoryCell(tx, f.cfg, f.drinks, station(f.terraceBar));
       await setCategoryCell(tx, f.cfg, f.cocktails, station(f.bar));
       await tx
@@ -1955,6 +1954,10 @@ describe("routing previews", () => {
     it("marks an extra that comes to wait on a dish with no replacement station", async () =>
       scoped(async (tx) => {
         const f = await withExtras(tx);
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, f.bar));
         const [pass] = await tx
           .insert(kitchenStations)
           .values({ ...f.cfg, name: "Pass" })
@@ -2156,7 +2159,6 @@ describe("routing previews", () => {
       await setRoutingCell(tx, cfg, { row: productRow(chips), zoneId: null }, station(fryer!.id));
       await setRoutingCell(tx, cfg, { row: noCategoryRow, zoneId: patio }, station(kitchen!.id));
       await setRoutingCell(tx, cfg, { row: allCategories, zoneId: terrace }, noPrep);
-      await setStationFallback(tx, cfg, fryer!.id, grill!.id);
       await tx
         .update(kitchenStations)
         .set({ active: false })
@@ -2307,31 +2309,28 @@ describe("timed routing", () => {
     businessDay: "2026-10-02",
     moment: { weekday: 5, timeOfDay: "22:00" },
   };
-  it("uses Friday hours and names the fallback, while now honors today's open", async () =>
+  it("routes to the station unless it is closed for today, reopening restores it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-      ]);
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       const { at } = fridayLate;
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
       const mojito = factsOf(f.mojito, f.mojito, f.cocktails);
       expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toEqual({
         route: { kind: "station", stationId: f.bar },
         decidedBy: { kind: "cell", address: { row: categoryRow(f.cocktails), zoneId: null } },
-        fallbacks: [{ stationId: f.terraceBar, why: "out_of_hours" }],
+        fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
         noReplacement: false,
       });
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
-        terraceBar: { open: false, why: "out_of_hours" },
+        terraceBar: { open: false, why: "closed_by_hand" },
       });
       await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
-        terraceBar: { open: true, why: "opened_by_hand" },
+        terraceBar: { open: true, why: "open" },
       });
       expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toMatchObject({
         route: station(f.terraceBar),
@@ -2355,9 +2354,6 @@ describe("timed routing", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-      ]);
       expect(await routedAt(tx, f, fridayLate.at)).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
         terraceBar: { open: true, why: "open" },
@@ -2369,7 +2365,6 @@ describe("timed routing", () => {
       const { at } = fridayLate;
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
@@ -2478,6 +2473,7 @@ describe("extra maker resolution", () => {
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
       await setStationToday(tx, f.cfg, f.grill, "closed", fixedInstant);
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], fixedInstant)).get(f.mojito),
@@ -2562,9 +2558,13 @@ describe("extra maker resolution", () => {
         read.mockRestore();
       }
     }));
-  it("follows the dish when the extra's station is closed with no fallback", async () =>
+  it("follows the dish when the extra's station is closed and no default remains", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.bar));
       await setStationToday(tx, f.cfg, f.fryer, "closed", fixedInstant);
       expect(
         await resolveExtraMakers(
@@ -2785,7 +2785,6 @@ describe("routing from cells", () => {
       const f = await extrasFixture(tx);
       const address: CellAddress = { row: categoryRow(f.sides), zoneId: null };
       await setRoutingCell(tx, f.cfg, address, station(f.terraceBar));
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await setStationToday(tx, f.cfg, f.terraceBar, "closed", fixedInstant);
       expect((await resolveMakers(tx, f.cfg, null, [f.chips], fixedInstant)).get(f.chips)).toEqual({
         kind: "made",
@@ -2857,9 +2856,6 @@ describe("routingAt", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-      ]);
       const resolver = await routingAt(tx, f.cfg, new Date("2026-10-02T22:00:00Z"));
       expect(await resolver.makers(null, [f.mojito])).toEqual(
         new Map([
@@ -2941,7 +2937,7 @@ describe("hours from special dates", () => {
       SAVED_AT,
     );
 
-  it("routes by a date's special hours, and by the standard week on the same weekday a week later", async () =>
+  it("named dates do not close a station on either Friday", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -2949,15 +2945,11 @@ describe("hours from special dates", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "23:00" },
-      ]);
       await closedOn(tx, f.cfg, "2026-10-09", f.terraceBar);
       // 18:00 UTC is 20:00 in Madrid on both Fridays.
       expect(await routedAt(tx, f, new Date("2026-10-09T18:00:00Z"))).toMatchObject({
-        mojito: { kind: "made", route: station(f.bar) },
-        terraceBar: { open: false, why: "out_of_hours" },
+        mojito: { kind: "made", route: station(f.terraceBar) },
+        terraceBar: { open: true, why: "open" },
       });
       expect(await routedAt(tx, f, new Date("2026-10-16T18:00:00Z"))).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
@@ -2973,9 +2965,6 @@ describe("hours from special dates", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       const at = new Date("2026-10-09T18:00:00Z");
-      await seedStationWeek(tx, f.cfg, f.terraceBar, [
-        { weekday: 5, opensAt: "18:00", closesAt: "23:00" },
-      ]);
       await closedOn(tx, f.cfg, "2026-10-09", f.terraceBar);
       const session = (
         tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
@@ -3000,20 +2989,15 @@ describe("hours from special dates", () => {
           { ...f.cfg, name: "Pass" },
         ])
         .returning();
-      for (const row of more)
-        await seedStationWeek(tx, f.cfg, row.id, [
-          { weekday: 5, opensAt: "12:00", closesAt: "16:00" },
-          { weekday: 6, opensAt: "12:00", closesAt: "16:00" },
-        ]);
       await closedOn(tx, f.cfg, "2026-10-08", more[0]!.id);
       await closedOn(tx, f.cfg, "2026-10-10", more[1]!.id);
       expect(await reads()).toBe(few);
-      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({ open: false });
+      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({ open: true });
     }));
 });
 
 describe("routing on repeating named days", () => {
-  it("routes a dish away from a closed station every Christmas, retaining the default station", async () =>
+  it("named days no longer close prep stations", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx
@@ -3021,7 +3005,6 @@ describe("routing on repeating named days", () => {
         .set({ timeZone: "Europe/Madrid", dayCutover: "06:00:00" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cfg, f.cocktails, station(f.terraceBar));
-      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await tx.insert(specialDates).values({
         locationId: f.cfg.locationId,
         date: "2026-12-25",
@@ -3032,9 +3015,9 @@ describe("routing on repeating named days", () => {
       for (const instant of ["2026-12-25T12:00:00Z", "2027-12-25T12:00:00Z"]) {
         const resolver = await routingAt(tx, f.cfg, new Date(instant));
         expect(await resolver.makers(null, [f.mojito])).toEqual(
-          new Map([[f.mojito, { kind: "made", route: station(f.bar) }]]),
+          new Map([[f.mojito, { kind: "made", route: station(f.terraceBar) }]]),
         );
-        expect((await resolver.stations()).get(f.terraceBar)).toMatchObject({ open: false });
+        expect((await resolver.stations()).get(f.terraceBar)).toMatchObject({ open: true });
         expect((await resolver.stations()).get(f.bar)).toMatchObject({
           open: true,
           isDefault: true,
@@ -3046,8 +3029,9 @@ describe("routing on repeating named days", () => {
         ).toEqual(new Map([[f.mojito, { kind: "made", route: station(f.terraceBar) }]]));
       }
       const model = await routingModel(tx, f.cfg, new Date("2027-01-01T12:00:00Z"));
-      expect(model.stationTimes.find((row) => row.stationId === f.terraceBar)).toMatchObject({
-        specialDateRestricts: true,
+      expect(model.stationTimes.find((row) => row.stationId === f.terraceBar)?.status).toEqual({
+        open: true,
+        why: "open",
       });
     }));
 });

@@ -31,9 +31,9 @@ const view: PrepStationsView = {
     stationTimes: [
       {
         stationId: "bar",
-        nextTransition: null,
+
         status: { open: true, why: "default" },
-        hours: [],
+
         fallbackStationId: null,
         today: null,
         closedSendsTo: "bar",
@@ -408,40 +408,6 @@ it("a timing override's equivalent submitted number is clean", async () => {
   expect((await question()).open).toBe(false);
   expect(writes).toEqual([]);
 });
-it("protects a fallback choice until its existing two-step confirmation writes it", async () => {
-  const initial = structuredClone(view);
-  initial.stations.push({
-    ...structuredClone(initial.stations[0]!),
-    id: "grill",
-    name: "Grill",
-    isDefault: false,
-  });
-  initial.routing.stations.push({ id: "grill", name: "Grill", active: true });
-  initial.routing.stationTimes.push({
-    ...structuredClone(initial.routing.stationTimes[0]!),
-    stationId: "grill",
-    fallbackStationId: "bar",
-  });
-  const { screen, writes } = await mount(undefined, false, initial);
-  await open(screen, "fallback", "grill");
-  await change(screen, "", "settings-choice");
-  expect(unload()).toBe(true);
-  cell(screen, "[data-test=cancel-settings-cell]")!.click();
-  await choose("keep");
-  expect(shown(screen, "settings-choice")).toBe("");
-  await change(screen, "bar", "settings-choice");
-  expect(unload()).toBe(false);
-  await change(screen, "", "settings-choice");
-  cell(screen, "[data-test=save-settings-cell]")!.click();
-  await settle(screen);
-  expect(writes).toEqual([]);
-  expect(unload()).toBe(true);
-  cell(screen, "[data-test=save-settings-cell]")!.click();
-  await expect.poll(() => shown(screen, "settings-choice")).toBeUndefined();
-  expect(writes).toEqual([{ id: "grill", target: null }]);
-  expect(unload()).toBe(false);
-});
-
 it("a successful write makes an older pending Cancel answer inert", async () => {
   const { screen, writes } = await mount();
   await open(screen);
@@ -565,7 +531,7 @@ function withGrill() {
   });
   return initial;
 }
-it.each(["fallback", "warmAfterMinutes"])(
+it.each(["warmAfterMinutes"])(
   "native Escape keeps the Settings %s warning open until the next answer",
   async (field) => {
     const choice = field === "fallback";

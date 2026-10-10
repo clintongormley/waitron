@@ -42,8 +42,7 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
       {
         stationId: "old",
         status: { open: false, why: "switched_off" },
-        nextTransition: null,
-        hours: [],
+
         fallbackStationId: "kitchen",
         today: null,
         closedSendsTo: "kitchen",
@@ -349,16 +348,13 @@ describe("venue-routing-grid", () => {
     ]);
   });
 
-  it("the fallback line follows the fallback chain with no time applied, not the model's current answer", async () => {
-    // Old kitchen falls back to the Terrace bar, closed at the model's time so that right now its
-    // work reaches the Bar; the line describes the station chain, which ends at the Terrace bar.
+  it("the disabled station warning names the default, ignoring the former fallback", async () => {
     const model = routing({
       stationTimes: [
         {
           stationId: "old",
           status: { open: false, why: "switched_off" },
-          nextTransition: null,
-          hours: [],
+
           fallbackStationId: "tbar",
           today: null,
           closedSendsTo: "bar",
@@ -366,8 +362,7 @@ describe("venue-routing-grid", () => {
         {
           stationId: "tbar",
           status: { open: false, why: "closed_by_hand" },
-          nextTransition: null,
-          hours: [],
+
           fallbackStationId: "bar",
           today: "closed",
           closedSendsTo: "bar",
@@ -377,18 +372,18 @@ describe("venue-routing-grid", () => {
     const { el } = await mount(model);
     const warning = cell(el, "c:food", "inside").querySelector('[data-test="disabled-target"]')!;
     expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      "Old kitchen: Disabled. Its work goes to Terrace bar.",
+      "Old kitchen: Disabled. Its work goes to Kitchen.",
     );
   });
 
   it("an inactive saved station with no replacement says the till asks", async () => {
     const model = routing({
+      defaultStationId: null,
       stationTimes: [
         {
           stationId: "old",
           status: { open: false, why: "switched_off" },
-          nextTransition: null,
-          hours: [],
+
           fallbackStationId: null,
           today: null,
           closedSendsTo: null,

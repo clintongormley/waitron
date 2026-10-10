@@ -235,7 +235,6 @@ export const QUERY_DEPENDENCIES = {
     "routing_cells",
     "kitchen_stations",
     "floor_zones",
-    "station_fallbacks",
   ],
   getFolderRouting: [
     "categories",
@@ -246,13 +245,8 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "floor_zones",
     "zone_service_policies",
-    "station_fallbacks",
     "station_day_states",
-    "hours_week_cells",
-    "hours_week_periods",
     "special_dates",
-    "special_date_hours",
-    "special_date_hours_periods",
     "locations",
   ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and

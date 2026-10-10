@@ -1,3 +1,4 @@
+import { openDishCount, disableWithDishes } from "./station-closing.js";
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
@@ -511,11 +512,14 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
 function withVenueAuth<T>(
   deps: ManagementApiDeps,
   sessionId: string,
-  fn: (tx: Transaction) => Promise<T>,
+  fn: (tx: Transaction, authorizedBy: string) => Promise<T>,
 ): Promise<T> {
   return withTransaction(deps.db, async (tx) => {
-    await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
-    return fn(tx);
+    const { authorizedBy } = await authorizeManager(tx, {
+      managementSessionId: sessionId,
+      permission: "venue.configure",
+    });
+    return fn(tx, authorizedBy);
   });
 }
 
@@ -2190,11 +2194,30 @@ export function mountManagementApi(
       ) {
         return c.body(null, 204);
       }
-      await withVenueAuth(deps, sessionId, async (tx) => {
+      await withVenueAuth(deps, sessionId, async (tx, authorizedBy) => {
         await authorizeStationPrinters(tx, sessionId, patch.printerIds);
-        await updateStation(tx, cfg, id, patch);
+        if (patch.active === false)
+          await disableWithDishes(tx, cfg, id, body, () => updateStation(tx, cfg, id, patch), {
+            deviceId: null,
+            personId: authorizedBy,
+          });
+        else await updateStation(tx, cfg, id, patch);
       });
       return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/stations/:id/closing", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireStationId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      return c.json(
+        await withVenueAuth(deps, sessionId, async (tx) => ({
+          destinations: await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date()),
+          openDishCount: await openDishCount(tx, cfg.locationId, id),
+        })),
+      );
     }),
   );
 
@@ -2203,7 +2226,16 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => deactivateStation(tx, cfg, id));
+      const raw = await c.req.text();
+      const body = raw === "" ? {} : await readRawJsonBody<Record<string, unknown>>(c);
+      if (body === null || typeof body !== "object" || Array.isArray(body))
+        throw new AppError("management.request_invalid", { field: "body" });
+      await withVenueAuth(deps, sessionId, (tx, authorizedBy) =>
+        disableWithDishes(tx, cfg, id, body, () => deactivateStation(tx, cfg, id), {
+          deviceId: null,
+          personId: authorizedBy,
+        }),
+      );
       return c.body(null, 204);
     }),
   );

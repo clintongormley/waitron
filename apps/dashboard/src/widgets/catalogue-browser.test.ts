@@ -297,9 +297,10 @@ it("works the route out again when the products or the categories change", async
   expect(await madeAtText(el, "folder:w")).toBe("Bar from Drinks");
 });
 
-it("decides the asterisk as Made at does, following a switched-off station's fallback", async () => {
-  const barOff = (fallbackStationId: string | null) =>
+it("decides the asterisk from default recovery for a switched-off station", async () => {
+  const barOff = (defaultAvailable: boolean) =>
     routingWith({
+      defaultStationId: defaultAvailable ? "kitchen" : null,
       stations: [
         { id: "bar", name: "Bar", active: false },
         { id: "terrace", name: "Terrace", active: true },
@@ -309,23 +310,21 @@ it("decides the asterisk as Made at does, following a switched-off station's fal
         {
           stationId: "bar",
           status: { open: false, why: "switched_off" },
-          hours: [],
-          fallbackStationId,
+          fallbackStationId: "terrace",
           today: null,
-          closedSendsTo: fallbackStationId,
-          nextTransition: null,
+          closedSendsTo: defaultAvailable ? "kitchen" : null,
         },
       ],
     });
-  const el = await mountBrowser({ routing: barOff("terrace") });
+  const el = await mountBrowser({ routing: barOff(true) });
   await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:d")).toBe("Terrace set on this category");
+  expect(await madeAtText(el, "folder:d")).toBe("Kitchen set on this category");
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
-  expect(await madeAtText(el, "folder:b")).toBe("Terrace from Drinks");
+  expect(await madeAtText(el, "folder:b")).toBe("Kitchen from Drinks");
   expect(await unroutedMarker(el, "folder:b")).toBeNull();
   expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
-  el.routing = barOff(null);
+  el.routing = barOff(false);
   expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
   expect(await unroutedMarker(el, "folder:b")).not.toBeNull();
 });

@@ -124,7 +124,7 @@ and hours proposals; the historical spec keeps its dated pointers.
   and matches a cell by id alone; one `hours-client.test.ts` case detaches in the same turn and
   cannot fail; the participant-failure route case checks the status, not the body's code; the
   time-zone route case never asserts `nextTransition`; nothing pins which of two repeated
-  midnights a clock change picks; no test opens Hours from a department's link end to end; with
+  midnights a clock change picks; with
   the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
   has disabled; on a phone the calendar's cells break a long
   special-date name mid-word (a design choice for the owner); the test where the live feed

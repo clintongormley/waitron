@@ -37,7 +37,6 @@ import {
   listStationNotices,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
-  setStationFallback,
   setStationToday,
 } from "@waitron/venue-service";
 import { placeGroups } from "./order-groups.js";
@@ -1370,7 +1369,6 @@ describe("dish extras on kitchen tickets", () => {
       };
       const orderId = party.tabId;
       await addTabRound(tx, cfg, orderId, [pick]);
-      await setStationFallback(tx, cfg, stations.fryer, stations.kitchen);
       await setStationToday(tx, cfg, stations.fryer, "closed", new Date());
       await addTabRound(tx, cfg, orderId, [pick]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));

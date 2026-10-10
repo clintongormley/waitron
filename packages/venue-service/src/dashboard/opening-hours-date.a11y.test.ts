@@ -33,7 +33,6 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
                 kind: "working_day" as const,
                 repeats: false,
                 ownHours: true,
-                hasStationHours: false,
                 closeWholeVenue: false,
               },
             ],

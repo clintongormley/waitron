@@ -431,6 +431,32 @@ absent afterwards. These losses are part of the reset requirement too.
 
 ### Earlier A261 hours storage
 
+**2026-10-09, A366 slice 4:** the Station hours page is removed. The station-hour tables and internal week readers remain until the later retirement tasks in the
+slice 4 plan. The named-date routes remain available.
+The station-week and configured-fallback HTTP writers are removed; their paths answer 404.
+Make default and creating a default station no longer check the outgoing station's saved hours.
+The unused demotion checker and private clash readers are removed, along with the internal
+fallback writer and its loop refusal code. The retained fallback table still accepts fixture rows;
+its self-reference CHECK still refuses a station pointing to itself.
+Configuration export omits the four station-hours tables and `station_fallbacks`; configuration
+import refuses an added retired table with `setup.request_invalid` (`field: "tables"`).
+The transfer validator checks named-day fields and colliding occurrences without reading station-hours rows.
+Named-day duplication leaves station cells behind; deletion no longer checks station-hour clashes.
+Named-day saves no longer check station-hour neighbour overlaps or skipped-minute endpoints;
+the parser and save path ignore former station-cell input and leave stored station rows unchanged.
+Named-day edits and the copy form no longer fetch station-hour source rows. Edits send calendar
+facts without station cells, and the copy form no longer displays station-period clock warnings.
+The displayed Calendar no longer subscribes to station-hours rows; explicit refreshes invalidate
+only its own sources.
+The server reader for the retired Hours page model and its private range reader are removed. Calendar checks use
+`readNamedDaysModel` and `readCalendarDays`; Opening hours supplies department names and its
+named-day list. The legacy Calendar mode and public station-hours wire types are removed. Temporary test support
+still reads the retained station-hours tables until their retirement.
+Calendar participants still copy and validate their dated rows inside the caller's transaction.
+The earlier A261 refusal below is historical.
+
+The dated slice 1 account below records the model before slice 4 retired it.
+
 **2026-10-08, A366 slice 1:** department opening hours now come from service periods.
 The Hours grid described below now edits station restrictions only. Its `special_dates` calendar
 also anchors department period schedules. `readHoursModel` and the Station hours page omit
@@ -1258,11 +1284,9 @@ number the same as its own, as when it names none and the parent has no primary 
 argument, `{ createdAt, timeZone, dayCutover }`, which `validateConfigurationBundle`
 (`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
 `validate` before the import writes anything. Core, catalogue and media take only the tables.
-Venue-service's station-hours validator uses the export date and zone to leave past neighbour
-pairs out and check skipped endpoints. Its menu validator uses the exported day changeover:
-see the service-period checks below. The station-hours validator still reads no changeover;
-when a save cannot read the cutover, the save checks every pair while import may leave past
-pairs out. A default station's retained cells are not checked.
+Venue-service's menu validator uses the exported day changeover; see the service-period checks
+below. Named-day field and occurrence validation takes only the tables. The station-hours
+validator was removed in A366 slice 4.
 
 ### Service-period configuration
 

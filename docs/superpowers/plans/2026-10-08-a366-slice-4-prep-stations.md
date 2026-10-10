@@ -1662,6 +1662,22 @@ slice 3 check this changes.
 
 ### Task B3: Dashboard — the Today column, status sentences and fallback field go; Disable asks
 
+**Implementation decision, 2026-10-09:** `ticket_items.station_retained_at_release` records the
+explicit "leave to finish" choice. It survives Disable at held-group release;
+`station_chosen_at` alone still protects a manual choice only while the station is active.
+Moving the dish clears its old retention choice. The core migration adds only this column;
+Task B7 still removes the separate station-hours and fallback tables.
+
+**Checkpoint, 2026-10-09:** The screen now opens `dashboard/station-disable-dialog.ts`,
+passing the routing cells that name the station. The one-request disposition flow carries the
+old cancellation, draft, pending-write, replacement and departed-control checks. Its required
+choice uses the shared field's visible and semantic marker. Connected EN/ES, light/dark,
+phone/desktop captures and focused screen checks pass. B3 remains incomplete: retire the
+remaining server/table fallback contract, then reconcile with Part A's table
+and run the whole-task gates. The Settings fallback column and editor have been removed
+test-first. Its mixed draft, retry, native-control and accessibility checks exercise the
+remaining rest setting; the assertion changes are in a separate signed commit.
+
 **Files:** `dashboard/prep-stations-screen.ts` (`#stationStatus :1670-1695`, `#todayCell
 :1696-1715`, `#destination :1661-1665`, the Settings fallback cell `:2487-2609`, `#fallbackOptions
 :1716-1728`, the Station action dialog's fallback `:3349-3368`, `#fallbackConfirmation
@@ -1725,7 +1741,7 @@ left them), `errors.ts` (`station.fallback_loop` and each code `grep` shows only
 `hours-station-model.test.ts`, `station-times.test.ts`, `configuration-transfer.test.ts` (both),
 `routes.test.ts`, `kitchen.test.ts` or the default-station suite.
 
-- [ ] Steps: the changed-checks commit (deleted suites by file; changed cases with `file:line`; a
+- [x] Steps: the changed-checks commit (deleted suites by file; changed cases with `file:line`; a
   configuration export no longer carries the five tables — `apps/server/src/configuration-transfer.test.ts`'s
   hours cases, `:3932-3944`, `:4011-4012`, `:4112`, `:4135-4138`, `:4187`, S1); failing tests (Make
   default no longer refuses on a demoted station's hours; the removed routes answer 404; an export
@@ -1733,6 +1749,111 @@ left them), `errors.ts` (`station.fallback_loop` and each code `grep` shows only
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`; the
   venue-service node project, the server package; typecheck; commit
   `feat(venue-service): station hours and fallbacks leave the server (A366)`.
+
+---
+
+### B6 fixture check inventory — provisioning and department scope
+
+The following test changes implement B6's retirement of station-week writers. They do not retire
+any department refusal or named-day preservation check.
+
+- `operations.test.ts`, the mixed station-hours/department-deactivation case: remove the fixture
+  writer's `hours.invalid` refusals, stored weekly modes/ranges and unset-week checks. Keep the
+  exact `department.not_found` refusal for both a foreign and unknown department and the foreign
+  department's active-row check. The retired writer exists only in test support at this checkpoint.
+- `provisioning.test.ts`, the mixed hours/named-date seed case: replace the old week's unset,
+  stored-Closed and five-table count checks with venue-scoped named-date checks. Keep the named
+  date's exact preservation across another seed, and explicitly check its authored fields and id.
+  Provisioning of service-period ranges remains covered by the separate Open-period seed cases.
+
+Before adapting these fixtures, run both cases in a disposable installed checkout after dropping
+the five retired tables, children first. Retain that failing output, then rerun the adapted cases
+under the same table absence. This rehearsal checks these two consumers only; B7 still owns the
+schema deletion and the complete upgrade walk.
+
+---
+
+### B6 fixture check inventory — routing and station day seats
+
+In `service.test.ts`, `routes.test.ts` and `routing-store.test.ts`, remove only calls that seed
+retired weekly hours or configured fallbacks, their imports and the local fallback fixture writer.
+Keep every existing result assertion, including daily destinations, reopening, venue isolation,
+clock handling and prepared-query bounds. Update titles that describe the removed setup.
+Before editing, run the old complete service and routing-store files, plus the explain-route case,
+in an independently installed checkout with the five retired tables dropped in the database
+helper's setup callback. Run the adapted cases under the same absence and retain sources/output.
+The route suite's separate stored-fallback retirement case still awaits B7 adaptation.
+This rehearsal covers these three consumers;
+the remaining fixture consumers and B7's generated migration are separate work.
+
+---
+
+### B6 fixture check inventory — station times
+
+In `station-times.test.ts`, remove retired week/fallback fixture writes, keeping the current
+station-status, daily close/reopen, destination, cutover, clock-change and venue refusal checks.
+Keep all cases. The two mixed week-storage cases keep their routing-result assertions; their
+fixture-only weekly replacement/unset rows and `hours.invalid` fixture-writer refusal checks
+retire with the writer under B6. Rename cases that describe the removed setup.
+Named-date setup keeps its date and whole-venue closure, without station cells.
+Run the old full file in an independently installed checkout with the five tables dropped in
+`useVenueDb` setup, then run the adapted full file under the same absence. Retain the before
+sources and exact diff. Table deletion, remaining hours/transfer/server consumers and upgrade
+verification remain B7 work; this inventory does not claim the whole retirement is complete.
+
+---
+
+### B6 fixture check inventory — Calendar model and live changes
+
+In `hours-station-model.test.ts`, retain named-day facts, venue clock fields, local/foreign
+station filtering, edits, copies, original preservation and Opening hours department names.
+Remove seeding and direct row checks of the retired week/date station tables. Retire only the
+two cases that exercise the temporary station-week fixture reader/writer's department refusal;
+those fixture functions are removed by B6. Keep public-export removal checks. Rename mixed
+cases to describe the supported Calendar behavior.
+
+In `hours.live.test.ts`, retain named-day create/copy/delete, clock, department, daily station,
+holiday geography, address, country and unrelated-write assertions. Remove committed writes to
+the five retired tables and the assertions on notifications from those fixture-only writes.
+The third mixed case keeps its daily station and named-day notification assertions.
+
+Before adaptation, run both complete files in an independently installed checkout with the five
+retired tables dropped children first in `useVenueDb` setup and their change sources removed
+in that disposable checkout, rehearsing B7. Repeat the adapted files under the same conditions. Record exact retired assertions and before/after sources for the final PR.
+This rehearsal does not replace B7's generated migration and upgrade walk.
+
+---
+
+### B6 fixture check inventory — server station moves, printing and today controls
+
+In `apps/server/src/station-move.test.ts`, `kitchen-print.test.ts` and
+`till-api.station-today.test.ts`, remove only configured-fallback seed calls, the local
+fixture writers and their table imports. Keep every existing result assertion and case,
+including held-dish destinations, printing, refusing moves and authenticated today controls.
+Rename the split-off chips case to describe the closed fryer without a configured fallback.
+
+Before adapting, run all three complete files in an independently installed checkout with
+the five retired tables dropped children first before `useVenueDb` runs its setup callback.
+Repeat the adapted files under the same absence. Retain exact sources, output and an assertion
+comparison for the final PR. This rehearsal covers these consumers; it does not complete B6
+or replace B7's generated migration and upgrade walk.
+
+---
+
+### B6 fixture check inventory — server configuration transfer
+
+In `apps/server/src/configuration-transfer.test.ts`, remove station-week and fallback seeds
+and readers from the mixed named-day fixtures. Retire only their stored-row counts and
+unset-week checks; keep named-day fields, fresh ids, Calendar/default-station results,
+zone closed-time round trips, refused retired-table imports and transaction rollback.
+The source/target named-day comparison drops its obsolete station-cell projection on both
+sides and compares the remaining fields exactly. The rejected-import persisted-row shape
+loses only the retired `cells` count and keeps `tenants: 0`.
+
+Run the original complete file in an independently installed checkout with the five tables
+dropped children first before setup, omitting them from that candidate's fixture clear list.
+Then run the adapted file under the same absence and retain the before sources and exact
+changed-check inventory. B7 still owns the generated migration and upgrade walk.
 
 ---
 
@@ -1747,16 +1868,16 @@ left them), `errors.ts` (`station.fallback_loop` and each code `grep` shows only
 `packages/venue-service/src/dashboard/live-queries.ts` and `apps/dashboard/src/api/live-queries.ts`
 (`:231-255`, S1: both name `station_fallbacks` and the hours tables); generated drizzle files.
 
-- [ ] **Step 1:** list the keys pointing at each table (`grep -rln 'REFERENCES \`hours_week_cells\`\|REFERENCES \`special_date_hours\`\|REFERENCES \`station_fallbacks\`' packages/*/drizzle/`);
+- [x] **Step 1:** list the keys pointing at each table (`grep -rln 'REFERENCES \`hours_week_cells\`\|REFERENCES \`special_date_hours\`\|REFERENCES \`station_fallbacks\`' packages/*/drizzle/`);
   expected: only the two `*_periods` children, dropped in the same generation. If any other table
   points at one, STOP.
-- [ ] **Step 2: Failing test** in `migrations.test.ts`: the five tables are absent.
-- [ ] **Step 3:** remove them from the schema and generate; read the SQL (five `DROP TABLE`, children
+- [x] **Step 2: Failing test** in `migrations.test.ts`: the five tables are absent.
+- [x] **Step 3:** remove them from the schema and generate; read the SQL (five `DROP TABLE`, children
   first). Remove them from classification, the guard lists, the clear list and `service.test.ts`.
-- [ ] **Step 4: Run** the Task A3 guard list, `scripts/live-subscriptions.test.ts`, and the
+- [x] **Step 4: Run** the Task A3 guard list, `scripts/live-subscriptions.test.ts`, and the
   upgrade walk; if it reports a casualty, add the `RESETS` entry it names and change the pull
   request's first line to "venue reset needed" with that reason.
-- [ ] **Step 5: Commit** — `feat(venue-service): drop station hours and fallbacks (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): drop station hours and fallbacks (A366)`.
 
 ---
 
@@ -1861,3 +1982,102 @@ reset needed — station hours and fallbacks are deleted"** (or Task B7's reset 
 - The pull request lists, under "Changed test checks", every check changed with `file:line`, before
   and after, and the decision or spec line that changed it, and adds one FYI to the lane's
   `questions.md`.
+
+
+#### B6 Calendar and server clock fixture retirement inventory (2026-10-10)
+
+Approved B6/B7 remove the five station-hours/fallback tables. In
+`packages/venue-service/src/hours-service-calendar.test.ts`, remove the old week/department-hour
+fixture writes; keep all six cases and their Calendar/Named Days result assertions. Rename
+the two case titles to describe the retained service-period checks.
+In `apps/server/src/venue-details.test.ts`, remove the obsolete station-week seed and its two
+stored-week snapshot fields, plus the fixture-only `[21, 3]` row-count assertion. Keep both daily
+override and booking snapshots and all clock-change result assertions. In
+`apps/server/src/working-order.test.ts`, remove the single old station-week seed and its import;
+keep the unreadable-clock routing assertion. No fiscal, permission, money or root-guard assertion
+changes. Before/after sources and the absence rehearsal live in Lane D's local
+`receipts/a366-4b/calendar-server-fixtures/`.
+
+
+#### B6 provisioning and management fixture retirement inventory (2026-10-10)
+
+In `apps/server/src/provision.test.ts`, the mixed clear-fixture case keeps its named date,
+stations, departments and location cleanup checks. Its old weekly/date station-cell seeds
+and four retired-table counts leave under B6/B7. Rename it for the retained named-date cleanup.
+In `apps/server/src/management-api.test.ts`, keep default switching, HTTP status, station
+state, list, deactivation and named-date preservation checks in all three expanded cases.
+Remove retired weekly writes/reads and their stored-Closed, stale-editor `station.always_open`,
+unchanged-week and kept-week assertions. Those assert only the temporary fixture writer,
+which B6 removes. Named dates keep their authored facts without station cells.
+
+Before adaptation, run both full files in an independently installed checkout after dropping
+the five retired tables, children first, before `useVenueDb` setup. In that disposable copy
+only, remove the five entries from `clearProvisionFixture` as B7 will, so cleanup does not mask
+the fixture failures. Repeat the adapted files under the same absence, retain exact sources
+and changed-check inventory, and run deletion controls on the retained default and
+named-date behaviors. This is a rehearsal for these consumers; B7 still owns schema deletion
+and the complete upgrade walk. No login, fiscal, money or permission assertion changes.
+
+#### B6 named-day route fixture retirement inventory (2026-10-10)
+
+In `hours-routes.test.ts`, remove temporary station-week seeds/readbacks and direct
+`special_date_hours` reads. Retire only their stored-week, unset-week and retained-cell
+assertions; keep every route status, named-day field/preservation/refusal, permission,
+participant rollback, clock and manual-closure assertion. Former station fields in HTTP
+bodies remain as ignored-input controls. Rename descriptions that promise stored hours.
+
+Before adaptation, run the full file in an independently installed checkout with the
+five retired tables removed children-first before `useVenueDb` setup. Repeat the adapted
+file under identical absence and record the retired assertions and retained statements.
+Run deletion controls on the named-day authorization and participant rollback paths.
+B7 still owns schema removal and the complete upgrade walk.
+
+
+#### B6 remaining calendar fixture retirement inventory (2026-10-10)
+
+The remaining `hours.test.ts` fixture checks leave with the station-week writer and the five
+B7 tables. Retire the standard-week fixture suite, six cases that only call that writer,
+and the case reading retained late station rows beside a repeating closure. Mixed cases keep
+calendar saves, edits, ownership refusals, duplication, deletion, station states, holiday facts,
+repeat keys, department/zone own-hours switching and participant rollback assertions. Remove
+only the station-row snapshots and the `standardCell`, `specialCell` and `targetCells`
+projections from those mixed checks. Calendar snapshots continue to read the actual stored
+named-day fields. Two clock-change save cases also assert the dates read back.
+
+`named-days.test.ts` removes the obsolete station-cell seed while keeping all its assertions.
+The table-writing `testing/station-week.ts`, `legacy-station-week.ts` and
+`legacy-station-rules.ts` fixtures and their package export leave after a caller scan. The
+pure legacy wire types remain for tests that deliberately send ignored former fields.
+
+The local before/after inventory records every removed or replaced assertion and renamed case
+for the final PR's Changed test checks section. Test under five-table absence in an installed
+disposable checkout, then delete the participant copy and before-delete calls separately;
+the corresponding copy and delete/rollback cases must fail, and pass after restoration.
+B7 still owns generated schema deletion, current migration/schema inventories, change-source
+lists, the clear list and the route suite's stored-fallback case.
+
+
+#### B7 generated retirement receipt (2026-10-10)
+
+`0040_retire_station_hours_fallbacks.sql` is newly generated; both `*_periods` tables drop before
+parents, then `station_fallbacks`. The referencing-key scan found only the two period children
+in venue-service's historical `0021_hours_calendar.sql`. No shipped SQL or snapshot was edited.
+The absence test failed with all five names before generation. Current schema/classification,
+constraint inventories and provisioning cleanup omit those five tables. The old fallback-route
+test keeps every 404 and routing snapshot check, dropping only its obsolete stored-fallback
+seed and three storage assertions. The named-day detail test keeps all calendar and ownership
+assertions; its temporary DROP/rollback wrapper is unnecessary after the migration.
+
+The service-schema inventory removes the fallback table entry and changes its size from 16 to
+15; migrations keep the surviving primary-key/foreign-key shapes and check `special_dates`
+instead of the removed week-cell table. The package export test continues refusing all five
+retired names. Current change-source lists derive from classification; the two query dependency
+maps already omitted the retired tables. The populated upgrade walk passes; its
+`carryRows` compares counts only for tables that still exist, so this receipt does not claim
+that it detects a dropped table or validates row contents. No new RESETS entry was added.
+The final PR retains its required "venue reset needed" first line.
+
+B8 needs Part A's `routing-periods.ts` reader and period-aware routing selection, currently on
+`feat/service-periods-slice-4-part-a`. Reconcile after that branch lands; do not duplicate its
+reader or cherry-pick another lane's unlanded work. If migration numbering collides on rebase,
+regenerate from the new main schema/journal and repeat the specified guards.

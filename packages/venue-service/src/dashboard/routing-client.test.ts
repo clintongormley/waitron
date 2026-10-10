@@ -2,15 +2,14 @@ import { expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 
-it("writes station fallback to venue service without a today writer, and reads output failures passively", async () => {
+it("has no station-hours, fallback or today writer, and reads output failures passively", async () => {
   const request = vi.fn(async () => ({ printersDown: [], screensDark: [] }));
   const api = new PrepStationsApi(request as DashboardRequest);
   expect("setStationHours" in api).toBe(false);
-  await api.setStationFallback("bar", null);
+  expect("setStationFallback" in api).toBe(false);
   expect("setStationToday" in api).toBe(false);
   await api.listOutputsDown();
   expect(request.mock.calls).toEqual([
-    ["/management-api/venue-service/stations/bar/fallback", "PUT", { fallbackStationId: null }],
     ["/management-api/stations/outputs-down", "GET", undefined, { passive: true }],
   ]);
 });
@@ -459,4 +458,23 @@ it("submits a whole watcher printer set as an active write even from a backgroun
     ["/management-api/watchers/pass/printers", "PUT", { printerIds: ["front", "back"] }],
     ["/management-api/watchers/pass/printers", "PUT", { printerIds: [] }],
   ]);
+});
+
+it("reads Disable choices passively without changing the station", async () => {
+  const answer = { openDishCount: 3, destinations: [{ id: "bar", name: "Bar", isDefault: true }] };
+  const request = vi.fn(async () => answer);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  expect(await api.readStationClosing("grill")).toEqual(answer);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/grill/closing", "GET", undefined, { passive: true }],
+  ]);
+});
+it.each([
+  { openDishes: "send" as const, sendsToStationId: "bar" },
+  { openDishes: "leave" as const },
+])("Disable sends its explicit open-dish choice %j in one active request", async (choice) => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.deactivateStation("grill", choice);
+  expect(request.mock.calls).toEqual([["/management-api/stations/grill", "DELETE", choice]]);
 });

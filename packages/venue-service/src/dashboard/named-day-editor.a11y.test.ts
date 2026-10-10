@@ -34,7 +34,6 @@ describe.each(["light", "dark"] as const)("Named day (%s)", (theme) => {
         repeats: state === "leap",
         ownHours: state === "leap",
         closeWholeVenue: state === "closed" || state === "hidden-hours-refusal",
-        hasStationHours: false,
       };
     el.open = true;
     await el.updateComplete;
@@ -92,7 +91,6 @@ describe.each(["en", "es"] as const)("visual %s", (locale) => {
         repeats: true,
         ownHours: true,
         closeWholeVenue: false,
-        hasStationHours: false,
       };
       el.ownHours = true;
       el.savableAtOpen = true;

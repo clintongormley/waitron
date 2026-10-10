@@ -2,19 +2,14 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import {
-  CORE_MIGRATIONS,
-  catalogues,
-  kitchenStations,
-  locations,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import { readCalendarDays, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
+import { readCalendarDays, saveSpecialDate } from "./hours.js";
+import { readNamedDaysModel } from "./named-days.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { hoursWeekCells, specialDateHours, specialDates } from "./schema/hours.js";
+import { specialDates } from "./schema/hours.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 
@@ -53,10 +48,6 @@ async function fixture() {
         },
       ])
       .returning();
-    const [station] = await tx
-      .insert(kitchenStations)
-      .values({ locationId: cfg.locationId, name: "Bar" })
-      .returning();
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
     const period = await saveMenuPeriod(tx, cfg, department!.id, {
       name: "Late",
@@ -88,7 +79,6 @@ async function fixture() {
       cfg,
       department: department!.id,
       inactive: inactive!.id,
-      station: station!.id,
       period: period.id,
       week,
     };
@@ -96,56 +86,52 @@ async function fixture() {
 }
 
 const tones = async (cfg: Awaited<ReturnType<typeof fixture>>["cfg"], from: string, to = from) =>
-  withTransaction(suite.db, async (tx) => ({
-    calendar: (await readCalendarDays(tx, cfg, from, to)).map((day) => day.tone),
-    model: (await readHoursModel(tx, cfg, from, to, at)).days.map((day) => day.tone),
-  }));
+  withTransaction(suite.db, async (tx) => {
+    const calendar = await readCalendarDays(tx, cfg, from, to);
+    const model = await readNamedDaysModel(tx, cfg, from, to, at);
+    return {
+      calendar: calendar.map((day) => day.tone),
+      model: model.days.map((day) => day.tone),
+      closed: model.days.map((day) => day.closed),
+    };
+  });
 
-describe("station-hours calendar follows department service periods", () => {
-  it("uses business-day ranges rather than midnight tails or station hours", async () => {
+describe("calendar follows department service periods", () => {
+  it("uses business-day ranges rather than midnight tails", async () => {
     const f = await fixture();
-    await withTransaction(suite.db, (tx) =>
-      replaceWeekHours(
-        tx,
-        f.cfg,
-        { kind: "station", id: f.station },
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          weekday,
-          cell: { mode: "all_day", periods: [] },
-        })),
-        at,
-      ),
-    );
     expect(await tones(f.cfg, "2026-10-19", "2026-10-20")).toEqual({
       calendar: ["standard", "closed"],
       model: ["standard", "closed"],
+      closed: [false, true],
     });
   });
 
-  it("ignores retained department-hour rows in both the week and a special date", async () => {
+  it("keeps a named day without its own timetable closed like the standard week", async () => {
     const f = await fixture();
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(hoursWeekCells)
-        .values({ departmentId: f.department, weekday: 2, mode: "all_day" });
-      const special = await saveSpecialDate(
+      await saveSpecialDate(
         tx,
         f.cfg,
         null,
         {
           date: "2026-10-20",
-          name: "Retained hours",
+          name: "Named Tuesday",
           closeWholeVenue: false,
           cells: [],
         },
         at,
       );
-      await tx
-        .insert(specialDateHours)
-        .values({ specialDateId: special.id, departmentId: f.department, mode: "all_day" });
     });
-    expect(await tones(f.cfg, "2026-10-20")).toEqual({ calendar: ["closed"], model: ["closed"] });
-    expect(await tones(f.cfg, "2026-10-27")).toEqual({ calendar: ["closed"], model: ["closed"] });
+    expect(await tones(f.cfg, "2026-10-20")).toEqual({
+      calendar: ["closed"],
+      model: ["working_day"],
+      closed: [true],
+    });
+    expect(await tones(f.cfg, "2026-10-27")).toEqual({
+      calendar: ["closed"],
+      model: ["closed"],
+      closed: [true],
+    });
   });
 
   it("uses an explicit empty special-day timetable, and falls back to the week when absent", async () => {
@@ -178,8 +164,16 @@ describe("station-hours calendar follows department service periods", () => {
         at,
       );
     });
-    expect(await tones(f.cfg, "2026-10-19")).toEqual({ calendar: ["closed"], model: ["closed"] });
-    expect(await tones(f.cfg, "2026-10-26")).toEqual({ calendar: ["blue"], model: ["blue"] });
+    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+      calendar: ["closed"],
+      model: ["working_day"],
+      closed: [true],
+    });
+    expect(await tones(f.cfg, "2026-10-26")).toEqual({
+      calendar: ["blue"],
+      model: ["working_day"],
+      closed: [false],
+    });
   });
 
   it("uses special-day ranges to open a closed weekday, and whole-venue closure wins", async () => {
@@ -224,8 +218,39 @@ describe("station-hours calendar follows department service periods", () => {
         }
       }
     });
-    expect(await tones(f.cfg, "2026-10-20")).toEqual({ calendar: ["blue"], model: ["blue"] });
-    expect(await tones(f.cfg, "2026-10-27")).toEqual({ calendar: ["closed"], model: ["closed"] });
+    expect(await tones(f.cfg, "2026-10-20")).toEqual({
+      calendar: ["blue"],
+      model: ["working_day"],
+      closed: [false],
+    });
+    expect(await tones(f.cfg, "2026-10-27")).toEqual({
+      calendar: ["closed"],
+      model: ["working_day"],
+      closed: [true],
+    });
+  });
+
+  it("a whole-venue named closure overrides a normally open weekday", async () => {
+    const f = await fixture();
+    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+      calendar: ["standard"],
+      model: ["standard"],
+      closed: [false],
+    });
+    await withTransaction(suite.db, (tx) =>
+      saveSpecialDate(
+        tx,
+        f.cfg,
+        null,
+        { date: "2026-10-19", name: "Venue closed", closeWholeVenue: true, cells: [] },
+        at,
+      ),
+    );
+    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+      calendar: ["closed"],
+      model: ["working_day"],
+      closed: [true],
+    });
   });
 
   it("ignores inactive departments and other venues, and closes when no active department is open", async () => {
@@ -234,11 +259,19 @@ describe("station-hours calendar follows department service periods", () => {
     await withTransaction(suite.db, (tx) =>
       replaceMenuWeek(tx, other.cfg, other.department, other.week(2), at),
     );
-    expect(await tones(f.cfg, "2026-10-20")).toEqual({ calendar: ["closed"], model: ["closed"] });
+    expect(await tones(f.cfg, "2026-10-20")).toEqual({
+      calendar: ["closed"],
+      model: ["closed"],
+      closed: [true],
+    });
     await suite.db
       .update(departments)
       .set({ active: false })
       .where(eq(departments.id, f.department));
-    expect(await tones(f.cfg, "2026-10-19")).toEqual({ calendar: ["closed"], model: ["closed"] });
+    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+      calendar: ["closed"],
+      model: ["closed"],
+      closed: [true],
+    });
   });
 });

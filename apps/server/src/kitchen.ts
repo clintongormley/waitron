@@ -16,7 +16,6 @@ import {
 import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
-import { assertDemotedStationHours } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
@@ -79,31 +78,6 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
     );
 }
 
-/**
- * Refuses (`hours.invalid`) replacing the venue's default station by `next` (`null` for a station
- * not yet created) when the schedule the current default would resume breaks a rule a save holds.
- */
-async function assertDefaultCanStepDown(
-  tx: Transaction,
-  cfg: TillConfig,
-  next: string | null,
-  at: Date,
-): Promise<void> {
-  const [current] = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(
-      and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)),
-    );
-  if (current !== undefined && current.id !== next)
-    await assertDemotedStationHours(tx, cfg, current.id, at);
-}
-
-/**
- * Create a kitchen station in `cfg.locationId`. A duplicate `(location, name)` is
- * `station.name_taken`. Marking it default clears any prior default first, and is refused like
- * {@link setDefaultStation} when the prior default's saved hours cannot resume.
- */
 export async function createStation(
   tx: Transaction,
   cfg: TillConfig,
@@ -114,7 +88,6 @@ export async function createStation(
     thresholds?: StationTimingPatch;
     printerIds?: readonly string[];
   },
-  at: Date = new Date(),
 ): Promise<{ id: string }> {
   if (input.thresholds !== undefined) {
     assertStationTiming(input.thresholds, await getKitchenTimingDefaults(tx, cfg), {
@@ -122,7 +95,6 @@ export async function createStation(
     });
   }
   if (input.isDefault) {
-    await assertDefaultCanStepDown(tx, cfg, null, at);
     await clearDefault(tx, cfg);
   }
   try {
@@ -299,19 +271,12 @@ export async function deactivateStation(
   }
 }
 
-/**
- * Make station `id` the venue's single default. The target must be a LIVE station of this venue,
- * and the station it replaces must be able to resume its saved hours (`hours.invalid` naming the
- * clash otherwise), both checked before any write so a refusal never clears the existing default.
- */
 export async function setDefaultStation(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  at: Date = new Date(),
 ): Promise<void> {
   await requireLiveStation(tx, cfg, id);
-  await assertDefaultCanStepDown(tx, cfg, id, at);
   await clearDefault(tx, cfg);
   await tx.update(kitchenStations).set({ isDefault: true }).where(eq(kitchenStations.id, id));
 }

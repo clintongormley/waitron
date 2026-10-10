@@ -70,11 +70,7 @@ function targetChoice(rules: RoutingRules, target: RouteTarget): MakerChoice {
   };
 }
 
-/** Each category's baseline route, worked out with the shared routing rules the way the server
- * works out a product row's (`describeMakers`): Every zone, and the time of day not applied, though
- * a switched-off station's fallback is followed. The baseline varies when an active zone's outcome,
- * or an active product's inside, differs from it, plainly or by a period line, and when its
- * deciding cell has period lines. */
+/** Today's closure does not change the untimed category baseline. */
 export function folderMadeAt(
   routing: RoutingModel,
   categories: readonly CategorySummary[],
@@ -86,12 +82,7 @@ export function folderMadeAt(
   const rules: RoutingRules = {
     ...selectionRulesFromModel(routing),
     parentOf: new Map(categories.map(({ id, parentId }) => [id, parentId])),
-    timing: new Map(
-      routing.stationTimes.map(({ stationId, fallbackStationId, hours, weekSet, today }) => [
-        stationId,
-        { fallbackId: fallbackStationId, hours, weekSet, today },
-      ]),
-    ),
+    timing: new Map(),
   };
   // A zone no cell names routes everything as Every zone does.
   const zoned = new Set(routing.cells.map(({ zoneId }) => zoneId));
@@ -134,21 +125,6 @@ export function folderMadeAt(
   }
   for (const { id } of categories)
     for (const zone of zones) compareChoice(id, zone, categoryChoice(rules, id, zone));
-  const restrictedByDate = new Set(
-    routing.stationTimes
-      .filter(({ specialDateRestricts }) => specialDateRestricts === true)
-      .map(({ stationId }) => stationId),
-  );
-  const timed = (stationId: string) => {
-    if (stationId === routing.defaultStationId) return false;
-    const timing = rules.timing.get(stationId);
-    return (
-      timing !== undefined &&
-      ((timing.weekSet ?? timing.hours.length > 0) ||
-        timing.today === "closed" ||
-        restrictedByDate.has(stationId))
-    );
-  };
 
   const linesAt = new Set(
     routing.cells
@@ -190,7 +166,6 @@ export function folderMadeAt(
       source,
       someElsewhere:
         elsewhere.has(id) ||
-        (route?.kind === "station" && timed(route.stationId)) ||
         (decidedBy?.kind === "cell" && linesAt.has(cellKey(decidedBy.address))),
     });
   }

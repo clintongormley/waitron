@@ -45,7 +45,6 @@ async function mount(
         kind: "working_day" as const,
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         closeWholeVenue: false,
       },
     ],

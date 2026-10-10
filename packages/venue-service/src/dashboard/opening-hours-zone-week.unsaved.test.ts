@@ -52,7 +52,6 @@ class ZoneWeekLeaveApp extends LitElement {
             kind: "working_day",
             repeats: false,
             ownHours: true,
-            hasStationHours: false,
             closeWholeVenue: false,
           }))
         : [],

@@ -33,16 +33,11 @@ export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
 export {
-  assertDemotedStationHours,
-  cellIntervals,
   deleteSpecialDate,
   duplicateSpecialDate,
   readCalendarDays,
-  readHoursModel,
   readSpecialDate,
-  readWeekHours,
   renameSpecialDate,
-  replaceWeekHours,
   saveSpecialDate,
   type HolidayReader,
   type SpecialDateParticipant,

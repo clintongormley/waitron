@@ -493,7 +493,6 @@ export class OpeningHoursScreen extends LitElement {
         await this.api.namedDays.saveDay(
           detail.id,
           detail.input,
-          action.day,
           () => this.isConnected && generation === this.generation && this.namedAction === action,
         );
     } catch (error) {
@@ -591,7 +590,6 @@ export class OpeningHoursScreen extends LitElement {
         html`<named-day-copy
           .open=${true}
           .day=${action.day!}
-          .api=${this.api.namedDays}
           .busy=${this.busy}
           @named-day-copy-save=${this.saveNamedDay}
           @named-day-copy-close=${(event: Event) => {

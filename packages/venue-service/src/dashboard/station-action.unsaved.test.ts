@@ -1,9 +1,10 @@
 import { afterEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { userEvent, page } from "vitest/browser";
+import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LitElement, html } from "lit";
 import { LeaveController, applyTokens } from "@waitron/ui";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
+import type { PrepStationsApi, PrepStationsView, StationDisableChoice } from "./routing-client.js";
 import { PrepStationsScreen } from "./prep-stations-screen.js";
 const view: PrepStationsView = {
   routing: {
@@ -28,9 +29,9 @@ const view: PrepStationsView = {
     stationTimes: [
       {
         stationId: "bar",
-        nextTransition: null,
+
         status: { open: true, why: "default" },
-        hours: [],
+
         fallbackStationId: null,
         today: null,
         closedSendsTo: "bar",
@@ -82,7 +83,10 @@ class StationActionLeaveApp extends LitElement {
 }
 customElements.define("station-action-leave-test-app", StationActionLeaveApp);
 let app: StationActionLeaveApp;
-afterEach(() => app?.remove());
+afterEach(() => {
+  app?.remove();
+  setLocale("en");
+});
 function deferred() {
   let resolve!: () => void;
   let reject!: (reason: unknown) => void;
@@ -105,7 +109,7 @@ async function mount(write?: Promise<void>, refreshFails = false, deactivate?: P
     model.routing.stationTimes.push({
       ...model.routing.stationTimes[0]!,
       stationId: id!,
-      status: { open: true, why: "in_hours" },
+      status: { open: true, why: "open" },
       closedSendsTo: null,
     });
   }
@@ -123,9 +127,15 @@ async function mount(write?: Promise<void>, refreshFails = false, deactivate?: P
       await write;
       model.routing.stationTimes.find((row) => row.stationId === id)!.fallbackStationId = choice;
     },
-    deactivateStation: async (id: string) => {
-      writes.push({ deactivate: id });
-      await deactivate;
+    readStationClosing: async (id: string) => ({
+      openDishCount: id === "bar" ? 0 : 3,
+      destinations: model.stations
+        .filter((row) => row.active && row.id !== id)
+        .map(({ id, name, isDefault }) => ({ id, name, isDefault })),
+    }),
+    deactivateStation: async (id: string, choice?: StationDisableChoice) => {
+      writes.push({ deactivate: id, ...(choice ? { choice } : {}) });
+      await (deactivate ?? write);
     },
     createStation: async (body: unknown) => {
       writes.push(body);
@@ -173,9 +183,17 @@ async function open(screen: PrepStationsScreen, id = "kitchen") {
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>(`[data-test=disable-${id}]`)!.click();
   await screen.updateComplete;
-  const modal = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-    "[data-test=station-action-modal]",
-  )!;
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("station-disable-dialog"))
+    .not.toBeNull();
+  const dialog = screen.shadowRoot!.querySelector<
+    HTMLElement & { updateComplete: Promise<boolean> }
+  >("station-disable-dialog")!;
+  await dialog.updateComplete;
+  await expect
+    .poll(() => dialog.shadowRoot?.querySelector("[data-test=disable-confirm]"))
+    .not.toBeNull();
+  const modal = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
   await modal.updateComplete;
   return modal;
 }
@@ -187,20 +205,19 @@ async function change(
   modal
     .querySelector("wt-combobox")!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await ((modal.getRootNode() as ShadowRoot).host as LitElement).updateComplete;
   await screen.updateComplete;
 }
 function cancel(modal: HTMLElementTagNameMap["wt-modal"]) {
   modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
 }
 async function save(screen: PrepStationsScreen, modal: HTMLElementTagNameMap["wt-modal"]) {
-  const button = modal.querySelector<HTMLElement>("[data-test=confirm-station-action]")!;
-  button.click();
-  await screen.updateComplete;
-  button.click();
+  modal.querySelector<HTMLElement>("[data-test=disable-confirm]")!.click();
+  await ((modal.getRootNode() as ShadowRoot).host as LitElement).updateComplete;
   await screen.updateComplete;
 }
 for (const route of ["cancel", "escape"] as const) {
-  it(`Disable station ${route} protects its selected fallback without issuing a command`, async () => {
+  it(`Disable station ${route} protects its selected disposition without issuing a command`, async () => {
     const { screen, writes } = await mount();
     const modal = await open(screen);
     await change(screen, modal, "bar");
@@ -217,7 +234,7 @@ for (const route of ["cancel", "escape"] as const) {
     expect(unload()).toBe(false);
   });
 }
-it("Disable station clean and reverted fallback closes without another safety confirmation", async () => {
+it("Disable station clean and reverted disposition closes without another safety confirmation", async () => {
   const { screen, writes } = await mount();
   let modal = await open(screen);
   cancel(modal);
@@ -232,44 +249,52 @@ it("Disable station clean and reverted fallback closes without another safety co
   expect((await question()).open).toBe(false);
   expect(writes).toEqual([]);
 });
-it("Disable station commits the accepted fallback before a failed refresh", async () => {
+it("Disable station commits the accepted disposition before a failed refresh", async () => {
   const { screen, writes } = await mount(undefined, true);
   const modal = await open(screen);
   await change(screen, modal, "bar");
   await save(screen, modal);
   await expect.poll(() => modal.isConnected).toBe(false);
-  expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }, { deactivate: "kitchen" }]);
+  expect(writes).toEqual([
+    { deactivate: "kitchen", choice: { openDishes: "send", sendsToStationId: "bar" } },
+  ]);
   expect(unload()).toBe(false);
   expect((await question()).open).toBe(false);
 });
-it("Disable station refused fallback retains selection and asks before Cancel", async () => {
+it("Disable station refused destination retains selection and asks before Cancel", async () => {
   const write = deferred();
   const { screen, writes } = await mount(write.promise);
   const modal = await open(screen);
   await change(screen, modal, "bar");
   await save(screen, modal);
-  write.reject({ code: "station.fallback_loop" });
-  await expect.poll(() => modal.querySelector("[data-field-error=fallback]")).not.toBeNull();
+  write.reject({ code: "station.destination_invalid" });
+  await expect.poll(() => modal.querySelector("[data-field-error=openDishes]")).not.toBeNull();
   expect(unload()).toBe(true);
   cancel(modal);
   await choose("keep");
   expect(modal.querySelector("wt-combobox")!.value).toBe("bar");
-  expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }]);
+  expect(writes).toEqual([
+    { deactivate: "kitchen", choice: { openDishes: "send", sendsToStationId: "bar" } },
+  ]);
 });
-it("Disable station commits only fallback when the later disable is refused", async () => {
+it("Disable station refused write keeps its uncommitted disposition protected", async () => {
   const deactivation = deferred();
   const { screen, writes } = await mount(undefined, false, deactivation.promise);
   const modal = await open(screen);
   await change(screen, modal, "bar");
   await save(screen, modal);
-  await expect.poll(() => writes.length).toBe(2);
+  await expect.poll(() => writes.length).toBe(1);
   deactivation.reject({ code: "station.default_cannot_disable" });
   await expect.poll(() => modal.querySelector("[role=alert]")).not.toBeNull();
   expect(modal.querySelector("wt-combobox")!.value).toBe("bar");
-  expect(unload()).toBe(false);
+  expect(unload()).toBe(true);
   cancel(modal);
-  await expect.poll(() => modal.isConnected).toBe(false);
+  await choose("keep");
+  expect(modal.isConnected).toBe(true);
   expect((await question()).open).toBe(false);
+  cancel(modal);
+  await choose("discard");
+  await expect.poll(() => modal.isConnected).toBe(false);
 });
 it("Disable station pending write refuses dismissal and ignores changes to its disabled selector", async () => {
   const write = deferred();
@@ -281,7 +306,9 @@ it("Disable station pending write refuses dismissal and ignores changes to its d
   await change(screen, modal, "grill");
   write.resolve();
   await expect.poll(() => modal.isConnected).toBe(false);
-  expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }, { deactivate: "kitchen" }]);
+  expect(writes).toEqual([
+    { deactivate: "kitchen", choice: { openDishes: "send", sendsToStationId: "bar" } },
+  ]);
   expect(unload()).toBe(false);
 });
 it("Disable station disconnect aborts the question and removes unload protection", async () => {
@@ -307,7 +334,7 @@ it("Disable station rerenders while asking without replacing the pending close c
   await expect.poll(() => modal.isConnected).toBe(false);
 });
 for (const refused of [false, true]) {
-  it(`Disable station departed ${refused ? "refused" : "accepted"} fallback cannot disable a replacement opening`, async () => {
+  it(`Disable station departed ${refused ? "refused" : "accepted"} request cannot disable a replacement opening`, async () => {
     const write = deferred();
     const { screen, writes } = await mount(write.promise);
     const old = await open(screen);
@@ -321,8 +348,8 @@ for (const refused of [false, true]) {
     old
       .querySelector("wt-combobox")!
       .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
-    old.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
-    if (refused) write.reject({ code: "station.fallback_loop" });
+    old.querySelector<HTMLElement>("[data-test=disable-confirm]")!.click();
+    if (refused) write.reject({ code: "station.destination_invalid" });
     else write.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await screen.updateComplete;
@@ -330,7 +357,9 @@ for (const refused of [false, true]) {
     expect(next.querySelector("wt-combobox")!.value).toBe("kitchen");
     expect(next.querySelector("[slot=cancel]")!.hasAttribute("disabled")).toBe(false);
     expect(next.querySelector("[role=alert]")).toBeNull();
-    expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }]);
+    expect(writes).toEqual([
+      { deactivate: "kitchen", choice: { openDishes: "send", sendsToStationId: "bar" } },
+    ]);
     expect(unload()).toBe(true);
   });
 }
@@ -342,9 +371,9 @@ it("Disable station departed controls cannot reopen a cancelled form", async () 
   old
     .querySelector("wt-combobox")!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
-  old.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
+  old.querySelector<HTMLElement>("[data-test=disable-confirm]")!.click();
   await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("[data-test=station-action-modal]")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("station-disable-dialog")).toBeNull();
   expect(writes).toEqual([]);
   expect(unload()).toBe(false);
 });
@@ -361,14 +390,14 @@ it("Disable station replacement waits for Discard and old controls cannot change
   await open(screen, "grill");
   await choose("discard");
   await expect.poll(() => old.isConnected).toBe(false);
-  const next = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-    "[data-test=station-action-modal]",
-  )!;
+  const next = screen
+    .shadowRoot!.querySelector("station-disable-dialog")!
+    .shadowRoot!.querySelector("wt-modal")!;
   await change(screen, next, "kitchen");
   old
     .querySelector("wt-combobox")!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
-  old.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
+  old.querySelector<HTMLElement>("[data-test=disable-confirm]")!.click();
   await screen.updateComplete;
   expect(next.querySelector("wt-combobox")!.value).toBe("kitchen");
   expect(writes).toEqual([]);
@@ -385,12 +414,10 @@ it("Disable default station is an unchanged safety confirmation without a draft 
   expect((await question()).open).toBe(false);
   expect(writes).toEqual([]);
 });
-it("Disable station reviewing an unchanged fallback does not create unsaved changes", async () => {
+it("Disable station reviewing a no-work confirmation does not create unsaved changes", async () => {
   const { screen, writes } = await mount();
-  const modal = await open(screen);
-  modal.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
-  await screen.updateComplete;
-  expect(modal.querySelector("[data-test=fallback-confirmation]")).not.toBeNull();
+  const modal = await open(screen, "bar");
+  expect(modal.querySelector("wt-combobox")).toBeNull();
   expect(unload()).toBe(false);
   cancel(modal);
   await expect.poll(() => modal.isConnected).toBe(false);
@@ -404,7 +431,7 @@ it("Disable station a background default change cannot retire the opening's unsa
   await change(screen, modal, "bar");
   model.stations.find((row) => row.id === "kitchen")!.isDefault = true;
   liveData.invalidate([{ type: "kitchen_stations" }]);
-  await expect.poll(() => modal.querySelector("wt-combobox")).toBeNull();
+  await expect.poll(() => modal.querySelector("wt-combobox")!.value).toBe("bar");
   expect(unload()).toBe(true);
   cancel(modal);
   await choose("keep");
@@ -412,17 +439,144 @@ it("Disable station a background default change cannot retire the opening's unsa
   expect(unload()).toBe(true);
 });
 
-it("Disable station completes when a background write already saved its selected fallback", async () => {
+it("Disable station keeps its choice through a background routing read, then submits it once", async () => {
   const { screen, model, liveData, writes, readCount } = await mount();
   const modal = await open(screen);
   await change(screen, modal, "bar");
   const reads = readCount();
-  model.routing.stationTimes.find((row) => row.stationId === "kitchen")!.fallbackStationId = "bar";
-  liveData.invalidate([{ type: "station_fallbacks" }]);
+  model.routing.cells = [
+    ...model.routing.cells,
+    { row: { kind: "all" }, zoneId: null, target: { kind: "station", stationId: "kitchen" } },
+  ];
+  liveData.invalidate([{ type: "kitchen_stations" }]);
   await expect.poll(readCount).toBeGreaterThan(reads);
   await screen.updateComplete;
+  expect(modal.querySelector("wt-combobox")!.value).toBe("bar");
+  expect(unload()).toBe(true);
   await save(screen, modal);
   await expect.poll(() => modal.isConnected).toBe(false);
-  expect(writes).toEqual([{ deactivate: "kitchen" }]);
+  expect(writes).toEqual([
+    { deactivate: "kitchen", choice: { openDishes: "send", sendsToStationId: "bar" } },
+  ]);
   expect(unload()).toBe(false);
 });
+
+it("Disable names every explicit routing cell that selects the station", async () => {
+  const { screen, model, liveData, readCount } = await mount();
+  model.routing.zones = [{ id: "terrace", name: "Terrace", departmentId: null }];
+  model.routing.cells = [
+    { row: { kind: "all" }, zoneId: null, target: { kind: "station", stationId: "kitchen" } },
+    {
+      row: { kind: "no_category" },
+      zoneId: "terrace",
+      target: { kind: "station", stationId: "kitchen" },
+    },
+    {
+      row: { kind: "category", categoryId: "cocktails" },
+      zoneId: null,
+      target: { kind: "station", stationId: "kitchen" },
+    },
+    {
+      row: { kind: "product", productId: "bread" },
+      zoneId: "terrace",
+      target: { kind: "station", stationId: "kitchen" },
+    },
+    {
+      row: { kind: "category", categoryId: "food" },
+      zoneId: null,
+      target: { kind: "station", stationId: "bar" },
+    },
+  ];
+  const reads = readCount();
+  liveData.invalidate([{ type: "kitchen_stations" }]);
+  await expect.poll(readCount).toBeGreaterThan(reads);
+  const modal = await open(screen);
+  expect([...modal.querySelectorAll("li")].map((row) => row.textContent!.trim())).toEqual([
+    "All categories · Every zone",
+    "No category · Terrace",
+    "Drinks › Cocktails · Every zone",
+    "Bread · Terrace",
+  ]);
+});
+
+it.each(["cancel", "disabled"] as const)(
+  "a departed Disable %s event cannot dismiss a newer opening or refresh its model",
+  async (eventName) => {
+    const { screen, writes, readCount } = await mount();
+    const old = await open(screen);
+    const oldDialog = (old.getRootNode() as ShadowRoot).host;
+    cancel(old);
+    await expect.poll(() => old.isConnected).toBe(false);
+    const next = await open(screen, "grill");
+    await change(screen, next, "kitchen");
+    const reads = readCount();
+    oldDialog.dispatchEvent(
+      new CustomEvent(eventName, {
+        detail: { stationId: "kitchen" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await screen.updateComplete;
+    expect(next.isConnected).toBe(true);
+    expect(next.querySelector("wt-combobox")!.value).toBe("kitchen");
+    expect(writes).toEqual([]);
+    expect(readCount()).toBe(reads);
+    expect(unload()).toBe(true);
+  },
+);
+
+it.each(
+  ([390, 1280] as const).flatMap((width) =>
+    (["en", "es"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)(
+  "connected Disable is readable in $locale $theme at $width CSS pixels",
+  async ({ width, locale, theme }) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 720);
+      const { screen, model, liveData, readCount } = await mount();
+      app.setAttribute("data-theme", theme);
+      app.style.display = "block";
+      app.style.background = "var(--wt-color-bg)";
+      app.style.width = `${width}px`;
+      model.routing.cells = [
+        {
+          row: { kind: "category", categoryId: "cocktails" },
+          zoneId: null,
+          target: { kind: "station", stationId: "kitchen" },
+        },
+      ];
+      const reads = readCount();
+      liveData.invalidate([{ type: "kitchen_stations" }]);
+      await expect.poll(readCount).toBeGreaterThan(reads);
+      setLocale(locale);
+      screen.requestUpdate();
+      await screen.updateComplete;
+      const modal = await open(screen);
+      const combo = modal.querySelector("wt-combobox")!;
+      await combo.updateComplete;
+      expect(combo.shadowRoot!.querySelector("button")!.name).toBe("openDishes");
+      expect(combo.shadowRoot!.querySelector("[data-required]")!.textContent).toBe("*");
+      expect(modal.querySelector("li")!.textContent).toContain("Drinks › Cocktails");
+      expect(modal.querySelector("[data-test=disable-confirm]")!.textContent!.trim()).toBe(
+        locale === "en" ? "Disable" : "Deshabilitar",
+      );
+      expect(window.innerWidth).toBe(width);
+      const native = modal.shadowRoot!.querySelector("dialog")!;
+      const rect = native.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(0);
+      expect(rect.right).toBeLessThanOrEqual(width);
+      expect(native.scrollWidth).toBeLessThanOrEqual(native.clientWidth);
+      await expectNoA11yViolations(app);
+      await page.screenshot({
+        path: `__screenshots__/look/connected-disable-${locale}-${theme}-${width}.png`,
+      });
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);

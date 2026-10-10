@@ -8,7 +8,6 @@ const annual = {
   repeats: true,
   ownHours: true,
   closeWholeVenue: false,
-  hasStationHours: false,
 };
 export function realWeekModel(): OpeningHoursModel {
   return {

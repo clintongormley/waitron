@@ -17,7 +17,6 @@ const day = {
   repeats: true,
   ownHours: false,
   closeWholeVenue: false,
-  hasStationHours: false,
 };
 async function mount(edit = false) {
   el = document.createElement("named-day-editor");
@@ -145,7 +144,7 @@ it.each(["date", "name", "kind", "repeats", "ownHours", "closeWholeVenue"])(
     await el.updateComplete;
     if (name === "repeats")
       expect(el.shadowRoot!.querySelector("[data-error=repeats]")!.textContent).toContain(
-        "This day has station hours. Remove them in Station hours first.",
+        "Check this field.",
       );
     else if (name === "closeWholeVenue")
       expect(el.shadowRoot!.querySelector("[data-error=closeWholeVenue]")!.textContent).not.toBe(
@@ -211,5 +210,41 @@ it.each([
         .error,
     ).toBe(bottom);
     expect(save().disabled).toBe(false);
+  },
+);
+
+it.each([
+  ["en", "Check this field.", "Correct the highlighted fields to continue."],
+  ["es", "Revisa este campo.", "Corrige los campos marcados para continuar."],
+] as const)(
+  "keeps a repeat refusal beside the choice and allows retry (%s)",
+  async (locale, message, bottom) => {
+    await mount(true);
+    setLocale(locale);
+    await change("name", { value: "Changed" });
+    el.refusal = { code: "hours.invalid", params: { field: "repeats" } };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-error=repeats]")!.textContent).toBe(message);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+        .error,
+    ).toBe(bottom);
+    expect(save().disabled).toBe(false);
+    const writes: unknown[] = [];
+    el.addEventListener("named-day-save", (event) => writes.push((event as CustomEvent).detail));
+    save().click();
+    expect(writes).toEqual([
+      {
+        id: "d1",
+        input: {
+          date: "2028-02-29",
+          name: "Changed",
+          kind: "working_day",
+          repeats: true,
+          ownHours: false,
+          closeWholeVenue: false,
+        },
+      },
+    ]);
   },
 );

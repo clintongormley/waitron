@@ -1608,6 +1608,13 @@ describe("mountCatalogueApi — products", () => {
         .set({ active: false })
         .where(eq(kitchenStations.id, cocktailBar!.id));
     });
+    const recovered = await send(app, "GET", "/management-api/products/made-at");
+    expect(recovered.status).toBe(200);
+    const recoveredBody = (await recovered.json()) as Record<string, unknown>;
+    expect(recoveredBody[lager]).toMatchObject({ stationName: "Bar", noReplacement: false });
+    await withTransaction(suite.db, (tx) =>
+      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.isDefault, true)),
+    );
     const changed = await send(app, "GET", "/management-api/products/made-at");
     const changedBody = (await changed.json()) as Record<string, unknown>;
     expect(changedBody[lager]).toMatchObject({

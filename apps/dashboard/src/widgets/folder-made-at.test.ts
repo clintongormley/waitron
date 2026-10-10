@@ -70,15 +70,17 @@ const cell = (row: Row, target: Target, zoneId: string | null = null) => ({ row,
 const onCategory = (categoryId: string, target: Target) => cell(category(categoryId), target);
 const times = (
   stationId: string,
-  fields: Partial<RoutingModel["stationTimes"][number]> = {},
+  fields: Partial<RoutingModel["stationTimes"][number]> & {
+    hours?: { weekday: number; opensAt: string; closesAt: string }[];
+    weekSet?: boolean;
+    specialDateRestricts?: boolean;
+  } = {},
 ): RoutingModel["stationTimes"][number] => ({
   stationId,
-  status: { open: true, why: "no_hours" },
-  hours: [],
+  status: { open: true, why: "open" },
   fallbackStationId: null,
   today: null,
   closedSendsTo: null,
-  nextTransition: null,
   ...fields,
 });
 
@@ -170,11 +172,12 @@ describe("folderMadeAt — the category's own baseline", () => {
     });
   });
 
-  it("follows a switched-off station's fallback, as product rows do", () => {
+  it("sends a switched-off station's work to the default, as product rows do", () => {
     const result = madeAt(
       routing({
         cells: [onCategory("drinks", station("cocktail"))],
-        stationTimes: [times("cocktail", { fallbackStationId: "bar" })],
+        defaultStationId: "bar",
+        stationTimes: [times("cocktail", { fallbackStationId: "terrace" })],
       }),
     );
     expect(result.get("drinks")?.maker).toEqual({ kind: "station", stationName: "Bar" });
@@ -359,7 +362,7 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies a station that opening hours can close", () => {
+  it("does not qualify a station from its retired opening hours", () => {
     const result = madeAt(
       routing({
         ...barOnDrinks,
@@ -368,14 +371,14 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
         ],
       }),
     );
-    expect(result.get("drinks")?.someElsewhere).toBe(true);
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies a station whose standard week is Closed every day", () => {
+  it("does not qualify a station from its retired Closed standard week", () => {
     const result = madeAt(
       routing({ ...barOnDrinks, stationTimes: [times("bar", { hours: [], weekSet: true })] }),
     );
-    expect(result.get("drinks")?.someElsewhere).toBe(true);
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
   it("does not qualify a station opened by hand today that keeps no hours", () => {
@@ -385,14 +388,14 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies a station with no weekly hours that a current or future special date closes", () => {
+  it("does not qualify a station from a retired special date restriction", () => {
     const restricted = madeAt(
       routing({
         ...barOnDrinks,
         stationTimes: [times("bar", { weekSet: false, specialDateRestricts: true })],
       }),
     );
-    expect(restricted.get("drinks")?.someElsewhere).toBe(true);
+    expect(restricted.get("drinks")?.someElsewhere).toBe(false);
     const unrestricted = madeAt(
       routing({
         ...barOnDrinks,
@@ -402,11 +405,11 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(unrestricted.get("drinks")?.someElsewhere).toBe(false);
   });
 
-  it("qualifies a station closed by hand today", () => {
+  it("does not apply today's closure to the untimed category baseline", () => {
     const result = madeAt(
       routing({ ...barOnDrinks, stationTimes: [times("bar", { today: "closed" })] }),
     );
-    expect(result.get("drinks")?.someElsewhere).toBe(true);
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
   });
 
   it("does not qualify the default station, which is always open, nor a station with no hours", () => {
@@ -598,5 +601,28 @@ describe("isRouted — what the category tree's asterisk reads", () => {
     expect(isRouted(made({ kind: "nowhere" }, { kind: "own" }))).toBe(false);
     expect(isRouted(made({ kind: "nowhere" }, { kind: "inherited", name: "Drinks" }))).toBe(false);
     expect(isRouted(made({ kind: "nowhere" }, { kind: "default" }))).toBe(false);
+  });
+});
+
+describe("folderMadeAt — station schedules no longer change the baseline", () => {
+  it.each([
+    { hours: [{ weekday: 1, opensAt: "18:00", closesAt: "23:00" }] },
+    { weekSet: true },
+    { specialDateRestricts: true },
+    { today: "closed" as const, closedSendsTo: "kitchen" },
+  ])("keeps a category made in one place with retired timing %j", (fields) => {
+    const result = madeAt(
+      routing({
+        defaultStationId: "kitchen",
+        cells: [onCategory("drinks", station("bar"))],
+        stationTimes: [times("bar", fields)],
+      }),
+      [product("cola", "drinks")],
+    );
+    expect(result.get("drinks")).toEqual({
+      maker: { kind: "station", stationName: "Bar" },
+      source: { kind: "own" },
+      someElsewhere: false,
+    });
   });
 });

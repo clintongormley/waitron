@@ -63,8 +63,9 @@ export const ticketItems = table(
     // NULL = HELD: the item cannot advance until it is fired.
     firedAt: tsString("fired_at"),
     awayAt: tsString("away_at"),
-    // Set when someone moved this record to its station by hand, from a till or a kitchen display; a release keeps it there while the station is switched on.
     stationChosenAt: tsString("station_chosen_at"),
+    // Explicit "leave to finish" survives disabling; an earlier manual station choice does not.
+    stationRetainedAtRelease: flag("station_retained_at_release").notNull().default(false),
     note: label("note"),
     // The quantity fired. Null where an insert does not state it, and on every row older than
     // `0014_order_edit_columns.sql`.

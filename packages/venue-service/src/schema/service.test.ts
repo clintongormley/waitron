@@ -15,7 +15,7 @@ import {
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
 import { routingCellPeriods, routingCells } from "./routing.js";
-import { stationDayStates, stationFallbacks } from "./station-times.js";
+import { stationDayStates } from "./station-times.js";
 
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
@@ -106,14 +106,6 @@ const EXPECTED: Record<
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: ["device_profile_zones_pk"],
-  },
-  station_fallbacks: {
-    table: stationFallbacks,
-    foreignKeys: ["station_fallbacks_station_fk", "station_fallbacks_fallback_fk"],
-    checks: ["station_fallbacks_not_self_ck"],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: [],
   },
   station_day_states: {
     table: stationDayStates,
@@ -219,7 +211,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(15);
+    expect(Object.keys(EXPECTED)).toHaveLength(14);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

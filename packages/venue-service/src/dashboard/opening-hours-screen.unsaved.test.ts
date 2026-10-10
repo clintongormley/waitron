@@ -32,7 +32,6 @@ class OpeningLeaveApp extends LitElement {
               repeats: true,
               ownHours: false,
               closeWholeVenue: false,
-              hasStationHours: false,
             },
             holidays: [],
             tone: "own_holiday",

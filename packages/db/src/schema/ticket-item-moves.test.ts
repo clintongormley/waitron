@@ -3,7 +3,7 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { FOREIGN_KEY_VIOLATION, NOT_NULL_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, CHECK_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -107,7 +107,7 @@ describe("ticket_item_moves schema", () => {
       fromStationId: values.from ?? grill,
       toStationId: values.to ?? fryer,
       movedAt: AT,
-      movedByDeviceId: values.deviceId === undefined ? "device-a" : (values.deviceId as string),
+      movedByDeviceId: values.deviceId === undefined ? "device-a" : values.deviceId,
       movedByPersonId: values.personId ?? null,
     });
 
@@ -139,11 +139,18 @@ describe("ticket_item_moves schema", () => {
     ]);
   });
 
-  it("refuses a move that names no device", async () => {
+  it("records a dashboard move by a person without a device", async () => {
+    await move({ deviceId: null, personId: "manager-1" });
+    expect(await suite.db.select().from(ticketItemMoves)).toEqual([
+      expect.objectContaining({ movedByDeviceId: null, movedByPersonId: "manager-1" }),
+    ]);
+  });
+
+  it("refuses a move naming neither device nor person", async () => {
     expect(
       isRefusal(
-        await captureError(() => move({ deviceId: null, personId: "person-1" })),
-        NOT_NULL_VIOLATION,
+        await captureError(() => move({ deviceId: null, personId: null })),
+        CHECK_VIOLATION,
       ),
     ).toBe(true);
   });

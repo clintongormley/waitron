@@ -18,7 +18,6 @@ const annual = {
   repeats: true,
   ownHours: true,
   closeWholeVenue: false,
-  hasStationHours: false,
 };
 
 function emit(target: Element, name: string, detail: unknown) {

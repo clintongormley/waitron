@@ -10,7 +10,7 @@ class NamedDayLeaveApp extends LitElement {
   override render() {
     return html`<named-day-editor
         .open=${true}
-        .day=${{ id: "d1", date: "2027-03-01", name: "Lunch", kind: "working_day", repeats: false, ownHours: false, closeWholeVenue: false, hasStationHours: false }}
+        .day=${{ id: "d1", date: "2027-03-01", name: "Lunch", kind: "working_day", repeats: false, ownHours: false, closeWholeVenue: false }}
       ></named-day-editor
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }

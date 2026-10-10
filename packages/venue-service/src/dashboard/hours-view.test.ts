@@ -26,3 +26,20 @@ it("does not fill a placeholder that arrived inside another value", () => {
 it("leaves a placeholder with no value as it is", () => {
   expect(format("prep.station_reordered", { name: "Bar" })).toBe("Bar is now {index} of {total}.");
 });
+
+it.each([
+  "cellText",
+  "unbrokenRanges",
+  "keyOf",
+  "isDefaultStation",
+  "weekCellOf",
+  "standardText",
+  "storedCells",
+  "dateValue",
+])(
+  "the shared date formatter no longer offers the retired station-hours renderer %s",
+  async (method) => {
+    const api = await import("./hours-view.js");
+    expect(api).not.toHaveProperty(method);
+  },
+);

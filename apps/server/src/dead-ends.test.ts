@@ -4,7 +4,7 @@ import { kitchenStations } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, setStationFallback, setStationToday } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { findDeadEnds } from "./dead-ends.js";
 import { inTx, setupPartyVenue } from "./testing/party-venue.js";
 
@@ -14,7 +14,7 @@ const suite = useVenueDb({
 });
 
 describe("findDeadEnds", () => {
-  it("names the closed station for a dish with no replacement and leaves a default-routed dish out", async () => {
+  it("names the closed station for a dish with no replacement and leaves an explicitly routed dish out", async () => {
     const v = await setupPartyVenue(suite.db);
     const stationName = `Upstairs bar ${randomUUID()}`;
     const [bar] = await suite.db
@@ -32,6 +32,20 @@ describe("findDeadEnds", () => {
         { row: { kind: "product", productId: v.productId("Caña") }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
+      const [kitchen] = await tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.isDefault, true));
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
+        { kind: "station", stationId: kitchen!.id },
+      );
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, kitchen!.id));
       await setStationToday(tx, v.cfg, bar!.id, "closed", at);
     });
     const answer = await inTx(v, (tx) =>
@@ -82,14 +96,14 @@ describe("findDeadEnds", () => {
     await inTx(v, (tx) =>
       tx.update(kitchenStations).set({ active: true }).where(eq(kitchenStations.id, bar!.id)),
     );
-    const [fallback] = await suite.db
+    const [destination] = await suite.db
       .insert(kitchenStations)
       .values({
         locationId: v.cfg.locationId,
-        name: `Fallback bar ${randomUUID()}`,
+        name: `Destination bar ${randomUUID()}`,
       })
       .returning({ id: kitchenStations.id });
-    await inTx(v, (tx) => setStationFallback(tx, v.cfg, bar!.id, fallback!.id));
+    await inTx(v, (tx) => setStationToday(tx, v.cfg, bar!.id, "closed", at, destination!.id));
     const replaced = await inTx(v, (tx) =>
       findDeadEnds(
         tx,

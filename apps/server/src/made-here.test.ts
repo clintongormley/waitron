@@ -31,7 +31,7 @@ import { createOpenOrder, fireCourse, fireLines, listStationQueue } from "./work
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { routeProductTo } from "./testing/zone-offers.js";
-import { setStationFallback, setStationToday } from "@waitron/venue-service";
+import { setStationToday } from "@waitron/venue-service";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -96,16 +96,15 @@ async function deviceAt(tx: Transaction, locationId: string, stationId: string):
 }
 
 describe("device made-here stations", () => {
-  it("prints at the fallback when a made-here station closes by hand", async () => {
+  it("prints at today's chosen destination when a made-here station closes by hand", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const bar = await createStation(tx, venue.cfg, { name: "Bar" });
       const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
       await routeProductTo(tx, venue.cfg, venue.cafeId, bar.id);
-      await setStationFallback(tx, venue.cfg, bar.id, downstairs.id);
       const downstairsPrinter = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
       const deviceId = await deviceAt(tx, venue.cfg.locationId, bar.id);
-      await setStationToday(tx, venue.cfg, bar.id, "closed", new Date());
+      await setStationToday(tx, venue.cfg, bar.id, "closed", new Date(), downstairs.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const lager = await rawLine(tx, orderId, venue.cafeId, 1);

@@ -1331,6 +1331,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
+  Part B is in progress on its unlanded branch: station-hours and fallback retirement,
+  daily closure notes and Disable are implemented; worked-out station times, their Opening
+  hours view and final qualification remain.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
@@ -1349,6 +1352,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Served at a table or counter; payment due before the kitchen, at collection or at the end of
   the tab. Slice 6 keeps the three-value order record and its behaviour.
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
+
+- **Prep station drag-scroll test failure (A366-4B).** Investigate the full-screen
+  `edge scroll carries a held station past the visible summary and persists on release`
+  failure. The isolated case, earlier checkpoint's full file and final candidate's full file
+  passed; the cause is unverified. Keep its scroll-distance and saved-order assertions.
 
 - **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
   own-hours dates and keep it beside only the action that failed, retaining its retry and draft.

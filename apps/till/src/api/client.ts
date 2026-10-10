@@ -1161,7 +1161,7 @@ export interface Station {
   open: boolean;
   byHand: "open" | "closed" | null;
   sendsTo: string | null;
-  why: "default" | "open" | "opened_by_hand" | "closed_by_hand" | "out_of_hours" | "switched_off";
+  why: "default" | "open" | "closed_by_hand" | "switched_off";
 }
 
 export interface StationDestination {
@@ -1199,6 +1199,7 @@ export interface PeriodExtensionWrite {
 }
 
 export interface StationTodayWrite {
+  openDishes?: "send" | "leave";
   state: "open" | "closed";
   sendsToStationId?: string;
   override?: { personId: string; pin: string };
@@ -2573,7 +2574,9 @@ export class TillApi {
     return this.#request<Station[]>("/api/stations", "GET", undefined, options.signal);
   }
 
-  stationToday(stationId: string): Promise<{ destinations: StationDestination[] }> {
+  stationToday(
+    stationId: string,
+  ): Promise<{ destinations: StationDestination[]; openDishCount: number }> {
     return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "GET");
   }
 
@@ -2581,9 +2584,11 @@ export class TillApi {
     return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "PUT", body);
   }
 
-  deviceStationToday(
-    stationId: string,
-  ): Promise<{ destinations: StationDestination[]; authorizers: StaffMember[] }> {
+  deviceStationToday(stationId: string): Promise<{
+    destinations: StationDestination[];
+    authorizers: StaffMember[];
+    openDishCount: number;
+  }> {
     return this.#request(`/api/device/stations/${encodeURIComponent(stationId)}/today`, "GET");
   }
 

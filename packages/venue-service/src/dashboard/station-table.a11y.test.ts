@@ -21,7 +21,7 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("prep-station-table");
     el.stations = state === "empty" ? [] : stations;
-    el.today = { bar: "Always open", old: "Disabled" };
+    el.statusNotes = { old: "Switched off" };
     el.actions =
       state === "manager"
         ? Object.fromEntries(

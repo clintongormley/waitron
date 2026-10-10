@@ -15,7 +15,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readNamedDaysModel } from "./named-days.js";
-import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
+import { readSpecialDate, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
@@ -267,12 +267,12 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await runSeed();
     expect(await settings()).toEqual([{ id: 1, edit_sent_lines: 0 }]);
   });
-  it("leaves a fresh venue with no hours set and no special dates, and a re-run keeps hours set later", async () => {
+  it("leaves a fresh venue without named dates and preserves an authored date on a re-run", async () => {
     await seedTenant(db);
     const [location] = await db
       .insert(locations)
       .values({
-        name: "Hours Venue",
+        name: "Calendar Venue",
         invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
         timeZone: "Europe/Madrid",
@@ -283,48 +283,18 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const cfg = { locationId };
     const node = { locationId, nodeId: await seedNode(db, locationId) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-    const counts = async () =>
+    const dates = async () =>
       (
         await db.execute(sql`
-          select
-            (select count(*) from hours_week_cells) as week_cells,
-            (select count(*) from hours_week_periods) as week_periods,
-            (select count(*) from special_dates) as special_dates,
-            (select count(*) from special_date_hours) as date_cells,
-            (select count(*) from special_date_hours_periods) as date_periods`)
-      ).rows[0];
+          select id, kind, repeat_on, own_hours, date, name, close_whole_venue
+          from special_dates where location_id = ${locationId}`)
+      ).rows;
     await runSeed();
-    const [station] = await db
-      .insert(kitchenStations)
-      .values({ locationId, name: "Pass" })
-      .returning();
-    const subject = { kind: "station" as const, id: station!.id };
-    expect(await db.transaction((tx) => readWeekHours(tx, cfg, subject))).toEqual(
-      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-        weekday,
-        cell: { mode: "not_set", periods: [] },
-      })),
-    );
-    expect(await counts()).toEqual({
-      week_cells: 0,
-      week_periods: 0,
-      special_dates: 0,
-      date_cells: 0,
-      date_periods: 0,
-    });
+    expect(await dates()).toEqual([]);
 
     const at = new Date("2026-10-06T10:00:00Z");
-    const lunch = { id: randomUUID(), opensAt: "12:00", closesAt: "16:00" };
-    const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-      weekday,
-      cell:
-        weekday === 1
-          ? { mode: "closed" as const, periods: [] as [] }
-          : { mode: "periods" as const, periods: [lunch].map((p) => ({ ...p, id: randomUUID() })) },
-    }));
-    const saved = await db.transaction(async (tx) => {
-      await replaceWeekHours(tx, cfg, subject, week, at);
-      return saveSpecialDate(
+    const saved = await db.transaction((tx) =>
+      saveSpecialDate(
         tx,
         cfg,
         null,
@@ -332,32 +302,35 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           date: "2026-12-25",
           name: "Christmas",
           closeWholeVenue: false,
-          cells: [{ subject, cell: { mode: "closed", periods: [] } }],
         },
         at,
-      );
+      ),
+    );
+    const before = await db.transaction((tx) => readSpecialDate(tx, cfg, saved.id));
+    expect(before).toEqual({
+      id: saved.id,
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
+      date: "2026-12-25",
+      name: "Christmas",
+      closeWholeVenue: false,
     });
-    const before = await db.transaction(async (tx) => ({
-      week: await readWeekHours(tx, cfg, subject),
-      date: await readSpecialDate(tx, cfg, saved.id),
-    }));
 
     await runSeed();
 
-    expect(
-      await db.transaction(async (tx) => ({
-        week: await readWeekHours(tx, cfg, subject),
-        date: await readSpecialDate(tx, cfg, saved.id),
-      })),
-    ).toEqual(before);
-    expect(before.week[1]!.cell).toEqual({ mode: "closed", periods: [] });
-    expect(await counts()).toEqual({
-      week_cells: 7,
-      week_periods: 6,
-      special_dates: 1,
-      date_cells: 1,
-      date_periods: 0,
-    });
+    expect(await db.transaction((tx) => readSpecialDate(tx, cfg, saved.id))).toEqual(before);
+    expect(await dates()).toEqual([
+      {
+        id: saved.id,
+        kind: "working_day",
+        repeat_on: null,
+        own_hours: 0,
+        date: "2026-12-25",
+        name: "Christmas",
+        close_whole_venue: 0,
+      },
+    ]);
   });
 
   it("leaves a fresh Spanish venue's holiday storage empty while its address reads the shipped holidays, and a re-run keeps entries made later", async () => {

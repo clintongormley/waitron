@@ -1854,8 +1854,8 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor, the routing cell editor,
-watcher Rename/follows/zones/pass/printers, and Settings fallback/timing. An unchanged Settings
-fallback opens no confirmation; an edited fallback keeps its two presses. Routing Confirm and station service operations remain actions.
+watcher Rename/follows/zones/pass/printers, and Settings timing. Rest-of-order is edited in
+the station editor. Routing Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
@@ -3147,10 +3147,11 @@ localized `label` for the tab group.
 
 Prep stations uses `stations`, `routing`, `watchers` and `settings` at
 `/manage/prep-stations/view/<key>`; an old `tickets` address opens Stations. Stations shows no
-live kitchen numbers: each station's name with its Default or Disabled mark, Printed on (its
-printers, or "No printer"), Shown on (the devices whose kitchen screens show it, and a link to
-Devices) and Today (`packages/venue-service/src/dashboard/station-table.ts`). Its Today column
-reports the station's status and destination without close/open controls.
+live kitchen numbers: each station's name with its Default mark, Printed on (its printers, or
+"No printer") and Shown on (the devices whose kitchen screens show it, and a link to Devices).
+A closure note beside its name reads Closed for today and its destination, or Switched off;
+open and default stations need no status note (`packages/venue-service/src/dashboard/station-table.ts`).
+Each active non-default station links to Opening hours with its station id.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
 Closing asks where new work goes and offers the default station first; a manager PIN step
 keeps the destination draft after a refused PIN. The counter and table order screens show the
@@ -3181,33 +3182,16 @@ rest of the order", saved in one request. Printers offers a printer a watcher us
 unless the station already has it, and is a read-out for a switched-off station; the editor also has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
 also sets Printers. Watchers keeps its own printer selections. Settings edits each station value in
-its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured
-fallback field reads "Outside its hours, work goes to". Station Edit, Make default and
+its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Edit, Make default and
 Disable/Enable actions belong to the Stations row menu; Routing's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
-at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
-with focus on the station's heading once it is read. Department opening hours belong to
-`/manage/opening-hours`, with Week, Periods, Day and Calendar tabs; `/department/<id>` selects the
-department and `/view/periods` selects its periods. The Week and Day editing contract is in
-Forms above. After provisioning, setup's completion screen shows the first saved Open schedule,
-when it is still Monday to Friday, 09:00–17:00, with a link to that department's Opening hours.
-
-- **Standard week.** Days are rows, Monday first, with today marked; prep stations are columns.
-  The editable cells share one Tab stop and the arrow keys move between
-  days and columns. Each editable column's heading has its own menu, a separate Tab stop, holding
-  Clear schedule, or Configure hours for a subject with no hours.
-  The default station's column reads Always open and has nothing to open. A subject with no hours
-  reads "No hours restriction"; Prep stations says
-  "Always open" for that station state. A cell opens that day's editor; a subject with no hours
-  opens a seven-day draft that starts Closed and saves only after a confirmation.
-- **Named days.** A `wt-data-table` of one-off named days from yesterday onward, with prep station
-  columns; a value kept from the standard week is muted. Edit changes station cells only; the date
-  and name are text, and the save carries the stored kind, repeat, own-hours, closure
-  values unchanged. A whole-venue closure keeps the station cells locked. Add, copy and delete
-  lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
+Department opening hours belong to `/manage/opening-hours`, with Week, Periods, Day and Calendar
+tabs; `/department/<id>` selects the department and `/view/periods` selects its periods. The Week
+and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
+the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
+that department's Opening hours.
 
 - **Calendar.** Add, edit, copy and delete named days here. The editor asks for Holiday or
   Working day, annual repeat and the day's hours choice; name and date are required. Own hours
@@ -3224,9 +3208,8 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
   official list needs it. `hours-calendar.ts` renders the area control and coverage, and
   `packages/venue-service/src/holidays.ts` reads both sources.
 
-In the week grid and date panel a period stays on one line, so hours wrap only between periods.
-The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
-Delete and Clear schedule are `compact`.
+In Opening hours, a period stays on one line in the week grid and date panel, so hours wrap only
+between periods.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.

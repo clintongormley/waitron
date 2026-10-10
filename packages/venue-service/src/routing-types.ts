@@ -1,10 +1,4 @@
-import type {
-  RouteTarget,
-  RoutingRules,
-  StationStatus,
-  StationTransition,
-  WeeklyInterval,
-} from "./routing.js";
+import type { RouteTarget, RoutingRules, StationStatus } from "./routing.js";
 import type { CalendarColour } from "./hours-types.js";
 
 export type RoutingRow =
@@ -45,17 +39,6 @@ export type GridRow = {
 export interface StationTimes {
   stationId: string;
   status: StationStatus;
-  nextTransition: StationTransition | null;
-  /** The standard week's opening periods. */
-  hours: WeeklyInterval[];
-  /** The standard week has hours set; when absent, any `hours` at all mean it has. */
-  weekSet?: boolean;
-  /**
-   * A special date from today on (on any date while the clock cannot be read) closes this station
-   * for some or all of its day: a Closed cell, a cell with periods, or a whole-venue closure. When
-   * absent, none does.
-   */
-  specialDateRestricts?: boolean;
   fallbackStationId: string | null;
   today: "open" | "closed" | null;
   closedSendsTo: string | null;

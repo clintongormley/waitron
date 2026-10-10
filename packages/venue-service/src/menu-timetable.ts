@@ -29,7 +29,7 @@ import type {
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
-import { specialDates, specialDateHours } from "./schema/hours.js";
+import { specialDates } from "./schema/hours.js";
 import { namedDaysOn } from "./named-days.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
@@ -1047,20 +1047,9 @@ export async function readOpeningHoursModel(
       ),
     )
     .orderBy(asc(specialDates.date));
-  const stationRows = await tx
-    .select({ specialDateId: specialDateHours.specialDateId })
-    .from(specialDateHours)
-    .where(
-      inArray(
-        specialDateHours.specialDateId,
-        dateRows.map(({ id }) => id),
-      ),
-    );
-  const stationDays = new Set(stationRows.map(({ specialDateId }) => specialDateId));
   const dates = dateRows.map(({ repeatOn, ...row }) => ({
     ...row,
     repeats: repeatOn !== null,
-    hasStationHours: stationDays.has(row.id),
   }));
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })

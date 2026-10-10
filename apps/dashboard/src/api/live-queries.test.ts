@@ -525,3 +525,56 @@ it.each([
     observed.unsubscribe();
   }
 });
+
+it.each(["getFolderRouting", "listMadeAt"] as const)(
+  "%s ignores retired station sources and applies current station changes",
+  async (name) => {
+    let station = "bar";
+    const value = () =>
+      name === "listMadeAt"
+        ? {
+            cocktail: {
+              stationId: station,
+              stationName: station,
+              noPreparation: false,
+              noReplacement: false,
+              variesByZone: false,
+            },
+          }
+        : {
+            stationTimes: [],
+            todayEnds: null,
+            clockReadable: true,
+            zones: [],
+            categories: [],
+            products: [],
+            cells: [],
+            defaultStationId: station,
+            stations: [{ id: station, name: station, active: true }],
+            canMakeDefault: true,
+          };
+    const fetchImpl = vi.fn(async () => Response.json(value()));
+    const api = new DashboardApi("", fetchImpl);
+    const observed = api.liveData.observe(dashboardQuery(api, name, []), () => {});
+    try {
+      await vi.waitFor(() => expect(observed.snapshot.value).toEqual(value()));
+      station = "kitchen";
+      for (const type of [
+        "hours_week_cells",
+        "hours_week_periods",
+        "special_date_hours",
+        "special_date_hours_periods",
+        "station_fallbacks",
+      ]) {
+        api.liveData.invalidate([{ type }]);
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+      }
+      api.liveData.invalidate([{ type: "kitchen_stations" }]);
+      await vi.waitFor(() => expect(observed.snapshot.value).toEqual(value()));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      observed.unsubscribe();
+    }
+  },
+);

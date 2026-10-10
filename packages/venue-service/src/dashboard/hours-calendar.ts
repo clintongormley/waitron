@@ -5,25 +5,9 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { HolidayCoverage, NamedDay, NamedDaysModel } from "../holiday-types.js";
 import { holidayDateName } from "../holiday-naming.js";
-import type {
-  CalendarDay,
-  DateHoursCell,
-  HolidayFact,
-  HoursModel,
-  LocalDate,
-  SpecialDate,
-} from "../hours-types.js";
+import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
-import type { HoursApi } from "./hours-client.js";
-import {
-  browserToday,
-  dateValue,
-  format,
-  formatDate,
-  formatLongDate,
-  storedCells,
-  unbrokenRanges,
-} from "./hours-view.js";
+import { browserToday, format, formatDate, formatLongDate } from "./hours-view.js";
 import type { NamedDaysApi } from "./named-days-client.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -31,20 +15,6 @@ import { t } from "./strings.js";
 
 /** A month, `YYYY-MM`. */
 export type Month = string;
-
-/**
- * What the operator asked the calendar's panel for. The page opens the editor; `cells` are the
- * date's stored cells as this month's read gave them, and `returnTo` is where focus goes back to.
- */
-export interface CalendarAction {
-  kind: "edit" | "duplicate" | "delete" | "make_special";
-  date: LocalDate;
-  special?: SpecialDate;
-  cells?: DateHoursCell[];
-  /** The date's public holidays, which name a date made special from the panel. */
-  holidays?: HolidayFact[];
-  returnTo: () => HTMLElement | null;
-}
 
 export interface NamedCalendarAction {
   kind: "add" | "edit" | "own" | "copy" | "delete";
@@ -85,7 +55,7 @@ const formatUtc = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
     new Date(`${date}T00:00:00Z`),
   );
 
-/** A Monday-first month of Hours dates, read a month at a time, with the chosen date's panel. */
+/** A Monday-first month of named days with the chosen date's actions. */
 @customElement("hours-calendar")
 export class HoursCalendar extends LitElement {
   static override styles = [
@@ -344,7 +314,6 @@ export class HoursCalendar extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) api!: HoursApi;
   @property({ attribute: false }) namedApi?: NamedDaysApi;
   @state() private namedModel?: NamedDaysModel;
   @state() private areaError = "";
@@ -355,7 +324,6 @@ export class HoursCalendar extends LitElement {
   /** Empty keeps named mode on the venue date; a selected month survives later date reads. */
   @property() month: Month = "";
   @state() private shownMonth: Month = "";
-  @state() private model?: HoursModel;
   @state() private readError = "";
   @state() private selected: LocalDate | null = null;
   /** The date that holds the grid's one Tab stop. */
@@ -366,7 +334,6 @@ export class HoursCalendar extends LitElement {
   #areaRequest = {};
   #watchedMonth = "";
   #venueMonth?: Month;
-  #days = new Map<LocalDate, CalendarDay>();
   /** A date to focus once the month that holds it has drawn. */
   #focusAfterRender?: LocalDate;
 
@@ -415,38 +382,6 @@ export class HoursCalendar extends LitElement {
       );
       return;
     }
-    this.#detach = this.api.watchHours(
-      dates[0]!,
-      dates.at(-1)!,
-      (model) => this.#apply(model),
-      () => {
-        this.readError = t("hours.load_error");
-      },
-      () => {
-        this.readError = "";
-      },
-    );
-  }
-
-  #apply(model: HoursModel): void {
-    const focused = this.shadowRoot?.activeElement ?? null;
-    this.model = model;
-    this.#days = new Map(model.days.map((day) => [day.date, day]));
-    this.readError = "";
-    this.dispatchEvent(
-      new CustomEvent("hours-calendar-read", {
-        detail: { days: model.days },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    // A panel action the new read takes away, such as Delete once the date is ordinary, would
-    // otherwise drop focus to the page.
-    const date = this.selected;
-    if (focused === null || date === null) return;
-    void this.updateComplete.then(() => {
-      if (!focused.isConnected) this.#dayButton(date)?.focus();
-    });
   }
 
   #show(month: Month, focus?: LocalDate, selected = true): void {
@@ -455,9 +390,7 @@ export class HoursCalendar extends LitElement {
     if (selected) this.month = month;
     if (month === this.shownMonth) return;
     this.shownMonth = month;
-    this.model = undefined;
     this.namedModel = undefined;
-    this.#days = new Map();
     if (this.selected !== null && !monthGrid(month).includes(this.selected)) this.selected = null;
     this.#watch();
     if (this.namedApi && selected)
@@ -485,23 +418,14 @@ export class HoursCalendar extends LitElement {
   protected override updated(): void {
     const date = this.#focusAfterRender;
     if (date === undefined) return;
+    const target = this.#dayButton(date);
+    if (!target) return;
     this.#focusAfterRender = undefined;
-    this.#dayButton(date)?.focus();
+    target.focus();
   }
 
   #dayButton(date: LocalDate): HTMLElement | null {
     return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`);
-  }
-
-  #dayOf(date: LocalDate): CalendarDay {
-    return (
-      this.#days.get(date) ?? {
-        date,
-        specialDate: null,
-        holidays: [],
-        tone: "standard",
-      }
-    );
   }
 
   #open(date: LocalDate): void {
@@ -522,263 +446,6 @@ export class HoursCalendar extends LitElement {
       this.focusDate = target;
       this.#dayButton(target)?.focus();
     } else this.#show(target.slice(0, 7), target);
-  }
-
-  #action(kind: CalendarAction["kind"], date: LocalDate, event: Event): void {
-    const trigger = event.currentTarget as HTMLElement;
-    const special = this.#dayOf(date).specialDate ?? undefined;
-    const detail: CalendarAction = {
-      kind,
-      date,
-      ...(special === undefined
-        ? {}
-        : { special, cells: structuredClone(storedCells(this.model!, special.id)) }),
-      holidays: structuredClone(this.#dayOf(date).holidays),
-      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
-    };
-    this.dispatchEvent(
-      new CustomEvent<CalendarAction>("hours-calendar-action", {
-        detail,
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  /** What a day says in words, so nothing rests on its colour alone. */
-  #dayWords(day: CalendarDay): string[] {
-    const words: string[] = [];
-    const special = day.specialDate;
-    if (special !== null)
-      words.push(
-        day.tone === "closed"
-          ? format("hours.calendar.special_closed", { name: special.name })
-          : special.name,
-      );
-    else if (day.tone === "closed") words.push(t("hours.closed"));
-    const name = holidayDateName(day.holidays, day.date, "");
-    if (name !== "")
-      words.push(
-        special === null && day.tone !== "closed"
-          ? format("hours.calendar.holiday_standard", { name })
-          : name,
-      );
-    return words;
-  }
-
-  #day(date: LocalDate, stop: LocalDate) {
-    const day = this.#dayOf(date);
-    const outside = !date.startsWith(this.shownMonth);
-    const today = date === (this.model?.civilDate ?? null);
-    const words = this.#dayWords(day);
-    const special = day.specialDate;
-    const coloured = special !== null && day.tone !== "closed";
-    const number = formatUtc(
-      date,
-      outside ? { day: "numeric", month: "short" } : { day: "numeric" },
-    );
-    return html`<td data-date=${date} data-tone=${day.tone} ?data-outside=${outside}>
-      <button
-        type="button"
-        class="day"
-        tabindex=${date === stop ? 0 : -1}
-        aria-pressed=${date === this.selected ? "true" : "false"}
-        aria-current=${today ? "date" : nothing}
-        aria-label=${[formatLongDate(date), ...words, ...(today ? [t("hours.today")] : [])].join(
-          ", ",
-        )}
-        @click=${() => this.#open(date)}
-        @focus=${() => {
-          this.focusDate = date;
-        }}
-      >
-        <span class="number">${number}</span>
-        ${words.map((word, index) =>
-          index === 0 && coloured
-            ? html`<span
-                class="label"
-                data-test="special-name"
-                data-colour=${special.kind === "holiday" ? "purple" : "blue"}
-                >${word}</span
-              > `
-            : html`<span>${word}</span> `,
-        )}
-      </button>
-    </td>`;
-  }
-
-  #grid() {
-    const dates = monthGrid(this.shownMonth);
-    const today = this.model?.civilDate ?? null;
-    const stop =
-      [this.focusDate, this.selected, today].find(
-        (date) => date !== null && dates.includes(date),
-      ) ?? dates.find((date) => date.startsWith(this.shownMonth))!;
-    const weeks = Array.from({ length: dates.length / 7 }, (_, row) =>
-      dates.slice(row * 7, row * 7 + 7),
-    );
-    return html`<table class="grid" aria-labelledby="month-heading" @keydown=${this.#keydown}>
-      <thead>
-        <tr>
-          ${dates
-            .slice(0, 7)
-            .map(
-              (date) =>
-                html`<th scope="col" abbr=${formatUtc(date, { weekday: "long" })}>
-                  ${formatUtc(date, { weekday: "short" })}
-                </th>`,
-            )}
-        </tr>
-      </thead>
-      <tbody>
-        ${weeks.map(
-          (row) =>
-            html`<tr>
-              ${row.map((date) => this.#day(date, stop))}
-            </tr>`,
-        )}
-      </tbody>
-    </table>`;
-  }
-
-  #panel() {
-    const date = this.selected;
-    if (date === null || this.model === undefined)
-      return html`<p class="note">${t("hours.calendar.pick")}</p>`;
-    const model = this.model;
-    const day = this.#dayOf(date);
-    const special = day.specialDate;
-    const cells = special === null ? [] : storedCells(model, special.id);
-    const subjects = model.subjects.filter((subject) => subject.active);
-    const action = (
-      kind: CalendarAction["kind"],
-      label: Parameters<typeof t>[0],
-      primary = false,
-    ) =>
-      html`<wt-button
-        variant=${primary ? "primary" : "secondary"}
-        data-test=${`calendar-${kind}`}
-        @click=${(event: Event) => this.#action(kind, date, event)}
-        >${t(label)}</wt-button
-      >`;
-    return html`<h2 tabindex="-1">
-        ${
-          special === null
-            ? nothing
-            : html`<span
-                class="swatch"
-                data-colour=${day.tone === "closed" ? "closed" : special.kind === "holiday" ? "purple" : "blue"}
-              ></span>`
-        }<span
-          >${special === null ? formatDate(date) : `${formatDate(date)} · ${special.name}`}</span
-        >
-      </h2>
-      ${this.#holidays(model, day)}
-      <table class="hours">
-        <thead class="visually-hidden">
-          <tr>
-            <th scope="col">${t("hours.calendar.subject")}</th>
-            <th scope="col">${t("hours.calendar.hours")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${subjects.map((subject) => {
-            const value = dateValue(model, subject, date, special, cells);
-            return html`<tr>
-              <th scope="row">${subject.name}</th>
-              <td>
-                ${
-                  value.inherited
-                    ? html`<span class="inherited"
-                        ><span class="visually-hidden">${t("hours.inherited_prefix")}</span
-                        >${unbrokenRanges(value.text)}</span
-                      >`
-                    : unbrokenRanges(value.text)
-                }
-              </td>
-            </tr>`;
-          })}
-        </tbody>
-      </table>
-      ${
-        this.readOnly
-          ? nothing
-          : html`<div class="actions">
-              ${
-                special === null
-                  ? action("make_special", "hours.make_special", true)
-                  : html`${action("edit", "hours.edit")}${action("duplicate", "hours.duplicate")}${action(
-                      "delete",
-                      "hours.delete",
-                    )}`
-              }
-            </div>`
-      }`;
-  }
-
-  #coverage(model: HoursModel, year: number): HolidayCoverage | undefined {
-    return model.holidayCoverage.find((coverage) => coverage.year === year);
-  }
-
-  /** Each of the date's holidays with its scope and source, then what its year's coverage says. */
-  #holidays(model: HoursModel, day: CalendarDay) {
-    const year = Number(day.date.slice(0, 4));
-    const coverage = this.#coverage(model, year);
-    const source = (holiday: HolidayFact) => {
-      const found = model.holidaySources.find(({ id }) => id === holiday.sourceId);
-      if (found === undefined) return nothing;
-      if (found.kind === "owner")
-        return html`<span class="source"
-          >${format("hours.calendar.source_owner", { city: found.title })}</span
-        >`;
-      const title =
-        found.url === null
-          ? found.title
-          : html`<a href=${found.url} target="_blank" rel="noopener noreferrer">${found.title}</a>`;
-      return html`<span class="source">${t("hours.calendar.source")} ${title}</span>`;
-    };
-    return html`${
-        day.holidays.length === 0
-          ? nothing
-          : html`<ul class="facts" data-test="holidays">
-              ${[...day.holidays].map(
-                (holiday) =>
-                  html`<li>
-                    <span
-                      >${t(`hours.calendar.scope.${holiday.scope}` as Key)}:
-                      <strong>${holiday.name}</strong></span
-                    >
-                    ${source(holiday)}
-                  </li>`,
-              )}
-            </ul>`
-      }
-      <ul class="note coverage" data-test="coverage">
-        <li>${nationalCoverage(year, coverage)}</li>
-        ${
-          coverage === undefined
-            ? nothing
-            : html`<li>
-                ${format(`hours.calendar.local.${coverage.local}` as Key, { year: String(year) })}
-              </li>`
-        }
-      </ul>`;
-  }
-
-  /** A line for each year the month shows whose official holidays are not known to be complete. */
-  #monthCoverage() {
-    const model = this.model;
-    if (model === undefined) return nothing;
-    const dates = monthGrid(this.shownMonth);
-    const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
-    const lines = years
-      .map((year) => [year, this.#coverage(model, year)] as const)
-      .filter(([, coverage]) => coverage?.nationalRegional !== "complete")
-      .map(([year, coverage]) => nationalCoverage(year, coverage));
-    if (lines.length === 0) return nothing;
-    return html`<ul class="note coverage" data-test="month-coverage">
-      ${lines.map((line) => html`<li>${line}</li>`)}
-    </ul>`;
   }
 
   #namedMonth() {
@@ -996,54 +663,12 @@ export class HoursCalendar extends LitElement {
   }
 
   override render() {
-    if (this.namedApi) return this.#namedMonth();
-    const nav = (test: string, label: Parameters<typeof t>[0], glyph: string, months: number) =>
-      html`<wt-button
-        variant="ghost"
-        data-test=${test}
-        aria-label=${t(label)}
-        @click=${() => this.#show(addMonths(this.shownMonth, months))}
-        >${glyph}</wt-button
-      >`;
-    const legend = (colour: string, label: Parameters<typeof t>[0]) =>
-      html`<li><span class="swatch" data-colour=${colour}></span>${t(label)}</li>`;
-    return html`<div class="layout">
-      <div class="month">
-        <div class="nav">
-          ${nav("previous-year", "hours.calendar.previous_year", "«", -12)}
-          ${nav("previous-month", "hours.calendar.previous_month", "‹", -1)}
-          <h2 id="month-heading" data-test="month" aria-live="polite">
-            ${formatUtc(`${this.shownMonth}-01`, { month: "long", year: "numeric" })}
-          </h2>
-          ${nav("next-month", "hours.calendar.next_month", "›", 1)}
-          ${nav("next-year", "hours.calendar.next_year", "»", 12)}
-          <wt-button
-            variant="secondary"
-            data-test="this-month"
-            @click=${() => this.#show((this.today ?? browserToday()).slice(0, 7))}
-            >${t("hours.calendar.this_month")}</wt-button
-          >
-        </div>
-        <ul class="legend">
-          ${legend("standard", "hours.calendar.legend_standard")}
-          ${legend("closed", "hours.calendar.legend_closed")} ${legend("purple", "named.holiday")}
-          ${legend("blue", "named.working_day")}
-        </ul>
-        ${this.#monthCoverage()}
-        ${this.readError ? html`<p role="alert">${this.readError}</p>` : nothing} ${this.#grid()}
-      </div>
-      <section class="panel" data-test="date-panel">${this.#panel()}</section>
-    </div>`;
+    return this.#namedMonth();
   }
 }
 
 declare global {
   interface HTMLElementTagNameMap {
     "hours-calendar": HoursCalendar;
-  }
-  interface HTMLElementEventMap {
-    "hours-calendar-action": CustomEvent<CalendarAction>;
-    /** The calendar read its month: `days` are that read's days. */
-    "hours-calendar-read": CustomEvent<{ days: CalendarDay[] }>;
   }
 }
