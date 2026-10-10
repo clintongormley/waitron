@@ -37,7 +37,8 @@ their full text.
   the station editor, and the "Where is this made?" tester and the Stations tab's live kitchen
   numbers removed. Part B, still to build and re-grounded on main first: station hours and
   fallbacks removed, closing a station with open dishes asks what to do with them, and each
-  station's worked-out times. Its new decisions 29–37 wait for the owner.
+  station's worked-out times. The owner answered its decisions 29–37 on 2026-10-09; the changes
+  to 29, 33 and 35 are built (A455).
   Slice 6's remaining work is Part C's floor-plan entry,
   in Lane D after A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
 

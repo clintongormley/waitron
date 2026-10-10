@@ -3154,11 +3154,11 @@ row holds a saved choice, No category; a column for Every zone and each active s
 40rem the row-label column is at most 96 px and table cells pad by `--wt-space-1`, so a 390 px
 window shows the labels, Every zone and one zone column without scrolling (the "at phone width"
 cases in `routing-grid.test.ts`). Each cell is a button showing its station (an inherited one muted
-and in italics), one line per period choice ("Lunch, Afternoon: Downstairs bar") and, where its
-choice is No preparation or it falls through to the default station, how extras are made ("No
-preparation — as an extra, follows its dish"). It opens the routing cell editor
-(`routing-cell-editor.ts`): "Any other time" holds the cell's own station, and "+ Different station
-during some periods" adds a line of periods with a station. A zone column offers only its
+and in italics) and one line per period choice ("Lunch, Afternoon: Downstairs bar"). Under a line
+the cell stores whose period's menus offer none of the row's active products, the grid and the
+editor show "Not on Lunch menus" in the warning colour; it does not change Save. It opens the
+routing cell editor (`routing-cell-editor.ts`): "Any other time" holds the cell's own station,
+and "+ Different station during some periods" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose
 menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
 what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not
@@ -3173,8 +3173,8 @@ also sets Printers. Watchers keeps its own printer selections. Settings edits ea
 its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured
 fallback field reads "Outside its hours, work goes to". Station Edit, Make default and
 Disable/Enable actions belong to the Stations row menu; Routing's All categories × Every zone cell
-also sets the default station, for someone with `venue.configure`. A supervisor sees only Stations,
-with no row menus and no Printed on or Shown on.
+also sets the default station, for someone with `venue.configure`. The page is offered only to
+someone with `venue_service.manage`; a supervisor is not offered it.
 
 Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
 at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week

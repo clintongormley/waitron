@@ -536,6 +536,8 @@ owner may override any when reviewing the plan.
     already stores in the line that holds its stored target; if that line's station changes, the
     server's `not_offered` refusal shows under the line. Override: check every period in the
     request, so a stale line must be removed before the cell can be saved.
+    _Owner override 2026-10-09: save, but flag it — the check stays as above, and a stored line
+    whose period's menus no longer offer the row is marked "Not on … menus"; built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 30. **The new refusal is a reason, not a new code.** _Added 2026-10-09, not yet answered._
     `route.period_invalid` gains `reason: "not_offered"`, beside its other two, as the house's
     siblings carry a `reason` union under one code (`station.destination_invalid`,
@@ -547,6 +549,8 @@ owner may override any when reviewing the plan.
     decision 29 keeps valid, so refusing it on import would make a good export unimportable. The
     import still refuses the rows decision 10 lists otherwise (Task A3). Override: refuse such a
     row on import as well.
+    _Owner 2026-10-09: the default stands; an imported line its period's menus no longer offer
+    shows decision 29's mark, built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 32. **What goes with the tester.** _Added 2026-10-09, not yet answered._ The route `GET
     /management-api/venue-service/routing/explain` (`routes.ts:442-478`, N) answers 404;
     `explainRoute` and `ExplainWhen` (`routing-store.ts:332-426`, N), `RouteExplanation` and
@@ -569,6 +573,7 @@ owner may override any when reviewing the plan.
     (`/manage/prep-stations/view/routing/test/<id>`) opens the tab its `view` names, else Stations:
     the URL controller ignores a segment its config does not name (`packages/ui/src/url-state.ts:58-75`,
     N) and drops it at its next write. Override: keep the route for a later tool.
+    _Owner 2026-10-09: nothing to build — no old tester links exist ([A455](2026-10-10-a455-prep-stations-owner-answers.md))._
 33. **The extras note belongs to the cell's plain choice.** _Added 2026-10-09, not yet answered._
     Spec §9.3: an empty cell (nothing set at it or above it, so it falls through to the default
     station) shows "{station} (default) — as an extra, follows its dish", and a No preparation
@@ -581,6 +586,7 @@ owner may override any when reviewing the plan.
     every empty cell falls through to. It is built with the tester's removal (Task A3d), so no
     commit leaves the grid without what only the tester showed. Override: also note a No
     preparation period line; leave the default cell without the note.
+    _Owner override 2026-10-09: no note; the note is removed in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 34. **The printer-down and dark-screen notes leave the Stations tab too.** _Added 2026-10-09, not
     yet answered._ They come from the same live read (`#name`, `station-health-table.ts:114-130`,
     N) and are live state, which spec §9 keeps off these pages. The dashboard still raises both as
@@ -607,6 +613,8 @@ owner may override any when reviewing the plan.
     `printer.manage` and `device.manage` (`print-api.ts:898-901`, `device-api.ts:106`, `:164-170`,
     N). This keeps the existing permission pattern and adds no read. Override: stop offering the
     page to `venue.view` (remove its `readPermission`).
+    _Owner override 2026-10-09: hide the page — it is offered only with `venue_service.manage`, and
+    the read-only overview route is gone; built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
 36. **The table is renamed for what it shows.** _Added 2026-10-09, not yet answered._ With no
     health in it, `prep-station-health-table` in `dashboard/station-health-table.ts` would misname
     itself, so it becomes `prep-station-table` in `dashboard/station-table.ts` (`git mv`, with its
