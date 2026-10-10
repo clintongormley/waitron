@@ -535,6 +535,19 @@ test("opens with focus on its body, not on a field first in a long body", async 
   expect(modal.shadowRoot!.activeElement).toBe(body);
 });
 
+test.each([
+  ["a field first", '<wt-input name="name" label="Name"></wt-input>'],
+  ["text only", "Printer settings"],
+])("opens with focus on its body when open at its first render (%s)", async (_, body) => {
+  const modal = (await mount(`<wt-modal heading="Add printer" open>
+    ${body}
+    <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  await modal.updateComplete;
+  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(modal.shadowRoot!.activeElement).toBe(modal.shadowRoot!.querySelector(".body"));
+});
+
 async function openModalWithMessage(body: string, footer: string) {
   const modal = (await mount(`<wt-modal heading="Add printer">
     ${body}

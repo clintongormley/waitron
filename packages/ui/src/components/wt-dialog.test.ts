@@ -636,6 +636,18 @@ test("paints a long dialog's surface and footer divider from their tokens", asyn
   expect(getComputedStyle(footer).borderTopColor).toBe("rgb(20, 21, 22)");
 });
 
+test("opens a long dialog that is open at its first render with focus on its first field", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    `<wt-dialog heading="Edit order" open><label>Note <input name="note" /></label><div style="height: 1800px">Long order</div>${SAVE_OR_CANCEL}</wt-dialog>`,
+  )) as Openable;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(deepActiveElement()).toBe(el.querySelector("input"));
+});
+
 test("keeps a short dialog fitted to its content", async () => {
   const el = (await mount(
     `<wt-dialog heading="Void sale">This will create a corrective record.${SAVE_OR_CANCEL}</wt-dialog>`,

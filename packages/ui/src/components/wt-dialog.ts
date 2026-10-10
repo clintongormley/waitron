@@ -248,6 +248,9 @@ export class WtDialog extends LitElement {
       if (this.open && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
+        // Before as well as after: the browser picks opening focus inside showModal(), and on the
+        // first render nothing has set a body that is always a tab stop yet.
+        this.syncBodyTabStop();
         this.dialog.showModal();
         this.syncBodyTabStop();
         // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
