@@ -216,8 +216,8 @@ it("draws a row for the menu itself first, by its name, then its members a level
   const root = row(el, "root")!;
   expect(root.getAttribute("aria-level")).toBe("1");
   expect(inTable(el, '[data-test="root-name"]')!.textContent!.trim()).toBe("Lunch Menu");
-  // It cannot close, so it draws no arrow and no toggle.
-  expect(root.querySelector(".row-activate, .tree-toggle")).toBeNull();
+  expect(root.querySelector(".row-activate")).toBeNull();
+  expect(root.querySelector(".tree-toggle")).not.toBeNull();
   for (const key of ["m-burger", "m-drinks", "m-fav"])
     expect(row(el, key)!.getAttribute("aria-level")).toBe("2");
   expect(["m-burger", "m-drinks", "m-fav"].map((key) => nameOf(el, key))).toEqual([
@@ -582,18 +582,13 @@ it("reports opening a section, and closing the current one or one holding it, as
   expect(edits).toEqual([{ path: [] }]);
 });
 
-it("reports the top level as the place to edit when Collapse all hides the current section", async () => {
+it("reports the top level as the place to edit when the root hides the current section", async () => {
   const el = await mount({ current: ["m-drinks", "m-beer"] });
   const edits = listen(el, "wt-structure-edit");
-  const button = () => inTable(el, ".expand-all")!;
-  expect(button().textContent!.trim()).toBe(t("folders.expand_all"));
-  button().click();
+  expect(inTable(el, ".expand-all")).toBeNull();
+  row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle")!.click();
   await settle(el);
-  expect(edits).toEqual([]);
-  expect(button().textContent!.trim()).toBe(t("folders.collapse_all"));
-  button().click();
-  await settle(el);
-  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual([]);
   expect(edits).toEqual([{ path: [] }]);
 });
 
@@ -3028,7 +3023,6 @@ describe("A461 Structure search", () => {
   it("A461 Structure search expansion does not replace current path", async () => {
     const current = ["m-drinks", "m-beer"];
     const el = await mount({ current });
-    const before = drawn(el);
     const changes = listen(el, "wt-structure-edit");
     el.search = "drinks";
     await settle(el);
@@ -3043,12 +3037,18 @@ describe("A461 Structure search", () => {
     expect(el.current).toEqual(current);
     el.search = "";
     await settle(el);
-    expect(drawn(el)).toEqual(before);
+    expect(drawn(el)).toEqual([
+      "root",
+      "m-burger",
+      "m-drinks",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer",
+      "m-drinks/m-lemonade",
+      "m-fav",
+    ]);
     expect(table(el).isExpanded("m-drinks")).toBe(true);
-    expect(table(el).isExpanded("m-drinks/m-beer")).toBe(true);
-    expect(changes).toEqual([]);
-    await toggle(el, "m-drinks");
-    expect(changes).toEqual([{ path: [] }]);
+    expect(table(el).isExpanded("m-drinks/m-beer")).toBe(false);
+    expect(changes).toEqual([{ path: ["m-drinks"] }]);
   });
 
   it("A461 Structure availability narrows flat matches and expanded contents", async () => {
@@ -3591,21 +3591,20 @@ describe("the menu's own row", () => {
     ]);
   });
 
-  it("stays open through Collapse all and Expand all, and is never closed by key", async () => {
+  it("closes by key and reopens only its own level", async () => {
     const el = await mount();
-    const button = () => inTable(el, ".expand-all")!;
-    expect(button().textContent!.trim()).toBe(t("folders.expand_all"));
-    button().click();
-    await settle(el);
-    expect(button().textContent!.trim()).toBe(t("folders.collapse_all"));
-    button().click();
-    await settle(el);
-    expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+    expect(inTable(el, ".expand-all")).toBeNull();
     expect(row(el, "root")!.getAttribute("aria-expanded")).toBe("true");
-    expect(button().textContent!.trim()).toBe(t("folders.expand_all"));
+    await toggle(el, "m-drinks");
+    await toggle(el, "m-drinks/m-beer");
     await el.setExpanded("root", false);
     await settle(el);
+    expect(drawn(el)).toEqual(["root"]);
+    await el.setExpanded("root", true);
+    await settle(el);
     expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+    expect(table(el).isExpanded("m-drinks")).toBe(false);
+    expect(table(el).isExpanded("m-drinks/m-beer")).toBe(false);
   });
 
   it("takes no box in Select mode, so Select all ticks members only", async () => {
@@ -3863,7 +3862,7 @@ describe("the menu's own row", () => {
     expect(box.part.contains("swatch-box")).toBe(true);
     expect(box.getAttribute("aria-hidden")).toBe("true");
     expect(box.parentElement!.part.contains("folder-frame")).toBe(true);
-    expect(box.closest("td")!.querySelector("button")).toBeNull();
+    expect(box.closest('[part~="folder-frame"]')!.querySelector("button")).toBeNull();
     const chip = box.querySelector<HTMLElement>('[part~="color-swatch"]')!;
     expect(getComputedStyle(chip).backgroundColor).toBe("rgb(170, 187, 204)");
     const coloured = rootNameLeft(el);
@@ -4299,4 +4298,134 @@ it("A461 returns arrow-move focus to the indented search copy", async () => {
   );
   await settle(el);
   expect(table(el).shadowRoot!.activeElement).toBe(copies()[1]);
+});
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)("A462 Structure native select-all aligns at %i px (%s, %s)", async (width, locale, theme) => {
+  const before = currentLocale();
+  try {
+    setLocale(locale);
+    await page.viewport(width, 844);
+    const el = await mount({ selecting: true, reordering: true });
+    el.parentElement!.setAttribute("data-theme", theme);
+    const root = table(el).shadowRoot!;
+
+    const header = root.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+    expect(header).not.toBeNull();
+    const h = header.getBoundingClientRect();
+    const boxes = [...root.querySelectorAll<HTMLInputElement>("tbody input[type=checkbox]")];
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) {
+      const b = box.getBoundingClientRect();
+      expect(Math.abs(b.left - h.left)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(b.width - h.width)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(b.height - h.height)).toBeLessThanOrEqual(0.5);
+      const cell = box.closest("td")!;
+      const grip = cell.querySelector<HTMLElement>('[part~="drag-grip"]');
+      if (grip) expect(b.right).toBeLessThanOrEqual(grip.getBoundingClientRect().left);
+      expect(b.right).toBeLessThanOrEqual(cell.nextElementSibling!.getBoundingClientRect().left);
+    }
+
+    expect(root.querySelector('[data-test="select-root"]')).toBeNull();
+    await page.screenshot({
+      path: `__screenshots__/a462-task2/structure-${width}-${locale}-${theme}.png`,
+    });
+  } finally {
+    setLocale(before);
+  }
+});
+
+it.each(["native", "silent"])(
+  "A462 Structure root closes current path once via %s",
+  async (method) => {
+    const el = await mount({ current: ["m-drinks", "m-beer"] });
+    const edits = listen(el, "wt-structure-edit");
+    expect(table(el).isExpanded("root")).toBe(true);
+    if (method === "native") {
+      const chevron = row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle");
+      expect(chevron).not.toBeNull();
+      chevron!.click();
+      await settle(el);
+    } else {
+      await el.setExpanded("root", false);
+      await settle(el);
+    }
+    expect(drawn(el)).toEqual(["root"]);
+    expect(edits).toEqual([{ path: [] }]);
+    el.current = [];
+    await settle(el);
+    el.nodes = [...lunchNodes()];
+    await settle(el);
+    expect(drawn(el)).toEqual(["root"]);
+    row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle")!.click();
+    await settle(el);
+    expect(drawn(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+    el.current = ["m-drinks", "m-beer"];
+    await settle(el);
+    expect(table(el).isExpanded("root")).toBe(true);
+    expect(drawn(el)).toContain("m-drinks/m-beer/m-lager-2");
+    expect(table(el).isExpanded("m-fav")).toBe(false);
+  },
+);
+
+it("A462 Structure search closure reconciles current after clearing", async () => {
+  const el = await mount({ current: ["m-drinks", "m-beer"] });
+  const edits = listen(el, "wt-structure-edit");
+  el.search = "drinks";
+  await settle(el);
+  await toggle(el, "m-drinks");
+  await toggle(el, "m-drinks");
+  expect(edits).toEqual([]);
+  el.search = "";
+  await settle(el);
+  expect(table(el).isExpanded("m-drinks")).toBe(false);
+  expect(table(el).isExpanded("m-drinks/m-beer")).toBe(false);
+  expect(edits).toEqual([{ path: [] }]);
+});
+
+it("A462 Structure cascade follows paths and preserves shared ticks", async () => {
+  const el = await mount({ selecting: true, selected: ["m-drinks/m-lager"] });
+  await toggle(el, "m-drinks");
+  await toggle(el, "m-drinks/m-beer");
+  await toggle(el, "m-fav");
+  await toggle(el, "m-fav/m-fav-drinks");
+  await toggle(el, "m-fav/m-fav-drinks/m-beer");
+  await toggle(el, "m-drinks");
+  expect(table(el).isExpanded("m-drinks/m-beer")).toBe(false);
+  expect(table(el).isExpanded("m-fav/m-fav-drinks/m-beer")).toBe(true);
+  expect((item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement).checked).toBe(true);
+  expect(el.selected).toEqual(["m-drinks/m-lager"]);
+  await toggle(el, "m-drinks");
+  expect(table(el).isExpanded("m-drinks/m-beer")).toBe(false);
+  expect((item(el, "select-m-drinks/m-lager") as HTMLInputElement).checked).toBe(true);
+});
+
+it("A462 Structure filter permits closing root and resetting current", async () => {
+  const el = await mount({ current: ["m-drinks", "m-beer"] });
+  const edits = listen(el, "wt-structure-edit");
+  await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "yes");
+  await settle(el);
+  const chevron = row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle");
+  expect(chevron).not.toBeNull();
+  chevron!.click();
+  await settle(el);
+  expect(drawn(el)).toEqual(["root"]);
+  expect(edits).toEqual([{ path: [] }]);
+});
+
+it("A462 Structure explicit current reveals through a closed root without opening another path", async () => {
+  const el = await mount();
+  await el.setExpanded("root", false);
+  await settle(el);
+  expect(drawn(el)).toEqual(["root"]);
+  el.current = ["m-drinks", "m-beer"];
+  await settle(el);
+  expect(table(el).isExpanded("root")).toBe(true);
+  expect(drawn(el)).toContain("m-drinks/m-beer/m-lager-2");
+  expect(table(el).isExpanded("m-fav")).toBe(false);
 });

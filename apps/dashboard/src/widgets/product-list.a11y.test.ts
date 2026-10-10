@@ -334,6 +334,32 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("A462 Products named root closure and reopening render accessibly", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products, selecting: true, reordering: true },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const toggle = () =>
+      table.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!;
+    expect(toggle().getAttribute("aria-label")).toBe(
+      t("folders.close_named").replace("{name}", t("folders.all_products")),
+    );
+    toggle().click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(1);
+    expect(toggle().getAttribute("aria-label")).toBe(
+      t("folders.open_named").replace("{name}", t("folders.all_products")),
+    );
+    await expectNoA11yViolations(host);
+    toggle().click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]").length).toBeGreaterThan(1);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with the All products menu open", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",

@@ -3321,10 +3321,11 @@ test("the search box draws a primary border, and a filter dropdown the 2px prima
 });
 
 test("the search box and filter dropdown paint from the theme tokens", async () => {
-  const el = await tableS({ searchable: true, columns: withStatus });
+  const el = await tableS({ searchable: true, columns: withStatusAndChooser });
   await openFilters(el);
   el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-close")!.focus();
   host.style.setProperty("--wt-tap-min", "52px");
+  host.style.setProperty("--wt-space-3", "17px");
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
   host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
@@ -3335,6 +3336,7 @@ test("the search box and filter dropdown paint from the theme tokens", async () 
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
   const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
   const box = filter.shadowRoot!.querySelector(".field")!;
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".table-search-end")!).gap).toBe("17px");
   expect(getComputedStyle(search).borderColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(search).backgroundColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(search).color).toBe("rgb(10, 11, 12)");
@@ -3378,26 +3380,26 @@ function toolbarBoxes(el: WtDataTable<RowS>) {
 }
 
 test.each([390, 640])(
-  "in a table %i px wide, Filters and the chooser share the first line and the search takes the full-width line below them",
+  "in a table %i px wide, Filters takes the first line and search ends with Customise on the full-width line below",
   async (width) => {
     const el = await tableS({ searchable: true, columns: withStatusAndChooser });
     el.style.width = `${width}px`;
     await el.updateComplete;
     await vi.waitFor(() => {
       const { toolbar, filters, search, chooser } = toolbarBoxes(el);
-      expect(chooser.top).toBeLessThan(filters.bottom);
-      expect(filters.top).toBeLessThan(chooser.bottom);
-      expect(search.top).toBeGreaterThanOrEqual(Math.max(filters.bottom, chooser.bottom));
+      expect(search.top).toBeGreaterThanOrEqual(filters.bottom);
+      expect(chooser.top).toBeCloseTo(search.top, 0);
+      expect(search.right).toBeLessThan(chooser.left);
       expect(filters.left).toBeCloseTo(toolbar.left, 0);
       expect(chooser.right).toBeGreaterThanOrEqual(toolbar.right - 8);
       expect(search.left).toBeCloseTo(toolbar.left, 0);
-      expect(search.width).toBeCloseTo(toolbar.width, 0);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
     });
   },
 );
 
 test.each([641, 1280])(
-  "in a table %i px wide, Filters, the chooser and the search share one line in that order",
+  "in a table %i px wide, Filters, search and Customise share one line in that order",
   async (width) => {
     const el = await tableS({ searchable: true, columns: withStatusAndChooser });
     el.style.width = `${width}px`;
@@ -3407,9 +3409,9 @@ test.each([641, 1280])(
       expect(search.top).toBeLessThan(filters.bottom);
       expect(chooser.top).toBeLessThan(search.bottom);
       expect(filters.left).toBeCloseTo(toolbar.left, 0);
-      expect(filters.right).toBeLessThan(chooser.left);
-      expect(chooser.right).toBeLessThan(search.left);
-      expect(search.right).toBeGreaterThanOrEqual(toolbar.right - 8);
+      expect(filters.right).toBeLessThan(search.left);
+      expect(search.right).toBeLessThan(chooser.left);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
       // The search grows into the room the buttons leave; they keep their natural width.
       expect(filters.width).toBeLessThan(search.width / 2);
     });
@@ -5604,6 +5606,8 @@ test.each(["light", "dark"] as const)(
   async (theme) => {
     const { el } = await narrowTable("end");
     host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    host.style.color = "var(--wt-color-text)";
     const table = el.shadowRoot!.querySelector("table")!;
     const row = el.shadowRoot!.querySelector("tbody tr")!;
     const cell = row.querySelector("td:last-child")!;
@@ -6506,6 +6510,8 @@ test("in both themes a hovered clickable row looks different from a resting one"
   for (const theme of ["light", "dark"]) {
     const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
     host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    host.style.color = "var(--wt-color-text)";
     const cell = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td')!;
     const pinned = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td:last-child')!;
     const resting = getComputedStyle(pinned).backgroundColor;
@@ -8268,6 +8274,8 @@ test.each(
     viewKey: "toolbar-tab",
   });
   host.setAttribute("data-theme", theme);
+  host.style.background = "var(--wt-color-bg)";
+  host.style.color = "var(--wt-color-text)";
   const before = document.createElement("button");
   before.textContent = "Before table";
   host.prepend(before);
@@ -8280,16 +8288,11 @@ test.each(
   await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(width === 390));
   const controls = [
     extra,
-    el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
     el.shadowRoot!.querySelector<HTMLElement>(".table-search")!,
+    el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
   ];
-  const drawn = [...controls].sort((a, b) => {
-    const x = a.getBoundingClientRect(),
-      y = b.getBoundingClientRect();
-    return Math.abs(x.top - y.top) > 20 ? x.top - y.top : x.left - y.left;
-  });
   before.focus();
-  for (const control of drawn) {
+  for (const control of controls) {
     await userEvent.keyboard("{Tab}");
     expect(el.shadowRoot!.activeElement ?? document.activeElement).toBe(control);
   }
@@ -8849,3 +8852,641 @@ test("A461 distinct row paths can share one controlled selection", async () => {
   await el.updateComplete;
   expect(el.selected).toEqual(["a"]);
 });
+
+test.each(
+  [390, 1280].flatMap((width) =>
+    ["light", "dark"].flatMap((theme) =>
+      ["Search", "Buscar"].flatMap((label) =>
+        [false, true].map((forwarded) => [width, theme, label, forwarded] as const),
+      ),
+    ),
+  ),
+)(
+  "A462 Customise is last after search at %i px (%s, %s, forwarded=%s)",
+  async (width, theme, label, forwarded) => {
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 844));
+    const el = await table({ searchable: !forwarded, searchLabel: label, columns: choosable });
+    host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    host.style.color = "var(--wt-color-text)";
+    const before = document.createElement("button");
+    before.textContent = "Before";
+    host.prepend(before);
+    const extra = document.createElement("button");
+    extra.slot = "toolbar-end";
+    extra.textContent = "Add";
+    el.append(extra);
+    let search: HTMLInputElement;
+    if (forwarded) {
+      search = document.createElement("input");
+      search.type = "search";
+      search.name = "forwarded-search";
+      search.setAttribute("aria-label", label);
+      search.slot = "toolbar-search";
+      search.style.flex = "1";
+      search.style.minWidth = "0";
+      el.append(search);
+    } else search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    el.requestUpdate();
+    await el.updateComplete;
+    await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(width === 390));
+    const chooser = trigger(el);
+    await vi.waitFor(() => {
+      const toolbar = el.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+      const s = search.getBoundingClientRect(),
+        c = chooser.getBoundingClientRect();
+      expect(s.right).toBeLessThanOrEqual(c.left);
+      expect(s.top).toBeLessThan(c.bottom);
+      expect(c.top).toBeLessThan(s.bottom);
+      expect(c.right).toBeCloseTo(toolbar.right, 0);
+      expect(s.left).toBeGreaterThanOrEqual(toolbar.left);
+      expect(c.bottom).toBeLessThanOrEqual(toolbar.bottom);
+      if (width === 390) expect(s.top).toBeGreaterThanOrEqual(extra.getBoundingClientRect().bottom);
+    });
+    before.focus();
+    for (const control of [extra, search, chooser]) {
+      await userEvent.keyboard("{Tab}");
+      let focused = document.activeElement;
+      while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+      expect(focused).toBe(control);
+    }
+    await page.screenshot({
+      path: `__screenshots__/a462-task1/shared-${width}-${theme}-${label}-${forwarded}.png`,
+    });
+  },
+);
+
+test("A462 Customise follows search through forwarded slot changes in a narrow container", async () => {
+  await page.viewport(1280, 844);
+  const el = await table({ columns: choosable });
+  el.style.width = "390px";
+  await settle();
+  expect(el.hasAttribute("stacked-search")).toBe(false);
+  const search = document.createElement("input");
+  search.slot = "toolbar-search";
+  search.setAttribute("aria-label", "Search");
+  el.append(search);
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+  expect(search.getBoundingClientRect().right).toBeLessThan(
+    trigger(el).getBoundingClientRect().left,
+  );
+  el.style.display = "none";
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(false));
+  el.style.display = "";
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(true));
+  search.remove();
+  await vi.waitFor(() => expect(el.hasAttribute("stacked-search")).toBe(false));
+  expect(trigger(el).getBoundingClientRect().width).toBeGreaterThan(0);
+});
+
+test("A462 Customise stays after both search channels and survives no matches, but not empty source rows", async () => {
+  const el = await table({ columns: choosable, searchable: true });
+  const forwarded = document.createElement("input");
+  forwarded.slot = "toolbar-search";
+  forwarded.setAttribute("aria-label", "Other search");
+  el.append(forwarded);
+  el.requestUpdate();
+  await el.updateComplete;
+  const own = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  own.focus();
+  await userEvent.keyboard("{Tab}");
+  expect(document.activeElement).toBe(forwarded);
+  await userEvent.keyboard("{Tab}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger(el));
+  own.value = "no matching name";
+  own.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".message")).not.toBeNull();
+  expect(trigger(el).getBoundingClientRect().width).toBeGreaterThan(0);
+  el.rows = [];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).toBeNull();
+});
+
+test("A462 Customise without search is last and no chooser is introduced without a choice", async () => {
+  const el = await table({ columns: choosable });
+  const start = document.createElement("button");
+  start.slot = "toolbar-start";
+  start.textContent = "Select";
+  el.append(start);
+  el.requestUpdate();
+  await el.updateComplete;
+  start.focus();
+  await userEvent.keyboard("{Tab}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger(el));
+  el.columns = [columns[0]!];
+  el.searchable = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".table-search")).not.toBeNull();
+});
+
+const selectionGeometryCases = [
+  [390, "light", "Select all", "baseline", true, true],
+  [390, "dark", "Seleccionar todo", "center", true, false],
+  [1280, "light", "Seleccionar todo", "center", true, true],
+  [1280, "dark", "Select all", "baseline", true, false],
+  [390, "dark", "Select all", "baseline", false, false],
+  [390, "light", "Seleccionar todo", "center", false, true],
+  [1280, "dark", "Seleccionar todo", "center", false, false],
+  [1280, "light", "Select all", "baseline", false, true],
+] as const;
+
+test.each(selectionGeometryCases)(
+  "A462 native select-all aligns with native row boxes at %i px (%s, %s, %s, grip=%s, tree=%s)",
+  async (width, theme, label, align, grip, tree) => {
+    await page.viewport(width, 844);
+    const el = await table({
+      rows: [
+        { id: "a", name: "Ada", count: 1 },
+        {
+          id: "b",
+          name: "A long product name that wraps across several lines on a phone",
+          count: 2,
+        },
+        { id: "c", name: "Not selectable", count: 3 },
+      ],
+      columns: [
+        {
+          ...columns[0],
+          cell: (row) =>
+            html`<span data-name style="display:block;max-width:160px;white-space:normal"
+              >${row.name}</span
+            >`,
+        },
+        { ...columns[2], key: "actions", pinned: "end" },
+      ],
+      selectable: true,
+      selectAllLabel: label,
+      rowSelectable: (row) => row.id !== "c",
+      rowSelectionKey: (row) => `member-${row.id}`,
+      rowParent: tree ? (row) => (row.id === "a" ? null : "a") : undefined,
+      rowControlsAlign: align,
+      rowControls: grip
+        ? (row) => html`<button data-grip=${row.id} aria-label=${`Move ${row.name}`}>↕</button>`
+        : undefined,
+    });
+    host.setAttribute("data-theme", theme);
+    const root = el.shadowRoot!;
+    const header = root.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+    const headerRect = header.getBoundingClientRect();
+    expect(header.getAttribute("aria-label")).toBe(label);
+    expect(root.querySelector("[data-test=select-c]")).toBeNull();
+    for (const id of ["a", "b"]) {
+      const row = root.querySelector<HTMLTableRowElement>(`tr[data-row-key="${id}"]`)!;
+      const rect = row
+        .querySelector<HTMLInputElement>(`[data-test=select-${id}]`)!
+        .getBoundingClientRect();
+      expect(Math.abs(rect.left - headerRect.left)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(rect.width - headerRect.width)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(rect.height - headerRect.height)).toBeLessThanOrEqual(0.5);
+      const name = row.cells[1]!.getBoundingClientRect();
+      const menu = row.cells[2]!.getBoundingClientRect();
+      expect(rect.right).toBeLessThanOrEqual(name.left);
+      expect(rect.right).toBeLessThanOrEqual(menu.left);
+      if (grip) {
+        const handle = row
+          .querySelector<HTMLElement>(`[data-grip="${id}"]`)!
+          .getBoundingClientRect();
+        expect(rect.right).toBeLessThanOrEqual(handle.left);
+        expect(handle.right).toBeLessThanOrEqual(name.left);
+      }
+    }
+    expect(
+      root.querySelector('[data-row-key="b"] [data-name]')!.getBoundingClientRect().height,
+    ).toBeGreaterThan(
+      root.querySelector('[data-row-key="a"] [data-name]')!.getBoundingClientRect().height,
+    );
+    const seen: string[][] = [];
+    el.addEventListener("wt-selection-change", (event) => {
+      const selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+      seen.push(selected);
+      el.selected = selected;
+    });
+    root.querySelector<HTMLInputElement>("[data-test=select-a]")!.click();
+    await el.updateComplete;
+    expect(header.indeterminate).toBe(true);
+    header.click();
+    await el.updateComplete;
+    expect(seen).toEqual([["member-a"], ["member-a", "member-b"]]);
+    expect(header.checked).toBe(true);
+    expect(header.indeterminate).toBe(false);
+    await page.screenshot({
+      path: `__screenshots__/a462-task2/shared-${width}-${theme}-${align}-${grip}-${tree}.png`,
+    });
+  },
+);
+
+test("A462 native select-all and row boxes paint from the same size and accent tokens", async () => {
+  const el = await table({ selectable: true, rowControls: () => html`<button>Move</button>` });
+  el.style.setProperty("--wt-space-4", "21px");
+  el.style.setProperty("--wt-color-primary", "rgb(11, 22, 33)");
+  const boxes = [...el.shadowRoot!.querySelectorAll<HTMLInputElement>(".select input")];
+  expect(boxes).toHaveLength(3);
+  for (const box of boxes) {
+    const css = getComputedStyle(box);
+    expect(css.width).toBe("21px");
+    expect(css.height).toBe("21px");
+    expect(css.accentColor).toBe("rgb(11, 22, 33)");
+  }
+});
+
+const a462TreeRows: TreeRow[] = [
+  { id: "root", parent: null, name: "All products" },
+  { id: "drinks", parent: "root", name: "Drinks" },
+  { id: "beer", parent: "drinks", name: "Beer" },
+  { id: "product", parent: "beer", name: "Beer bottle" },
+  { id: "variant", parent: "product", name: "Large" },
+  { id: "sibling", parent: "root", name: "Desserts" },
+  { id: "cake", parent: "sibling", name: "Cake" },
+];
+
+async function a462Cascade(props: Partial<WtDataTable<TreeRow>> = {}) {
+  return treeTable({
+    rows: a462TreeRows,
+    initiallyCollapsed: true,
+    collapseDescendants: true,
+    rowInitiallyExpanded: (row: TreeRow) => row.id === "root",
+    rowToggleLabel: (row: TreeRow, open: boolean) => `${open ? "Close" : "Open"} ${row.name}`,
+    rememberExpanded: true,
+    viewKey: "a462-tree",
+    ...props,
+  });
+}
+
+function a462Expanded(el: WtDataTable<TreeRow>) {
+  return ["root", "drinks", "beer", "product", "sibling"].map((key) => el.isExpanded(key));
+}
+
+test("A462 cascade seeds only the root open and closes hidden descendants", async () => {
+  const el = await a462Cascade();
+  expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+  expect(a462Expanded(el)).toEqual([true, false, false, false, false]);
+  for (const key of ["drinks", "beer", "product", "sibling"]) el.setExpanded(key, true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "product", "variant", "sibling", "cake"]);
+  el.searchTerm = "Desserts";
+  await el.updateComplete;
+  el.setExpanded("drinks", false);
+  el.setExpanded("drinks", true);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(a462Expanded(el)).toEqual([true, true, false, false, true]);
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling", "cake"]);
+  a461Toggle(el, "root");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root"]);
+  expect(a462Expanded(el)).toEqual([false, false, false, false, false]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="root"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+  expect(JSON.parse(localStorage.getItem("a462-tree:expanded")!)).toEqual([]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:collapsed") ?? "[]").sort()).toEqual([
+    "beer",
+    "drinks",
+    "product",
+    "root",
+    "sibling",
+  ]);
+  cleanup();
+  const remounted = await a462Cascade();
+  expect(treeKeys(remounted)).toEqual(["root"]);
+  remounted.setExpanded("root", true);
+  await remounted.updateComplete;
+  expect(treeKeys(remounted)).toEqual(["root", "drinks", "sibling"]);
+  remounted.rows = [...a462TreeRows];
+  await remounted.updateComplete;
+  expect(a462Expanded(remounted)).toEqual([true, false, false, false, false]);
+  await remounted.revealRow("variant");
+  expect(treeKeys(remounted)).toEqual(["root", "drinks", "beer", "product", "variant", "sibling"]);
+  expect(a462Expanded(remounted)).toEqual([true, true, true, true, false]);
+});
+
+test("A462 cascade keeps flat own results while retiring saved descendant openings", async () => {
+  const el = await a462Cascade({
+    flatTreeSearch: true,
+    searchTerm: "beer",
+    selectable: true,
+    selected: ["cake"],
+  });
+  el.setExpanded("beer", true);
+  el.setExpanded("product", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["beer", "product", "variant", "product", "variant"]);
+  a461Toggle(el, "beer");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["beer", "product"]);
+  expect(el.isExpanded("beer")).toBe(false);
+  expect(el.isExpanded("product")).toBe(false);
+  expect(el.selected).toEqual(["cake"]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:expanded")!)).toEqual(["drinks", "root"]);
+  el.searchTerm = "   ";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling"]);
+  el.searchTerm = "beer";
+  await el.updateComplete;
+  el.setExpanded("product", true);
+  await el.updateComplete;
+  el.searchTerm = "Beer bottle";
+  await el.updateComplete;
+  expect(el.isExpanded("product")).toBe(false);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(a462Expanded(el)).toEqual([true, true, true, true, false]);
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  cleanup();
+  const remounted = await a462Cascade();
+  expect(treeKeys(remounted)).toEqual(["root"]);
+  expect(a462Expanded(remounted)).toEqual([false, false, false, false, false]);
+});
+
+const a462FilterColumns: DataTableColumn<TreeRow>[] = [
+  {
+    ...treeColumns[0]!,
+    filter: {
+      label: "Kind",
+      allLabel: "All",
+      value: (row) => (row.id === "variant" ? "variant" : "other"),
+      options: [
+        { value: "variant", label: "Variant" },
+        { value: "other", label: "Other" },
+      ],
+    },
+  },
+];
+
+test("A462 cascade honours deliberate closures over filter-held paths", async () => {
+  const el = await a462Cascade({ columns: a462FilterColumns });
+  el.chooseFilter("name", ["variant"]);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "product", "variant"]);
+  expect(a462Expanded(el)).toEqual([true, true, true, true, false]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!.getAttribute("aria-expanded"),
+  ).toBe("true");
+  a461Toggle(el, "drinks");
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks"]);
+  expect(a462Expanded(el)).toEqual([true, false, false, false, false]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!.getAttribute("aria-expanded"),
+  ).toBe("false");
+  el.chooseFilter("name", []);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+  el.chooseFilter("name", ["variant"]);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks"]);
+  a461Toggle(el, "root");
+  await el.updateComplete;
+  cleanup();
+  const remounted = await a462Cascade({ columns: a462FilterColumns });
+  expect(treeKeys(remounted)).toEqual(["root"]);
+  await remounted.revealRow("variant");
+  expect(treeKeys(remounted)).toEqual(["root", "drinks", "beer", "product", "variant"]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:collapsed")!)).toEqual(["sibling"]);
+});
+
+test("A462 cascade seeds late children once and does not reopen a refreshed root", async () => {
+  const el = await a462Cascade({ rows: [a462TreeRows[0]!] });
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  el.rows = [...a462TreeRows];
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root"]);
+  el.setExpanded("root", true);
+  el.setExpanded("drinks", true);
+  await el.updateComplete;
+  el.rows = [...a462TreeRows, { id: "new", parent: "variant", name: "New child" }];
+  await el.updateComplete;
+  expect(el.isExpanded("drinks")).toBe(true);
+  el.setExpanded("variant", true);
+  await el.updateComplete;
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  expect(el.isExpanded("variant")).toBe(false);
+});
+
+test("A462 cascade bounds cycles and uses graph keys rather than their prefixes", async () => {
+  const el = await a462Cascade({
+    rows: [
+      ...a462TreeRows,
+      { id: "drinks-copy", parent: "root", name: "Copy" },
+      { id: "copy-child", parent: "drinks-copy", name: "Child" },
+      { id: "orphan", parent: "missing", name: "Orphan" },
+      { id: "cycle-a", parent: "cycle-b", name: "Cycle A" },
+      { id: "cycle-b", parent: "cycle-a", name: "Cycle B" },
+    ],
+  });
+  for (const key of ["drinks", "beer", "drinks-copy", "cycle-a", "cycle-b"])
+    el.setExpanded(key, true);
+  el.setExpanded("drinks", false);
+  el.setExpanded("cycle-a", false);
+  el.setExpanded("missing", false);
+  await el.updateComplete;
+  expect(el.isExpanded("beer")).toBe(false);
+  expect(el.isExpanded("drinks-copy")).toBe(true);
+  expect(el.isExpanded("cycle-a")).toBe(false);
+  expect(el.isExpanded("cycle-b")).toBe(false);
+  expect(treeKeys(el)).toEqual([
+    "root",
+    "drinks",
+    "sibling",
+    "drinks-copy",
+    "copy-child",
+    "orphan",
+  ]);
+});
+
+test.each(["{", "5", '{"root":true}', '[5,"gone"]'])(
+  "A462 cascade invalid closed storage keeps first-visit defaults (%s)",
+  async (stored) => {
+    localStorage.setItem("a462-tree:collapsed", stored);
+    const el = await a462Cascade();
+    expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+    a461Toggle(el, "root");
+    await el.updateComplete;
+    expect(treeKeys(el)).toEqual(["root"]);
+  },
+);
+
+test("A462 cascade saved closure wins a conflicting open key", async () => {
+  localStorage.setItem("a462-tree:expanded", '["root","drinks","beer"]');
+  localStorage.setItem("a462-tree:collapsed", '[5,"root","beer"]');
+  const el = await a462Cascade();
+  expect(a462Expanded(el)).toEqual([false, true, false, false, false]);
+  expect(treeKeys(el)).toEqual(["root"]);
+  el.setExpanded("root", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling"]);
+  expect(JSON.parse(localStorage.getItem("a462-tree:collapsed")!)).toEqual(["beer"]);
+});
+
+test.each(["blocked", "no-key", "no-remember"])(
+  "A462 cascade works without persistence (%s)",
+  async (mode) => {
+    localStorage.setItem("a462-tree:collapsed", '["root"]');
+    if (mode === "blocked") {
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+    }
+    const el = await a462Cascade({
+      ...(mode === "no-key" ? { viewKey: undefined } : {}),
+      ...(mode === "no-remember" ? { rememberExpanded: false } : {}),
+    });
+    expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+    el.setExpanded("drinks", true);
+    el.setExpanded("beer", true);
+    el.setExpanded("root", false);
+    await el.updateComplete;
+    expect(a462Expanded(el)).toEqual([false, false, false, false, false]);
+    el.setExpanded("root", true);
+    await el.updateComplete;
+    expect(treeKeys(el)).toEqual(["root", "drinks", "sibling"]);
+  },
+);
+
+test("A462 default preserves descendants and ignores opted-in closed storage", async () => {
+  localStorage.setItem("test.tree:collapsed", '["food"]');
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    rememberExpanded: true,
+    viewKey: "test.tree",
+  });
+  el.setExpanded("food", true);
+  el.setExpanded("break", true);
+  el.setExpanded("food", false);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  el.setExpanded("food", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(el.isExpanded("break")).toBe(true);
+});
+
+test("A462 cascade closes one placement while preserving a distinct path and shared tick", async () => {
+  const el = await a462Cascade({
+    rows: [
+      ...a462TreeRows,
+      { id: "beer-copy", parent: "sibling", name: "Beer" },
+      { id: "product-copy", parent: "beer-copy", name: "Beer bottle" },
+      { id: "variant-copy", parent: "product-copy", name: "Large" },
+    ],
+    selectable: true,
+    selected: ["same-product"],
+    rowSelectionKey: (row) => (row.id.startsWith("product") ? "same-product" : row.id),
+    rowSelectionAllowed: (row) => row.id.startsWith("product"),
+    rowSelectable: (row) => row.id.startsWith("product"),
+  });
+  for (const key of ["drinks", "beer", "product", "sibling", "beer-copy", "product-copy"])
+    el.setExpanded(key, true);
+  await el.updateComplete;
+  el.setExpanded("drinks", false);
+  await el.updateComplete;
+  expect(el.isExpanded("beer")).toBe(false);
+  expect(el.isExpanded("product")).toBe(false);
+  expect(el.isExpanded("beer-copy")).toBe(true);
+  expect(el.isExpanded("product-copy")).toBe(true);
+  expect(treeKeys(el)).toEqual([
+    "root",
+    "drinks",
+    "sibling",
+    "cake",
+    "beer-copy",
+    "product-copy",
+    "variant-copy",
+  ]);
+  expect(el.selected).toEqual(["same-product"]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLInputElement>('tr[data-row-key="product-copy"] input')!
+      .checked,
+  ).toBe(true);
+});
+
+test("A462 cascade preserves noncollapsible branches while closing their descendants", async () => {
+  const el = await a462Cascade({ rowCollapsible: (row) => row.id !== "drinks" });
+  el.setExpanded("beer", true);
+  el.setExpanded("product", true);
+  el.setExpanded("root", false);
+  await el.updateComplete;
+  expect(el.isExpanded("drinks")).toBe(true);
+  expect(el.isExpanded("beer")).toBe(false);
+  el.setExpanded("root", true);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["root", "drinks", "beer", "sibling"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="drinks"] .tree-toggle')).toBeNull();
+});
+
+test("A462 cascade flat always-open branch reports the expansion it draws", async () => {
+  const el = await a462Cascade({
+    flatTreeSearch: true,
+    searchTerm: "drinks",
+    rowCollapsible: (row) => row.id !== "drinks",
+  });
+  expect(treeKeys(el)).toEqual(["drinks", "beer"]);
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="drinks"]')!.getAttribute("aria-expanded"),
+  ).toBe("true");
+  expect(el.isExpanded("drinks")).toBe(true);
+  el.setExpanded("drinks", false);
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["drinks", "beer"]);
+  expect(el.isExpanded("drinks")).toBe(true);
+});
+
+test.each([390, 1000].flatMap((width) => [false, true].map((chooser) => ({ width, chooser }))))(
+  "A462 no-search trailing controls stay together at the edge ($width, chooser: $chooser)",
+  async ({ width, chooser }) => {
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 844));
+    const el = await table({
+      rows: [
+        { id: "root", name: "Root", count: 0 },
+        { id: "child", name: "Child", count: 1 },
+      ],
+      rowParent: (row) => (row.id === "root" ? null : "root"),
+      columns: chooser
+        ? [
+            { ...columns[0], choosable: "shown" },
+            { ...columns[1], choosable: "shown" },
+            { key: "id", label: "ID", cell: (row) => row.id, choosable: "shown" },
+          ]
+        : [columns[0]],
+      viewKey: chooser ? "review-no-search" : "",
+      expandAllLabel: "Expand all",
+      collapseAllLabel: "Collapse all",
+    });
+    const end = document.createElement("button");
+    end.slot = "toolbar-end";
+    end.textContent = "Add item";
+    el.append(end);
+    el.style.display = "block";
+    el.style.width = "100%";
+    el.requestUpdate();
+    await el.updateComplete;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const bar = el
+      .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
+      .getBoundingClientRect();
+    const all = el.shadowRoot!.querySelector<HTMLElement>(".expand-all")!.getBoundingClientRect();
+    const last = chooser ? el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")! : end;
+    expect(last).not.toBeNull();
+    expect(last.getBoundingClientRect().right).toBeCloseTo(bar.right, 0);
+    expect(end.getBoundingClientRect().left - all.right).toBeLessThanOrEqual(12);
+    if (chooser)
+      expect(
+        last.getBoundingClientRect().left - end.getBoundingClientRect().right,
+      ).toBeLessThanOrEqual(12);
+    await page.screenshot({
+      path: `__screenshots__/a462-review/no-search-${width}-${chooser}.png`,
+    });
+  },
+);

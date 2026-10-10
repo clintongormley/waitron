@@ -93,14 +93,7 @@ export class CatalogueBrowser extends LitElement {
       }
       wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
-        min-width: min(100%, calc(var(--wt-tap-min) * 7));
-      }
-      /* The list's width decides when search wraps, since a sidebar can leave a wide window
-         a narrow list. */
-      @container (max-width: 40rem) {
-        wt-input {
-          flex-basis: 100%;
-        }
+        min-width: 0;
       }
     `,
     iconButtonStyles,
@@ -264,10 +257,16 @@ export class CatalogueBrowser extends LitElement {
     this.#list()?.focusRowMenu(categoryId);
   }
 
-  /** The address follows the category a person opens; closing it, or one above it, names its parent. */
-  #categoryToggled(event: CustomEvent<{ categoryId: string; open: boolean }>): void {
+  #categoryToggled(event: CustomEvent<{ categoryId: string | null; open: boolean }>): void {
     event.stopPropagation();
     const { categoryId, open } = event.detail;
+    if (categoryId === null) {
+      if (!open && this.categoryId !== null) {
+        this.#revealed = null;
+        this.#emit("open-category", { categoryId: null });
+      }
+      return;
+    }
     if (open) {
       this.#revealed = categoryId;
       this.#emit("open-category", { categoryId });

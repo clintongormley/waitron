@@ -1803,6 +1803,8 @@ it.each(["light", "dark"])(
       }),
     );
     el.parentElement!.setAttribute("data-theme", theme);
+    el.parentElement!.style.background = "var(--wt-color-bg)";
+    el.parentElement!.style.color = "var(--wt-color-text)";
     await clickInTable(el, "extra-lists", "delete-extra-e1");
     const dialog = deleteDialog(el);
     const confirm = confirmDelete(el);
@@ -2270,4 +2272,49 @@ describe("the editor's Save", () => {
     expect(save.disabled).toBe(false);
     expect(save.variant).toBe("primary");
   });
+});
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en", "es"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)("A462 Customise is last after search at %i px (%s, %s)", async (width, locale, theme) => {
+  const previous = [window.innerWidth, window.innerHeight];
+  await page.viewport(width, 844);
+  setLocale(locale);
+  try {
+    const el = await mount();
+    el.parentElement!.setAttribute("data-theme", theme);
+    el.parentElement!.style.background = "var(--wt-color-bg)";
+    el.parentElement!.style.color = "var(--wt-color-text)";
+    const list = el.shadowRoot!.querySelector<HTMLElement>('[data-test="extra-lists"]')!;
+    await vi.waitFor(() => {
+      const search = list
+        .shadowRoot!.querySelector<HTMLElement>(".table-search")!
+        .getBoundingClientRect();
+      const chooser = list
+        .shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!
+        .getBoundingClientRect();
+      const toolbar = list
+        .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
+        .getBoundingClientRect();
+      expect(search.width).toBeGreaterThan(0);
+      expect(search.right).toBeLessThanOrEqual(chooser.left);
+      expect(search.top).toBeLessThan(chooser.bottom);
+      expect(chooser.top).toBeLessThan(search.bottom);
+      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+    });
+    const search = list.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    search.focus();
+    await userEvent.keyboard("{Tab}");
+    expect(list.shadowRoot!.activeElement).toBe(list.shadowRoot!.querySelector(".columns-trigger"));
+    await page.screenshot({
+      path: `__screenshots__/a462-task1/extras-${width}-${locale}-${theme}.png`,
+    });
+  } finally {
+    setLocale("en-GB");
+    await page.viewport(previous[0]!, previous[1]!);
+  }
 });

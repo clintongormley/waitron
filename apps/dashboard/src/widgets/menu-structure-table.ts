@@ -391,7 +391,6 @@ export class MenuStructureTable extends LitElement {
 
   protected override firstUpdated(): void {
     this.#watchPathWidth();
-    // Collapse all closes branches without telling anyone, so the table's own updates are watched.
     this.#table()!.addController({
       hostUpdated: () => {
         this.#schedulePathFit();
@@ -404,7 +403,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has("current")) void this.#revealCurrent();
+    if (changed.has("current") && this.current.length > 0) void this.#revealCurrent();
   }
 
   async #revealCurrent(): Promise<void> {
@@ -412,7 +411,7 @@ export class MenuStructureTable extends LitElement {
     this.#revealing++;
     try {
       await table.updateComplete;
-      for (const key of this.#currentKeys()) table.setExpanded(key, true);
+      for (const key of ["root", ...this.#currentKeys()]) table.setExpanded(key, true);
     } finally {
       this.#revealing--;
     }
@@ -429,7 +428,7 @@ export class MenuStructureTable extends LitElement {
     if (this.#revealing > 0 || this.#lostReported || keys.length === 0) return;
     // A current section no longer in the menu is the host's to resolve.
     if (!this.#rowByKey.has(keys.at(-1)!)) return;
-    const closed = keys.findIndex((key) => !table.isExpanded(key));
+    const closed = table.isExpanded("root") ? keys.findIndex((key) => !table.isExpanded(key)) : 0;
     if (closed === -1) return;
     this.#lostReported = true;
     this.#send("wt-structure-edit", { path: this.current.slice(0, closed) });
@@ -439,6 +438,13 @@ export class MenuStructureTable extends LitElement {
     event.stopPropagation();
     if (this.search.trim() !== "") return;
     const { key, expanded } = event.detail;
+    if (key === "root") {
+      if (!expanded && this.current.length > 0 && !this.#lostReported) {
+        this.#lostReported = true;
+        this.#send("wt-structure-edit", { path: [] });
+      }
+      return;
+    }
     const row = this.#rowByKey.get(key);
     if (row === undefined || !this.#ownedSection(row)) return;
     if (expanded) {
@@ -1444,9 +1450,9 @@ export class MenuStructureTable extends LitElement {
         filtersCloseLabel=${t("table.filters_close")}
         flatTreeSearch
         .searchTerm=${this.search}
-        expandAllLabel=${t("folders.expand_all")}
-        collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
+        collapseDescendants
+        .rowInitiallyExpanded=${(row: TableRow) => row.kind === "root"}
         .rowControls=${
           this.#reorderable
             ? (row: TableRow) => (row.kind === "root" ? gripSpace : this.#grip(row))
@@ -1456,7 +1462,6 @@ export class MenuStructureTable extends LitElement {
         rowControlsAlign="center"
         .rowActivation=${(row: TableRow) =>
           row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
-        .rowCollapsible=${(row: TableRow) => row.kind !== "root"}
         .rowToggleLabel=${(row: TableRow, expanded: boolean) =>
           t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.name)}
         .rows=${rows}

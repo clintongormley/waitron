@@ -633,15 +633,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   A461 shows existing placements only. This work is not queued.
 
 
-- **A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch
-  closes everything in it (owner, 2026-10-10; open).** Every table's Customise columns button moves
-  to the right-hand end of its toolbar (seen on Products, a menu's Price overrides and Modifiers →
-  Extras), last at every width. Products and a menu's Structure tab lose Expand all; their top row
-  ("All products", the menu's own name) opens its own level and, closed, closes everything. Closing
-  a branch closes every branch inside it. The Structure tab's Reorder and Select buttons become one,
-  as on Products. Every table's Select all checkbox lines up with the rows' checkboxes.
-  [Detail](backlog/catalogue.md#a462--dashboard-table-toolbars-column-chooser-at-the-end-no-expand-all-closing-a-branch-closes-everything-in-it)
-
 - **The Products list builds a new list of rows on every redraw, so its table prepares every
   product's search text again on each keystroke.** Found by A454's review (#1491); I believe it
   predates that branch (not checked with `git blame`). **Next action:** keep the rows array stable
@@ -817,10 +808,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   drag itself. A shared helper, told how to map a row to a target, would serve both.
   [Detail](backlog/catalogue.md#two-copies-of-the-tree-pointer-drag--open-w88)
 
-- **The Menus Structure tree notices Collapse all only by watching its table redraw — OPEN (W88).**
+- **The Menus Structure tree notices silent branch closure by watching its table redraw — OPEN (W88).**
   An event from the table for "these branches changed" would be cleaner; it means a change in
   `packages/ui`.
-  [Detail](backlog/catalogue.md#the-menus-structure-tree-notices-collapse-all-only-by-watching-its-table-redraw--open-w88)
+  [Detail](backlog/catalogue.md#the-menus-structure-tree-notices-silent-branch-closure-by-watching-its-table-redraw--open-w88)
 
 - **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
   other items in the tree's row menus are greyed out while a change is out; the link to the included

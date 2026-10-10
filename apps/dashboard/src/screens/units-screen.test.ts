@@ -1412,3 +1412,56 @@ it("translates unit columns when whole-number precision choices stay the same", 
   );
   expect(table.columns[0]!.label).toBe("Nombre");
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)(
+  "A462 Units native select-all aligns without grips at %i px (%s, %s)",
+  async (width, locale, theme) => {
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 844);
+      const el = await mount(inUseApi());
+      el.parentElement!.setAttribute("data-theme", theme);
+      const dialog = await openInUseModal(el);
+      await enableProductSelection(el, dialog);
+      const root = dialog.querySelector("wt-data-table")!.shadowRoot!;
+
+      const header = root.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+      expect(header).not.toBeNull();
+      const h = header.getBoundingClientRect();
+      const boxes = [...root.querySelectorAll<HTMLInputElement>("tbody input[type=checkbox]")];
+      expect(boxes.length).toBeGreaterThan(0);
+      for (const box of boxes) {
+        const b = box.getBoundingClientRect();
+        expect(Math.abs(b.left - h.left)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(b.width - h.width)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(b.height - h.height)).toBeLessThanOrEqual(0.5);
+        const cell = box.closest("td")!;
+        const grip = cell.querySelector<HTMLElement>('[part~="drag-grip"]');
+        if (grip) expect(b.right).toBeLessThanOrEqual(grip.getBoundingClientRect().left);
+        expect(b.right).toBeLessThanOrEqual(cell.nextElementSibling!.getBoundingClientRect().left);
+      }
+
+      expect(root.querySelector('[part~="drag-grip"]')).toBeNull();
+      header.click();
+      await el.updateComplete;
+      await dialog.querySelector("wt-data-table")!.updateComplete;
+      expect(
+        [...root.querySelectorAll<HTMLInputElement>("tbody input[type=checkbox]")].map(
+          (box) => box.checked,
+        ),
+      ).toEqual([true, true]);
+      await page.screenshot({
+        path: `__screenshots__/a462-task2/units-${width}-${locale}-${theme}.png`,
+      });
+    } finally {
+      setLocale(before);
+    }
+  },
+);

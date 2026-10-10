@@ -526,3 +526,52 @@ it("uses the phone name column for a short product name without reserving absent
     table(el).shadowRoot!.querySelector<HTMLElement>(".scroll")!.scrollWidth,
   ).toBeLessThanOrEqual(310);
 });
+
+it("A462 default Preview keeps Expand all and nested reopen state", async () => {
+  const el = await mount();
+  expect(row(el, "root")!.querySelector(".tree-toggle")).toBeNull();
+  const bulk = () => table(el).shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  expect(bulk().textContent).toContain(t("folders.expand_all"));
+  bulk().click();
+  await settle(el);
+  expect(shown(el)).toEqual(["root", "drinks", "drinks/beer", "drinks/beer/mi", "juice"]);
+  await toggle(el, "drinks");
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+  await toggle(el, "drinks");
+  expect(shown(el)).toEqual(["root", "drinks", "drinks/beer", "drinks/beer/mi", "juice"]);
+  expect(bulk().textContent).toContain(t("folders.collapse_all"));
+  bulk().click();
+  await settle(el);
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+});
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en", "es"] as const).flatMap((language) =>
+      (["light", "dark"] as const).map((theme) => ({ width, language, theme })),
+    ),
+  ),
+)("A462 Preview visual $width $language $theme", async ({ width, language, theme }) => {
+  setLocale(language);
+  await page.viewport(width, 844);
+  expect(window.innerWidth).toBe(width);
+  const el = await mount(fixture(), theme);
+  const bulk = () => table(el).shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+  bulk().click();
+  await settle(el);
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+  expect(bulk().textContent).toContain(t("folders.collapse_all"));
+  expect(bulk().getBoundingClientRect().right).toBeCloseTo(
+    table(el).shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!.getBoundingClientRect()
+      .right,
+    0,
+  );
+  expect(row(el, "root")!.querySelector(".tree-toggle")).toBeNull();
+  expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width);
+  await page.screenshot({
+    element: el,
+    path: `__screenshots__/a462-task5/preview-${width}-${language}-${theme}.png`,
+  });
+});
