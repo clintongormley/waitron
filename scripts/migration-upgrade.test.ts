@@ -131,6 +131,7 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
   const bookkeeping = new Set(migrationOptionsFor(sets, staged).map((set) => set.migrationsTable));
   let held = new Map<string, number>();
   let existing = new Set<string>();
+  let comparedKitchenRows = false;
   for (const cut of [floor, ...cuts]) {
     const tags = [...journals]
       .flatMap(([name, journal]) =>
@@ -154,7 +155,18 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
       );
     }
     const step = async () => {
+      const nameIndexUpgrade = label === "core/0135_course_station_delete";
+      const kitchenBefore = nameIndexUpgrade ? kitchenRows(venueDir) : undefined;
       await watch.phase(`${label}: migrate`, () => applyMigrations(venueDir, options));
+      if (kitchenBefore !== undefined) {
+        comparedKitchenRows = true;
+        expect(kitchenRows(venueDir), `${label}: parent and child row values`).toEqual(
+          kitchenBefore,
+        );
+        console.log(
+          `${label}: kept row values in ${kitchenBefore.map(([table, rows]) => `${table} (${rows.length})`).join(", ")}`,
+        );
+      }
       const store = await watch.phase(`${label}: open`, () => openVenueDatabase(venueDir));
       try {
         const present = sources.filter((source) => {
@@ -207,6 +219,7 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
     held = new Map();
     await step();
   }
+  expect(comparedKitchenRows, "course/station name-index upgrade was reached").toBe(true);
   const connection = openRaw(venueDir);
   try {
     const names = connection
@@ -558,6 +571,45 @@ function openRaw(venueDir: string): DatabaseSync {
   connection.exec("pragma foreign_keys = on");
   connection.exec("pragma recursive_triggers = on");
   return connection;
+}
+
+function kitchenRows(venueDir: string): [string, unknown[]][] {
+  const connection = openRaw(venueDir);
+  const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
+  try {
+    const parents = new Set(["kitchen_courses", "kitchen_stations"]);
+    const tables = connection
+      .prepare("select name from sqlite_master where type = 'table' order by name")
+      .all()
+      .map((row) => String(row.name));
+    const related = tables.filter(
+      (table) =>
+        parents.has(table) ||
+        connection
+          .prepare(`pragma foreign_key_list(${quoted(table)})`)
+          .all()
+          .some((key) => parents.has(String(key.table))),
+    );
+    expect(related).toEqual(
+      expect.arrayContaining([
+        "kitchen_courses",
+        "kitchen_stations",
+        "products",
+        "ticket_items",
+        "kitchen_print_jobs",
+      ]),
+    );
+    return related.map((table) => {
+      const rows = connection
+        .prepare(`select * from ${quoted(table)}`)
+        .all()
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+      expect(rows.length, `${table}: upgrade comparison must hold rows`).toBeGreaterThan(0);
+      return [table, rows];
+    });
+  } finally {
+    connection.close();
+  }
 }
 
 function tableCounts(connection: DatabaseSync, skip: Set<string>): Map<string, number> {

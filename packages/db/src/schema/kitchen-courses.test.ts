@@ -2,9 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
@@ -68,6 +68,47 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       return row!.id;
     });
   }
+
+  it("deleted course names are reusable under new ids", async () => {
+    const name = "Reusable course";
+    const oldId = await seedCourse(LOCATION_A, name);
+    await inTx((tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, oldId)),
+    );
+    const replacementId = await seedCourse(LOCATION_A, name);
+    expect(replacementId).not.toBe(oldId);
+    const rows = await inTx((tx) =>
+      tx
+        .select({ id: kitchenCourses.id, active: kitchenCourses.active })
+        .from(kitchenCourses)
+        .where(eq(kitchenCourses.name, name)),
+    );
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { id: oldId, active: false },
+        { id: replacementId, active: true },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+
+    const collision = await captureError(() => seedCourse(LOCATION_A, name));
+    expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(collision)).toBe(
+      "UNIQUE constraint failed: kitchen_courses.location_id, kitchen_courses.name",
+    );
+    const elsewhereId = await seedCourse(LOCATION_A2, name);
+    expect(elsewhereId).not.toBe(replacementId);
+    await inTx((tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, replacementId)),
+    );
+    const thirdId = await seedCourse(LOCATION_A, name);
+    expect([oldId, replacementId]).not.toContain(thirdId);
+
+    const [index] = suite.db.all<{ sql: string }>(
+      sql`select sql from sqlite_master where type = 'index' and name = 'kitchen_courses_name_key'`,
+    );
+    expect(index?.sql).toMatch(/WHERE "kitchen_courses"\."active" = 1$/);
+  });
 
   it("maps display_order and name through the Drizzle export, with the active default", async () => {
     const id = await seedCourse(LOCATION_A, "Principales", 1);

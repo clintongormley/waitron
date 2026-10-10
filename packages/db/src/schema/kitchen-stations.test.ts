@@ -50,6 +50,50 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     });
   }
 
+  it("deleted station names are reusable under new ids", async () => {
+    const name = "Reusable station";
+    const oldId = await seedStation(LOCATION_A, name);
+    await inTx((tx) =>
+      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, oldId)),
+    );
+    const replacementId = await seedStation(LOCATION_A, name);
+    expect(replacementId).not.toBe(oldId);
+    const rows = await inTx((tx) =>
+      tx
+        .select({ id: kitchenStations.id, active: kitchenStations.active })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.name, name)),
+    );
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { id: oldId, active: false },
+        { id: replacementId, active: true },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+
+    const collision = await captureError(() => seedStation(LOCATION_A, name));
+    expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(collision)).toBe(
+      "UNIQUE constraint failed: kitchen_stations.location_id, kitchen_stations.name",
+    );
+    const elsewhereId = await seedStation(LOCATION_A2, name);
+    expect(elsewhereId).not.toBe(replacementId);
+    await inTx((tx) =>
+      tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, replacementId)),
+    );
+    const thirdId = await seedStation(LOCATION_A, name);
+    expect([oldId, replacementId]).not.toContain(thirdId);
+
+    const [index] = suite.db.all<{ sql: string }>(
+      sql`select sql from sqlite_master where type = 'index' and name = 'kitchen_stations_name_key'`,
+    );
+    expect(index?.sql).toMatch(/WHERE "kitchen_stations"\."active" = 1$/);
+  });
+
   it("exposes every column through the Drizzle export, with the is_default and active defaults", async () => {
     const id = await seedStation(LOCATION_A, "Cocina");
     await inTx((tx) =>
