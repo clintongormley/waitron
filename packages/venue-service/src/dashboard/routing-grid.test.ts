@@ -125,6 +125,11 @@ const shown = (box: HTMLButtonElement) => {
   return { text: value.textContent!.trim(), muted: value.classList.contains("inherited") };
 };
 const editorOf = (el: RoutingGrid) => root(el).querySelector<Editor>("routing-cell-editor");
+/** The open cell editor's `wt-close`; take it before the key or click that closes the editor. */
+function editorClosed(el: RoutingGrid) {
+  const modal = editorOf(el)!.shadowRoot!.querySelector("wt-modal")!;
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
 const field = (editor: Editor, name: string) =>
   editor.shadowRoot!.querySelector<Combo>(`wt-combobox[name="${name}"]`)!;
 const editorButton = (editor: Editor, test: string) =>
@@ -539,13 +544,17 @@ describe("venue-routing-grid", () => {
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
     await editorOf(el)!.updateComplete;
+    let closed = editorClosed(el);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
     await vi.waitFor(() => expect(root(el).activeElement).toBe(button));
     await userEvent.keyboard(" ");
     await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
     await editorOf(el)!.updateComplete;
+    closed = editorClosed(el);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
     await vi.waitFor(() => expect(root(el).activeElement).toBe(button));
     expect(emitted.changes).toEqual([]);

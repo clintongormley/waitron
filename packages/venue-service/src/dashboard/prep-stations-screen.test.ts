@@ -236,6 +236,13 @@ const q = (el: PrepStationsScreen, s: string) =>
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
   stationTable(el)?.querySelector<HTMLElement>(s) ??
   null;
+/** The station editor's `wt-close`; take it before the click that closes the editor. */
+function editorClosed(el: PrepStationsScreen) {
+  const modal = el
+    .shadowRoot!.querySelector("prep-station-editor")!
+    .shadowRoot!.querySelector("wt-modal")!;
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
 async function routingGrid(el: PrepStationsScreen) {
   const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
     '[slot="routing"] venue-routing-grid',
@@ -599,7 +606,9 @@ it.each([
     );
     expect(rest().checked).toBe(true);
     expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
+    const closed = editorClosed(el);
     q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closed;
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
     q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
@@ -2515,7 +2524,9 @@ const editorSave = (el: PrepStationsScreen) =>
 const editorMessage = (el: PrepStationsScreen) =>
   editorQ<HTMLElement & { error: string }>(el, "wt-form-actions")!.error;
 async function cancelEditor(el: PrepStationsScreen) {
+  const closed = editorClosed(el);
   editorQ(el, '[data-test="cancel-station-edit"]')!.click();
+  await closed;
   await vi.waitFor(() => expect(stationEditor(el)).toBeNull());
   await settle(el);
 }
@@ -6232,7 +6243,9 @@ describe("The station editor", () => {
         ],
       }),
     });
+    const closed = editorClosed(el);
     q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closed;
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
     q(el, '[data-test="edit-retired"]')!.click();
     await settle(el);
@@ -6272,21 +6285,28 @@ describe("The station editor", () => {
   it("ignores a departed editor's cancel and a departed Add station's printers", async () => {
     const { el, a } = await openEdit({ createStation: vi.fn() });
     const old = editorOf(el)!;
+    const closed = editorClosed(el);
     q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closed;
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
     q(el, '[data-test="edit-bar"]')!.click();
     await settle(el);
     old.dispatchEvent(new CustomEvent("station-close", { bubbles: true, composed: true }));
     await settle(el);
     expect(editorOf(el)).not.toBeNull();
+    const closedAgain = editorClosed(el);
     q(el, '[data-test="cancel-station-edit"]')!.click();
+    await closedAgain;
     await vi.waitFor(() => expect(editorOf(el)).toBeNull());
     q(el, '[data-test="new-station"]')!.click();
     await settle(el);
     const departed = q(el, "wt-combobox[name=printerIds]")!;
-    await el
-      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
-      .requestClose("cancel");
+    const addModal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
+    const addClosed = new Promise((resolve) =>
+      addModal.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await addModal.requestClose("cancel");
+    await addClosed;
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
     q(el, '[data-test="new-station"]')!.click();
     await settle(el);

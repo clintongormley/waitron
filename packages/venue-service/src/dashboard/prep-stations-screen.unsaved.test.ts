@@ -147,6 +147,10 @@ function modalIn(screen: PrepStationsScreen) {
     null
   );
 }
+/** The form's `wt-close`; take it before the click that closes it. */
+function closeOf(modal: HTMLElementTagNameMap["wt-modal"]) {
+  return new Promise((resolve) => modal.addEventListener("wt-close", resolve, { once: true }));
+}
 async function field(modal: HTMLElementTagNameMap["wt-modal"], value: string, name = "name") {
   const input = modal.querySelector<HTMLElementTagNameMap["wt-input"]>(
     `wt-input[name=${modal.hasAttribute("data-test") ? "stationName" : name}]`,
@@ -184,8 +188,10 @@ for (const rename of [false, true]) {
     expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     await choose("keep");
     expect(modal.querySelector("wt-input")!.value).toBe("Kitchen");
+    const closed = closeOf(modal);
     modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
     await choose("discard");
+    await closed;
     await expect.poll(() => modalIn(screen)).toBeNull();
     expect(writes).toEqual([]);
     expect(unload()).toBe(false);
@@ -193,13 +199,17 @@ for (const rename of [false, true]) {
   it(`${label} clean and reverted submitted values close directly`, async () => {
     const { screen } = await mount();
     let modal = await open(screen, rename);
+    let closed = closeOf(modal);
     modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await closed;
     await expect.poll(() => modalIn(screen)).toBeNull();
     modal = await open(screen, rename);
     await field(modal, "Kitchen");
     await field(modal, rename ? " Bar " : "");
     expect(unload()).toBe(false);
+    closed = closeOf(modal);
     modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await closed;
     await expect.poll(() => modalIn(screen)).toBeNull();
     expect((await question()).open).toBe(false);
   });

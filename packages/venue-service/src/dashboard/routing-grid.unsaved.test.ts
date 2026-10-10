@@ -276,8 +276,13 @@ describe("a pending routing cell choice", () => {
       const editor = editorOf(screen)!;
       expect(editor.open).toBe(true);
       expect(unload()).toBe(true);
+      const modal = editor.shadowRoot!.querySelector("wt-modal")!;
+      const closed = new Promise((resolve) =>
+        modal.addEventListener("wt-close", resolve, { once: true }),
+      );
       editor.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-cell"]')!.click();
       await answer("discard");
+      await closed;
       await expect.poll(() => editorOf(screen)).toBeNull();
       expect(unload()).toBe(false);
       expect(writes).toEqual([]);
