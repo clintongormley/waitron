@@ -140,7 +140,10 @@ export class TillFloorScreen extends LitElement {
 
       wt-floor-map {
         align-self: center;
-        width: min(100%, calc((100dvh - var(--wt-tap-min) * 8) * var(--floor-map-ratio)));
+        width: min(
+          100%,
+          calc(max(var(--wt-tap-min) * 6, 100dvh - var(--wt-tap-min) * 8) * var(--floor-map-ratio))
+        );
         aspect-ratio: var(--floor-map-ratio);
       }
 
@@ -563,7 +566,6 @@ export class TillFloorScreen extends LitElement {
     if (this.tables.some((table) => table.id === tableId)) this.details = { tableId };
   }
 
-  /** As the map names the table: a merge by all its drawn members' labels, else its own label. */
   #detailsHeading(table: TableState): string {
     const joinId = table.today?.joinId ?? null;
     const members =
@@ -963,7 +965,6 @@ export class TillFloorScreen extends LitElement {
     if (table === null) return nothing;
     return html`<till-seat-dialog
       .tableLabel=${table.label}
-      .seats=${seatsFor(table)}
       @seat-confirm=${(event: Event) => this.#onSeatConfirm(event, table)}
       @seat-cancel=${(event: Event) => {
         event.stopPropagation();

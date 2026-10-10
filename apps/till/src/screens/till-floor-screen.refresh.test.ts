@@ -118,8 +118,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("till-floor-screen's seats placeholder and re-read", () => {
-  it("gives the seat dialog today's seats, a merge's, or the old capacity", async () => {
+describe("till-floor-screen's guest count and re-read", () => {
+  it("leaves the seat dialog's placeholder empty for today's seats, a merge, or old capacity", async () => {
     const el = await mount({
       zones: twoZones,
       tables: [
@@ -130,14 +130,20 @@ describe("till-floor-screen's seats placeholder and re-read", () => {
     });
 
     await tapMap(el, "t1");
-    expect(seatDialog(el)!.seats).toBe(6);
+    await seatDialog(el)!.updateComplete;
+    const field6 = seatDialog(el)!.shadowRoot!.querySelector("wt-input")!;
+    await field6.updateComplete;
+    expect(field6.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe("");
     seatDialog(el)!.dispatchEvent(
       new CustomEvent("seat-cancel", { bubbles: true, composed: true }),
     );
     await el.updateComplete;
 
     await tapMap(el, "t2");
-    expect(seatDialog(el)!.seats).toBe(10);
+    await seatDialog(el)!.updateComplete;
+    const field10 = seatDialog(el)!.shadowRoot!.querySelector("wt-input")!;
+    await field10.updateComplete;
+    expect(field10.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe("");
     seatDialog(el)!.dispatchEvent(
       new CustomEvent("seat-cancel", { bubbles: true, composed: true }),
     );
@@ -152,7 +158,10 @@ describe("till-floor-screen's seats placeholder and re-read", () => {
       }),
     );
     await el.updateComplete;
-    expect(seatDialog(el)!.seats).toBe(4);
+    await seatDialog(el)!.updateComplete;
+    const field4 = seatDialog(el)!.shadowRoot!.querySelector("wt-input")!;
+    await field4.updateComplete;
+    expect(field4.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe("");
   });
 
   it("asks for the floor every 15 s while a planned zone's map shows", async () => {

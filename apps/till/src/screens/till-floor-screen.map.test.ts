@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cropToTables } from "@waitron/ui";
 import type { WtFloorMap } from "@waitron/ui";
@@ -408,3 +409,37 @@ for (const theme of ["light", "dark"] as const) {
     expect(getComputedStyle(chip).color).toBe(getComputedStyle(control).color);
   });
 }
+
+it("keeps a square map usable on a phone held sideways", async () => {
+  const previous = { width: window.innerWidth, height: window.innerHeight };
+  try {
+    await page.viewport(844, 390);
+    const el = await mount();
+    const map = mapOf(el);
+    const tapSize = parseFloat(getComputedStyle(map).getPropertyValue("--wt-tap-min"));
+    const box = map.getBoundingClientRect();
+    expect(box.height).toBeGreaterThanOrEqual(tapSize * 6);
+    expect(box.width).toBeCloseTo(box.height, 2);
+  } finally {
+    await page.viewport(previous.width, previous.height);
+  }
+});
+
+for (const locale of ["en", "es"])
+  for (const seats of [6, 1, null]) {
+    it(`leaves Guests without a placeholder for ${seats} seats in ${locale}`, async () => {
+      const previous = currentLocale();
+      try {
+        setLocale(locale);
+        const el = await mount({ tables: [planned("t1", { today: today({ seats }) })] });
+        await tap(el, "t1");
+        const dialog = el.shadowRoot!.querySelector("till-seat-dialog")!;
+        await dialog.updateComplete;
+        const field = dialog.shadowRoot!.querySelector("wt-input")!;
+        await field.updateComplete;
+        expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe("");
+      } finally {
+        setLocale(previous);
+      }
+    });
+  }

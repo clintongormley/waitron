@@ -419,3 +419,11 @@ for (const [locale, heading] of [
     }
   });
 }
+
+it("keeps a named single-table party's heading", async () => {
+  const p = party({ name: "Birthday", displayName: "Birthday" });
+  const { el } = await mount({ party: p, tables: [row(p)] });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("Birthday");
+});

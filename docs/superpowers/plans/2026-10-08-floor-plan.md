@@ -216,6 +216,8 @@ Tests pinning these may change, under the commit rule above.
   name instead).
 
 **Slice 3** (added at its expansion):
+> Owner override, 2026-10-10 (A472): Guests now has no placeholder. This supersedes the seats /
+> "Covers" replacement recorded below.
 - The seat dialog's hint "Optional. Leave it empty if you don't know yet." / "Opcional. Déjalo
   vacío si aún no lo sabes." (`seat.guest_count_hint`, `apps/till/src/i18n/strings.ts:546`, `:1679`),
   replaced by the table's seats or "Covers" (slice 3 decision 12). No test named it at `28f150197`

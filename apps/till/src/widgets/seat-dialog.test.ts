@@ -44,35 +44,11 @@ describe("till-seat-dialog", () => {
     expect(field(el).required).toBe(false);
   });
 
-  it("leaves Guests without a placeholder even when seats are known", async () => {
-    const six = await mountWidget<TillSeatDialog>("till-seat-dialog", {
-      tableLabel: "4",
-      seats: 6,
-    });
-    expect(nativeInput(six.el).placeholder).toBe("");
-
-    const one = await mountWidget<TillSeatDialog>("till-seat-dialog", {
-      tableLabel: "5",
-      seats: 1,
-    });
-    expect(nativeInput(one.el).placeholder).toBe("");
-
-    setLocale("es");
-    const es = await mountWidget<TillSeatDialog>("till-seat-dialog", {
-      tableLabel: "6",
-      seats: 6,
-    });
-    expect(nativeInput(es.el).placeholder).toBe("");
-  });
-
-  it("leaves Guests without a placeholder when seats are unknown", async () => {
+  it.each(["en", "es"])("leaves Guests without a placeholder in %s", async (locale) => {
+    setLocale(locale);
     const el = await mountDialog();
-    expect(el.seats).toBeNull();
     expect(nativeInput(el).placeholder).toBe("");
-
-    setLocale("es");
-    const es = await mountWidget<TillSeatDialog>("till-seat-dialog", { tableLabel: "6" });
-    expect(nativeInput(es.el).placeholder).toBe("");
+    expect(field(el).label).toBe(t("seat.guest_count"));
   });
 
   it("seats with the whole number typed", async () => {

@@ -36,7 +36,6 @@ export class TillSeatDialog extends LitElement {
   ];
 
   @property() tableLabel = "";
-  @property({ attribute: false }) seats: number | null = null;
 
   @state() private value = "";
   @state() private attempted = false;

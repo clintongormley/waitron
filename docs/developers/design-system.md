@@ -623,7 +623,8 @@ tall, with `aria-expanded` and `aria-controls` naming the body) shows `heading`.
 set. The consuming app registers the `chevron-down` icon.
 
 On the till's floor screen, the map box follows the cropped zone's aspect ratio, capped in height
-so the surrounding controls and Unplaced tray have room (owner, 2026-10-10, A472). Bill requested
+so the surrounding controls and Unplaced tray have room; the cap stays at least six tap heights
+on short windows, where the page can scroll (owner, 2026-10-10, A472). Bill requested
 chips share the map's purple tokens. The order pin's swatch follows its displayed signal: ready
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9"; Guests has no placeholder.

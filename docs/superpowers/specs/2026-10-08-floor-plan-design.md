@@ -116,6 +116,11 @@ the details one tap away.
   occupied, bill requested, needs clearing and reserved; a flashing dot for dishes ready to serve
   and for an order past its "forgotten" time. Colours read `--wt-*` tokens.
 - **The list view** stays as the other view, and lists the tables on today's plan.
+> Owner override, 2026-10-10 (A472): Guests has no placeholder. The floor map follows the zone's
+> proportions with a height cap; Bill requested chips use the map's purple, the pin's swatch
+> follows its words, and a single-table sheet says "Table 9" / "Mesa 9". The four-second notice
+> stays as built. These supersede the corresponding defaults below.
+
 - **Tapping a free table** opens the seat dialog. Its covers field is optional, and its placeholder
   is short: the table's seats for today as a guide ("4 seats"), or "Covers" when it has none. The
   seat count never refuses or warns about a larger party (section 7).
