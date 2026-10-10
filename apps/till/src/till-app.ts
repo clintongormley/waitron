@@ -5058,7 +5058,8 @@ export class TillApp extends LitElement {
 
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
    * the last-known floor, and so does one whose signal aborted before it answered. Answers whether
-   * `this.tables` now holds this read's answer or a newer one's. */
+   * this read's answer, or a newer one's, has been applied; `this.tables` then holds it or a list
+   * equal to it. */
   async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
     const read = ++this.#tablesRead;
     try {

@@ -2611,7 +2611,7 @@ if it is wrong.
 decision above or a task's text, the ruling is what was built. Line numbers checked at the slice's
 head: the till's idle listeners are at `till-app.ts:1408-1409` (`#onInteraction` at `:1386`);
 design-system.md → "Adding a primitive" is at `:3127`, its item 4's `delegatesFocus` at
-`:3134-3135`; the backlog's "Nothing has carried that out" is at `docs/backlog.md:2396`.
+`:3134-3135`; the backlog's "Nothing has carried that out" is at `docs/backlog.md:2398`.
 
 - Decision 2 reads "reachability wins": a taken-off table a party holds, with a delivery on its way
   or needing clearing is listed, not drawn.
@@ -2622,7 +2622,7 @@ design-system.md → "Adding a primitive" is at `:3127`, its item 4's `delegates
 - Decision 18's arrow-key pan stays within the pan limit (decision 8), so at high zoom the focused
   table can stay off-screen; the map has no composite-widget role, and each table stays a button.
 - A merge's words take the fill's words from the member that supplied the fill and the dot's count
-  from the member that supplied the dot; nothing is summed (`statusWords`, `pinText`). Its members
+  from the member that supplied the dot; nothing is summed (`statusWords`, `statusPin`). Its members
   are grouped over every table in the zone, drawn or not.
 - `mergeLabel` is exported from `@waitron/ui`, and `mapLabel` only from the component's file; the
   details sheet's heading is `mergeLabel` over the labels of the table's merge, the map's own
@@ -2643,6 +2643,12 @@ design-system.md → "Adding a primitive" is at `:3127`, its item 4's `delegates
   already covers the map that way, else the least distance that leaves no gap.
 - The notice and the pin say "<n> ready", not "<n> ready to serve".
 - Decision 8's wheel reads `deltaMode`: a line is 16 px, a page the map's width or height.
+- A finger pressed during a pinch, or once it is spent, keeps the gesture active until it lifts,
+  and its cancel sends no `cancel`.
+- Decision 13's re-read sends `floor-refresh` with `{ poll: true }`. The app skips a tick while
+  the last poll's read is out, cuts that read off at `FLOOR_POLL_LIMIT_MS` (25 s, as
+  `menu-state-poll.ts`'s `READ_LIMIT_MS`), and cancels it when the operator session ends or the app's api is replaced. An answer
+  equal, as JSON, to the last applied one counts as applied but keeps the shown list.
 - Stryker ran on every new `packages/ui` file, `floor-map-fills.ts` included; the ten fill tokens
   were added to design-system.md's colour list; the design-system paragraph for `wt-floor-map` names
   its events `wt-table-tap`, `wt-table-details` and `wt-table-drag-end`.
