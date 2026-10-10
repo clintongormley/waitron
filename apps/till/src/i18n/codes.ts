@@ -76,6 +76,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table needs clearing first. Mark it cleared, then try again",
     es: "Esa mesa está por recoger. Márcala como recogida e inténtalo de nuevo",
   },
+  "table.fixed": {
+    en: "That table is fixed in place",
+    es: "Esa mesa está fija",
+  },
+  "table.merged": {
+    en: "That table is joined to another. Split it first",
+    es: "Esa mesa está unida a otra. Sepárala primero",
+  },
+  "table.taken_off": {
+    en: "That table is off today's plan. Put it back first",
+    es: "Esa mesa está quitada hoy. Vuelve a ponerla primero",
+  },
+  "table.not_in_floor_plan": {
+    en: "That table is not on today's plan",
+    es: "Esa mesa no está en el plano de hoy",
+  },
+  "table.delivery_pending": {
+    en: "Food is on its way to that table",
+    es: "Hay comida en camino a esa mesa",
+  },
   "table.not_found": {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",

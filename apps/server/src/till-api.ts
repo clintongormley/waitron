@@ -201,6 +201,7 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
+import { mountFloorTodayApi } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
@@ -489,6 +490,12 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.inactive": 409,
   "table.zone_inactive": 409,
   "table.in_floor_plan": 409,
+  "table.not_in_floor_plan": 409,
+  "table.taken_off": 409,
+  "table.fixed": 409,
+  "table.merged": 409,
+  "table.delivery_pending": 409,
+  "floor_plan.invalid": 400,
   "zone.not_found": 404,
   "placement.invalid": 400,
   "tab.already_open": 409,
@@ -1090,6 +1097,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountStationTodayApi(app, deps, log, run, pinThrottle);
   mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
+  mountFloorTodayApi(app, deps, log, run);
   mountBillLookupApi(app, deps, log, run);
   mountInvoiceLookupApi(app, deps, log, run);
 
