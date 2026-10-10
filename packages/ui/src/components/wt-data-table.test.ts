@@ -5238,7 +5238,7 @@ function manyChoosable(count: number): DataTableColumn<Row>[] {
 test("a long Customise list scrolls within the screen and reaches its last choice", async () => {
   const el = await table({ columns: manyChoosable(40) });
   await userEvent.click(trigger(el));
-  const popup = panel(el).querySelector<HTMLElement>(".columns-list")!;
+  const popup = panel(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
   const bounds = popup.getBoundingClientRect();
   expect(bounds.top).toBeGreaterThanOrEqual(0);
   expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
@@ -8355,6 +8355,7 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
     await userEvent.click(trigger(el));
     const box = panel(el).querySelector<HTMLElement>(".columns-list")!;
     box.style.maxHeight = "240px";
+    box.style.overflow = "auto";
     const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
     const source = box.querySelector<HTMLElement>(`[data-reorder="${key}"]`)!;
     if (action === "up")

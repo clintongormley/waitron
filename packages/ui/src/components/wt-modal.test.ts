@@ -526,6 +526,15 @@ test("keeps the body in the tab order, whether or not there is anything to scrol
   await vi.waitFor(() => expect(longBody.scrollTop).toBeGreaterThan(0));
 });
 
+test("opens with focus on its body, not on a field first in a long body", async () => {
+  const modal = await openModal(
+    '<wt-input name="name" label="Name"></wt-input><div style="height: 1800px">Long form</div>',
+  );
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(modal.shadowRoot!.activeElement).toBe(body);
+});
+
 async function openModalWithMessage(body: string, footer: string) {
   const modal = (await mount(`<wt-modal heading="Add printer">
     ${body}

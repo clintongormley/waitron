@@ -370,15 +370,15 @@ describe("the exact time", () => {
       `<wt-dialog open heading="Devices"><wt-relative-time datetime="${AT}" locale="en-GB"></wt-relative-time><div style="height: ${innerHeight * 2}px"></div></wt-dialog>`,
     );
     await (dialogHost as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-    const dialog = dialogHost.shadowRoot!.querySelector("dialog")!;
-    expect(dialog.scrollHeight).toBeGreaterThan(dialog.clientHeight);
+    const body = dialogHost.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
     const el = dialogHost.querySelector("wt-relative-time") as WtRelativeTime;
     await el.updateComplete;
     const { button, tip } = parts(el);
     await userEvent.click(button);
     await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
     await commands.parkPointer();
-    await scrollBy(dialog, 40);
+    await scrollBy(body, 40);
     await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
   });
 

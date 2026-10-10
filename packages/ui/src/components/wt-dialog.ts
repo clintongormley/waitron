@@ -60,12 +60,23 @@ export class WtDialog extends LitElement {
         max-width: var(--wt-dialog-max-width);
       }
 
+      /* The native modal dialog's own height limit bounds this column, so a long body scrolls
+         inside it and the footer stays in view. */
+      dialog[open] {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
       dialog::backdrop {
         background: var(--wt-color-scrim);
       }
 
       .body {
         padding: var(--wt-space-5);
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
       }
 
       .body > .form-message {
@@ -83,6 +94,7 @@ export class WtDialog extends LitElement {
       }
 
       .footer {
+        flex-shrink: 0;
         display: flex;
         justify-content: flex-end;
         gap: var(--wt-space-2);
@@ -204,7 +216,9 @@ export class WtDialog extends LitElement {
   }
 
   @query("dialog") private dialog!: HTMLDialogElement;
+  @query(".body") private bodyEl!: HTMLElement;
   @query(".footer") private footerEl!: HTMLElement;
+  @query("slot:not([name])") private bodySlot!: HTMLSlotElement;
   @query('slot[name="footer"]') private footerSlot!: HTMLSlotElement;
 
   override willUpdate(): void {
@@ -228,6 +242,11 @@ export class WtDialog extends LitElement {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
         this.dialog.showModal();
+        // Chromium makes an overflowing body a tab stop by itself, slotted field or not, and
+        // opening focus then lands on it ahead of the field. A subclass that sets the body's
+        // tabindex itself chose that.
+        if (this.shadowRoot!.activeElement === this.bodyEl && !this.bodyEl.hasAttribute("tabindex"))
+          this.focusFirstContent();
       }
       if (!this.open && this.dialog.open) {
         this.dialog.close();
@@ -274,6 +293,13 @@ export class WtDialog extends LitElement {
       for (const candidate of tabbables(at, skip)) if (this.takesFocus(candidate)) return;
       if (!skip.has(at) && isTabbable(at) && this.takesFocus(at)) return;
       skip.add(at);
+    }
+  }
+
+  private focusFirstContent(): void {
+    for (const node of this.bodySlot.assignedElements({ flatten: true })) {
+      if (isTabbable(node) && this.takesFocus(node)) return;
+      for (const candidate of tabbables(node, new Set())) if (this.takesFocus(candidate)) return;
     }
   }
 

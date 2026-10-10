@@ -53,6 +53,28 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  test.each([
+    ["focusable content", '<label>Note <input name="note" /></label>'],
+    ["text only", ""],
+  ])("open, with a body taller than the window, holding %s", async (_, field) => {
+    const el = (await mountThemed(
+      `<wt-dialog heading="Edit order">
+        ${field}
+        <p style="height: 1800px">Order lines</p>
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+          <wt-button>Save</wt-button>
+        </wt-form-actions>
+      </wt-dialog>`,
+      theme,
+    )) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    await expectNoA11yViolations(host);
+  });
+
   // No `heading`, so the accessible name must come from the forwarded aria-label.
   test("open, heading-less, named via aria-label", async () => {
     const el = (await mountThemed(
