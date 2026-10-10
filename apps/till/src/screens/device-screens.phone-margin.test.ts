@@ -4,7 +4,7 @@ import { applyTokens } from "@waitron/ui";
 import indexHtml from "../../index.html?raw";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
-import type { TillApi } from "../api/client.js";
+import type { TableState, TillApi } from "../api/client.js";
 import { mount as mountTableOrder } from "./till-table-order-screen.test-helpers.js";
 import "./till-floor-screen.js";
 import "./till-expo-screen.js";
@@ -152,4 +152,61 @@ describe("device screens at phone width", () => {
       expect(contentBox(el, selector)).toEqual(wide);
     });
   }
+
+  // The map draws inside .screen, so .screen's padding alone cannot show where the map sits.
+  for (const [width, left, right] of [
+    [411, 8, 403],
+    [1280, 40, 1240],
+  ] as const) {
+    it(`a planned zone's map fills the floor screen's content box at ${width}px`, async () => {
+      await onPage(width);
+      const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+        embedded: true,
+        zones: [
+          {
+            id: "z1",
+            name: "Comedor",
+            displayOrder: 0,
+            active: true,
+            closesAt: null,
+            closed: false,
+          },
+        ],
+        tables: [plannedTable],
+      });
+      const rect = el.shadowRoot!.querySelector("wt-floor-map")!.getBoundingClientRect();
+      expect({ left: rect.left, right: rect.right }).toEqual({ left, right });
+    });
+  }
 });
+
+const plannedTable: TableState = {
+  id: "t1",
+  label: "1",
+  zoneId: "z1",
+  capacity: 4,
+  state: "free",
+  condition: "free",
+  hasOpenTab: false,
+  pendingDeliveries: 0,
+  pendingToServe: 0,
+  readyToServe: 0,
+  enRoute: 0,
+  timingBand: "fresh",
+  status: null,
+  nextReservation: null,
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
+  today: {
+    placement: { x: 2, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+  },
+  signals: [],
+  party: null,
+};

@@ -5,8 +5,8 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
-// Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>` and `<wt-table-token>`, which
-// the map view and the tray use by tag.
+// Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>`, `<wt-floor-map>` and
+// `<wt-table-token>`, which the map views and the tray use by tag.
 import {
   baseStyles,
   UrlStateController,
@@ -20,6 +20,7 @@ import {
 } from "@waitron/ui";
 import type {
   FloorCanvasCopy,
+  FloorMapTable,
   FloorTable,
   PlacementChange,
   PlacementClear,
@@ -29,6 +30,7 @@ import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { countText, currentLocale, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
+import { isPlannedZone, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
@@ -126,6 +128,11 @@ export class TillFloorScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+      }
+
+      wt-floor-map {
+        height: 65dvh;
+        min-height: calc(var(--wt-tap-min) * 6);
       }
 
       /* A token's unsent-order mark hangs below it, into the row gap and the tray's padding. */
@@ -458,6 +465,8 @@ export class TillFloorScreen extends LitElement {
 
   override willUpdate(): void {
     this.#drawnAt = this.now ?? Date.now();
+    // Edit plan's writes move the old placement columns, which a planned zone's map does not read.
+    if (this.#zoneOnScreen().planned) this.editing = false;
   }
 
   override updated(): void {
@@ -537,8 +546,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The shared canvas has no read-model, so it emits `wt-open-table { tableId }` only. The table is
-   * looked up here, so a seated one resumes its party rather than being seated a second time.
+   * Both maps send a table id only (the canvas's `wt-open-table`, the new map's `wt-table-tap`). The
+   * table is looked up here, so a seated one resumes its party rather than being seated a second time.
    */
   #onCanvasOpen(event: Event): void {
     event.stopPropagation();
@@ -630,7 +639,7 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  override render() {
+  #zoneOnScreen() {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
     const tabs = buildZoneTabs(
       this.zones.map((zone) => ({
@@ -646,14 +655,27 @@ export class TillFloorScreen extends LitElement {
     const visible = this.tables.filter((table) =>
       activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
+    return { tabs, refusedZone, activeKey, visible, planned: isPlannedZone(visible) };
+  }
+
+  override render() {
+    const { tabs, refusedZone, activeKey, visible, planned } = this.#zoneOnScreen();
+    const listed = planned ? listedTables(visible) : visible;
+    const onMap = planned ? mapTables(visible) : [];
     // The server writes and nulls the four placement columns together, so `posX` alone tells placed
     // from unplaced.
-    const placed = visible.filter(
-      (table): table is TableState & { posX: number; posY: number } =>
-        table.posX != null && table.posY != null,
-    );
-    const unplaced = visible.filter((table) => table.posX == null);
-    const view: "map" | "list" = this.viewOverride ?? (placed.length > 0 ? "map" : "list");
+    const placed = planned
+      ? []
+      : visible.filter(
+          (table): table is TableState & { posX: number; posY: number } =>
+            table.posX != null && table.posY != null,
+        );
+    const mapIds = new Set(onMap.map((table) => table.id));
+    const unplaced = planned
+      ? listed.filter((table) => !mapIds.has(table.id))
+      : visible.filter((table) => table.posX == null);
+    const drawn = planned ? onMap.length : placed.length;
+    const view: "map" | "list" = this.viewOverride ?? (drawn > 0 ? "map" : "list");
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -680,7 +702,7 @@ export class TillFloorScreen extends LitElement {
             ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
           </wt-button>
           ${
-            this.canEdit
+            this.canEdit && !planned
               ? html`<wt-button
                   class="edit-toggle"
                   data-edit-toggle
@@ -715,9 +737,11 @@ export class TillFloorScreen extends LitElement {
         })()}
         ${this.#stationSummary()}
         ${
-          view === "map"
-            ? this.#map(placed, unplaced)
-            : html`<div class="grid">${visible.map((table) => this.#card(table))}</div>`
+          view === "list"
+            ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
+            : planned
+              ? this.#plannedMap(onMap, unplaced, activeKey)
+              : this.#map(placed, unplaced)
         }
         ${this.#seatDialog()} ${this.#clearDialog()}
       </section>
@@ -739,16 +763,38 @@ export class TillFloorScreen extends LitElement {
           @wt-placement-change=${(event: Event) => void this.#onPlacementChange(event)}
           @wt-placement-clear=${(event: Event) => void this.#onPlacementClear(event)}
         ></wt-floor-canvas>
-        ${
-          unplaced.length > 0
-            ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
-                <span class="tray-label">${t("floor.unplaced")}</span>
-                ${unplaced.map((table) => this.#trayItem(table, placed))}
-              </div>`
-            : nothing
-        }
+        ${this.#tray(unplaced, placed)}
       </div>
     `;
+  }
+
+  /** `fitKey` and `tables` change in one update, so a new zone is fitted to its own tables. */
+  #plannedMap(
+    onMap: FloorMapTable[],
+    unplaced: TableState[],
+    activeKey: string | null | undefined,
+  ): TemplateResult {
+    return html`
+      <div class="map">
+        <wt-floor-map
+          data-floor-map
+          .tables=${onMap}
+          .fitKey=${activeKey ?? ""}
+          .copy=${{ label: t("floor.map_label") }}
+          @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
+        ></wt-floor-map>
+        ${this.#tray(unplaced, [])}
+      </div>
+    `;
+  }
+
+  #tray(unplaced: TableState[], placed: TableState[]): TemplateResult | typeof nothing {
+    return unplaced.length > 0
+      ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
+          <span class="tray-label">${t("floor.unplaced")}</span>
+          ${unplaced.map((table) => this.#trayItem(table, placed))}
+        </div>`
+      : nothing;
   }
 
   /** `placed` is the active zone's already-placed tables, so the default slot can dodge them. */
@@ -870,11 +916,7 @@ export class TillFloorScreen extends LitElement {
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">
         <span class="label">${table.label}</span>
-        ${
-          table.capacity !== null
-            ? html`<span class="capacity">${table.capacity} ${t("floor.capacity")}</span>`
-            : nothing
-        }
+        ${this.#seats(table)}
       </span>
       <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
       <wt-button
@@ -888,6 +930,13 @@ export class TillFloorScreen extends LitElement {
     </div>`;
   }
 
+  #seats(table: TableState): TemplateResult | typeof nothing {
+    const seats = seatsFor(table);
+    return seats !== null
+      ? html`<span class="capacity">${seats} ${t("floor.capacity")}</span>`
+      : nothing;
+  }
+
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#clearingCard(table);
     return html`<button
@@ -897,11 +946,7 @@ export class TillFloorScreen extends LitElement {
     >
       <span class="card-head">
         <span class="label">${table.label}</span>
-        ${
-          table.capacity !== null
-            ? html`<span class="capacity">${table.capacity} ${t("floor.capacity")}</span>`
-            : nothing
-        }
+        ${this.#seats(table)}
       </span>
       ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
       <span class="badges">
