@@ -191,18 +191,24 @@ never with a bare `pnpm dev*`. The first port slot uses
 venue directory is derived from that state directory by
 `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). The gitignored `apps/server/.env`
 describes that venue (venue ids, credentials key), so `wa-wt` copies its newest copy into another
-worktree that takes the first slot. Starting a second worktree while the first runs gives it ports
-5290, 5291, 5292, 8180 and 9210 for till, dashboard, setup, server and print agent. Its own
-`$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and `.env` are provisioned separately.
-`WAITRON_MANAGEMENT_ORIGIN` points at `http://localhost:5291`, so passkeys and account links stay
-with that venue. Provisioning writes its shifted server port to that checkout's `.env`.
-The two venues are directories of SQLite files on the host, not containers.
+worktree that takes the first slot. There are eight slots: slot _k_ serves the till, dashboard,
+setup, server and print agent on 5190, 5191, 5192, 8080 and 9110 plus 100 × _k_, so the second slot
+is 5290, 5291, 5292, 8180 and 9210. A start keeps its saved slot unless another running instance
+holds it or a process `wa-wt` does not recognise as a Waitron app listens on one of its ports.
+Otherwise it takes the first slot nothing listens on, or failing that the first whose only listeners
+are Waitron app processes run under pnpm from one of the checkouts. Whichever slot it takes, it
+first stops those processes, even ones `wa-wt` did not start. A listener on one slot never blocks a
+start on another. A worktree on any slot but the first has its own
+`$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and `.env`, provisioned separately, and
+its `WAITRON_MANAGEMENT_ORIGIN` points at its own dashboard port, so passkeys and account links stay
+with that venue. Provisioning writes its shifted server port to that checkout's `.env`. Every venue
+is a directory of SQLite files on the host, not a container.
 
-For side-by-side visual checks, start the first worktree, then start the second without taking the
-first down. `wa-wt ls` shows which name owns each URL. While both run, name the instance in
+For side-by-side visual checks, start one worktree, then start another without taking the first
+down. `wa-wt ls` shows which name owns each URL. While more than one runs, name the instance in
 `wa-wt logs <name>`, `wa-wt down <name>`, and `wa-wt reset demo <name>`; a bare command refuses to
-guess. Stopping one leaves the other's listeners and venue open. A third start refuses until a port
-slot is free.
+guess. Stopping one leaves the others' listeners and venues open. When all eight slots are held, a
+start refuses and lists what holds each.
 
 **Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
 `mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.
@@ -211,7 +217,7 @@ It is started because `pnpm dev:setup` and `pnpm dev:reset` each begin
 unqualified `docker compose up` from a worktree starts a SECOND mailpit fighting for the fixed 1025
 and 8025 ports, which is the reason the rule at the top of this paragraph exists — `wa-wt` brings
 the shared one up under `COMPOSE_PROJECT_NAME=waitron`. It copies `.env` between worktrees sharing
-the first slot and keeps the second slot's `.env` with its own venue.
+the first slot, and a checkout on any other slot keeps its own `.env` with its own venue.
 
 Changing target REMOVES THAT INSTANCE'S VENUE DIRECTORY, keeping its development CA. Two steps do
 it: `wa-wt`'s `reset_target` clears that instance's box state except `tls`, and the `dev:reset` it
@@ -220,9 +226,9 @@ directory whole. That comment says why the whole directory rather than
 `venue.db`: the engine keeps write-ahead sidecars beside each file, and a venue file removed while
 its `-wal` stays behind reopens on the OLD tail and answers wrongly without erroring.
 `wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected target. The first
-slot copies its new `.env` to other first-slot checkouts; the second keeps its own. Cost: a round
-trip each on 2026-09-05 and 2026-09-06 while the original copy and reset rules were manual. Detail:
-`docs/ui-review.md` → _Running the stack from a worktree_.
+slot copies its new `.env` to other first-slot checkouts; a checkout on any other slot keeps its
+own. Cost: a round trip each on 2026-09-05 and 2026-09-06 while the original copy and reset rules
+were manual. Detail: `docs/ui-review.md` → _Running the stack from a worktree_.
 
 Writing to that database from outside the server — a seeding script, or any other process that
 opens the venue directory — no longer puts your change on an open dashboard at the moment you write
