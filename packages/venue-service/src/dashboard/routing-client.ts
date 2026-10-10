@@ -10,13 +10,6 @@ import type {
   RoutingView,
 } from "../routing-types.js";
 
-export interface StationClosing {
-  openDishCount: number;
-  destinations: readonly { id: string; name: string; isDefault: boolean }[];
-}
-export type StationDisableChoice =
-  { openDishes: "send"; sendsToStationId: string } | { openDishes: "leave" };
-
 export interface OutputsDown {
   printersDown: {
     stationId: string;
@@ -148,20 +141,6 @@ export class PrepStationsApi {
       "DELETE",
     );
   }
-  readStationClosing(id: string): Promise<StationClosing> {
-    return this.request(`/management-api/stations/${id}/closing`, "GET", undefined, {
-      passive: true,
-    });
-  }
-  deactivateStation(id: string, choice?: StationDisableChoice): Promise<void> {
-    return choice === undefined
-      ? this.request(`/management-api/stations/${id}`, "DELETE")
-      : this.request(`/management-api/stations/${id}`, "DELETE", choice);
-  }
-  activateStation(id: string): Promise<void> {
-    return this.request(`/management-api/stations/${id}`, "PATCH", { active: true });
-  }
-
   listOutputsDown(): Promise<OutputsDown> {
     return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {
       passive: true,

@@ -245,13 +245,18 @@ it("keeps refused Settings values protected and clears protection on the accepte
   await change(screen, "6");
   cell(screen, "[data-test=save-settings-cell]")!.click();
   await settle(screen);
-  wait.reject({ code: "station.not_found" });
+  wait.reject({ code: "management.request_invalid", params: { field: "warmAfterMinutes" } });
   await settle(screen);
   expect(shown(screen)).toBe("6");
   expect(unload()).toBe(true);
   cell(screen, "[data-test=cancel-settings-cell]")!.click();
   await choose("keep");
   expect(shown(screen)).toBe("6");
+  expect(cell(screen, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+  expect(
+    (cell(screen, "[data-test=settings-minutes]") as HTMLElement & { error: string }).error,
+  ).toBe("Use whole minutes with warm < overdue < forgotten.");
+  await change(screen, "7");
   app.api.updateStation = async (id, body) => {
     writes.push({ id, body });
   };
@@ -259,7 +264,7 @@ it("keeps refused Settings values protected and clears protection on the accepte
   await expect.poll(() => shown(screen)).toBeUndefined();
   expect(writes).toEqual([
     { id: "bar", body: { warmAfterMinutes: 6 } },
-    { id: "bar", body: { warmAfterMinutes: 6 } },
+    { id: "bar", body: { warmAfterMinutes: 7 } },
   ]);
   expect(unload()).toBe(false);
 });

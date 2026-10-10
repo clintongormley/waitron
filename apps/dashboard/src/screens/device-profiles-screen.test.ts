@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -1220,14 +1221,13 @@ describe("device-profiles-screen kitchen screens", () => {
       .shadowRoot!.querySelector(`[data-test="${testId}"]`)
       ?.textContent?.replace(/\s+/g, " ")
       .trim() ?? null;
-  const disabled = t("devices.station_disabled_mark");
 
   async function save(el: DeviceProfilesScreen) {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
   }
 
-  it("shows a kitchen display's three kinds, each one's lists, and a switched-off entry it holds marked", async () => {
+  it("shows a kitchen display's three kinds and live stations while retaining disabled zones", async () => {
     const { el } = await edit(kitchen, stored);
     expect(
       shown(el, "profile-kitchen-screens").filter(([label]) =>
@@ -1247,7 +1247,6 @@ describe("device-profiles-screen kitchen screens", () => {
       ["Grill", true],
       ["Cold", false],
       ["Pastry", false],
-      [`Old grill (${disabled})`, true],
     ]);
     expect(sw(el, "profile-station-screen-every-zone")).toBeNull();
     expect(sw(el, "profile-pass-screen-every-station")).toBeNull();
@@ -1311,7 +1310,7 @@ describe("device-profiles-screen kitchen screens", () => {
     });
   });
 
-  it("saves a kitchen display's changed lists whole, keeping what was switched off since", async () => {
+  it("saves a kitchen display's changed lists whole, excluding deleted stations and keeping disabled zones", async () => {
     const { api, el } = await edit(kitchen, stored);
     toggle(el, "profile-station-screen-station-s2", true);
     toggle(el, "profile-pass-screen", true);
@@ -1319,7 +1318,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
       kitchenScreens: {
-        station: { stationIds: ["s1", "s-off", "s2"], zoneIds: null },
+        station: { stationIds: ["s1", "s2"], zoneIds: null },
         pass: { stationIds: null, zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] },
       },
@@ -1371,7 +1370,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
       kitchenScreens: {
-        station: { stationIds: ["s1", "s-off", "s2"], zoneIds: null },
+        station: { stationIds: ["s1", "s2"], zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] },
       },
     });
@@ -1523,7 +1522,79 @@ describe("device-profiles-screen kitchen screens", () => {
     expect(text(el, "narrowed-devices")).toBeNull();
   });
 
-  it("copies only the switched-on stations and zones when a profile is duplicated, and no kind left with an empty list", async () => {
+  it("permanent delete keeps station choices within a phone profile editor with long names", async () => {
+    await page.viewport(390, 900);
+    try {
+      const { el } = await edit(
+        kitchen,
+        { station: { stationIds: [], zoneIds: null } },
+        {
+          listStations: vi
+            .fn()
+            .mockResolvedValue([
+              station("s1", "Covered terrace preparation station for the dining room and kitchen"),
+            ]),
+        },
+      );
+      const lists = el.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="profile-station-screen-lists"]',
+      )!;
+      await new Promise(requestAnimationFrame);
+      expect(lists.getBoundingClientRect().right).toBeLessThanOrEqual(
+        el.getBoundingClientRect().right,
+      );
+      expect(lists.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+        el.getBoundingClientRect().left,
+      );
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it.each([
+    ["en", "No stations selected. Choose stations or Every."],
+    ["es", "No hay estaciones elegidas. Elige estaciones o Todas."],
+  ] as const)(
+    "permanent delete explains an empty explicit bound briefly in %s",
+    async (locale, message) => {
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        const { el } = await edit(kitchen, { station: { stationIds: [], zoneIds: null } });
+        expect(
+          el
+            .shadowRoot!.querySelector('[data-test="empty-station-selection"]')!
+            .textContent?.trim(),
+        ).toBe(message);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("permanent delete displays an explicit empty profile bound and preserves it on an unrelated save", async () => {
+    const { api, el } = await edit(kitchen, { station: { stationIds: [], zoneIds: null } });
+    const every = sw(el, "profile-station-screen-every-station")!;
+    expect(every.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
+    expect(el.shadowRoot!.querySelector('[data-test="empty-station-selection"]')).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('[data-test="empty-station-selection"]')!.textContent?.trim(),
+    ).toBe(t("devices.empty_station_selection"));
+    rename(el);
+    await save(el);
+    await flush(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toEqual([
+      "p2",
+      "Renamed",
+      null,
+      [],
+      "kds",
+      null,
+      { receiptPrinterIds: [], paymentSlipPrinterIds: [] },
+    ]);
+  });
+
+  it("permanent delete keeps an empty explicit station bound when a kitchen profile is duplicated", async () => {
     const { api, el } = await edit(kitchen, {
       station: { stationIds: ["s1", "s-off"], zoneIds: null },
       pass: { stationIds: ["s-off"], zoneIds: null },
@@ -1535,7 +1606,10 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
-      kitchenScreens: { station: { stationIds: ["s1"], zoneIds: null } },
+      kitchenScreens: {
+        station: { stationIds: ["s1"], zoneIds: null },
+        pass: { stationIds: [], zoneIds: null },
+      },
     });
   });
 
@@ -1556,9 +1630,9 @@ describe("device-profiles-screen kitchen screens", () => {
         pass: { stationIds: null, zoneIds: [] },
       },
     });
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]!.kitchenScreens).not.toHaveProperty(
-      "pass_monitor",
-    );
+    expect(
+      vi.mocked(api.createDeviceProfile).mock.calls[0]![6]!.kitchenScreens!.pass_monitor,
+    ).toEqual({ stationIds: [], zoneIds: null });
   });
 
   it("copies a till's pass monitor when it is duplicated", async () => {

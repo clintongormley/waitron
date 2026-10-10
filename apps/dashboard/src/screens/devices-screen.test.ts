@@ -4664,7 +4664,7 @@ describe("add a device", () => {
       expect(profile.value).toBe("");
     });
 
-    it("whose only station was switched off opens with no Screen", async () => {
+    it("whose deleted station leaves an explicit empty station choice", async () => {
       const api = waiting({
         ...returning,
         returning: {
@@ -4690,10 +4690,15 @@ describe("add a device", () => {
       await toEnableSettings(el);
 
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
-      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("");
+      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("station");
+      const every = q(el, "[data-test=pair-screen-every-station]")!;
+      expect(every.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
+      expect(q(el, '[data-test="empty-station-selection"]')!.textContent?.trim()).toBe(
+        t("devices.empty_station_selection"),
+      );
     });
 
-    it("whose station its profile no longer lists opens with no Screen", async () => {
+    it("whose station its profile no longer lists keeps an explicit empty choice", async () => {
       const api = waiting();
       vi.mocked(api.listProfileKitchenScreens).mockResolvedValue([
         { profileId: "dp3", screens: { station: { stationIds: ["s2"], zoneIds: null } } },
@@ -4702,7 +4707,12 @@ describe("add a device", () => {
       await toEnableSettings(el);
 
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
-      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("");
+      expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("station");
+      const every = q(el, "[data-test=pair-screen-every-station]")!;
+      expect(every.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
+      expect(q(el, '[data-test="empty-station-selection"]')!.textContent?.trim()).toBe(
+        t("devices.empty_station_selection"),
+      );
     });
 
     describe("while its Enable dialog is open", () => {

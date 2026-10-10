@@ -172,7 +172,7 @@ it("writes station changes to core and cells to venue-service", async () => {
     forgottenAfterMinutes: 15,
   });
   await api.setDefaultStation("bar");
-  await api.deactivateStation("bar");
+  await api.deleteStation("bar");
   await api.setCell(
     { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
     {
@@ -374,12 +374,6 @@ it("writes station targets for a category cell and a category zone cell", async 
     ],
   ]);
 });
-it("switches a station on through the core station PATCH", async () => {
-  const request = vi.fn(async () => undefined);
-  await new PrepStationsApi(request as DashboardRequest).activateStation("bar");
-  expect(request).toHaveBeenCalledWith("/management-api/stations/bar", "PATCH", { active: true });
-});
-
 it("writes a complete station order as one active request even from a background client", async () => {
   const request = vi.fn(async () => undefined);
   const client = new PrepStationsApi(request as DashboardRequest).background;
@@ -387,25 +381,6 @@ it("writes a complete station order as one active request even from a background
   expect(request.mock.calls).toEqual([
     ["/management-api/stations/order", "PUT", { ids: ["bar", "kitchen"] }],
   ]);
-});
-
-it("reads Disable choices passively without changing the station", async () => {
-  const answer = { openDishCount: 3, destinations: [{ id: "bar", name: "Bar", isDefault: true }] };
-  const request = vi.fn(async () => answer);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  expect(await api.readStationClosing("grill")).toEqual(answer);
-  expect(request.mock.calls).toEqual([
-    ["/management-api/stations/grill/closing", "GET", undefined, { passive: true }],
-  ]);
-});
-it.each([
-  { openDishes: "send" as const, sendsToStationId: "bar" },
-  { openDishes: "leave" as const },
-])("Disable sends its explicit open-dish choice %j in one active request", async (choice) => {
-  const request = vi.fn(async () => undefined);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  await api.deactivateStation("grill", choice);
-  expect(request.mock.calls).toEqual([["/management-api/stations/grill", "DELETE", choice]]);
 });
 
 it("delete impact reads passively in the background and delete sends no body or passive option", async () => {

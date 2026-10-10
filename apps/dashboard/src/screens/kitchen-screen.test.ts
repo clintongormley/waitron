@@ -41,7 +41,6 @@ function stubApi(
     listStations: vi.fn().mockResolvedValue(stations.map((s) => ({ ...s }))),
     createStation: vi.fn().mockResolvedValue({ id: "s9" }),
     updateStation: vi.fn().mockResolvedValue(undefined),
-    deactivateStation: vi.fn().mockResolvedValue(undefined),
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),

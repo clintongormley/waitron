@@ -40,7 +40,7 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
           "dashboard-opening-hours-screen",
         ) as OpeningHoursScreen;
         screen.api = new OpeningHoursApi((async (path: string) => {
-          if (path === "/management-api/stations?includeDisabled=true")
+          if (path === "/management-api/stations")
             return [
               { id: "bar", name: locale === "en" ? "Upstairs bar" : "Bar de arriba", active: true },
             ];

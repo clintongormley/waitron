@@ -60,7 +60,7 @@ async function mount(station = "bar", answer?: (path: string) => unknown | Promi
   const request = (async (path: string, method: string, body: unknown, options: unknown) => {
     calls.push([path, method, body, options]);
     if (path === "/management-api/venue-service/opening-hours") return structuredClone(model);
-    if (path === "/management-api/stations?includeDisabled=true") return structuredClone(stations);
+    if (path === "/management-api/stations") return structuredClone(stations);
     if (path.includes("/service-times?"))
       return (
         answer?.(path) ?? {

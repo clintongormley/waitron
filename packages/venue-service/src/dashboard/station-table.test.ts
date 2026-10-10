@@ -70,18 +70,19 @@ it("names its columns in Spanish, and says so when there are no stations", async
   const empty = await mount([]);
   expect(table(empty)?.textContent).toContain("No hay estaciones de preparación");
 });
-it("keeps disabled stations at the bottom and marks Default and the supplied disabled status", async () => {
+it("omits deleted stations and their supplied status while preserving Default", async () => {
   const el = await mount([
     station({ id: "disabled", name: "Old kitchen", active: false, displayOrder: 0 }),
     station({ id: "bar", name: "Bar", isDefault: true, displayOrder: 1 }),
   ]);
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),
-  ).toEqual([expect.stringContaining("Bar"), expect.stringContaining("Old kitchen")]);
+  ).toEqual([expect.stringContaining("Bar")]);
   expect(table(el)?.textContent).toContain("Default");
   el.statusNotes = { disabled: "Switched off" };
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(table(el)?.textContent).toContain("Switched off");
+  expect(table(el)?.textContent).not.toContain("Switched off");
+  expect(table(el)?.textContent).not.toContain("Old kitchen");
 });
 it("orders tied stations by name", async () => {
   const el = await mount([

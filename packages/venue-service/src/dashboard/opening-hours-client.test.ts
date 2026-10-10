@@ -204,8 +204,8 @@ it("loads and refreshes the station picker as passive session activity", async (
     live.invalidate([{ type: "kitchen_stations" }]);
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
     expect(request.mock.calls).toEqual([
-      ["/management-api/stations?includeDisabled=true", "GET", undefined, { passive: true }],
-      ["/management-api/stations?includeDisabled=true", "GET", undefined, { passive: true }],
+      ["/management-api/stations", "GET", undefined, { passive: true }],
+      ["/management-api/stations", "GET", undefined, { passive: true }],
     ]);
   } finally {
     stop();

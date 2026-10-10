@@ -96,8 +96,13 @@ function api(overrides: Partial<ScreenApi> = {}): ScreenApi {
     preview: vi.fn().mockResolvedValue([]),
     createStation: vi.fn(),
     updateStation: vi.fn(),
-    readStationClosing: vi.fn().mockResolvedValue({ openDishCount: 0, destinations: [] }),
-    deactivateStation: vi.fn(),
+    getStationDeleteImpact: vi.fn(async (id: string) => ({
+      target: { id, name: id === "bar" ? "Bar" : "Upstairs bar" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    })),
+    deleteStation: vi.fn(),
     setDefaultStation: vi.fn(),
     ...overrides,
   } as unknown as ScreenApi;
@@ -119,7 +124,7 @@ async function settle(el: PrepStationsScreen) {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
   await el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
-    "station-disable-dialog",
+    "wt-delete-dialog",
   )?.updateComplete;
 }
 async function editSaveField(el: PrepStationsScreen, field: HTMLElement, value: string | string[]) {
@@ -134,9 +139,7 @@ const q = (el: PrepStationsScreen, s: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(s) ??
   el.shadowRoot!.querySelector("prep-station-editor")?.shadowRoot?.querySelector<HTMLElement>(s) ??
   stationTable(el)?.querySelector<HTMLElement>(s) ??
-  el
-    .shadowRoot!.querySelector("station-disable-dialog")
-    ?.shadowRoot?.querySelector<HTMLElement>(s) ??
+  el.shadowRoot!.querySelector("wt-delete-dialog")?.shadowRoot?.querySelector<HTMLElement>(s) ??
   null;
 /** The station editor's `wt-close`; take it before the click that closes the editor. */
 function editorClosed(el: PrepStationsScreen) {
@@ -214,8 +217,7 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
 
 it.each([
   ["default-upstairs", "open"],
-  ["switch-off-upstairs", "open"],
-  ["switch-on-retired", "open"],
+  ["delete-upstairs", "open"],
 ] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
   const next = withUpstairs({ open: true, why });
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
@@ -225,10 +227,7 @@ it.each([
   expect(await routingGrid(el)).not.toBeNull();
   expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
   expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
-  const moved = action
-    .replace("default-", "make-default-")
-    .replace("switch-off-", "disable-")
-    .replace("switch-on-", "enable-");
+  const moved = action.replace("default-", "make-default-");
   expect(stationTable(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
 });
 
@@ -252,26 +251,15 @@ async function openStationRest(el: PrepStationsScreen, stationId = "upstairs") {
   return q(el, "wt-switch[name=showsRestOfOrder]") as HTMLElementTagNameMap["wt-switch"];
 }
 
-it("the station editor retains disabled station rest editing without enabling it", async () => {
+it("a deleted station has no editor, Delete or Enable action", async () => {
   const next = withUpstairs({ open: false, why: "switched_off" });
   next.stations[1]!.active = false;
-  next.routing.stations[1]!.active = false;
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    setStationFallback: vi.fn(),
-    activateStation: vi.fn(),
-  });
+  const a = api({ load: vi.fn().mockResolvedValue(next) });
   const el = await mount(a);
-  const control = await openStationRest(el);
-  expect(control.checked).toBe(false);
-  control.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
-  await settle(el);
-  q(el, '[data-test="save-station-edit"]')!.click();
-  await settle(el);
-  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("upstairs", { showsRestOfOrder: true });
-  expect(a.setStationFallback).not.toHaveBeenCalled();
-  expect(a.activateStation).not.toHaveBeenCalled();
-  expect(next.stations[1]!.active).toBe(false);
+  expect(q(el, '[data-test="edit-upstairs"]')).toBeNull();
+  expect(q(el, '[data-test="delete-upstairs"]')).toBeNull();
+  expect(q(el, '[data-test="enable-upstairs"]')).toBeNull();
+  expect(a.updateStation).not.toHaveBeenCalled();
 });
 
 it.each(
@@ -343,10 +331,7 @@ it.each(
     await page.screenshot({
       path: `__screenshots__/look/routing-fallback-${locale}-${theme}-${width}-station.png`,
     });
-    el.shadowRoot!.querySelector('[data-test="inactive-retired"]')!.scrollIntoView();
-    await page.screenshot({
-      path: `__screenshots__/look/routing-fallback-${locale}-${theme}-${width}-inactive.png`,
-    });
+    expect(el.shadowRoot!.querySelector('[data-test="inactive-retired"]')).toBeNull();
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
@@ -474,6 +459,16 @@ it.each([
     q(el, '[data-test="save-station-edit"]')!.click();
     await settle(el);
     expect(a.updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
+    if (code === "station.not_found") {
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull(),
+      );
+      expect(el.shadowRoot!.textContent).toContain("This station could not be found.");
+      expect(el.shadowRoot!.textContent).not.toContain("station.not_found");
+      expect(a.updateStation).toHaveBeenCalledTimes(1);
+      expect(view.stations[0]!.showsRestOfOrder).toBe(false);
+      return;
+    }
     await vi.waitFor(() =>
       expect((q(el, "wt-form-actions") as HTMLElement & { error: string }).error).toBe(message),
     );
@@ -610,7 +605,7 @@ it("does not rename a station removed while its draft is open", async () => {
   expect(a.updateStation).not.toHaveBeenCalled();
 });
 
-it("rejects unordered thresholds beside overdue in Settings and retains station disable", async () => {
+it("rejects unordered thresholds beside overdue in Settings and keeps Delete available", async () => {
   const a = api();
   const el = await mount(a);
   settingsQ(el, '[data-test="edit-settings-overdueAfterMinutes-bar"]')!.click();
@@ -623,11 +618,11 @@ it("rejects unordered thresholds beside overdue in Settings and retains station 
   await settle(el);
   expect((settingsQ(el, '[data-test="settings-minutes"]') as WtInput).error).not.toBe("");
   expect(a.updateStation).not.toHaveBeenCalled();
-  q(el, '[data-test="disable-bar"]')!.click();
+  q(el, '[data-test="delete-bar"]')!.click();
   await settle(el);
-  q(el, '[data-test="disable-confirm"]')!.click();
+  q(el, '[data-test="delete-confirm"]')!.click();
   await settle(el);
-  expect(a.deactivateStation).toHaveBeenCalledWith("bar");
+  expect(a.deleteStation).toHaveBeenCalledWith("bar");
 });
 
 it("shows linked printers and kitchen screens in Stations", async () => {
@@ -819,13 +814,13 @@ it("does not create an unnamed station", async () => {
   expect(q(el, '[data-field-error="name"]')).not.toBeNull();
 });
 it("reports rejected station actions without exposing a code", async () => {
-  const a = api({ deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }) });
+  const a = api({ deleteStation: vi.fn().mockRejectedValue({ code: "station.not_found" }) });
   const el = await mount(a);
-  q(el, '[data-test="disable-bar"]')!.click();
+  q(el, '[data-test="delete-bar"]')!.click();
   await settle(el);
-  q(el, '[data-test="disable-confirm"]')!.click();
+  q(el, '[data-test="delete-confirm"]')!.click();
   await settle(el);
-  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
+  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be found");
   expect(q(el, '[role="alert"]')?.textContent).not.toContain("station.not_found");
 });
 it("refreshes station cards after a kitchen-stations live change", async () => {
@@ -1049,7 +1044,7 @@ it("keeps a failed save's message through a later failed refresh and the recover
   expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
 });
 
-it("Disable ignores a stored inactive fallback and makes one request without changing its mapping", async () => {
+it("Delete ignores a stored inactive fallback and makes one request without changing its mapping", async () => {
   setLocale("en");
   const next = withUpstairs(
     { open: false, why: "closed_by_hand" },
@@ -1058,14 +1053,14 @@ it("Disable ignores a stored inactive fallback and makes one request without cha
   next.routing.stations.push({ id: "old", name: "Old bar", active: false });
   const a = api({ load: vi.fn().mockResolvedValue(next), setStationFallback: vi.fn() });
   const el = await mount(a);
-  q(el, '[data-test="disable-upstairs"]')!.click();
+  q(el, '[data-test="delete-upstairs"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="station-fallback"]')).toBeNull();
   expect(q(el, 'wt-combobox[name="openDishes"]')).toBeNull();
-  q(el, '[data-test="disable-confirm"]')!.click();
+  q(el, '[data-test="delete-confirm"]')!.click();
   await settle(el);
   expect(a.setStationFallback).not.toHaveBeenCalled();
-  expect(a.deactivateStation).toHaveBeenCalledExactlyOnceWith("upstairs");
+  expect(a.deleteStation).toHaveBeenCalledExactlyOnceWith("upstairs");
   expect(next.routing.stationTimes[1]!.fallbackStationId).toBe("old");
 });
 
@@ -1095,102 +1090,59 @@ it("reports unreadable venue time on every Stations row", async () => {
   for (const id of ["bar", "upstairs"])
     expect(stationRow(el, id).textContent).toContain("Venue time cannot be read.");
 });
-it("retains the open-dish choice after a failed Disable and reports the failure above the buttons", async () => {
-  const next = withUpstairs({ open: true, why: "open" }, { fallbackStationId: null });
+it("retains Delete after a failed write, without a disposition draft", async () => {
+  setLocale("en");
+  const next = withUpstairs({ open: true, why: "open" });
   const a = api({
     load: vi.fn().mockResolvedValue(next),
+    deleteStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     setStationFallback: vi.fn(),
-    readStationClosing: vi.fn().mockResolvedValue({
-      openDishCount: 2,
-      destinations: [{ id: "bar", name: "Bar", isDefault: true }],
-    }),
-    deactivateStation: vi.fn().mockRejectedValue(new Error("offline")),
   });
   const el = await mount(a);
-  q(el, '[data-test="disable-upstairs"]')!.click();
+  q(el, '[data-test="delete-upstairs"]')!.click();
   await settle(el);
-  q(el, 'wt-combobox[name="openDishes"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
+  q(el, '[data-test="delete-confirm"]')!.click();
   await settle(el);
-  q(el, '[data-test="disable-confirm"]')!.click();
-  await settle(el);
+  expect(a.deleteStation).toHaveBeenCalledExactlyOnceWith("upstairs");
   expect(a.setStationFallback).not.toHaveBeenCalled();
-  expect(a.deactivateStation).toHaveBeenCalledExactlyOnceWith("upstairs", {
-    openDishes: "send",
-    sendsToStationId: "bar",
-  });
-  expect(q(el, '[data-test="station-upstairs"]')).not.toBeNull();
-  const alert = q(el, '[data-test="disable-error"]')!;
-  expect(alert.textContent).toContain("could not be saved");
-  expect(alert.parentElement!.nextElementSibling?.localName).toBe("wt-form-actions");
-  expect((q(el, 'wt-combobox[name="openDishes"]') as WtCombobox).value).toBe("bar");
+  const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+  expect(dialog.actionError).toContain("could not be saved");
+  expect(q(el, 'wt-combobox[name="openDishes"]')).toBeNull();
+  expect(q(el, '[data-test="delete-confirm"]')!.hasAttribute("disabled")).toBe(false);
 });
 it.each([
-  {
-    locale: "en",
-    disable: "Disable",
-    confirm: "Disable Upstairs bar?",
-    heading: "Switched off",
-    hint: "Disabled: no replacement, the till asks",
-    enable: "Enable",
-  },
-  {
-    locale: "es-ES",
-    disable: "Deshabilitar",
-    confirm: "¿Deshabilitar Upstairs bar?",
-    heading: "Desactivada",
-    hint: "Deshabilitada: sin sustituta, el TPV pregunta",
-    enable: "Habilitar",
-  },
-] as const)(
-  "in $locale, offers Disable on a station and Enable on a disabled one",
-  async ({ locale, disable, confirm, heading, hint, enable }) => {
-    setLocale(locale);
-    const on = await mount(
-      api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "open" })) }),
-    );
-    const off = q(on, '[data-test="disable-upstairs"]')!;
-    expect(off.textContent!.trim()).toBe(disable);
-    off.click();
-    await settle(on);
-    const modal = q(on, "station-disable-dialog")!.shadowRoot!.querySelector("wt-modal")!;
-    expect(modal.getAttribute("heading")).toBe(disable);
-    expect(modal.textContent).toContain(confirm);
-    const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
-    next.stations[1]!.active = false;
-    next.routing.stations[1]!.active = false;
-    const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    const row = stationRow(el, "upstairs");
-    expect(row.querySelector('[part="station-status"]')!.textContent!.trim()).toBe(heading);
-    expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(hint);
-    const back = q(el, '[data-test="enable-upstairs"]')!;
-    expect(back.textContent!.trim()).toBe(enable);
-    back.click();
-    await settle(el);
-    expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(enable);
-  },
-);
-it("switches an inactive station on from its Stations row", async () => {
+  ["en", "Delete", "Delete station"],
+  ["es", "Eliminar", "Eliminar estación"],
+] as const)("offers only translated permanent Delete in %s", async (locale, label, heading) => {
+  setLocale(locale);
+  const next = withUpstairs({ open: true, why: "open" });
+  next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+  expect(q(el, '[data-test="enable-retired"]')).toBeNull();
+  expect(q(el, '[data-test="delete-retired"]')).toBeNull();
+  const action = q(el, '[data-test="delete-upstairs"]')!;
+  expect(action.textContent!.trim()).toBe(label);
+  action.click();
+  await settle(el);
+  expect(el.shadowRoot!.querySelector("wt-delete-dialog")!.copy!.heading).toBe(heading);
+});
+it("a deleted station stays absent in Stations, Routing and Settings", async () => {
   const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
   next.stations[1]!.active = false;
   next.routing.stations[1]!.active = false;
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    activateStation: vi.fn(),
-  });
-  const el = await mount(a);
-  expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(
-    "No replacement: the till asks.",
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+  expect(q(el, '[data-test="enable-upstairs"]')).toBeNull();
+  expect(q(el, '[data-test="inactive-upstairs"]')).toBeNull();
+  expect(stationTable(el)!.textContent).not.toContain("Upstairs bar");
+  expect(el.shadowRoot!.querySelector('[slot="routing"]')!.textContent).not.toContain(
+    "Upstairs bar",
   );
-  q(el, '[data-test="enable-upstairs"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(a.activateStation).toHaveBeenCalledWith("upstairs");
+  expect(
+    el.shadowRoot!.querySelector('[data-test="settings-table"]')!.shadowRoot!.textContent,
+  ).not.toContain("Upstairs bar");
 });
 
-it("a refused Disable does not partially save a fallback or refresh the station's closed destination", async () => {
+it("a refused Delete does not save a fallback or change the daily closed destination", async () => {
   const server = withUpstairs(
     { open: false, why: "closed_by_hand" },
     { fallbackStationId: null, closedSendsTo: null },
@@ -1198,31 +1150,22 @@ it("a refused Disable does not partially save a fallback or refresh the station'
   const a = api({
     load: vi.fn(async () => structuredClone(server)),
     setStationFallback: vi.fn(),
-    readStationClosing: vi.fn().mockResolvedValue({
-      openDishCount: 2,
-      destinations: [{ id: "bar", name: "Bar", isDefault: true }],
-    }),
-    deactivateStation: vi.fn().mockRejectedValue(new Error("offline")),
+    deleteStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
   });
   const el = await mount(a);
-  q(el, '[data-test="disable-upstairs"]')!.click();
+  q(el, '[data-test="delete-upstairs"]')!.click();
   await settle(el);
-  q(el, 'wt-combobox[name="openDishes"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
+  q(el, '[data-test="delete-confirm"]')!.click();
   await settle(el);
-  q(el, '[data-test="disable-confirm"]')!.click();
-  await settle(el);
-  expect(a.deactivateStation).toHaveBeenCalledExactlyOnceWith("upstairs", {
-    openDishes: "send",
-    sendsToStationId: "bar",
-  });
+  expect(a.deleteStation).toHaveBeenCalledExactlyOnceWith("upstairs");
   expect(a.setStationFallback).not.toHaveBeenCalled();
   expect(server.routing.stationTimes[1]!.fallbackStationId).toBeNull();
   expect(
     stationRow(el, "upstairs").querySelector('[part="station-status"]')?.textContent?.trim(),
   ).toBe("Closed for today → No replacement");
-  expect(q(el, '[data-test="disable-error"]')!.textContent).toContain("could not be saved");
+  expect(el.shadowRoot!.querySelector("wt-delete-dialog")!.actionError).toContain(
+    "could not be saved",
+  );
 });
 
 function stationTable(el: PrepStationsScreen) {
@@ -1454,19 +1397,17 @@ it.each([
     locale: "en",
     heading: "Category or product",
     field: "All categories, Every zone: Bar, the default station",
-    disable: "Disable",
-    enable: "Enable",
+    disable: "Delete",
   },
   {
     locale: "es",
     heading: "Categoría o producto",
     field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
-    disable: "Deshabilitar",
-    enable: "Habilitar",
+    disable: "Eliminar",
   },
 ])(
-  "uses category and Disable/Enable wording for retained stations ($locale)",
-  async ({ locale, heading, field, disable, enable }) => {
+  "uses category and Delete wording without deleted stations ($locale)",
+  async ({ locale, heading, field, disable }) => {
     setLocale(locale);
     const disabled = { ...upstairs, active: false };
     const el = await mount(
@@ -1476,8 +1417,8 @@ it.each([
     );
     const grid = (await routingGrid(el))!;
     expect(grid.shadowRoot!.querySelector("thead th")!.textContent!.trim()).toBe(heading);
-    expect(q(el, '[data-test="disable-bar"]')!.textContent!.trim()).toBe(disable);
-    expect(q(el, '[data-test="enable-upstairs"]')!.textContent!.trim()).toBe(enable);
+    expect(q(el, '[data-test="delete-bar"]')!.textContent!.trim()).toBe(disable);
+    expect(q(el, '[data-test="enable-upstairs"]')).toBeNull();
     expect(gridCombo(grid, "all", "every")!.label).toBe(field);
   },
 );
@@ -1710,9 +1651,7 @@ it("row notes offer no hours action for switched-off stations or an unreadable v
     (row) => row.querySelectorAll("td")[0]!,
   );
   expect(cells[0]!.textContent).toContain("cannot be read");
-  expect(cells[1]!.querySelector('[part="station-status"]')?.textContent?.trim()).toBe(
-    "Switched off",
-  );
+  expect(cells).toHaveLength(1);
   for (const cell of cells)
     expect(
       cell.querySelector('[part="station-status"]')?.querySelector("wt-button") ?? null,
@@ -1866,11 +1805,11 @@ it.each([false, true])(
 );
 
 it.each([
-  ["en", "Edit", "Disable", "Enable"],
-  ["es", "Editar", "Deshabilitar", "Habilitar"],
+  ["en", "Edit", "Delete"],
+  ["es", "Editar", "Eliminar"],
 ])(
-  "Stations row menus identify their row and use retained-state wording in %s",
-  async (locale, edit, disable, enable) => {
+  "Stations row menus identify their row and use permanent Delete wording in %s",
+  async (locale, edit, disable) => {
     setLocale(locale as "en" | "es");
     const next = withUpstairs({ open: true, why: "open" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
@@ -1880,10 +1819,10 @@ it.each([
     expect(menu).not.toBeNull();
     expect(menu!.getAttribute("label")).toContain("Upstairs bar");
     expect(menu!.querySelector('[data-test="edit-upstairs"]')!.textContent).toContain(edit);
-    expect(menu!.querySelector('[data-test="disable-upstairs"]')!.textContent).toContain(disable);
+    expect(menu!.querySelector('[data-test="delete-upstairs"]')!.textContent).toContain(disable);
     expect(menu!.querySelector('[data-test="make-default-upstairs"]')).not.toBeNull();
     expect(summary.querySelector('[data-test="make-default-bar"]')).toBeNull();
-    expect(summary.querySelector('[data-test="enable-retired"]')!.textContent).toContain(enable);
+    expect(summary.querySelector('[data-test="enable-retired"]')).toBeNull();
     expect(summary.querySelector('[data-test="disable-retired"]')).toBeNull();
     expect(summary.querySelector('[data-test="make-default-retired"]')).toBeNull();
   },
@@ -1939,9 +1878,9 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
   expect(a.updateStation).toHaveBeenLastCalledWith("upstairs", { name: "New name" });
   expect(q(el, '[data-test="station-editor"]')).toBeNull();
 });
-it("Stations row actions reuse default and retained disable/enable writes", async () => {
+it("Stations row actions reuse default and permanent Delete writes", async () => {
   const next = withUpstairs({ open: true, why: "open" });
-  const { el, a } = await mountToday(next, { activateStation: vi.fn() });
+  const { el, a } = await mountToday(next);
   const makeDefault = stationTable(el)!.querySelector<HTMLElement>(
     '[data-test="make-default-upstairs"]',
   );
@@ -1949,20 +1888,16 @@ it("Stations row actions reuse default and retained disable/enable writes", asyn
   makeDefault!.click();
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("upstairs");
-  stationTable(el)!.querySelector<HTMLElement>('[data-test="disable-upstairs"]')!.click();
+  stationTable(el)!.querySelector<HTMLElement>('[data-test="delete-upstairs"]')!.click();
   await settle(el);
-  expect(a.deactivateStation).not.toHaveBeenCalled();
-  q(el, '[data-test="disable-confirm"]')!.click();
+  expect(a.deleteStation).not.toHaveBeenCalled();
+  q(el, '[data-test="delete-confirm"]')!.click();
   await settle(el);
-  expect(a.deactivateStation).toHaveBeenCalledExactlyOnceWith("upstairs");
+  expect(a.deleteStation).toHaveBeenCalledExactlyOnceWith("upstairs");
   next.stations[1]!.active = false;
   await (el as unknown as { requestUpdate(): void }).requestUpdate();
   await settle(el);
-  stationTable(el)!.querySelector<HTMLElement>('[data-test="enable-upstairs"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  expect(a.activateStation).toHaveBeenCalledWith("upstairs");
+  expect(stationTable(el)!.querySelector('[data-test="enable-upstairs"]')).toBeNull();
 });
 
 it("reorders Stations with the keyboard, retains focus and leaves routing cells unchanged", async () => {
@@ -2003,7 +1938,7 @@ it("restores the Stations order after refusal and never moves disabled rows", as
     [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
       row.querySelector("wt-row-actions")!.getAttribute("data-test"),
     ),
-  ).toEqual(["station-menu-bar", "station-menu-upstairs", "station-menu-retired"]);
+  ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
   expect(q(el, '[role="alert"]')!.textContent).toContain("could not be saved");
 });
 it("persists a pointer reorder once on release and releases the drag on disconnect", async () => {
@@ -2138,17 +2073,10 @@ it.each([
         .querySelector<HTMLElement>('wt-button[slot="cancel"]')!
         .click();
       await settle(el);
-      const disabledMenu = stationTable(el)!.querySelector(
-        'wt-row-actions[data-test="station-menu-retired"]',
-      )!;
-      await page.elementLocator(disabledMenu.shadowRoot!.querySelector("button")!).click();
-      await settle(el);
-      expect(disabledMenu.querySelector('[data-test="enable-retired"]')).not.toBeNull();
-      expect(disabledMenu.querySelector('[data-test="disable-retired"]')).toBeNull();
+      expect(
+        stationTable(el)!.querySelector('wt-row-actions[data-test="station-menu-retired"]'),
+      ).toBeNull();
       await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/look/station-actions-${locale}-${theme}-${width}-disabled-menu.png`,
-      });
     } finally {
       document.body.style.background = previous.body;
       document.documentElement.style.background = previous.canvas;
@@ -2582,7 +2510,7 @@ it.each([true, false])(
   },
 );
 
-it("the station editor keeps the stored membership and editable draft after a station refusal", async () => {
+it("a missing station closes its printer editor without changing the saved membership", async () => {
   setLocale("en");
   const { el, a } = await mountStations({
     updateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
@@ -2590,15 +2518,12 @@ it("the station editor keeps the stored membership and editable draft after a st
   await openPrinters(el);
   await pickPrinters(el, ["next"]);
   editorSave(el).click();
-  await vi.waitFor(() =>
-    expect(editorMessage(el)).toBe(
-      "The change could not be saved. This station could not be found.",
-    ),
-  );
-  expect(stationEditor(el)!.shadowRoot!.textContent).not.toContain("station.not_found");
-  expect(printersOf(el)!.values).toEqual(["next"]);
-  expect(a.load).toHaveBeenCalledTimes(1);
-  await cancelEditor(el);
+  await vi.waitFor(() => expect(stationEditor(el)).toBeNull());
+  expect(el.shadowRoot!.textContent).toContain("This station could not be found.");
+  expect(el.shadowRoot!.textContent).not.toContain("station.not_found");
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["next"] });
+  await vi.waitFor(() => expect(a.load).toHaveBeenCalledTimes(2));
+  await settle(el);
   expect(q(el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
 });
 
@@ -2730,7 +2655,7 @@ it("preserves an unknown printer id on the Stations table", async () => {
 });
 
 it.each(["settings", "stations"])(
-  "%s orders tied station positions by name and keeps disabled stations last",
+  "%s orders tied station positions by name and omits deleted stations",
   async (tab) => {
     const server = structuredClone(ticketView);
     server.stations = [
@@ -2751,11 +2676,8 @@ it.each(["settings", "stations"])(
     const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
     expect(rows[0]!.textContent).toContain("Alpha");
     expect(rows[1]!.textContent).toContain("Zulu");
-    if (tab !== "stations") expect(rows[2]!.textContent).toContain("A disabled (Disabled)");
-    else {
-      expect(rows).toHaveLength(3);
-      expect(rows[2]!.textContent).toContain("A disabled");
-    }
+    expect(rows).toHaveLength(2);
+    expect(table.shadowRoot!.textContent).not.toContain("A disabled");
   },
 );
 
@@ -4435,7 +4357,7 @@ describe("The station editor", () => {
     expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
     expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
   });
-  it("offers a switched-off station's name for editing and its printers as a read-out", async () => {
+  it("does not offer a deleted station for editing even if the stale snapshot names its printers", async () => {
     const { el, a } = await openEdit({
       load: vi.fn().mockResolvedValue({
         ...ticketView,
@@ -4446,19 +4368,8 @@ describe("The station editor", () => {
         ],
       }),
     });
-    const closed = editorClosed(el);
-    q(el, '[data-test="cancel-station-edit"]')!.click();
-    await closed;
-    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
-    q(el, '[data-test="edit-retired"]')!.click();
-    await settle(el);
-    await editorOf(el)!.updateComplete;
-    expect(q(el, "wt-combobox[name=printerIds]")).toBeNull();
-    expect(q(el, '[data-test="station-printers"]')!.textContent).toContain("Next printer");
-    await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Old bar");
-    q(el, '[data-test="save-station-edit"]')!.click();
-    await settle(el);
-    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("retired", { name: "Old bar" });
+    expect(q(el, '[data-test="edit-retired"]')).toBeNull();
+    expect(a.updateStation).not.toHaveBeenCalled();
   });
   it("Add station sends the printers chosen with the station", async () => {
     const a = api({
@@ -4628,9 +4539,8 @@ it.each([
     expect(cell("Upstairs bar").querySelector('[part="station-status"]')?.textContent?.trim()).toBe(
       closedNote,
     );
-    expect(cell("Off kitchen").querySelector('[part="station-status"]')?.textContent?.trim()).toBe(
-      offNote,
-    );
+    expect(rows.some((row) => row.textContent?.includes("Off kitchen"))).toBe(false);
+    expect(summary.textContent).not.toContain(offNote);
     expect(cell("Bar").querySelector('[part="station-status"]')).toBeNull();
     expect(cell("Open kitchen").querySelector('[part="station-status"]')).toBeNull();
     expect(cell("Upstairs bar").textContent).not.toContain("wrong-fallback");
@@ -4769,4 +4679,38 @@ describe("a printer deleted elsewhere while a form holds it", () => {
     await vi.waitFor(() => expect(createStation).toHaveBeenCalledTimes(2));
     expect(createStation.mock.calls[1]![0]).toMatchObject({ name: "Grill", printerIds: ["old"] });
   });
+});
+
+it("permanent delete names current refusals and never offers a disposition", async () => {
+  setLocale("en");
+  const impact = {
+    target: { id: "bar", name: "Bar" },
+    refusals: [
+      {
+        code: "station.is_default",
+        params: { stationId: "bar" },
+        targets: [{ id: "bar", name: "Bar" }],
+      },
+    ],
+    ends: [],
+    removes: [],
+  };
+  const a = api({
+    getStationDeleteImpact: vi.fn().mockResolvedValue(impact),
+    deleteStation: vi.fn().mockResolvedValue(impact),
+  });
+  const el = await mount(a);
+  const action = q(el, '[data-test="delete-bar"]');
+  expect(action).not.toBeNull();
+  action!.click();
+  await settle(el);
+  const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+  await dialog.updateComplete;
+  expect(dialog.copy!.heading).toBe("Delete station");
+  expect(dialog.shadowRoot!.textContent).toContain("Choose another default station first.");
+  expect(dialog.shadowRoot!.querySelector("wt-combobox")).toBeNull();
+  expect(
+    dialog.shadowRoot!.querySelector('[data-test="delete-confirm"]')!.hasAttribute("disabled"),
+  ).toBe(true);
+  expect(a.deleteStation).not.toHaveBeenCalled();
 });

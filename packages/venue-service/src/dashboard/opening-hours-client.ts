@@ -58,12 +58,9 @@ export class OpeningHoursApi {
       "opening-hours:stations",
       QUERY_DEPENDENCIES.routing,
       () =>
-        this.request<OpeningStation[]>(
-          "/management-api/stations?includeDisabled=true",
-          "GET",
-          undefined,
-          { passive: true },
-        ),
+        this.request<OpeningStation[]>("/management-api/stations", "GET", undefined, {
+          passive: true,
+        }),
       apply,
       failed,
       recovered,

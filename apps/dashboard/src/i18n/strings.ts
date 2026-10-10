@@ -1078,6 +1078,9 @@ export const en = {
   "devices.pass_screen_shows": "Pass screen shows",
   "devices.every_station_profile": "Every station the profile allows",
   "devices.no_longer_available": "No longer available",
+  "devices.empty_profile_stations":
+    "This profile allows no stations. Choose stations in the profile first.",
+  "devices.empty_station_selection": "No stations selected. Choose stations or Every.",
   "devices.readout_every_station": "every station",
   "devices.readout_every_zone": "every zone",
   "devices.readout_gone_one": "({names} no longer available)",
@@ -3724,6 +3727,9 @@ export const es: Record<StringKey, string> = {
   "devices.pass_screen_shows": "La pantalla de pase muestra",
   "devices.every_station_profile": "Todas las estaciones que permite el perfil",
   "devices.no_longer_available": "Ya no está disponible",
+  "devices.empty_profile_stations":
+    "Este perfil no permite ninguna estación. Elige primero las estaciones en el perfil.",
+  "devices.empty_station_selection": "No hay estaciones elegidas. Elige estaciones o Todas.",
   "devices.readout_every_station": "todas las estaciones",
   "devices.readout_every_zone": "todas las zonas",
   "devices.readout_gone_one": "({names} ya no está disponible)",
