@@ -5024,7 +5024,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   together with the four paths in item 1, which are the same problem in the same file. Floor plans
   slice 1 (A429) added more read and written by id alone: `refuseFloorPlanChange`
   (`apps/server/src/tables.ts`); in `apps/server/src/table-removal.ts`, `tablesTied` and
-  `removeLiveTable`'s label read and the deletes after it; `releaseDeliveries`
+  `removeLiveTables`' label read and the deletes after it; `releaseDeliveries`
   (`apps/server/src/delivery-release.ts`); `followersOf` (`apps/server/src/floor-plan.ts`); and
   bookings' `release` (`packages/bookings/src/table-removal.ts`), unscoped on purpose so a stray
   booking under another location cannot block a table's final delete (`25ecf900b`) — scoping it

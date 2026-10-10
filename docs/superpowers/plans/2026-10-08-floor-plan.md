@@ -544,7 +544,7 @@ where value like … )` (and `= … collate nocase`) — add the `parties` join 
 **Interfaces:**
 - Produces: `export async function releaseDeliveries(tx: Transaction, tableId: string, label: string): Promise<void>`
   — one update: every `working_orders` row with `delivery_table_id` = the table gets
-  `delivery_table_id = null, delivery_table_label = label`. It decides nothing; `removeLiveTable` (Task 1.9) calls it
+  `delivery_table_id = null, delivery_table_label = label`. It decides nothing; `removeLiveTables` (Task 1.9) calls it
   only for a table nothing ties any more, so no live order is ever released.
 
 - [ ] **Step 0: STOP check.** Spec §8 stops the work if a table involved is append-only. Run
@@ -790,8 +790,8 @@ it("leaves a table the master never had untouched", async () => { /* planned fal
 ```ts
 /** The tables of `tableIds` an open party holds or used earlier in its meal, or an order to which is unpaid or has food on its way. */
 export async function tablesTied(tx: Transaction, tableIds: readonly string[]): Promise<Set<string>>;
-/** Removes the live table for good. Returns false when a module refuses, having changed nothing, or when something unknown still names it, having kept its reset row and the table itself. */
-export async function removeLiveTable(tx: Transaction, cfg: Pick<TillConfig, "locationId">, removals: readonly TableRemoval[], tableId: string, now: Date): Promise<boolean>;
+/** Removes the live tables for good, returning those it kept: each a module refuses, having changed nothing, and each something unknown still names, having kept its reset row and the table itself. (Amended 2026-10-10: one call for the whole list, asking the modules once.) */
+export async function removeLiveTables(tx: Transaction, cfg: Pick<TillConfig, "locationId">, removals: readonly TableRemoval[], tableIds: readonly string[], now: Date): Promise<Set<string>>;
 ```
 
 `tablesTied` (amended 2026-10-10: one call answers for every candidate table): a `party_tables` row of an OPEN party names the table (held, or left earlier while
@@ -800,20 +800,20 @@ the party is still open); or an order names it in `delivery_table_id` and either
 `foodOnItsWay` (`apps/server/src/delivery-release.ts`), which both queries read (not abandoned, `collected_at` null, and a ticket item with
 `made_here = 0`).
 
-(amended 2026-10-10, as built in slice 1) `removeLiveTable` first asks every module's `refuse`; if
-any refuses (bookings: an upcoming booking), it changes nothing and answers `false`. `catchUpZone`
+(amended 2026-10-10, as built in slice 1) `removeLiveTables` first asks every module's `refuse`; if
+any refuses (bookings: an upcoming booking), it changes nothing for that table and returns it among those kept. `catchUpZone`
 asks the same before planning, and treats a refused table as it treats a held one, except that it
 never seeds it (the planner's `refused` flag): it waits whole, on today's plan
 with its reset row pending, until the refusal clears.
 
-`removeLiveTable`: each removal's `release`; `releaseDeliveries(tx, id, label)`; delete its
+`removeLiveTables`: each removal's `release`; `releaseDeliveries(tx, id, label)`; delete its
 `floor_today_join_tables` row (a merge left with fewer than two members goes with its members),
 its `floor_today_tables` row and its `floor_reset_tables` row; then the `dining_tables` row. A
 foreign-key refusal at that last delete (rows of a module switched off since, or of a party closed
 before slice 1) is caught by `isRefusal(error, FOREIGN_KEY_VIOLATION)`
 (`packages/db/src/sql-state.ts:24`; every key into `dining_tables` is `no action`, which this engine
 refuses with code 787 — measured twice by the plan reviews on Node v26.7.0 `node:sqlite`;
-`restrictRefused` matches only 1811) and answered `false`; `catchUpZone` then hides the table and
+`restrictRefused` matches only 1811) and the table is returned among those kept; `catchUpZone` then hides the table and
 keeps its reset row pending, so it is tried again. A refused statement backs out only itself
 (CLAUDE.md §3), so the releases before it stand: orders and bookings keep the table's name and no
 longer point at it, and the table is off today's plan, which `catchUpZone` then hides anyway. Any
