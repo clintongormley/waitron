@@ -99,6 +99,8 @@ export {
   snapToSquare,
 } from "./floor-plan-geometry.js";
 export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.js";
+export { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Gestures, LONG_PRESS_MS, SLOP_PX } from "./gestures.js";
+export type { GestureHandlers, GesturePoint } from "./gestures.js";
 export { UndoHistory } from "./history.js";
 export { submitOnEnter } from "./submit-on-enter.js";
 export {
