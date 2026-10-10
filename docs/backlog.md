@@ -1356,34 +1356,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
   working assumption, to confirm before go-live. Hours moved to A254.
 
-- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 7 and slice 6 Part C.**
-  Slice 4 Part A is built: combined tickets on shared printers, period choices in routing cells and
-  the station editor. Station-hours and fallback retirement and the read-only station Week view are
-  built. Slice 5 is built: kitchen screens and monitors (Part A, #1479) and watchers retired
-  (Part B, #1502), so a pass printer is a printer listed on every station. Department receipts (slice 7)
-  remain. Slice 6's
-  remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
-  revision is complete;
-  its contracts, scoped storage, routes, thermal/A4 composition and independent email contact
-  selector, preview, till answers and media usage are built on Lane E's receipt branch. The
-  department editor is now mounted there with department selection and authored-draft previews and a separate preview-language picker;
-  the independent venue defaults editor is mounted and feeds draft previews and inherited hints.
-  Its text drafts compare and submit trimmed values, accept untouched fields from live reads
-  alongside a dirty field, and keep an outstanding leave choice open on unchanged refreshes.
-  Held-response browser cases now cover older paper/errors after department edits and saved-language
-  refreshes, plus unchanged snapshots and explicit preview-language choices.
-  On that branch, loaded department edits, saves and draft previews now stay usable after
-  unrelated receipt/location/language reads refuse; recovery retains refused department drafts.
-  The legacy combined form is retired on that branch; department contact, venue defaults,
-  receipt language and description each save independently. Department switches retain global
-  drafts; reconnect preserves edits against their saved baselines. Stacked language headings
-  label receipts/copies and warn from authored draft maps; known locale refusals focus and
-  scroll to their field. All draft previews use POST on that branch; the legacy GET route
-  and client method are retired. The complete managed-stack preview pass, remaining
-  retained-consumer qualification and branch reviews also remain open.
+- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) —
+  remaining work is slice 7 Part B and slice 6 Part C.**
+  Add the department page's Receipt tab and the floor-plan entry. Department receipt
+  storage, translated text, live venue defaults, independent saves and previews,
+  thermal/A4 composition, till presentation and email contacts are built.
   Core email consent removal stays separate.
-  Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
