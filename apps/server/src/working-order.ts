@@ -25,6 +25,8 @@ import type { Placement } from "./floor-reset-plan.js";
 import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
+import { RETAINED_COURSE } from "./retained-course.js";
+import type { RetainedCourseLine } from "./retained-course.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
@@ -431,7 +433,8 @@ export async function priceOrderLines(
     frozenExtras?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [REQUIRES_PERIOD_SELECTION]?: true;
-  } & LineExtras)[],
+  } & LineExtras &
+    RetainedCourseLine)[],
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
@@ -683,18 +686,14 @@ export async function priceOrderLines(
     }
   }
 
-  // Only an OVERRIDE is screened: the product's default course is already a stored key, and
-  // re-validating it would refuse a product whose default course was since deactivated.
-  const overrideCourseIds = new Set(
-    lines
-      .map((line) => line.courseId)
-      .filter((courseId): courseId is string => courseId !== null && courseId !== undefined),
-  );
-  for (const courseId of overrideCourseIds) {
+  for (const line of lines) {
+    const courseId = line.courseId;
+    if (courseId === null || courseId === undefined) continue;
     if (!isUuid(courseId)) {
       throw new AppError("course.not_found", { courseId });
     }
-    await requireLiveCourse(tx, cfg, courseId);
+    if (line[RETAINED_COURSE] === true) await requireCourse(tx, cfg, courseId);
+    else await requireLiveCourse(tx, cfg, courseId);
   }
 
   const gross = grossBasketWithOptions(items);
@@ -2285,7 +2284,8 @@ export type TabRoundLine = {
   options?: OptionSelection[];
   hold?: boolean;
   release?: boolean;
-} & LineExtras;
+} & LineExtras &
+  RetainedCourseLine;
 
 /**
  * APPEND a priced round to an OPEN tab, locking each new line's gross unit price at add time, WITHOUT
@@ -4827,6 +4827,8 @@ async function applyLineEdits(
       intent.makeAt === undefined ||
       (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
     const asOffered = (quantity: string): RequestedLine => ({
+      [RETAINED_COURSE]: true,
+      courseId: parent.courseId,
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,

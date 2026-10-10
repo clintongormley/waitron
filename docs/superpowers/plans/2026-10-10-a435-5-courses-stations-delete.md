@@ -118,7 +118,7 @@ PATCH containing its own `active` key, of **any** value, returns 400 `management
 
 ## Task 3: Keep recorded course choices usable without offering deleted courses
 
-**Files:** create `apps/server/src/retained-course.ts`; modify `working-order.ts`, `order-drafts.ts`, `order-groups.ts`; test new `course-retention.test.ts` plus existing `order-drafts.db.test.ts`, `till-api.courses.test.ts`, `order-groups.test.ts`, `working-order.test.ts` (confirm the draft DB filename before adding cases).
+**Files:** create `apps/server/src/retained-course.ts`; modify `working-order.ts`, `order-drafts.ts`, `order-groups.ts`, and the authoritative stored-line pricing map in `till-api.ts`'s `POST /api/dead-ends/draft`; test new `course-retention.test.ts` plus existing `order-drafts.db.test.ts`, `till-api.courses.test.ts`, `order-groups.test.ts`, `working-order.test.ts` (confirm the draft DB filename before adding cases).
 
 **Interfaces:** export server-only `RETAINED_COURSE: unique symbol` and `RetainedCourseLine = { [RETAINED_COURSE]?: true }`; intersect it into server pricing/round line types. A marked line's course is checked with `requireCourse`, an unmarked explicit override with `requireLiveCourse`. No JSON/wire parser can manufacture this symbol. `GroupLine`/`TabRoundLine` carry it only internally; existing function names and return shapes remain.
 

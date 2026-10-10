@@ -990,18 +990,13 @@ describe("a refused save writes nothing", () => {
     );
   });
 
-  it("keeps a line of an inactive course, which is refused only when it is sent", async () => {
+  it("refuses a fresh selection of an inactive course without writing anything", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     await db.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, v.courseId));
 
-    const draft = await save(v, partyId, ALEX, null, 0, [
-      item(v, "beer", { courseId: v.courseId }),
-    ]);
-
-    expect(draft.lines.map((line) => line.courseId)).toEqual([v.courseId]);
     await refusedWritingNothing(
-      () => submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "hold" }]),
+      () => save(v, partyId, ALEX, null, 0, [item(v, "beer", { courseId: v.courseId })]),
       { code: "course.not_found", params: { courseId: v.courseId } },
     );
   });

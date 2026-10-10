@@ -169,6 +169,7 @@ import {
   unsnoozeReminder,
 } from "./order-groups.js";
 import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
+import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
@@ -2681,6 +2682,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             variantId: line.variantId ?? undefined,
             menuVersionId: line.menuVersionId ?? undefined,
             courseId: line.courseId ?? undefined,
+            [RETAINED_COURSE]: true,
             makeAt: line.makeAt,
           })),
           zoneId ?? undefined,

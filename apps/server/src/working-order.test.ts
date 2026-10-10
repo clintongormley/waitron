@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   isUniqueViolation,
+  kitchenCourses,
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
@@ -82,7 +83,6 @@ import {
   deactivateStation,
   removeCourse,
   setProductCourse,
-  updateCourse,
 } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
@@ -5044,7 +5044,10 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const retired = await createCourse(tx, cfg, { name: "Postres", displayOrder: 1 });
-      await updateCourse(tx, cfg, retired.id, { active: false });
+      await tx
+        .update(kitchenCourses)
+        .set({ active: false })
+        .where(eq(kitchenCourses.id, retired.id));
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
@@ -6960,7 +6963,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
       const dead = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
-      await updateCourse(tx, cfg, dead.id, { active: false });
+      await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, dead.id));
       await expect(
         addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: dead.id }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead.id } });

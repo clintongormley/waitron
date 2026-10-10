@@ -1,12 +1,5 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import {
-  kitchenCourses,
-  newId,
-  nowIso,
-  orderDraftEvents,
-  orderDraftLines,
-  orderDrafts,
-} from "@waitron/db";
+import { newId, nowIso, orderDraftEvents, orderDraftLines, orderDrafts } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
@@ -27,6 +20,8 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import { checkAndBumpParty, partyZone, requireOpenParty, runServiceCommand } from "./parties.js";
 import { screenNote } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
+import { requireCourse, requireLiveCourse } from "./kitchen.js";
+import { RETAINED_COURSE } from "./retained-course.js";
 import "./errors.js";
 
 export interface DraftLine {
@@ -101,7 +96,14 @@ export async function saveDraft(
 ): Promise<Draft> {
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
-  await requireCourses(tx, cfg, lines);
+  let previous: DraftLine[] = [];
+  const draft =
+    input.draftId === null ? null : await requireDraft(tx, foldIfUuid(input.draftId), partyId);
+  if (draft !== null) {
+    await requireOwnDraftAt(tx, draft, operatorId, input.revision);
+    previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
+  }
+  await requireCourses(tx, cfg, lines, previous);
   // The lines replace the draft's, so these are every offer the read at the end needs.
   const offers = await offersFor(
     tx,
@@ -116,8 +118,7 @@ export async function saveDraft(
     }
   }
   let draftId: string;
-  let previous: DraftLine[] = [];
-  if (input.draftId === null) {
+  if (draft === null) {
     const [held] = await openDraftsOn(tx, partyId, operatorId);
     if (held !== undefined) {
       throw new AppError("draft.out_of_date", { draftId: held.id, revision: held.revision });
@@ -133,10 +134,7 @@ export async function saveDraft(
       detail: {},
     });
   } else {
-    const draft = await requireDraft(tx, foldIfUuid(input.draftId), partyId);
-    await requireOwnDraftAt(tx, draft, operatorId, input.revision);
     draftId = draft.id;
-    previous = (await storedLines(tx, [draftId])).map(({ line }) => line);
     await tx
       .update(orderDrafts)
       .set({ revision: draft.revision + 1, updatedAt: nowIso() })
@@ -409,6 +407,7 @@ function foldIfUuid(id: string): string {
 /** A draft line as pricing takes a basket line, with each null field left out. */
 function groupLine(line: DraftLine): GroupLine {
   return {
+    [RETAINED_COURSE]: true,
     menuItemId: line.menuItemId,
     quantity: line.quantity,
     options: line.options,
@@ -458,32 +457,34 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
   });
 }
 
-/**
- * A named course must be one of this location's, as `requireCourse` (kitchen.ts) asks. An inactive
- * one is kept: every save replaces all the lines, so refusing it would leave a line saved before
- * the course was switched off unsavable; submission refuses it.
- */
 async function requireCourses(
   tx: Transaction,
   cfg: TillConfig,
   lines: readonly DraftLineInput[],
+  previous: readonly DraftLine[],
 ): Promise<void> {
-  const named = [
-    ...new Set(lines.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),
-  ];
-  if (named.length === 0) return;
-  const found = new Set(
-    (
-      await tx
-        .select({ id: kitchenCourses.id })
-        .from(kitchenCourses)
-        .where(
-          and(inArray(kitchenCourses.id, named), eq(kitchenCourses.locationId, cfg.locationId)),
-        )
-    ).map((row) => row.id),
-  );
-  const missing = named.find((courseId) => !found.has(courseId));
-  if (missing !== undefined) throw new AppError("course.not_found", { courseId: missing });
+  const keyOf = (line: DraftLineInput) =>
+    JSON.stringify([
+      foldIfUuid(line.menuItemId),
+      line.variantId === null ? null : foldIfUuid(line.variantId),
+      line.courseId === null ? null : foldIfUuid(line.courseId),
+    ]);
+  const retained = new Map<string, number>();
+  for (const line of previous) {
+    const key = keyOf(line);
+    retained.set(key, (retained.get(key) ?? 0) + 1);
+  }
+  for (const line of lines) {
+    if (line.courseId === null) continue;
+    const key = keyOf(line);
+    const count = retained.get(key) ?? 0;
+    if (count > 0) {
+      retained.set(key, count - 1);
+      await requireCourse(tx, cfg, line.courseId);
+    } else {
+      await requireLiveCourse(tx, cfg, line.courseId);
+    }
+  }
 }
 
 async function requireDraft(tx: Transaction, draftId: string, partyId: string) {
