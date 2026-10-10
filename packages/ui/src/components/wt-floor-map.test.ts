@@ -325,9 +325,9 @@ it("names the tables' group from its copy", async () => {
   const group = el.shadowRoot!.querySelector('[role="group"]')!;
   expect(group.getAttribute("aria-label")).toBe("Tables");
   expect(group.contains(button(el, "t1"))).toBe(true);
-  el.copy = { label: "Mesas" };
+  el.copy = { label: "Terrace tables" };
   await el.updateComplete;
-  expect(group.getAttribute("aria-label")).toBe("Mesas");
+  expect(group.getAttribute("aria-label")).toBe("Terrace tables");
 });
 
 it("keeps the view when the tables change", async () => {
