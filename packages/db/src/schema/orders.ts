@@ -87,6 +87,8 @@ export const workingOrders = table(
     /* v8 ignore start */
     deliveryTableId: id("delivery_table_id").references(() => diningTables.id),
     /* v8 ignore stop */
+    // The delivery table's name, kept once the order lets go of a removed table.
+    deliveryTableLabel: label("delivery_table_label"),
     collectedAt: tsString("collected_at"),
     revision: count("revision").notNull().default(0),
     // The invoice-type insert/update triggers enforce this union.

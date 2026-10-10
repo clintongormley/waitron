@@ -1,0 +1,1 @@
+ALTER TABLE `working_orders` ADD `delivery_table_label` text;
