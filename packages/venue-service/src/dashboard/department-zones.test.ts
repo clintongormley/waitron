@@ -4,7 +4,7 @@ import { applyTokens } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
-import { zonesModel } from "../testing/department-zones-fixture.js";
+import { placedZonePlan, zonesModel } from "../testing/department-zones-fixture.js";
 import "./department-zones.js";
 function settingsApi(request: DashboardRequest) {
   return new VenueServiceApi(((path, method, body, options) => {
@@ -17,6 +17,7 @@ function settingsApi(request: DashboardRequest) {
         namedDays: [],
         departments: [],
       });
+    if (path.endsWith("/floor-plan")) return Promise.resolve(structuredClone(placedZonePlan));
     return request(path, method, body, options);
   }) as DashboardRequest);
 }

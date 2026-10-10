@@ -164,7 +164,7 @@ migration: "no venue reset needed".
 
 **Part C (Task C1).** `department-zones.ts` and its tests, `strings.ts`; `packages/venue-service/src/dashboard/venue-operations-screen.ts`
 only if A429 Task 2.7 put the floor plan action there; A429's canvas primitive (a read-only
-property, if it has none).
+property, if it has none). (Corrected 2026-10-10: a separate primitive instead; see Task C1.)
 
 ### 2. Does this slice need slice 2, 3, 4 or 5?
 
@@ -1294,6 +1294,11 @@ slice 2 on the zone panel. A429 slice 2 shows that link without a permission che
 because only a manager or an admin can open the department page: `venue_service.manage` is granted
 from manager up, and the role map gives both roles `venue.configure`; role map read 2026-10-10. So
 drop the hidden-without-`venue.configure` test; the link is shown wherever the page opens.)
+(Corrected 2026-10-10 while building Part C: the preview is a separate read-only primitive,
+`wt-floor-plan-preview` in `@waitron/ui`, not a `readonly` property on `wt-floor-plan-canvas`.
+"A zone with tables" means the zone's master plan read has at least one table with a placement;
+a plan with none, or only live tables offered for adoption, shows "Add a floor plan", which opens
+the same editor.)
 
 - [ ] Steps: failing tests (preview present with tables, absent without; the link; hidden without
   `venue.configure`); watch them fail; implement; the browser files; LOOK in EN and ES, both themes,

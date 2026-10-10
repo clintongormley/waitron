@@ -51,6 +51,8 @@ export type {
   TableRotate,
   TableSelect,
 } from "./components/wt-floor-plan-canvas.js";
+export { WtFloorPlanPreview } from "./components/wt-floor-plan-preview.js";
+export type { PreviewTable } from "./components/wt-floor-plan-preview.js";
 export { WtSheet } from "./components/wt-sheet.js";
 export {
   FLOOR_ASPECT,

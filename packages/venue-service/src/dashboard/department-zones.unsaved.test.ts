@@ -120,7 +120,14 @@ it("a refusal retains the dirty draft and success commits before saved observers
 it("a write from a disconnected editor cannot commit a later zone", async () => {
   const el = await mount();
   let finish!: () => void;
-  el.api = new VenueServiceApi((() => new Promise<void>((r) => (finish = r))) as DashboardRequest);
+  // Holds every request; only the save's reply is released, so the zone's floor plan read cannot
+  // take its place.
+  el.api = new VenueServiceApi(
+    ((_path: string, method: string) =>
+      new Promise<void>((r) => {
+        if (method !== "GET") finish = r;
+      })) as DashboardRequest,
+  );
   await edit(el);
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-zone]")!.click();
   await el.updateComplete;

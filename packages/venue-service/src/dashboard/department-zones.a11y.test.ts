@@ -5,7 +5,8 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { VenueServiceApi } from "./client.js";
-import { zonesModel } from "../testing/department-zones-fixture.js";
+import { departmentHoursModel } from "../testing/department-hours-fixture.js";
+import { placedZonePlan, zonesModel } from "../testing/department-zones-fixture.js";
 import "./department-zones.js";
 registerIcons({
   kebab:
@@ -17,7 +18,7 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Zones (%s)", (theme) => {
-  it.each(["active", "disabled", "empty", "refusal", "menu"] as const)(
+  it.each(["active", "preview", "disabled", "empty", "refusal", "menu"] as const)(
     "%s is accessible",
     async (state) => {
       setLocale("en");
@@ -30,10 +31,20 @@ describe.each(["light", "dark"] as const)("Zones (%s)", (theme) => {
       el.zone = "z2";
       if (state === "disabled") el.model.zones[1]!.active = false;
       if (state === "empty") el.model.zones = [];
-      el.api = new VenueServiceApi((async () => {
+      el.api = new VenueServiceApi((async (path: string) => {
+        if (state === "preview" && path.endsWith("/floor-plan")) return placedZonePlan;
         throw { code: "management.request_invalid", params: { field: "paidWhen" } };
       }) as DashboardRequest);
       await el.updateComplete;
+      if (state === "preview")
+        await expect
+          .poll(() =>
+            el
+              .shadowRoot!.querySelector("wt-floor-plan-preview")
+              ?.shadowRoot?.querySelector("[role=img]")
+              ?.getAttribute("aria-label"),
+          )
+          .toBe("Floor plan: Bar");
       if (state === "refusal") {
         const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
         fields.dispatchEvent(
@@ -62,6 +73,81 @@ describe.each(["light", "dark"] as const)("Zones (%s)", (theme) => {
         for (const link of ["zone-opening-hours", "zone-floor-plan"])
           expect(el.shadowRoot!.querySelector(`a[data-test=${link}]`)).not.toBeNull();
       await expectNoA11yViolations(host);
+    },
+  );
+  it.each([
+    ["en", 1280],
+    ["en", 390],
+    ["es", 1280],
+    ["es", 390],
+  ] as const)(
+    "the floor plan's preview, Add link and load failure are accessible in %s at %i",
+    async (locale, width) => {
+      const words = {
+        en: {
+          preview: "Floor plan: Bar",
+          add: "Add a floor plan",
+          failure: "The floor plan could not be loaded. It will be tried again.",
+        },
+        es: {
+          preview: "Plano de sala: Bar",
+          add: "Añadir un plano de sala",
+          failure: "No se ha podido cargar el plano de sala. Se volverá a intentar.",
+        },
+      }[locale];
+      const old = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(width, 1100);
+        for (const state of ["preview", "add", "failure"] as const) {
+          setLocale(locale);
+          const el = (await mountThemed(
+            "<department-zones></department-zones>",
+            theme,
+          )) as HTMLElementTagNameMap["department-zones"];
+          host.style.width = "100%";
+          host.style.boxSizing = "border-box";
+          host.style.padding = "var(--wt-space-4)";
+          el.model = structuredClone(zonesModel);
+          el.departmentId = "d1";
+          el.zone = "z2";
+          el.api = new VenueServiceApi((async (path: string) => {
+            if (!path.endsWith("/floor-plan")) return departmentHoursModel();
+            if (state === "failure") throw new Error("offline");
+            return state === "preview" ? structuredClone(placedZonePlan) : { tables: [] };
+          }) as DashboardRequest);
+          await el.updateComplete;
+          if (state === "preview")
+            await expect
+              .poll(() =>
+                el
+                  .shadowRoot!.querySelector("wt-floor-plan-preview")
+                  ?.shadowRoot?.querySelector("[role=img]")
+                  ?.getAttribute("aria-label"),
+              )
+              .toBe(words.preview);
+          if (state === "add")
+            await expect
+              .poll(() =>
+                el.shadowRoot!.querySelector("[data-test=zone-floor-plan]")?.textContent?.trim(),
+              )
+              .toBe(words.add);
+          if (state === "failure")
+            await expect
+              .poll(() =>
+                el.shadowRoot!.querySelector("[data-test=floor-plan-error]")?.textContent?.trim(),
+              )
+              .toBe(words.failure);
+          await new Promise<void>((r) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => r())),
+          );
+          expect(window.innerWidth).toBe(width);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          await expectNoA11yViolations(host);
+          cleanup();
+        }
+      } finally {
+        await page.viewport(old[0]!, old[1]!);
+      }
     },
   );
   it.each([

@@ -1,4 +1,4 @@
-import type { VenueServiceView } from "../dashboard/client.js";
+import type { VenueServiceView, ZoneFloorPlan } from "../dashboard/client.js";
 export const zonesModel: VenueServiceView = {
   departments: [
     {
@@ -112,4 +112,14 @@ export const zonesModel: VenueServiceView = {
   printHeldWork: false,
   releaseReminderMinutes: null,
   clearingWorkflow: false,
+};
+
+export const placedZonePlan: ZoneFloorPlan = {
+  tables: [
+    {
+      id: "t1",
+      fixed: false,
+      placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+    },
+  ],
 };

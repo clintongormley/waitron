@@ -83,3 +83,13 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "products",
   ]);
 });
+
+it("refreshes a zone's floor plan preview when a floor plan, its tables or joins, or a dining table changes", () => {
+  expect(QUERY_DEPENDENCIES["floor-plan"]).toEqual([
+    "floor_plans",
+    "floor_plan_tables",
+    "floor_plan_joins",
+    "floor_plan_join_tables",
+    "dining_tables",
+  ]);
+});

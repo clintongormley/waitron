@@ -4,7 +4,7 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import { departmentHoursModel } from "../testing/department-hours-fixture.js";
-import { zonesModel } from "../testing/department-zones-fixture.js";
+import { placedZonePlan, zonesModel } from "../testing/department-zones-fixture.js";
 import { VenueServiceApi } from "./client.js";
 import "./department-zones.js";
 afterEach(() => {
@@ -41,7 +41,8 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
             }
             el.departmentId = "d1";
             el.zone = "z1";
-            el.api = new VenueServiceApi((async () => {
+            el.api = new VenueServiceApi((async (path: string) => {
+              if (path.endsWith("/floor-plan")) return structuredClone(placedZonePlan);
               if (state === "failure") throw new Error("offline");
               return hours;
             }) as DashboardRequest);

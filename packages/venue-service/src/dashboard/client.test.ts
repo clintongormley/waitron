@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LiveData, createRequest } from "@waitron/dashboard-kit";
+import { LiveData, createRequest, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -500,4 +500,33 @@ it("creates a department through the real request with name only", async () => {
     headers: { "content-type": "application/json" },
     body: '{"name":"Brunch"}',
   });
+});
+
+it("watches one zone's master floor plan passively and rereads it when a plan table changes", async () => {
+  const plan = { zoneId: "z/1", revision: 2, savedAt: null, tables: [], joins: [] };
+  const live = new LiveData();
+  const request = vi.fn(async () => structuredClone(plan));
+  const api = new VenueServiceApi(request as unknown as DashboardRequest, live);
+  const apply = vi.fn();
+  const stop = api.watchZoneFloorPlan("z/1", apply, vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(plan));
+    expect(request.mock.calls).toEqual([
+      ["/management-api/zones/z%2F1/floor-plan", "GET", undefined, { passive: true }],
+    ]);
+    expect(live.interests).toEqual(
+      [
+        "floor_plans",
+        "floor_plan_tables",
+        "floor_plan_joins",
+        "floor_plan_join_tables",
+        "dining_tables",
+      ].map((type) => ({ type })),
+    );
+    live.invalidate([{ type: "floor_plan_tables" }]);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  } finally {
+    stop();
+  }
+  expect(live.interests).toEqual([]);
 });
