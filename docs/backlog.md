@@ -1504,10 +1504,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `canManagePrinters` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open
   by A366 slice 4 Part A.
 
-- **New station's printer refusal shows no message above the buttons until another edit**; its
-  name-taken refusal behaves the same (`#saveStation`,
-  `packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open by A366 slice 4 Part A.
-
 - **Until slice 5 Part B, a station printing only through a watcher reads "No printer" on the
   Stations tab**, and nothing station-side lists the watchers that follow it (`#stationOutputs`,
   `packages/venue-service/src/dashboard/prep-stations-screen.ts`). Left open by A366 slice 4 Part A.

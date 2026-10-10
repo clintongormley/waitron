@@ -922,6 +922,8 @@ it("places a taken-name refusal below Name", async () => {
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(q(el, '[data-field-error="name"]')?.textContent).toContain("already in use");
+  expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");
+  expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
 });
 it("does not create an unnamed station", async () => {
   const a = api();
@@ -6331,6 +6333,11 @@ describe("The station editor", () => {
       "Choose active printers that no watcher uses.",
     );
     expect(q(el, '[data-field-error="name"]')).toBeNull();
+    expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");
     expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, []);
+    expect(q(el, "wt-modal")!.textContent).not.toContain(
+      "Correct the highlighted fields to continue.",
+    );
   });
 });

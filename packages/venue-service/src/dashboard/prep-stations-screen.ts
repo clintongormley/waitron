@@ -1323,7 +1323,7 @@ export class PrepStationsScreen extends LitElement {
               : "prep.printers_refused",
           ),
         };
-      else this.#showError(t("prep.save_error"));
+      this.#showError(t(field === undefined ? "prep.save_error" : "prep.fix_fields"));
     } finally {
       if (this.isConnected && (identity === this.#stationIdentity || !this.editor))
         this.busy = false;
