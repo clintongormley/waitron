@@ -646,10 +646,18 @@ export class DashboardApp extends LitElement {
           padding-inline-start: 0;
           border-inline-start: 0;
         }
-        /* The closed drawer is moved out past .layout's left edge, which is not the window's: the
-           page's own padding would show its last strip. */
+        /* The closed drawer is moved out past .layout's left edge; where the page keeps its padding,
+           its last strip would show there. */
         .layout {
           overflow: clip;
+        }
+        /* Reaches over index.html's body padding to give the floor plan editor's header room on a
+           phone (one row at 390 px). The 4px stays inside .main, which clips: a focus ring needs it. */
+        .shell.edge {
+          margin-inline: calc(-1 * var(--wt-space-5));
+        }
+        .shell.edge .body {
+          padding-inline: var(--wt-space-1);
         }
         .alert-toast {
           inset-inline: var(--wt-space-2);
@@ -1353,7 +1361,7 @@ export class DashboardApp extends LitElement {
     return html`
       ${this.leaveConfirmation()}
       <div
-        class="shell"
+        class=${classMap({ shell: true, edge: this.screen === "floor-plan" })}
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}

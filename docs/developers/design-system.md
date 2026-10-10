@@ -2437,9 +2437,11 @@ locations. Once a session is active, put the account menu — a person-icon `wt-
 holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
 two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
-space runs short, and the legal name and Live mode pill take the second in full. The language chooser
-sits at the trailing edge too, before the alerts bell and the account menu, signed in and signed out
-(see "Navigation and language controls"). In Demo and Preparation, `wt-demo-bar` shows the mode,
+space runs short, and the legal name and Live mode pill take the second in full. On the floor
+plan editor's page below that breakpoint, the banner and the page below it reach the window's
+left and right edges, and the editor keeps `--wt-space-1` at each side, so Close, Undo, Redo and
+Save keep one row at 390 px (owner, 2026-10-10, A468). The language chooser sits at the trailing
+edge too, before the alerts bell and the account menu, signed in and signed out (see "Navigation and language controls"). In Demo and Preparation, `wt-demo-bar` shows the mode,
 the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
 (the inbox screen, also linked from setup's done page). Signed out, the inbox link always shows;
 signed in, it shows only to a session that may open the inbox screen (a manager or an admin). The

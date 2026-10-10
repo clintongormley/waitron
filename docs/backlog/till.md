@@ -272,7 +272,9 @@ screen is designed.
   - A failed Reload read shows nothing while the out-of-date message stands.
   - A refusal mark on table A while table B is selected leaves nothing pointing back to A.
   - The booked reason ("Booked 12 Oct, 21:00") is worded in the dashboard's core strings, not the
-    bookings module's, because the module code-message route takes no parameters.
+    bookings module's, because the module code-message route takes no parameters. The owner decided
+    on 2026-10-10 that it stays in the dashboard's own strings.
+  - Seat and size errors keep showing while the person types (owner decision 2026-10-10).
   - The canvas: a narrow table at x=0 draws part of its rotate handle left of the grid; a table
     dragged into the top rows shows its handle above the grid until it is released; the size
     tokens are read once for the element's whole life.
@@ -283,12 +285,10 @@ screen is designed.
     after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
     scrollbar, since headless Chromium's scrollbars take none).
   - Place on a plan with no free spot does nothing and says nothing.
-  - On a phone the header's buttons do not stay on one row. Inside the dashboard's page padding a
-    390 px phone leaves the editor about 310 px, while Close, Undo, Redo and Save need about 346 px
-    in Spanish with the Mac's font. When they wrap, Undo and Redo sit on a row above Close and Save,
-    because `wt-form-actions`' outer row never wraps. The editor's own tests mount it at 390 px
-    without the page padding, so they do not see this. A fix needs a decision: less page padding on
-    phones, or Close on its own row by design.
+  - The floor plan editor's header was measured at a 390 px window only (A468). Below that,
+    whether Close, Undo, Redo and Save keep one row has not been measured in any language or font
+    (Spanish with a wide font has the least room); when they wrap, Undo and Redo sit on a row
+    above Close and Save, because `wt-form-actions`' outer row never wraps.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
     `super.disconnectedCallback` and `preventScroll`.
 
