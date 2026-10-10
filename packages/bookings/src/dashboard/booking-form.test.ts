@@ -68,6 +68,7 @@ const EDIT_BOOKING: Booking = {
   contactPhone: "600100200",
   notes: "Ventana",
   tableId: "t-2",
+  tableLabel: null,
   tabId: null,
   status: "booked",
   createdBy: "p1",
