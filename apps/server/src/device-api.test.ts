@@ -23,6 +23,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
+import { deleteStation } from "./station-delete.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
 import { readApprovedProfiles, switchActiveProfile } from "./device.js";
@@ -1091,7 +1092,7 @@ describe("Device API — the device-guarded routes", () => {
     });
   });
 
-  describe("a station switched off on its own page keeps its waiting dishes (owner 2026-10-09)", () => {
+  describe("historical deleted station rows on kitchen screens", () => {
     type Entry = {
       id: string;
       name: string;
@@ -1149,9 +1150,37 @@ describe("Device API — the device-guarded routes", () => {
     const acknowledge = (app: Hono, jar: string, notice: string) =>
       send(app, "POST", `/api/device/kitchen-notices/${notice}/acknowledge`, { cookie: jar });
 
+    it("shows ready dishes and notices after actual station deletion on an Every screen until collection", async () => {
+      const { venue, app, fria, orderId, items, notice } = await seed();
+      const { jar } = await enrolStationScreen(app, venue, null);
+      expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
+      expect((await advance(app, jar, items[1]!, "ready")).status).toBe(204);
+      const before = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, items[1]!));
+      await withTransaction(suite.db, (tx) => deleteStation(tx, venue.cfg, fria));
+
+      const off = (await read(app, jar)).find((entry) => entry.id === fria);
+      expect(off).toMatchObject({
+        id: fria,
+        name: "Fría",
+        available: false,
+        switchedOff: true,
+        today: { why: "switched_off" },
+        notices: [{ id: notice }],
+      });
+      expect(queued(off!)).toEqual([items[1]]);
+      expect(
+        await suite.db.select().from(ticketItems).where(eq(ticketItems.id, items[1]!)),
+      ).toEqual(before);
+      expect((await acknowledge(app, jar, notice)).status).toBe(204);
+      await suite.db.execute(
+        sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${orderId}`,
+      );
+      expect((await read(app, jar)).map((entry) => entry.id)).toEqual([venue.defaultStationId]);
+    });
+
     it("sends it with its queue, notices and today, and its dish and notice can still be worked", async () => {
       const { venue, app, fria, orderId, items, notice } = await seed();
-      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const { jar } = await enrolStationScreen(app, venue, null);
       await switchStationOff(fria);
 
       const [, off] = await read(app, jar);
@@ -1171,9 +1200,8 @@ describe("Device API — the device-guarded routes", () => {
       await suite.db.execute(
         sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${orderId}`,
       );
-      const [, done] = await read(app, jar);
-      expect(done).toMatchObject({ id: fria, available: false, switchedOff: true, notices: [] });
-      expect(queued(done!)).toEqual([]);
+      const done = await read(app, jar);
+      expect(done.map((entry) => entry.id)).toEqual([venue.defaultStationId]);
     });
 
     it("reads every station's notices together, each station its own", async () => {
@@ -1218,7 +1246,7 @@ describe("Device API — the device-guarded routes", () => {
         attempts: 5,
         createdAt: "2026-10-02T18:00:00.000Z",
       });
-      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const { jar } = await enrolStationScreen(app, venue, null);
       const printersDown = async () =>
         ((await read(app, jar)) as (Entry & { printersDown?: { printerId: string }[] })[]).find(
           (entry) => entry.id === fria,
@@ -1669,7 +1697,9 @@ describe("Device management routes (device.manage)", () => {
       { kind: "station", available: true, stations: [{ name, available }], zones: null },
     ];
     expect(screensOf(live.deviceId)).toMatchObject(stationScreenOn("Plancha", true));
-    expect(screensOf(off.deviceId)).toMatchObject(stationScreenOn("Horno", false));
+    expect(screensOf(off.deviceId)).toMatchObject([
+      { kind: "station", available: true, stations: [], zones: null },
+    ]);
     expect(screensOf(till.deviceId)).toEqual([]);
   });
 
@@ -2088,10 +2118,10 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
       );
 
-    it("a PATCH without kitchenScreens keeps a station switched off since, and what a narrowing took", async () => {
+    it("a PATCH without kitchenScreens omits a deleted station and keeps what a narrowing took", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const { deviceId, off, grill } = await narrowedKds(venue, app);
+      const { deviceId, grill } = await narrowedKds(venue, app);
       const before = await shown(venue, deviceId);
       expect(before).toMatchObject([
         {
@@ -2099,7 +2129,6 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
           stations: [
             { id: venue.defaultStationId, available: true },
             { id: grill, available: false },
-            { id: off, available: false },
           ],
         },
       ]);
@@ -2223,17 +2252,22 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       expect(await removalCount(deviceId)).toBe(0);
     });
 
-    it("a PATCH may keep a station switched off since, but not choose another", async () => {
+    it("a PATCH refuses a deleted station even when previously stored, and another deleted choice", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId, off } = await narrowedKds(venue, app);
-      expect(
-        (
-          await edit(app, venue.managerCookie, deviceId, {
-            kitchenScreens: [{ kind: "station", stationIds: [off], zoneIds: null }],
-          })
-        ).status,
-      ).toBe(204);
+      const before = await shown(venue, deviceId);
+      const stored = await edit(app, venue.managerCookie, deviceId, {
+        kitchenScreens: [{ kind: "station", stationIds: [off], zoneIds: null }],
+      });
+      expect(stored.status).toBe(400);
+      expect(await stored.json()).toEqual({
+        error: {
+          code: "kitchen_screen.invalid",
+          params: { field: "stationIds", reason: "not_found", screen: "station" },
+        },
+      });
+      expect(await shown(venue, deviceId)).toEqual(before);
       const other = await withTransaction(suite.db, (tx) =>
         createStation(tx, venue.cfg, { name: "Other" }),
       );
@@ -2464,7 +2498,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     });
   });
 
-  it("renames a kitchen screen whose station has since been switched off, keeping the station", async () => {
+  it("renames a kitchen screen whose station was deleted, keeping its empty bound and made-here choice", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const off = await withTransaction(suite.db, (tx) =>
@@ -2493,7 +2527,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       madeHereStationIds: [venue.defaultStationId],
     });
     expect(await shownOn(venue, deviceId)).toMatchObject([
-      { kind: "station", stations: [{ id: off.id, available: false }] },
+      { kind: "station", stations: [], everyStation: false },
     ]);
   });
 

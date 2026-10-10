@@ -478,7 +478,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const { slots, queues } = await stationScreenSlots(tx, deps.cfg, screen);
         const live = [...queues.keys()];
         const now = new Date();
-        const states = await VENUE_SERVICE.stationStates(tx, cfg, now);
+        // An Every screen can still hold ready dishes at a deleted station.
+        const states = await (await VENUE_SERVICE.routingAt(tx, cfg, now)).stations();
         const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live, {
           withSwitchedOff: true,
         });

@@ -440,6 +440,12 @@ routing rules and all their period children, clears incoming daily destinations 
 reopening those stations, and clears only eligible unsent/open-draft choices. Recorded tickets, sent
 order lines, draft events and groups stay unchanged.
 
+An Every station screen keeps the deleted station visible while its queue has dishes. The
+screen reads historical states through `routingAt().stations()`; setup and new selections use
+the active-only `stationStates` map. The actual-delete ready-dish case in
+`apps/server/src/device-api.test.ts` checks the screen, notice acknowledgement and disappearance
+after collection.
+
 An empty screen scope keeps its parent: `stationIds: []` means no stations, never Every. The
 resolved device read has `available: true` and `stations: []` for that retained parent. A
 removed screen kind has `available: false`; its removal marker is a different state.
