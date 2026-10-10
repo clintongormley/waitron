@@ -195,8 +195,8 @@ export class TillTenderPay extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /**
    * A sale or order is being sent (card-grid also ORs its held basket into it). Disabling the
-   * controls is only the VISIBLE half of the double-file guard; the real safety is the app-level
-   * single-flight flag (`till-app`'s `submitting`).
+   * controls is only the VISIBLE half of the guard against a second send; the real safety is the
+   * app's own single-flight flags (`till-app`'s `submitting` and `placing`).
    */
   @property({ type: Boolean }) busy = false;
   /** The pay controls are held while nothing is being sent; read only to draw Cash and Card grey. */

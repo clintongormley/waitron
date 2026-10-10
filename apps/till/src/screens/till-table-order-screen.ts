@@ -3176,6 +3176,9 @@ export class TillTableOrderScreen extends LitElement {
               return row === undefined ? [] : [{ ...row, key: String(index) }];
             }),
           };
+    const waiting =
+      pending?.checking === true ||
+      [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt);
     return html`<wt-dialog
       ${trackDialog()}
       class="draft-preview"
@@ -3256,9 +3259,9 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 class="preview-confirm"
-                variant=${pending?.checking === true || [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt) ? "secondary" : "primary"}
+                variant=${waiting ? "secondary" : "primary"}
                 data-draft-confirm
-                ?disabled=${pending?.checking === true || [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt)}
+                ?disabled=${waiting}
                 @click=${() => this.#confirmPreview()}
               >
                 ${t("table.preview_confirm")}

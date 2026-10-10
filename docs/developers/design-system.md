@@ -1765,12 +1765,13 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   a dish after a refused edit; Transfer; Split's Add bill, which stays blue when its own quantity
   check refuses a press; the send preview's Confirm, while the station check is out or a dish has
   no station; the dead-ends dialog's Continue; the extras picker's Add when adding a dish (when
-  editing one it is a save); and Cash and Card on the pay card, while there is nothing to pay or
-  the counter holds the pay controls for a stale line or a part-paid order, keeping blue through a
-  sale or order being sent and when only an invalid tip disables Card. Not covered: a button disabled only while a
-  request is being sent, an action blocked by its own field checks, the sign-in screens, and the
-  canvas editor's Delete on a canvas's last tab (canvases are being retired, A182). Nothing guards it
-  across screens.
+  editing one it is a save); and Cash and Card on the pay card, while the basket or bill has no
+  lines, or while the basket's pay controls are held for a line not yet saved that cannot be sold
+  as it stands or is stale, or for a part-paid order, keeping blue through a payment being sent,
+  through an order being placed from the counter tab, and when only an invalid tip disables Card.
+  Not covered: a button disabled only while a request is being sent, an action blocked by its own
+  field checks, the sign-in screens, and the canvas editor's Delete on a canvas's last tab
+  (canvases are being retired, A182). Nothing guards it across screens.
 
 These forms follow the rule
 ([backlog](../backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07) A331,

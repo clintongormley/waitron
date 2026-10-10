@@ -1770,17 +1770,19 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
     "paints grey Cash and Card like Hold until a line is rung up, then blue (%s theme)",
     async (theme) => {
       const { el, store } = await mountPay(0, {}, theme);
-      const hold = query(el, ".hold")!;
-      const cash = query(el, ".pay")!;
-      const card = query(el, ".pay-card")!;
-      await (cash as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      const button = (selector: string) =>
+        query(el, selector) as HTMLElementTagNameMap["wt-button"];
+      const hold = button(".hold");
+      const cash = button(".pay");
+      const card = button(".pay-card");
+      await cash.updateComplete;
       expect(buttonFill(cash)).toBe(buttonFill(hold));
       expect(buttonFill(card)).toBe(buttonFill(hold));
       store.addProduct(cafe, "1");
       await el.updateComplete;
-      await (cash as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await (card as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await (hold as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await cash.updateComplete;
+      await card.updateComplete;
+      await hold.updateComplete;
       expect(buttonFill(cash)).not.toBe(buttonFill(hold));
       expect(buttonFill(card)).not.toBe(buttonFill(hold));
     },

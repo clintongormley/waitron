@@ -180,7 +180,7 @@ export class TillCounterScreen extends LitElement {
   @state() private showAllergens = false;
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
-  /** A sale is in flight: the visible half of the app's single-flight double-file guard. */
+  /** A sale or order is being sent: the visible half of the app's guard against a second send. */
   @property({ type: Boolean }) busy = false;
   /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
   @property({ type: Boolean }) payHeld = false;

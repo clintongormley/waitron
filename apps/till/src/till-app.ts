@@ -6908,6 +6908,7 @@ export class TillApp extends LitElement {
         <div slot="footer" class="edit-dead-ends-actions">
           <wt-button
             variant="secondary"
+            data-edit-dead-ends-cancel
             @click=${(event: Event) => {
               if (
                 !this.#editDeadEndsCurrent(pending) ||

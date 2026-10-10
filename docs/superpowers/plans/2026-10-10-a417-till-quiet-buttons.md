@@ -15,11 +15,12 @@ path: no migration, fiscal, auth, permission or shared `wt-*` change.
 
 1. **Eight buttons, not two.** The queue item named none ("find them"). Two of the eight match the
    pair A409's review subagent flagged (its text survives only in a lane B session transcript of
-   2026-10-08, not in #1433). A full survey of `apps/till/src` found six more breaking the same rule.
-   The owner's "b" was "draw them all quiet the same way", and A416 likewise took buttons beyond its
-   list (the profile window's Edit, the backup key's Change the key). DEFAULT: all eight; the FYI
-   names the six extra so the owner can strike any.
-2. **Cash and Card on the pay card** are grey while the basket is empty or the counter holds the pay
+   2026-10-08, not in #1433). A survey that read the source under `apps/till/src`, without opening
+   every screen in a running till, found six more breaking the same rule. The owner's "b" was
+   "draw them all quiet the same way", and A416 likewise took buttons beyond its list (the profile
+   window's Edit, the backup key's Change the key). DEFAULT: all eight; the FYI names the six extra
+   so the owner can strike any.
+2. **Cash and Card on the pay card** are grey while the basket is empty or card-grid holds the pay
    controls (`#payHeld()` in `till-app.ts`: a stale or blocked basket line, or an order already part
    paid — the row-state case of A427). They keep blue while a payment is being sent, even if the
    basket becomes held or empty during that send (A416's precedent: Print a copy and Change the key

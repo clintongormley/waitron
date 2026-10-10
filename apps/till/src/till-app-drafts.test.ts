@@ -731,7 +731,7 @@ it.each(["light", "dark"] as const)(
     )!;
     const fill = (host: Element) =>
       getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
-    const cancelFill = fill(dialog.querySelector(".edit-dead-ends-actions > wt-button")!);
+    const cancelFill = fill(dialog.querySelector("[data-edit-dead-ends-cancel]")!);
     await confirm.updateComplete;
     expect(confirm.hasAttribute("disabled")).toBe(true);
     expect(confirm.getAttribute("variant")).toBe("secondary");
@@ -4763,7 +4763,6 @@ describe("till-app: a draft line that cannot be sold now", () => {
 });
 
 describe("line-edit unsaved station choice", () => {
-  const editDeadEndsCancel = ".edit-dead-ends-actions > wt-button:not([data-edit-dead-ends-retry])";
   async function opening(sessionActivity?: TillApp["sessionActivity"]) {
     const updateOrderLine = vi
       .fn()
@@ -4806,7 +4805,7 @@ describe("line-edit unsaved station choice", () => {
       await flush(el);
       return field;
     };
-    const cancel = () => dialog.querySelector<HTMLElement>(editDeadEndsCancel)!.click();
+    const cancel = () => dialog.querySelector<HTMLElement>("[data-edit-dead-ends-cancel]")!.click();
     return { ...mounted, dialog, section, choose, cancel, change, updateOrderLine };
   }
   function unload() {
@@ -4935,7 +4934,7 @@ describe("line-edit unsaved station choice", () => {
     const q = await question(el);
     expect(q.open).toBe(true);
     const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
-    const oldCancel = dialog.querySelector<HTMLElement>(editDeadEndsCancel)!;
+    const oldCancel = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-cancel]")!;
     const oldConfirm = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!;
     updateOrderLine.mockRejectedValueOnce({ code: "station.no_replacement" });
     change();

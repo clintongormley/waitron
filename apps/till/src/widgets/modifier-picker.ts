@@ -495,6 +495,7 @@ export class TillModifierPicker extends LitElement {
     const stale = this.#stalePicks();
     const totals = this.#listTotals();
     const saveAction = this.#saveAction();
+    const satisfied = this.#satisfied(stale, totals);
     return html`<wt-modal
       ${trackDialog()}
       size="standard"
@@ -577,8 +578,8 @@ export class TillModifierPicker extends LitElement {
       <wt-button
         slot="footer"
         class="confirm"
-        variant=${this.initialSelections === undefined && !this.#satisfied(stale, totals) ? "secondary" : saveAction.variant}
-        ?disabled=${saveAction.unchanged || !this.#satisfied(stale, totals)}
+        variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
+        ?disabled=${saveAction.unchanged || !satisfied}
         @click=${(e: Event) => this.#confirm(e)}
       >
         ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
