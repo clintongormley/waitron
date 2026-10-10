@@ -15,6 +15,7 @@ import {
   statusOf,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { openTillSession } from "./testing/session-device.js";
 import { addTabRound } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
@@ -23,6 +24,8 @@ import { splitBill } from "./bill-actions.js";
 // Task 5): the session guard, the id and body screens, the answers and the status of each code.
 // The verbs themselves are tested in `party-bill-actions.test.ts`.
 let venue: BillVenue;
+/** The operator's open session on `venue.cfg`'s device, which a bill payment is taken under. */
+let operator: { personId: string; sessionId: string };
 
 useVenueDb({
   resetPerTest: false,
@@ -30,6 +33,13 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    operator = {
+      personId: venue.operatorId,
+      sessionId: await openTillSession(db, {
+        deviceId: venue.cfg.origin.deviceId,
+        personId: venue.operatorId,
+      }),
+    };
   },
 });
 
@@ -333,7 +343,7 @@ describe("the bill action routes", () => {
         applied: "3.00",
         tip: "0.00",
       },
-      venue.operatorId,
+      operator,
     );
     expect(await statusOf(venue, second)).toBe("settled");
 
@@ -390,7 +400,7 @@ describe("the bill action routes", () => {
         applied: "35.00",
         tip: "0.00",
       },
-      venue.operatorId,
+      operator,
     );
     expect(registroCount(venue, tabId)).toBe(0);
 

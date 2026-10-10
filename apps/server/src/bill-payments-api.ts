@@ -213,7 +213,7 @@ export function mountBillPaymentsApi(
   app.post("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
-      const { personId } = session;
+      const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
@@ -222,7 +222,7 @@ export function mountBillPaymentsApi(
       if (request.entry !== "reader") {
         const saleCfg = sendingCfg(cfg, c, session.device);
         assertTakesTender(session.device, request.method === "cash" ? "cash" : "hand-keyed-card");
-        return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
+        return c.json(await takeBillPayment(fiscal, saleCfg, id, request, { personId, sessionId }));
       }
       // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
       // answered 200 even for a decline.
@@ -245,7 +245,7 @@ export function mountBillPaymentsApi(
           saleCfg,
           id,
           request,
-          personId,
+          { personId, sessionId },
         ),
       );
     }),

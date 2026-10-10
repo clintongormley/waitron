@@ -34,7 +34,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 
 // A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
@@ -384,10 +384,17 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const tabId = await openTableTab(v, [
       { menuItemId: v.tables.offerFor(v.products.cana), quantity: "2" },
     ]);
-    await takeBillPayment(deps(), v.cfg, tabId, cash("2.50"), OPERATOR);
+    const operator = {
+      personId: OPERATOR,
+      sessionId: await openTillSession(suite.db, {
+        deviceId: v.cfg.origin.deviceId,
+        personId: OPERATOR,
+      }),
+    };
+    await takeBillPayment(deps(), v.cfg, tabId, cash("2.50"), operator);
 
     at(NEW_YEAR);
-    const { invoice } = await takeBillPayment(deps(), v.cfg, tabId, cash("2.50"), OPERATOR);
+    const { invoice } = await takeBillPayment(deps(), v.cfg, tabId, cash("2.50"), operator);
 
     expect(invoice).not.toBeNull();
     expect(await filed(tabId)).toMatchObject({

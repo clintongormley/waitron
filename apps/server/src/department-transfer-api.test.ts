@@ -57,6 +57,7 @@ import { requestCfg } from "./request-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { openTillSession } from "./testing/session-device.js";
 import {
   setupPartyVenue,
   counterOrder,
@@ -73,6 +74,8 @@ let v: PartyVenue;
 let app: Hono;
 const liveEvents = new LiveEvents();
 let personId: string;
+/** `personId`'s open session on `v.cfg`'s device, which a bill payment is taken under. */
+let operator: { personId: string; sessionId: string };
 let nextOrderNumber = 0;
 
 async function login(profileId: string) {
@@ -236,6 +239,10 @@ beforeAll(async () => {
     .values({ displayName: "Transfer operator", pinHash: hashPin("5555"), role: "staff" })
     .returning();
   personId = p!.id;
+  operator = {
+    personId,
+    sessionId: await openTillSession(suite.db, { deviceId: v.cfg.origin.deviceId, personId }),
+  };
   app = new Hono();
   mountTillApi(
     app,
@@ -1518,7 +1525,7 @@ describe("department transfer tab lifecycle", () => {
                 applied: "2.00",
                 tip: "0.00",
               },
-              personId,
+              operator,
             )
           : (kind === "issued" ? collectOrder : payWorkingOrder)(
               deps,

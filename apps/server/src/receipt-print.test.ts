@@ -118,7 +118,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 
@@ -640,6 +640,13 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
     });
     return tabId;
   });
+  const operator = {
+    personId: OPERATOR,
+    sessionId: await openTillSession(suite.db, {
+      deviceId: cfg.origin.deviceId,
+      personId: OPERATOR,
+    }),
+  };
 
   const selects = vi.spyOn(suite.db, "select");
   let printerReads: number;
@@ -657,7 +664,7 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
         applied: "1.50",
         tip: "0.00",
       },
-      OPERATOR,
+      operator,
     );
     expect(invoice).not.toBeNull();
     // The one select that reads the device's printers with its profile's drawer permission.

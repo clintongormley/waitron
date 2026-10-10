@@ -94,7 +94,7 @@ import {
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 
 // The retained fixture runs synchronous work across cases; let the venue watchdog tick between them.
 afterEach(() => yieldTurn());
@@ -116,6 +116,8 @@ let clock: TrustedClock;
 
 interface Venue {
   cfg: DeviceRequestConfig;
+  /** OPERATOR's open session on the venue's device, which a bill payment is taken under. */
+  operator: { personId: string; sessionId: string };
   offers: ZoneOffers;
   productIds: Map<string, string>;
 }
@@ -193,6 +195,10 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  const operator = {
+    personId: OPERATOR,
+    sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
+  };
   return withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });
@@ -219,7 +225,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     await tx.run(
       sql`update devices set receipt_printer_id = ${printer.id}, payment_slip_printer_id = ${printer.id}`,
     );
-    return { cfg, offers: await offerProducts(tx, cfg, { zone: "tables" }), productIds };
+    return {
+      cfg,
+      operator,
+      offers: await offerProducts(tx, cfg, { zone: "tables" }),
+      productIds,
+    };
   });
 }
 
@@ -273,7 +284,7 @@ function cash(amount: string, over: Partial<BillPaymentRequest> = {}): BillPayme
 }
 
 function take(billId: string, request: BillPaymentRequest) {
-  return takeBillPayment(fiscal(), venue.cfg, billId, request, OPERATOR);
+  return takeBillPayment(fiscal(), venue.cfg, billId, request, venue.operator);
 }
 
 async function codeOf(promise: Promise<unknown>): Promise<string | undefined> {
@@ -346,10 +357,10 @@ describe("invoice selection before reserving new bill money", () => {
         cfg,
         billId,
         req,
-        OPERATOR,
+        venue.operator,
       );
     }
-    return takeBillPayment(fiscal(), cfg, billId, req, OPERATOR);
+    return takeBillPayment(fiscal(), cfg, billId, req, venue.operator);
   }
 
   it.each(["cash", "manual", "reader"] as const)(

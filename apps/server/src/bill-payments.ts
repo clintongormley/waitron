@@ -1005,7 +1005,7 @@ async function beginBillPayment(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
-  operatorId: string,
+  operator: { personId: string; sessionId: string },
   state: "received" | "pending",
   now: Date,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
@@ -1049,7 +1049,7 @@ async function beginBillPayment(
       tip: decimalToCents(allocation.tip),
       tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
       state,
-      requestedBy: operatorId,
+      requestedBy: operator.personId,
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? now.toISOString() : null,
@@ -1072,7 +1072,7 @@ export async function takeBillPayment(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
-  operatorId: string,
+  operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
   return withTransaction(deps.db, async (tx) => {
     const receivedAt = deps.clock.now().instant;
@@ -1082,7 +1082,7 @@ export async function takeBillPayment(
       cfg,
       workingOrderId,
       req,
-      operatorId,
+      operator,
       "received",
       receivedAt,
     );
@@ -1098,14 +1098,21 @@ export async function takeBillPayment(
         externalRef: req.externalRef,
         billPaymentId: payment.id,
       });
-      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operatorId, printers);
+      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
     } else {
-      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operatorId, printers);
+      await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
     }
-    const { invoice, total } = await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, {
-      total: begun.total,
-      printers,
-    });
+    const { invoice, total } = await issueWhenFullyPaid(
+      tx,
+      deps,
+      cfg,
+      workingOrderId,
+      operator.personId,
+      {
+        total: begun.total,
+        printers,
+      },
+    );
     return resultOf(tx, deps, cfg, payment, invoice, total);
   });
 }
@@ -1235,7 +1242,7 @@ export async function takeReaderBillPayment(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
-  operatorId: string,
+  operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
   let release = (): void => {};
   try {
@@ -1246,7 +1253,7 @@ export async function takeReaderBillPayment(
         cfg,
         workingOrderId,
         req,
-        operatorId,
+        operator,
         "pending",
         deps.clock.now().instant,
       );

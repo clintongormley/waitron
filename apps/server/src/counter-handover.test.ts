@@ -23,11 +23,14 @@ import { takeBillPayment } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { openTillSession } from "./testing/session-device.js";
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
 
 // Counter service (spec §5): a counter order may be handed over before or after it is paid.
 let venue: BillVenue;
+/** The operator's open session on `venue.cfg`'s device, which a bill payment is taken under. */
+let operator: { personId: string; sessionId: string };
 type CounterFixture = "ticket_then_pay" | "issued" | "prepay";
 const zones = {} as Record<"ticket_then_pay" | "prepay", string>;
 
@@ -37,6 +40,13 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    operator = {
+      personId: venue.operatorId,
+      sessionId: await openTillSession(db, {
+        deviceId: venue.cfg.origin.deviceId,
+        personId: venue.operatorId,
+      }),
+    };
     for (const mode of ["ticket_then_pay", "prepay"] as const) {
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = await tx
@@ -518,7 +528,7 @@ describe("paying a counter order never sent, in a mode that sends before payment
         applied: amount,
         tip: "0.00",
       },
-      venue.operatorId,
+      operator,
     );
   }
 

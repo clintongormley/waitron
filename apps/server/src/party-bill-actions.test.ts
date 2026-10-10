@@ -167,7 +167,7 @@ async function contribute(billId: string, amount: string): Promise<string> {
       applied: amount,
       tip: "0.00",
     },
-    OPERATOR,
+    v.operator,
   );
   return result.payment.id;
 }
@@ -283,7 +283,7 @@ describe("split a bill", () => {
         applied: "12.00",
         tip: "0.00",
       },
-      OPERATOR,
+      v.operator,
     );
     const before = await snapshot(partyId, [tabId]);
 

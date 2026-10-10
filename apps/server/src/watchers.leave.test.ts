@@ -122,7 +122,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
         applied: "12.00",
         tip: "0.00",
       },
-      OPERATOR,
+      v.operator,
     );
 
     expect(await billRow(v, tabId)).toMatchObject({ status: "settled", collectedAt: null });
