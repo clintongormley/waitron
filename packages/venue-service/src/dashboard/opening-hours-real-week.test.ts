@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -18,7 +19,6 @@ const annual = {
   repeats: true,
   ownHours: true,
   closeWholeVenue: false,
-  hasStationHours: false,
 };
 
 function emit(target: Element, name: string, detail: unknown) {
@@ -49,12 +49,14 @@ async function mount(
       "/manage/opening-hours/view/week/department/d1/zone/z1?week=2026-10-12",
     );
   screen = document.createElement("dashboard-opening-hours-screen");
-  screen.api = new OpeningHoursApi((async (path, method, body) =>
-    method === "GET"
-      ? path.includes("named-days?")
-        ? named()
-        : structuredClone(data)
-      : write(path, method, body)) as DashboardRequest);
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (path, method, body) =>
+      method === "GET"
+        ? path.includes("named-days?")
+          ? named()
+          : structuredClone(data)
+        : write(path, method, body)) as DashboardRequest),
+  );
   applyTokens(screen);
   document.body.append(screen);
   await expect

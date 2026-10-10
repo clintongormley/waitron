@@ -102,7 +102,6 @@ declare module "@waitron/shared" {
       sendsToStationId: string;
       reason: "self" | "unknown" | "inactive" | "closed";
     };
-    "station.fallback_loop": { stationId: string; fallbackStationId: string };
     "time_zone.unreadable": Record<string, never>;
     "device_profile.access_invalid": {
       field:

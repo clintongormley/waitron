@@ -84,7 +84,6 @@ describe.each(["en", "es"] as const)("Calendar actions visual (%s)", (locale) =>
                     repeats: true,
                     ownHours: true,
                     closeWholeVenue: false,
-                    hasStationHours: false,
                   },
                   holidays: [],
                   tone: "own_holiday",

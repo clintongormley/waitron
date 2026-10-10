@@ -1,29 +1,16 @@
 import { getCountryPack } from "@waitron/country-packs";
-import { civilDateOf } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { holidayCityKey } from "./holiday-rules.js";
 import type { PackLookup } from "./holidays.js";
-import {
-  addDays,
-  cellIntervals,
-  effective,
-  isLocalDate,
-  pairMatters,
-  parseSpecialDateInput,
-  parseWeek,
-  tailOverlaps,
-  type DateState,
-  type Interval,
-} from "./hours-rules.js";
+import { addDays, isLocalDate, parseSpecialDateInput } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
-import { isReadableClock, isReadableZone, skippedEndpoint } from "./hours-clock.js";
+import { isReadableClock } from "./hours-clock.js";
 import { occursOn, repeatKey } from "./named-day-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
 import { calendarDateOfTime, parseClosedRanges, parseServiceDay } from "./service-day.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
-import { HOURS_CELL_MODES } from "./schema/hours.js";
 import "./errors.js";
 
 type Row = Record<string, unknown>;
@@ -72,104 +59,7 @@ function isActive(row: Row, table: string): boolean {
   return row.active === 1;
 }
 
-/** The venue's calendar date when the bundle was made; `null` when it cannot be read. */
-function exportDate(bundle: { readonly createdAt: Date; readonly timeZone: string } | undefined) {
-  if (bundle === undefined) return null;
-  try {
-    return civilDateOf(bundle.createdAt, bundle.timeZone) as LocalDate;
-  } catch {
-    return null;
-  }
-}
-
-function ownerKey(row: Row, table: string, stations: Set<unknown>): string {
-  if (row.department_id !== undefined && row.department_id !== null)
-    refuse(`${table}.department_id`);
-  const station = row.station_id;
-  if (station === undefined || station === null || !stations.has(station))
-    refuse(`${table}.station_id`);
-  return `station:${station as string}`;
-}
-
-/** Each cell's periods in position order, as wire periods; every period must name a known cell. */
-function periodsByCell(
-  rows: readonly Row[] | undefined,
-  table: string,
-  cells: Set<unknown>,
-): Map<unknown, { id: unknown; opensAt: string; closesAt: string }[]> {
-  const byCell = new Map<unknown, Row[]>();
-  for (const row of rows ?? []) {
-    if (!cells.has(row.cell_id)) refuse(`${table}.cell_id`);
-    if (typeof row.position !== "number" || !Number.isInteger(row.position) || row.position < 0)
-      refuse(`${table}.position`);
-    for (const column of ["opens_at", "closes_at"])
-      if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
-        refuse(`${table}.${column}`);
-    const siblings = byCell.get(row.cell_id) ?? [];
-    if (siblings.some((other) => other.position === row.position)) refuse(`${table}.position`);
-    byCell.set(row.cell_id, [...siblings, row]);
-  }
-  return new Map(
-    [...byCell].map(([cell, periods]) => [
-      cell,
-      periods
-        .sort((a, b) => (a.position as number) - (b.position as number))
-        .map((row) => ({
-          id: row.id,
-          opensAt: (row.opens_at as string).slice(0, 5),
-          closesAt: (row.closes_at as string).slice(0, 5),
-        })),
-    ]),
-  );
-}
-
-function storedMode(row: Row, table: string): string {
-  if (!(HOURS_CELL_MODES as readonly unknown[]).includes(row.mode)) refuse(`${table}.mode`);
-  return row.mode as string;
-}
-
-/** Retained default-station cells travel but do not constrain its opening times. */
-export function validateHoursConfiguration(
-  tables: Tables,
-  bundle?: { readonly createdAt: Date; readonly timeZone: string },
-): void {
-  const stations = ids(tables.kitchen_stations);
-
-  const weekCells = tables.hours_week_cells ?? [];
-  const weekPeriods = periodsByCell(
-    tables.hours_week_periods,
-    "hours_week_periods",
-    ids(weekCells),
-  );
-  const weeks = new Map<string, { weekday: number; cell: unknown }[]>();
-  for (const row of weekCells) {
-    const key = ownerKey(row, "hours_week_cells", stations);
-    const weekday = row.weekday;
-    if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
-      refuse("hours_week_cells.weekday");
-    const days = weeks.get(key) ?? [];
-    if (days.some((day) => day.weekday === weekday)) refuse("hours_week_cells.weekday");
-    const mode = storedMode(row, "hours_week_cells");
-    days.push({ weekday, cell: { mode, periods: weekPeriods.get(row.id) ?? [] } });
-    weeks.set(key, days);
-  }
-  const weekIntervals = new Map<string, (Interval[] | null)[]>();
-  for (const [key, days] of weeks) {
-    const full = [0, 1, 2, 3, 4, 5, 6].map(
-      (weekday) =>
-        days.find((day) => day.weekday === weekday) ?? {
-          weekday,
-          cell: { mode: "not_set", periods: [] },
-        },
-    );
-    const week = parsedAs("hours_week_cells", () => parseWeek(full));
-    weekIntervals.set(
-      key,
-      week.cells.map((cell) => cellIntervals(cell)),
-    );
-  }
-
-  const dates = new Map<unknown, { date: LocalDate; closeWholeVenue: boolean; row: Row }>();
+export function validateNamedDaysConfiguration(tables: Tables): void {
   const taken: { locationId: unknown; date: LocalDate; repeats: boolean }[] = [];
   for (const row of tables.special_dates ?? []) {
     if (!isLocalDate(row.date)) refuse("special_dates.date");
@@ -207,83 +97,6 @@ export function validateHoursConfiguration(
       }),
     );
     if (row.own_hours === 1 && row.close_whole_venue === 1) refuse("special_dates");
-    dates.set(row.id, { date: row.date, closeWholeVenue: row.close_whole_venue === 1, row });
-  }
-  const dateCells = tables.special_date_hours ?? [];
-  const datePeriods = periodsByCell(
-    tables.special_date_hours_periods,
-    "special_date_hours_periods",
-    ids(dateCells),
-  );
-  const cellsByDate = new Map<unknown, { key: string; cell: unknown }[]>();
-  for (const row of dateCells) {
-    if (!dates.has(row.special_date_id)) refuse("special_date_hours.special_date_id");
-    const key = ownerKey(row, "special_date_hours", stations);
-    const cells = cellsByDate.get(row.special_date_id) ?? [];
-    if (cells.some((cell) => cell.key === key)) refuse("special_date_hours.station_id");
-    const mode = storedMode(row, "special_date_hours");
-    cells.push({ key, cell: { mode, periods: datePeriods.get(row.id) ?? [] } });
-    cellsByDate.set(row.special_date_id, cells);
-  }
-  const defaults = new Set(
-    (tables.kitchen_stations ?? []).filter((row) => row.is_default === 1).map((row) => row.id),
-  );
-  const today = exportDate(bundle);
-  const zone = bundle !== undefined && isReadableZone(bundle.timeZone) ? bundle.timeZone : null;
-  const states = new Map<LocalDate, DateState>();
-  for (const [id, { date, closeWholeVenue, row }] of dates) {
-    const cells = cellsByDate.get(id) ?? [];
-    if (row.repeat_on !== undefined && row.repeat_on !== null && cells.length > 0)
-      refuse("special_date_hours");
-    const input = parsedAs("special_date_hours", () =>
-      parseSpecialDateInput({
-        date,
-        name: row.name,
-        kind: row.kind,
-        repeats: row.repeat_on !== undefined && row.repeat_on !== null,
-        ownHours: row.own_hours === 1,
-        closeWholeVenue,
-        cells: cells.map(({ key, cell }) => {
-          const [kind, ...rest] = key.split(":");
-          return { subject: { kind, id: rest.join(":") }, cell };
-        }),
-      }),
-    );
-    if (zone !== null && pairMatters(date, today)) {
-      const applied = input.cells.filter(
-        (entry) => !(entry.subject.kind === "station" && defaults.has(entry.subject.id)),
-      );
-      const skipped = skippedEndpoint(date, applied, zone);
-      if (skipped !== null)
-        refuse(
-          `special_date_hours_periods.${skipped.end === "opensAt" ? "opens_at" : "closes_at"}`,
-        );
-    }
-    states.set(date, {
-      closeWholeVenue,
-      cells: new Map(
-        input.cells.map((entry, index) => [cells[index]!.key, cellIntervals(entry.cell)]),
-      ),
-    });
-  }
-
-  const subjects = [...stations]
-    .filter((id) => !defaults.has(id))
-    .map((id) => `station:${id as string}`);
-  for (const key of subjects) {
-    const week = (weekday: number) => weekIntervals.get(key)?.[weekday] ?? null;
-    for (const date of states.keys())
-      for (const earlier of [addDays(date, -1), date]) {
-        if (!pairMatters(earlier, today)) continue;
-        const later = addDays(earlier, 1);
-        if (
-          tailOverlaps(
-            effective(earlier, key, states, week).intervals,
-            effective(later, key, states, week).intervals,
-          )
-        )
-          refuse("special_date_hours");
-      }
   }
 }
 
@@ -676,7 +489,7 @@ function validateVenueServiceConfiguration(
 ): void {
   validateReceiptModes(tables);
   validateOrderStarts(tables);
-  validateHoursConfiguration(tables, bundle);
+  validateNamedDaysConfiguration(tables);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);
   validateZoneClosedTimes(tables, bundle);
@@ -700,20 +513,15 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "device_profile_kitchen_screen_zones" },
     { name: "department_transfer_desks" },
     { name: "department_transfer_destinations" },
-    { name: "station_fallbacks" },
     { name: "routing_cells", locationColumns: ["location_id"] },
     { name: "service_settings" },
-    { name: "hours_week_cells" },
-    { name: "hours_week_periods" },
     { name: "special_dates", locationColumns: ["location_id"] },
     { name: "menu_periods" },
     { name: "menu_period_staff_menus" },
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
     { name: "routing_cell_periods" },
-    { name: "special_date_hours" },
     { name: "zone_closed_times" },
-    { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },
   ],
   validate: validateVenueServiceConfiguration,

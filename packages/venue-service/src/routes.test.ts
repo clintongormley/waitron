@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -37,7 +38,8 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import { configureZone, createDepartment, listServiceZones } from "./operations.js";
-import { saveMenuPeriod } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { setRoutingCell } from "./routing-store.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -1424,47 +1426,49 @@ describe("venue service management routes", () => {
     expect(Object.keys((await listed.json()) as object)).not.toContain("hours");
   });
 
-  it("saves and clears a fallback while refusing loops and a missing key", async () => {
+  it("the retired station fallback route answers 404 without changing routing", async () => {
     const fx = await fixture();
     const path = `/management-api/venue-service/stations/${fx.stationId}/fallback`;
     const [another] = await db
       .insert(kitchenStations)
       .values({ locationId: fx.locationId, name: "Second bar" })
       .returning({ id: kitchenStations.id });
-    expect(
-      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: another!.id }))
-        .status,
-    ).toBe(204);
-    const saved = (await (
-      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
-    ).json()) as { stationTimes: { stationId: string; fallbackStationId: string | null }[] };
-    expect(
-      saved.stationTimes.find((station) => station.stationId === fx.stationId)?.fallbackStationId,
-    ).toBe(another!.id);
-    const missing = await send(fx.app, "PUT", path, fx.managerCookie, {});
-    expect(missing.status).toBe(400);
-    expect(await missing.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "fallbackStationId" } },
-    });
-    const loop = await send(fx.app, "PUT", path, fx.managerCookie, {
-      fallbackStationId: fx.stationId,
-    });
-    expect(loop.status).toBe(409);
-    expect(await loop.json()).toMatchObject({ error: { code: "station.fallback_loop" } });
-    const other = await fixture();
-    expect(
-      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: other.stationId }))
-        .status,
-    ).toBe(409);
-    expect(
-      (await send(fx.app, "PUT", path, fx.managerCookie, { fallbackStationId: null })).status,
-    ).toBe(204);
-    const cleared = (await (
-      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
-    ).json()) as { stationTimes: { stationId: string; fallbackStationId: string | null }[] };
-    expect(
-      cleared.stationTimes.find((station) => station.stationId === fx.stationId)?.fallbackStationId,
-    ).toBeNull();
+    const readRouting = async () => {
+      const response = await send(
+        fx.app,
+        "GET",
+        "/management-api/venue-service/routing",
+        fx.managerCookie,
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    const before = await readRouting();
+    for (const body of [
+      { fallbackStationId: another!.id },
+      { fallbackStationId: null },
+      { fallbackStationId: fx.stationId },
+      { fallbackStationId: randomUUID() },
+      { fallbackStationId: "invalid" },
+      {},
+    ]) {
+      expect((await send(fx.app, "PUT", path, fx.managerCookie, body)).status).toBe(404);
+      expect(await readRouting()).toEqual(before);
+    }
+    for (const id of [randomUUID(), "invalid"]) {
+      expect(
+        (
+          await send(
+            fx.app,
+            "PUT",
+            `/management-api/venue-service/stations/${id}/fallback`,
+            fx.managerCookie,
+            { fallbackStationId: another!.id },
+          )
+        ).status,
+      ).toBe(404);
+      expect(await readRouting()).toEqual(before);
+    }
   });
 
   it("the retired dashboard station today route answers 404 without changing its state", async () => {
@@ -3218,5 +3222,117 @@ describe("name-only department creation", () => {
     expect(
       (await db.select().from(departments).where(eq(departments.id, row.id)))[0],
     ).toMatchObject({ name: "Renamed", active: false });
+  });
+});
+
+describe("station service-times planning route", () => {
+  const path = (id: string, range = "from=2026-10-12&to=2026-10-12") =>
+    `/management-api/venue-service/stations/${id}/service-times?${range}`;
+  it("serves the same read-only default-station answer to managers and supervisors", async () => {
+    const f = await fixture();
+    for (const cookie of [f.managerCookie, f.supervisorCookie]) {
+      const response = await send(f.app, "GET", path(f.stationId), cookie);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ always: "default", days: [] });
+    }
+  });
+  it.each([
+    ["staff", 403, "authorization.not_permitted"],
+    ["anonymous", 401, "management_session.required"],
+  ] as const)("refuses %s reads", async (kind, status, code) => {
+    const f = await fixture();
+    const response = await send(
+      f.app,
+      "GET",
+      path(f.stationId),
+      kind === "staff" ? f.staffCookie : undefined,
+    );
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ error: { code } });
+  });
+  it.each([
+    ["", "from"],
+    ["from=2026-10-12", "to"],
+    ["from=2026-10-12&to=2026-11-23", "to"],
+    ["from=2026-10-12&to=2026-10-18&week=unknown", "week"],
+  ])("refuses incomplete or overlong date range %s", async (query, field) => {
+    const f = await fixture();
+    const response = await send(f.app, "GET", path(f.stationId, query!), f.managerCookie);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+  it("refuses unknown and foreign stations by the same domain code", async () => {
+    const f = await fixture(),
+      other = await fixture();
+    for (const id of [randomUUID(), other.stationId]) {
+      const response = await send(f.app, "GET", path(id), f.managerCookie);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: "station.not_found", params: { stationId: id } },
+      });
+    }
+  });
+});
+it("the station planning route returns the configured period ranges for a non-default station", async () => {
+  const f = await fixture();
+  const expected = await withTransaction(db, async (tx) => {
+    const cfg = { locationId: f.locationId };
+    const departmentId = (await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }))
+      .id;
+    await configureZone(tx, cfg, { zoneId: f.zoneId, departmentId });
+    const product = await createProduct(tx, {
+      catalogueId: f.menuId,
+      name: randomUUID(),
+      categoryId: f.categoryId,
+      pricingUnit: "each",
+      unitPrice: "3",
+      vatClass: "general",
+    });
+    await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
+    const periodId = (
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Lunch",
+        menuId: f.menuId,
+        staffMenuIds: [],
+        colour: "blue",
+      })
+    ).id;
+    const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
+    await replaceMenuWeek(
+      tx,
+      cfg,
+      departmentId,
+      Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
+      new Date("2026-10-10T10:00:00Z"),
+    );
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ ...cfg, name: "Cocktails" })
+      .returning();
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "category", categoryId: f.categoryId }, zoneId: f.zoneId },
+      { kind: "station", stationId: station!.id },
+    );
+    return { stationId: station!.id, departmentId, ranges };
+  });
+  const response = await send(
+    f.app,
+    "GET",
+    `/management-api/venue-service/stations/${expected.stationId}/service-times?from=2026-10-12&to=2026-10-12`,
+    f.supervisorCookie,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    always: null,
+    days: [
+      {
+        date: "2026-10-12",
+        departments: [{ departmentId: expected.departmentId, ranges: expected.ranges }],
+      },
+    ],
   });
 });

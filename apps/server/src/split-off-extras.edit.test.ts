@@ -349,12 +349,19 @@ describe("editing split-off extras", () => {
     });
   });
 
-  it("keeps chips with the dish after Fryer closes without fallback", async () => {
+  it("keeps chips with the dish when Fryer closes and sends its work to Grill", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
-      await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date());
+      await setStationToday(
+        tx,
+        venue.cfg,
+        venue.stations.fryer,
+        "closed",
+        new Date(),
+        venue.stations.grill,
+      );
       await edit(tx, venue, 1, { note: "No salt" });
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,

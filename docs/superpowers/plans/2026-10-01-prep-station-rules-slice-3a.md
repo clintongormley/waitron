@@ -1,5 +1,12 @@
 # Prep station rules (slice 3a) Implementation Plan
 
+> **2026-10-10, A366 slice 4 Part B:** station-hours and configured-fallback contracts below
+> describe the earlier implementation. The Station hours page, its editors and storage are
+> retired. A closed station follows today's destination, then the active default; a disabled
+> station uses the active default. Closing or disabling with unfinished dishes requires their
+> disposition. See [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
+> and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
+
 > **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

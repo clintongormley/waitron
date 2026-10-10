@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { page } from "vitest/browser";
 import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillStationToday } from "./station-today.js";
@@ -33,7 +34,7 @@ function refused(code: string, params: object = {}) {
 async function mount(
   props: Partial<TillStationToday> = {},
   reply: (path: string, init: RequestInit) => Response | Promise<Response> = () =>
-    json({ destinations }),
+    json({ destinations, openDishCount: 0 }),
 ) {
   const calls: { path: string; method: string; body: unknown }[] = [];
   const fetcher = vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
@@ -67,23 +68,23 @@ function confirm(d: TillStationTodayDialog) {
 }
 it.each([
   ["open", {}, "Open", "Close for today"],
-  ["opened by hand", { byHand: "open" }, "Opened for today.", "Close for today"],
+  ["open ignores an old override", { byHand: "open" }, "Open", "Close for today"],
   [
     "closed by hand",
     { open: false, byHand: "closed", why: "closed_by_hand", sendsTo: "bar" },
-    "Closed for today. New dishes go to Bar.",
+    "Closed for today → Bar",
     "Open for today",
   ],
   [
-    "outside hours",
-    { open: false, why: "out_of_hours", sendsTo: "bar" },
-    "Closed now (outside its hours). New dishes go to Bar.",
+    "closed without an override flag",
+    { open: false, why: "closed_by_hand", sendsTo: "bar" },
+    "Closed for today → Bar",
     "Open for today",
   ],
   [
-    "outside hours without a destination",
-    { open: false, why: "out_of_hours" },
-    "Closed now (outside its hours).",
+    "closed without a destination",
+    { open: false, why: "closed_by_hand" },
+    "Closed for today",
     "Open for today",
   ],
   ["default", { isDefault: true }, "Always open: this is the default station.", null],
@@ -97,7 +98,9 @@ it.each([
 });
 it("reads destinations and closes with the default, then reports the completed write", async () => {
   const { el, calls } = await mount({}, (_path, init) =>
-    init.method === "PUT" ? new Response(null, { status: 204 }) : json({ destinations }),
+    init.method === "PUT"
+      ? new Response(null, { status: 204 })
+      : json({ destinations, openDishCount: 0 }),
   );
   const heard: unknown[] = [];
   el.addEventListener("station-today-changed", (e) => heard.push((e as CustomEvent).detail));
@@ -125,7 +128,10 @@ it.each(["closed", "inactive"])(
     const { el, calls } = await mount({}, (_path, init) =>
       init.method === "PUT"
         ? refused("station.destination_invalid", { reason })
-        : json({ destinations: ++reads === 1 ? destinations : [destinations[0]] }),
+        : json({
+            destinations: ++reads === 1 ? destinations : [destinations[0]],
+            openDishCount: 0,
+          }),
     );
     act(el);
     const d = await dialog(el);
@@ -169,7 +175,7 @@ it.each(["pin.invalid", "pin.throttled"])(
             : writes === 2
               ? refused(pinCode)
               : new Response(null, { status: 204 });
-        return json({ destinations });
+        return json({ destinations, openDishCount: 0 });
       },
     );
     let changed = 0;
@@ -218,7 +224,7 @@ it("closing also retries its chosen destination with manager approval", async ()
         ? ++writes === 1
           ? refused("authorization.not_permitted")
           : new Response(null, { status: 204 })
-        : json({ destinations }),
+        : json({ destinations, openDishCount: 0 }),
   );
   act(el);
   const d = await dialog(el);
@@ -258,7 +264,7 @@ it.each(["disconnect", "station switch"])(
       el.station = { ...station, id: "bar", name: "Bar" };
       await el.updateComplete;
     }
-    resolve(json({ destinations }));
+    resolve(json({ destinations, openDishCount: 0 }));
     await promise;
     await el.updateComplete;
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -277,7 +283,7 @@ it("duplicate action presses share one read and a removed widget cannot report a
   act(el);
   act(el);
   expect(calls.length).toBe(1);
-  resolveRead(json({ destinations }));
+  resolveRead(json({ destinations, openDishCount: 0 }));
   const d = await dialog(el);
   confirm(d);
   confirm(d);
@@ -294,7 +300,7 @@ it("cancelling manager approval returns to the destination draft without another
       ? json([{ personId: "manager", displayName: "Ana" }])
       : init.method === "PUT"
         ? refused("authorization.not_permitted")
-        : json({ destinations }),
+        : json({ destinations, openDishCount: 0 }),
   );
   act(el);
   const d = await dialog(el);
@@ -320,7 +326,7 @@ it("an authorizer read failure returns a localized refusal without hiding the cl
       ? refused("time_zone.unreadable")
       : init.method === "PUT"
         ? refused("authorization.not_permitted")
-        : json({ destinations }),
+        : json({ destinations, openDishCount: 0 }),
   );
   act(el);
   const d = await dialog(el);
@@ -350,7 +356,7 @@ it.each(["open", "closed"] as const)(
       (_path, init) =>
         init.method === "PUT"
           ? new Response(null, { status: 204 })
-          : json({ destinations, authorizers: managers }),
+          : json({ destinations, authorizers: managers, openDishCount: 0 }),
     );
     let changed = 0;
     el.addEventListener("station-today-changed", () => changed++);
@@ -384,7 +390,7 @@ it.each(["pin.invalid", "pin.throttled"])(
         ? ++writes === 1
           ? refused(code)
           : new Response(null, { status: 204 })
-        : json({ destinations, authorizers: managers }),
+        : json({ destinations, authorizers: managers, openDishCount: 0 }),
     );
     act(el);
     const close = await dialog(el);
@@ -436,7 +442,7 @@ it("device forbidden-station read shows its sentence and permits retry", async (
 it("cancelling a device opening PIN writes nothing and the next press asks again", async () => {
   const { el, calls } = await mount(
     { deviceMode: true, station: { ...station, open: false } },
-    () => json({ destinations, authorizers: managers }),
+    () => json({ destinations, authorizers: managers, openDishCount: 0 }),
   );
   act(el);
   (await pinStep(el)).dispatchEvent(new CustomEvent("override-cancel"));
@@ -500,7 +506,7 @@ it.each(["disconnect", "station switch"])(
       el.station = { ...station, id: "bar" };
       await el.updateComplete;
     }
-    resolve(json({ destinations, authorizers: managers }));
+    resolve(json({ destinations, authorizers: managers, openDishCount: 0 }));
     await pending;
     await el.updateComplete;
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -541,7 +547,9 @@ it.each(["answer", "refusal"])(
     let finish!: (response: Response) => void;
     let count = 0;
     const { el, calls } = await mount({}, () =>
-      ++count === 1 ? new Promise((resolve) => (finish = resolve)) : json({ destinations }),
+      ++count === 1
+        ? new Promise((resolve) => (finish = resolve))
+        : json({ destinations, openDishCount: 0 }),
     );
     const read = vi.spyOn(el.api!, "stationToday");
     act(el);
@@ -550,7 +558,11 @@ it.each(["answer", "refusal"])(
     el.remove();
     parent.append(el);
     await el.updateComplete;
-    finish(reply === "answer" ? json({ destinations }) : refused("time_zone.unreadable"));
+    finish(
+      reply === "answer"
+        ? json({ destinations, openDishCount: 0 })
+        : refused("time_zone.unreadable"),
+    );
     await Promise.allSettled([read.mock.results[0]!.value]);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await el.updateComplete;
@@ -561,3 +573,167 @@ it.each(["answer", "refusal"])(
     expect(calls).toHaveLength(2);
   },
 );
+
+describe.each(["en", "es"] as const)(
+  "current station states without schedule wording in %s",
+  (locale) => {
+    it.each([
+      [{ byHand: "open" }, "Open", "Abierta"],
+      [
+        { open: false, byHand: null, why: "closed_by_hand", sendsTo: "bar" },
+        "Closed for today → Bar",
+        "Cerrada por hoy → Bar",
+      ],
+      [{ open: false, byHand: null, why: "closed_by_hand" }, "Closed for today", "Cerrada por hoy"],
+    ] as const)("renders %j as a current state", async (changes, english, spanish) => {
+      setLocale(locale);
+      try {
+        const { el } = await mount({ station: { ...station, ...changes } });
+        expect(el.shadowRoot!.querySelector("[data-status]")!.textContent!.trim()).toBe(
+          locale === "en" ? english : spanish,
+        );
+      } finally {
+        setLocale("en");
+      }
+    });
+  },
+);
+
+it.each([
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+] as const)("looks at station status in %s %s at %i", async (locale, theme, width) => {
+  const previous = { width: innerWidth, height: innerHeight };
+  try {
+    await page.viewport(width, 700);
+    setLocale(locale);
+    for (const changes of [
+      {},
+      { open: false, byHand: "closed", why: "closed_by_hand", sendsTo: "bar" },
+      { open: false, byHand: "closed", why: "closed_by_hand" },
+      { isDefault: true, why: "default" },
+      { active: false, open: false, why: "switched_off" },
+    ] as const) {
+      const { el } = await mountWidget<TillStationToday>(
+        "till-station-today",
+        {
+          station: { ...station, ...changes },
+          stations: destinations,
+        },
+        theme,
+      );
+      const line = el.shadowRoot!.querySelector<HTMLElement>(".line")!;
+      expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      expect(el.shadowRoot!.querySelector("[data-status]")!.textContent).not.toMatch(
+        /outside|horario/,
+      );
+    }
+    await page.screenshot({
+      path: `__screenshots__/station-status-${locale}-${theme}-${width}.png`,
+    });
+  } finally {
+    setLocale("en");
+    await page.viewport(previous.width, previous.height);
+  }
+});
+
+it.each([false, true])(
+  "mode device=%s carries the disposition through manager approval and retry",
+  async (deviceMode) => {
+    let writes = 0;
+    const { el, calls } = await mount({ deviceMode }, (path, init) => {
+      if (path.endsWith("authorizers")) return json(managers);
+      if (init.method === "PUT")
+        return ++writes === 1
+          ? refused("authorization.not_permitted")
+          : new Response(null, { status: 204 });
+      return json({
+        destinations,
+        openDishCount: 2,
+        ...(deviceMode ? { authorizers: managers } : {}),
+      });
+    });
+    act(el);
+    const d = await dialog(el);
+    expect(d.shadowRoot!.textContent).toContain("2 unfinished dishes");
+    const choice = d.shadowRoot!.querySelector('wt-combobox[name="openDishes"]');
+    expect(choice).not.toBeNull();
+    confirm(d);
+    expect(calls.filter((c) => c.method === "PUT")).toEqual([]);
+    choice!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "send" } }));
+    await d.updateComplete;
+    confirm(d);
+    let pin = await pinStep(el);
+    const originalPeople = pin.authorizers;
+    pin.dispatchEvent(
+      new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+    );
+    if (deviceMode) {
+      await expect.poll(() => pin.authorizers).not.toBe(originalPeople);
+      await el.updateComplete;
+      pin = await pinStep(el);
+      pin.dispatchEvent(
+        new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+      );
+    }
+    await expect.poll(() => writes).toBe(2);
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
+      {
+        state: "closed",
+        sendsToStationId: "pass",
+        openDishes: "send",
+        ...(deviceMode ? { authorizer: { personId: "manager", pin: "1234" } } : {}),
+      },
+      {
+        state: "closed",
+        sendsToStationId: "pass",
+        openDishes: "send",
+        ...(deviceMode
+          ? { authorizer: { personId: "manager", pin: "1234" } }
+          : { override: { personId: "manager", pin: "1234" } }),
+      },
+    ]);
+  },
+);
+
+it("refreshes dishes that arrived after the closing read and asks before retrying", async () => {
+  let reads = 0;
+  let writes = 0;
+  const { el, calls } = await mount({}, (_path, init) => {
+    if (init.method === "GET") return json({ destinations, openDishCount: ++reads === 1 ? 0 : 1 });
+    return ++writes === 1
+      ? json(
+          { error: { code: "management.request_invalid", params: { field: "openDishes" } } },
+          400,
+        )
+      : new Response(null, { status: 204 });
+  });
+  act(el);
+  const d = await dialog(el);
+  confirm(d);
+  await expect.poll(() => reads).toBe(2);
+  await d.updateComplete;
+  const choice = d.shadowRoot!.querySelector('wt-combobox[name="openDishes"]');
+  expect(choice).not.toBeNull();
+  expect(d.shadowRoot!.textContent).toContain("1 unfinished dish");
+  expect(
+    d.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-submit]")!.disabled,
+  ).toBe(true);
+  confirm(d);
+  expect(writes).toBe(1);
+  choice!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "leave" } }));
+  await d.updateComplete;
+  confirm(d);
+  await expect.poll(() => writes).toBe(2);
+  expect(calls.at(-1)!.body).toEqual({
+    state: "closed",
+    sendsToStationId: "pass",
+    openDishes: "leave",
+  });
+});

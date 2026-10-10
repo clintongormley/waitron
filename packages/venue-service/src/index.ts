@@ -33,16 +33,11 @@ export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
 export {
-  assertDemotedStationHours,
-  cellIntervals,
   deleteSpecialDate,
   duplicateSpecialDate,
   readCalendarDays,
-  readHoursModel,
   readSpecialDate,
-  readWeekHours,
   renameSpecialDate,
-  replaceWeekHours,
   saveSpecialDate,
   type HolidayReader,
   type SpecialDateParticipant,
@@ -67,3 +62,9 @@ export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecy
 export { readNamedDaysModel, namedDaysOn, namedDaysBetween } from "./named-days.js";
 
 export { replaceZoneClosedWeek } from "./zone-closed-times.js";
+
+export {
+  stationServiceTimes,
+  type StationServiceDay,
+  type StationServiceTimes,
+} from "./station-service-times.js";

@@ -12,9 +12,9 @@ afterEach(() => {
 describe.each(["light", "dark"] as const)("station today %s", (theme) => {
   it.each([
     ["open", true, false, true, null, "open"],
-    ["opened", true, false, true, "open", "opened_by_hand"],
+    ["opened", true, false, true, "open", "open"],
     ["closed", true, false, false, "closed", "closed_by_hand"],
-    ["out of hours", true, false, false, null, "out_of_hours"],
+    ["closed without destination", true, false, false, "closed", "closed_by_hand"],
     ["default", true, true, true, null, "default"],
     ["switched off", false, false, false, null, "switched_off"],
   ] as const)(
@@ -30,7 +30,7 @@ describe.each(["light", "dark"] as const)("station today %s", (theme) => {
             isDefault,
             open,
             byHand,
-            sendsTo: open ? null : "bar",
+            sendsTo: open || _label === "closed without destination" ? null : "bar",
             why,
           },
           stations: [{ id: "bar", name: "Barra" }],
@@ -55,6 +55,7 @@ describe.each(["light", "dark"] as const)("device station today %s", (theme) => 
               init?.method === "PUT"
                 ? { error: { code: "pin.invalid", params: {} } }
                 : {
+                    openDishCount: 0,
                     destinations: [{ id: "pass", name: "Pase", isDefault: true }],
                     authorizers: [{ personId: "manager", displayName: "Ana" }],
                   },

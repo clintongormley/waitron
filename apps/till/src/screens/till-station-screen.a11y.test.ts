@@ -638,9 +638,10 @@ describe.each(["light", "dark"] as const)("operator station-today a11y (%s)", (t
       "till-station-screen",
       {
         api: stubApi({
-          stationToday: vi
-            .fn()
-            .mockResolvedValue({ destinations: [{ id: "st-1", name: "Cocina", isDefault: true }] }),
+          stationToday: vi.fn().mockResolvedValue({
+            destinations: [{ id: "st-1", name: "Cocina", isDefault: true }],
+            openDishCount: 0,
+          }),
         }),
       },
       theme,

@@ -40,7 +40,6 @@ import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-ti
 
 // The one-default partial unique is pinned in packages/db/src/schema/kitchen-stations.test.ts.
 const LOCALE = "es-ES";
-// Venue-service's tables too: replacing the default reads the outgoing station's saved hours.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,

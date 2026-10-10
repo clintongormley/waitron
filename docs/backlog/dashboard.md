@@ -581,6 +581,8 @@ there is no copy to keep in step.
 The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIFIED**.
 **Next action:** measure the browser's media preference and the selected `<picture>` source
 against `data-wt-theme` in the live dashboard before deciding a fix.
+A366-4B's 2026-10-09 sidebar captures also show a dark wordmark with the root and fixture host
+set to the dark theme. The media preference and selected source were not measured there either.
 
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
@@ -765,6 +767,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
 - **Re-check the venue-service screens once after A366 slice 7.** Each A366 slice builds the rule
   into the forms it creates or rewrites (owner, 2026-10-08); after slice 7 lands, run batch 4b's
   audit once more over `packages/venue-service/src/dashboard/` and gate any form a slice missed.
+- **2026-10-10, A366 slice 4 Part B:** the fallback editor and its checks below are retired;
+  Settings retains rest-of-order and timing editors. The batch 4d account records its earlier scope.
 - **Batch 4d — LANDED in #1426 (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer
   choices, watcher Rename/follows/zones/pass/printer choices, and Settings rest/fallback/minutes
   use the shared Save state. An untouched fallback stays open without a confirmation or write;

@@ -55,7 +55,6 @@ describe("OpeningHoursApi", () => {
           "menu_day_timetables",
           "menu_slots",
           "special_dates",
-          "special_date_hours",
           "departments",
           "catalogues",
           "locations",
@@ -164,3 +163,108 @@ it("encodes zone closing-time writes and preserves their bodies", async () => {
     [`${base}/special-dates/s%2F1/zone-closed-times/z%2F1`, "PUT", { ranges }],
   ]);
 });
+
+it.each([
+  "hours_week_cells",
+  "hours_week_periods",
+  "special_date_hours",
+  "special_date_hours_periods",
+  "station_fallbacks",
+])("Opening hours ignores retired %s changes and still applies a period refresh", async (type) => {
+  const live = new LiveData();
+  let current = model;
+  const request = vi.fn(async () => current);
+  const api = new OpeningHoursApi(request as DashboardRequest, live);
+  const received: OpeningHoursModel[] = [];
+  const stop = api.watchOpeningHours((value) => received.push(value), vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(received).toEqual([model]));
+    current = { ...model, dayCutover: "07:00" };
+    live.invalidate([{ type }]);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(received).toEqual([model]);
+    live.invalidate([{ type: "menu_periods" }]);
+    await vi.waitFor(() => expect(received).toEqual([model, current]));
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
+it("loads and refreshes the station picker as passive session activity", async () => {
+  const live = new LiveData();
+  const stations = [{ id: "bar", name: "Bar", active: true, isDefault: true }];
+  const request = vi.fn(async () => stations);
+  const api = new OpeningHoursApi(request as DashboardRequest, live);
+  const apply = vi.fn();
+  const stop = api.watchStations(apply, vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(stations));
+    live.invalidate([{ type: "kitchen_stations" }]);
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(request.mock.calls).toEqual([
+      ["/management-api/stations?includeDisabled=true", "GET", undefined, { passive: true }],
+      ["/management-api/stations?includeDisabled=true", "GET", undefined, { passive: true }],
+    ]);
+  } finally {
+    stop();
+  }
+  live.invalidate([{ type: "kitchen_stations" }]);
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+it.each(["sections", "section_members", "catalogues"])(
+  "refreshes worked-out station times when menu composition changes in %s",
+  async (type) => {
+    const live = new LiveData();
+    const before = {
+      always: null,
+      days: [
+        "2026-10-12",
+        "2026-10-13",
+        "2026-10-14",
+        "2026-10-15",
+        "2026-10-16",
+        "2026-10-17",
+        "2026-10-18",
+      ].map((date) => ({ date, departments: [] })),
+    };
+    const after = {
+      always: null,
+      days: [
+        {
+          date: "2026-10-12",
+          departments: [
+            {
+              departmentId: "dining",
+              ranges: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }],
+            },
+          ],
+        },
+        ...before.days.slice(1),
+      ],
+    };
+    const request = vi.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const received: unknown[] = [];
+    const stop = api.watchStationTimes(
+      "bar",
+      "2026-10-12",
+      "2026-10-18",
+      false,
+      (times) => received.push(times),
+      vi.fn(),
+      vi.fn(),
+    );
+    try {
+      await vi.waitFor(() => expect(received).toEqual([before]));
+      live.invalidate([{ type }]);
+      await vi.waitFor(() => expect(received).toEqual([before, after]));
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+    }
+  },
+);

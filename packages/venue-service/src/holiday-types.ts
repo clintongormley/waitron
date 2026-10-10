@@ -55,7 +55,6 @@ export interface NamedDay {
   repeats: boolean;
   ownHours: boolean;
   closeWholeVenue: boolean;
-  hasStationHours: boolean;
 }
 export interface NamedCalendarDay {
   date: LocalDate;

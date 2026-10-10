@@ -324,15 +324,13 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
 describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (theme) => {
   it.each([
     "closed",
-    "fallback",
-    "fallback-confirmation",
     "switch-off",
     "inactive",
     "clock-unreadable",
     "opened-by-hand",
     "closed-by-hand",
     "no-replacement",
-    "refused-fallback",
+    "refused-rest",
     "refused-switch-off",
   ] as const)("checks %s", async (state) => {
     setLocale("en");
@@ -398,10 +396,10 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
                 open: state === "opened-by-hand",
                 why:
                   state === "opened-by-hand"
-                    ? "opened_by_hand"
+                    ? "open"
                     : state === "closed-by-hand"
                       ? "closed_by_hand"
-                      : "out_of_hours",
+                      : "closed_by_hand",
               },
               hours: [
                 {
@@ -419,39 +417,33 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
           ],
         },
       }),
-      setStationFallback: vi.fn().mockRejectedValue({ code: "station.fallback_loop" }),
+      updateStation: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "showsRestOfOrder" },
+      }),
+      readStationClosing: vi.fn().mockResolvedValue({ openDishCount: 0, destinations: [] }),
       deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
     } as unknown as PrepStationsApi;
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    const settingsTable = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
-    const settingsQ = (selector: string) =>
-      settingsTable.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    const fallbackState = state.includes("fallback");
-    if (!fallbackState) {
-      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
-        new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
-      );
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
+    );
+    await el.updateComplete;
+    let restEditor: HTMLElementTagNameMap["prep-station-editor"] | undefined;
+    if (state === "refused-rest") {
+      const table = el
+        .shadowRoot!.querySelector("prep-station-table")!
+        .shadowRoot!.querySelector("wt-data-table")!;
+      await (table as HTMLElementTagNameMap["wt-data-table"]).updateComplete;
+      table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
       await el.updateComplete;
-    }
-    if (fallbackState) {
-      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
-        new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
-      );
-      await el.updateComplete;
-      await (settingsTable as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-      settingsQ('[data-test="edit-settings-fallback-bar"]').click();
-      await el.updateComplete;
-      if (state === "fallback-confirmation") {
-        settingsQ('[data-test="settings-choice"]').dispatchEvent(
-          new CustomEvent("wt-change", { detail: { value: "" } }),
-        );
-        await el.updateComplete;
-        settingsQ('[data-test="save-settings-cell"]').click();
-        await el.updateComplete;
-        expect(settingsQ('[data-test="settings-fallback-confirmation"]')).not.toBeNull();
-      }
+      restEditor =
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["prep-station-editor"]>(
+          "prep-station-editor",
+        )!;
+      await restEditor.updateComplete;
     }
     const action = state === "switch-off" || state === "refused-switch-off" ? "disable" : null;
     if (action) {
@@ -464,34 +456,53 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       await el.updateComplete;
     }
     if (state.startsWith("refused-")) {
-      if (state === "refused-fallback") {
-        settingsQ('[data-test="settings-choice"]').dispatchEvent(
-          new CustomEvent("wt-change", { detail: { value: "" } }),
-        );
-        await el.updateComplete;
-        settingsQ('[data-test="save-settings-cell"]').click();
-        await el.updateComplete;
-        settingsQ('[data-test="save-settings-cell"]').click();
+      if (state === "refused-rest") {
+        restEditor!
+          .shadowRoot!.querySelector("wt-switch[name=showsRestOfOrder]")!
+          .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+        await restEditor!.updateComplete;
+        restEditor!
+          .shadowRoot!.querySelector<HTMLElement>('[data-test="save-station-edit"]')!
+          .click();
       } else {
-        el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
-        await el.updateComplete;
-        if (state === "refused-switch-off")
-          el.shadowRoot!.querySelector<HTMLElement>(
-            '[data-test="confirm-station-action"]',
-          )!.click();
+        const dialog = el.shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<boolean> }
+        >("station-disable-dialog")!;
+        await dialog.updateComplete;
+        await expect
+          .poll(() =>
+            dialog
+              .shadowRoot!.querySelector("[data-test=disable-confirm]")
+              ?.hasAttribute("disabled"),
+          )
+          .toBe(false);
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=disable-confirm]")!.click();
       }
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
-      if (state === "refused-fallback") {
-        const choice = settingsQ('[data-test="settings-choice"]') as HTMLElement & {
-          error: string;
-          value: string;
-        };
-        expect(choice.error).toContain("loop");
-        expect(choice.value).toBe("");
-        expect(settingsQ('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
+      if (state === "refused-rest") {
+        await restEditor!.updateComplete;
+        expect(
+          restEditor!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+            "wt-form-actions",
+          )!.error,
+        ).toContain("could not be saved");
+        expect(
+          restEditor!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+            "wt-switch[name=showsRestOfOrder]",
+          )!.checked,
+        ).toBe(true);
+        expect(
+          restEditor!
+            .shadowRoot!.querySelector('[data-test="save-station-edit"]')!
+            .hasAttribute("disabled"),
+        ).toBe(false);
       } else {
-        expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+        expect(
+          el
+            .shadowRoot!.querySelector("station-disable-dialog")!
+            .shadowRoot!.querySelector('[role="alert"]'),
+        ).not.toBeNull();
       }
     }
     await expectNoA11yViolations(host);

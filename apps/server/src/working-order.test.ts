@@ -1,6 +1,5 @@
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
-import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -102,12 +101,9 @@ import {
   WEEK_DISPLAY_ORDER,
   departments,
   readHolidayFacts,
-  replaceWeekHours,
   replaceMenuWeek,
   saveSpecialDate,
-  setStationFallback,
   setStationToday,
-  stationFallbacks,
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
@@ -3368,22 +3364,18 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
 });
 
 describe("opening hours", () => {
-  it("refuses a fallback loop when both stations are closed", async () => {
+  it("uses the default when today's destinations loop through two closed stations", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await tx.insert(stationFallbacks).values([
-        { stationId: upstairs.id, fallbackStationId: downstairs.id },
-        { stationId: downstairs.id, fallbackStationId: upstairs.id },
-      ]);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const secondProduct = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const orderId = randomUUID();
@@ -3392,22 +3384,20 @@ describe("opening hours", () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
       try {
-        await setStationToday(tx, cfg, upstairs.id, "closed", new Date());
-        await setStationToday(tx, cfg, downstairs.id, "closed", new Date());
-        await expect(
-          fireLines(tx, cfg, orderId, await fireableLines(tx, orderId)),
-        ).rejects.toMatchObject({
-          code: "station.no_replacement",
-          params: { stationId: upstairs.id, productIds: [product, secondProduct] },
-        });
-        expect(await ticketItemsFor(tx, orderId)).toEqual([]);
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date(), downstairs.id);
+        await setStationToday(tx, cfg, downstairs.id, "closed", new Date(), upstairs.id);
+        await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
+        expect(await ticketItemsFor(tx, orderId)).toEqual([
+          { productId: product, stationId: kitchen.id, state: "queued" },
+          { productId: secondProduct, stationId: kitchen.id, state: "queued" },
+        ]);
       } finally {
         vi.useRealTimers();
       }
     });
   });
 
-  it("routes at closing time to a fallback", async () => {
+  it("routes to the destination chosen when closing for today", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx
@@ -3419,14 +3409,11 @@ describe("opening hours", () => {
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await seedStationWeek(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
-      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T19:00:00Z"));
       try {
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date(), downstairs.id);
         const { id } = await fireContextless(tx, cfg, [product]);
         expect((await ticketItemsFor(tx, id))[0]!.stationId).toBe(downstairs.id);
       } finally {
@@ -3435,7 +3422,7 @@ describe("opening hours", () => {
     });
   });
 
-  it("routes only work fired after an hours change to the fallback, leaving sent work as it was", async () => {
+  it("routes only new work to today's chosen destination, leaving sent work as it was", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx
@@ -3447,10 +3434,6 @@ describe("opening hours", () => {
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
-      await seedStationWeek(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "23:00" },
-      ]);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       vi.useFakeTimers({ toFake: ["Date"] });
       // Friday 2 October, 20:00 in Madrid.
@@ -3468,13 +3451,7 @@ describe("opening hours", () => {
         const before = await recorded();
         expect(before[0].map((item) => item.stationId)).toEqual([upstairs.id]);
 
-        await replaceWeekHours(
-          tx,
-          cfg,
-          { kind: "station", id: upstairs.id },
-          WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, cell: { mode: "closed", periods: [] } })),
-          new Date(),
-        );
+        await setStationToday(tx, cfg, upstairs.id, "closed", new Date(), downstairs.id);
         const second = await fireContextless(tx, cfg, [product]);
         expect((await ticketItemsFor(tx, second.id))[0]!.stationId).toBe(downstairs.id);
         expect(await recorded()).toEqual(before);
@@ -3528,9 +3505,6 @@ describe("opening hours", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await seedStationWeek(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T20:00:00Z"));
@@ -3550,7 +3524,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
@@ -3605,9 +3579,16 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await expect(
-          updateOrderLine(tx, cfg, tabId, 1, { note: "Sin limón" }, lastRevision!),
-        ).rejects.toMatchObject({ code: "station.no_replacement" });
+        await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin limón" }, lastRevision!);
+        expect(
+          await tx
+            .select({ stationId: ticketItems.stationId, note: ticketItems.note })
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderId, tabId)),
+        ).toEqual([
+          { stationId: upstairs.id, note: "Sin hielo" },
+          { stationId: kitchen.id, note: "Sin limón" },
+        ]);
       } finally {
         vi.useRealTimers();
       }
@@ -3671,17 +3652,21 @@ describe("opening hours", () => {
     await withTransaction(db, async (tx) => {
       await tx
         .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
+        .set({ timeZone: "Europe/Madrid", dayCutover: "21:00:00" })
         .where(eq(locations.id, cfg.locationId));
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await seedStationWeek(tx, cfg, upstairs.id, [
-        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-      ]);
-      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
+      await setStationToday(
+        tx,
+        cfg,
+        upstairs.id,
+        "closed",
+        new Date("2026-10-02T19:00:00Z"),
+        downstairs.id,
+      );
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
@@ -3747,14 +3732,15 @@ describe("opening hours", () => {
     });
   });
 
-  it("refuses a closed station with no fallback before writing and honors a stored choice", async () => {
+  it("refuses a closed station with no active default before writing and honors a stored choice", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      await deactivateStation(tx, cfg, kitchen.id);
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
@@ -3818,7 +3804,7 @@ describe("a sale on a Spanish public holiday", () => {
   const HOLIDAY = "2026-10-12";
   const ORDINARY = "2026-10-05";
 
-  it("is made and routed by the station's own Hours as on an ordinary Monday, until the venue saves a special date", async () => {
+  it("uses the same routing and prices on a public holiday until a station closes for today", async () => {
     const { cfg, catalogueId, cafeId } = await setupVenue();
     const { upstairs, downstairs, product } = await withTransaction(db, async (tx) => {
       await tx
@@ -3834,10 +3820,6 @@ describe("a sale on a Spanish public holiday", () => {
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
-      await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
-      await seedStationWeek(tx, cfg, upstairs.id, [
-        { weekday: 1, opensAt: "19:00", closesAt: "23:00" },
-      ]);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       return { upstairs, downstairs, product };
     });
@@ -3899,14 +3881,19 @@ describe("a sale on a Spanish public holiday", () => {
           date: HOLIDAY,
           name: "Upstairs closed",
           closeWholeVenue: false,
-          cells: [
-            {
-              subject: { kind: "station", id: upstairs.id },
-              cell: { mode: "closed", periods: [] },
-            },
-          ],
+          cells: [],
         },
         new Date(`${ORDINARY}T10:00:00Z`),
+      ),
+    );
+    await withTransaction(db, (tx) =>
+      setStationToday(
+        tx,
+        cfg,
+        upstairs.id,
+        "closed",
+        new Date(`${HOLIDAY}T10:00:00Z`),
+        downstairs.id,
       ),
     );
     const afterSpecialDate = await saleOn(HOLIDAY);

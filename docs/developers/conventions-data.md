@@ -429,7 +429,42 @@ were deleted, while the weekday timetable and its slot remained. The `local_holi
 absent afterwards. These losses are part of the reset requirement too.
 
 
+### Prep stations without authored hours
+
+**2026-10-10, A366 slice 4 Part B:** prep stations have no authored hours or configured
+fallbacks. Routing uses an active station unless it is closed for today's business date.
+A closed station follows its chosen daily destination; a disabled station uses the active default.
+A missing destination or a cycle also ends at the active default. With none, the route has no
+replacement (`routing.ts`). Reopening deletes the daily state; it does not move sent work back.
+
+Closing or disabling with unfinished dishes requires a Send or Leave choice. Send moves waiting
+unserved queued or held dishes; started dishes stay. Leave keeps unfinished dishes at their station,
+including held dishes when released (`apps/server/src/station-closing.ts`). The dashboard records
+moves with the authenticated person's id and no device; till and device closures record their
+actors in `ticket_item_moves`.
+
+Opening hours' prep-station view is read-only. `stationServiceTimes` combines routed products on
+period menus with department hours, subtracts zone closed times, and joins overlapping shares of
+the same period. Its normal week ignores named days; its dated week applies them. Planning ignores
+today's station closures and kept-open extensions. Default and disabled stations return a status
+sentence without a grid.
+
+Venue-service migration `0047_retire_station_hours_fallbacks.sql` drops `hours_week_cells`,
+`hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.
+The old Station hours page, client, wire types, readers and writers are removed. Configuration
+exports omit those tables; import refuses them with `setup.request_invalid`, field `tables`.
+Named days retain their calendar facts and department/zone schedules; they no longer copy,
+validate or return station cells. The Calendar uses `NamedDaysApi` and its own dependencies.
+
+Core migration `0131_station_retention_and_dashboard_moves.sql` adds held-dish retention and
+permits a person-only move, refusing a move with neither person nor device. The populated upgrade
+walk passed on this branch; station-hours and fallback settings are deleted. The slice 4 plan
+requires a reset warning only if that walk reports a casualty.
+The earlier hours accounts below describe their dated implementations.
+
 ### Earlier A261 hours storage
+
+The dated slice 1 account below records the model before slice 4 retired it.
 
 **2026-10-08, A366 slice 1:** department opening hours now come from service periods.
 The Hours grid described below now edits station restrictions only. Its `special_dates` calendar
@@ -934,6 +969,10 @@ each column's name was searched across `packages/` and `apps/` for a text compar
   for the whole-second `.000Z` spelling. The paging cursors that are compared with `created_at` or
   `issued_at` are checked against the millisecond spelling before use (the `CURSOR` pattern in
   `apps/server/src/orders-api.ts` and in `packages/adjustments/src/routes.ts`).
+**2026-10-10, A366 slice 4 Part B:** the station period tables and their `storedTime` writer
+in the sweep below are retired. The booking writer remains; the account below records the
+2026-10-03 sweep.
+
 - **Times of day normalised by a helper.** `bookings.booking_time` and the opening periods'
   `opens_at` and `closes_at` (`hours_week_periods`, `special_date_hours_periods`) go through a
   `storedTime` helper (`packages/bookings/src/bookings.ts`,
@@ -1258,11 +1297,9 @@ number the same as its own, as when it names none and the parent has no primary 
 argument, `{ createdAt, timeZone, dayCutover }`, which `validateConfigurationBundle`
 (`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
 `validate` before the import writes anything. Core, catalogue and media take only the tables.
-Venue-service's station-hours validator uses the export date and zone to leave past neighbour
-pairs out and check skipped endpoints. Its menu validator uses the exported day changeover:
-see the service-period checks below. The station-hours validator still reads no changeover;
-when a save cannot read the cutover, the save checks every pair while import may leave past
-pairs out. A default station's retained cells are not checked.
+Venue-service's menu validator uses the exported day changeover; see the service-period checks
+below. Named-day field and occurrence validation takes only the tables. The station-hours
+validator was removed in A366 slice 4.
 
 ### Service-period configuration
 
@@ -1292,15 +1329,16 @@ morning; an end exactly at changeover is next morning and a start there is the b
 Removing each endpoint-date branch in the disposable checkout failed its skipped-time
 assertion. Unlike station hours, the menu writer and import check skipped endpoints on past
 business dates too (`saveSpecialDateMenus`, `packages/venue-service/src/menu-timetable.ts`).
-The station-hour assertions were retained. Remaining schema and screen work is tracked in
-A366's plan; these experiments are not a complete-slice result.
+The station-hour assertions were retained at that checkpoint. **2026-10-10:** slice 4 Part B
+retires their subject, the station-hours schema and its writers. The menu endpoint checks remain.
+These experiments are not a complete-slice result.
 
 ### Today's station destination and period extension
 
-A station's by-hand state and chosen destination belong to one business date. Routing tries
-that destination before the configured fallback. If a walk that followed today's destination
-finds no open station, the active venue default receives the work. A failed walk that never
-followed today's destination keeps its previous no-replacement result. Opening the station does not move already sent work back.
+A station's by-hand state and chosen destination belong to one business date. A closed station
+follows that destination, then the active venue default if the destination is missing or the walk
+cycles. A disabled station uses the active default directly. With no active default, a failed walk
+has no replacement. Opening the station does not move already sent work back.
 Period extensions also belong to one business date: the resolver overlays the stored range
 before choosing the running and ended menus. The extension read offers future quarter-hours
 through the business-day boundary. Configuration exports omit `station_day_states`,

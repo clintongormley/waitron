@@ -1,3 +1,4 @@
+import type { DateHoursCell } from "./testing/legacy-station-types.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -38,7 +39,7 @@ import {
 } from "./hours.js";
 import { addDays } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
-import type { SpecialDateInput } from "./hours-types.js";
+import type { SpecialDateInput as NamedDayInput } from "./hours-types.js";
 import {
   MENU_TIMETABLE_CALENDAR_PARTICIPANT,
   deleteMenuPeriod,
@@ -70,6 +71,8 @@ import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import type { VenueScope } from "./operations.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
+
+type SpecialDateInput = NamedDayInput & { cells: DateHoursCell[] };
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -755,7 +758,7 @@ const turnOffOwnHours = (v: { cfg: VenueScope }, id: string) =>
       tx,
       v.cfg,
       id,
-      { ...day, ownHours: false },
+      { ...day, ownHours: false, cells: [] },
       AT,
       VENUE_SERVICE_CALENDAR_PARTICIPANTS,
     );
@@ -1310,7 +1313,6 @@ describe("a period no longer placed anywhere but a past special date", () => {
       kind: "working_day",
       repeats: false,
       ownHours: true,
-      hasStationHours: false,
       id: lastChristmas.id,
       date: "2025-12-25",
       name: "Navidad",
@@ -2022,7 +2024,6 @@ describe("the editor's model", () => {
         kind: "working_day",
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         id: yesterday.id,
         date: "2026-10-06",
         name: "Ayer",
@@ -2032,7 +2033,6 @@ describe("the editor's model", () => {
         kind: "working_day",
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         id: christmas.id,
         date: CHRISTMAS,
         name: "Navidad",
@@ -2238,7 +2238,6 @@ describe("the editor's model of two venues", () => {
         kind: "working_day",
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         id: ours.id,
         date: CHRISTMAS,
         name: "Navidad",
@@ -2783,7 +2782,6 @@ describe("department service periods", () => {
         kind: "holiday",
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         id: date.id,
         date: FRIDAY,
         name: "Navidad",

@@ -36,30 +36,15 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ).toEqual([["menu_period_staff_menus", "state"]]);
   });
   it("replicates opening hours, station fallbacks and today's state", () => {
-    const timing = [
-      "station_hours",
-      "department_hours",
-      "station_fallbacks",
-      "station_day_states",
-      "hours_week_cells",
-      "hours_week_periods",
-      "special_dates",
-      "special_date_hours",
-      "special_date_hours_periods",
-    ];
+    const timing = ["station_hours", "department_hours", "station_day_states", "special_dates"];
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => timing.includes(entry.table)).map((entry) => [
         entry.table,
         entry.class,
       ]),
     ).toEqual([
-      ["station_fallbacks", "state"],
       ["station_day_states", "state"],
-      ["hours_week_cells", "state"],
-      ["hours_week_periods", "state"],
       ["special_dates", "state"],
-      ["special_date_hours", "state"],
-      ["special_date_hours_periods", "state"],
     ]);
   });
   it("classifies routing_cells as replicated state", () => {

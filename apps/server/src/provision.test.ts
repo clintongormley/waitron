@@ -23,7 +23,6 @@ import { createCategory } from "@waitron/catalogue";
 import {
   readHolidays,
   readHolidayAreaModel,
-  replaceWeekHours,
   saveHolidayArea,
   saveSpecialDate,
   setRoutingCell,
@@ -479,7 +478,7 @@ describe("clearProvisionFixture", () => {
     expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });
   });
 
-  it("clears a venue holding opening hours, periods before their cells and dates before their owners", async () => {
+  it("clears a venue holding named dates before their owners", async () => {
     const db = ownerDb();
     const result = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -488,28 +487,11 @@ describe("clearProvisionFixture", () => {
     const cfg = { locationId: brandLocationId(result.locationId) };
     const at = new Date("2026-10-06T10:00:00Z");
     await withTransaction(db, async (tx) => {
-      const [pass] = await tx
+      await tx
         .insert(kitchenStations)
         .values({ locationId: result.locationId, name: "Restaurant pass" })
         .returning({ id: kitchenStations.id });
-      const restaurant = { kind: "station" as const, id: pass!.id };
-      const [bar] = await tx
-        .insert(kitchenStations)
-        .values({ locationId: result.locationId, name: "Bar" })
-        .returning({ id: kitchenStations.id });
-      const lunch = () => ({
-        mode: "periods" as const,
-        periods: [{ id: randomUUID(), opensAt: "12:00", closesAt: "16:00" }],
-      });
-      const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: lunch() }));
-      await replaceWeekHours(tx, cfg, restaurant, week, at);
-      await replaceWeekHours(
-        tx,
-        cfg,
-        { kind: "station", id: bar!.id },
-        week.map((day) => ({ ...day, cell: lunch() })),
-        at,
-      );
+      await tx.insert(kitchenStations).values({ locationId: result.locationId, name: "Bar" });
       await saveSpecialDate(
         tx,
         cfg,
@@ -518,10 +500,6 @@ describe("clearProvisionFixture", () => {
           date: "2026-12-24",
           name: "Christmas Eve",
           closeWholeVenue: false,
-          cells: [
-            { subject: restaurant, cell: lunch() },
-            { subject: { kind: "station", id: bar!.id }, cell: lunch() },
-          ],
         },
         at,
       );
@@ -531,20 +509,12 @@ describe("clearProvisionFixture", () => {
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from hours_week_cells) as week_cells,
-        (select cast(count(*) as int) from hours_week_periods) as week_periods,
         (select cast(count(*) as int) from special_dates) as special_dates,
-        (select cast(count(*) as int) from special_date_hours) as date_cells,
-        (select cast(count(*) as int) from special_date_hours_periods) as date_periods,
         (select cast(count(*) as int) from departments) as departments,
         (select cast(count(*) as int) from kitchen_stations) as stations,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({
-      week_cells: 0,
-      week_periods: 0,
       special_dates: 0,
-      date_cells: 0,
-      date_periods: 0,
       departments: 0,
       stations: 0,
       locations: 0,

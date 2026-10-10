@@ -3,8 +3,8 @@ import { kitchenStations, type Transaction } from "@waitron/db";
 import { readLocationClock, venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
-import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
-import { routingModel, scheduledStationStatus } from "./routing-store.js";
+import { stationDayStates } from "./schema/station-times.js";
+import { routingModel } from "./routing-store.js";
 import "./errors.js";
 
 export async function venueMoment(
@@ -28,47 +28,6 @@ async function requireStation(tx: Transaction, cfg: VenueScope, stationId: strin
   return station;
 }
 
-export async function setStationFallback(
-  tx: Transaction,
-  cfg: VenueScope,
-  stationId: string,
-  fallbackStationId: string | null,
-): Promise<void> {
-  await requireStation(tx, cfg, stationId);
-  if (fallbackStationId === null) {
-    await tx.delete(stationFallbacks).where(eq(stationFallbacks.stationId, stationId));
-    return;
-  }
-  const [fallback] = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, fallbackStationId),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
-  if (fallback === undefined)
-    throw new AppError("route.station_inactive", { stationId: fallbackStationId });
-  const seen = new Set<string>();
-  let current: string | null = fallbackStationId;
-  while (current !== null && !seen.has(current)) {
-    if (current === stationId)
-      throw new AppError("station.fallback_loop", { stationId, fallbackStationId });
-    seen.add(current);
-    const [row]: { fallbackStationId: string }[] = await tx
-      .select({ fallbackStationId: stationFallbacks.fallbackStationId })
-      .from(stationFallbacks)
-      .where(eq(stationFallbacks.stationId, current));
-    current = row?.fallbackStationId ?? null;
-  }
-  await tx
-    .insert(stationFallbacks)
-    .values({ stationId, fallbackStationId })
-    .onConflictDoUpdate({ target: stationFallbacks.stationId, set: { fallbackStationId } });
-}
-
 export async function setStationToday(
   tx: Transaction,
   cfg: VenueScope,
@@ -88,7 +47,7 @@ export async function setStationToday(
         ne(stationDayStates.businessDay, moment.businessDay),
       ),
     );
-  if (state === null) {
+  if (state !== "closed") {
     await tx
       .delete(stationDayStates)
       .where(
@@ -99,18 +58,18 @@ export async function setStationToday(
       );
     return;
   }
-  const destination = state === "closed" ? (sendsToStationId ?? null) : null;
+  const destination = sendsToStationId ?? null;
   await tx
     .insert(stationDayStates)
     .values({
       stationId,
       businessDay: moment.businessDay,
-      open: state === "open",
+      open: false,
       sendsToStationId: destination,
     })
     .onConflictDoUpdate({
       target: [stationDayStates.stationId, stationDayStates.businessDay],
-      set: { open: state === "open", sendsToStationId: destination },
+      set: { open: false, sendsToStationId: destination },
     });
 }
 
@@ -201,6 +160,5 @@ export async function openStationForToday(
 ): Promise<void> {
   const station = await requireStation(tx, cfg, stationId);
   if (!station.active) throw new AppError("route.station_inactive", { stationId });
-  const scheduled = await scheduledStationStatus(tx, cfg, stationId, at);
-  await setStationToday(tx, cfg, stationId, scheduled.open ? null : "open", at);
+  await setStationToday(tx, cfg, stationId, null, at);
 }

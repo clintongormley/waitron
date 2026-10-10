@@ -373,8 +373,7 @@ export interface StationTodayState {
   readonly name: string;
   readonly byHand: "open" | "closed" | null;
   readonly sendsTo: string | null;
-  readonly why:
-    "default" | "open" | "opened_by_hand" | "closed_by_hand" | "out_of_hours" | "switched_off";
+  readonly why: "default" | "open" | "closed_by_hand" | "switched_off";
 }
 
 /** Rules and venue moment loaded once at `at`. Both questions use that snapshot and the

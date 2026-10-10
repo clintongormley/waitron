@@ -145,3 +145,27 @@ it("a request refusal keeps the chosen draft protected and reordering choices do
   cancel(form);
   expect((await question(app)).open).toBe(true);
 });
+
+it("protects an edited open-dish choice even when the destination stays unchanged", async () => {
+  const { app, form } = await mount();
+  form.openDishCount = 2;
+  await form.updateComplete;
+  const choice = form.shadowRoot!.querySelector('wt-combobox[name="openDishes"]');
+  expect(choice).not.toBeNull();
+  choice!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "leave" } }));
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  cancel(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[name="openDishes"]',
+    )!.value,
+  ).toBe("leave");
+  expect(app.closes).toBe(0);
+  form.commit();
+  expect(unload()).toBe(false);
+});

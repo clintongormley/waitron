@@ -102,31 +102,31 @@ it("preserves the Opening hours tab and department a link names when the dashboa
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/deli");
 });
 
-it("preserves the Station hours tab and the station a link names when the dashboard rewrites its destination", () => {
+it("ignores a retired Station hours station child when rewriting its destination", () => {
   history.replaceState(null, "", "/manage/hours/view/week/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("department")).toBeNull();
-  expect(url.read("station")).toBe("bar");
+  expect(url.read("station")).toBeNull();
   url.write({ dashboard: "hours" }, true);
-  expect(location.pathname).toBe("/manage/hours/view/week/station/bar");
+  expect(location.pathname).toBe("/manage/hours/view/week");
   url.write({ station: null, department: "deli" }, true);
   expect(location.pathname).toBe("/manage/hours/view/week");
   expect(url.read("department")).toBeNull();
 });
 
-it("drops a department from a Station hours destination while preserving its station", () => {
+it("drops station and department children from a retired Station hours destination", () => {
   history.replaceState(null, "", "/manage/hours/view/calendar/department/deli/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("department")).toBeNull();
-  expect(url.read("station")).toBe("bar");
+  expect(url.read("station")).toBeNull();
   url.write({ dashboard: "hours" }, true);
-  expect(location.pathname).toBe("/manage/hours/view/calendar/station/bar");
+  expect(location.pathname).toBe("/manage/hours/view/calendar");
 });
 
 it("preserves the explicit menu price filter when the dashboard rewrites its destination", () => {
@@ -180,4 +180,15 @@ it("draws the Calendar's own-hours clock from the dashboard registry", async () 
   await icon.updateComplete;
   expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
   icon.remove();
+});
+
+it("declares no Station hours destination while retaining Opening hours navigation", () => {
+  expect(dashboardPath.children).not.toHaveProperty("hours");
+  expect(dashboardPath.children!["opening-hours"]).toEqual({
+    view: "view",
+    department: "department",
+    zone: "zone",
+    station: "station",
+    month: "month",
+  });
 });

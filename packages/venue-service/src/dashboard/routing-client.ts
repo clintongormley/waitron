@@ -11,6 +11,13 @@ import type {
 } from "../routing-types.js";
 import type { WatcherView } from "./watchers-seen.js";
 
+export interface StationClosing {
+  openDishCount: number;
+  destinations: readonly { id: string; name: string; isDefault: boolean }[];
+}
+export type StationDisableChoice =
+  { openDishes: "send"; sendsToStationId: string } | { openDishes: "leave" };
+
 export interface OutputsDown {
   printersDown: {
     stationId: string;
@@ -159,16 +166,18 @@ export class PrepStationsApi {
   reorderStations(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/stations/order", "PUT", { ids });
   }
-  deactivateStation(id: string): Promise<void> {
-    return this.request(`/management-api/stations/${id}`, "DELETE");
+  readStationClosing(id: string): Promise<StationClosing> {
+    return this.request(`/management-api/stations/${id}/closing`, "GET", undefined, {
+      passive: true,
+    });
+  }
+  deactivateStation(id: string, choice?: StationDisableChoice): Promise<void> {
+    return choice === undefined
+      ? this.request(`/management-api/stations/${id}`, "DELETE")
+      : this.request(`/management-api/stations/${id}`, "DELETE", choice);
   }
   activateStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", { active: true });
-  }
-  setStationFallback(id: string, fallbackStationId: string | null): Promise<void> {
-    return this.request(`/management-api/venue-service/stations/${id}/fallback`, "PUT", {
-      fallbackStationId,
-    });
   }
 
   listOutputsDown(): Promise<OutputsDown> {

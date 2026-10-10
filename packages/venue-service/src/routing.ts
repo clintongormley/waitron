@@ -1,5 +1,4 @@
 import type { ExtraMakerOutcome, PreparationRoute } from "@waitron/module";
-import { addDays } from "./hours-rules.js";
 import type {
   CellAddress,
   RoutingCell,
@@ -54,31 +53,21 @@ export interface DayPeriod {
 }
 
 export interface StationTiming {
-  readonly fallbackId: string | null;
-  readonly hours: readonly WeeklyInterval[];
   readonly today: "open" | "closed" | null;
   readonly todaySendsTo?: string | null;
-  /** The standard week has hours set; when absent, any `hours` at all mean it has. */
-  readonly weekSet?: boolean;
-  /** Special-date hours by calendar date, `[]` for Closed; a date not listed uses the week. */
-  readonly dates?: ReadonlyMap<string, readonly DayPeriod[]>;
 }
 
 export interface RoutingMoment {
   readonly weekday: number;
   readonly timeOfDay: string;
-  /** The calendar date that owns `timeOfDay`; without one only the standard week applies. */
   readonly civilDate?: string;
   /** The running period by department id, null when none runs; absent: Any other time. */
   readonly periods?: ReadonlyMap<string, string | null>;
 }
 
 export type StationStatus =
-  | {
-      readonly open: true;
-      readonly why: "default" | "opened_by_hand" | "in_hours" | "no_hours" | "time_not_applied";
-    }
-  | { readonly open: false; readonly why: "switched_off" | "closed_by_hand" | "out_of_hours" };
+  | { readonly open: true; readonly why: "default" | "open" }
+  | { readonly open: false; readonly why: "switched_off" | "closed_by_hand" };
 
 export interface ProductFacts {
   readonly productId: string;
@@ -88,7 +77,7 @@ export interface ProductFacts {
 
 export interface FallbackStep {
   readonly stationId: string;
-  readonly why: "switched_off" | "closed_by_hand" | "out_of_hours";
+  readonly why: "switched_off" | "closed_by_hand";
 }
 
 export interface MakerChoice {
@@ -219,48 +208,9 @@ export function stationStatus(
 ): StationStatus {
   if (!rules.activeStationIds.has(stationId)) return { open: false, why: "switched_off" };
   if (stationId === rules.defaultStationId) return { open: true, why: "default" };
-  if (moment === null) return { open: true, why: "time_not_applied" };
-  const timing = rules.timing.get(stationId);
-  if (timing?.today === "closed") return { open: false, why: "closed_by_hand" };
-  if (timing?.today === "open") return { open: true, why: "opened_by_hand" };
-  if (timing === undefined) return { open: true, why: "no_hours" };
-  const time = moment.timeOfDay;
-  const previousDate = moment.civilDate === undefined ? undefined : addDays(moment.civilDate, -1);
-  const own = stationDayHours(timing, moment.civilDate, moment.weekday);
-  const previous = stationDayHours(timing, previousDate, (moment.weekday + 6) % 7);
-  const inTail = (previous ?? []).some(
-    ({ opensAt, closesAt }) =>
-      opensAt.slice(0, 5) >= closesAt.slice(0, 5) && time < closesAt.slice(0, 5),
-  );
-  if (own === null) return { open: true, why: inTail ? "in_hours" : "no_hours" };
-  const inOwn = own.some(({ opensAt, closesAt }) => {
-    const opening = opensAt.slice(0, 5);
-    const closing = closesAt.slice(0, 5);
-    return opening <= time && (opening >= closing || time < closing);
-  });
-  return inOwn || inTail ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" };
-}
-
-/**
- * A station's hours on one date: its special-date hours, else that weekday of a set standard week.
- * `null` makes no claim at all: no hours are set for that date.
- */
-export function stationDayHours(
-  timing: StationTiming,
-  civilDate: string | undefined,
-  weekday: number,
-): readonly DayPeriod[] | null {
-  const special = civilDate === undefined ? undefined : timing.dates?.get(civilDate);
-  if (special !== undefined) return special;
-  if (!(timing.weekSet ?? timing.hours.length > 0)) return null;
-  return timing.hours.filter((interval) => interval.weekday === weekday);
-}
-
-/** The next change of a station's scheduled state, on the venue's clock. */
-export interface StationTransition {
-  readonly weekday: number;
-  readonly timeOfDay: string;
-  readonly daysAhead: number;
+  if (moment !== null && rules.timing.get(stationId)?.today === "closed")
+    return { open: false, why: "closed_by_hand" };
+  return { open: true, why: "open" };
 }
 
 function walkFallbacks(
@@ -268,7 +218,6 @@ function walkFallbacks(
   start: string | null,
   moment: RoutingMoment | null,
   seen: Set<string>,
-  usedTodayDestination = false,
 ) {
   const steps: FallbackStep[] = [];
   let current = start;
@@ -279,14 +228,10 @@ function walkFallbacks(
     steps.push({ stationId: current, why: status.why });
     const timing = rules.timing.get(current);
     const todayDestination = status.why === "closed_by_hand" ? timing?.todaySendsTo : null;
-    if (todayDestination != null) usedTodayDestination = true;
-    current = todayDestination ?? timing?.fallbackId ?? null;
+    current = todayDestination ?? rules.defaultStationId;
   }
   const defaultId = rules.defaultStationId;
-  const stationId =
-    usedTodayDestination && defaultId !== null && rules.activeStationIds.has(defaultId)
-      ? defaultId
-      : null;
+  const stationId = defaultId !== null && rules.activeStationIds.has(defaultId) ? defaultId : null;
   return { stationId, steps };
 }
 
@@ -303,16 +248,16 @@ export function closedSendsTo(
   stationId: string,
   moment: RoutingMoment | null,
 ): string | null {
-  if (stationId === rules.defaultStationId) return stationId;
+  if (stationId === rules.defaultStationId)
+    return rules.activeStationIds.has(stationId) ? stationId : null;
   const timing = rules.timing.get(stationId);
   const todayDestination =
     stationStatus(rules, stationId, moment).why === "closed_by_hand" ? timing?.todaySendsTo : null;
   return walkFallbacks(
     rules,
-    todayDestination ?? timing?.fallbackId ?? null,
+    todayDestination ?? rules.defaultStationId,
     moment,
     new Set([stationId]),
-    todayDestination != null,
   ).stationId;
 }
 

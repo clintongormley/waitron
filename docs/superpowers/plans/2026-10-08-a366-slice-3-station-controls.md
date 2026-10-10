@@ -1,5 +1,12 @@
 # Live controls, slice 3 — keeping a period or zone open, and closing a station for today (A366)
 
+> **2026-10-10, A366 slice 4 Part B:** station-hours and configured-fallback contracts below
+> describe the earlier implementation. The Station hours page, its editors and storage are
+> retired. A closed station follows today's destination, then the active default; a disabled
+> station uses the active default. Closing or disabling with unfinished dishes requires their
+> disposition. See [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
+> and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Each task is test-first: write the failing behavioural test, run it,

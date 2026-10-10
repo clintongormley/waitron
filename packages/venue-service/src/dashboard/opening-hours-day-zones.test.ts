@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -49,12 +50,14 @@ async function mount(
   named: () => Promise<NamedDaysModel> = async () => namedWeekModel(),
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
-  screen.api = new OpeningHoursApi((async (path, method, body) =>
-    method === "GET"
-      ? path.includes("named-days?")
-        ? named()
-        : structuredClone(model)
-      : write(path, method, body)) as DashboardRequest);
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (path, method, body) =>
+      method === "GET"
+        ? path.includes("named-days?")
+          ? named()
+          : structuredClone(model)
+        : write(path, method, body)) as DashboardRequest),
+  );
   applyTokens(screen);
   document.body.append(screen);
   await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-day")).not.toBeNull();
@@ -299,16 +302,18 @@ it("waits for the shown date's calendar facts and prefills a public holiday's na
   let answer!: (model: NamedDaysModel) => void;
   const reads: string[] = [];
   screen = document.createElement("dashboard-opening-hours-screen");
-  screen.api = new OpeningHoursApi((async (path, method) => {
-    if (method !== "GET") return;
-    if (path.includes("named-days?")) {
-      reads.push(path);
-      return new Promise<NamedDaysModel>((resolve) => {
-        answer = resolve;
-      });
-    }
-    return fixture();
-  }) as DashboardRequest);
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (path, method) => {
+      if (method !== "GET") return;
+      if (path.includes("named-days?")) {
+        reads.push(path);
+        return new Promise<NamedDaysModel>((resolve) => {
+          answer = resolve;
+        });
+      }
+      return fixture();
+    }) as DashboardRequest),
+  );
   applyTokens(screen);
   document.body.append(screen);
   await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-day")).not.toBeNull();

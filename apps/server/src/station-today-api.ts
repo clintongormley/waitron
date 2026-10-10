@@ -17,6 +17,7 @@ import { assertProfileAction, requireDevice } from "./device-session.js";
 import { requestCfg } from "./request-config.js";
 import { overridePinAttempts, parseOverrideField, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
+import { openDishCount, openDishesChoice, withStationDishes } from "./station-closing.js";
 import "./errors.js";
 
 function stationId(value: string): string {
@@ -58,7 +59,11 @@ export function mountStationTodayApi(
           await assertScreenShowsStation(tx, cfg, device.deviceId, id);
           const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
           const authorizers = await listActivePersonsWithPermission(tx, "venue_service.manage");
-          return { destinations, authorizers };
+          return {
+            destinations,
+            authorizers,
+            openDishCount: await openDishCount(tx, cfg.locationId, id),
+          };
         }),
       );
     }),
@@ -72,6 +77,7 @@ export function mountStationTodayApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       if (body.state !== "open" && body.state !== "closed") throw invalid("state");
       const state = body.state;
+      const choice = state === "closed" ? openDishesChoice(body.openDishes) : undefined;
       let destination: string | undefined;
       if (state === "closed") {
         if (typeof body.sendsToStationId !== "string" || !isUuid(body.sendsToStationId))
@@ -85,7 +91,7 @@ export function mountStationTodayApi(
       await withPinCheckAhead(deps.db, authorizer, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
           await assertScreenShowsStation(tx, cfg, device.deviceId, id);
-          await authorizeByPin(
+          const { authorizedBy } = await authorizeByPin(
             tx,
             {
               permission: "venue_service.manage",
@@ -94,7 +100,15 @@ export function mountStationTodayApi(
             attempts,
           );
           if (state === "closed")
-            await VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, new Date());
+            await withStationDishes(
+              tx,
+              cfg,
+              id,
+              destination,
+              choice,
+              (at) => VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, at),
+              { deviceId: cfg.origin.deviceId, personId: authorizedBy },
+            );
           else await VENUE_SERVICE.openStationForToday(tx, cfg, id, new Date());
         }),
       );
@@ -116,10 +130,12 @@ export function mountStationTodayApi(
       const session = await requireSession(deps, c);
       const id = stationId(c.req.param("stationId"));
       const cfg = requestCfg(deps.cfg, session);
-      const destinations = await withTransaction(deps.db, (tx) =>
-        VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date()),
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
+          return { destinations, openDishCount: await openDishCount(tx, cfg.locationId, id) };
+        }),
       );
-      return c.json({ destinations });
     }),
   );
   app.put("/api/stations/:stationId/today", (c) =>
@@ -130,6 +146,7 @@ export function mountStationTodayApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       if (body.state !== "open" && body.state !== "closed") throw invalid("state");
       const state = body.state;
+      const choice = state === "closed" ? openDishesChoice(body.openDishes) : undefined;
       let destination: string | undefined;
       if (state === "closed") {
         if (typeof body.sendsToStationId !== "string" || !isUuid(body.sendsToStationId))
@@ -142,9 +159,21 @@ export function mountStationTodayApi(
       const toCheck = await overrideToCheck(deps.db, authz, override);
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
-          await authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts);
+          const { authorizedBy } = await authorize(
+            tx,
+            { ...authz, override: withCheck(override, checked) },
+            attempts,
+          );
           if (state === "closed")
-            await VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, new Date());
+            await withStationDishes(
+              tx,
+              cfg,
+              id,
+              destination,
+              choice,
+              (at) => VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, at),
+              { deviceId: cfg.origin.deviceId, personId: authorizedBy },
+            );
           else await VENUE_SERVICE.openStationForToday(tx, cfg, id, new Date());
         }),
       );

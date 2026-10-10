@@ -1164,6 +1164,10 @@ that browser action. The handlers then called `preventDefault`, and the printer 
 observed that the actual keydown was cancelled and the warning stayed open until a subsequent
 answer.
 
+**Historical receipt, 2026-10-10:** slice 4 Part B removes the fallback editor; the minutes
+editor and its native Escape checks remain. The experiment below describes the earlier two-editor
+shape, rather than a deletion control for the current screen.
+
 Receipt, 2026-10-10: the two Settings cell editors in
 `packages/venue-service/src/dashboard/prep-stations-screen.ts` (the fallback choice and the minutes
 fields) each call `event.preventDefault()` on Escape, and the case “native Escape keeps the Settings

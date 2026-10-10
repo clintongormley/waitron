@@ -1,5 +1,12 @@
 # Routing grid: implementation plan (A261 step 4)
 
+> **2026-10-10, A366 slice 4 Part B:** station-hours and configured-fallback contracts below
+> describe the earlier implementation. The Station hours page, its editors and storage are
+> retired. A closed station follows today's destination, then the active default; a disabled
+> station uses the active default. Closing or disabling with unfinished dishes requires their
+> disposition. See [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
+> and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
+
 > **For the future implementer:** Execute these test-first tasks inline, in order, using `superpowers:executing-plans`. Before writing code, load `superpowers:test-driven-development`; observe each new behavior fail for the expected reason, implement it, then observe it pass. This document is a draft, not authorization to build.
 
 **Goal:** Let you see and edit preparation routing in one category/product-by-zone table, with the tester explaining the same row-first rule that sends dishes and extras.

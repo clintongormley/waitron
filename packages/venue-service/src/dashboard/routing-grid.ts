@@ -339,16 +339,10 @@ export class RoutingGrid extends LitElement {
     );
   }
 
-  /** Where a disabled station's work goes, before any opening hours are applied. */
   #fallbackSentence(stationId: string): string {
     this.#fallbackRules ??= {
       ...this.#rules!,
-      timing: new Map(
-        this.model!.stationTimes.map((times) => [
-          times.stationId,
-          { fallbackId: times.fallbackStationId, hours: [], today: null },
-        ]),
-      ),
+      timing: new Map(this.model!.stationTimes.map((times) => [times.stationId, { today: null }])),
     };
     const { stationId: receiver } = followFallbacks(this.#fallbackRules, stationId, null);
     return receiver === null

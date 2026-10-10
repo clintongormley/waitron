@@ -1,5 +1,12 @@
 # Station opening hours and fallbacks (slice 3b) Implementation Plan
 
+> **2026-10-10, A366 slice 4 Part B:** station-hours and configured-fallback contracts below
+> describe the earlier implementation. The Station hours page, its editors and storage are
+> retired. A closed station follows today's destination, then the active default; a disabled
+> station uses the active default. Closing or disabling with unfinished dishes requires their
+> disposition. See [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
+> and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
+
 > **2026-10-08 update:** A366 slice 3 removes the dashboard's today controls and write route.
 > The Today column keeps status and destination text. See the
 > [slice 3 plan](../plans/2026-10-08-a366-slice-3-station-controls.md#task-a8-dashboard--the-prep-stations-screen-loses-its-today-buttons).

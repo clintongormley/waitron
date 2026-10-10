@@ -1529,11 +1529,11 @@ export async function fireLines(
     const chosen = chosenStations.get(line.id);
     if (chosen !== undefined) return chosen;
     const outcome = line.productId === null ? undefined : makers.get(line.productId);
-    if (outcome?.kind === "made") return null;
-    if (outcome?.kind === "no_replacement") {
-      const kept = options.keepStations?.get(line.id);
-      if (kept !== undefined && keepStates?.get(kept)?.active) return kept;
-    }
+    if (outcome?.kind === "made" && outcome.route.kind === "no_preparation") return null;
+    const kept = options.keepStations?.get(line.id);
+    const state = kept === undefined ? undefined : keepStates?.get(kept);
+    if (kept !== undefined && state?.active && (!state.open || outcome?.kind === "no_replacement"))
+      return kept;
     return null;
   };
   let fallbackStationId: string | null = null;

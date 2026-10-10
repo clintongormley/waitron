@@ -3848,7 +3848,7 @@ describe("dashboard URL navigation", () => {
     await expect.poll(() => location.pathname).toBe("/manage/overview");
     expect(navItem(el, "prep-stations")).toBeNull();
     expect(navItem(el, "opening-hours")).not.toBeNull();
-    expect(navItem(el, "hours")).not.toBeNull();
+    expect(navItem(el, "hours")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-prep-stations-screen")).toBeNull();
     expect(
       reads.filter((path) => path.startsWith("/management-api/venue-service/stations")),
@@ -5796,7 +5796,6 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("operations")).toEqual([
       "nav-venue-operations",
       "nav-opening-hours",
-      "nav-hours",
       "nav-floor",
       "nav-prep-stations",
       "nav-venue-settings",

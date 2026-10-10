@@ -24,7 +24,7 @@ import { isLocalDate } from "../hours-rules.js";
 import { NAMED_DAY_KINDS } from "../named-day-rules.js";
 import { t } from "./strings.js";
 
-export type NamedDayInput = Omit<NamedDay, "id" | "hasStationHours">;
+export type NamedDayInput = Omit<NamedDay, "id">;
 type Field = keyof NamedDayInput;
 const fields: Field[] = ["date", "name", "kind", "repeats", "ownHours", "closeWholeVenue"];
 const copy = (value: NamedDayInput): NamedDayInput => ({ ...value });
@@ -176,7 +176,7 @@ export class NamedDayEditor extends LitElement {
   private error(field: Field): string {
     if (this.refusalField() === field) {
       if (this.refusal?.code === "special_date.date_taken") return t("named.date_taken");
-      return t(field === "repeats" ? "named.station_hours" : "named.field_refused");
+      return t("named.field_refused");
     }
     return this.attempted ? (this.ownErrors[field] ?? "") : "";
   }

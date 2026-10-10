@@ -40,6 +40,7 @@ export class TillStationToday extends LitElement {
   @property({ attribute: false }) stations: readonly Pick<Station, "id" | "name">[] = [];
   @property({ type: Boolean }) deviceMode = false;
   @state() private busy = false;
+  @state() private openDishCount = 0;
   @state() private destinations: StationDestination[] | null = null;
   @state() private refusal: string | null = null;
   @state() private authorizers: StaffMember[] | null = null;
@@ -62,6 +63,7 @@ export class TillStationToday extends LitElement {
     this.#generation++;
     this.busy = false;
     this.destinations = null;
+    this.openDishCount = 0;
     this.authorizers = null;
     this.#intent = undefined;
     this.#deviceAuthorizers = [];
@@ -104,8 +106,10 @@ export class TillStationToday extends LitElement {
       const answer = await this.#readToday(id);
       if (this.#current(generation, id)) {
         if (answer.authorizers) this.#deviceAuthorizers = answer.authorizers;
-        if (station.open) this.destinations = answer.destinations;
-        else this.#askDeviceManager({ state: "open" });
+        if (station.open) {
+          this.destinations = answer.destinations;
+          this.openDishCount = answer.openDishCount;
+        } else this.#askDeviceManager({ state: "open" });
       }
     } catch (error) {
       if (this.#current(generation, id)) this.refusal = this.#code(error);
@@ -113,9 +117,11 @@ export class TillStationToday extends LitElement {
       if (this.#current(generation, id)) this.busy = false;
     }
   }
-  async #readToday(
-    id: string,
-  ): Promise<{ destinations: StationDestination[]; authorizers?: StaffMember[] }> {
+  async #readToday(id: string): Promise<{
+    destinations: StationDestination[];
+    authorizers?: StaffMember[];
+    openDishCount: number;
+  }> {
     if (!this.deviceMode) return this.api!.stationToday(id);
     const answer = await this.api!.deviceStationToday(id);
     return answer;
@@ -138,10 +144,11 @@ export class TillStationToday extends LitElement {
     this.pinError = null;
     try {
       if (this.deviceMode) {
-        const { state, sendsToStationId } = intent;
+        const { state, sendsToStationId, openDishes } = intent;
         await this.api.deviceSetStationToday(id, {
           state,
           ...(sendsToStationId === undefined ? {} : { sendsToStationId }),
+          ...(openDishes === undefined ? {} : { openDishes }),
           authorizer: override!,
         });
       } else await this.api.setStationToday(id, override ? { ...intent, override } : intent);
@@ -175,11 +182,22 @@ export class TillStationToday extends LitElement {
       } else {
         this.authorizers = null;
         this.refusal = code;
-        if (code === "station.destination_invalid" && this.destinations !== null) {
+        const needsDishChoice =
+          code === "management.request_invalid" &&
+          typeof error === "object" &&
+          error !== null &&
+          "field" in error &&
+          error.field === "openDishes";
+        if (
+          (code === "station.destination_invalid" || needsDishChoice) &&
+          this.destinations !== null
+        ) {
           try {
             const answer = await this.#readToday(id);
             if (this.#current(generation, id)) {
               this.destinations = answer.destinations;
+              this.openDishCount = answer.openDishCount;
+              if (needsDishChoice) this.refusal = null;
               if (answer.authorizers) this.#deviceAuthorizers = answer.authorizers;
             }
           } catch {
@@ -195,16 +213,11 @@ export class TillStationToday extends LitElement {
     const s = this.station!;
     if (!s.active) return t("station_today.switched_off");
     if (s.isDefault) return t("station_today.default");
-    if (s.open)
-      return t(s.byHand === "open" ? "station_today.opened_by_hand" : "station_today.open");
+    if (s.open) return t("station_today.open");
     const destination = this.stations.find((d) => d.id === s.sendsTo)?.name;
-    const key =
-      s.byHand === "closed" && destination
-        ? "station_today.closed_by_hand"
-        : destination
-          ? "station_today.out_of_hours"
-          : "station_today.out_of_hours_nowhere";
-    return t(key).replace("{station}", () => destination ?? "");
+    return destination
+      ? t("station_today.closed_by_hand").replace("{station}", () => destination)
+      : t("station_today.closed");
   }
   override render() {
     const station = this.station;
@@ -228,6 +241,7 @@ export class TillStationToday extends LitElement {
         this.destinations !== null
           ? html`<till-station-today-dialog
               .stationName=${station.name}
+              .openDishCount=${this.openDishCount}
               .destinations=${this.destinations}
               .busy=${this.busy || this.authorizers !== null}
               .refusal=${this.refusal}
@@ -235,9 +249,11 @@ export class TillStationToday extends LitElement {
                 e.stopPropagation();
                 this.#reset();
               }}
-              @station-today-confirm=${(e: CustomEvent<{ sendsToStationId: string }>) => {
+              @station-today-confirm=${(
+                e: CustomEvent<Pick<StationTodayWrite, "sendsToStationId" | "openDishes">>,
+              ) => {
                 e.stopPropagation();
-                void this.#write({ state: "closed", sendsToStationId: e.detail.sendsToStationId });
+                void this.#write({ state: "closed", ...e.detail });
               }}
             ></till-station-today-dialog>`
           : nothing

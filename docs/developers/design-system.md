@@ -1797,11 +1797,8 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- A366 slice 2: Station hours' weekday, Configure and named-day station-cell editors.
-  Clear hours stays a confirmation. The weekday and named-day editors retain an edit
-  made before removal and ask before discarding an edit made after reconnect; their cases are in
-  `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`. Opening hours' normal week,
-  a day, the period editor and the date range dialog follow it too;
+- Opening hours: the normal week, a day, the period editor and the date range dialog.
+  A366 slice 4 retires the separate Station hours page and its draft editors;
 - Departments: Add and Rename department, Add and Rename zone, Move and Add to department,
   the Settings form (including transfers) and the selected zone's settings. Their sibling
   `*.unsaved.test.ts` suites cover reconnect. Disable confirmations have no draft and stay `danger`.
@@ -1861,8 +1858,8 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor, the routing cell editor,
-watcher Rename/follows/zones/pass/printers, and Settings fallback/timing. An unchanged Settings
-fallback opens no confirmation; an edited fallback keeps its two presses. Routing Confirm and station service operations remain actions.
+watcher Rename/follows/zones/pass/printers, and Settings timing. Rest-of-order is edited in
+the station editor. Routing Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
@@ -3098,13 +3095,15 @@ Composition, held keys, and Enter with Shift, Control, Alt, or Meta do not submi
 filters and controls that persist each edit immediately unbound. If a field edits a draft that you
 commit with Save, bind it to that Save even when its preview updates as you type.
 
-### Station hours named days
+### Worked-out prep-station times
 
-Station hours offers Week and Named days. Add, copy or delete a named day through the links
-in Named days to Opening hours → Calendar. You see one-off days from the venue’s yesterday
-onward; repeating days follow each station’s standard week. Edit shows the stored date and name
-as text and saves station cells with the day’s other fields unchanged. A stored whole-venue closure
-locks those cells; the default station stays open. Station hours has no local-holiday editor (Task 26 implementation checkpoint, 2026-10-09).
+Choose a prep station in Opening hours' picker to see its read-only Week view. The normal week
+shows department columns and period ranges derived from routed products and the zones that can
+order them. Browse dated weeks to include named-day hours and closures. These are planned times;
+today's station closures and service extensions do not change them. A default station shows
+"Always open: this is the default station", and a disabled station shows "Switched off", without
+a grid (`opening-hours-station.ts`). Named days are edited in Opening hours' Calendar.
+The separate Station hours page and its station-cell editors are retired.
 
 ### Tabbed management pages
 
@@ -3154,13 +3153,17 @@ localized `label` for the tab group.
 
 Prep stations uses `stations`, `routing`, `watchers` and `settings` at
 `/manage/prep-stations/view/<key>`; an old `tickets` address opens Stations. Stations shows no
-live kitchen numbers: each station's name with its Default or Disabled mark, Printed on (its
-printers, or "No printer"), Shown on (the devices whose kitchen screens show it, and a link to
-Devices) and Today (`packages/venue-service/src/dashboard/station-table.ts`). Its Today column
-reports the station's status and destination without close/open controls.
+live kitchen numbers: each station's name with its Default mark, Printed on (its printers, or
+"No printer") and Shown on (the devices whose kitchen screens show it, and a link to Devices).
+A closure note beside its name reads Closed for today and its destination, or Switched off;
+open and default stations need no status note (`packages/venue-service/src/dashboard/station-table.ts`).
+Each active non-default station links to Opening hours with its station id.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
-Closing asks where new work goes and offers the default station first; a manager PIN step
-keeps the destination draft after a refused PIN. The counter and table order screens show the
+Closing asks where new work goes and offers the default station first. With unfinished dishes,
+the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
+A manager PIN step keeps the draft after a refused PIN. Disable on Prep stations also asks about
+unfinished dishes, while new dishes use the active default. Reopening moves no dishes back.
+The counter and table order screens show the
 period's end beside Keep open later. Its dialog offers server-provided times, explains the next
 period's delay and allows ending an existing extension. Both destination and endpoint dialogs
 use the shared draft scope and save-action state, with reconnect cases in their
@@ -3188,33 +3191,16 @@ rest of the order", saved in one request. Printers offers a printer a watcher us
 unless the station already has it, and is a read-out for a switched-off station; the editor also has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
 also sets Printers. Watchers keeps its own printer selections. Settings edits each station value in
-its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured
-fallback field reads "Outside its hours, work goes to". Station Edit, Make default and
+its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Edit, Make default and
 Disable/Enable actions belong to the Stations row menu; Routing's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
-at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
-with focus on the station's heading once it is read. Department opening hours belong to
-`/manage/opening-hours`, with Week, Periods, Day and Calendar tabs; `/department/<id>` selects the
-department and `/view/periods` selects its periods. The Week and Day editing contract is in
-Forms above. After provisioning, setup's completion screen shows the first saved Open schedule,
-when it is still Monday to Friday, 09:00–17:00, with a link to that department's Opening hours.
-
-- **Standard week.** Days are rows, Monday first, with today marked; prep stations are columns.
-  The editable cells share one Tab stop and the arrow keys move between
-  days and columns. Each editable column's heading has its own menu, a separate Tab stop, holding
-  Clear schedule, or Configure hours for a subject with no hours.
-  The default station's column reads Always open and has nothing to open. A subject with no hours
-  reads "No hours restriction"; Prep stations says
-  "Always open" for that station state. A cell opens that day's editor; a subject with no hours
-  opens a seven-day draft that starts Closed and saves only after a confirmation.
-- **Named days.** A `wt-data-table` of one-off named days from yesterday onward, with prep station
-  columns; a value kept from the standard week is muted. Edit changes station cells only; the date
-  and name are text, and the save carries the stored kind, repeat, own-hours, closure
-  values unchanged. A whole-venue closure keeps the station cells locked. Add, copy and delete
-  lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
+Department opening hours belong to `/manage/opening-hours`, with Week, Periods, Day and Calendar
+tabs; `/department/<id>` selects the department and `/view/periods` selects its periods. The Week
+and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
+the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
+that department's Opening hours.
 
 - **Calendar.** Add, edit, copy and delete named days here. The editor asks for Holiday or
   Working day, annual repeat and the day's hours choice; name and date are required. Own hours
@@ -3231,9 +3217,8 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
   official list needs it. `hours-calendar.ts` renders the area control and coverage, and
   `packages/venue-service/src/holidays.ts` reads both sources.
 
-In the week grid and date panel a period stays on one line, so hours wrap only between periods.
-The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
-Delete and Clear schedule are `compact`.
+In Opening hours, a period stays on one line in the week grid and date panel, so hours wrap only
+between periods.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.

@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -29,48 +30,50 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     // Assign the API before connecting: the screen attaches its passive model watch on connection.
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
-    screen.api = new OpeningHoursApi((async (_path, method) => {
-      if (state === "load-failed") throw new Error("offline");
-      if (method !== "GET")
-        throw { code: "menu_period.in_use", params: { uses: [{ kind: "week", weekday: 1 }] } };
-      return {
-        timeZone: "Europe/Madrid",
-        clockReadable: state !== "unreadable-viewer",
-        dayCutover: "06:00",
-        namedDays: [],
-        menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-        departments: [
-          {
-            id: "restaurant",
-            name: "Restaurant",
-            active: true,
-            week: [],
-            dates: [],
-            periods:
-              state === "empty"
-                ? []
-                : [
-                    {
-                      id: "p1",
-                      name: "Lunch",
-                      colour: "green",
-                      menuId: "lunch",
-                      staffMenuIds: [],
-                      endOffsetMinutes: 0,
-                      weekdays: [1, 3],
-                      routingUses:
-                        state === "delete-routing"
-                          ? [
-                              { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
-                              { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
-                            ]
-                          : [],
-                    },
-                  ],
-          },
-        ],
-      };
-    }) as DashboardRequest);
+    screen.api = new OpeningHoursApi(
+      withOpeningStations((async (_path, method) => {
+        if (state === "load-failed") throw new Error("offline");
+        if (method !== "GET")
+          throw { code: "menu_period.in_use", params: { uses: [{ kind: "week", weekday: 1 }] } };
+        return {
+          timeZone: "Europe/Madrid",
+          clockReadable: state !== "unreadable-viewer",
+          dayCutover: "06:00",
+          namedDays: [],
+          menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
+          departments: [
+            {
+              id: "restaurant",
+              name: "Restaurant",
+              active: true,
+              week: [],
+              dates: [],
+              periods:
+                state === "empty"
+                  ? []
+                  : [
+                      {
+                        id: "p1",
+                        name: "Lunch",
+                        colour: "green",
+                        menuId: "lunch",
+                        staffMenuIds: [],
+                        endOffsetMinutes: 0,
+                        weekdays: [1, 3],
+                        routingUses:
+                          state === "delete-routing"
+                            ? [
+                                { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+                                { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
+                              ]
+                            : [],
+                      },
+                    ],
+            },
+          ],
+        };
+      }) as DashboardRequest),
+    );
     screen.readOnly = state === "viewer" || state === "unreadable-viewer";
     wrapper.appendChild(screen);
     if (state === "load-failed") {
@@ -114,32 +117,34 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
         const screen = document.createElement(
           "dashboard-opening-hours-screen",
         ) as OpeningHoursScreen;
-        screen.api = new OpeningHoursApi((async () => ({
-          timeZone: "Europe/Madrid",
-          clockReadable: true,
-          dayCutover: "06:00",
-          namedDays: [],
-          menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-          departments: [
-            {
-              id: "restaurant",
-              name: "Restaurant",
-              active: true,
-              week: [],
-              dates: [],
-              periods: [-15, 0, 14].map((offset, index) => ({
-                id: `p${index}`,
-                name: ["Breakfast", "Lunch", "Dinner"][index],
-                colour: "green",
-                menuId: "lunch",
-                staffMenuIds: [],
-                endOffsetMinutes: offset,
-                weekdays: [1],
-                routingUses: [],
-              })),
-            },
-          ],
-        })) as DashboardRequest);
+        screen.api = new OpeningHoursApi(
+          withOpeningStations((async () => ({
+            timeZone: "Europe/Madrid",
+            clockReadable: true,
+            dayCutover: "06:00",
+            namedDays: [],
+            menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
+            departments: [
+              {
+                id: "restaurant",
+                name: "Restaurant",
+                active: true,
+                week: [],
+                dates: [],
+                periods: [-15, 0, 14].map((offset, index) => ({
+                  id: `p${index}`,
+                  name: ["Breakfast", "Lunch", "Dinner"][index],
+                  colour: "green",
+                  menuId: "lunch",
+                  staffMenuIds: [],
+                  endOffsetMinutes: offset,
+                  weekdays: [1],
+                  routingUses: [],
+                })),
+              },
+            ],
+          })) as DashboardRequest),
+        );
         wrapper.appendChild(screen);
         await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
         const table =

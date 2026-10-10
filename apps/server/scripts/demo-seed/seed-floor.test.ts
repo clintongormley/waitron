@@ -10,7 +10,8 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listSalePolicies } from "@waitron/venue-service";
+import { listAvailableProducts } from "@waitron/catalogue";
+import { listSalePolicies, resolveMakers } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readZonePlan } from "../../src/floor-plan.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
@@ -18,6 +19,7 @@ import { createTable } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { DEMO_TABLES } from "./floor.js";
 import { seedFloor } from "./seed-floor.js";
+import { seedCatalogues } from "./seed-catalogue.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -37,6 +39,84 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 });
 
 describe("seedFloor", () => {
+  it("seeds no station hours and routes drinks downstairs without an evening period", async () => {
+    const { locationId } = await provisionVenue();
+    const result = await withTransaction(suite.db, async (tx) => {
+      const { menuIds } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+        menuIds,
+      });
+      const { rows: hours } = await tx.execute(sql`
+        select name from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
+      const { rows: periods } = await tx.execute<{ name: string }>(sql`
+        select p.name from menu_periods p join departments d on d.id = p.department_id
+        where d.location_id = ${locationId} order by d.name`);
+      const { rows: zones } = await tx.execute<{ id: string }>(sql`
+        select id from floor_zones where location_id = ${locationId} and name = 'Upstairs bar'`);
+      const { rows: stations } = await tx.execute<{ id: string }>(sql`
+        select id from kitchen_stations where location_id = ${locationId} and name = 'Downstairs bar'`);
+      const { products } = await listAvailableProducts(tx, locationId);
+      const drink = products.find((product) => product.name === "Negroni")!;
+      const makers = [];
+      for (const instant of ["2026-10-02T18:00:00Z", "2026-10-06T18:00:00Z"]) {
+        makers.push(
+          await resolveMakers(
+            tx,
+            { locationId: brandLocationId(locationId) },
+            zones[0]!.id,
+            [drink.id],
+            new Date(instant),
+          ),
+        );
+      }
+      return { hours, periods, makers, stationId: stations[0]!.id, productId: drink.id };
+    });
+    expect.soft(result.hours).toEqual([]);
+    expect(result.periods).toEqual([{ name: "Open" }, { name: "Open" }]);
+    expect(result.makers).toEqual(
+      [0, 1].map(
+        () =>
+          new Map([
+            [
+              result.productId,
+              { kind: "made", route: { kind: "station", stationId: result.stationId } },
+            ],
+          ]),
+      ),
+    );
+  });
+
+  it("seeds no configured station fallback", async () => {
+    const { locationId } = await provisionVenue();
+    const rows = await withTransaction(suite.db, async (tx) => {
+      const { menuIds } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+        menuIds,
+      });
+      return (
+        await tx.execute(sql`select name from sqlite_master
+        where type = 'table' and name = 'station_fallbacks'`)
+      ).rows;
+    });
+    expect(rows).toEqual([]);
+  });
+
   it("leaves every seeded department and service zone with a sale policy for management reads", async () => {
     const { locationId } = await provisionVenue();
 

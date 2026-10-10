@@ -13,7 +13,6 @@ import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { stationDayStates } from "./schema/station-times.js";
 import { setStationToday } from "./station-times.js";
-import { seedStationWeek } from "./testing/station-week.js";
 import { VENUE_SERVICE } from "./service.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
@@ -116,19 +115,23 @@ describe("VENUE_SERVICE", () => {
     );
   });
 
-  it("transfers opening hours and fallbacks but not today's by-hand state", () => {
+  it("transfers service calendars without station hours, fallbacks or today's by-hand state", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     for (const table of [
       "hours_week_cells",
       "hours_week_periods",
-      "special_dates",
       "special_date_hours",
       "special_date_hours_periods",
     ])
-      expect(names).toContain(table);
+      expect(names).not.toContain(table);
+    expect(names).toContain("special_dates");
+    expect(names).toContain("menu_periods");
+    expect(names).toContain("menu_day_timetables");
+    expect(names).toContain("menu_slots");
+    expect(names).toContain("zone_closed_times");
     expect(names).not.toContain("station_hours");
     expect(names).not.toContain("department_hours");
-    expect(names).toContain("station_fallbacks");
+    expect(names).not.toContain("station_fallbacks");
     expect(names).not.toContain("station_day_states");
     expect(names).not.toContain("period_extensions");
     expect(names).not.toContain("zone_extensions");
@@ -207,30 +210,19 @@ describe("station day seats", () => {
     });
   });
 
-  it("opens a scheduled-closed station today and clears its old destination", async () => {
+  it("opens a station by deleting its closure and destination", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await seedStationWeek(tx, f.cfg, f.grill, [
-        { weekday: 6, opensAt: "19:00", closesAt: "21:00" },
-      ]);
       await setStationToday(tx, f.cfg, f.grill, "closed", AT, f.bar);
       await VENUE_SERVICE.openStationForToday(tx, f.cfg, f.grill, AT);
       expect(
         await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.grill)),
-      ).toEqual([
-        {
-          id: expect.any(String),
-          stationId: f.grill,
-          businessDay: "2026-10-02",
-          open: true,
-          sendsToStationId: null,
-        },
-      ]);
+      ).toEqual([]);
       expect((await VENUE_SERVICE.stationStates(tx, f.cfg, AT)).get(f.grill)).toMatchObject({
         open: true,
-        byHand: "open",
+        byHand: null,
         sendsTo: null,
-        why: "opened_by_hand",
+        why: "open",
       });
     });
   });

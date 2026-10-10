@@ -3,18 +3,15 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { categories, kitchenStations, tableServiceStatuses, type Transaction } from "@waitron/db";
-import type { WeekCell, WeekDay } from "@waitron/venue-service";
 import {
   createServiceZone,
   departmentSalePolicies,
   departments,
-  replaceWeekHours,
   menuPeriods,
   saveMenuPeriod,
   updateMenuPeriod,
   replaceMenuWeek,
   setRoutingCell,
-  setStationFallback,
   zoneSalePolicies,
 } from "@waitron/venue-service";
 import {
@@ -36,15 +33,6 @@ export interface SeedFloorInput {
   dataSet: DemoDataSet;
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
-
-const CLOSED: WeekCell = { mode: "closed", periods: [] };
-const opening = (opensAt: string, closesAt: string): WeekCell => ({
-  mode: "periods",
-  periods: [{ id: randomUUID(), opensAt, closesAt }],
-});
-/** A whole standard week, Sunday (0) first. */
-const weekOf = (cell: (weekday: number) => WeekCell): WeekDay[] =>
-  [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: cell(weekday) }));
 
 /** `createServiceZone`, `createTable` and `setTablePlacement` read only `locationId`; every other field is
  *  a placeholder that satisfies the type. */
@@ -158,15 +146,6 @@ export async function seedFloor(
     if (downstairsStationId === undefined || upstairsStationId === undefined) {
       throw new Error("seedFloor: bar preparation stations were not created");
     }
-    const stationCfg = { locationId: brandLocationId(locationId) };
-    await replaceWeekHours(
-      tx,
-      stationCfg,
-      { kind: "station", id: upstairsStationId },
-      weekOf((weekday) => (weekday >= 5 ? opening("19:00", "21:00") : CLOSED)),
-      new Date(),
-    );
-    await setStationFallback(tx, stationCfg, upstairsStationId, downstairsStationId);
     const barCategories = await tx
       .select({ id: categories.id })
       .from(categories)
@@ -183,7 +162,7 @@ export async function seedFloor(
         tx,
         { locationId: brandLocationId(locationId) },
         { row: { kind: "category", categoryId: category.id }, zoneId: upstairsBarZone.id },
-        { kind: "station", stationId: upstairsStationId },
+        { kind: "station", stationId: downstairsStationId },
       );
     }
   }

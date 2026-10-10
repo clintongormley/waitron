@@ -16,9 +16,8 @@ import "./errors.js";
 
 export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
 
-/** A held dish at a station that is not open follows the release's routing snapshot unless a
- * hand-chosen station remains active. Its ticket can move even on a paid bill; its line's make-at
- * stays unchanged. */
+/** Explicitly retained work stays through Disable; a manual choice alone protects only an active
+ * station. Rerouting a paid bill changes the ticket, not the line's make-at choice. */
 export async function rerouteHeldAtRelease(
   tx: Transaction,
   cfg: OriginConfig,
@@ -33,6 +32,7 @@ export async function rerouteHeldAtRelease(
       lineNo: workingOrderLines.lineNo,
       stationId: ticketItems.stationId,
       stationChosenAt: ticketItems.stationChosenAt,
+      stationRetainedAtRelease: ticketItems.stationRetainedAtRelease,
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
       makeAtStationId: workingOrderLines.makeAtStationId,
@@ -63,7 +63,9 @@ export async function rerouteHeldAtRelease(
   const unchosen = closed.filter((row) => {
     const state = states.get(row.stationId);
     return (
-      !state?.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)
+      !state ||
+      (!row.stationRetainedAtRelease &&
+        (!state.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)))
     );
   });
   const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
@@ -172,7 +174,7 @@ export interface StationMoveResult {
 }
 
 export interface StationMover {
-  deviceId: string;
+  deviceId: string | null;
   personId: string | null;
 }
 
@@ -302,6 +304,7 @@ export async function moveDishesToStation(
           stationId: request.stationId,
           queuedAt: at.toISOString(),
           stationChosenAt: at.toISOString(),
+          stationRetainedAtRelease: false,
         })
         .where(
           and(

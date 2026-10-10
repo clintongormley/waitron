@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { asc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { getCountryPack } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -27,20 +28,12 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { HolidayGeography, HolidayRead, NamedDaysModel } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
 import { saveSpecialDate } from "./hours.js";
-import type { HoursModel } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { holidayGeographies } from "./schema/holidays.js";
 import { specialDates } from "./schema/hours.js";
-
-// A spy over the real reader, so the Hours page can be shown to read holidays exactly once.
-vi.mock("./holidays.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./holidays.js")>();
-  return { ...actual, readHolidays: vi.fn(actual.readHolidays) };
-});
-const readSpy = vi.mocked(readHolidays);
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -275,17 +268,30 @@ describe("reading holidays", () => {
   });
 });
 
-describe("the Hours page and holidays", () => {
+describe("the Calendar and holidays", () => {
   it("reads holidays once and returns their coverage and sources with the days", async () => {
     const fx = await fixture();
     await create(fx, "2026-10-13", "Feria");
     const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-11", "2026-10-13"));
-    readSpy.mockClear();
-    const response = await send(fx, "GET", "/hours?from=2026-10-11&to=2026-10-13", fx.supervisor);
+    const readSpy = vi.spyOn(getCountryPack("ES")!.holidayCalendar!, "read");
+    onTestFinished(() => readSpy.mockRestore());
+    const response = await send(
+      fx,
+      "GET",
+      "/named-days?from=2026-10-11&to=2026-10-13",
+      fx.supervisor,
+    );
     expect(response.status).toBe(200);
     expect(readSpy).toHaveBeenCalledTimes(1);
-    expect(readSpy.mock.calls[0]!.slice(1)).toEqual([fx.cfg, "2026-10-11", "2026-10-13"]);
-    const model = (await response.json()) as HoursModel;
+    expect(readSpy.mock.calls[0]).toEqual([
+      {
+        provinceCode: "41",
+        areaKey: null,
+        from: "2026-10-11",
+        to: "2026-10-13",
+      },
+    ]);
+    const model = (await response.json()) as NamedDaysModel;
     expect(model.days.map(({ date, holidays }) => ({ date, holidays }))).toEqual([
       { date: "2026-10-11", holidays: [] },
       { date: "2026-10-12", holidays: expected.facts.filter((f) => f.date === "2026-10-12") },

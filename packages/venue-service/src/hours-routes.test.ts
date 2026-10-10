@@ -1,3 +1,11 @@
+import type {
+  DateCell,
+  HourPeriod,
+  HoursSubject,
+  DateHoursCell,
+  WeekCell,
+  WeekDay,
+} from "./testing/legacy-station-types.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -23,38 +31,31 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
+import type { NamedDaysModel } from "./holiday-types.js";
+import { readCalendarDays } from "./hours.js";
+import { readNamedDaysModel } from "./named-days.js";
+import { readOpeningHoursModel } from "./menu-timetable.js";
 import { civilDateOf } from "@waitron/reporting";
 import { AppError, locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import {
-  readHoursModel,
-  readSpecialDate,
-  readWeekHours,
-  replaceWeekHours,
-  saveSpecialDate,
-  type SpecialDateParticipant,
-} from "./hours.js";
+import { readSpecialDate, saveSpecialDate, type SpecialDateParticipant } from "./hours.js";
 import {
   WEEK_DISPLAY_ORDER,
-  type DateCell,
-  type HourPeriod,
-  type HoursModel,
-  type HoursSubject,
   type SpecialDate,
-  type SpecialDateInput,
-  type WeekCell,
-  type WeekDay,
+  type SpecialDateInput as NamedDayInput,
 } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { specialDateHours, specialDates } from "./schema/hours.js";
+import { specialDates } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { setStationToday } from "./station-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
+
+type SpecialDateInput = NamedDayInput & { cells: DateHoursCell[] };
 
 const participants = vi.hoisted(() => [] as SpecialDateParticipant[]);
 vi.mock("./calendar-participants.js", () => ({
@@ -259,62 +260,44 @@ const venueDates = (fx: Fixture) =>
     .where(eq(specialDates.locationId, fx.cfg.locationId))
     .orderBy(asc(specialDates.date));
 
-const storedWeek = (fx: Fixture, subject: HoursSubject) =>
-  withTransaction(db, (tx) => readWeekHours(tx, fx.cfg, subject));
-
 const createDate = (fx: Fixture, value: SpecialDateInput) =>
   withTransaction(db, (tx) => saveSpecialDate(tx, fx.cfg, null, value, new Date()));
 
 describe("reading Hours", () => {
   it("returns the whole page model for the range to anyone who may view the venue", async () => {
     const fx = await fixture();
-    const lunch = period("12:00", "16:00");
-    await withTransaction(db, (tx) =>
-      replaceWeekHours(tx, fx.cfg, fx.bar, week({ 2: periods(lunch) }), new Date()),
-    );
     const party = await createDate(
       fx,
       input({ cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }] }),
     );
     const before = civilDateOf(new Date(), "Europe/Madrid");
-    const response = await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-16", fx.supervisor);
+    const response = await send(
+      fx,
+      "GET",
+      "/named-days?from=2030-10-14&to=2030-10-16",
+      fx.supervisor,
+    );
     const after = civilDateOf(new Date(), "Europe/Madrid");
     expect(response.status).toBe(200);
-    const model = (await response.json()) as HoursModel;
+    const model = (await response.json()) as NamedDaysModel;
     expect([before, after]).toContain(model.civilDate);
-    const unset = unsetWeek();
     expect(model).toEqual({
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       civilDate: model.civilDate,
       clockReadable: true,
-      departments: [
-        { id: fx.departmentIds.restaurant, name: "Restaurant" },
-        { id: fx.departmentIds.deli, name: "Deli" },
-      ],
-      subjects: [
-        { ...fx.kitchen, name: "Kitchen", active: true, isDefault: true },
-        { ...fx.bar, name: "Bar", active: true, isDefault: false },
-        { ...fx.restaurant, name: "Pass", active: true, isDefault: false },
-        { ...fx.deli, name: "Grill", active: true, isDefault: false },
-      ],
-      week: [
-        { subject: fx.kitchen, days: unset },
-        {
-          subject: fx.bar,
-          days: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-            weekday,
-            cell: weekday === 2 ? periods(lunch) : closed,
-          })),
-        },
-        { subject: fx.restaurant, days: unset },
-        { subject: fx.deli, days: unset },
-      ],
       days: [
-        { date: "2030-10-14", specialDate: null, holidays: [], tone: "standard" },
+        {
+          date: "2030-10-14",
+          namedDay: null,
+          holidays: [],
+          tone: "standard",
+          ownHours: false,
+          closed: false,
+        },
         {
           date: "2030-10-15",
-          specialDate: {
+          namedDay: {
             kind: "working_day",
             repeats: false,
             ownHours: false,
@@ -324,25 +307,17 @@ describe("reading Hours", () => {
             closeWholeVenue: false,
           },
           holidays: [],
-          tone: "blue",
-        },
-        { date: "2030-10-16", specialDate: null, holidays: [], tone: "standard" },
-      ],
-      specialDates: [
-        {
-          kind: "working_day",
-          repeats: false,
+          tone: "working_day",
           ownHours: false,
-          id: party.id,
-          date: "2030-10-15",
-          name: "Staff party",
-          closeWholeVenue: false,
+          closed: false,
         },
-      ],
-      specialCells: [
         {
-          specialDateId: party.id,
-          cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }],
+          date: "2030-10-16",
+          namedDay: null,
+          holidays: [],
+          tone: "standard",
+          ownHours: false,
+          closed: false,
         },
       ],
       // No tenant row is stored here, so there is no country to read holidays for.
@@ -359,15 +334,23 @@ describe("reading Hours", () => {
         },
       ],
       holidaySources: [],
+      area: {
+        readiness: "unsupported_country",
+        addressKey: '["",null,""]',
+        options: [],
+        required: false,
+        chosen: null,
+      },
+      localHolidaysPerYear: 0,
     });
-    expect((await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-16", fx.manager)).status).toBe(
-      200,
-    );
+    expect(
+      (await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-16", fx.manager)).status,
+    ).toBe(200);
   });
 
   it("refuses staff, an absent and an expired session", async () => {
     const fx = await fixture();
-    const path = "/hours?from=2030-10-14&to=2030-10-16";
+    const path = "/named-days?from=2030-10-14&to=2030-10-16";
     await refused(await send(fx, "GET", path, fx.staff), 403, {
       code: "authorization.not_permitted",
     });
@@ -389,14 +372,14 @@ describe("reading Hours", () => {
       ["?from=2030-10-14&to=2030-10-13", "to"],
       ["?from=2030-01-01&to=2031-01-02", "to"],
     ] as const)
-      await refused(await send(fx, "GET", `/hours${query}`, fx.manager), 400, {
+      await refused(await send(fx, "GET", `/named-days${query}`, fx.manager), 400, {
         code: "hours.invalid",
         params: { field },
       });
     // A leap year's whole year is the longest range served.
-    expect((await send(fx, "GET", "/hours?from=2032-01-01&to=2032-12-31", fx.manager)).status).toBe(
-      200,
-    );
+    expect(
+      (await send(fx, "GET", "/named-days?from=2032-01-01&to=2032-12-31", fx.manager)).status,
+    ).toBe(200);
   });
 
   it("colours a date Closed only when no active department has service ranges", async () => {
@@ -433,17 +416,18 @@ describe("reading Hours", () => {
       saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date()),
     );
     const model = (await (
-      await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-15", fx.manager)
-    ).json()) as HoursModel;
-    expect(model.days.map((day) => day.tone)).toEqual(["closed", "closed"]);
+      await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-15", fx.manager)
+    ).json()) as NamedDaysModel;
+    expect(model.days.map((day) => day.closed)).toEqual([true, true]);
+    expect(model.days.map((day) => day.tone)).toEqual(["working_day", "closed"]);
     await db
       .update(departments)
       .set({ active: false })
       .where(eq(departments.id, fx.departmentIds.restaurant));
     const deli = await withTransaction(db, (tx) =>
-      readHoursModel(tx, fx.cfg, "2030-10-14", "2030-10-15", new Date()),
+      readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(deli.days.map((day) => day.tone)).toEqual(["closed", "closed"]);
+    expect(deli.map((day) => day.tone)).toEqual(["closed", "closed"]);
     await withTransaction(db, (tx) =>
       replaceMenuWeek(
         tx,
@@ -458,22 +442,13 @@ describe("reading Hours", () => {
       ),
     );
     const open = await withTransaction(db, (tx) =>
-      readHoursModel(tx, fx.cfg, "2030-10-14", "2030-10-15", new Date()),
+      readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(open.days.map((day) => day.tone)).toEqual(["closed", "standard"]);
+    expect(open.map((day) => day.tone)).toEqual(["closed", "standard"]);
   });
 
   it("reads the model in the same number of statements whatever the range and its special dates", async () => {
     const fx = await fixture();
-    await withTransaction(db, (tx) =>
-      replaceWeekHours(
-        tx,
-        fx.cfg,
-        fx.restaurant,
-        week({ 1: periods(period("09:00", "17:00")) }),
-        new Date(),
-      ),
-    );
     for (const date of ["2030-11-03", "2030-11-10", "2030-11-17", "2030-11-24"])
       await createDate(
         fx,
@@ -482,7 +457,7 @@ describe("reading Hours", () => {
     const statements = (from: string, to: string) =>
       withTransaction(db, async (tx) => {
         const reads = vi.spyOn(tx, "select");
-        const model = await readHoursModel(tx, fx.cfg, from, to, new Date());
+        const model = await readNamedDaysModel(tx, fx.cfg, from, to, new Date());
         const count = reads.mock.calls.length;
         reads.mockRestore();
         return { count, days: model.days.length };
@@ -494,7 +469,7 @@ describe("reading Hours", () => {
     expect(long.count).toBe(short.count);
   });
 
-  it("lists every special date from the venue's yesterday onward however far ahead, apart from the calendar's range", async () => {
+  it("keeps named days in the timetable and limits the Calendar to its requested range", async () => {
     const fx = await fixture();
     /** Sunday 6 October 2030, 12:00 in Madrid. */
     const at = new Date("2030-10-06T10:00:00Z");
@@ -505,52 +480,51 @@ describe("reading Hours", () => {
         saveSpecialDate(tx, fx.cfg, null, input({ date, name: date, cells: closedBar }), at),
       );
     const read = () =>
-      withTransaction(db, (tx) => readHoursModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
+      withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
 
     const model = await read();
     expect(model.civilDate).toBe("2030-10-06");
-    expect(model.specialDates).toEqual([
-      saved["2030-10-05"],
-      saved["2030-10-14"],
-      saved["2032-12-25"],
-    ]);
-    expect(model.days.map((day) => day.specialDate?.id ?? null)).toEqual([
+    expect(
+      (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
+    ).toEqual([saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
+    expect(model.days.map((day) => day.namedDay?.id ?? null)).toEqual([
       null,
       saved["2030-10-14"]!.id,
       null,
     ]);
-    for (const date of ["2030-10-05", "2030-10-14", "2032-12-25"])
-      expect(
-        model.specialCells.find((entry) => entry.specialDateId === saved[date]!.id)?.cells,
-      ).toEqual(closedBar);
-    expect(
-      model.specialCells.some((entry) => entry.specialDateId === saved["2030-10-04"]!.id),
-    ).toBe(false);
-
-    // With no venue date to go by, the list starts where the range does.
+    for (const field of ["specialDates", "specialCells", "subjects", "week"])
+      expect(model).not.toHaveProperty(field);
     await db
       .update(locations)
       .set({ timeZone: "Mars/Base" })
       .where(eq(locations.id, fx.cfg.locationId));
-    expect((await read()).specialDates).toEqual([saved["2030-10-14"], saved["2032-12-25"]]);
+    const unreadable = await read();
+    expect([unreadable.civilDate, unreadable.clockReadable]).toEqual([null, false]);
+    expect(unreadable.days).toEqual(model.days);
+    expect(
+      (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
+    ).toEqual([saved["2030-10-04"], saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
   });
 });
 
 describe("writing Hours", () => {
-  it("replaces a subject's standard week, then clears it", async () => {
+  it("the retired station week writer answers 404 and keeps named days for every session", async () => {
     const fx = await fixture();
-    const dinner = period("19:00", "23:00");
-    const saved = await send(fx, "PUT", "/hours/week", fx.manager, {
-      subject: fx.deli,
-      days: week({ 5: periods(dinner) }),
-    });
-    expect(saved.status).toBe(204);
-    expect((await storedWeek(fx, fx.deli))[5]).toEqual({ weekday: 5, cell: periods(dinner) });
-    expect(
-      (await send(fx, "PUT", "/hours/week", fx.manager, { subject: fx.deli, days: unsetWeek() }))
-        .status,
-    ).toBe(204);
-    expect(await storedWeek(fx, fx.deli)).toEqual(unsetWeek());
+    const bodies = [
+      { subject: fx.deli, days: week({ 5: periods(period("18:00", "22:00")) }) },
+      { subject: fx.deli, days: unsetWeek() },
+      { subject: fx.deli, days: week({ 1: periods(period("12:00", "12:00")) }) },
+      { subject: fx.kitchen, days: week() },
+      { subject: fx.otherDepartment, days: week() },
+      { subject: { kind: "department", id: fx.departmentIds.restaurant }, days: week() },
+      {},
+    ];
+    for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
+      for (const body of bodies) {
+        expect((await send(fx, "PUT", "/hours/week", cookie, body)).status).toBe(404);
+        expect(await venueDates(fx)).toEqual([]);
+      }
+    }
   });
 
   it("creates, edits, duplicates and deletes a special date under one stable id", async () => {
@@ -591,9 +565,9 @@ describe("writing Hours", () => {
       { ...date, id: expect.any(String), date: "2030-10-29", name: "Team dinner" },
     ]);
     expect(new Set([date.id, ...copies.map((copy) => copy.id)]).size).toBe(3);
-    expect(
-      await withTransaction(db, (tx) => readSpecialDate(tx, fx.cfg, copies[1]!.id)),
-    ).toMatchObject({ cells: [{ subject: fx.bar, cell: { mode: "all_day", periods: [] } }] });
+    expect(await withTransaction(db, (tx) => readSpecialDate(tx, fx.cfg, copies[1]!.id))).toEqual({
+      ...copies[1],
+    });
 
     const deleted = await send(fx, "DELETE", `/special-dates/${date.id}`, fx.manager);
     expect(deleted.status).toBe(204);
@@ -796,43 +770,21 @@ describe("Hours write refusals", () => {
 
   it("refuses a bad field, naming it, and keeps what was stored", async () => {
     const fx = await fixture();
-    await refused(
-      await send(fx, "PUT", "/hours/week", fx.manager, {
-        subject: fx.deli,
-        days: week({ 1: periods(period("12:00", "12:00")) }),
-      }),
-      400,
-      { code: "hours.invalid", params: { field: "days.0.cell.periods.0.closesAt" } },
-    );
-    await refused(
-      await send(fx, "PUT", "/hours/week", fx.manager, {
-        subject: fx.otherDepartment,
-        days: week(),
-      }),
-      400,
-      { code: "hours.invalid", params: { field: "subject" } },
-    );
+    for (const body of [
+      { subject: fx.deli, days: week({ 1: periods(period("12:00", "12:00")) }) },
+      { subject: fx.otherDepartment, days: week() },
+    ])
+      expect((await send(fx, "PUT", "/hours/week", fx.manager, body)).status).toBe(404);
     await refused(
       await send(fx, "POST", "/special-dates", fx.manager, input({ name: "  " })),
       400,
       { code: "hours.invalid", params: { field: "name" } },
     );
-    expect(await storedWeek(fx, fx.deli)).toEqual(unsetWeek());
     expect(await venueDates(fx)).toEqual([]);
   });
 
-  it("names a duplicate's clash by the neighbouring date and a skipped minute by the target itself", async () => {
+  it("duplicates named days without retired station-hour clashes or skipped-minute checks", async () => {
     const fx = await fixture();
-    // The bar's standard Wednesday opens at 01:00; a copied Tuesday running to 03:00 clashes.
-    await withTransaction(db, (tx) =>
-      replaceWeekHours(
-        tx,
-        fx.cfg,
-        fx.bar,
-        week({ 3: periods(period("01:00", "05:00")) }),
-        new Date(),
-      ),
-    );
     const late = await createDate(
       fx,
       input({
@@ -840,16 +792,15 @@ describe("Hours write refusals", () => {
         cells: [{ subject: fx.bar, cell: datePeriods(period("22:00", "03:00")) }],
       }),
     );
-    await refused(
-      await send(fx, "POST", `/special-dates/${late.id}/duplicate`, fx.manager, {
-        dates: ["2030-10-28", "2030-10-22"],
-      }),
-      400,
-      {
-        code: "hours.invalid",
-        params: { field: "dates.1", date: "2030-10-23", subjectId: fx.bar.id },
-      },
-    );
+    const lateResponse = await send(fx, "POST", `/special-dates/${late.id}/duplicate`, fx.manager, {
+      dates: ["2030-10-28", "2030-10-22"],
+    });
+    expect(lateResponse.status).toBe(201);
+    const lateCopies = (await lateResponse.json()) as SpecialDate[];
+    expect(lateCopies).toEqual([
+      { ...late, id: expect.any(String), date: "2030-10-28" },
+      { ...late, id: expect.any(String), date: "2030-10-22" },
+    ]);
     const forward = clockChangeAfter("Europe/Madrid", "2030-01-01T00:00:00Z", "forward");
     const early = await createDate(
       fx,
@@ -865,52 +816,54 @@ describe("Hours write refusals", () => {
         ],
       }),
     );
-    await refused(
-      await send(fx, "POST", `/special-dates/${early.id}/duplicate`, fx.manager, {
-        dates: [forward.date],
-      }),
-      400,
+    const earlyResponse = await send(
+      fx,
+      "POST",
+      `/special-dates/${early.id}/duplicate`,
+      fx.manager,
       {
-        code: "hours.invalid",
-        params: { field: "dates.0", date: forward.date, subjectId: fx.deli.id },
+        dates: [forward.date],
       },
     );
+    expect(earlyResponse.status).toBe(201);
+    const earlyCopies = (await earlyResponse.json()) as SpecialDate[];
+    expect(earlyCopies).toEqual([{ ...early, id: expect.any(String), date: forward.date }]);
+    for (const copy of [...lateCopies, ...earlyCopies])
+      expect(await withTransaction(db, (tx) => readSpecialDate(tx, fx.cfg, copy.id))).toEqual({
+        ...copy,
+      });
     expect(await venueDates(fx)).toEqual([
       { id: early.id, date: "2030-01-07", name: "Staff party" },
+      { id: earlyCopies[0]!.id, date: forward.date, name: "Staff party" },
       { id: late.id, date: "2030-10-14", name: "Staff party" },
+      { id: lateCopies[1]!.id, date: "2030-10-22", name: "Staff party" },
+      { id: lateCopies[0]!.id, date: "2030-10-28", name: "Staff party" },
     ]);
   });
 
-  it("refuses a schedule for the default station, which is always open", async () => {
+  it("does not write a default-station schedule through either former input", async () => {
     const fx = await fixture();
-    await refused(
-      await send(fx, "PUT", "/hours/week", fx.manager, { subject: fx.kitchen, days: week() }),
-      409,
-      { code: "station.always_open", params: { stationId: fx.kitchen.id } },
+    expect(
+      (await send(fx, "PUT", "/hours/week", fx.manager, { subject: fx.kitchen, days: week() }))
+        .status,
+    ).toBe(404);
+    const response = await send(
+      fx,
+      "POST",
+      "/special-dates",
+      fx.manager,
+      input({ cells: [{ subject: fx.kitchen, cell: { mode: "closed", periods: [] } }] }),
     );
-    await refused(
-      await send(
-        fx,
-        "POST",
-        "/special-dates",
-        fx.manager,
-        input({ cells: [{ subject: fx.kitchen, cell: { mode: "closed", periods: [] } }] }),
-      ),
-      409,
-      { code: "station.always_open", params: { stationId: fx.kitchen.id } },
-    );
-    expect(await storedWeek(fx, fx.kitchen)).toEqual(unsetWeek());
-    expect(await venueDates(fx)).toEqual([]);
-    expect(await db.select().from(specialDateHours)).toEqual(
-      expect.not.arrayContaining([expect.objectContaining({ stationId: fx.kitchen.id })]),
-    );
+    expect(response.status).toBe(201);
+    const saved = (await response.json()) as SpecialDate;
+    expect(saved).toMatchObject({ date: "2030-10-15", name: "Staff party", repeats: false });
+    expect(await venueDates(fx)).toEqual([{ id: saved.id, date: saved.date, name: saved.name }]);
   });
 
   it("lets only a venue service manager write, however the request reaches the server", async () => {
     const fx = await fixture();
     const source = await createDate(fx, input());
     const writes = [
-      ["PUT", "/hours/week", { subject: fx.deli, days: week() }],
       ["POST", "/special-dates", input({ date: "2030-11-01" })],
       ["PUT", `/special-dates/${source.id}`, input({ name: "Renamed" })],
       ["POST", `/special-dates/${source.id}/duplicate`, { dates: ["2030-11-02"] }],
@@ -930,7 +883,6 @@ describe("Hours write refusals", () => {
         code: "management_session.expired",
       });
     }
-    expect(await storedWeek(fx, fx.deli)).toEqual(unsetWeek());
     expect(await venueDates(fx)).toEqual([
       { id: source.id, date: "2030-10-15", name: "Staff party" },
     ]);
@@ -951,15 +903,11 @@ describe("Hours when the venue's clock changes", () => {
     });
 
   const model = (fx: Fixture, at: Date) =>
-    withTransaction(db, (tx) => readHoursModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
+    withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
 
-  it("moves the civil date and the routing labels with a new time zone, keeping the week and special dates", async () => {
+  it("moves the civil date with a new time zone, keeping named days without closing stations", async () => {
     const fx = await fixture();
     await withTransaction(db, async (tx) => {
-      const evenings = Object.fromEntries(
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => [weekday, periods(period("18:00", "23:00"))]),
-      );
-      await replaceWeekHours(tx, fx.cfg, fx.bar, week(evenings), new Date("2026-10-01T10:00:00Z"));
       await saveSpecialDate(
         tx,
         fx.cfg,
@@ -973,34 +921,21 @@ describe("Hours when the venue's clock changes", () => {
     });
     const madrid = await model(fx, AT);
     expect(madrid.civilDate).toBe("2026-10-15");
-    expect(await barStatus(fx, AT)).toEqual({ open: false, why: "out_of_hours" });
+    expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
 
     await setClock(fx, { timeZone: "America/New_York" });
     const newYork = await model(fx, AT);
     expect(newYork.civilDate).toBe("2026-10-14");
     expect(newYork.timeZone).toBe("America/New_York");
-    expect(await barStatus(fx, AT)).toEqual({ open: true, why: "in_hours" });
-    expect(newYork.week).toEqual(madrid.week);
+    expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
     expect(newYork.days).toEqual(madrid.days);
-    expect(newYork.specialCells).toEqual(madrid.specialCells);
   });
 
-  it("moves which business day a manual closure belongs to with a new cutover, but not which date owns the hours", async () => {
+  it("moves which business day a manual closure belongs to with a new cutover", async () => {
     const fx = await fixture();
     /** Thursday 15 October 2026 02:30 in Madrid. */
     const at = new Date("2026-10-15T00:30:00Z");
-    await withTransaction(db, (tx) =>
-      replaceWeekHours(
-        tx,
-        fx.cfg,
-        fx.bar,
-        week({ 3: closed, 4: { mode: "all_day", periods: [] } }),
-        new Date("2026-10-01T10:00:00Z"),
-      ),
-    );
-    // The bar is Closed on Wednesday and open all Thursday. Before the 06:00 cutover the business
-    // day is still Wednesday the 14th, but Thursday the 15th owns the hours.
-    expect(await barStatus(fx, at)).toEqual({ open: true, why: "in_hours" });
+    expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
     await withTransaction(db, (tx) => setStationToday(tx, fx.cfg, fx.bar.id, "closed", at));
     const before = await model(fx, at);
     expect(before.civilDate).toBe("2026-10-15");
@@ -1008,49 +943,47 @@ describe("Hours when the venue's clock changes", () => {
 
     await setClock(fx, { dayCutover: "02:00:00" });
     const after = await model(fx, at);
-    expect(await barStatus(fx, at)).toEqual({ open: true, why: "in_hours" });
+    expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
     expect(after).toEqual({ ...before, dayCutover: "02:00" });
   });
 });
 
 describe("station-only Hours request boundary", () => {
-  it("refuses a department week at subject.kind and keeps the page's station weeks unset", async () => {
+  it("the retired department week writer answers 404", async () => {
     const fx = await fixture();
-    await refused(
-      await send(fx, "PUT", "/hours/week", fx.manager, {
-        subject: { kind: "department" as never, id: fx.departmentIds.restaurant },
-        days: week(),
-      }),
-      400,
-      { code: "hours.invalid", params: { field: "subject.kind" } },
-    );
-    expect(await storedWeek(fx, fx.restaurant)).toEqual(unsetWeek());
+    expect(
+      (
+        await send(fx, "PUT", "/hours/week", fx.manager, {
+          subject: { kind: "department", id: fx.departmentIds.restaurant },
+          days: week(),
+        })
+      ).status,
+    ).toBe(404);
   });
-  it("refuses a department special-date cell at its kind without creating a named date", async () => {
+  it("ignores a former department station-cell field while creating the named day", async () => {
     const fx = await fixture();
-    await refused(
-      await send(
-        fx,
-        "POST",
-        "/special-dates",
-        fx.manager,
-        input({
-          cells: [
-            {
-              subject: { kind: "department" as never, id: fx.departmentIds.restaurant },
-              cell: { mode: "closed", periods: [] },
-            },
-          ],
-        }),
-      ),
-      400,
-      { code: "hours.invalid", params: { field: "cells.0.subject.kind" } },
+    const response = await send(
+      fx,
+      "POST",
+      "/special-dates",
+      fx.manager,
+      input({
+        cells: [
+          {
+            subject: { kind: "department" as never, id: fx.departmentIds.restaurant },
+            cell: { mode: "closed", periods: [] },
+          },
+        ],
+      }),
     );
-    expect(await venueDates(fx)).toEqual([]);
+    expect(response.status).toBe(201);
+    const saved = (await response.json()) as SpecialDate;
+    expect(saved).toMatchObject({ date: "2030-10-15", name: "Staff party" });
+    expect(await venueDates(fx)).toEqual([{ id: saved.id, date: saved.date, name: saved.name }]);
   });
 });
 
-it("rolls back POST date and cells when an after-change participant refuses", async () => {
+it("rolls back a posted named day when an after-change participant refuses", async () => {
   const fx = await fixture();
   participants.push({
     async copy() {},
@@ -1059,13 +992,11 @@ it("rolls back POST date and cells when an after-change participant refuses", as
       throw new AppError("hours.invalid", { field: "date" });
     },
   });
-  const before = await db.select().from(specialDateHours);
   await refused(await send(fx, "POST", "/special-dates", fx.manager, input()), 400, {
     code: "hours.invalid",
     params: { field: "date" },
   });
   expect(await venueDates(fx)).toEqual([]);
-  expect(await db.select().from(specialDateHours)).toEqual(before);
 });
 
 describe("named-day HTTP writes", () => {
@@ -1131,7 +1062,6 @@ describe("named-days Calendar route", () => {
           repeats: true,
           ownHours: false,
           closeWholeVenue: true,
-          hasStationHours: false,
         },
         holidays: [],
         tone: "own_holiday",
@@ -1173,6 +1103,22 @@ describe("named-days Calendar route", () => {
         code: "hours.invalid",
         params: { field },
       });
+    }
+  });
+});
+
+describe("retired station-hours range route", () => {
+  it.each([
+    "/hours?from=2030-10-14&to=2030-10-16",
+    "/hours",
+    "/hours?from=2030-02-30&to=2030-03-02",
+  ])("answers 404 for %s without changing saved data for any session", async (path) => {
+    const fx = await fixture();
+    await createDate(fx, input({ closeWholeVenue: true }));
+    const beforeDates = await venueDates(fx);
+    for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
+      expect((await send(fx, "GET", path, cookie)).status).toBe(404);
+      expect(await venueDates(fx)).toEqual(beforeDates);
     }
   });
 });

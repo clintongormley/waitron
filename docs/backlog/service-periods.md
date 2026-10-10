@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Part C, each planned
+  APPROVED 2026-10-07; remaining work is slice 7, slice 5 Part B and slice 6 Part C, each planned
   then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -35,9 +35,9 @@ their full text.
   revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
   requests. Part A is built: combined tickets on shared printers, period choices in routing cells,
   the station editor, and the "Where is this made?" tester and the Stations tab's live kitchen
-  numbers removed. Part B, still to build and re-grounded on main first: station hours and
-  fallbacks removed, closing a station with open dishes asks what to do with them, and each
-  station's worked-out times. The owner answered its decisions 29–37 on 2026-10-09; the changes
+  numbers removed. Part B removes station hours and fallbacks, asks what to do with unfinished
+  dishes at closure or Disable, and shows each station's computed times in Opening hours.
+  The owner answered its decisions 29–37 on 2026-10-09; the changes
   to 29, 33 and 35 are built (A455), and 32 needed nothing.
   Slice 6's remaining work is Part C's floor-plan entry,
   in Lane D after A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
@@ -120,16 +120,13 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## Smaller notes from the Hours reviews
 
-- Smaller notes: the calendar's day read repeats the subject precedence `resolveSubjects` holds
-  and matches a cell by id alone; one `hours-client.test.ts` case detaches in the same turn and
-  cannot fail; the participant-failure route case checks the status, not the body's code; the
-  time-zone route case never asserts `nextTransition`; nothing pins which of two repeated
-  midnights a clock change picks; no test opens Hours from a department's link end to end; with
+- Smaller notes: the participant-failure route case checks the status, not the body's code;
+  nothing pins which of two repeated
+  midnights a clock change picks; with
   the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
   has disabled; on a phone the calendar's cells break a long
-  special-date name mid-word (a design choice for the owner); the test where the live feed
-  delivers nothing does not check that its two reads cover different ranges; and no test sends
-  the default station with a blank inherited cell.
+  special-date name mid-word (a design choice for the owner). The separate Hours client's
+  read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
 ## Province edits in Venue details
 

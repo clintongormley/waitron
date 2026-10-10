@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -21,7 +22,6 @@ export function dayFixture(): OpeningHoursModel {
         kind: "working_day" as const,
         repeats: false,
         ownHours: true,
-        hasStationHours: false,
         closeWholeVenue: false,
       },
     ],
@@ -108,8 +108,10 @@ async function mount(
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.readOnly = readOnly;
-  screen.api = new OpeningHoursApi((async (url, method, body) =>
-    method === "GET" ? model : write(url, method, body)) as DashboardRequest);
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (url, method, body) =>
+      method === "GET" ? model : write(url, method, body)) as DashboardRequest),
+  );
   applyTokens(screen);
   document.body.append(screen);
   await expect

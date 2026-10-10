@@ -5,7 +5,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import type { StationDestination } from "../api/client.js";
+import type { StationDestination, StationTodayWrite } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
@@ -28,6 +28,8 @@ export class TillStationTodayDialog extends LitElement {
     `,
   ];
   @property() stationName = "";
+  @property({ type: Number }) openDishCount = 0;
+  @state() private openDishes: StationTodayWrite["openDishes"];
   @property({ attribute: false }) destinations: readonly StationDestination[] = [];
   @property() selected: string | undefined = undefined;
   @property({ type: Boolean }) busy = false;
@@ -35,9 +37,9 @@ export class TillStationTodayDialog extends LitElement {
   @state() private active = true;
   @state() private savableAtOpen = true;
   @state() private fieldEdited = false;
-  #scope?: DraftScope<string>;
+  #scope?: DraftScope<{ destination: string; openDishes: StationTodayWrite["openDishes"] }>;
   #leave?: LeaveCoordinator;
-  #baseline?: { value: string };
+  #baseline?: { value: { destination: string; openDishes: StationTodayWrite["openDishes"] } };
   #observed = "";
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -58,6 +60,9 @@ export class TillStationTodayDialog extends LitElement {
       ? this.selected!
       : (this.destinations.find((d) => d.isDefault)?.id ?? this.destinations[0]?.id ?? "");
   }
+  #draft() {
+    return { destination: this.#choice(), openDishes: this.openDishes };
+  }
   override willUpdate(changed: PropertyValues): void {
     if (!this.isConnected || !this.active) return;
     if (changed.has("refusal")) this.fieldEdited = false;
@@ -69,13 +74,16 @@ export class TillStationTodayDialog extends LitElement {
       }
       return;
     }
-    this.#baseline ??= { value: this.selected };
+    this.#baseline ??= { value: this.#draft() };
     const { coordinator, scope } = draftScopeFor(this, {
       id: this,
-      current: () => this.#choice(),
+      current: () => this.#draft(),
       snapshot: (value) => value,
-      equal: (a, b) => a === b,
-      restore: (value) => (this.selected = value),
+      equal: (a, b) => a.destination === b.destination && a.openDishes === b.openDishes,
+      restore: (value) => {
+        this.selected = value.destination;
+        this.openDishes = value.openDishes;
+      },
     });
     this.#leave = coordinator;
     this.#scope = scope;
@@ -84,7 +92,7 @@ export class TillStationTodayDialog extends LitElement {
   }
   commit(): void {
     if (!this.isConnected || !this.active) return;
-    this.#baseline = { value: this.#choice() };
+    this.#baseline = { value: this.#draft() };
     this.#scope?.commit(this.#baseline.value);
     this.savableAtOpen = false;
   }
@@ -94,13 +102,17 @@ export class TillStationTodayDialog extends LitElement {
       !this.active ||
       this.busy ||
       !this.#choice() ||
+      (this.openDishCount > 0 && this.openDishes === undefined) ||
       saveActionState(this.#scope, { savableAtOpen: this.savableAtOpen }).unchanged
     )
       return;
     this.fieldEdited = true;
     this.dispatchEvent(
       new CustomEvent("station-today-confirm", {
-        detail: { sendsToStationId: this.#choice() },
+        detail: {
+          sendsToStationId: this.#choice(),
+          ...(this.openDishCount > 0 ? { openDishes: this.openDishes } : {}),
+        },
         bubbles: true,
         composed: true,
       }),
@@ -120,7 +132,7 @@ export class TillStationTodayDialog extends LitElement {
   }
   override render() {
     const action = saveActionState(this.#scope, { savableAtOpen: this.savableAtOpen });
-    const missing = !this.#choice();
+    const missing = !this.#choice() || (this.openDishCount > 0 && this.openDishes === undefined);
     const fieldRefusal = this.refusal === "station.destination_invalid";
     const refusal =
       this.refusal === null || (fieldRefusal && this.fieldEdited) ? "" : codeMessage(this.refusal);
@@ -150,7 +162,35 @@ export class TillStationTodayDialog extends LitElement {
             this.#scope?.changed();
           }}
         ></wt-combobox>
-        <p>${t("station_today.sent_stay")}</p>
+        ${
+          this.openDishCount > 0
+            ? html`
+                <p>
+                  ${t(this.openDishCount === 1 ? "station_today.unfinished_one" : "station_today.unfinished_many").replace("{count}", String(this.openDishCount))}
+                </p>
+                <wt-combobox
+                  name="openDishes"
+                  required
+                  label=${t("station_today.unfinished_choice")}
+                  search="never"
+                  .options=${[
+                    { value: "send", label: t("station_today.send_waiting") },
+                    { value: "leave", label: t("station_today.leave_finish") },
+                  ]}
+                  .value=${this.openDishes ?? ""}
+                  .disabled=${this.busy}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                    e.stopPropagation();
+                    if (!this.isConnected || !this.active || this.busy) return;
+                    if (e.detail.value !== "send" && e.detail.value !== "leave") return;
+                    this.openDishes = e.detail.value;
+                    this.#scope?.changed();
+                  }}
+                ></wt-combobox>
+                <p>${t("station_today.started_stay")}</p>
+              `
+            : html`<p>${t("station_today.sent_stay")}</p>`
+        }
         ${refusal ? html`<p class="refusal" role="alert">${fieldRefusal ? t("form.fix_fields") : refusal}</p>` : nothing}
       </div>
       <wt-button

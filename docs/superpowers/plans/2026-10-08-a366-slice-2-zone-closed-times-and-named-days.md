@@ -967,6 +967,11 @@ export interface NamedDaysModel {
 export async function readNamedDaysModel(tx: Transaction, cfg: VenueScope, from: LocalDate, to: LocalDate, at: Date, holidays?: HolidayReader): Promise<NamedDaysModel>;
 ```
 
+2026-10-09 follow-up: slice 4 Part B Task B6 retires `hasStationHours` from `NamedDay`;
+the interface above records the slice 2 contract. See
+[the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#task-b6-server--station-hours-writers-readers-routes-and-codes-go).
+
+
 `tone` follows decision 3; `closed` is Task 3's calendar rule. Route `GET
 /management-api/venue-service/named-days?from&to` (`venue.view`, at most `HOURS_RANGE_MAX_DAYS`).
 Live query `named-days`: `special_dates`, `special_date_hours`, `menu_day_timetables`,
@@ -985,6 +990,9 @@ Live query `named-days`: `special_dates`, `special_date_hours`, `menu_day_timeta
 ---
 
 ### Task 19: The named-day editor
+
+_2026-10-10: slice 4 Part B retires the station-hours refusal instruction; the editor uses the
+normal field refusal message for Repeats too. See [Task B6](2026-10-08-a366-slice-4-prep-stations.md#task-b6-server--station-hours-writers-readers-routes-and-codes-go)._
 
 **Files:** create `dashboard/named-day-editor.ts` (element `named-day-editor`), `.test.ts`,
 `.unsaved.test.ts`, `.a11y.test.ts`; modify `strings.ts`.

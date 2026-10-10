@@ -47,6 +47,8 @@ takes its remaining steps, such as opening the item the page's link names; it pe
 Cost, before a screen sharing one field remembered which one set it: a recovery that matched the
 message's code, or cleared on any successful read, wiped a save's `connection.failed` (A224).
 
+**Historical receipt, 2026-10-06 (Station hours).**
+
 A screen that waits for the change feed to show its own save shows the old data when the stream
 the browser holds open delivers nothing, as after a tablet wakes or the Wi-Fi changes: a review
 probe on the Hours page reproduced it: the old data stayed, with no error shown, until the page's
@@ -59,6 +61,14 @@ read again itself, so that read is ordered with the watch's timer reads: a timer
 before it and answers after it is not applied. The feed's own update
 can still arrive and read again; on Hours with the calendar open that measured two passive reads
 per save with the feed silent and four with it delivering (2026-10-06).
+
+2026-10-09: A366 slice 4 removes the Station hours page. The shared calendar, Hours client and
+its read-ordering tests remain while Opening hours uses the calendar.
+
+2026-10-10: A366 slice 4 Part B removes the legacy Hours client and Calendar mode.
+Opening hours Calendar uses `NamedDaysApi`
+(`packages/venue-service/src/dashboard/named-days-client.ts`) and its named-day dependencies.
+The Hours read counts above describe the retired page, not the current Calendar.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

@@ -1324,10 +1324,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Part C.**
+  APPROVED 2026-10-07; remaining work is slice 7, slice 5 Part B and slice 6 Part C.**
   Slice 4 Part A is built: combined tickets on shared printers, which retiring watchers (slice 5
   Part B) waited for, period choices in routing cells and the station editor. Station-hours and
-  fallback retirement (slice 4 Part B) and department receipts (slice 7) remain. Slice 6's
+  fallback retirement and the read-only station Week view are built. Department receipts (slice 7) remain. Slice 6's
   remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
@@ -1349,6 +1349,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Served at a table or counter; payment due before the kitchen, at collection or at the end of
   the tab. Slice 6 keeps the three-value order record and its behaviour.
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
+
+- **Prep station drag-scroll test failure (A366-4B).** Investigate the full-screen
+  `edge scroll carries a held station past the visible summary and persists on release`
+  failure. The isolated case, earlier checkpoint's full file and final candidate's full file
+  passed; the cause is unverified. Keep its scroll-distance and saved-order assertions.
+
+- **Compare computed station weeks with live routing on an own-hours named day without a zone override.**
+  The slice 4 review read the planning and zone-week paths but did not compare the real sale
+  resolver. Add a real-database comparison before claiming they agree on that case.
 
 - **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
   own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
@@ -1377,16 +1386,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A rename refusal without a supplied name remains a database error, rather than returning an
   undefined name** — left open by A261-2d (#1274).
 
-- **The Hours page fixes its read window (yesterday plus a year) when it opens** — left open by the
-  reviews of A261 step 5 (Hours, #1298): a page left open for days keeps the old window until it is
-  reopened.
-
-- **For a non-default station with no hours, Hours says "No hours restriction" and Prep stations
-  says "Always open" (owner informed)** — left open by the reviews of A261 step 5 (Hours, #1298).
-
 - **Smaller notes from the Hours reviews** — left open by the reviews of A261 step 5 (Hours, #1298):
-  the calendar's day read repeats the subject precedence `resolveSubjects` holds and matches a cell
-  by id alone; one `hours-client.test.ts` case detaches in the same turn and cannot fail; …
+  the participant-failure route case checks the status but not the body's code; repeated-midnight
+  clock choices and narrow-calendar name wrapping still need checking; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-hours-reviews)
 
 - **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily
@@ -1578,10 +1580,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
-
-- **The Settings fallback's native Escape test does not always catch a missing `preventDefault`**:
-  with the call deleted it failed 5 runs out of 6 (2026-10-10, `docs/developers/testing-guide.md`).
-  Make it fail every time.
 
 - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells** — left open
   by A261-4 (#1363). `#saveSettingsCell`

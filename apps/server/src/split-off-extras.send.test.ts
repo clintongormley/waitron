@@ -35,7 +35,7 @@ import { routeCategoryTo } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { addTabRound, fireLines, unsentDishLines } from "./working-order.js";
 import { routingCells, setRoutingCell } from "@waitron/venue-service";
-import { setStationFallback, setStationToday } from "@waitron/venue-service";
+import { setStationToday } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { OPERATOR, seat, setupPartyVenue } from "./testing/party-venue.js";
@@ -639,7 +639,7 @@ describe("sending split-off extras", () => {
     });
   });
 
-  it("omits an extra at a closed station, then sends it to that station's fallback", async () => {
+  it("keeps an extra with its dish at the default, then sends it to today's chosen destination", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
@@ -681,9 +681,9 @@ describe("sending split-off extras", () => {
       await setStationToday(tx, cfg, fryer.id, "closed", new Date());
       const without = await order();
       expect((await recordsFor(tx, without)).map((row) => row.stationId)).toEqual([grill.id]);
-      await setStationFallback(tx, cfg, fryer.id, kitchen.id);
-      const withFallback = await order();
-      expect((await recordsFor(tx, withFallback)).map((row) => row.stationId).sort()).toEqual(
+      await setStationToday(tx, cfg, fryer.id, "closed", new Date(), kitchen.id);
+      const withDestination = await order();
+      expect((await recordsFor(tx, withDestination)).map((row) => row.stationId).sort()).toEqual(
         [grill.id, kitchen.id].sort(),
       );
     });
@@ -832,6 +832,10 @@ describe("sending split-off extras", () => {
           extras: [{ listId, picks: [{ productId: chips!, quantity: 1 }] }],
         },
       ]);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.isDefault, true));
       await setStationToday(tx, cfg, grill.id, "closed", new Date());
       await expect(
         fireLines(tx, cfg, orderId, await unsentDishLines(tx, orderId)),

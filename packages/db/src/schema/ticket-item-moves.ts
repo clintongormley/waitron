@@ -1,4 +1,5 @@
-import { foreignKey, index } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { id, newId, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
@@ -14,11 +15,15 @@ export const ticketItemMoves = table(
     fromStationId: id("from_station_id").notNull(),
     toStationId: id("to_station_id").notNull(),
     movedAt: tsString("moved_at").notNull(),
-    movedByDeviceId: id("moved_by_device_id").notNull(),
+    movedByDeviceId: id("moved_by_device_id"),
     // People live in identity's migration set, which core cannot reference.
     movedByPersonId: id("moved_by_person_id"),
   },
   (t) => [
+    check(
+      "ticket_item_moves_actor_ck",
+      sql`${t.movedByDeviceId} is not null or ${t.movedByPersonId} is not null`,
+    ),
     foreignKey({
       columns: [t.workingOrderLineId],
       foreignColumns: [workingOrderLines.id],

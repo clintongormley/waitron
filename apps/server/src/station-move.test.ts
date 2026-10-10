@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
@@ -29,7 +28,6 @@ import {
   closeStationForToday,
   listStationNotices,
   setStationToday,
-  setStationFallback,
   setRoutingCell,
   type RouteTarget,
   writeEditSentLines,
@@ -295,7 +293,6 @@ describe("release", () => {
     const oldGrillJobs = (await jobs(grillPrinter)).length;
     const at = new Date("2026-10-02T18:45:00.000Z");
     await inTx(venue, async (tx) => {
-      await setStationFallback(tx, venue.cfg, bar, grill);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
       await tx
         .update(workingOrders)
@@ -370,9 +367,8 @@ describe("release", () => {
       await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
       await tx
         .update(kitchenStations)
-        .set({ isDefault: true })
+        .set({ isDefault: false })
         .where(eq(kitchenStations.id, grill));
-      await setStationFallback(tx, venue.cfg, bar, null);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -497,7 +493,6 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationFallback(tx, venue.cfg, bar, grill);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
     });
     const before = (await jobs(grillPrinter)).length;
@@ -600,7 +595,6 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationFallback(tx, venue.cfg, bar, grill);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
@@ -647,7 +641,6 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationFallback(tx, venue.cfg, bar, grill);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
@@ -861,7 +854,6 @@ describe("release", () => {
         .update(ticketItems)
         .set({ madeHere: true })
         .where(eq(ticketItems.workingOrderLineId, group.lineId));
-      await setStationFallback(tx, venue.cfg, bar, grill);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
     });
     const grillJobs = (await jobs(grillPrinter)).length;
@@ -970,8 +962,6 @@ describe("release", () => {
     ).toEqual([false]);
     const at = new Date("2026-10-02T18:45:00.000Z");
     await inTx(venue, async (tx) => {
-      await setStationFallback(tx, venue.cfg, bar, null);
-      await setStationFallback(tx, venue.cfg, grill, bar);
       await setStationToday(tx, venue.cfg, grill, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
@@ -1005,12 +995,11 @@ describe("release", () => {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
         await clearRoutingCell(tx, venue.cfg, cell);
-        await setStationFallback(tx, venue.cfg, grill, null);
       });
     }
   });
 
-  it("releases split-off chips at their closed fryer even when it has an open fallback", async () => {
+  it("releases split-off chips at their closed fryer", async () => {
     useSplitExtrasDb(splitSuite.db);
     const split = await setupSplitExtrasVenue();
     const at = new Date("2026-10-02T18:45:00.000Z");
@@ -1066,7 +1055,6 @@ describe("release", () => {
     );
     expect(chips).toMatchObject({ stationId: split.stations.fryer, firedAt: null });
     await splitTx(async (tx) => {
-      await setStationFallback(tx, split.cfg, split.stations.fryer, split.stations.kitchen);
       await setStationToday(tx, split.cfg, split.stations.fryer, "closed", at);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -1156,7 +1144,17 @@ describe("release", () => {
           .where(eq(workingOrders.id, checkId)),
       );
       const at = new Date(instant);
+      const [clockBefore] = await inTx(venue, (tx) =>
+        tx
+          .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
+          .from(locations)
+          .where(eq(locations.id, venue.cfg.locationId)),
+      );
       await inTx(venue, async (tx) => {
+        await tx
+          .update(locations)
+          .set({ timeZone: "Europe/Madrid", dayCutover: "21:00:00" })
+          .where(eq(locations.id, venue.cfg.locationId));
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -1165,11 +1163,14 @@ describe("release", () => {
           .update(kitchenStations)
           .set({ isDefault: true })
           .where(eq(kitchenStations.id, grill));
-        await setStationToday(tx, venue.cfg, bar, null, at);
-        await seedStationWeek(tx, venue.cfg, bar, [
-          { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
-        ]);
-        await setStationFallback(tx, venue.cfg, bar, grill);
+        await setStationToday(
+          tx,
+          venue.cfg,
+          bar,
+          "closed",
+          new Date("2026-10-02T19:00:00.000Z"),
+          grill,
+        );
       });
       const RealDate = globalThis.Date;
       const barJobsBefore = (await jobs(barPrinter)).length;
@@ -1248,6 +1249,11 @@ describe("release", () => {
         resolveMakers.mockRestore();
         stationStates.mockRestore();
         await inTx(venue, async (tx) => {
+          await setStationToday(tx, venue.cfg, bar, null, at);
+          await tx
+            .update(locations)
+            .set(clockBefore!)
+            .where(eq(locations.id, venue.cfg.locationId));
           await tx
             .update(kitchenStations)
             .set({ isDefault: false })
@@ -1581,7 +1587,6 @@ describe("moveDishesToStation", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, downstairs.id));
-      await setStationFallback(tx, venue.cfg, bar, downstairs.id);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
       const [held] = await tx
         .select({ stationChosenAt: ticketItems.stationChosenAt, stationId: ticketItems.stationId })
@@ -1598,7 +1603,6 @@ describe("moveDishesToStation", () => {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
         await clearRoutingCell(tx, venue.cfg, cell);
-        await setStationFallback(tx, venue.cfg, bar, null);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
