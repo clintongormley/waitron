@@ -27,13 +27,13 @@ const selectIn = (handle: Handle, expression: string) =>
 
 /** The write connection serves a read unless another caller's write transaction is open. */
 const besideAWrite = async (handle: Handle, expression: string) => {
-  let open!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
+  let openBody!: () => void;
+  const bodyOpen = new Promise<void>((resolve) => {
+    openBody = resolve;
   });
-  const read = opened.then(() => selectIn(handle, expression));
+  const read = bodyOpen.then(() => selectIn(handle, expression));
   await handle.withWriteLock(async () => {
-    open();
+    openBody();
     await read;
   });
   return read;
@@ -81,10 +81,16 @@ describe.each(paths)("waitron_search_rank in %s", (_, selectOn) => {
     expect(await rank("'4', 4")).toBeNull();
   });
 
-  it("answers 0 for a blank or NULL query: no search at all", async () => {
+  it("answers 0 for a blank query: no search at all", async () => {
     const rank = await ranker();
     expect(await rank("'  ', 'anything'")).toBe(0);
-    expect(await rank("null, 'anything'")).toBe(0);
+  });
+
+  it("matches nothing for a query that is NULL or not text", async () => {
+    const rank = await ranker();
+    expect(await rank("null, 'anything'")).toBeNull();
+    expect(await rank("4, '4'")).toBeNull();
+    expect(await rank("x'67696e', 'gin'")).toBeNull();
   });
 
   it("answers the rank's key, so a whole word sorts before the start of one", async () => {

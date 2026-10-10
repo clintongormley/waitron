@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   compareSearchRanks,
   foldForSearch,
@@ -18,8 +18,17 @@ it("folds case and accents, so jamon finds Jamón", () => {
 });
 
 it("folds a capital I the same whatever language the process runs in", () => {
-  // Fails only when run under a Turkish locale (LANG=tr_TR.UTF-8): a text still holding a character
-  // beyond Latin-1 after folding is the one lowercased by the process's language.
+  const original = String.prototype.toLocaleLowerCase;
+  // Stands in for a process whose language is Turkish, where a capital I lowercases to a dotless ı.
+  vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (
+    this: string,
+    locale?: Intl.LocalesArgument,
+  ) {
+    return original.call(this, locale ?? "tr");
+  });
+  onTestFinished(() => {
+    vi.restoreAllMocks();
+  });
   expect(foldForSearch("ISABEL İBIZA €5")).toBe("isabel ibiza €5");
 });
 

@@ -193,8 +193,8 @@ function openReadConnection(path: string): DatabaseSync {
  * THE HANDLE lands on whichever connection the routing picks at that instant, so an attachment
  * belongs on a connection a caller holds itself.
  *
- * **The schemas arrive as arguments rather than as imports.** This package imports nothing from
- * the workspace but `@waitron/shared`, because `@waitron/db` imports it;
+ * **The schemas arrive as arguments rather than as imports.** This package imports only
+ * `@waitron/shared` from the workspace; `@waitron/db` imports this package, so
  * `scripts/workspace-cycles.test.ts` fails on the loop an import back would close.
  *
  * **Two connections per file, and one Drizzle instance over the pair**, so that while
