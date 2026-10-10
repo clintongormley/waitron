@@ -60,6 +60,24 @@ describe("validateCoreConfiguration", () => {
     ).not.toThrow();
   });
 
+  it.each(["kitchen_courses", "kitchen_stations"])(
+    "refuses a deleted %s configuration row without refusing archived products",
+    (table) => {
+      expect(() => validateCoreConfiguration({ [table]: [{ id: "old", active: 0 }] })).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: `${table}.active` },
+        }),
+      );
+      expect(() =>
+        validateCoreConfiguration({
+          [table]: [{ id: "live", active: 1 }],
+          products: [{ id: "archived", active: 0 }],
+        }),
+      ).not.toThrow();
+    },
+  );
+
   it("is the core transfer's validate", () => {
     expect(validateCoreConfiguration).toBeTypeOf("function");
     expect(CORE_CONFIGURATION_TRANSFER.validate).toBe(validateCoreConfiguration);

@@ -1119,6 +1119,8 @@ export interface ConfigurationTransferTable {
   /** An export leaves behind each row whose value in this column is not null, and then, in every
    * declared table, each row whose foreign key names a row left behind. */
   readonly leaveBehindWhenSet?: string;
+  /** As above, but only rows holding false (stored as 0) in the declared column. */
+  readonly leaveBehindWhenFalse?: string;
   readonly reconnect?: boolean;
 }
 

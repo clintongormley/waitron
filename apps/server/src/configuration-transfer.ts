@@ -237,7 +237,7 @@ function asciiLower(name: string): string {
 }
 
 /** Read the explicitly declared configuration tables (one tenant per database), less the rows a
- * table's `leaveBehindWhenSet` leaves behind and every row whose foreign key names one of them. */
+ * table's leave-behind selector excludes and every row whose foreign key names one of them. */
 export async function exportConfigurationTables(
   db: Database | Transaction,
   modules: readonly WaitronModule[],
@@ -250,7 +250,10 @@ export async function exportConfigurationTables(
   const leftBehind = new Map<string, Set<unknown>>();
   for (const declaration of declared) {
     const isTracked = tracked.has(declaration.name);
-    const column = declaration.leaveBehindWhenSet;
+    const selectorColumns = [
+      declaration.leaveBehindWhenSet,
+      declaration.leaveBehindWhenFalse,
+    ].filter((column): column is string => column !== undefined);
     if (isTracked) {
       // `table_info` leaves out generated columns, which `select *` returns and which can be named
       // `rowid`.
@@ -258,10 +261,10 @@ export async function exportConfigurationTables(
         select name from pragma_table_xinfo(${declaration.name})
       `);
       const names = new Set(columns.rows.map((row) => row.name));
-      // Without this check every row would read the missing column as `undefined`, not null, and
-      // be left behind.
-      if (column !== undefined && !names.has(column)) {
-        throw new AppError("setup.request_invalid", { field: `${declaration.name}.${column}` });
+      // A declared selector must address an actual column; undefined cannot decide whether a row travels.
+      for (const column of selectorColumns) {
+        if (!names.has(column))
+          throw new AppError("setup.request_invalid", { field: `${declaration.name}.${column}` });
       }
       // A column named `rowid`, in any case, hides the engine's own from every query below; the
       // alias is a key of the row object, so only its exact spelling collides.
@@ -282,9 +285,16 @@ export async function exportConfigurationTables(
     leftBehind.set(
       declaration.name,
       new Set(
-        column === undefined
-          ? []
-          : result.rows.filter((row) => row[column] !== null).map((row) => row[ROWID]),
+        result.rows
+          .filter(
+            (row) =>
+              (declaration.leaveBehindWhenSet !== undefined &&
+                row[declaration.leaveBehindWhenSet] !== null) ||
+              (declaration.leaveBehindWhenFalse !== undefined &&
+                (row[declaration.leaveBehindWhenFalse] === 0 ||
+                  row[declaration.leaveBehindWhenFalse] === false)),
+          )
+          .map((row) => row[ROWID]),
       ),
     );
   }
@@ -317,7 +327,7 @@ interface ForeignKey {
 }
 
 /** The tables a row left behind can reach through foreign keys between declared tables, from a
- * table that declares `leaveBehindWhenSet` to its children and theirs, and the keys that lead there,
+ * table that declares a leave-behind selector to its children and theirs, and the keys that lead there,
  * their parent columns resolved: a key that names none references the parent's primary key, in the
  * primary key's own column order. */
 async function reachedForeignKeys(
@@ -326,7 +336,11 @@ async function reachedForeignKeys(
 ): Promise<{ tracked: Set<string>; keys: ForeignKey[] }> {
   const tracked = new Set(
     declared
-      .filter((declaration) => declaration.leaveBehindWhenSet !== undefined)
+      .filter(
+        (declaration) =>
+          declaration.leaveBehindWhenSet !== undefined ||
+          declaration.leaveBehindWhenFalse !== undefined,
+      )
       .map((declaration) => declaration.name),
   );
   if (tracked.size === 0) return { tracked, keys: [] };
