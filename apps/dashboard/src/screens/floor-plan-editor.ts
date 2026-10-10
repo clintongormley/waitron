@@ -204,6 +204,11 @@ export class FloorPlanEditor extends LitElement {
       header.narrow wt-button[data-action="load-newer"] {
         flex-basis: 100%;
       }
+      /* Room on a phone for fonts wider than macOS's system font. */
+      header.narrow wt-button::part(button),
+      header.narrow a.close {
+        padding-inline: var(--wt-space-3);
+      }
       .note {
         margin: var(--wt-space-2) 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);

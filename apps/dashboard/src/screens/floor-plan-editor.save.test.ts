@@ -380,9 +380,15 @@ it("offers Reload in Spanish", async () => {
   expect(button(el, "load-newer")!.textContent!.trim()).toBe("Recargar");
 });
 
-it.each(["en-GB", "es-ES"])(
-  "keeps Close, Undo, Redo and Save on one row at 390 px with Reload shown (%s)",
-  async (locale) => {
+// A wider font than macOS's system one, as CI's Linux Chromium draws: Verdana widens these buttons
+// by about 9%. Where Verdana is missing, DejaVu Sans stands in if installed.
+it.each([
+  ["en-GB", "the system font", ""],
+  ["es-ES", "the system font", ""],
+  ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
+])(
+  "keeps Close, Undo, Redo and Save on one row at 390 px with Reload shown (%s, %s)",
+  async (locale, _name, font) => {
     setLocale(locale);
     const before = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(390, 844);
@@ -391,6 +397,7 @@ it.each(["en-GB", "es-ES"])(
       .fn()
       .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
     const el = await open(stubApi({ saveFloorPlan }));
+    if (font !== "") el.style.setProperty("--wt-font-family", font);
     await expect.poll(() => el.shadowRoot!.querySelector("wt-sheet")).not.toBeNull();
     await move(el, "m1", 5);
     await press(el, "save");
