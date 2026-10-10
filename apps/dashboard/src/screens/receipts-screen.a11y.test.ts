@@ -77,6 +77,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
         ...(receipt.phone ? { phone: receipt.phone } : {}),
         ...(receipt.email ? { email: receipt.email } : {}),
       },
+      receiptLanguage: "es-ES",
       venueDefaults: {},
       venueAddress,
       languages: ["es-ES"],

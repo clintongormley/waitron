@@ -1,5 +1,6 @@
 import "./errors.js";
 import type { Hono } from "hono";
+import { readReceiptLanguage } from "@waitron/catalogue";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import {
@@ -78,10 +79,12 @@ export function mountDepartmentReceiptApi(
           { ...cfg, receiptLanguages: languages },
           id,
         );
+        const { locale: receiptLanguage } = await readReceiptLanguage(tx, cfg.locationId);
         const venueDefaults = await getVenueReceiptSettings(tx);
         const venueAddress = await readLocationAddress(tx, cfg.locationId);
         return {
           receipt,
+          receiptLanguage,
           venueDefaults,
           languages,
           warningLanguages: untranslatedLanguages(

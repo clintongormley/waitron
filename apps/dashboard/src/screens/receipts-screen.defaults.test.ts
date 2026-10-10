@@ -608,6 +608,11 @@ it("redraws the department's saved-language fallback after a live change despite
     choices: ["es-ES", "ca-ES"],
     fixed: null,
   });
+  const departmentRead = api.getDepartmentReceipt.getMockImplementation()!;
+  api.getDepartmentReceipt.mockImplementation(async () => ({
+    ...(await departmentRead()),
+    receiptLanguage: "ca-ES",
+  }));
   api.liveData.invalidate([{ type: "locations" }]);
   await vi.waitFor(() =>
     expect(

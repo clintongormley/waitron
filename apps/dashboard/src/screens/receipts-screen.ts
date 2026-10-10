@@ -316,6 +316,7 @@ export class ReceiptsScreen extends LitElement {
   @state() private focusedTrim: ReceiptMarkName | null = null;
   /** The paper width the person chose, kept for every later preview; never saved. */
   @state() private chosenWidth: PrintPaperWidth | null = null;
+  @state() private departmentLanguage: Pick<ReceiptLanguage, "language" | "choices"> | null = null;
   @state() private chosenPreviewLanguage: string | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
@@ -365,13 +366,25 @@ export class ReceiptsScreen extends LitElement {
       departmentId: string;
       receipt: DepartmentReceiptConfig;
       venueDefaults: VenueReceiptSettings;
+      receiptLanguage: string;
+      languages: string[];
     }>,
   ): void {
     event.stopPropagation();
     if (event.detail.departmentId !== this.previewDepartmentId) return;
+    const languageChanged = this.departmentLanguage?.language !== event.detail.receiptLanguage;
+    this.departmentLanguage = {
+      language: event.detail.receiptLanguage,
+      choices: [...event.detail.languages],
+    };
     const defaultsChanged = !sameValue(this.departmentVenueDefaults, event.detail.venueDefaults);
     this.departmentVenueDefaults = structuredClone(event.detail.venueDefaults);
-    if (!defaultsChanged && sameValue(this.departmentDraft, event.detail.receipt)) return;
+    if (
+      !defaultsChanged &&
+      !languageChanged &&
+      sameValue(this.departmentDraft, event.detail.receipt)
+    )
+      return;
     this.departmentDraft = structuredClone(event.detail.receipt);
     this.#departmentGeneration++;
     this.#schedulePreview();
@@ -608,8 +621,14 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
+  #previewLanguage(): Pick<ReceiptLanguage, "language" | "choices"> | null {
+    return this.departmentId && this.departmentLanguage?.language
+      ? this.departmentLanguage
+      : this.receiptLanguage;
+  }
+
   #choosePreviewLanguage(language: string): void {
-    this.chosenPreviewLanguage = language === this.receiptLanguage?.language ? null : language;
+    this.chosenPreviewLanguage = language === this.#previewLanguage()?.language ? null : language;
     this.#departmentGeneration++;
     this.#previewActive = true;
     void this.#sendPreview();
@@ -936,7 +955,7 @@ export class ReceiptsScreen extends LitElement {
       .venueDefaults=${this.receiptLoaded ? this.#venueDefaults() : undefined}
       .draftParent=${this}
       @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
-      @receipt-draft-changed=${(event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig; venueDefaults: VenueReceiptSettings }>) => this.#departmentChanged(event)}
+      @receipt-draft-changed=${(event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig; venueDefaults: VenueReceiptSettings; receiptLanguage: string; languages: string[] }>) => this.#departmentChanged(event)}
     ></dashboard-department-receipt-editor>`;
   }
 
@@ -958,6 +977,7 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #renderPreview(): TemplateResult {
+    const language = this.#previewLanguage();
     const preview = this.preview;
     const marks: PaperMark[] = [];
     for (const name of MARK_NAMES) {
@@ -967,14 +987,15 @@ export class ReceiptsScreen extends LitElement {
     return html`<div class="preview">
       <h2>${t("receipts.preview")}</h2>
       ${
-        this.receiptLanguage
+        language
           ? html`<wt-combobox
               name="previewLanguage"
               label=${t("receipts.preview_language")}
-              .value=${this.chosenPreviewLanguage ?? this.receiptLanguage.language}
-              .options=${[
-                ...new Set([this.receiptLanguage.language, ...this.receiptLanguage.choices]),
-              ].map((language) => ({ value: language, label: receiptLanguageName(language) }))}
+              .value=${this.chosenPreviewLanguage ?? language.language}
+              .options=${[...new Set([language.language, ...language.choices])].map((language) => ({
+                value: language,
+                label: receiptLanguageName(language),
+              }))}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
                 this.#choosePreviewLanguage(event.detail.value);

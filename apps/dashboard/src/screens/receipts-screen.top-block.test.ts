@@ -94,6 +94,7 @@ function stubApi(
         ...(receipt.phone ? { phone: receipt.phone } : {}),
         ...(receipt.email ? { email: receipt.email } : {}),
       },
+      receiptLanguage: "es-ES",
       venueDefaults: {},
       venueAddress,
       languages: ["es-ES"],

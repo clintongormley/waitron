@@ -10,6 +10,7 @@ import "./department-receipt-editor.js";
 type Editor = DepartmentReceiptEditor;
 const LOGO = `${"a".repeat(64)}.png`;
 const settings: DepartmentReceiptSettings = {
+  receiptLanguage: "es-ES",
   receipt: { phone: "+34 912 345 678", headerSubtitle: { "es-ES": "Bar" } },
   venueDefaults: { logo: LOGO, headerSubtitle: "Venue subtitle", footerMessage: "Gracias" },
   languages: ["es-ES", "ca-ES"],

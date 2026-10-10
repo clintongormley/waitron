@@ -2075,6 +2075,21 @@ async function putTrim(app: Hono, cookie: string, path: string, body: unknown): 
 }
 
 describe("independent department and global defaults routes", () => {
+  it("the department read reports the saved receipt language rather than the first offered choice", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const id = await departmentFixture();
+    await suite.db
+      .update(locations)
+      .set({ invoiceLocales: ["ca-ES", "es-ES"] })
+      .where(eq(locations.id, venueCfg!.locationId));
+    const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.receiptLanguage).toBe("ca-ES");
+    expect(body.languages[0]).toBe("es-ES");
+  });
   it("reads missing department receipt without copying global defaults or contact", async () => {
     await setupTenant();
     const app = mountApp();
@@ -2090,6 +2105,7 @@ describe("independent department and global defaults routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       receipt: {},
+      receiptLanguage: "es-ES",
       venueDefaults: { headerSubtitle: "Venue", footerMessage: "Thanks", printAddress: false },
       languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
       warningLanguages: [],
@@ -2122,6 +2138,7 @@ describe("independent department and global defaults routes", () => {
       const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
       expect(await response.json()).toEqual({
         receipt,
+        receiptLanguage: "es-ES",
         venueDefaults: { footerMessage: "Global", printAddress: false },
         languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
         warningLanguages: ["gl-ES", "eu-ES"],

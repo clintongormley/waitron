@@ -16,6 +16,7 @@ const departments = [
   { id: "closed", name: "Closed", active: false, isDefault: false },
 ];
 const settings: DepartmentReceiptSettings = {
+  receiptLanguage: "es-ES",
   receipt: {},
   venueDefaults: { headerSubtitle: "Venue subtitle" },
   languages: ["es-ES", "ca-ES"],
@@ -366,6 +367,11 @@ for (const venueOnly of [false, true]) {
           choices: ["es-ES", "ca-ES"],
           fixed: null,
         });
+        const departmentRead = api.getDepartmentReceipt.getMockImplementation()!;
+        api.getDepartmentReceipt.mockImplementation(async (id) => ({
+          ...(await departmentRead(id)),
+          receiptLanguage: "ca-ES",
+        }));
         api.liveData.invalidate([{ type: "locations" }]);
         await vi.waitFor(() => expect(previewLanguage(el)!.value).toBe("ca-ES"));
         if (refused) old.reject({ code: "connection.failed" });
@@ -521,6 +527,7 @@ it.each(["bar", "closed"])(
 );
 
 it("the hosted editor marks the saved receipt language and copy languages", async () => {
+  setLocale("en-GB");
   url("bar");
   const { el } = await mount();
   const child = await loadedEditor(el);
@@ -542,4 +549,32 @@ it("department mode keeps its editor and preview when unrelated venue reads refu
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".paper-viewport")).not.toBeNull());
   expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="retry"]')).toBeNull();
+});
+
+it("the department read supplies receipt language when Venue settings is forbidden", async () => {
+  setLocale("en-GB");
+  url("bar");
+  const api = apiFixture();
+  api.getReceiptLanguage.mockRejectedValue(new Error("permission refused"));
+  api.getDepartmentReceipt.mockImplementation(async () => ({
+    ...settings,
+    receipt: {},
+    receiptLanguage: "ca-ES",
+  }));
+  const { el } = await mount(api);
+  const child = await loadedEditor(el);
+  await vi.waitFor(() =>
+    expect(child.shadowRoot!.querySelector('h3[lang="ca-ES"]')?.textContent).toContain(
+      "(receipts)",
+    ),
+  );
+  expect(child.shadowRoot!.querySelector('h3[lang="es-ES"]')?.textContent).toContain("(copies)");
+  const choice = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="previewLanguage"]',
+  );
+  expect(choice).not.toBeNull();
+  expect(choice!.value).toBe("ca-ES");
+  expect(choice!.options.map(({ value }) => value)).toEqual(["ca-ES", "es-ES"]);
+  await chooseOption(choice!, "es-ES");
+  await vi.waitFor(() => expect(api.previewReceiptDraft.mock.lastCall?.[0].language).toBe("es-ES"));
 });

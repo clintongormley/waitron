@@ -149,6 +149,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     getVenueDepartments: async () => [{ id: "bar", name: "Bar", active: true, isDefault: true }],
     getDepartmentReceipt: async () => ({
       receipt: {},
+      receiptLanguage: "es-ES",
       venueDefaults: {},
       venueAddress: [],
       languages: ["es-ES"],
@@ -490,6 +491,7 @@ it("saves every appearance field in its existing normalized body and stays clean
     },
     getDepartmentReceipt: async () => ({
       receipt: contact,
+      receiptLanguage: "es-ES",
       venueDefaults: {},
       venueAddress: [],
       languages: ["es-ES"],
