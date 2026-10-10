@@ -899,7 +899,7 @@ describe.each(["light", "dark"] as const)("A462 cascade accessibility (%s)", (th
         el.columns = [
           {
             key: "name",
-            label: language === "en" ? "Name" : "Nombre",
+            label: language === "en" ? "Product" : "Producto",
             cell: (row) => row.name,
             searchValue: (row) => row.name,
           },
