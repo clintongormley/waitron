@@ -81,7 +81,7 @@ it("localizes the grouped times and link in Spanish", async () => {
   await mount(model());
   await expect
     .poll(summary)
-    .toBe("Cerrada desde las 23:30 lunes a jueves y domingo; desde las 01:00 viernes y sábado");
+    .toBe("Cerrada desde 23:30 lunes a jueves y domingo; desde 01:00 viernes y sábado");
   expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.textContent).toBe(
     "Horario de apertura (semana normal)",
   );
@@ -237,4 +237,34 @@ it("detaches on removal and ignores a late answer after reconnecting with anothe
   await Promise.resolve();
   await el.updateComplete;
   expect(summary()).toBe("Open whenever the department is");
+});
+
+it("stops a connected component's previous API watch before a late read answers", async () => {
+  let answer!: (hours: OpeningHoursModel) => void;
+  const pending = new Promise<OpeningHoursModel>((resolve) => {
+    answer = resolve;
+  });
+  let initial = true;
+  await mount(model(), (() => {
+    if (initial) {
+      initial = false;
+      return Promise.resolve(model());
+    }
+    return pending;
+  }) as DashboardRequest);
+  await expect.poll(summary).toContain("23:30");
+  el.api!.openingHours.rereadWatches();
+  el.api = new VenueServiceApi(
+    (() => new Promise<OpeningHoursModel>(() => {})) as DashboardRequest,
+  );
+  await el.updateComplete;
+  expect(summary()).toBe("");
+  const changed = model();
+  changed.departments[0]!.zones[0]!.week = [
+    { weekday: 0, ranges: [{ startsAt: "21:00", endsAt: "06:00" }] },
+  ];
+  answer(changed);
+  await pending;
+  await el.updateComplete;
+  expect(summary()).toBe("");
 });

@@ -730,7 +730,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.zone_closed_days": "Cerrada en algunas franjas de {count} días",
   "venue.zone_day_range": "{start} a {end}",
   "venue.zone_closed_summary": "Cerrada {groups}",
-  "venue.zone_closed_from": "desde las {time}",
+  "venue.zone_closed_from": "desde {time}",
   "venue.zone_opening_hours": "Horario de apertura (semana normal)",
   "opening.title": "Horario de apertura",
   "opening.all_departments": "Todos los departamentos",
