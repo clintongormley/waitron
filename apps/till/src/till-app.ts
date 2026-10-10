@@ -287,6 +287,10 @@ interface RefreshRetry {
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
+/** How long a floor poll's read may stay out before it is cancelled: longer than the floor screen's
+ * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. */
+const FLOOR_POLL_LIMIT_MS = 25_000;
+
 // Icons shared primitives draw and their consuming app registers: wt-toast's `close`,
 // wt-combobox's, wt-row-actions' `kebab`, and the top bar's More menu's `hamburger`.
 registerIcons({
@@ -2259,7 +2263,10 @@ export class TillApp extends LitElement {
     }
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
-    if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
+    if (changed.has("api")) {
+      this.api.onMadeHere?.(this.#onMadeHere);
+      this.#stopFloorPoll();
+    }
     if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
       this.#syncDepartmentTransfers();
     if (changed.has("canvas") || changed.has("capabilities"))
@@ -5026,28 +5033,37 @@ export class TillApp extends LitElement {
     else void this.#refreshFloor();
   }
 
-  #floorPollOut = false;
+  /** The floor poll's read now out, cancelled when the operator's session ends or the api is
+   * replaced. */
+  #floorPoll?: AbortController;
 
-  /** One poll read out at a time, cut off at the till's request limit. */
+  /** One poll read out at a time, cut off at {@link FLOOR_POLL_LIMIT_MS}. */
   async #pollFloor(): Promise<void> {
-    if (this.#floorPollOut) return;
-    this.#floorPollOut = true;
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    if (this.#floorPoll !== undefined) return;
+    const poll = new AbortController();
+    this.#floorPoll = poll;
+    const limit = limited(FLOOR_POLL_LIMIT_MS, poll.signal);
     try {
       await this.#refreshFloor({ signal: limit.signal });
     } finally {
       limit.done();
-      this.#floorPollOut = false;
+      if (this.#floorPoll === poll) this.#floorPoll = undefined;
     }
   }
 
+  #stopFloorPoll(): void {
+    this.#floorPoll?.abort();
+    this.#floorPoll = undefined;
+  }
+
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
-   * the last-known floor. Answers whether `this.tables` now holds this read's answer or a newer
-   * one's. */
+   * the last-known floor, and so does one whose signal aborted before it answered. Answers whether
+   * `this.tables` now holds this read's answer or a newer one's. */
   async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
     const read = ++this.#tablesRead;
     try {
-      this.#applyTables(read, await this.api.getTablesState(...options));
+      const tables = await this.api.getTablesState(...options);
+      if (options[0]?.signal?.aborted !== true) this.#applyTables(read, tables);
     } catch {
       // The last-known floor stays.
     }
@@ -8028,6 +8044,7 @@ export class TillApp extends LitElement {
     this.#endReloadLock();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#stopFloorPoll();
     this.#polledDefaults.clear();
     this.#tableZoneId = undefined;
     this.#markedRounds.clear();
