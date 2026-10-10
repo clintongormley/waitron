@@ -594,6 +594,7 @@ export class FloorPlanEditor extends LitElement {
     const { ids } = answer;
     const saved = rekeyDraft(sentDraft, ids);
     const current = rekeyDraft(trimLabels(this.draft!, draft), ids);
+    this.renderRoot.querySelector("floor-plan-add-join")?.rekey(ids);
     this.revision = answer.revision;
     this.outOfDate = false;
     this.#opened = saved;

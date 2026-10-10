@@ -369,3 +369,20 @@ it("shows a join's table name as typed, even one that looks like a placeholder",
     "with $& {seats} · seats 6",
   );
 });
+
+it("names each Remove after its join's tables", async () => {
+  const draft = {
+    ...opened(),
+    joins: [...opened().joins, { key: "j2", seats: 8, tableKeys: ["m1", "m2", "live:l9"] }],
+  };
+  const el = await open({ draft });
+  const labels = joinRows(el).map((row) =>
+    row.querySelector("[data-test=remove-join]")!.getAttribute("aria-label"),
+  );
+  expect(labels).toEqual(["Remove: T2", "Remove: T2, T9"]);
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(
+    joinRows(el)[0]!.querySelector("[data-test=remove-join]")!.getAttribute("aria-label"),
+  ).toBe("Eliminar: T2");
+});

@@ -6,7 +6,13 @@ import "./floor-plan-add-join.js";
 import type { FloorPlanAddJoin } from "./floor-plan-add-join.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { FloorPlan } from "../api/client.js";
-import { draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
+import {
+  deleteTable,
+  draftFromPlan,
+  patchTable,
+  rekeyDraft,
+  type FloorPlanDraft,
+} from "./floor-plan-draft.js";
 
 let originalLocale = currentLocale();
 beforeEach(() => {
@@ -120,7 +126,7 @@ it("a seat count out of range holds Add and says why", async () => {
   const el = await mount();
   const changes = listen(el);
   await show(el);
-  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
   for (const seats of ["0", "1000", "1.5"]) {
     await chooseOption(field(el, "join-seats"), seats);
     await el.updateComplete;
@@ -154,7 +160,7 @@ it("offers an unnamed table as Unnamed", async () => {
 it("opens empty again after an add", async () => {
   const el = await mount();
   await show(el);
-  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
   await chooseOption(field(el, "join-seats"), "6");
   await el.updateComplete;
   confirm(el).click();
@@ -172,4 +178,86 @@ it("is in Spanish", async () => {
   expect(dialog(el).heading).toBe("Añadir unión");
   expect((field(el, "join-tables") as Field & { label: string }).label).toBe("Mesas");
   expect((field(el, "join-seats") as Field & { label: string }).label).toBe("Plazas");
+});
+
+it("holds Add with a reason when the tables are already joined, in any order", async () => {
+  const el = await mount();
+  const changes = listen(el);
+  await show(el, "m2");
+  await chooseOptions(field(el, "join-tables"), ["m1"]);
+  await chooseOption(field(el, "join-seats"), "8");
+  await el.updateComplete;
+  expect(field(el, "join-tables").error).toBe("Already joined.");
+  expect(confirm(el).disabled).toBe(true);
+  expect(confirm(el).variant).toBe("secondary");
+  confirm(el).click();
+  await el.updateComplete;
+  expect(changes).toEqual([]);
+  await chooseOptions(field(el, "join-tables"), ["m1", "live:l9"]);
+  await el.updateComplete;
+  expect(field(el, "join-tables").error).toBe("");
+  expect(confirm(el).disabled).toBe(false);
+});
+
+it("says Already joined in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await mount();
+  await show(el);
+  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await el.updateComplete;
+  expect(field(el, "join-tables").error).toBe("Ya están unidas.");
+});
+
+it("re-keys its table and chosen tables when the page re-keys its draft", async () => {
+  const el = await mount();
+  const changes = listen(el);
+  await show(el, "live:l9");
+  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  el.rekey({ "live:l9": "m9", m2: "m2" });
+  el.draft = rekeyDraft(el.draft, { "live:l9": "m9" });
+  await el.updateComplete;
+  expect(field(el, "join-tables").options.map((o) => o.value)).toEqual(["m1", "m2"]);
+  await chooseOption(field(el, "join-seats"), "4");
+  await el.updateComplete;
+  confirm(el).click();
+  expect(changes[0]!.joins.at(-1)!.tableKeys).toEqual(["m9", "m2"]);
+});
+
+it("adds only the chosen tables the draft still holds", async () => {
+  const el = await mount();
+  const changes = listen(el);
+  await show(el);
+  await chooseOptions(field(el, "join-tables"), ["m2", "live:l9"]);
+  await chooseOption(field(el, "join-seats"), "4");
+  el.draft = deleteTable(el.draft, "m2");
+  await el.updateComplete;
+  confirm(el).click();
+  expect(changes[0]!.joins.at(-1)!.tableKeys).toEqual(["m1", "live:l9"]);
+});
+
+it("is not ready when every chosen table has gone from the draft", async () => {
+  const el = await mount();
+  const changes = listen(el);
+  await show(el);
+  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await chooseOption(field(el, "join-seats"), "4");
+  el.draft = deleteTable(el.draft, "m2");
+  await el.updateComplete;
+  expect(confirm(el).disabled).toBe(true);
+  confirm(el).click();
+  expect(changes).toEqual([]);
+});
+
+it("closes without adding when its table has gone from the draft", async () => {
+  const el = await mount();
+  const changes = listen(el);
+  await show(el);
+  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await chooseOption(field(el, "join-seats"), "4");
+  await el.updateComplete;
+  el.draft = deleteTable(el.draft, "m1");
+  confirm(el).click();
+  await el.updateComplete;
+  expect(changes).toEqual([]);
+  await expect.poll(() => dialog(el).open).toBe(false);
 });

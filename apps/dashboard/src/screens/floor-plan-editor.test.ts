@@ -706,3 +706,47 @@ for (const [from, to] of sizes) {
     expect(joinField(el, "join-tables").values).toEqual(["m2"]);
   });
 }
+
+it("a save answer arriving while Add join is open re-keys its chosen table", async () => {
+  const withT9 = (revision: number, id: string | null): FloorPlan => ({
+    ...terrace(revision),
+    tables: [
+      ...terrace(revision).tables,
+      { id, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    ],
+  });
+  let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
+  const api = stubApi({
+    getFloorPlan: vi.fn().mockResolvedValueOnce(withT9(3, null)).mockResolvedValue(withT9(4, "m9")),
+    saveFloorPlan: vi.fn(
+      () =>
+        new Promise<{ revision: number; ids: Record<string, string> }>((resolve) => {
+          answer = resolve;
+        }),
+    ),
+  });
+  const el = await open(api);
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  button(el, "save").click();
+  await el.updateComplete;
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await openAddJoin(el);
+  await chooseOptions(joinField(el, "join-tables"), ["live:l9"]);
+  answer({ revision: 4, ids: { "live:l9": "m9" } });
+  await flush(el);
+  await flush(el);
+  expect(panelOf(el).draft.tables.map((t) => t.key)).toContain("m9");
+  expect(joinModal(el).open).toBe(true);
+  expect(joinField(el, "join-tables").values).toEqual(["m9"]);
+  await chooseOption(joinField(el, "join-seats"), "4");
+  await joinDialogOf(el).updateComplete;
+  joinModal(el).querySelector<HTMLElement>("wt-button[data-action=join-confirm]")!.click();
+  await el.updateComplete;
+  expect(tablePanel(el)!.draft.joins).toEqual([
+    { key: "join:1", seats: 4, tableKeys: ["m1", "m9"] },
+  ]);
+  await tablePanel(el)!.updateComplete;
+  expect(tablePanel(el)!.shadowRoot!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
+    "with T9 · seats 4",
+  );
+});

@@ -985,6 +985,7 @@ export const en = {
   "floor_plan_editor.join_with": "with {tables} · seats {seats}",
   "floor_plan_editor.add_join": "Add join",
   "floor_plan_editor.join_seats_invalid": "Enter 1 to 999.",
+  "floor_plan_editor.already_joined": "Already joined.",
   "floor_plan_editor.booked": "Booked {date}, {time}",
   "floor_plan_editor.first_note": "Your first save goes live now; later changes, tomorrow.",
   "floor_plan_editor.note": "Your changes will go live tomorrow.",
@@ -3557,6 +3558,7 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.join_with": "con {tables} · {seats} plazas",
   "floor_plan_editor.add_join": "Añadir unión",
   "floor_plan_editor.join_seats_invalid": "Escribe de 1 a 999.",
+  "floor_plan_editor.already_joined": "Ya están unidas.",
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
   "floor_plan_editor.first_note":
     "Tu primer guardado se aplica ya; los cambios posteriores, mañana.",

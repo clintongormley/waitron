@@ -206,12 +206,16 @@ export class FloorPlanTablePanel extends LitElement {
     return label || t("floor_plan_editor.unnamed");
   }
 
-  /** Names go in last and through a function, so a name holding `{seats}` or `$&` stays as typed. */
-  #joinText(tableKeys: string[], seats: number): string {
-    const names = tableKeys
+  #otherNames(tableKeys: string[]): string {
+    return tableKeys
       .filter((key) => key !== this.tableKey)
       .map((key) => this.#label(key))
       .join(", ");
+  }
+
+  /** Names go in last and through a function, so a name holding `{seats}` or `$&` stays as typed. */
+  #joinText(tableKeys: string[], seats: number): string {
+    const names = this.#otherNames(tableKeys);
     return t("floor_plan_editor.join_with")
       .replace("{seats}", String(seats))
       .replace("{tables}", () => names);
@@ -232,6 +236,7 @@ export class FloorPlanTablePanel extends LitElement {
                     ><wt-button
                       variant="secondary"
                       data-test="remove-join"
+                      aria-label=${`${t("action.remove")}: ${this.#otherNames(join.tableKeys)}`}
                       @click=${() => this.#change(removeJoin(this.draft, join.key))}
                       >${t("action.remove")}</wt-button
                     >

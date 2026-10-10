@@ -529,6 +529,38 @@ describe("checkZonePlanSave", () => {
     expect(error.params).toEqual({ field });
   });
 
+  async function threeTables() {
+    const { z, input } = await planned();
+    const tables: ZonePlanSave["tables"] = [
+      ...input.tables,
+      { key: "b", label: fresh("B"), seats: null, fixed: false, placement: null },
+      { key: "c", label: fresh("C"), seats: null, fixed: false, placement: null },
+    ];
+    return { z, input: { ...input, tables } };
+  }
+
+  it("refuses a second join of the same tables, in any order", async () => {
+    const { z, input } = await threeTables();
+    const joins = [
+      { seats: 6, tableKeys: ["a", "b"] },
+      { seats: 8, tableKeys: ["c", "a", "b"] },
+      { seats: 8, tableKeys: ["b", "a"] },
+    ];
+    const error = await refusal(check(z, { ...input, joins }));
+    expect(error.code).toBe("floor_plan.invalid");
+    expect(error.params).toEqual({ field: "joins.2.tableKeys" });
+  });
+
+  it("accepts joins of different tables that share some", async () => {
+    const { z, input } = await threeTables();
+    const joins = [
+      { seats: 6, tableKeys: ["a", "b"] },
+      { seats: 8, tableKeys: ["b", "c"] },
+      { seats: 10, tableKeys: ["a", "b", "c"] },
+    ];
+    await expect(check(z, { ...input, joins })).resolves.toBeUndefined();
+  });
+
   it("refuses a join of one table", async () => {
     const { z, input } = await planned();
     const error = await refusal(check(z, { ...input, joins: [{ seats: 4, tableKeys: ["a"] }] }));
@@ -930,6 +962,24 @@ describe("saveZonePlan", () => {
     expect(after.find((row) => row.id === result.ids.bar)).toEqual(
       before.find((row) => row.id === result.ids.bar),
     );
+  });
+
+  it("saves nothing when two joins name the same tables", async () => {
+    const z = await zone();
+    const error = await refusal(
+      save(z, {
+        revision: 0,
+        tables: [entry("1", fresh("T1")), entry("2", fresh("T2"))],
+        joins: [
+          { seats: 6, tableKeys: ["1", "2"] },
+          { seats: 8, tableKeys: ["2", "1"] },
+        ],
+      }),
+    );
+    expect(error.code).toBe("floor_plan.invalid");
+    expect(error.params).toEqual({ field: "joins.1.tableKeys" });
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(plan.joins).toEqual([]);
   });
 
   it("deletes a table that is in a saved join", async () => {

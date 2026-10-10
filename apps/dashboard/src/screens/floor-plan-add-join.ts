@@ -30,9 +30,9 @@ interface JoinForm {
 
 const copyForm = (form: JoinForm): JoinForm => ({ ...form, others: [...form.others] });
 
+/** The anchor is not input: a save answer may re-key it while the dialog is open. */
 function sameForm(a: JoinForm, b: JoinForm): boolean {
   return (
-    a.tableKey === b.tableKey &&
     a.seats === b.seats &&
     a.others.length === b.others.length &&
     a.others.every((key) => b.others.includes(key))
@@ -104,6 +104,15 @@ export class FloorPlanAddJoin extends LitElement {
     this.form = { tableKey, others: [], seats: "" };
   }
 
+  /** Follows the page's re-keying of its draft after a save answer. */
+  rekey(ids: Readonly<Record<string, string>>): void {
+    const form = this.form;
+    if (form === null) return;
+    const rekey = (key: string): string => (Object.hasOwn(ids, key) ? ids[key]! : key);
+    this.form = { ...form, tableKey: rekey(form.tableKey), others: form.others.map(rekey) };
+    this.#scope?.changed();
+  }
+
   #close(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -137,16 +146,37 @@ export class FloorPlanAddJoin extends LitElement {
       }));
   }
 
+  /** The chosen tables the draft still holds. */
+  #present(form: JoinForm): string[] {
+    return form.others.filter((key) => this.draft.tables.some((t) => t.key === key));
+  }
+
+  #alreadyJoined(form: JoinForm): boolean {
+    const members = new Set([form.tableKey, ...this.#present(form)]);
+    return this.draft.joins.some(
+      (join) =>
+        join.tableKeys.length === members.size && join.tableKeys.every((key) => members.has(key)),
+    );
+  }
+
   #ready(form: JoinForm): boolean {
-    return form.others.length > 0 && seatsOf(form.seats) !== null;
+    return (
+      this.#present(form).length > 0 && seatsOf(form.seats) !== null && !this.#alreadyJoined(form)
+    );
   }
 
   #add(): void {
     const form = this.form;
     if (form === null || !this.#ready(form) || saveActionState(this.#scope).unchanged) return;
+    if (!this.draft.tables.some((t) => t.key === form.tableKey)) {
+      this.#scope?.commit(copyForm(form));
+      this.#modal()?.closeAfter("saved");
+      this.#close();
+      return;
+    }
     const draft = addJoin(
       this.draft,
-      [form.tableKey, ...form.others],
+      [form.tableKey, ...this.#present(form)],
       seatsOf(form.seats)!,
       this.nextJoinKey(),
     );
@@ -170,6 +200,8 @@ export class FloorPlanAddJoin extends LitElement {
       form !== null && form.seats !== "" && seatsOf(form.seats) === null
         ? t("floor_plan_editor.join_seats_invalid")
         : "";
+    const tablesError =
+      form !== null && this.#alreadyJoined(form) ? t("floor_plan_editor.already_joined") : "";
     return html`<wt-modal
       data-dialog="add-join"
       size="standard"
@@ -191,7 +223,8 @@ export class FloorPlanAddJoin extends LitElement {
                 required
                 label=${t("floor_plan_editor.tables")}
                 .options=${this.#options(form)}
-                .values=${form.others}
+                .values=${this.#present(form)}
+                .error=${tablesError}
                 @wt-change=${(e: CustomEvent<{ values: string[] }>) => {
                   e.stopPropagation();
                   this.#edit({ others: [...e.detail.values] });
