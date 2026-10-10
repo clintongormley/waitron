@@ -6921,7 +6921,7 @@ export class TillApp extends LitElement {
             >${t("action.cancel")}</wt-button
           >
           <wt-button
-            variant="primary"
+            variant=${pending.stationId === undefined ? "secondary" : "primary"}
             data-edit-dead-ends-retry
             ?disabled=${pending.stationId === undefined}
             @click=${(event: Event) => {

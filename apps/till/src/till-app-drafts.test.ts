@@ -692,6 +692,61 @@ it("asks where a refused line edit should be made and retries with the chosen st
   );
 });
 
+it.each(["light", "dark"] as const)(
+  "draws the refused edit's Confirm quiet like Cancel until a station is chosen, then blue (%s theme)",
+  async (theme) => {
+    const { el } = await mountApp(
+      {
+        updateOrderLine: vi.fn().mockRejectedValueOnce({ code: "station.no_replacement" }),
+        askSaleDeadEnds: vi.fn().mockResolvedValue({
+          sends: true,
+          deadEnds: [
+            {
+              key: "0",
+              name: "Beer",
+              quantity: "2",
+              stationId: "bar",
+              stationName: "Upstairs bar",
+              why: "switched_off",
+            },
+          ],
+          stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+        }),
+      },
+      undefined,
+      theme,
+    );
+    const order = await openMesa(el);
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Beer",
+      patch: { quantity: "2" },
+      revision: 0,
+      saleLine: { menuItemId: "offer-beer", quantity: "2" },
+    });
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-edit-dead-ends]")!;
+    const confirm = dialog.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-edit-dead-ends-retry]",
+    )!;
+    const fill = (host: Element) =>
+      getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+    const cancelFill = fill(dialog.querySelector(".edit-dead-ends-actions > wt-button")!);
+    await confirm.updateComplete;
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+    expect(confirm.getAttribute("variant")).toBe("secondary");
+    expect(fill(confirm)).toBe(cancelFill);
+    dialog
+      .querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await flush(el);
+    await confirm.updateComplete;
+    expect(confirm.hasAttribute("disabled")).toBe(false);
+    expect(confirm.getAttribute("variant")).toBe("primary");
+    expect(fill(confirm)).not.toBe(cancelFill);
+  },
+);
+
 describe("dead-end questions with no timely answer", () => {
   afterEach(() => vi.useRealTimers());
 

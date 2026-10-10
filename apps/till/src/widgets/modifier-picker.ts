@@ -577,7 +577,7 @@ export class TillModifierPicker extends LitElement {
       <wt-button
         slot="footer"
         class="confirm"
-        variant=${saveAction.variant}
+        variant=${this.initialSelections === undefined && !this.#satisfied(stale, totals) ? "secondary" : saveAction.variant}
         ?disabled=${saveAction.unchanged || !this.#satisfied(stale, totals)}
         @click=${(e: Event) => this.#confirm(e)}
       >

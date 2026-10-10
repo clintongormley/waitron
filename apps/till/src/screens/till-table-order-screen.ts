@@ -3256,7 +3256,7 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 class="preview-confirm"
-                variant="primary"
+                variant=${pending?.checking === true || [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt) ? "secondary" : "primary"}
                 data-draft-confirm
                 ?disabled=${pending?.checking === true || [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt)}
                 @click=${() => this.#confirmPreview()}
@@ -4891,7 +4891,7 @@ export class TillTableOrderScreen extends LitElement {
       <wt-button
         class="transfer-confirm"
         data-transfer-confirm
-        variant="primary"
+        variant=${canConfirm ? "primary" : "secondary"}
         ?disabled=${!canConfirm}
         @click=${(event: Event) => this.#confirmTransfer(event)}
       >
@@ -4932,7 +4932,7 @@ export class TillTableOrderScreen extends LitElement {
         <wt-button
           class="transfer-confirm"
           data-split-confirm
-          variant="primary"
+          variant=${this.splitQuantities.size === 0 ? "secondary" : "primary"}
           ?disabled=${this.splitQuantities.size === 0 || errors.length > 0}
           @click=${(event: Event) => void this.#confirmSplit(event)}
         >

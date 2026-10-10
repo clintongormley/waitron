@@ -63,3 +63,33 @@ it("does not offer Remove on an already stored bill", async () => {
   ).toBe(false);
   expect(el.shadowRoot!.querySelector<HTMLElement>(".remove")).toBeNull();
 });
+
+const buttonFill = (host: Element) =>
+  getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+
+it.each(["light", "dark"] as const)(
+  "draws Continue quiet like Cancel until every dish has somewhere to go, then blue (%s theme)",
+  async (theme) => {
+    setLocale("en");
+    const { el } = await mountWidget<TillDeadEndsDialog>(
+      "till-dead-ends-dialog",
+      { answer, allowRemove: true },
+      theme,
+    );
+    const root = el.shadowRoot!;
+    const proceed = root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-continue]")!;
+    const cancelFill = buttonFill(root.querySelector("[data-cancel]")!);
+    await proceed.updateComplete;
+    expect(proceed.hasAttribute("disabled")).toBe(true);
+    expect(proceed.getAttribute("variant")).toBe("secondary");
+    expect(buttonFill(proceed)).toBe(cancelFill);
+    root
+      .querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+    await el.updateComplete;
+    await proceed.updateComplete;
+    expect(proceed.hasAttribute("disabled")).toBe(false);
+    expect(proceed.getAttribute("variant")).toBe("primary");
+    expect(buttonFill(proceed)).not.toBe(cancelFill);
+  },
+);

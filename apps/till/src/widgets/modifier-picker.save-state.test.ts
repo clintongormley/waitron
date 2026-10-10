@@ -176,3 +176,23 @@ it("in add mode a press with the offer's defaults sends them", async () => {
   expect(sent[0]!.options).toEqual([{ listId: "list-cooked", labelId: "label-medium" }]);
   expect(sent[0]!.extras).toBeUndefined();
 });
+
+const buttonFill = (host: Element) =>
+  getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+
+it.each(["light", "dark"] as const)(
+  "in add mode Add is quiet like Cancel while a required choice is missing, and blue once it is made (%s theme)",
+  async (theme) => {
+    const { el } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      { product: burger },
+      theme,
+    );
+    const cancelFill = buttonFill(el.shadowRoot!.querySelector(".cancel")!);
+    expect(await saveState(el)).toEqual(quiet);
+    expect(buttonFill(confirmButton(el))).toBe(cancelFill);
+    await pick(el, "pick-list-sides-p-chips");
+    expect(await saveState(el)).toEqual(ready);
+    expect(buttonFill(confirmButton(el))).not.toBe(cancelFill);
+  },
+);

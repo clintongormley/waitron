@@ -152,7 +152,7 @@ export class TillDeadEndsDialog extends LitElement {
         >
         <wt-button
           data-continue
-          variant="primary"
+          variant=${remaining.some((row) => !this.choices.has(row.key)) ? "secondary" : "primary"}
           ?disabled=${remaining.some((row) => !this.choices.has(row.key))}
           @click=${() => this.#continue()}
           >${t("dead_end.continue")}</wt-button
