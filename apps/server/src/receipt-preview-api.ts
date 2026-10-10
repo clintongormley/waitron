@@ -214,10 +214,13 @@ async function draftBody(c: Context): Promise<Record<string, unknown>> {
     throw invalid();
   if (
     Object.keys(result).some(
-      (key) => !["departmentId", "receipt", "settings", "language", "paperWidth"].includes(key),
+      (key) =>
+        !["departmentId", "receipt", "settings", "language", "paperWidth", "passive"].includes(key),
     )
   )
     throw invalid();
+  if (result.passive !== undefined && typeof result.passive !== "boolean")
+    throw new AppError("management.request_invalid", { field: "passive" });
   return result;
 }
 
@@ -252,6 +255,7 @@ export function mountReceiptPreviewApi(
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
+          touch: body.passive !== true,
         });
         const rules = await readVenueReceiptLanguageRules(tx, deps.cfg);
         const current = await readReceiptLanguage(tx, deps.cfg.locationId);

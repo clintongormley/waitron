@@ -2742,14 +2742,21 @@ export class DashboardApi {
     return this.#request<void>("/management-api/receipt-language", "PUT", { language });
   }
 
-  previewReceiptDraft(draft: {
-    departmentId: string | null;
-    receipt: DepartmentReceiptConfig;
-    settings: VenueReceiptSettings;
-    language?: string;
-    paperWidth?: PrintPaperWidth;
-  }): Promise<ReceiptPreview> {
-    return this.#request("/management-api/receipt-preview", "POST", draft);
+  previewReceiptDraft(
+    draft: {
+      departmentId: string | null;
+      receipt: DepartmentReceiptConfig;
+      settings: VenueReceiptSettings;
+      language?: string;
+      paperWidth?: PrintPaperWidth;
+    },
+    options: { passive?: boolean } = {},
+  ): Promise<ReceiptPreview> {
+    return this.#request(
+      "/management-api/receipt-preview",
+      "POST",
+      options.passive === true ? { ...draft, passive: true } : draft,
+    );
   }
 
   /** Draws a sample receipt with this trim, at the given paper width and in the given receipt

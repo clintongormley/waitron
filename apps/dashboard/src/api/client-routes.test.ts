@@ -1202,3 +1202,18 @@ describe("department draft preview request", () => {
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 });
+
+it("makes only explicitly passive draft previews passive, including on the background client", async () => {
+  const answer = { preview: { text: "Draft" }, marks: {} };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+  const api = new DashboardApi("", fetchImpl);
+  const draft = { departmentId: null, receipt: {}, settings: {} };
+  await expect(api.previewReceiptDraft(draft, { passive: true })).resolves.toEqual(answer);
+  await expect(api.background.previewReceiptDraft(draft)).resolves.toEqual(answer);
+  await expect(api.previewReceiptDraft(draft, { passive: false })).resolves.toEqual(answer);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/receipt-preview", "POST", { ...draft, passive: true }],
+    ["/management-api/receipt-preview", "POST", draft],
+    ["/management-api/receipt-preview", "POST", draft],
+  ]);
+});

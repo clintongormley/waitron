@@ -67,7 +67,7 @@ function fixture() {
       defaultLanguage: "es",
       languages: ["es", "ca", "gl"],
     })),
-    previewReceipt: vi.fn(async () => paper),
+    previewReceiptDraft: vi.fn(async () => paper),
   };
 }
 async function mount(api = fixture(), theme: "light" | "dark" = "light") {

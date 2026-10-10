@@ -86,8 +86,12 @@ function apiFixture(rows = departments) {
     putReceiptLanguage: vi.fn(async () => {}),
     getContentLanguages: vi.fn(async () => ({ defaultLanguage: "es", languages: ["es"] })),
     previewReceipt: vi.fn(async () => preview("Venue only")),
-    previewReceiptDraft: vi.fn(async (draft: Parameters<DashboardApi["previewReceiptDraft"]>[0]) =>
-      preview(`${draft.departmentId}: ${draft.receipt.email ?? draft.receipt.phone ?? "empty"}`),
+    previewReceiptDraft: vi.fn<DashboardApi["previewReceiptDraft"]>(async (draft) =>
+      preview(
+        draft.departmentId === null
+          ? "Venue only"
+          : `${draft.departmentId}: ${draft.receipt.email ?? draft.receipt.phone ?? "empty"}`,
+      ),
     ),
     imageLibraryRequest: vi.fn(async () => ({ images: [], total: 0 })),
   };
@@ -471,7 +475,7 @@ it("keeps the preview language when selecting another department", async () => {
 it("keeps a venue-only preview independent of an unsaved receipt language", async () => {
   url();
   const { el, api } = await mount(apiFixture([]));
-  await vi.waitFor(() => expect(api.previewReceipt).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
   await chooseOption(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       "wt-combobox[name=receiptLanguage]",
@@ -480,7 +484,11 @@ it("keeps a venue-only preview independent of an unsaved receipt language", asyn
   );
   await fill(el, "headerSubtitle", "Unsaved default");
   await vi.waitFor(() =>
-    expect(api.previewReceipt.mock.lastCall).toEqual([{ headerSubtitle: "Unsaved default" }]),
+    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
+      departmentId: null,
+      receipt: {},
+      settings: { headerSubtitle: "Unsaved default" },
+    }),
   );
   expect(previewLanguage(el)!.value).toBe("es-ES");
 });
@@ -569,7 +577,7 @@ for (const venueOnly of [false, true]) {
       const api = apiFixture(venueOnly ? [] : departments);
       const { el } = await mount(api);
       if (!venueOnly) await loadedEditor(el);
-      const request = venueOnly ? api.previewReceipt : api.previewReceiptDraft;
+      const request = api.previewReceiptDraft;
       const initial = venueOnly ? "Venue only" : "bar: +34 912 345 678";
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain(initial),
@@ -678,4 +686,47 @@ it("accepts the chosen preview language's paper when a different saved language 
     held.resolve(preview("Held settled"));
     next.resolve(preview("Next settled"));
   }
+});
+
+it("posts a venue-only authored preview without copying stored contact into the draft", async () => {
+  url();
+  const api = apiFixture([]);
+  api.getReceipt.mockResolvedValue({
+    receipt: { headerSubtitle: "Stored", phone: "+34 912 345 678", email: "venue@example.test" },
+    venueAddress: ["Calle Mayor 1"],
+  });
+  const { el } = await mount(api);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Venue only"),
+  );
+  expect(api.previewReceiptDraft.mock.lastCall).toEqual([
+    { departmentId: null, receipt: {}, settings: { headerSubtitle: "Venue subtitle" } },
+  ]);
+  await fill(el, "headerSubtitle", "Venue draft");
+  await vi.waitFor(() =>
+    expect(api.previewReceiptDraft.mock.lastCall?.[0].settings).toEqual({
+      headerSubtitle: "Venue draft",
+    }),
+  );
+  expect(api.previewReceiptDraft.mock.lastCall?.[0].receipt).toEqual({});
+  expect(api.previewReceipt).not.toHaveBeenCalled();
+});
+
+it("makes a venue contact refresh passive without sending contact as an authored override", async () => {
+  url();
+  const api = apiFixture([]);
+  const { el } = await mount(api);
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
+  api.getReceipt.mockResolvedValue({
+    receipt: { phone: "+34 912 345 678" },
+    venueAddress: ["Calle Mayor 1"],
+  });
+  api.liveData.invalidate([{ type: "tenant_receipts" }]);
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
+  expect(api.previewReceiptDraft.mock.lastCall).toEqual([
+    { departmentId: null, receipt: {}, settings: { headerSubtitle: "Venue subtitle" } },
+    { passive: true },
+  ]);
+  expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Venue only");
+  expect(api.putReceipt).not.toHaveBeenCalled();
 });

@@ -30,7 +30,7 @@ const PREVIEW = {
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
-  return {
+  const api = {
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     getVenueDepartments: vi.fn().mockResolvedValue([]),
     getVenueReceiptSettings: vi
@@ -51,6 +51,15 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
     previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;
+  api.previewReceiptDraft = vi.fn(async (draft) => {
+    const config = draft.settings;
+    return draft.language !== undefined
+      ? api.previewReceipt(config, draft.paperWidth, draft.language)
+      : draft.paperWidth !== undefined
+        ? api.previewReceipt(config, draft.paperWidth)
+        : api.previewReceipt(config);
+  });
+  return api;
 }
 
 async function flush(el: ReceiptsScreen): Promise<void> {

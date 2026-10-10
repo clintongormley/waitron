@@ -66,7 +66,7 @@ function stubApi(
   content: ContentLanguages = { defaultLanguage: "es", languages: ["es", "ca", "gl", "eu"] },
   overrides: Record<string, unknown> = {},
 ): DashboardApi {
-  return {
+  const api = {
     getVenueReceiptSettings: vi.fn().mockResolvedValue({ settings: {} }),
     putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
     getVenueDepartments: vi.fn().mockResolvedValue([]),
@@ -81,6 +81,15 @@ function stubApi(
     previewReceipt: vi.fn(drawn),
     ...overrides,
   } as unknown as DashboardApi;
+  api.previewReceiptDraft = vi.fn(async (draft) => {
+    const config = draft.settings;
+    return draft.language !== undefined
+      ? api.previewReceipt(config, draft.paperWidth, draft.language)
+      : draft.paperWidth !== undefined
+        ? api.previewReceipt(config, draft.paperWidth)
+        : api.previewReceipt(config);
+  });
+  return api;
 }
 
 const defaultsRoot = (el: ReceiptsScreen) =>

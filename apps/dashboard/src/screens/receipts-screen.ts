@@ -626,7 +626,8 @@ export class ReceiptsScreen extends LitElement {
       this.#previewAgain = true;
       return;
     }
-    const client = this.#previewActive ? this.api : (this.api.background ?? this.api);
+    const passive = !this.#previewActive;
+    const client = passive ? (this.api.background ?? this.api) : this.api;
     this.#previewActive = false;
     const config: ReceiptConfig = {
       ...this.#venueDefaults(),
@@ -655,19 +656,16 @@ export class ReceiptsScreen extends LitElement {
     }
     const generation = this.#departmentGeneration;
     try {
-      const preview = await (departmentId !== null
-        ? client.previewReceiptDraft({
-            departmentId,
-            receipt,
-            settings: this.#venueDefaults(),
-            ...(width === null ? {} : { paperWidth: width }),
-            ...(language === null ? {} : { language }),
-          })
-        : language !== null
-          ? client.previewReceipt(config, width ?? undefined, language)
-          : width === null
-            ? client.previewReceipt(config)
-            : client.previewReceipt(config, width));
+      const preview = await client.previewReceiptDraft(
+        {
+          departmentId,
+          receipt,
+          settings: this.#venueDefaults(),
+          ...(width === null ? {} : { paperWidth: width }),
+          ...(language === null ? {} : { language }),
+        },
+        ...(passive ? [{ passive: true }] : []),
+      );
       if (generation === this.#departmentGeneration) {
         this.preview = preview;
         this.previewFailed = false;

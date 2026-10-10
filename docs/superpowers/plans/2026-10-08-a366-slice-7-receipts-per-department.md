@@ -757,6 +757,9 @@ only if new findings require them.
 - [ ] Preview POST sends selected department's authored draft maps and global defaults/switch draft,
   not a resolved string masquerading as validated maps. Handle stale response generations and passive reads.
   Preview selection uses decision 6's languages; it is separate from the stacked editor fields.
+  Automatic preview POSTs send the preview-specific Boolean `passive: true`; the route authenticates
+  without touching session activity. Explicit previews omit it. The generic background client
+  continues to mark only GETs passive.
 - [ ] Focused preview/API/types. Once at task end, do the complete LOOK: EN/ES UI, all receipt
   choices, both themes, desktop/390 px, short/long/empty fields, logo/no logo, two departments,
   null-sale venue-only sample, 58/80 thermal, A4, independent language and inline refusal scroll.

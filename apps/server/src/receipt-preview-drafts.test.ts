@@ -341,3 +341,46 @@ describe("POST receipt draft preview", () => {
     expect((await response.json()).error.code).toBe("management.request_invalid");
   });
 });
+
+it("authenticates passive previews without extending the session while explicit previews extend it", async () => {
+  const before = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  await suite.db.execute(sql`update management_sessions set last_seen_at = ${before}`);
+  const seen = async () =>
+    (
+      await suite.db.execute<{ seen: string }>(
+        sql`select last_seen_at as seen from management_sessions order by id`,
+      )
+    ).rows.map((row) => row.seen);
+  const original = await seen();
+  const automatic = await ask({ ...draft(), passive: true });
+  expect(automatic.status).toBe(200);
+  expect(await seen()).toEqual(original);
+  const explicit = await ask(draft());
+  expect(explicit.status).toBe(200);
+  expect(await seen()).not.toEqual(original);
+});
+
+it.each([null, "true", 1, []])("refuses a non-boolean passive preview flag %#", async (passive) => {
+  const response = await ask({ ...draft(), passive });
+  expect(response.status).toBe(400);
+  expect((await response.json()).error).toEqual({
+    code: "management.request_invalid",
+    params: { field: "passive" },
+  });
+});
+
+it("keeps the venue-only page's stored contact in the drawn paper without submitting it", async () => {
+  const contact = { phone: "+34 912 345 678", email: "venue@example.com" };
+  await suite.db.insert(tenantReceipts).values({ receipt: contact });
+  const answer = await drawn({
+    departmentId: null,
+    receipt: {},
+    settings: { headerSubtitle: "Venue-only draft", footerMessage: "Thanks", printAddress: false },
+  });
+  expect(lines(answer)).toContain("Tel. +34 912 345 678");
+  expect(lines(answer)).toContain("venue@example.com");
+  expect(lines(answer)).toContain("Venue-only draft");
+  expect(lines(answer)).toContain("Thanks");
+  expect(answer.marks.address).toBeNull();
+  expect((await suite.db.select().from(tenantReceipts))[0]!.receipt).toEqual(contact);
+});

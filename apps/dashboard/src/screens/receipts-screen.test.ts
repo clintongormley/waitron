@@ -44,7 +44,7 @@ function fakePreview(config: ReceiptConfig): ReceiptPreview {
 }
 
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
-  return {
+  const api = {
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     getVenueReceiptSettings: vi.fn().mockResolvedValue({ settings: {} }),
     putVenueReceiptSettings: vi.fn().mockResolvedValue(undefined),
@@ -79,6 +79,17 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     previewReceipt: vi.fn(async (config: ReceiptConfig) => fakePreview(config)),
     ...overrides,
   } as unknown as DashboardApi;
+  const departmentPreview = api.previewReceiptDraft;
+  api.previewReceiptDraft = vi.fn(async (draft, options) => {
+    if (draft.departmentId !== null)
+      return options === undefined ? departmentPreview(draft) : departmentPreview(draft, options);
+    return draft.language !== undefined
+      ? api.previewReceipt(draft.settings, draft.paperWidth, draft.language)
+      : draft.paperWidth !== undefined
+        ? api.previewReceipt(draft.settings, draft.paperWidth)
+        : api.previewReceipt(draft.settings);
+  });
+  return api;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

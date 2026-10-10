@@ -50,7 +50,7 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     getVenueDepartments: vi.fn().mockResolvedValue([]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
-    previewReceipt: vi.fn().mockResolvedValue(PREVIEW),
+    previewReceiptDraft: vi.fn().mockResolvedValue(PREVIEW),
     ...overrides,
   } as unknown as DashboardApi;
 }

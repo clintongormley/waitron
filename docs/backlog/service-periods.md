@@ -52,9 +52,10 @@ their full text.
   receipt/location/language read refusals; read recovery retains a refused department draft.
   Reconnect preserves scoped drafts; stacked language headings label receipts/copies and
   warn from authored maps. Known locale refusals focus and scroll to their field; unknown
-  locales stay in the action summary. Venue-only previews still use the legacy GET route
-  (`apps/dashboard/src/screens/receipts-screen.ts`); migrating that caller and retiring the
-  client/server GET path remain open. The complete managed-stack presentation pass and
+  locales stay in the action summary. Venue-only previews now use authored POST drafts,
+  leaving stored global contact to the server. Automatic draft previews authenticate without
+  extending the session; explicit previews retain activity. The unused client/server GET path
+  and its remaining legacy test fixtures still need retirement. The complete managed-stack presentation pass and
   remaining retained-consumer qualification also remain open.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core

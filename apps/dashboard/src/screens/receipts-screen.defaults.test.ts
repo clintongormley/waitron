@@ -257,18 +257,20 @@ it("keeps defaults usable after a department load refusal", async () => {
   expect(api.previewReceiptDraft).not.toHaveBeenCalled();
 });
 
-it("uses authored defaults in a venue-only preview while keeping stored global contact", async () => {
+it("uses authored defaults in a venue-only preview without sending stored global contact", async () => {
   const api = fixture();
   api.getVenueDepartments.mockResolvedValue([]);
   const { el } = await mount(api);
   await edit(defaults(el), "headerSubtitle", "Venue-only draft");
   await vi.waitFor(() =>
-    expect(api.previewReceipt.mock.lastCall?.[0]).toEqual({
-      headerSubtitle: "Venue-only draft",
-      footerMessage: "Thanks",
-      printAddress: false,
-      phone: "+34 912 345 678",
-      email: "venue@example.com",
+    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
+      departmentId: null,
+      receipt: {},
+      settings: {
+        headerSubtitle: "Venue-only draft",
+        footerMessage: "Thanks",
+        printAddress: false,
+      },
     }),
   );
   expect(api.getDepartmentReceipt).not.toHaveBeenCalled();
@@ -340,15 +342,18 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
         "bar: preview@bar.example",
       ),
     );
-    expect(api.previewReceiptDraft).toHaveBeenLastCalledWith({
-      departmentId: "bar",
-      receipt: { email: "preview@bar.example" },
-      settings: {
-        headerSubtitle: "Current defaults",
-        footerMessage: "Thanks",
-        printAddress: false,
+    expect(api.previewReceiptDraft).toHaveBeenLastCalledWith(
+      {
+        departmentId: "bar",
+        receipt: { email: "preview@bar.example" },
+        settings: {
+          headerSubtitle: "Current defaults",
+          footerMessage: "Thanks",
+          printAddress: false,
+        },
       },
-    });
+      ...(failed === "getReceipt" ? [{ passive: true }] : []),
+    );
     expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
     expect(api.putReceipt).not.toHaveBeenCalled();
     expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
