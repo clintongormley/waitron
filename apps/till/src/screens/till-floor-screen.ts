@@ -1,6 +1,7 @@
 import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
 import { tillPath } from "../navigation.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
@@ -81,6 +82,12 @@ export class TillFloorScreen extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-4);
         padding: var(--wt-space-4);
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .screen {
+          padding-inline: 0;
+        }
       }
 
       .head {

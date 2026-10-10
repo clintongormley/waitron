@@ -1,7 +1,8 @@
 import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/shared";
@@ -96,6 +97,12 @@ export class TillExpoScreen extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-4);
         padding: var(--wt-space-4);
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .screen {
+          padding-inline: 0;
+        }
       }
 
       .head {
