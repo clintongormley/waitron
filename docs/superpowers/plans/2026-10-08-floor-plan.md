@@ -161,6 +161,16 @@ The owner confirms or overrides these when reviewing the plan.
     catch-up (and the day's reset) first. The till re-reads after its own actions and every 15
     seconds, and a delivery being paid or collected frees a table without any table route
     running.
+20. **A merge's seats come from the master's saved join as it is now** (added at slice 4's
+    expansion, slice 4 decision 7; the owner may override). A reset copies no joins, so a join saved
+    mid-service gives a merge its seats before the next reset, against decision 3; keeping decision 3
+    would take a migration recording each reset's joins, not built.
+21. **A fixed spare cannot be placed from the till** (added at slice 4's expansion, slice 4 decision
+    11; the owner may override): a fixed table never moves on today's plan, so a spare stool is set
+    out in the editor.
+22. **Take off for today needs a free table** (added at slice 4's expansion, slice 4 decision 12;
+    the owner may override): refused while a party sits there (the spec), while it needs clearing,
+    while food is on its way to it, and while it is in a merge.
 
 ## Global constraints
 
@@ -249,7 +259,7 @@ has its test in the task named.
    party is seated elsewhere in the zone; the party finishes; nothing on the till changes until
    the next reset (Task 1.8).
 5. **A fixed table sent a move anyway.** A move request for a fixed table, sent straight to the
-   route, is refused and nothing moves (Task 4.3c).
+   route, is refused and nothing moves (Task 4.3d).
 
 ## File map
 
@@ -3650,7 +3660,7 @@ files, 2026-10-10):
   will go live tomorrow." Task 4.5c changes that text (slice 2 decision 16), which "Behaviour this
   plan removes" did not list: slice 4 decision 20, a STOP for the owner.
 - `apps/till/src/state/floor-map.test.ts:188-198` and `:212-224` pin `mapTables`' whole answer; Task
-  4.4c adds two keys (`fixed`, `linkId`) to each row, which the header's rule allows. Their fixtures'
+  4.4d adds two keys (`fixed`, `linkId`) to each row, which the header's rule allows. Their fixtures'
   `seated` sets no party (`:57`), so no row's colour or words change (read, not run).
 - `apps/till/src/till-app-parties.test.ts:426`, `:488` and `apps/till/src/till-app-table-service.test.ts:2390`
   pin `seatTable` called with two arguments; `apps/till/src/till-app-parties.test.ts:457` and
@@ -3658,8 +3668,9 @@ files, 2026-10-10):
   `apps/till/src/api/client.test.ts:2425` and `:2997` pin those two methods' bodies. This slice
   leaves every one of those calls as it is (decision 15), so none changes.
 - No existing server test seats a party after inserting a today's merge (merges are inserted only in
-  `apps/server/src/floor-today-store.test.ts` and `floor-today-state.test.ts`; read, not run), so
-  seating every member of a merge (Task 4.3b) changes none of them.
+  `apps/server/src/floor-today-store.test.ts`, `floor-today-state.test.ts`,
+  `apps/server/src/table-removal.test.ts:444` and `packages/db/src/schema/floor-plans.test.ts:175`;
+  read, not run), so seating every member of a merge (Task 4.3c) changes none of them.
 
 **What earlier slices built that this slice works with** (read, not run):
 
@@ -3805,7 +3816,7 @@ if it is wrong.
 3. **What each route refuses, in this order, with existing codes where one fits.** A malformed path
    id is `table.not_found` (as the seat route, `till-api.ts:2249`); a malformed body field is
    `management.request_invalid { field }`; a table in another venue or none is `table.not_found`;
-   then, for the table the change names:
+   then, for the table the change names, in the order listed here, every route alike:
    - **`table.not_in_floor_plan { tableId }`** (new): it has no today's row; or, for a move, turn or
      merge, it has no place (a spare); or, for Back to its saved place, its reset row is missing or
      says the table goes (its master table was deleted).
@@ -3851,24 +3862,29 @@ if it is wrong.
    empty space moves (decision 2); a merge dropped on another table springs back and the status line
    says "Drag the other table onto it" (`floor.drop_merge`). A single table dropped on a merge joins
    it, placed against the member nearest the drop. Joining a free table to a seated merge, or a
-   seated table to a free merge, makes the party hold every member (decision 8). A merge's members
-   are all held by one party or all free: seating, joining and splitting keep it so (reasoned, not
-   run). Cost: dragging a merge onto a table does nothing; the waiter drags the table instead.
+   seated table to a free merge, makes the party hold every member (decision 8), and so does Move
+   guests to a table of a free merge (`moveGuests` adds only the table it names,
+   `table-actions.ts:96-99`, so the move route runs `joinMergeMembers` for it too, Task 4.3d). A
+   merge's members are all held by one party or all free: seating, joining, moving and splitting
+   keep it so (reasoned, not run). Cost: dragging a merge onto a table does nothing; the waiter drags the table instead.
 7. **Seats for a merge.** From the master's saved join whose members are exactly the merge's
    tables' master tables (`dining_tables.plan_table_id`), read as the master is NOW: a reset copies
    no joins (`floor_reset_tables` holds none). Without one the route refuses `floor_plan.invalid
    { field: "seats" }` before anything changes, and the till opens the seats prompt with the members'
    seats for today added up (a table without seats counts 0) and sends again with `seats`. The same
-   holds when a merge grows: its seats are worked out again for all its members. Cost: a master join
-   saved mid-service reaches a merge before the next reset, against the plan's decision 3; and
-   growing a merge asks again even when the waiter set its seats.
+   holds when a merge grows: its seats are worked out again for all its members. This is the default
+   (controller's ruling); the owner may override it. Cost: a master join saved mid-service gives a
+   merge its seats before the next reset, against the plan's decision 3; the way that keeps decision
+   3 is a migration recording each reset's joins (a reset-joins table that `resetZone` and
+   `ensureToday` copy from the master), which this slice does not build. And growing a merge asks
+   again even when the waiter set its seats.
 8. **Seating at a merge seats every member** (the plan's decision 18), in `seatTable`, so a booking
    seated through the core seam does too (`moduleCoreServices`, `parties.ts:101-104`). A member a
    party holds refuses `tab.already_open { tableId: <member> }`, one needing clearing
    `table.needs_clearing`. A table joined to a party (the join route, and the seat route's
    `withTableIds`) brings every free member of its merge into the party too. Cost: none expected.
 9. **A join involving a fixed table moves nothing and writes no merge** (spec §6.1). Two free tables,
-   one fixed: the seat dialog opens for the dragged table, headed with both names ("Bar 1+Bar 2"),
+   one fixed: the seat dialog opens for the dragged table, headed with both names as `mergeLabel` names them ("Bar 1+2", `packages/shared/src/party-name.ts:16-17`),
    and its confirm seats the party at the dragged table with `withTableIds` naming the target's
    members, in one request. One seated: the join route without `merge`. Both seated: the bill choice,
    then the join route. Cost: none expected; the plan's Task 4.3 had two requests (seat, then join),
@@ -3916,7 +3932,10 @@ if it is wrong.
     the zone's crop as the map first fits it (`cropToTables` of the placed tables; with none, at 0,
     0), not the middle of a zoomed view: the map does not tell the screen its view. Reset to saved plan
     asks first, its Reset button `danger`. Cost: a spare placed while zoomed into a corner can land
-    off screen.
+    off screen, and the crop's middle can fall on a table already there, so the spare is drawn over
+    it until dragged away. The editor's free-spot search, `firstFreeSpot`
+    (`packages/ui/src/floor-plan-geometry.ts:123-134`), scans row by row from the top-left corner, not
+    out from a point, so it is not used here.
 18. **Forms.** The seats prompt and Change seats are one new dialog, `till-today-seats-dialog`, which
     holds a typed number, so A331's rule applies: `draftScopeFor`, `saveActionState`, the early
     return, and a `*.unsaved.test.ts` with a reconnect case. The prompt opens with the suggested sum
@@ -3956,8 +3975,9 @@ if it is wrong.
     and `apps/dashboard/src/screens/floor-plan-editor.save.test.ts:251`. Proposed: "Your changes go
     live tomorrow, or sooner with Reset to saved plan on the till." / "Tus cambios se aplican mañana, o
     antes con Volver al plano guardado en el TPV." The entry is added to "Behaviour this plan removes"
-    as proposed; Task 4.5c changes the note and those two assertions only after the owner says yes,
-    and otherwise leaves the note as it is. Cost: the build waits on one answer for one sentence.
+    as proposed; Task 4.5c changes the note and those two assertions only after the owner says yes.
+    Task 4.5c builds everything else either way. Cost: the editor's note stays unchanged until the
+    owner answers.
 21. **The map's fixed drag.** While a fixed table is held and dragged, a copy (`part="ghost"`, the
     table's shape at half opacity) follows the finger in whole squares and the table stays; over
     another table the target is marked (`data-drop-target`) and a 1 px line (`part="drag-link"`)
@@ -4044,7 +4064,7 @@ it("places a spare 8 × 8 at the corner it is given, and leaves a placed table w
   /* spare → placeSpareToday {x: 20, y: 10} → { x: 20, y: 10, width: 8, height: 8, shape: "rect", rotation: 0 }; a placed table at (0,0) → unchanged */
 });
 it("refuses to place a fixed spare or a taken-off one", async () => { /* table.fixed; table.taken_off */ });
-it("puts a placed spare back among the spares at the next reset", async () => { /* placeSpareToday then resetZone → todayRow placement columns all null (spec §13) */ });
+it("puts a placed spare back among the spares at the next reset", async () => { /* placeSpareToday {x: 20, y: 10} → todayRow x 20 (so the case cannot pass on a write that did nothing); then resetZone → placement columns all null (spec §13) */ });
 ```
 
 - [ ] **Step 2: Run and watch them fail** — `pnpm --filter @waitron/server exec vitest run src/floor-today-moves.test.ts`.
@@ -4075,10 +4095,10 @@ export async function seatsToday(tx: Transaction, cfg: TillConfig, tableId: stri
 export async function backToSaved(tx: Transaction, cfg: TillConfig, tableId: string): Promise<void>;
 ```
 
-Behaviour (decisions 2, 3, 12): `takeOffToday` refuses, in order, `tab.already_open` (an open
-`party_tables` row), `table.needs_clearing` (`needs_clearing_since` set), `table.delivery_pending`
-(an order delivered to it matching `foodOnItsWay()`), `table.merged`; an already taken-off table is
-left as it is; else `taken_off = true`, keeping its place. `putBackToday` sets `taken_off = false`.
+Behaviour (decisions 2, 3, 12): `takeOffToday` refuses in decision 3's order: `table.merged`, then
+`tab.already_open` (an open `party_tables` row), `table.needs_clearing` (`needs_clearing_since` set),
+`table.delivery_pending` (an order delivered to it matching `foodOnItsWay()`); an already taken-off
+table is left as it is; else `taken_off = true`, keeping its place. `putBackToday` sets `taken_off = false`.
 `seatsToday` sets the merge's `floor_today_joins.seats` for a merged table, else the table's own
 seats; a taken-off table is `table.taken_off`. `backToSaved` reads the table's `floor_reset_tables`
 row (by `table_id`); none, or `remove` true, is `table.not_in_floor_plan`; it then runs
@@ -4092,7 +4112,7 @@ at a reset or a catch-up.
 it("takes a free table off for today, keeping its place, and puts it back there", async () => { /* taken_off true, x/y kept; putBack → taken_off false, same x/y */ });
 it("taking off twice, or putting back a table on the plan, changes nothing", async () => { /* no throw; rows unchanged */ });
 it("refuses to take off a seated table, one needing clearing, one with food on its way and one in a merge", async () => {
-  /* seat(v, t) → tab.already_open; needs_clearing_since set → table.needs_clearing;
+  /* (each table has one cause only) seat(v, t) → tab.already_open; needs_clearing_since set → table.needs_clearing;
      a counter order delivered to it with food on its way (as floor-catch-up.test.ts's counterOrder) → table.delivery_pending; a merged table → table.merged */
 });
 it("sets a table's seats for today, and a merge's for a member", async () => { /* seatsToday(t, 6) → today seats 6, master unchanged; merged member → floor_today_joins.seats */ });
@@ -4101,7 +4121,7 @@ it("puts a table back as the last reset copied it, not as the master is now", as
   /* move, turn, seats 9, take off; then edit the master (move it, seats 2) without a reset; backToSaved → the reset's place, seats and fixed, taken_off false */
 });
 it("takes a table out of its merge when it goes back, and puts its partner back too", async () => { /* merge A+B; backToSaved(A) → no merge; B at its before place */ });
-it("sends a table the last reset copied as a spare back to the spares", async () => { /* placeSpareToday, backToSaved → placement columns null */ });
+it("sends a table the last reset copied as a spare back to the spares", async () => { /* placeSpareToday → todayRow has a place (x not null); backToSaved → placement columns null */ });
 it("refuses a table whose master table was deleted, and one never on a plan", async () => {
   /* reset row remove true (delete the master table, reset while a party sits there) → table.not_in_floor_plan; a zone table with no reset row → table.not_in_floor_plan */
 });
@@ -4150,10 +4170,18 @@ active and has a master plan (decision 2).
 it("moves, turns, takes off, puts back, places and sets seats through the routes, answering 204", async () => {
   /* each route → 204; GET /api/tables/state then shows the change in `today` */
 });
-it("sends a table back to its saved place, and resets a zone to the saved plan", async () => {
+it("sends a table back to its saved place", async () => { /* move and turn a free table; POST …/today/back → 204; the floor read shows the place the reset copied */ });
+it("resets a zone to the saved plan", async () => {
   /* move a free table and a seated one; POST /api/zones/:id/today/reset → the free one back to the master, the seated one where it was */
 });
-it("catches today's plan up before a change", async () => { /* a free table a party left after the reset caught up first, as floor-catch-up.test.ts's first case, through POST …/today/move */ });
+it("catches today's plan up before a change, so the change survives the next read", async () => {
+  /* T seated at a reset that moved its master table (its reset row waits); finish T's party; POST …/T/today/move { x: 30, y: 0 } → 204;
+     GET /api/tables/state (which catches up too, till-api.ts:2190) → T still at x 30. Control: delete the route's ensureToday call and watch T come back at the master's place */
+});
+it("leaves a disabled planned zone's tables off on a reset", async () => {
+  /* a planned zone switched off (deactivateZone): POST …/today/reset → 204; its tables' dining_tables.active stays false (a reset switches tables on, floor-today-store.ts:295)
+     and its floor_today_zones generation is unchanged (its first save wrote the row, so the row itself exists) */
+});
 it("answers a refusal with its code and status", async () => {
   /* a fixed table's move → 409 table.fixed { tableId }; a spare's rotate → 409 table.not_in_floor_plan; taken off → 409 table.taken_off */
 });
@@ -4224,19 +4252,20 @@ export function touchingPlace(target: JoinPlace, moving: Pick<JoinPlace, "width"
 // apps/server/src/floor-today-merges.ts
 /** The seats of the master's saved join with exactly these tables' master tables, or null. */
 export async function savedJoinSeats(tx: Transaction, tableIds: readonly string[]): Promise<number | null>;
-/** `moving` joins `target`'s merge (or a new one), touching it on `side`; no party check. */
-export async function writeMerge(tx: Transaction, cfg: TillConfig, args: { movingId: string; targetId: string; side: JoinSide; seats: number | null }): Promise<void>;
+/** `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing. */
+export async function writeMerge(tx: Transaction, cfg: TillConfig, args: { movingId: string; targetId: string; side: JoinSide; seats: number | null; free: boolean }): Promise<void>;
 /** Each table leaves its merge and goes back to where it stood before; a merge left with one member ends as leaveMerges ends it. */
 export async function leaveMergesRestoring(tx: Transaction, tableIds: readonly string[]): Promise<void>;
 /** Every member of `tableId`'s merge, `tableId` included, or [] when it is in none. */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]>;
 ```
 
-Behaviour: `writeMerge` reads both tables as Task 4.1a's `todayOf` does and refuses, in decision 3's
-order: `table.not_in_floor_plan` (no row or no place), `table.taken_off`, `table.fixed` (either),
-`table.merged` (the moving one), `service_zone.join_mismatch { orderZoneId: <target's zone>,
-tableZoneId: <moving's zone> }` (two zones), and `management.request_invalid { field: "targetId" }`
-when they are one table. It works out the merge's members after the join (the target's members, or
+Behaviour: `writeMerge` refuses `management.request_invalid { field: "targetId" }` when the two are
+one table, reads both as Task 4.1a's `todayOf` does, and refuses in decision 3's order:
+`table.not_in_floor_plan` (no row or no place), `table.taken_off`, `table.fixed` (either),
+`table.merged` (the moving one), then, with `free`, `tab.already_open` and `table.needs_clearing`
+(either), then `service_zone.join_mismatch { orderZoneId: <target's zone>, tableZoneId: <moving's
+zone> }` (two zones). It works out the merge's members after the join (the target's members, or
 the target, plus the moving table); the seats are `args.seats`, else `savedJoinSeats(members)`, else
 `floor_plan.invalid { field: "seats" }`, thrown before anything is written. It then records the
 moving table's `before_x`, `before_y`, `before_rotation` as it stands (and the target's, for a new
@@ -4286,38 +4315,26 @@ it("puts each table that leaves back where it stood before, and ends a merge lef
 - [ ] **Step 6: Commit** — e.g. "Till floor: where a joined table goes against its target, and
   today's merges with their seats (A429 slice 4)".
 
-### Task 4.3b: Merging and splitting free tables, and seating at a merge
+### Task 4.3b: Merging and splitting free tables
 
 **Files:**
 - Create: `apps/server/src/floor-today-merge-api.test.ts`
-- Modify: `apps/server/src/floor-today-api.ts` (the merge and split routes), `apps/server/src/parties.ts`
-  (`seatTable`, `:78-98`), `apps/server/src/till-api.ts` (the seat route, `:2243-2259`),
-  `apps/server/src/floor-today-merges.ts`, both route maps (as Task 4.2b)
+- Modify: `apps/server/src/floor-today-api.ts` (the merge and split routes), `apps/server/src/floor-today-merges.ts`,
+  both route maps (as Task 4.2b)
 
 **Interfaces:**
 - Consumes: Task 4.3a.
 - Produces: `POST /api/tables/:id/today/merge` `{ targetId: uuid, side: JoinSide, seats?: 1–999 }`
-  → 204; `POST /api/tables/:id/today/split` `{}` → 204; the seat route's optional `withTableIds:
-  string[]` (each a UUID, else `table.not_found` as `requireTargetTable` refuses one, `till-api.ts:812-818`;
-  not an array, or the path table repeated, is `management.request_invalid { field: "withTableIds" }`).
-  In `floor-today-merges.ts`: `export async function seatMergeMembers(tx: Transaction, partyId: string,
-  tableId: string): Promise<void>` (for `seatTable`, with its own checks), `export async function
-  joinMergeMembers(tx: Transaction, cfg: OriginConfig, partyId: string, tableId: string, operatorId:
-  string): Promise<void>` (every member of `tableId`'s merge that no party holds joins the party,
-  through `joinTables`, decision 8; Task 4.3c's join route uses it too) and `export async function
-  splitFreeMerge(tx: Transaction, cfg: TillConfig, tableId: string): Promise<void>`.
+  → 204; `POST /api/tables/:id/today/split` `{}` → 204; `export async function splitFreeMerge(tx:
+  Transaction, cfg: TillConfig, tableId: string): Promise<void>` in `floor-today-merges.ts`.
 
-Behaviour (decisions 2, 3, 8, 9): the merge route zone-checks `[{ tableId: id }, { tableId: targetId }]`,
-refuses either table held (`tab.already_open`) or needing clearing (`table.needs_clearing`), then
-`writeMerge`. The split route ends a free merge with `leaveMergesRestoring(members)`; a merge a party
-holds is `tab.already_open`; a table in no merge is left alone. `seatTable` runs `seatMergeMembers`
-after its own `party_tables` row (`parties.ts:95`): every other member of the table's merge joins the
-party, refused `tab.already_open { tableId: <member> }` if a party holds it and `table.needs_clearing`
-if it needs clearing. The seat route, with `withTableIds`, zone-checks each, and after `seatTable` runs
-`joinTables(tx, sendCfg, partyId, id, { bills: "merge", expectedPartyRevision: <the party's revision
-now>, operatorId, otherPartyId: null })` for each in turn, then `joinMergeMembers` for it, reading
-the revision again before each, all in the one transaction. A member another party holds is
-answered as `joinTables` answers it (by decision 6's rule no merge has one; reasoned, not run).
+Behaviour (decisions 2, 3): the merge route reads its body before the transaction (a non-UUID
+`targetId` is `table.not_found`, the path table again is `management.request_invalid { field:
+"targetId" }`, a `side` outside `JOIN_SIDES` is `{ field: "side" }`, `seats` outside 1–999 is
+`{ field: "seats" }`), zone-checks `[{ tableId: id }, { tableId: targetId }]`, catches up, then
+runs `writeMerge(…, { free: true })`, which refuses in decision 3's order. The split route ends a
+free merge with `leaveMergesRestoring(members)`; a merge a party holds is `tab.already_open`; a table
+in no merge is left alone.
 
 - [ ] **Step 1: Write the failing tests** in `floor-today-merge-api.test.ts` (the app and cookie as Task
   4.2a's):
@@ -4331,6 +4348,55 @@ it("asks for seats when no saved join has exactly these tables", async () => { /
 it("refuses to merge a seated table or one needing clearing, and to split a seated merge here", async () => {
   /* tab.already_open; table.needs_clearing; split of a merge a party holds → tab.already_open */
 });
+it("refuses a malformed merge", async () => { /* targetId "nope" → 404 table.not_found; targetId = the path id → 400 { field: "targetId" }; side "up" → { field: "side" } */ });
+// till-api.profile-actions.test.ts: ordering rows for /today/merge and /today/split; the comment row
+// till-api.profile-zones.test.ts: rows "POST /api/tables/:id/today/merge (table)" (path deliTable, { targetId: restFreeTable, side: "right" }),
+//   "(target)" (path restFreeTable, { targetId: deliTable, side: "right" }) and "POST /api/tables/:id/today/split" (path deliTable, {}),
+//   each refused naming the Deli tables zone; a body without a valid side would answer 400 before the zone check
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/server exec vitest run src/floor-today-merge-api.test.ts src/till-api.profile-zones.test.ts src/till-api.profile-actions.test.ts`.
+  Expected: the merge and split routes answer 404; the new map rows fail.
+- [ ] **Step 3: Implement.** Then delete the merge route's zone check of `targetId` and watch the
+  "(target)" row fail; restore.
+- [ ] **Step 4: Run** the same command, `src/floor-today-merges.test.ts`, the server's typecheck and
+  lint, `prettier --check`.
+- [ ] **Step 5: Commit** — e.g. "Till floor: merge two free tables and split them back (A429 slice 4)".
+
+### Task 4.3c: Seating at a merge, and one party at several tables
+
+**Files:**
+- Create: `apps/server/src/floor-today-seat-api.test.ts`
+- Modify: `apps/server/src/parties.ts` (`seatTable`, `:78-98`), `apps/server/src/till-api.ts` (the seat
+  route, `:2243-2259`), `apps/server/src/floor-today-merges.ts`, the zone map (as Task 4.2b)
+
+**Interfaces:**
+- Consumes: Task 4.3a.
+- Produces: the seat route's optional `withTableIds: string[]` (each a UUID, else `table.not_found`
+  as `requireTargetTable` refuses one, `till-api.ts:812-818`; not an array, or naming the path table,
+  is `management.request_invalid { field: "withTableIds" }`). In `floor-today-merges.ts`: `export
+  async function seatMergeMembers(tx: Transaction, partyId: string, tableId: string): Promise<void>`
+  (for `seatTable`, with its own checks) and `export async function joinMergeMembers(tx: Transaction,
+  cfg: OriginConfig, partyId: string, tableId: string, operatorId: string): Promise<void>` (every
+  member of `tableId`'s merge that no party holds joins the party, through `joinTables`, decision 8;
+  Task 4.3d's join and move routes use it too).
+
+Behaviour (decisions 8, 9): `seatTable` runs `seatMergeMembers` after its own `party_tables` row
+(`parties.ts:95`): every other member of the table's merge joins the party, refused `tab.already_open
+{ tableId: <member> }` if a party holds it and `table.needs_clearing` if it needs clearing. The seat
+route, with `withTableIds`, zone-checks each, and after `seatTable` runs, for each `otherId` of
+`withTableIds` in turn, `joinTables(tx, sendCfg, partyId, otherId, { bills: "merge",
+expectedPartyRevision: <the party's revision now>, operatorId, otherPartyId: null })` and then
+`joinMergeMembers` for it, reading the revision again before each, all in the one transaction. The
+seat route has no `sendCfg` today (it uses `requestCfg` alone, `till-api.ts:2246-2257`); it takes
+`sendingCfg(cfg, c, session.device)` as the join route does (`apps/server/src/made-here.ts:37-41`).
+A member another party holds is answered as `joinTables` answers it (by decision 6's rule no merge
+has one; reasoned, not run).
+
+- [ ] **Step 1: Write the failing tests** in `floor-today-seat-api.test.ts` (as Task 4.3b's):
+
+```ts
 it("seats a party at every table of a free merge", async () => {
   /* merge A+B; POST /api/tables/A/seat → party_tables rows for A and B; the floor read shows both held by one party */
 });
@@ -4340,38 +4406,38 @@ it("seats one party at two tables in one request", async () => {
 });
 it("seats nobody when one of the other tables cannot be joined", async () => { /* F2 needs clearing → 409 table.needs_clearing; F1 free */ });
 it("refuses a malformed list of other tables", async () => { /* "x" → management.request_invalid { field: "withTableIds" }; [F1] (the path table) → same; ["nope"] → table.not_found */ });
-// till-api.profile-actions.test.ts: ordering rows for /today/merge and /today/split; the comment row
-// till-api.profile-zones.test.ts: rows "POST /api/tables/:id/today/merge (table)", "(target)" (path restFreeTable, targetId deliTable),
-//   "POST /api/tables/:id/today/split", and "POST /api/tables/:id/seat (other tables)" (path restFreeTable, { withTableIds: [deliTable] }), each refused naming the Deli tables zone
+// till-api.profile-zones.test.ts: a row "POST /api/tables/:id/seat (other tables)" (path restFreeTable, { withTableIds: [deliTable] }), refused naming the Deli tables zone
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/server exec vitest run src/floor-today-merge-api.test.ts src/till-api.profile-zones.test.ts src/till-api.profile-actions.test.ts`.
-  Expected: the merge and split routes answer 404; the seat cases seat one table; the new map rows
-  fail.
+  `pnpm --filter @waitron/server exec vitest run src/floor-today-seat-api.test.ts src/till-api.profile-zones.test.ts`.
+  Expected: the seat cases seat one table; `withTableIds` is ignored; the new map row fails.
 - [ ] **Step 3: Implement.** Then delete the seat route's zone check of `withTableIds` and watch the
   "(other tables)" row fail; restore.
 - [ ] **Step 4: Run** the same command, `src/till-api.table-actions.test.ts`, `src/party-table-actions.test.ts`,
-  `src/floor-catch-up.test.ts`, the server's typecheck and lint, `prettier --check`.
-- [ ] **Step 5: Commit** — e.g. "Till floor: merge two free tables, split them back, and seat a party
-  at every table of a merge or at two tables at once (A429 slice 4)".
+  `src/floor-catch-up.test.ts`, `src/till-api.profile-actions.test.ts`, the server's typecheck and
+  lint, `prettier --check`.
+- [ ] **Step 5: Commit** — e.g. "Till floor: seat a party at every table of a merge, or at two tables
+  at once (A429 slice 4)".
 
-### Task 4.3c: A join that merges, a split that puts the table back, and the fixed table sent a move
+### Task 4.3d: A join that merges, a split that puts the table back, and the fixed table sent a move
 
 **Files:**
 - Create: `apps/server/src/till-api.today-joins.test.ts`
-- Modify: `apps/server/src/till-api.ts` (the join route, `:2329-2351`, and the split-table route,
-  `:2353-2383`), `apps/server/src/floor-today-merges.ts`
+- Modify: `apps/server/src/till-api.ts` (the move and join routes, `:2329-2351`, and the split-table
+  route, `:2353-2383`), `apps/server/src/floor-today-merges.ts`
 
 **Interfaces:**
-- Consumes: Tasks 4.3a and 4.3b (`writeMerge`, `leaveMergesRestoring`, `joinMergeMembers`).
+- Consumes: Tasks 4.3a–4.3c (`writeMerge`, `leaveMergesRestoring`, `joinMergeMembers`).
 - Produces: the join route's optional `merge: { moving: uuid, target: uuid, side: JoinSide, seats?:
   1–999 }`, refused `management.request_invalid { field: "merge" }` unless `{ moving, target }` is
   the body's `tableId` and a table the path party holds.
 
-Behaviour (decisions 2, 5, 6, 8): the shared move/join handler keeps its shape; for `join` only, after
-`joinTables` (`table-actions.ts:112`) it runs `joinMergeMembers` for the body table and, with
-`merge`, `writeMerge` with `movingId`, `targetId`, `side` and `seats` from the body, so a party
+Behaviour (decisions 2, 5, 6, 8): the shared move/join handler keeps its shape. For `move`, after
+`moveGuests` it runs `joinMergeMembers` for the table moved to, so a party moved to a table of a
+free merge holds all of it (`moveGuests` adds only that table, `table-actions.ts:96-99`). For
+`join`, after `joinTables` (`table-actions.ts:112`) it runs `joinMergeMembers` for the body table and, with
+`merge`, `writeMerge` with `movingId`, `targetId`, `side` and `seats` from the body and `free: false`, so a party
 joined to a table of a free merge holds all of it; a refusal anywhere rolls the whole request back. The split-table route runs `leaveMergesRestoring(tx,
 [tableId])` after `splitTable`.
 
@@ -4387,12 +4453,14 @@ it("two seated tables combine, keeping the bills apart when asked, and merge", a
   /* P at A, Q at B; POST /api/parties/Q/join { tableId: A, bills: "separate", otherPartyId: P, expectedOtherPartyRevision, merge: { moving: A, target: B, … } } → one party, two bills, one merge */
 });
 it("a party joined to a table of a free merge holds every table of it", async () => { /* merge B+C free; P at A joins B (no merge body) → P holds A, B, C */ });
+it("a party moved to a table of a free merge holds every table of it", async () => { /* merge C+D free; P at A moves to C → P holds C and D, A left for clearing as the move leaves it */ });
 it("refuses a merge that names neither the party's table nor the body's, and joins nothing", async () => {
   /* merge { moving: X, target: B } → management.request_invalid { field: "merge" }; P still at A only */
 });
 it("undoes the join when the merge is refused", async () => { /* no saved join, no seats → floor_plan.invalid { field: "seats" }; P still at A only, B free */ });
 it("a split table goes back to where it stood before the merge", async () => {
-  /* P at merged A+B; POST /api/parties/P/split-table { tableId: B, billId: null } → B at its before place, no merge, A where it was */
+  /* P at A+B, merged with A the target (B moved against it); POST /api/parties/P/split-table { tableId: B, billId: null } → B at its before place,
+     no merge, A where it stands (the merge's last table goes back to its before place, floor-today-merges.ts:24-30, which for the target is where it stood) */
 });
 it("a fixed table sent a move anyway is refused by every route, and nothing moves", async () => {
   /* Review focus 5: fixed F placed, P at a movable M.
@@ -4407,8 +4475,9 @@ it("joining a fixed table without a merge links the party and moves nothing, and
 
 - [ ] **Step 2: Run and watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.today-joins.test.ts`.
   Expected: the merge body is ignored (no merge; no positions change), the free merge's other member
-  stays free, the split table keeps its merged place; the fixed-table case and the last case pass
-  before the change (guards: the routes they use already refuse or move nothing).
+  stays free, the moved party holds C alone, the split table keeps its merged place; the fixed-table
+  case fails on its join line (the route ignores `merge`, and `joinTables` adds F to P,
+  `table-actions.ts:136`); the last case passes before the change (a guard).
 - [ ] **Step 3: Implement.** Then delete `writeMerge`'s fixed check for the target and watch the fixed
   case fail; restore.
 - [ ] **Step 4: Run** the same command, `src/till-api.table-actions.test.ts`, `src/party-table-actions.test.ts`,
@@ -4417,7 +4486,7 @@ it("joining a fixed table without a merge links the party and moves nothing, and
 - [ ] **Step 5: Commit** — e.g. "Till floor: a join that merges the tables, a split that puts the
   table back, and no route moves a fixed table (A429 slice 4)".
 
-### Task 4.4a: `wt-floor-map` — fixed tables, linked parties, the drop target and a drop after a re-read
+### Task 4.4a: `wt-floor-map` — fixed tables, the drop target and a drop after a re-read
 
 **Files:**
 - Modify: `packages/ui/src/components/wt-floor-map.ts`, `wt-floor-map.a11y.test.ts`,
@@ -4425,23 +4494,18 @@ it("joining a fixed table without a merge links the party and moves nothing, and
 - Create: `packages/ui/src/components/wt-floor-map.today.test.ts`
 
 **Interfaces:**
-- Produces: `FloorMapTable` gains `fixed?: boolean` (unset is movable) and `linkId?: string | null`
-  (decision 10); new parts `ghost`, `drag-link`, `links`; `data-drop-target` on the button under the
-  pointer during a drag. Events unchanged.
+- Produces: `FloorMapTable` gains `fixed?: boolean` (unset is movable); new parts `ghost` and
+  `drag-link`; `data-drop-target` on the button under the pointer during a drag. Events unchanged.
 
-Behaviour (decisions 10, 21, 22): during a hold-drag, each `holdDrag` also finds the first other
+Behaviour (decisions 21, 22): during a hold-drag, each `holdDrag` also finds the first other
 table under the pointer (`elementsFromPoint`, as `#sendDrop` does, `:459-463`) and marks its button
 `data-drop-target` (an outline in `--wt-color-primary`, as `data-held`'s ring), cleared when the
 pointer leaves it and on release or cancel. A held group with a fixed member stays where it is; a
-`<span part="ghost">` of its shapes, at `opacity` from a token-free `0.5`, is drawn at the moved place
-instead, and over a target a `<svg part="drag-link">` line joins the group's centre and the target's
-centre, 1 px, `--wt-color-primary`. On release the ghost and the line go; the drop is sent as today.
-Groups sharing a `linkId` get one `<svg part="links">` under the buttons with a 1 px
-`--wt-color-field-line` line between consecutive groups' centres, in label order of their first
-members; only the first draws `part="name"`, as `mergeLabel` of all their labels, by `showsName` of
-its own box; every one's accessible name starts with that label. When `tables` changes during a drag
-and no longer has the held table, the drag ends with no drop. The map still never stops a
-`pointerdown` or `keydown`.
+`<span part="ghost">` of its shapes, at half opacity, is drawn at the moved place instead, and over a
+target a `<svg part="drag-link">` line joins the group's centre and the target's centre, 1 px,
+`--wt-color-primary`. On release the ghost and the line go; the drop is sent as today. When `tables`
+changes during a drag and no longer has the held table, the drag ends with no drop. The map still
+never stops a `pointerdown` or `keydown`.
 
 - [ ] **Step 1: Write the failing tests** in `wt-floor-map.today.test.ts` (slice 3's host, fixtures
   and pointer helpers, `wt-floor-map.view.test.ts:1-140`; fake `setTimeout`/`clearTimeout`):
@@ -4453,20 +4517,16 @@ it("a fixed table stays put while its copy follows the finger", async () => {
 });
 it("a fixed table's copy over another table draws a line to it", async () => { /* over t2 → [part=drag-link] with a line from t1's centre to t2's; t2 [data-drop-target] */ });
 it("a fixed table's copy goes on release, and the drop is still sent", async () => { /* up over t2 → no ghost, no line; wt-table-drag-end { tableId: "t1", targetId: "t2", … } */ });
-it("links a party's tables with a line and names them once", async () => {
-  /* t1 "Bar 1", t2 "Bar 2" with linkId "p1", t3 alone: one [part=links] line between t1's and t2's centres; t1 shows "Bar 1+2", t2 no name;
-     aria-labels "Bar 1+2, …" on both; t3 unchanged */
-});
 it("a re-read without the held table ends the drag and sends no drop", async () => { /* hold t1, move; el.tables = [t2]; up → no wt-table-drag-end; no [data-held] */ });
 it("a drag over a target still lets a press reach the page", async () => { /* document pointerdown listener hears the press on t1; nothing defaultPrevented */ });
-// wt-floor-map.a11y.test.ts: "a fixed table's copy over a target" and "a linked party" in both themes
+// wt-floor-map.a11y.test.ts: "a fixed table's copy over a target" in both themes
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
   `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.today.test.ts`. Expected: the
   new cases fail, except "a drag over a target still lets a press reach the page", a guard.
-- [ ] **Step 3: Implement**, and the design-system row (the two new keys, three parts) and paragraph
-  (the drop target, the fixed copy and its line, linked parties, a re-read ending a drag).
+- [ ] **Step 3: Implement**, and the design-system row (the new key, two parts) and paragraph (the
+  drop target, the fixed copy and its line, a re-read ending a drag).
 - [ ] **Step 4: Run** every `wt-floor-map` test file (`wt-floor-map.test.ts`, `.taps.test.ts`,
   `.view.test.ts`, `.keys.test.ts`, `.today.test.ts`, `.a11y.test.ts`),
   `pnpm --filter @waitron/ui exec vitest run src/no-hardcoded-chrome.test.ts`,
@@ -4474,9 +4534,44 @@ it("a drag over a target still lets a press reach the page", async () => { /* do
   Expected: pass, no existing case changed.
 - [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts`.
 - [ ] **Step 6: Commit** — e.g. "Floor map: a fixed table's copy follows the finger and links to its
-  target, a party's tables are linked, and a re-read ends a drag (A429 slice 4)".
+  target, and a re-read ends a drag (A429 slice 4)".
 
-### Task 4.4b: The till client's today's methods, and seating at two tables
+### Task 4.4b: `wt-floor-map` — a party's tables linked
+
+**Files:**
+- Modify: `packages/ui/src/components/wt-floor-map.ts`, `wt-floor-map.today.test.ts`,
+  `wt-floor-map.a11y.test.ts`, `docs/developers/design-system.md` (the row and paragraph of Task 4.4a)
+
+**Interfaces:**
+- Produces: `FloorMapTable` gains `linkId?: string | null` (decision 10); a new part `links`.
+
+Behaviour (decision 10): groups sharing a `linkId` get one `<svg part="links">` under the buttons
+with a 1 px `--wt-color-field-line` line between consecutive groups' centres, in label order of their
+first members; only the first draws `part="name"`, as `mergeLabel` of all their labels, by
+`showsName` of its own box; every one's accessible name starts with that label. Each group stays its
+own button, and a drag of one of them is a drag of that group alone.
+
+- [ ] **Step 1: Write the failing tests** in `wt-floor-map.today.test.ts`:
+
+```ts
+it("links a party's tables with a line and names them once", async () => {
+  /* t1 "Bar 1", t2 "Bar 2" with linkId "p1", t3 alone: one [part=links] line between t1's and t2's centres; t1 shows "Bar 1+2", t2 no name;
+     aria-labels "Bar 1+2, …" on both; t3 unchanged */
+});
+it("draws no link for a party at one table", async () => { /* t1 alone with linkId "p1" → no [part=links] line; its own name */ });
+it("a linked table is dragged alone", async () => { /* hold t1 and move → only t1's button moves; t2 stays */ });
+// wt-floor-map.a11y.test.ts: "a linked party" in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** — the Task 4.4a command. Expected: the link cases fail;
+  "a linked table is dragged alone" passes before the change (a guard).
+- [ ] **Step 3: Implement**, with the design-system row and paragraph (the key, the part, one name).
+- [ ] **Step 4: Run** Task 4.4a's Step 4 list.
+- [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts`.
+- [ ] **Step 6: Commit** — e.g. "Floor map: a party's tables are linked by a line and named once
+  (A429 slice 4)".
+
+### Task 4.4c: The till client's today's methods, and seating at two tables
 
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (after `joinTables`, `:3536-3547`), `apps/till/src/api/client.test.ts`,
@@ -4509,7 +4604,9 @@ joinTables(partyId: string, tableId: string, bills: "merge" | "separate", revisi
 Behaviour (decision 15): `joinTables` sends `merge` only when it is given, so its four-argument body
 stays `{ tableId, bills, ...revisions }`. The app's open-table seat calls `seatTable(tableId,
 guestCount)` when the detail has no `withTableIds`, as now, and `seatAtTables` otherwise, and then
-holds `tableIds: [tableId, ...withTableIds]` for the party until its reload.
+holds for the party until its reload every table the server seated: the members of the seated
+table's merge (`today.joinId` in `this.tables`; today it holds `[tableId]`, `till-app.ts:5223`) and
+each of `withTableIds` with its merge's members.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -4522,6 +4619,7 @@ it("seatAtTables sends the other tables with the guest count", async () => { /* 
 it("seats a party at two tables when the floor asks for both", async () => {
   /* open-table { tableId: "t9", seated: false, guestCount: 2, withTableIds: ["t10"] } → seatAtTables("t9", 2, ["t10"]); seatTable not called */
 });
+it("holds every table of a merge it seats", async () => { /* t9 and t11 share a joinId; seat t9 → orderParty.tableIds ["t9", "t11"] */ });
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
@@ -4534,7 +4632,7 @@ it("seats a party at two tables when the floor asks for both", async () => {
 - [ ] **Step 5: Commit** — e.g. "Till: client calls for today's plan, and seating one party at two
   tables (A429 slice 4)".
 
-### Task 4.4c: What a drop does
+### Task 4.4d: What a drop does
 
 **Files:**
 - Create: `apps/till/src/state/floor-today.ts`, `apps/till/src/state/floor-today.test.ts`
@@ -4607,13 +4705,15 @@ it("links a party's tables on the map and gives them one status", () => { /* P a
 - [ ] **Step 5: Commit** — e.g. "Till floor: what dropping one table on another does, and a party's
   tables linked on the map (A429 slice 4)".
 
-### Task 4.4d: The seats dialog
+### Task 4.4e: The seats dialog
 
 **Files:**
 - Create: `apps/till/src/widgets/today-seats-dialog.ts` (`till-today-seats-dialog`) and its
   `.test.ts`, `.save-state.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`
 - Modify: `apps/till/src/i18n/strings.ts` (decision 19's seats strings; EN after `floor.seats_one`,
-  `:541`, ES after `:1687`)
+  `:541`, ES after `:1687`), `docs/developers/design-system.md` (the dialog's Change seats in the
+  "batch 5, the till" line of the forms that follow the rule, `:1957`, and the prompt with a
+  suggestion in "These open already savable", `:1965-1990`)
 
 **Interfaces:**
 - Produces:
@@ -4668,35 +4768,30 @@ it("disconnect aborts a leave decision; reconnect keeps the opened number as the
 - [ ] **Step 5: Commit** — e.g. "Till floor: a dialog for a merge's seats and for changing seats today
   (A429 slice 4)".
 
-### Task 4.4e: Dragging on the floor screen
+### Task 4.4f: Dragging on the floor screen — moves, free merges and the status line
 
 **Files:**
 - Create: `apps/till/src/screens/till-floor-screen.today.test.ts`
 - Modify: `apps/till/src/screens/till-floor-screen.ts` (`#plannedMap`, `:854-872`; `#zoneOnScreen`,
-  `:710-751`; `#seatDialog`, `:954-966`; `#onSeatConfirm`, `:550-555`; the status line beside
-  `data-zone-closed`, `:809`), `apps/till/src/screens/till-floor-screen.a11y.test.ts`
+  `:710-751`, and its cached inputs, `:711-719`; the status line beside `data-zone-closed`, `:809`),
+  `apps/till/src/screens/till-floor-screen.a11y.test.ts`
 
 **Interfaces:**
-- Consumes: Tasks 4.4a–4.4d; `till-bill-choice-dialog`; `otherPartyRead` (Task 4.4b); `codeMessage`.
-- Produces: the floor's `wt-table-drag-end` handler; the seat dialog seating several tables (its
-  `open-table` detail carries `withTableIds`); `#pending` (decision 14); the `data-floor-refusal` line
-  (decision 1).
+- Consumes: Tasks 4.4a–4.4e; `codeMessage`.
+- Produces: the floor's `wt-table-drag-end` handler for `none`, `say`, `move` and `merge`; `#pending`
+  (decision 14); the `data-floor-refusal` line (decision 1); `#settle(call)`, which every floor write
+  of this slice uses (show a refusal's words, drop `#pending`, send `floor-refresh`).
 
 Behaviour: on `wt-table-drag-end` (stopped, as the map's events are re-emitted; the screen adds no
 `pointerdown` or `keydown` listener) the screen runs `dropAction(<the active zone's tables>, detail)`:
 `none` does nothing; `say` shows the words in the status line; `move` sets `#pending` and calls
-`api.moveToday`; `merge` sets `#pending` and calls `api.mergeToday` with no seats; `seat` opens the
-seat dialog headed with `heading`, whose confirm sends `open-table { tableId, seated: false,
-guestCount, withTableIds }`; `join` asks the bill choice first when `other` is not null (scope
-`table.combine_scope` from the dragged party into the target's), then calls `api.joinTables(party.id,
-tableId, bills, { expectedPartyRevision: party.revision, ...otherPartyRead(<seated read at tableId>,
-party.id) }, merge ?? undefined)`. A merge or join refused `floor_plan.invalid` with `field: "seats"`
-opens `till-today-seats-dialog` (action `join`, `seats` the guess, heading `floor.seats_title` with
-`heading`), whose confirm sends the same call again with the seats, and whose cancel drops `#pending`.
-Any other refusal drops `#pending` and shows its words; every settled call sends `floor-refresh`.
-`#pending` overrides the active zone's map placements in `#zoneOnScreen` and is cleared in
-`willUpdate` when `tables` is a new array. The seat dialog for a free merge is headed with the merge's
-name (`#detailsHeading`).
+`api.moveToday`; `merge` sets `#pending` and calls `api.mergeToday` with no seats. A merge refused
+`floor_plan.invalid` with `field: "seats"` opens `till-today-seats-dialog` (action `join`, `seats` the
+guess, heading `floor.seats_title` with `heading`), whose confirm sends the same call again with the
+seats, and whose cancel drops `#pending`. Any other refusal drops `#pending` and shows its words;
+every settled call sends `floor-refresh`. `#pending` overrides the active zone's map placements in
+`#zoneOnScreen`, joins that method's cached inputs (`:711-719`) so a change to it redraws the map,
+and is cleared in `willUpdate` when `tables` is a new array. Task 4.4g handles `seat` and `join`.
 
 - [ ] **Step 1: Write the failing tests** in `till-floor-screen.today.test.ts` (the map fixtures of
   `till-floor-screen.map.test.ts`; an `api` stub of `vi.fn()`s; drops dispatched from the map as
@@ -4711,14 +4806,8 @@ it("two free tables merge, asking for seats when the server wants them", async (
   /* mergeToday rejects { code: "floor_plan.invalid", field: "seats" } → till-today-seats-dialog with seats 8; confirm 10 → mergeToday(t2, { targetId: t1, side, seats: 10 }) */
 });
 it("cancelling the seats puts the table back", async () => { /* today-seats-cancel → #pending dropped; nothing sent */ });
-it("a seated table dropped on a free one joins and merges", async () => { /* joinTables(P, t2, "merge", { expectedPartyRevision, otherPartyId: null }, { moving: t1, target: t2, side }) */ });
-it("two seated tables ask which bills to keep, then join", async () => { /* till-bill-choice-dialog; confirm separate → joinTables(Q, t1, "separate", { …, otherPartyId: P, expectedOtherPartyRevision }, merge) */ });
-it("two free fixed tables open the seat dialog for both, and seat them in one go", async () => {
-  /* drop F1 on F2 → till-seat-dialog headed "Bar 1+2"; confirm 2 → open-table { tableId: F1, seated: false, guestCount: 2, withTableIds: [F2] } */
-});
 it("a merge dropped on a table says to drag the other one", async () => { /* [data-floor-refusal] "Drag the other table onto it"; no api call */ });
 it("the status line clears on the next drop and on a change of zone", async () => {});
-it("a free merge's seat dialog is headed with the merge's name", async () => { /* tap a merge of 4 and 5 → tableLabel "4+5" */ });
 it("a press on the map still reaches the page", async () => { /* a document pointerdown and keydown listener hear a press and a key on a table (the idle logout's events) */ });
 // till-floor-screen.a11y.test.ts — "a refusal said on the floor" in both themes
 ```
@@ -4728,14 +4817,58 @@ it("a press on the map still reaches the page", async () => { /* a document poin
   Expected: the new cases fail (nothing listens to the drop), except "a press on the map still reaches
   the page", a guard.
 - [ ] **Step 3: Implement.** Then stop clearing `#pending` on a refusal and watch "a refused move puts
-  the table back" fail; restore.
+  the table back" fail; restore. Then leave `#pending` out of the cached inputs and watch "draws it
+  there until the next read" fail; restore.
 - [ ] **Step 4: Run** the same command and every existing floor file
   (`src/screens/till-floor-screen.test.ts src/screens/till-floor-screen.map.test.ts src/screens/till-floor-screen.details.test.ts src/screens/till-floor-screen.refresh.test.ts src/screens/till-floor-screen.parties.test.ts src/screens/till-floor-screen.signals.test.ts src/screens/till-floor-screen.unsaved.test.ts src/screens/device-screens.phone-margin.test.ts`),
   `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`, the
   till's typecheck and lint, `prettier --check`. Expected: pass, no existing case changed; one that
   needs changing is a STOP.
-- [ ] **Step 5: Commit** — e.g. "Till floor: drag a table to move it, or onto another to join them
-  (A429 slice 4)".
+- [ ] **Step 5: Commit** — e.g. "Till floor: drag a table to move it, or onto a free one to merge
+  them (A429 slice 4)".
+
+### Task 4.4g: Dragging on the floor screen — joins and seating
+
+**Files:**
+- Create: `apps/till/src/screens/till-floor-screen.today-joins.test.ts`
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (`#seatDialog`, `:954-966`; `#onSeatConfirm`,
+  `:550-555`; Task 4.4f's drop handler)
+
+**Interfaces:**
+- Consumes: Task 4.4f's handler and `#settle`; `till-bill-choice-dialog`; `otherPartyRead` (Task 4.4c).
+- Produces: the drop handler's `seat` and `join`; the seat dialog seating several tables (its
+  `open-table` detail carries `withTableIds`).
+
+Behaviour: `seat` opens the seat dialog headed with `heading`, whose confirm sends `open-table {
+tableId, seated: false, guestCount, withTableIds }`; `join` asks the bill choice first when `other`
+is not null (scope `table.combine_scope` from the dragged party into the target's), then calls
+`api.joinTables(party.id, tableId, bills, { expectedPartyRevision: party.revision,
+...otherPartyRead(<seated read at tableId>, party.id) }, merge ?? undefined)` through `#settle`, a
+join refused `floor_plan.invalid` with `field: "seats"` asking for seats as Task 4.4f's merge does.
+The seat dialog for a free merge is headed with the merge's name (`#detailsHeading`).
+
+- [ ] **Step 1: Write the failing tests** in `till-floor-screen.today-joins.test.ts` (as Task 4.4f's):
+
+```ts
+it("a seated table dropped on a free one joins and merges", async () => { /* joinTables(P, t2, "merge", { expectedPartyRevision, otherPartyId: null }, { moving: t1, target: t2, side }) */ });
+it("a join that needs seats asks for them and sends them", async () => { /* rejects floor_plan.invalid seats → dialog; confirm 9 → joinTables(…, { …merge, seats: 9 }) */ });
+it("two seated tables ask which bills to keep, then join", async () => { /* till-bill-choice-dialog; confirm separate → joinTables(Q, t1, "separate", { …, otherPartyId: P, expectedOtherPartyRevision }, merge) */ });
+it("two free fixed tables open the seat dialog for both, and seat them in one go", async () => {
+  /* drop F1 on F2 → till-seat-dialog headed "Bar 1+2"; confirm 2 → open-table { tableId: F1, seated: false, guestCount: 2, withTableIds: [F2] } */
+});
+it("a fixed table and a seated one join without a merge", async () => { /* joinTables(P, F2, "merge", revisions) with no fifth argument */ });
+it("a free merge's seat dialog is headed with the merge's name", async () => { /* tap a merge of 4 and 5 → tableLabel "4+5" */ });
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.today-joins.test.ts`.
+  Expected: the new cases fail (the handler ignores `seat` and `join`; the dialog shows the first
+  table's label).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command, Task 4.4f's Step 4 list, the till's typecheck and lint,
+  `prettier --check`.
+- [ ] **Step 5: Commit** — e.g. "Till floor: drag a table onto a seated one to join them, and seat a
+  party at two fixed tables (A429 slice 4)".
 
 ### Task 4.5a: The details sheet's actions
 
@@ -4799,27 +4932,29 @@ it("names the actions in Spanish", async () => { /* "Unir con…", "Separar", "G
 @customElement("till-join-with-dialog")
 export class TillJoinWithDialog extends LitElement {
   @property({ attribute: false }) table: TableState | null = null;   // null: closed
-  @property({ attribute: false }) targets: TableState[] = [];        // the zone's other placed groups' first members
+  @property({ attribute: false }) targets: TableState[] = [];        // the zone's other placed groups' first members, not the table's own party's
   @property() heading = "";                                          // "Join 4 with"
 }
 // join-with-pick: { tableId, targetId }; join-with-close — both bubble, composed
 ```
 
-Behaviour (decision 16): the dialog lists `targets` with `tableTarget` (`table-targets.ts:64`), each
-group named as the map names it; a pick sends `join-with-pick` and closes. The floor passes
+Behaviour (decision 16): the floor leaves out of `targets` the table's own group and every group
+its own party holds, for which `dropAction` answers `none`. The dialog lists `targets` with
+`tableTarget` (`table-targets.ts:64`), each group named as the map names it; a pick sends `join-with-pick` and closes. The floor passes
 `.actions=${true}` to its sheet and answers `today-action`: `join-with` opens the dialog, whose pick
-runs Task 4.4e's drop path with `dropAction(zone, { tableId, x, y, targetId })`, `x` and `y` the
+runs the drop path of Tasks 4.4f and 4.4g with `dropAction(zone, { tableId, x, y, targetId })`, `x` and `y` the
 table's current corner; `split` calls `api.splitToday` for a free merge, else `api.splitTable(party.id,
 <the merge's last member in label order>, null, party.revision)`; `rotate` calls `api.rotateToday`;
 `seats` opens `till-today-seats-dialog` (action `save`, `seats` `seatsFor(table)`) whose confirm calls
 `api.setSeatsToday`; `back` calls `api.backToSavedToday`; `take-off` calls `api.takeOffToday`. Each
-settles as Task 4.4e's calls do (status line, `floor-refresh`).
+settles through Task 4.4f's `#settle` (status line, `floor-refresh`).
 
 - [ ] **Step 1: Write the failing tests:**
 
 ```ts
 // join-with-dialog.test.ts
 it("lists the zone's other tables with their condition and sends the pick", async () => {});
+// till-floor-screen.sheet.test.ts also: "Join with… leaves out the table's own party's other tables" (P at t1 and t2 → t2 not among targets)
 it("closes on Escape", async () => { /* await wt-close, then join-with-close */ });
 // till-floor-screen.sheet.test.ts
 it("passes the sheet its actions", async () => { /* till-table-details-sheet .actions true */ });
@@ -4838,7 +4973,7 @@ it("a refused action is said on the floor", async () => { /* takeOffToday reject
   `pnpm --filter @waitron/till exec vitest run src/widgets/join-with-dialog.test.ts src/widgets/join-with-dialog.a11y.test.ts src/screens/till-floor-screen.sheet.test.ts`.
   Expected: the new files fail to load or find no actions.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the same command, Task 4.4e's floor files, the till's typecheck and lint,
+- [ ] **Step 4: Run** the same command, the floor files of Tasks 4.4f and 4.4g, the till's typecheck and lint,
   `prettier --check`.
 - [ ] **Step 5: Commit** — e.g. "Till floor: Join with… for keyboard and screen readers, and the
   sheet's changes on today's plan (A429 slice 4)".
@@ -4873,7 +5008,7 @@ words `floor.no_spares` / `floor.none_taken_off`; a press sends its event and cl
 `wt-dialog` headed `floor.reset_title` with `floor.reset_body`, Cancel and Reset (`danger`), which
 sends `zone-reset`. The floor draws the menu in its action row while the active zone is planned, and
 answers the events with `api.placeSpareToday(tableId, spareSpot(zone))`, `api.putBackToday` and
-`api.resetZoneToday`, settling as Task 4.4e's calls do.
+`api.resetZoneToday`, settling through Task 4.4f's `#settle`.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -4900,8 +5035,11 @@ it("places a spare in the middle of the zone, puts a table back and resets the z
   `floor_plan_editor.note` in both languages, then, in a separate commit titled "Changed test checks
   (A429 slice 4):", the two assertions, listing each `file:line` with its before and after; run
   `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-editor.test.ts src/screens/floor-plan-editor.save.test.ts`.
-  Without it, leave the note and both assertions as they are and say so in the handover.
-- [ ] **Step 5: Run** Step 2's command, Task 4.4e's floor files, the till's (and, after Step 4, the
+  If no answer has arrived by then, leave the note and both assertions untouched, add a line to
+  A470's detail in `docs/backlog/till.md` ("The editor's note still says changes go live tomorrow;
+  Reset to saved plan is waiting on the owner's answer to slice 4 decision 20"), and say so in the
+  handover.
+- [ ] **Step 5: Run** Step 2's command, the floor files of Tasks 4.4f and 4.4g, the till's (and, after Step 4, the
   dashboard's) typecheck and lint, `prettier --check`.
 - [ ] **Step 6: Commit** — e.g. "Till floor: the zone menu adds a spare, puts a table back and resets
   the zone to its saved plan (A429 slice 4)".
