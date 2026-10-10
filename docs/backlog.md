@@ -4891,6 +4891,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Several printer queries that already require an active printer or a live job also filter
   `deleted_at`**; one test pinning "deleted means switched off with no live jobs" could replace the
   copies. Left open by A435 step 2.
+- **The devices screen copies the printers screen's delete-dialog logic** (about 110 lines in
+  `apps/dashboard/src/screens/devices-screen.ts`); steps 3, 5 and 6 would add more copies. Pull it
+  into one shared piece once step 3 (card readers) has landed. Left open by A435 step 4 (#1519).
+- **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` at about 13
+  places in 6 files; one named check would keep a new query from forgetting it. Left open by A435
+  step 4 (#1519).
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
