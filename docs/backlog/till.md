@@ -243,7 +243,7 @@ screen is designed.
   change, the old floor screen refusing to change a planned table, and the demo seed writing
   master plans. Slice 2 is the dashboard editor at `/manage/floor-plan/zone/<id>`, opened from
   the zone panel's "Edit floor plan". Slice 3 is the till's map: a planned zone drawn on a new
-  map with status colours and dots, a details sheet, the seat dialog's seats hint, a 15-second
+  map with status colours and dots, a details sheet, the seat dialog, a 15-second
   re-read, and the order screen's status pin and notice. Left: slice 4 (today's changes on the
   till) and slice 5 (removing the old pieces). A Square-style editor on the
   dashboard for each zone's master plan (tables created in bulk, saved joins, Undo/Redo), and a
@@ -312,11 +312,7 @@ screen is designed.
     `apps/till/src/state/floor-map.ts`), so slice 4 should refuse those take-offs or keep that
     listing. A merge's member tables could also sit in different zones, while the map reads one
     zone at a time.
-  - Six choices from the look pass (`~/waitron-campaign/questions.md`, "FYI 2026-10-10 — A429-3"):
-    the map's height of 65dvh; a requested bill purple on the map but a blue chip in the sheet and
-    the list; the pin's colour swatch and its words able to differ; a single table's sheet headed by
-    its bare number; the "Covers" placeholder; the notice covering the order title row at 390 px.
-    Built with defaults; owner may override.
+
 
 ## Small floor-plan refusals still missing
 

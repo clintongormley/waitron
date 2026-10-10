@@ -102,10 +102,11 @@ function wordsOf({ status, fillFrom, dotFrom }: Sources): string {
 /** The status pin's fill and shortest word. Pass a merge's members together. */
 export function statusPin(tables: TableState | readonly TableState[]): {
   fill: FloorMapFill;
+  dot: FloorMapDot | null;
   text: string;
 } {
   const from = sources(tables);
-  return { fill: from.status.fill, text: pinWords(from) };
+  return { fill: from.status.fill, dot: from.status.dot, text: pinWords(from) };
 }
 
 export function pinText(tables: TableState | readonly TableState[]): string {

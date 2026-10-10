@@ -1,4 +1,6 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cropToTables } from "@waitron/ui";
 import type { WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { mapTables } from "../state/floor-map.js";
@@ -359,3 +361,85 @@ describe("till-floor-screen on the new map", () => {
     expect(el.shadowRoot!.querySelector("[data-table=t4]")).not.toBeNull();
   });
 });
+
+for (const [width, height] of [
+  [30, 4],
+  [4, 30],
+]) {
+  it(`sizes the map to a ${width} by ${height} zone`, async () => {
+    const el = await mount({
+      tables: [
+        planned("t1", {
+          today: today({
+            placement: { x: 0, y: 0, width: width!, height: height!, shape: "rect", rotation: 0 },
+          }),
+        }),
+      ],
+    });
+    const map = mapOf(el);
+    await map.updateComplete;
+    const crop = cropToTables(map.tables.map((t) => t.placement))!;
+    const box = map.getBoundingClientRect();
+    expect(box.width / box.height).toBeCloseTo(crop.width / crop.height, 2);
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  it(`paints the list's Bill requested chip purple in ${theme}`, async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      {
+        zones: [zone()],
+        tables: [
+          planned("t1", {
+            signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
+          }),
+        ],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    const chip = el.shadowRoot!.querySelector("[data-chip='bill-requested']")!;
+    const control = document.createElement("span");
+    control.style.backgroundColor = "var(--wt-color-table-bill)";
+    host.appendChild(control);
+    expect(getComputedStyle(chip).backgroundColor).toBe(getComputedStyle(control).backgroundColor);
+    control.style.color = "var(--wt-color-on-table-bill)";
+    expect(getComputedStyle(chip).color).toBe(getComputedStyle(control).color);
+  });
+}
+
+it("keeps a square map usable on a phone held sideways", async () => {
+  const previous = { width: window.innerWidth, height: window.innerHeight };
+  try {
+    await page.viewport(844, 390);
+    const el = await mount();
+    const map = mapOf(el);
+    const tapSize = parseFloat(getComputedStyle(map).getPropertyValue("--wt-tap-min"));
+    const box = map.getBoundingClientRect();
+    expect(box.height).toBeGreaterThanOrEqual(tapSize * 6);
+    expect(box.width).toBeCloseTo(box.height, 2);
+  } finally {
+    await page.viewport(previous.width, previous.height);
+  }
+});
+
+for (const locale of ["en", "es"])
+  for (const seats of [6, 1, null]) {
+    it(`leaves Guests without a placeholder for ${seats} seats in ${locale}`, async () => {
+      const previous = currentLocale();
+      try {
+        setLocale(locale);
+        const el = await mount({ tables: [planned("t1", { today: today({ seats }) })] });
+        await tap(el, "t1");
+        const dialog = el.shadowRoot!.querySelector("till-seat-dialog")!;
+        await dialog.updateComplete;
+        const field = dialog.shadowRoot!.querySelector("wt-input")!;
+        await field.updateComplete;
+        expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe("");
+      } finally {
+        setLocale(previous);
+      }
+    });
+  }

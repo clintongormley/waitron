@@ -216,6 +216,8 @@ Tests pinning these may change, under the commit rule above.
   name instead).
 
 **Slice 3** (added at its expansion):
+> Owner override, 2026-10-10 (A472): Guests now has no placeholder. This supersedes the seats /
+> "Covers" replacement recorded below.
 - The seat dialog's hint "Optional. Leave it empty if you don't know yet." / "Opcional. Déjalo
   vacío si aún no lo sabes." (`seat.guest_count_hint`, `apps/till/src/i18n/strings.ts:546`, `:1679`),
   replaced by the table's seats or "Covers" (slice 3 decision 12). No test named it at `28f150197`
@@ -2438,6 +2440,13 @@ check); design-system.md names both primitives and the editor; the backlog's A42
 2 landed and what it left.
 
 ## Slice 3 — the till's map (spec §5)
+
+> Owner overrides, 2026-10-10 (A472): the floor screen sizes the map to the zone's cropped
+> proportions, with a viewport height cap; Bill requested chips use the map's purple; the pin's
+> swatch follows its displayed signal; a single-table sheet says "Table 9" / "Mesa 9"; Guests has
+> no placeholder. The 4-second notice stays as built. These supersede the corresponding slice 3
+> defaults below.
+
 
 Branch `feat/floor-plan-till-map`, after slice 2 (landed as #1506). Expanded to step level on
 2026-10-10, unattended, and revised the same day on a fresh-context review's findings; every

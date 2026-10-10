@@ -347,3 +347,25 @@ describe("till-table-details-sheet", () => {
     expect(text(el, "[data-details-close]")).toBe("Cerrar");
   });
 });
+
+for (const theme of ["light", "dark"] as const) {
+  it(`paints the details' Bill requested chip purple in ${theme}`, async () => {
+    const { el, host } = await mountWidget<TillTableDetailsSheet>(
+      "till-table-details-sheet",
+      {
+        table: table({
+          signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
+        }),
+        heading: "Table 9",
+      },
+      theme,
+    );
+    const chip = el.shadowRoot!.querySelector("[data-chip='bill-requested']")!;
+    const control = document.createElement("span");
+    control.style.backgroundColor = "var(--wt-color-table-bill)";
+    control.style.color = "var(--wt-color-on-table-bill)";
+    host.appendChild(control);
+    expect(getComputedStyle(chip).backgroundColor).toBe(getComputedStyle(control).backgroundColor);
+    expect(getComputedStyle(chip).color).toBe(getComputedStyle(control).color);
+  });
+}

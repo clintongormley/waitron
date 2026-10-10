@@ -370,3 +370,60 @@ describe("till-table-status", () => {
     expect(toast(el)!.open).toBe(true);
   });
 });
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [over, words, token] of [
+    [{ signals: [billRequested] }, "Bill requested", "--wt-color-table-bill"],
+    [{ signals: [billRequested], readyToServe: 2 }, "2 ready", "--wt-color-success"],
+    [
+      { signals: [billRequested], readyToServe: 2, timingBand: "forgotten" },
+      "Forgotten",
+      "--wt-color-danger",
+    ],
+  ] as const) {
+    it(`paints ${words} with its signal colour in ${theme}`, async () => {
+      const p = party();
+      const { el, host } = await mountWidget<TillTableStatus>(
+        "till-table-status",
+        {
+          party: p,
+          tables: [row(p, { ...over, signals: [...over.signals] })],
+        },
+        theme,
+      );
+      expect(pin(el)!.textContent!.trim()).toBe(words);
+      const control = document.createElement("span");
+      control.style.backgroundColor = `var(${token})`;
+      host.appendChild(control);
+      expect(getComputedStyle(pin(el)!.querySelector(".swatch")!).backgroundColor).toBe(
+        getComputedStyle(control).backgroundColor,
+      );
+    });
+  }
+}
+
+for (const [locale, heading] of [
+  ["en", "Table 4"],
+  ["es", "Mesa 4"],
+]) {
+  it(`names the pin's single-table sheet in ${locale}`, async () => {
+    setLocale(locale!);
+    try {
+      const p = party();
+      const { el } = await mount({ party: p, tables: [row(p)] });
+      pin(el)!.click();
+      await el.updateComplete;
+      expect(sheet(el)!.heading).toBe(heading);
+    } finally {
+      setLocale("en");
+    }
+  });
+}
+
+it("keeps a named single-table party's heading", async () => {
+  const p = party({ name: "Birthday", displayName: "Birthday" });
+  const { el } = await mount({ party: p, tables: [row(p)] });
+  pin(el)!.click();
+  await el.updateComplete;
+  expect(sheet(el)!.heading).toBe("Birthday");
+});
