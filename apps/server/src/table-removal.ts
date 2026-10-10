@@ -57,6 +57,25 @@ export async function tableTied(tx: Transaction, tableId: string): Promise<boole
   return order !== undefined;
 }
 
+/** Whether any module refuses to let go of the table; a failure that is not an AppError is rethrown. */
+export async function refusedByAModule(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId">,
+  removals: readonly TableRemoval[],
+  tableId: string,
+  now: Date,
+): Promise<boolean> {
+  for (const removal of removals) {
+    try {
+      await removal.refuse(tx, { locationId: cfg.locationId }, tableId, now);
+    } catch (error) {
+      if (error instanceof AppError) return true;
+      throw error;
+    }
+  }
+  return false;
+}
+
 /**
  * Removes the live table for good. Returns false when a module refuses, having changed nothing, or
  * when something unknown still names it, having kept its reset row and the table itself.
@@ -68,20 +87,13 @@ export async function removeLiveTable(
   tableId: string,
   now: Date,
 ): Promise<boolean> {
+  if (await refusedByAModule(tx, cfg, removals, tableId, now)) return false;
   const { locationId } = cfg;
   const [table] = await tx
     .select({ label: diningTables.label })
     .from(diningTables)
     .where(eq(diningTables.id, tableId));
   const { label } = table!;
-  for (const removal of removals) {
-    try {
-      await removal.refuse(tx, { locationId }, tableId, now);
-    } catch (error) {
-      if (error instanceof AppError) return false;
-      throw error;
-    }
-  }
   for (const removal of removals) await removal.release(tx, { locationId }, tableId, label);
   await releaseDeliveries(tx, tableId, label);
   await leaveMerges(tx, [tableId]);

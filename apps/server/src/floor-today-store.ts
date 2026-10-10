@@ -13,7 +13,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
 import {
   planReset,
   targetsFromMaster,
@@ -22,7 +21,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { leaveMerges } from "./floor-today-merges.js";
-import { removeLiveTable, tableTied } from "./table-removal.js";
+import { refusedByAModule, removeLiveTable, tableTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 
 type Placed = {
@@ -302,24 +301,6 @@ function todayColumns(target: Target) {
     ...placementColumns(target.placement),
     takenOff: false,
   };
-}
-
-async function refusedByAModule(
-  tx: Transaction,
-  cfg: TillConfig,
-  removals: readonly TableRemoval[],
-  tableId: string,
-  now: Date,
-): Promise<boolean> {
-  for (const removal of removals) {
-    try {
-      await removal.refuse(tx, { locationId: cfg.locationId }, tableId, now);
-    } catch (error) {
-      if (error instanceof AppError) return true;
-      throw error;
-    }
-  }
-  return false;
 }
 
 /** Takes the table off today's plan; `active` false keeps every reader that skips an inactive table off it. */

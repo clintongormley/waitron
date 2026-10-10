@@ -29,6 +29,7 @@ import {
   counterOrder,
   inTx,
   join,
+  OPERATOR,
   partyRow,
   pay,
   seat,
@@ -36,7 +37,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { handOverOrder } from "./working-order.js";
+import { handOverOrder, placeOrder } from "./working-order.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -315,7 +316,13 @@ describe("removing a live table the master no longer has", () => {
 
     expect(await tableRow(v, t1!)).toMatchObject({ active: false });
     expect(await todayRow(t1!)).toBeUndefined();
-    expect(await resetRowOf(t1!)).toMatchObject({ remove: true, pending: true });
+    const kept = await resetRowOf(t1!);
+    expect(kept).toMatchObject({ remove: true, pending: true });
+
+    await catchUp(zoneId);
+
+    expect(await resetRowOf(t1!)).toEqual(kept);
+    expect(await tableExists(t1!)).toBe(true);
 
     await inTx(v, (tx) => tx.delete(partyTables).where(eq(partyTables.tableId, t1!)));
     await catchUp(zoneId);
@@ -323,7 +330,9 @@ describe("removing a live table the master no longer has", () => {
     expect(await tableExists(t1!)).toBe(false);
     expect(await resetRowOf(t1!)).toBeUndefined();
   });
+});
 
+describe("removeLiveTable", () => {
   it("gives the last table of a merge its place back", async () => {
     const {
       zoneId,
@@ -344,19 +353,17 @@ describe("removing a live table the master no longer has", () => {
           .values({ joinId: merge!.id, tableId, beforeX: 3, beforeY: 4, beforeRotation: 90 });
       }
     });
-    await deleteFromMaster(t1!);
 
-    await reset(zoneId);
+    expect(await inTx(v, (tx) => removeLiveTable(tx, v.cfg, NONE, t1!, NOW))).toBe(true);
 
     expect(await tableExists(t1!)).toBe(false);
     const merges = await inTx(v, (tx) =>
       tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, zoneId)),
     );
     expect(merges).toEqual([]);
+    expect(await todayRow(t2!)).toMatchObject({ x: 3, y: 4, rotation: 90 });
   });
-});
 
-describe("removeLiveTable", () => {
   it("removes nothing when a module refuses to let go", async () => {
     const {
       ids: [t1],
@@ -423,7 +430,7 @@ describe("removeLiveTable", () => {
         );
         return removeLiveTable(tx, v.cfg, NONE, t1!, NOW);
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("guarded");
     expect(await tableExists(t1!)).toBe(true);
   });
 });
@@ -431,6 +438,29 @@ describe("removeLiveTable", () => {
 describe("tableTied", () => {
   it("is false for a table nothing ties", async () => {
     const t1 = await v.table("Untied 1", await zone());
+
+    expect(await inTx(v, (tx) => tableTied(tx, t1))).toBe(false);
+  });
+
+  it("is false for a closed party's leftover row", async () => {
+    const t1 = await v.table("Leftover 1", await zone());
+    const { partyId } = await seat(v, t1);
+    await finish(partyId);
+    await strayPartyRow(partyId, t1);
+
+    expect(await inTx(v, (tx) => tableTied(tx, t1))).toBe(false);
+  });
+
+  it("is false for an abandoned order with kitchen items never collected", async () => {
+    const t1 = await v.table("Abandoned 1", await zone());
+    const order = await delivery(t1);
+    await placeOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, order, OPERATOR);
+    // What cancelling a placed order leaves (`cancelPlacedOrder`): abandoned, its items fired.
+    await inTx(v, (tx) =>
+      tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, order)),
+    );
+    expect(await kitchenItemsOf(order)).toBeGreaterThan(0);
+    expect((await billRow(v, order)).collectedAt).toBeNull();
 
     expect(await inTx(v, (tx) => tableTied(tx, t1))).toBe(false);
   });
