@@ -40,6 +40,7 @@ export const en = {
   "station_today.picker_closed": "{station} · Closed",
 
   "department_transfer.title": "Department transfers",
+  "department_transfer.short": "Transfers",
   "department_transfer.current_tab": "Current tab",
   "department_transfer.source_responsible":
     "Your department remains responsible until the receiving desk accepts.",
@@ -85,10 +86,10 @@ export const en = {
   "department_transfer.close": "Close",
   "department_transfer.read_failed":
     "Transfer updates could not be loaded. The last received state is shown.",
-  "department_transfer.open": "Department transfers ({count} pending)",
+  "department_transfer.open": "Transfers ({count} pending)",
   "shell.more": "More",
-  "shell.more_transfers": "More, {n} department transfers pending",
-  "shell.more_transfers_one": "More, 1 department transfer pending",
+  "shell.more_transfers": "More, {n} transfers pending",
+  "shell.more_transfers_one": "More, 1 transfer pending",
   "unsaved.heading": "Discard unsaved changes?",
   "unsaved.message": "Your changes have not been saved.",
   "unsaved.keep": "Keep editing",
@@ -1208,6 +1209,7 @@ export const es: Record<StringKey, string> = {
   "station_today.picker_closed": "{station} · Cerrada",
 
   "department_transfer.title": "Traspasos entre departamentos",
+  "department_transfer.short": "Traspasos",
   "department_transfer.current_tab": "Cuenta actual",
   "department_transfer.source_responsible":
     "Tu departamento sigue siendo responsable hasta que el mostrador receptor acepte.",
@@ -1253,10 +1255,10 @@ export const es: Record<StringKey, string> = {
   "department_transfer.close": "Cerrar",
   "department_transfer.read_failed":
     "No se pudieron cargar las novedades. Se muestra el último estado recibido.",
-  "department_transfer.open": "Traspasos entre departamentos (pendientes: {count})",
+  "department_transfer.open": "Traspasos (pendientes: {count})",
   "shell.more": "Más",
-  "shell.more_transfers": "Más, traspasos entre departamentos pendientes: {n}",
-  "shell.more_transfers_one": "Más, traspasos entre departamentos pendientes: 1",
+  "shell.more_transfers": "Más, traspasos pendientes: {n}",
+  "shell.more_transfers_one": "Más, traspasos pendientes: 1",
   "unsaved.heading": "¿Descartar los cambios sin guardar?",
   "unsaved.message": "Tus cambios no se han guardado.",
   "unsaved.keep": "Seguir editando",

@@ -3467,10 +3467,12 @@ content.
 
 The till's tab-shell bar is one row at every width. On a phone (40rem wide or less) it holds the
 tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
-its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row,
-in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My schedule,
-Pass, Kitchen, Find a bill, Department transfers (the count and its button together), and last the
-operator's name with Log out. Inside More the items keep the bar's order. The tabs and the language
+its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row.
+The bar draws its actions left to right in priority order — Find a bill, Pass, Kitchen, My
+schedule, Allergens, Profile, Equipment, Transfers (the count and its button together) — and More
+takes them from the right: the Waitron name is hidden first, then Transfers, Equipment, Profile,
+Allergens, My schedule, Kitchen, Pass, Find a bill, and last the operator's name with Log out,
+which keep their place after the language chooser. Inside More the items keep the bar's order. The tabs and the language
 chooser never leave the bar; once everything else has left, the tabs scroll sideways. Items come
 back when the screen grows wider, the bar's content other than the transfer count changes, or the
 language changes, but not while More is open. While the transfers are in More, its button carries the pending count. Cases:

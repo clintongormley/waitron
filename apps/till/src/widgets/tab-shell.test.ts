@@ -104,7 +104,9 @@ describe("till-tab-shell", () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
     const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
     expect(equipment.textContent).toContain(t("equipment.open"));
-    expect(equipment.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.allergens"));
+    expect(equipment.previousElementSibling).toBe(
+      el.shadowRoot!.querySelector("wt-button.allergens"),
+    );
     let fired = 0;
     el.addEventListener("open-equipment", () => (fired += 1));
     equipment.click();
@@ -416,14 +418,14 @@ const full: Partial<TillTabShell> = {
 
 // Menu order: each button's selector and the event it emits.
 const menuActions = [
-  ["[data-open-transfers]", "open-transfers"],
   [".find-bill", "find-bill"],
-  [".station", "show-station"],
   [".expo", "show-expo"],
+  [".station", "show-station"],
   [".schedule", "show-schedule"],
+  [".allergens", "open-allergens"],
   [".profile", "open-profile"],
   [".equipment", "open-equipment"],
-  [".allergens", "open-allergens"],
+  ["[data-open-transfers]", "open-transfers"],
   [".logout", "logout"],
 ] as const;
 
@@ -503,15 +505,15 @@ describe("till-tab-shell at phone width", () => {
             c.localName,
         );
       expect(order).toEqual([
-        "department-transfers",
-        "data-open-transfers",
         "find-bill",
-        "station",
         "expo",
+        "station",
         "schedule",
+        "allergens",
         "profile",
         "equipment",
-        "allergens",
+        "department-transfers",
+        "data-open-transfers",
         "operator",
         "logout",
       ]);
@@ -579,9 +581,7 @@ describe("till-tab-shell at phone width", () => {
         const badge = menuOf(el)!.querySelector<HTMLElement>('wt-count-badge[slot="badge"]')!;
         expect(badge.getAttribute("tone")).toBe("warning");
         expect(badge.shadowRoot!.textContent).toContain("2");
-        expect(triggerOf(el).getAttribute("aria-label")).toBe(
-          "More, 2 department transfers pending",
-        );
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("More, 2 transfers pending");
 
         el.transferCount = 1;
         await el.updateComplete;
@@ -589,9 +589,7 @@ describe("till-tab-shell at phone width", () => {
         expect(
           menuOf(el)!.querySelector('wt-count-badge[slot="badge"]')!.shadowRoot!.textContent,
         ).toContain("1");
-        expect(triggerOf(el).getAttribute("aria-label")).toBe(
-          "More, 1 department transfer pending",
-        );
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("More, 1 transfer pending");
 
         for (const transferCount of [0, undefined]) {
           el.transferCount = transferCount;
@@ -613,15 +611,11 @@ describe("till-tab-shell at phone width", () => {
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
         await (menuOf(el) as LitElement).updateComplete;
-        expect(triggerOf(el).getAttribute("aria-label")).toBe(
-          "Más, traspasos entre departamentos pendientes: 2",
-        );
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("Más, traspasos pendientes: 2");
         el.transferCount = 1;
         await el.updateComplete;
         await (menuOf(el) as LitElement).updateComplete;
-        expect(triggerOf(el).getAttribute("aria-label")).toBe(
-          "Más, traspasos entre departamentos pendientes: 1",
-        );
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("Más, traspasos pendientes: 1");
         el.transferCount = 0;
         await el.updateComplete;
         await (menuOf(el) as LitElement).updateComplete;
@@ -698,7 +692,7 @@ describe("till-tab-shell at phone width", () => {
     });
   });
 
-  it("leaves the wide header as it was: brand, and every button straight in the session row", async () => {
+  it("draws the wide header whole: brand, and every button straight in the session row in priority order", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
       expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
@@ -712,15 +706,15 @@ describe("till-tab-shell at phone width", () => {
             c.localName,
         ),
       ).toEqual([
-        "department-transfers",
-        "data-open-transfers",
         "find-bill",
-        "station",
         "expo",
+        "station",
         "schedule",
+        "allergens",
         "profile",
         "equipment",
-        "allergens",
+        "department-transfers",
+        "data-open-transfers",
         "wt-language-chooser",
         "operator",
         "logout",
@@ -752,14 +746,14 @@ describe("till-tab-shell above phone width", () => {
   /** The order in which the bar's items leave for More, first to leave first: each item's key and
    * the selector of its button. */
   const leaveOrder = [
-    ["allergens", ".allergens"],
+    ["transfers", "[data-open-transfers]"],
     ["equipment", ".equipment"],
     ["profile", ".profile"],
+    ["allergens", ".allergens"],
     ["schedule", ".schedule"],
-    ["expo", ".expo"],
     ["station", ".station"],
+    ["expo", ".expo"],
     ["find-bill", ".find-bill"],
-    ["transfers", "[data-open-transfers]"],
     ["operator", ".logout"],
   ] as const;
 
@@ -882,6 +876,141 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
+  const demoCounter: Partial<TillTabShell> = {
+    tabs,
+    activeTabKey: "counter",
+    operatorName: "Ana",
+    affordances: ["find-bill", "station", "expo", "schedule"],
+    transferAvailable: true,
+    transferCount: 1,
+    loadLocales: full.loadLocales!,
+  };
+
+  const service = [".find-bill", ".expo", ".station"] as const;
+
+  /** What each item that ranks below Find a bill, Pass and Kitchen draws in the session row. */
+  const belowService: Record<string, readonly string[]> = {
+    transfers: ['[data-test="department-transfers"]', "[data-open-transfers]"],
+    equipment: [".equipment"],
+    profile: [".profile"],
+    allergens: [".allergens"],
+    schedule: [".schedule"],
+  };
+
+  /** The items of `shell` that rank below Find a bill, Pass and Kitchen, and the viewport widths
+   * just wide enough (`fits`) and just too narrow (`tight`) for its bar to keep all three with the
+   * name hidden and those items in More. Measured in the running browser, because how wide the text
+   * draws differs between platforms. */
+  async function serviceWidths(
+    shell: Partial<TillTabShell>,
+  ): Promise<{ below: string[]; fits: number; tight: number }> {
+    let result = { below: [] as string[], fits: 0, tight: 0 };
+    await atViewport(ROOMY_WIDTH, async () => {
+      const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
+      await settle(el);
+      await settle(el);
+      expect(menuOf(el)).toBeNull();
+      const header = el.shadowRoot!.querySelector("header")!;
+      const session = header.querySelector<HTMLElement>(".session")!;
+      const width = (node: Element) => node.getBoundingClientRect().width;
+      const px = (value: string) => parseFloat(value);
+      const below = leaveOrder
+        .slice(
+          0,
+          leaveOrder.findIndex(([key]) => key === "station"),
+        )
+        .filter(([, selector]) => header.querySelector(selector) !== null)
+        .map(([key]) => key);
+      const sessionGap = px(getComputedStyle(session).columnGap);
+      const head = getComputedStyle(header);
+      let need =
+        px(head.paddingLeft) +
+        px(head.columnGap) +
+        width(header.querySelector(".tabs")!) +
+        width(session) +
+        px(head.paddingRight);
+      for (const key of below) {
+        for (const selector of belowService[key]!) {
+          need -= width(session.querySelector(`:scope > ${selector}`)!) + sessionGap;
+        }
+      }
+      const offset = window.innerWidth - width(header);
+      await page.viewport(700, 844);
+      await settle(el);
+      need += width(menuOf(el)!) + sessionGap;
+      host.remove();
+      result = {
+        below,
+        fits: Math.ceil(need + offset) + 2,
+        tight: Math.floor(need + offset) - 2,
+      };
+    });
+    return result;
+  }
+
+  for (const [fixture, shell] of [
+    ["full", full],
+    ["the demo counter", demoCounter],
+  ] as const) {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      it(`moves the transfers, and what ranks below Find a bill, Pass and Kitchen, into More before them, then Kitchen first, with ${fixture} in ${locale}`, async () => {
+        await withLocale(locale, async () => {
+          const { below, fits, tight } = await serviceWidths(shell);
+          expect(below[0]).toBe("transfers");
+          for (const [width, left] of [
+            [fits, below],
+            [tight, [...below, "station"]],
+          ] as const) {
+            await atViewport(width, async () => {
+              const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
+              await settle(el);
+              expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).toBeNull();
+              expect(inMore(el), `${width}`).toEqual(left);
+              const menu = menuOf(el)!;
+              for (const selector of service) {
+                const found = [
+                  ...el.shadowRoot!.querySelectorAll<HTMLElement>(`header ${selector}`),
+                ];
+                expect(found, `${width} ${selector}`).toHaveLength(1);
+                const moved = left.includes(selector.slice(1));
+                expect(menu.contains(found[0]!), `${width} ${selector}`).toBe(moved);
+                if (moved) continue;
+                const r = found[0]!.getBoundingClientRect();
+                expect(r.width, `${width} ${selector}`).toBeGreaterThan(0);
+                expect(r.left, `${width} ${selector}`).toBeGreaterThanOrEqual(0);
+                expect(r.right, `${width} ${selector}`).toBeLessThanOrEqual(window.innerWidth);
+              }
+              expectOneRow(el);
+              host.remove();
+            });
+          }
+        });
+      });
+    }
+  }
+
+  it.each([
+    ["en-GB", "Transfers", "Department transfers"],
+    ["es-ES", "Traspasos", "Traspasos entre departamentos"],
+  ] as const)(
+    "names the bar's transfers button with the short name in %s, keeping the dialog's full title",
+    async (locale, short, title) => {
+      await withLocale(locale, () =>
+        atViewport(ROOMY_WIDTH, async () => {
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          expect(menuOf(el)).toBeNull();
+          const button = el.shadowRoot!.querySelector<HTMLElement>(
+            "header .session > [data-open-transfers]",
+          )!;
+          expect(button.textContent!.trim()).toBe(short);
+          expect(t("department_transfer.short")).toBe(short);
+          expect(t("department_transfer.title")).toBe(title);
+        }),
+      );
+    },
+  );
+
   it("keeps More in the bar's order, showing only the items that left", async () => {
     await atViewport(1024, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
@@ -896,15 +1025,15 @@ describe("till-tab-shell above phone width", () => {
             c.localName,
         );
       const barOrder = [
-        "department-transfers",
-        "data-open-transfers",
         "find-bill",
-        "station",
         "expo",
+        "station",
         "schedule",
+        "allergens",
         "profile",
         "equipment",
-        "allergens",
+        "department-transfers",
+        "data-open-transfers",
         "operator",
         "logout",
       ];
@@ -1006,15 +1135,10 @@ describe("till-tab-shell above phone width", () => {
 
   it("keeps the visible count as the status while the transfers are on the bar", async () => {
     await withLocale("en-GB", () =>
-      atViewport(1280, async () => {
+      atViewport(ROOMY_WIDTH, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
         await settle(el);
-        const menu = menuOf(el)!;
-        expect(menu).not.toBeNull();
-        expect(menu.querySelector("[data-open-transfers]")).toBeNull();
-        expect(menu.querySelector("wt-count-badge")).toBeNull();
-        await (menu as LitElement).updateComplete;
-        expect(triggerOf(el).getAttribute("aria-label")).toBe("More");
+        expect(menuOf(el)).toBeNull();
         const [status, ...rest] = statuses(el);
         expect(rest).toEqual([]);
         expect(status!.getAttribute("data-test")).toBe("department-transfers");
@@ -1037,9 +1161,7 @@ describe("till-tab-shell above phone width", () => {
         const badge = menu.querySelector<HTMLElement>('wt-count-badge[slot="badge"]')!;
         expect(badge.getAttribute("tone")).toBe("warning");
         await (menu as LitElement).updateComplete;
-        expect(triggerOf(el).getAttribute("aria-label")).toBe(
-          "More, 2 department transfers pending",
-        );
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("More, 2 transfers pending");
         const [status, ...rest] = statuses(el);
         expect(rest).toEqual([]);
         expect(menu.contains(status!)).toBe(false);
@@ -1051,34 +1173,28 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
-  it.each([
-    [1024, "in More"],
-    [1280, "on the bar"],
-  ] as const)(
-    "keeps an open More open, and the same status region, when the transfer count changes at %i wide (transfers %s)",
-    async (width, where) => {
-      await withLocale("en-GB", () =>
-        atViewport(width, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
-          await settle(el);
-          const menu = menuOf(el)!;
-          expect(menu.querySelector("[data-open-transfers]") !== null).toBe(where === "in More");
-          const [status] = statuses(el);
-          await userEvent.click(triggerOf(el));
-          await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
-          el.transferCount = 3;
-          await settle(el);
-          expect(menuOf(el)).toBe(menu);
-          expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
-          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-          expect(statuses(el)).toEqual([status]);
-          expect(status!.textContent).toContain(
-            t("department_transfer.open").replace("{count}", "3"),
-          );
-        }),
-      );
-    },
-  );
+  it("keeps an open More open, and the same status region, when the transfer count changes while the transfers are in More", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1024, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        expect(menu.querySelector("[data-open-transfers]")).not.toBeNull();
+        const [status] = statuses(el);
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        el.transferCount = 3;
+        await settle(el);
+        expect(menuOf(el)).toBe(menu);
+        expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+        expect(statuses(el)).toEqual([status]);
+        expect(status!.textContent).toContain(
+          t("department_transfer.open").replace("{count}", "3"),
+        );
+      }),
+    );
+  });
 
   it("waits for an open More to close before giving items back to a wider bar", async () => {
     await withLocale("en-GB", () =>
@@ -1105,7 +1221,7 @@ describe("till-tab-shell above phone width", () => {
 
   it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
     await withLocale("en-GB", () =>
-      atViewport(1280, async () => {
+      atViewport(1024, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
           ...full,
           canSwitchProfile: false,
@@ -1115,7 +1231,7 @@ describe("till-tab-shell above phone width", () => {
         const held = inMore(el);
         // Profile would come third in the leaving order, so with three or more items already in
         // More its arrival shifts the count's slice by one.
-        expect(held).toContain("schedule");
+        expect(held).toContain("allergens");
         await userEvent.click(triggerOf(el));
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
         await page.viewport(ROOMY_WIDTH, 844);

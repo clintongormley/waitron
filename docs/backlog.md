@@ -1797,11 +1797,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
   `#onPayTab`. Raised by the A1 review wave (A1d).
 
-- **The till's top bar: because items leave strictly in that order, a wide item can take narrower
-  ones with it** — open, for the owner; left open by A395 (#1435). Option: after the bar fits, bring
-  back any item that left earlier and now fits, so the order is no longer strict. Not done.
-  [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
-
 - **The till's top bar: a change in the pending-transfer count alone never brings items back onto
   the bar**, so when the count shrinks or goes away, items can stay in More although they would now
   fit, until the next resize or other change refits the bar. Open, decided as built; left open by
@@ -1810,6 +1805,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test** (deleting any one
   leaves every test passing): the phone-width early return in `#release`, the return after re-adding
   a step in `#fit`, and the unobserve of a replaced language chooser. Left open by A395 (#1435).
+
+- **Three till top-bar cases run close to, and sometimes past, their 15 s limit locally.** The
+  "fits as a fresh bar does when …" cases in `apps/till/src/widgets/tab-shell.test.ts`; find what
+  makes them slow rather than raising the limit. Left open by A425.
+  [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
 
 - **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).** A unit with no
   enabled text has an empty label; the tile and basket-refresh price templates still append a slash.

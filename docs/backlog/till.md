@@ -205,20 +205,21 @@ screen is designed.
 
 - **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,
   the bar moves items into the More menu one at a time, only as many as it needs to stay on one
-  row, in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My
-  schedule, Pass, Kitchen, Find a bill, Department transfers (count and button together), and last
-  the operator's name with Log out. Tabs and the language chooser never leave; once everything
+  row. It draws its actions in priority order (A425) and moves them into More from the right:
+  the Waitron name is hidden first, then Transfers (count and button together), Equipment,
+  Profile, Allergens, My schedule, Kitchen, Pass, Find a bill, and last the operator's name with
+  Log out (`design-system.md`). Tabs and the language chooser never leave; once everything
   else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
   `design-system.md` says which icon means which menu. While More is open nothing moves out of
   it; the bar refits when it closes.
-  - **Open, for the owner:** because items leave strictly in that order, a wide item can take
-    narrower ones with it. In screenshots of the demo counter in Spanish at 1024 px, and in both
-    languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
-    Pass are in More too, though the bar has empty room for some of them. Option: after the bar fits, bring back any item that left earlier and now fits, so the
-    order is no longer strict. Not done. Screenshots: `~/waitron-campaign/a395-shots/`.
   - **Open, decided as built:** a change in the pending-transfer count alone never brings items
     back onto the bar, so when the count shrinks or goes away, items can stay in More although they
     would now fit, until the next resize or other change refits the bar.
+  - **Open: three cases run close to, and sometimes past, their 15 s limit locally.** The "fits as a fresh bar does when
+    …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
+    owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
+    changes" case timed out at 15.4 s both before and after A425's order change. Find what makes
+    them slow rather than raising the limit.
   - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
     any one leaves every test passing): the phone-width early return in `#release`, the return
     after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.

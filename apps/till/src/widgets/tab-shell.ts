@@ -30,16 +30,17 @@ type BarItem =
   | "allergens"
   | "operator";
 
-/** First to leave the bar first: occasional tools, then service actions, then who is signed in. */
+/** First to leave the bar first: the lowest priority first, and who is signed in last. `#items`
+ * draws the others in the reverse order, so the rightmost of them leaves first. */
 const LEAVE_ORDER: readonly BarItem[] = [
-  "allergens",
+  "transfers",
   "equipment",
   "profile",
+  "allergens",
   "schedule",
-  "expo",
   "station",
+  "expo",
   "find-bill",
-  "transfers",
   "operator",
 ];
 
@@ -459,7 +460,19 @@ export class TillTabShell extends LitElement {
       >`;
     const affordance = (item: ShellAffordance & BarItem, type: string, label: string) =>
       here(item) && this.affordances.includes(item) ? button(item, type, label) : nothing;
-    return html`${
+    return html`${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
+      "expo",
+      "show-expo",
+      t("expo.open"),
+    )}${affordance("station", "show-station", t("station.open"))}${affordance(
+      "schedule",
+      "show-schedule",
+      t("schedule.open"),
+    )}${here("allergens") ? button("allergens", "open-allergens", t("allergens.open")) : nothing}${
+      here("profile") && this.canSwitchProfile
+        ? button("profile", "open-profile", t("profile.open"))
+        : nothing
+    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open")) : nothing}${
       here("transfers") && this.transferCount !== undefined
         ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
             >${this.#transferText()}</span
@@ -467,22 +480,8 @@ export class TillTabShell extends LitElement {
         : nothing
     }${
       here("transfers") && this.transferAvailable
-        ? button(nothing, "open-transfers", t("department_transfer.title"), true)
+        ? button(nothing, "open-transfers", t("department_transfer.short"), true)
         : nothing
-    }${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
-      "station",
-      "show-station",
-      t("station.open"),
-    )}${affordance("expo", "show-expo", t("expo.open"))}${affordance(
-      "schedule",
-      "show-schedule",
-      t("schedule.open"),
-    )}${
-      here("profile") && this.canSwitchProfile
-        ? button("profile", "open-profile", t("profile.open"))
-        : nothing
-    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open")) : nothing}${
-      here("allergens") ? button("allergens", "open-allergens", t("allergens.open")) : nothing
     }`;
   }
 
