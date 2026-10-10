@@ -631,8 +631,8 @@ the view. A press that moves 8 px before the hold pans, wherever it started; two
 their midpoint; the wheel pans and Ctrl+wheel zooms ×2 per 100 px of `deltaY`
 about the pointer, the wheel event always prevented. A wheel reporting lines counts 16 px a line,
 and one reporting pages the map's width (`deltaX`) or height (`deltaY`) a page. Zoom runs from half to four times the fitted
-scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by `mapLabel`
-("Terrace 4+5", "4+10"), whose `data-table-id` is its first member's in number order; each table is
+scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by `mergeLabel`
+(its tables in number order, "Terrace 4+5", "4+10"), whose `data-table-id` is its first member's in number order; each table is
 drawn at its true size and angle, so a small one is below `--wt-tap-min`. Each shape is painted from
 its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line` with `--wt-radius-sm`
 corners (a round one is a circle), and the name in the fill's

@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { cleanup, host, mount } from "../test-helpers.js";
 import type { PlanPlacement } from "../floor-plan-geometry.js";
-import { type FloorMapTable, type WtFloorMap, mapLabel } from "./wt-floor-map.js";
+import { type FloorMapTable, type WtFloorMap, mapLabel, mergeLabel } from "./wt-floor-map.js";
 import "./wt-floor-map.js";
 
 afterEach(cleanup);
@@ -133,6 +133,21 @@ it("names a merge's shared first word once", () => {
   expect(mapLabel([" 1", " 2"])).toBe(" 1+ 2");
   expect(mapLabel(["Terrace 4"])).toBe("Terrace 4");
   expect(mapLabel([])).toBe("");
+});
+
+it("names a merge in number order whatever order its labels come in, as the map does", async () => {
+  expect(mergeLabel(["Terrace 10", "Terrace 4"])).toBe("Terrace 4+10");
+  expect(mergeLabel(["10", "9", "4"])).toBe("4+9+10");
+  expect(mergeLabel(["Terrace 4"])).toBe("Terrace 4");
+  expect(mergeLabel([])).toBe("");
+  const labels = ["Terrace 10", "Terrace 4"];
+  mergeLabel(labels);
+  expect(labels).toEqual(["Terrace 10", "Terrace 4"]);
+  const el = await map([
+    t("t10", "Terrace 10", { x: 10, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+    t("t4", "Terrace 4", { x: 14, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+  ]);
+  expect(within(el, "name", "t4")!.textContent).toBe(mergeLabel(labels));
 });
 
 const small = [

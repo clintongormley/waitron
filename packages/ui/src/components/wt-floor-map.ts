@@ -86,7 +86,14 @@ const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
 
 const collator = new Intl.Collator(undefined, { numeric: true });
 
+const inNumberOrder = (a: string, b: string): number => collator.compare(a, b);
+
+/** Names the labels in the order given; `mergeLabel` is the map's own naming. */
 export const mapLabel = (labels: readonly string[]): string => partyTablesName(labels, "+");
+
+/** A merge's name as the map draws it: its labels in number order, then `mapLabel`. */
+export const mergeLabel = (labels: readonly string[]): string =>
+  mapLabel([...labels].sort(inNumberOrder));
 
 /** By the top of each box, then its left. */
 const readingOrder = (groups: Group[]): Group[] =>
@@ -111,7 +118,7 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
     else byKey.set(key, [table]);
   }
   return [...byKey].map(([key, members]) => {
-    members.sort((a, b) => collator.compare(a.label, b.label));
+    members.sort((a, b) => inNumberOrder(a.label, b.label));
     return { key, members, box: bounds(members.map((m) => m.placement))! };
   });
 }
@@ -134,7 +141,7 @@ const idOf = (target: EventTarget | null): string | null =>
 
 /**
  * Draws the placed tables fitted to its box. A merge (tables sharing a `joinId`) is one button,
- * named by `mapLabel`, whose id is its first member's in label order.
+ * named by `mergeLabel`, whose id is its first member's in label order.
  */
 @customElement("wt-floor-map")
 export class WtFloorMap extends LitElement {
@@ -615,7 +622,7 @@ export class WtFloorMap extends LitElement {
   #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
     const { box, members } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
-    const label = mapLabel(members.map((m) => m.label));
+    const label = mergeLabel(members.map((m) => m.label));
     const merged = members.length > 1;
     const named = showsName(merged ? box : first.placement, view.scale);
     const drag = this.#drag?.tableId === first.id ? this.#drag : null;
