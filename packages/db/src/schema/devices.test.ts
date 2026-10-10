@@ -102,7 +102,7 @@ describe("devices schema (columns, FKs, unique)", () => {
       name: "deleted_at",
       notnull: 0,
     });
-    const id = await seedDevice("Caja 1");
+    const id = await seedDevice("Till 1");
     const [fresh] = suite.db.all<{ deleted_at: string | null }>(
       sql`select deleted_at from devices where id = ${id}`,
     );
@@ -117,13 +117,13 @@ describe("devices schema (columns, FKs, unique)", () => {
   });
 
   it("devices: a deleted device frees its name, as a disabled one does", async () => {
-    const first = await seedDevice("Caja 1");
+    const first = await seedDevice("Till 1");
     await inTx(async (tx) => {
       await tx.execute(
         sql`update devices set active = 0, deleted_at = '2026-10-10T10:00:00.000Z' where id = ${first}`,
       );
     });
-    const second = await seedDevice("Caja 1");
+    const second = await seedDevice("Till 1");
     expect(second).not.toBe(first);
   });
 
