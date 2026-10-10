@@ -12,6 +12,7 @@ import {
   rowKey,
   selectRoutingCell,
   stationStatus,
+  parseTargetKey,
   targetKey,
   type CellAddress,
   type MakerChoice,
@@ -772,6 +773,15 @@ describe("the text keys", () => {
       "station:a",
       "station:b",
     ]);
+  });
+
+  it("reads each target key back as the target it was made from", () => {
+    const targets = [null, noPreparation, station("a"), station("b:c")];
+    expect(targets.map((target) => parseTargetKey(targetKey(target)))).toEqual(targets);
+  });
+
+  it("refuses a key no target makes", () => {
+    expect(() => parseTargetKey("kitchen")).toThrow("kitchen");
   });
 });
 

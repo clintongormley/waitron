@@ -15,7 +15,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { cellKey, targetKey, type RouteTarget } from "../routing.js";
+import { cellKey, parseTargetKey, targetKey, type RouteTarget } from "../routing.js";
 import type { CellAddress, PeriodLine, RoutingPeriod } from "../routing-types.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -38,13 +38,7 @@ type OwnErrors = { target?: string; lines: Map<number, { periods?: string; targe
 type LeftOut = { period: RoutingPeriod; reason: "department" | "products" };
 
 const NO_PREPARATION = targetKey({ kind: "no_preparation" });
-const STATION = "station:";
-
-function decode(value: string): RouteTarget {
-  return value === NO_PREPARATION
-    ? { kind: "no_preparation" }
-    : { kind: "station", stationId: value.slice(STATION.length) };
-}
+const stationKey = (stationId: string) => targetKey({ kind: "station", stationId });
 
 const copy = (draft: Draft): Draft => ({
   target: draft.target,
@@ -356,7 +350,7 @@ export class RoutingCellEditor extends LitElement {
   private stationOptions() {
     const options: { value: string; label: string; disabled?: boolean }[] = this.stations
       .filter((station) => station.active)
-      .map((station) => ({ value: `${STATION}${station.id}`, label: station.name }));
+      .map((station) => ({ value: stationKey(station.id), label: station.name }));
     if (!this.isDefaultCell)
       options.push({ value: NO_PREPARATION, label: t("prep.no_preparation") });
     return options;
@@ -366,7 +360,7 @@ export class RoutingCellEditor extends LitElement {
   private targetOptions(value: string) {
     const options = this.stationOptions();
     if (value === "" || options.some((option) => option.value === value)) return options;
-    const station = this.stations.find((candidate) => `${STATION}${candidate.id}` === value);
+    const station = this.stations.find((candidate) => stationKey(candidate.id) === value);
     const label =
       station === undefined ? value : format("routing.disabled_station", { station: station.name });
     return [...options, { value, label, disabled: true }];
@@ -448,9 +442,9 @@ export class RoutingCellEditor extends LitElement {
       return;
     }
     const detail: RoutingCellSave = {
-      target: decode(this.draft.target),
+      target: parseTargetKey(this.draft.target)!,
       periods: this.draft.lines.flatMap((line) =>
-        line.periodIds.map((periodId) => ({ periodId, target: decode(line.target) })),
+        line.periodIds.map((periodId) => ({ periodId, target: parseTargetKey(line.target)! })),
       ),
     };
     this.dispatchEvent(

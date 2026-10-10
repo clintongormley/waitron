@@ -134,6 +134,14 @@ export function targetKey(target: RouteTarget | null): string {
   return target.kind === "no_preparation" ? "no_preparation" : `station:${target.stationId}`;
 }
 
+export function parseTargetKey(key: string): RouteTarget | null {
+  if (key === "") return null;
+  if (key === "no_preparation") return { kind: "no_preparation" };
+  if (key.startsWith("station:"))
+    return { kind: "station", stationId: key.slice("station:".length) };
+  throw new Error(`Not a route target key: ${key}`);
+}
+
 const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, RoutingCell>>();
 
 /** Only a frozen list is cached: a cached index would go stale if the list changed. */
