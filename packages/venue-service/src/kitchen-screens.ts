@@ -570,6 +570,31 @@ export async function setDeviceKitchenScreens(
   }
 }
 
+/** How many kitchen screens the device has chosen. */
+export async function countDeviceKitchenScreens(
+  tx: Transaction,
+  deviceId: string,
+): Promise<number> {
+  const rows = await tx
+    .select({ screen: deviceKitchenScreens.screen })
+    .from(deviceKitchenScreens)
+    .where(eq(deviceKitchenScreens.deviceId, deviceId));
+  return rows.length;
+}
+
+/** Removes the device's kitchen screens, their stations and zones, and what narrowings took from it.
+ * The children go explicitly, not by cascade, so this holds with foreign keys off. */
+export async function removeDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<void> {
+  await tx
+    .delete(deviceKitchenScreenStations)
+    .where(eq(deviceKitchenScreenStations.deviceId, deviceId));
+  await tx.delete(deviceKitchenScreenZones).where(eq(deviceKitchenScreenZones.deviceId, deviceId));
+  await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
+  await tx
+    .delete(deviceKitchenScreenRemovals)
+    .where(eq(deviceKitchenScreenRemovals.deviceId, deviceId));
+}
+
 /**
  * The slots a list shows: the device's explicit list, or else the profile's (no row or "every"
  * meaning every switched-on one here) less what narrowings took; what they took shows too, as

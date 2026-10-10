@@ -639,6 +639,35 @@ export async function denyJoinRequest(
   return row.kind;
 }
 
+const returningOf = (cfg: TillConfig, deviceId: string) =>
+  and(ownedBy(cfg), eq(joinRequests.id, deviceId), eq(joinRequests.kind, "device"));
+
+/** Whether this node holds a pending request from the device to come back. */
+export async function hasReturningRequest(
+  tx: Transaction,
+  cfg: TillConfig,
+  deviceId: string,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: joinRequests.id })
+    .from(joinRequests)
+    .where(returningOf(cfg, deviceId));
+  return row !== undefined;
+}
+
+/** Deletes this node's pending request from the device to come back; false when there was none. */
+export async function endReturningRequest(
+  tx: Transaction,
+  cfg: TillConfig,
+  deviceId: string,
+): Promise<boolean> {
+  const ended = await tx
+    .delete(joinRequests)
+    .where(returningOf(cfg, deviceId))
+    .returning({ id: joinRequests.id });
+  return ended.length > 0;
+}
+
 /**
  * Enrol THIS node's own print agent. Idempotent per node: a node that has lost its token re-asks,
  * and this refreshes the existing row's token, so the agent id is stable and its printer bindings

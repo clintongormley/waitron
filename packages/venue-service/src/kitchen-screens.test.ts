@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
@@ -23,11 +23,13 @@ import {
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
+  countDeviceKitchenScreens,
   narrowDeviceKitchenScreens,
   readDeviceKitchenScreens,
   readDevicesKitchenScreens,
   readProfileKitchenScreens,
   readStationScreens,
+  removeDeviceKitchenScreens,
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
@@ -2025,5 +2027,61 @@ describe("the statements a device's kitchen screens are read in", () => {
         '"device_profile_kitchen_screens"."device_profile_id" in',
       );
     }
+  });
+});
+
+describe("a device's kitchen screens counted and removed", () => {
+  async function snapshotKitchenScreenRows() {
+    const rows = async (query: SQL) =>
+      (await db.execute<Record<string, unknown> & { device_id: string }>(query)).rows;
+    return {
+      screens: await rows(
+        sql`select * from device_kitchen_screens order by device_id, screen, every_station, every_zone`,
+      ),
+      stations: await rows(
+        sql`select * from device_kitchen_screen_stations order by device_id, screen, station_id`,
+      ),
+      zones: await rows(
+        sql`select * from device_kitchen_screen_zones order by device_id, screen, zone_id`,
+      ),
+      removals: await rows(
+        sql`select * from device_kitchen_screen_removals order by id, device_id, screen, station_id, zone_id, removed_at`,
+      ),
+    };
+  }
+
+  it("counts a device's kitchen screens, then removes them with their stations, zones and removals, leaving other devices alone", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.till, {
+      station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
+      pass: { stationIds: null, zoneIds: [venue.dining, venue.terrace] },
+    });
+    const deviceA = await seedDevice(venue, venue.till, "Till A");
+    const deviceB = await seedDevice(venue, venue.till, "Till B");
+    await choose(venue, deviceA, venue.till, [
+      { kind: "station", stationIds: [venue.grill], zoneIds: null },
+      { kind: "pass", stationIds: null, zoneIds: [venue.dining] },
+    ]);
+    await recordRemoval(deviceA, "station", { stationId: venue.cold });
+    await choose(venue, deviceB, venue.till, [
+      { kind: "station", stationIds: [venue.cold], zoneIds: null },
+    ]);
+    await recordRemoval(deviceB, "pass", { zoneId: venue.terrace });
+
+    const before = await snapshotKitchenScreenRows();
+    for (const table of Object.keys(before) as (keyof typeof before)[]) {
+      expect(before[table].some((row) => row.device_id === deviceA)).toBe(true);
+    }
+    expect(before.stations.some((row) => row.device_id === deviceB)).toBe(true);
+    expect(before.removals.some((row) => row.device_id === deviceB)).toBe(true);
+
+    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(2);
+    await scoped((tx) => removeDeviceKitchenScreens(tx, deviceA));
+    const after = await snapshotKitchenScreenRows();
+    for (const table of Object.keys(before) as (keyof typeof before)[]) {
+      expect(after[table]).toEqual(before[table].filter((row) => row.device_id !== deviceA));
+    }
+    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(0);
+    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceB))).toBe(1);
   });
 });

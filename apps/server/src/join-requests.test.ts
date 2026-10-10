@@ -13,7 +13,9 @@ import {
   checkDeviceJoinNumber,
   createJoinRequest,
   denyJoinRequest,
+  endReturningRequest,
   findJoinRequest,
+  hasReturningRequest,
   listPendingJoinRequests,
   provenDisabledDevice,
   readAgentJoinStatus,
@@ -1280,6 +1282,77 @@ describe("a returning disabled device", () => {
     expect(await readJoinStatus(suite.db, venue.cfg, deviceId, made.token, openWindow())).toBe(
       "approved",
     );
+  });
+
+  /** A disabled till's knock, so a pending request carries the device's own id. */
+  async function returningKnock(venue: { cfg: TillConfig }): Promise<string> {
+    const deviceId = await disabledDevice(venue, await seedProfile("till"));
+    const tokenHash = await storedHash(deviceId);
+    await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, venue.cfg, {
+        kind: "device",
+        label: "Bar till",
+        returning: { deviceId, tokenHash },
+      }),
+    );
+    return deviceId;
+  }
+
+  it("finds and ends this node's request to come back, by the device's id, and nothing else", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await returningKnock(venue);
+    const otherNode = brandNodeId(randomUUID());
+    const [otherNodes] = await suite.db
+      .insert(joinRequests)
+      .values({
+        nodeId: otherNode,
+        locationId: cfg.locationId,
+        kind: "device",
+        label: "Elsewhere",
+        tokenHash: "x",
+        verificationNumber: "41",
+        decoyNumbers: ["42", "43"],
+      })
+      .returning({ id: joinRequests.id });
+    const otherNodesId = otherNodes!.id;
+    const unrelatedId = (
+      await withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, cfg, { kind: "device", label: "New till" }),
+      )
+    ).joinId;
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(true);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(true);
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    const rows = await suite.db
+      .select({ id: joinRequests.id, nodeId: joinRequests.nodeId })
+      .from(joinRequests);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { id: otherNodesId, nodeId: otherNode },
+        { id: unrelatedId, nodeId: cfg.nodeId },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+  });
+
+  it("does not see or end the device's request once it belongs to another node", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await returningKnock(venue);
+    const otherNode = brandNodeId(randomUUID());
+    await suite.db
+      .update(joinRequests)
+      .set({ nodeId: otherNode })
+      .where(eq(joinRequests.id, deviceId));
+    const before = await suite.db.select().from(joinRequests);
+    expect(before.map((row) => [row.id, row.nodeId])).toEqual([[deviceId, otherNode]]);
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await suite.db.select().from(joinRequests)).toEqual(before);
   });
 
   it("proves a cookie only for a disabled device whose token it holds", async () => {
