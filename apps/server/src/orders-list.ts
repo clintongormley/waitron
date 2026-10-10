@@ -156,7 +156,7 @@ function rowsSql(filter: OrderListFilter): SQL {
          cast(s.total as text) as sale_total,
          cast((select coalesce(sum(l.line_total), 0) from working_order_lines l where l.working_order_id = wo.id) as text) as lines_total,
          ${CORRECTIONS} as corrections, null as operator_id, null as operator_name,
-         ${BILL_STATUS} as status, ud.recorded_at as departed_at
+         ${BILL_STATUS} as status, ud.recorded_at as departed_at, p.table_names as party_table_names
   from working_orders wo
   left join parties p on p.id = wo.party_id
   left join dining_tables dd on dd.id = wo.delivery_table_id
@@ -171,7 +171,7 @@ function rowsSql(filter: OrderListFilter): SQL {
          s.counterparty_tax_id,
          cast(s.total as text), '0', ${CORRECTIONS}, s.operator_id, op.display_name,
          case when sv.id is not null then 'voided' when ss.id is not null then 'paid' else 'waiting_for_payment' end,
-         null
+         null, null
   from sales s
   join invoice_series sr on sr.id = s.series_id
   left join sale_settlements ss on ss.sale_id = s.id
@@ -201,6 +201,8 @@ interface RawRow extends Record<string, unknown> {
   operator_name: string | null;
   status: OrderStatus;
   departed_at: string | null;
+  /** A closed party's kept table names, as JSON text; null for an open party. */
+  party_table_names: string | null;
   credited: number;
   search_rank?: number;
 }
@@ -267,8 +269,7 @@ function tableClause(table: string): SQL {
   return sql`(r.delivery_label = ${table} collate nocase
     or exists (select 1 from party_tables pt join dining_tables dt on dt.id = pt.table_id
                where pt.party_id = r.party_id and dt.label = ${table} collate nocase)
-    or exists (select 1 from parties tp, json_each(tp.table_names) n
-               where tp.id = r.party_id and n.value = ${table} collate nocase))`;
+    or exists (select 1 from json_each(r.party_table_names) n where n.value = ${table} collate nocase))`;
 }
 
 function filterClauses(filter: OrderListFilter): SQL[] {
@@ -360,8 +361,7 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
         coalesce(
           (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
            where pt.party_id = r.party_id),
-          (select group_concat(n.value, ' ') from parties tp, json_each(tp.table_names) n
-           where tp.id = r.party_id))) as search_rank
+          (select group_concat(n.value, ' ') from json_each(r.party_table_names) n))) as search_rank
       from base r where ${whereOf(clauses)}
     )
     select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
@@ -400,8 +400,14 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
     raw.flatMap((row) => row.sale_id ?? []),
   );
   const tables = await readPartyTables(tx, [
-    ...new Set(bills.flatMap((row) => row.party_id ?? [])),
+    ...new Set(
+      bills.flatMap((row) => (row.party_table_names === null ? (row.party_id ?? []) : [])),
+    ),
   ]);
+  for (const row of bills) {
+    if (row.party_table_names !== null)
+      tables.set(row.party_id!, JSON.parse(row.party_table_names) as string[]);
+  }
   const staff = await readStaff(
     tx,
     bills.map((row) => row.id),
@@ -474,21 +480,13 @@ export async function readCreditNotes(
   return notes;
 }
 
-/**
- * Every table each party ever held, once each, in the order they joined it: a closed party's kept
- * names, an open party's live tables.
- */
+/** Every table each open party ever held, once each, in the order they joined it. */
 async function readPartyTables(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, string[]>> {
   const tables = new Map<string, string[]>();
   if (partyIds.length === 0) return tables;
-  const kept = await tx
-    .select({ id: parties.id, tableNames: parties.tableNames })
-    .from(parties)
-    .where(and(inArray(parties.id, [...partyIds]), isNotNull(parties.tableNames)));
-  for (const party of kept) tables.set(party.id, party.tableNames!);
   const rows = await tx
     .select({ partyId: partyTables.partyId, label: diningTables.label })
     .from(partyTables)
