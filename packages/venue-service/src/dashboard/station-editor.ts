@@ -233,7 +233,6 @@ export class StationEditor extends LitElement {
     }
   }
 
-  /** Whether the draft differs from what the editor opened with, or last saved. */
   get dirty(): boolean {
     return this.baseline !== undefined && !equal(this.draft, this.baseline);
   }

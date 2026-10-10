@@ -22,7 +22,6 @@ import { t } from "./strings.js";
 
 export interface RoutingCellEditorCell {
   address: CellAddress;
-  /** The modal's heading: the row and the column. */
   label: string;
   /** The cell's own choice, or the inherited one; null when nothing decides it. */
   target: RouteTarget | null;
@@ -108,7 +107,6 @@ export class RoutingCellEditor extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) cell?: RoutingCellEditorCell;
-  /** The routing model's periods, in its order. */
   @property({ attribute: false }) periods: readonly RoutingPeriod[] = [];
   @property({ attribute: false }) stations: readonly {
     id: string;
@@ -236,7 +234,6 @@ export class RoutingCellEditor extends LitElement {
     }
   }
 
-  /** Whether the draft differs from what the editor opened with. */
   get dirty(): boolean {
     return this.baseline !== undefined && !equal(this.draft, this.baseline);
   }
