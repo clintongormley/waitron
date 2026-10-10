@@ -646,7 +646,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   ("Iced coffee  Drinks › Coffee"); a matching category is a collapsed row with its chevron. The
   till's home-page search should find sections as well as products, in one grid ranked by
   closeness. And a ticked row stays ticked when the search changes, so items from several searches
-  can be dragged to one place together.
+  can be dragged to one place together. The Menus screen's Structure table gets the same flat
+  list and kept ticks.
   [Detail](backlog/catalogue.md#a461--product-search-shows-what-matches-finds-categories-on-the-till-and-keeps-ticks-between-searches)
 
 - **The Products list builds a new list of rows on every redraw, so its table prepares every

@@ -5,6 +5,8 @@ their full text.
 
 ## A461 — product search shows what matches, finds categories on the till, and keeps ticks between searches
 
+Covers the Products screen and the Menus screen's Structure table on the dashboard, and the till's home page.
+
 Owner, 2026-10-10, queued for implementation. Three changes; the owner's choices between drawn
 layouts are recorded as decisions. Setup used for the examples: category Drinks › Coffee holds
 Espresso, Iced coffee, Add ice and Ginger tea; category Desserts holds Coffee cake.
@@ -26,9 +28,11 @@ only the category's name matches, it already shows collapsed with its chevron. D
   beneath it, as in the tree.
 - Clearing the search returns to the tree as it was.
 
-The Menus screen's Structure table (`apps/dashboard/src/widgets/menu-structure-table.ts`) also sets
-`searchOpensPath`. The owner asked only about Products, so the Structure table keeps today's
-behaviour unless the owner asks otherwise; a change to the shared table must leave it unchanged.
+The same goes for the Menus screen's Structure table (owner, 2026-10-10: "do the same for menus").
+It also sets `searchOpensPath` (`apps/dashboard/src/widgets/menu-structure-table.ts`): while a search
+is typed it becomes a flat list of the sections and items whose own name matches, each followed by
+its path within the menu, with a matching section collapsed and showing its chevron. Those two
+screens are the only users of `searchOpensPath` today.
 
 **2. Till home page: sections in the results.** Today `#matches`
 (`apps/till/src/widgets/menu-browser.ts`) searches product names only, so a section never appears.
@@ -39,9 +43,13 @@ tapping a section tile opens that section and clears the search, as tapping it o
 does; a section the diet filter has emptied shows greyed and disabled, as on the home page; with
 several menus served, each menu's section of results includes its own matching sections.
 
-**3. Ticks survive a new search.** Today typing in the search box empties the selection
-(`apps/dashboard/src/widgets/catalogue-browser.ts`, `if (changed.has("search")) this.selected = []`,
-pinned by "clears selection on %s and keeps selection mode on" in `catalogue-browser.test.ts`).
+**3. Ticks survive a new search, on Products and on the Menus Structure table.** Today typing in
+either search box empties the selection (`apps/dashboard/src/widgets/catalogue-browser.ts`,
+`if (changed.has("search")) this.selected = []`, pinned by "clears selection on %s and keeps
+selection mode on" in `catalogue-browser.test.ts`; `structureSelected = []` beside the search
+box's change handler in `apps/dashboard/src/screens/menus-screen.ts`). On Menus, dragging is off
+while a search is typed (`#reorderable`, `menu-structure-table.ts`), so ticks gathered across
+searches are moved by dragging after the search is cleared, or with the Move action.
 Decided: a ticked row stays ticked when the search changes or is cleared, so the owner can tick
 results from several searches and then drag them all to one place. Read, not run: dragging a ticked
 row already drags every ticked item, shown or not (`#moveDrag`, `apps/dashboard/src/widgets/product-list.ts`). Assumed, not asked, and to be confirmed with the owner at
