@@ -95,8 +95,9 @@ Each line is the default that will be built. The owner may overrule any of them 
    that fails answers a new code, **`reader.unpair_failed`** `{ providerId }`, HTTP 502. **It
    leaves the reader switched off** (step (a)'s write, decision 1) and changes nothing else: no
    link removed, `unpaired_at` and `deleted_at` still null. Its dashboard message says so (Task
-   5). An `AppError` the seat throws passes through with its own code. The Unpair route keeps
-   answering `server.internal` 500 on a failed call, as its test pins
+   5). An `AppError` the seat throws passes through with its own code (_2026-10-10, A435 step 3b:
+   except `credentials.missing`, which the delete answers as `reader.provider_disconnected`._).
+   The Unpair route keeps answering `server.internal` 500 on a failed call, as its test pins
    (`apps/server/src/payments-api.test.ts:1043-1044`).
 4. **The provider is looked up only for a reader that is still paired** (`unpaired_at` null), so
    an already-unpaired reader is deleted without consulting its provider at all, as the spec says.
