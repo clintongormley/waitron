@@ -62,6 +62,7 @@ import {
   toScale,
   workingOrderId,
   workingOrderLineId,
+  searchBy,
   searchFor,
   sqliteFailureOf,
   stringToBasisPoints,
@@ -176,6 +177,7 @@ describe("package public surface (./index.js)", () => {
       ]),
     ).toEqual(["b", "a"]);
     expect(textSearch(" ")).toBeUndefined();
+    expect(searchBy("cafe", ["Té", "Café"], (name) => name)).toEqual(["Café"]);
   });
 
   it("re-exports the equipment takeover rule", () => {

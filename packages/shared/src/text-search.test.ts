@@ -2,6 +2,7 @@ import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   compareSearchRanks,
   foldForSearch,
+  searchBy,
   searchFor,
   searchRankKey,
   textSearch,
@@ -188,5 +189,27 @@ describe("compareSearchRanks and searchRankKey agree", () => {
     expect(searchRankKey({ kind: 0, part: 5000, position: 0, length: 0 })).toBeLessThan(
       searchRankKey({ kind: 1, part: 0, position: 0, length: 0 }),
     );
+  });
+});
+
+describe("searchBy", () => {
+  const drinks = [{ name: "Café con leche" }, { name: "Té" }, { name: "Caffè latte" }];
+  it("folds each item's text, so cafe finds Café", () => {
+    expect(searchBy("cafe", drinks, (drink) => drink.name)).toEqual([drinks[0]]);
+  });
+  it("folds each part, and finds the words across parts", () => {
+    const rows = [
+      { name: "Tónic", group: "Mezcladores" },
+      { name: "Gin", group: "Licores" },
+    ];
+    expect(searchBy("mezcladores tonic", rows, (row) => [row.name, row.group])).toEqual([rows[0]]);
+  });
+  it("gives every item, in the order given, when nothing is typed", () => {
+    const textOf = vi.fn((drink: { name: string }) => drink.name);
+    expect(searchBy("  ", drinks, textOf)).toEqual(drinks);
+    expect(textOf).not.toHaveBeenCalled();
+  });
+  it("gives no item when only punctuation is typed", () => {
+    expect(searchBy("&", drinks, (drink) => drink.name)).toEqual([]);
   });
 });

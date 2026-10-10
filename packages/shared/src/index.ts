@@ -136,6 +136,7 @@ export { compareLabels, createLabelComparator } from "./compare-labels.js";
 export {
   compareSearchRanks,
   foldForSearch,
+  searchBy,
   searchFor,
   searchRankKey,
   textSearch,

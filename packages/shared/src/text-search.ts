@@ -103,3 +103,17 @@ export function searchFor(query: string): NameSearch {
       .sort((left, right) => compareSearchRanks(left.rank, right.rank))
       .map(({ value }) => value);
 }
+
+const foldAll = (text: string | readonly string[]) =>
+  typeof text === "string" ? foldForSearch(text) : text.map(foldForSearch);
+
+/** `searchFor` over items whose text is not folded yet: `textOf` gives an item's text, or its
+ * parts, as shown. */
+export function searchBy<T>(
+  query: string,
+  items: readonly T[],
+  textOf: (item: T) => string | readonly string[],
+): T[] {
+  if (query.trim() === "") return [...items];
+  return searchFor(query)(items.map((item) => [item, foldAll(textOf(item))] as const));
+}
