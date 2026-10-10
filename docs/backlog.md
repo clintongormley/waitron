@@ -639,6 +639,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
+- **A461 — product search shows what matches, finds categories on the till, and keeps ticks
+  between searches (owner, 2026-10-10; queued).** On the dashboard's Products screen, searching
+  "coffee" shows the Coffee category held open with no chevron and every product in it ("Add ice",
+  "Ginger tea"). The owner wants a flat list of matches only, each followed by its category path
+  ("Iced coffee  Drinks › Coffee"); a matching category is a collapsed row with its chevron. The
+  till's home-page search should find sections as well as products, in one grid ranked by
+  closeness. And a ticked row stays ticked when the search changes, so items from several searches
+  can be dragged to one place together.
+  [Detail](backlog/catalogue.md#a461--product-search-shows-what-matches-finds-categories-on-the-till-and-keeps-ticks-between-searches)
+
 - **The Products list builds a new list of rows on every redraw, so its table prepares every
   product's search text again on each keystroke.** Found by A454's review (#1491); I believe it
   predates that branch (not checked with `git blame`). **Next action:** keep the rows array stable
@@ -2561,7 +2571,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#every-remembered-round-is-marked-again-against-the-open-tables-menu)
 
 - **The till's home page (Task 9, #729).** — left open by the menus plan. Search matches the staff
-  name only, not a customer name or a section's name.
+  name only, not a customer name; finding a section by its name is A461.
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
 - **The till says "Not found" (menus spec §9) only when a newly read version drops the section it

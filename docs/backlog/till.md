@@ -1141,8 +1141,8 @@ Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-
 
 ## The till's home page (Task 9, #729)
 
-- **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name
-  or a section's name. Every `/api/menu-state` read from an enrolled device reads the device, once
+- **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name;
+  finding a section by its name is A461 (under "Menus and the catalogue"). Every `/api/menu-state` read from an enrolled device reads the device, once
   per zone the till holds at each poll; the token's scrypt check (21.1 ms, measured once on a Mac)
   runs off the lock, once per device until its token changes, the server restarts or the device
   falls out of the 256 the server remembers.

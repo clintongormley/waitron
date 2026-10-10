@@ -3,6 +3,53 @@
 The open entries are listed in [the backlog](../backlog.md), under "Menus and the catalogue". This file holds
 their full text.
 
+## A461 — product search shows what matches, finds categories on the till, and keeps ticks between searches
+
+Owner, 2026-10-10, queued for implementation. Three changes; the owner's choices between drawn
+layouts are recorded as decisions. Setup used for the examples: category Drinks › Coffee holds
+Espresso, Iced coffee, Add ice and Ginger tea; category Desserts holds Coffee cake.
+
+**1. Dashboard Products search: a flat list of what matches.** Today a search for "coffee" shows
+the Coffee category held open without its chevron and every product in it, because `wt-data-table`
+with `searchOpensPath` pulls in every row below a match (`#treeVisible`,
+`packages/ui/src/components/wt-data-table.ts`) and hides the chevron of a row it holds open. When
+only the category's name matches, it already shows collapsed with its chevron. Decided:
+
+- While a search is typed, the Products list is a flat list of the rows whose own name matches
+  (a product still matches on its variant names, as today), ranked by closeness as today. Rows in a
+  matching category are not shown unless their own name matches.
+- Each row shows its category path after its name on the same line, moving to the next line only
+  when there is no room: "Iced coffee  Drinks › Coffee", "Coffee cake  Desserts", and for the
+  category itself "Coffee  Drinks". The owner chose this over the path beneath the name and over a
+  matches-only tree.
+- A matching category is a collapsed row with its chevron; opening it shows its contents indented
+  beneath it, as in the tree.
+- Clearing the search returns to the tree as it was.
+
+The Menus screen's Structure table (`apps/dashboard/src/widgets/menu-structure-table.ts`) also sets
+`searchOpensPath`. The owner asked only about Products, so the Structure table keeps today's
+behaviour unless the owner asks otherwise; a change to the shared table must leave it unchanged.
+
+**2. Till home page: sections in the results.** Today `#matches`
+(`apps/till/src/widgets/menu-browser.ts`) searches product names only, so a section never appears.
+Decided: matching section tiles and matching product tiles share one grid, ranked purely by how
+closely the name matches (the owner chose this over sections first and over a section header with
+its matches beside it). A section tile looks as it does on the home page. Assumed, not asked:
+tapping a section tile opens that section and clears the search, as tapping it on the home page
+does; a section the diet filter has emptied shows greyed and disabled, as on the home page; with
+several menus served, each menu's section of results includes its own matching sections.
+
+**3. Ticks survive a new search.** Today typing in the search box empties the selection
+(`apps/dashboard/src/widgets/catalogue-browser.ts`, `if (changed.has("search")) this.selected = []`,
+pinned by "clears selection on %s and keeps selection mode on" in `catalogue-browser.test.ts`).
+Decided: a ticked row stays ticked when the search changes or is cleared, so the owner can tick
+results from several searches and then drag them all to one place. Read, not run: dragging a ticked
+row already drags every ticked item, shown or not (`#moveDrag`, `apps/dashboard/src/widgets/product-list.ts`). Assumed, not asked, and to be confirmed with the owner at
+the plan: a column-filter change keeps ticks too, for the same reason; "select all" still adds
+only the rows shown; the selected count already shown in select mode is how the owner sees ticks
+the current search hides; leaving select mode, Done, and a finished move or delete still clear
+them as today.
+
 ## `mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently from run to run
 
 - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
