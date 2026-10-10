@@ -19,7 +19,8 @@
 > as tasks with their files, interfaces and tests; each is expanded to step level in this file,
 > on that slice's own branch, after the slice before it lands, and the expansion gets one
 > fresh-context review before dispatch. Their steps would otherwise be written against code
-> slice 1 has not built yet. Slice 2 was expanded on 2026-10-10, after slice 1 landed (#1493).
+> slice 1 has not built yet. Slice 2 was expanded on 2026-10-10, after slice 1 landed (#1493),
+> and slice 3 on the same day, after slice 2 landed (#1506).
 >
 > **Revised 2026-10-08**, twice: after a fresh-context review against the spec and the code
 > (which ran the behavioural trigger guard, drizzle-kit and the engine's foreign-key codes), and
@@ -133,7 +134,9 @@ The owner confirms or overrides these when reviewing the plan.
 13. **The till's map still re-reads rather than being pushed to**: on tab select, after its own
     actions, as today (`apps/till/src/till-app.ts:4823`), and now also every 15 seconds while a
     map is showing, so two waiters see each other's moves. A push stream like the department
-    transfers' (`apps/server/src/department-transfer-api.ts:65`) is later work.
+    transfers' (`apps/server/src/department-transfer-api.ts:65`) is later work. (Amended
+    2026-10-10 at slice 3's expansion: the tab-select read is now `till-app.ts:4979`; the 15-second
+    read is the floor screen's, only for a zone on the new map, slice 3 decision 13.)
 14. **A join of fixed tables is a party join only**: it uses today's join route and leaves no
     merge, so the link ends when the party leaves (spec §6.1).
 15. **The configuration export carries the master plan** (`floor_plans`, `floor_plan_tables`,
@@ -201,6 +204,13 @@ Tests pinning these may change, under the commit rule above.
 - A finished delivery order keeping `delivery_table_id` once its table is removed (it keeps the
   name instead).
 
+**Slice 3** (added at its expansion):
+- The seat dialog's hint "Optional. Leave it empty if you don't know yet." / "Opcional. Déjalo
+  vacío si aún no lo sabes." (`seat.guest_count_hint`, `apps/till/src/i18n/strings.ts:546`, `:1679`),
+  replaced by the table's seats or "Covers" (slice 3 decision 12). No test named it at `28f150197`
+  (a grep of `apps/` and `packages/` for the key and both sentences found only `strings.ts` and
+  `seat-dialog.ts:151`).
+
 **Slice 5:**
 - The floor screen's Config tab, per-zone tabs and Disable/Enable, and
   `DELETE /management-api/tables/:id` switching a table off (`management-api.ts:1806`,
@@ -254,8 +264,12 @@ has its test in the task named.
 | `apps/dashboard/src/screens/floor-plan-tables-panel.ts` | 2 | the tables list and Add tables |
 | `apps/dashboard/src/screens/floor-plan-table-panel.ts` | 2 | the selected table's panel |
 | `packages/ui/src/gestures.ts` | 3 | tap, double-tap, long-press, drag, pinch |
+| `packages/ui-core/src/tokens/colors.css` | 3 | the table fill colours (added at slice 3's expansion) |
+| `packages/ui/src/floor-map-fills.ts` | 3 | the map's fill and dot names and their style sheet (added at slice 3's expansion) |
 | `packages/ui/src/components/wt-floor-map.ts` | 3 | the till's map |
+| `apps/till/src/state/floor-map.ts` | 3 | the stand-in statuses and which tables a planned zone shows (added at slice 3's expansion) |
 | `apps/till/src/widgets/table-details-sheet.ts` | 3, 4 | the long-press details sheet |
+| `apps/till/src/widgets/table-status.ts` | 3 | the order screen's flash notice and status pin (added at slice 3's expansion) |
 | `apps/server/src/floor-today-api.ts` | 4 | the till's today's-plan routes |
 
 ---
@@ -2400,33 +2414,932 @@ check); design-system.md names both primitives and the editor; the backlog's A42
 
 ## Slice 3 — the till's map (spec §5)
 
-Branch `feat/floor-plan-till-map`, after slice 2. Coordinate with A182 (canvases retired) if it has started.
-The floor screen's `.screen` drops its side padding at phone width (A414);
-`apps/till/src/screens/device-screens.phone-margin.test.ts` holds it, so keep that selector or move the case.
+Branch `feat/floor-plan-till-map`, after slice 2 (landed as #1506). Expanded to step level on
+2026-10-10, unattended; every `file:line` in this slice was read at `main` `28f150197`.
 
-- **Task 3.1: Gestures** — `packages/ui/src/gestures.ts`: one pointer state machine telling tap,
-  double-tap, long-press (500 ms, under 8 px of movement), long-press-then-drag and drag-on-empty
-  (pan) apart, and two pointers as pinch; browser tests with real dispatched pointer events and
-  fake timers advanced through an awaited animation frame (CLAUDE.md §4).
-- **Task 3.2: `wt-floor-map`** — draws the zone's tables from `TableState.today`, cropped to its tables with a two-square
-  margin and fitted (Task 2.1), pinch to zoom, drag to pan, double-tap empty space to fit again;
-  each table a fill colour and at most one flashing dot (reduced motion: no flash); the name
-  hidden under 28 px (decision 11); merges drawn as one shape with both names ("4+5"). Events
-  `wt-table-tap`, `wt-table-details`, `wt-table-drag-end`. The stand-in status set (spec §5) is a
-  pure function `standInStatus(tableState) → { fill, dot }` in the till, with tokens for each
-  fill. Token and a11y tests.
-- **Task 3.3: The till floor screen on the new map** — `apps/till/src/screens/till-floor-screen.ts`
-  uses `wt-floor-map` from `TableState.today`; the list view lists today's tables; the seat
-  dialog's covers placeholder is "4 seats" from today's seats, or "Covers"; the 15-second re-read
-  while a map shows (decision 13).
-- **Task 3.4: The details sheet** — `apps/till/src/widgets/table-details-sheet.ts`, opened by
-  long-press (double-click with a mouse): party name, covers, amount owed, kitchen progress,
-  signals, reserved time, and Mark cleared; slice 4 adds the other actions.
-- **Task 3.5: Flash notice and status pin** — on the order screen
-  (`till-table-order-screen.ts`, in `.head-actions`, `:396-418`): a notice for ready-to-serve,
-  forgotten and bill requested that goes on its own after 4 s or on a tap and blocks nothing; a
-  pin with the colour and a short word or count that opens the details sheet.
-- **Task 3.6: Look** — handheld at 390 px and the till at 1280 px, both themes, EN and ES.
+What the slice builds: a gesture recogniser and a map primitive in `packages/ui`
+(`gestures.ts`, `wt-floor-map`), the table fill colours as tokens, and, on the till, the floor screen
+drawing a planned zone on the new map, the seat dialog's seats placeholder, a 15-second re-read, a
+details sheet, and on the order screen a flash notice and a status pin. A zone with no today's plan
+looks and works exactly as today (the plan's decision 2). Nothing on the server changes.
+
+**A182** (retire canvases) had not started at `28f150197`: the backlog says "Nothing has carried
+that out" (`docs/backlog.md:2406-2407`). The floor stays a card in the canvas grid
+(`apps/till/src/widgets/card-grid.ts:470-480`). If A182 has started when this slice is dispatched,
+the driver reads that branch first and moves this slice's floor-screen tasks onto it.
+
+**A414.** The floor screen's `.screen` drops its side padding at phone width
+(`apps/till/src/screens/till-floor-screen.ts:80-91`), and
+`apps/till/src/screens/device-screens.phone-margin.test.ts:74-86` (the floor row) and `:137-155`
+(the loop) hold it. This slice keeps the `.screen` selector and adds a planned-zone row to that
+file (Task 3.3b), so the case stays where it is.
+
+**What earlier slices built that this slice works with** (read, not run):
+
+- The till's table-state answer carries `today` (`apps/till/src/api/client.ts:1831-1849` for
+  `TodayPlacement` and `TableToday`, `:1899-1900` on `TableState`; the server's twin at
+  `apps/server/src/working-order.ts:6986-6994`). A taken-off table's `placement` is null
+  (`readTodayTables`, `working-order.ts:7245-7283`, at `:7274`), and its `takenOff` is true.
+- `GET /api/tables/state` runs the day's reset and the catch-up before it reads, and answers only
+  the device profile's zones (`apps/server/src/till-api.ts:2186-2198`). `listTablesWithState` lists
+  only tables whose `dining_tables.active` is true (`working-order.ts:7166`), so a table a reset hid
+  is not in the answer at all.
+- A live table that was never in a plan gets no reset row (`targetsFromMaster` skips it,
+  `apps/server/src/floor-reset-plan.ts:141`), so in a zone with a master plan such a table has
+  `today: null` beside tables that have rows (the plan's decision 17).
+- A reset copies no merges: today's joins are written only by slice 4's merge routes, and
+  `floor-today-store.ts` only reads and deletes them (`:370-376`; `leaveMerges`,
+  `apps/server/src/floor-today-merges.ts:9`). So until slice 4, a merge reaches the map only from a
+  test fixture; the map draws it anyway (spec §5), and slice 4's look pass sees a real one.
+- Every existing floor-screen fixture sets `today: null` (`till-floor-screen.test.ts:40`,
+  `.parties.test.ts:29`, `.signals.test.ts:52`, `.a11y.test.ts:40`, `.unsaved.test.ts:29`), so the
+  existing cases keep exercising the old view.
+- Slice 2's geometry gives `cropToTables` (two-square margin), `fitScale`, `rotatedRect`,
+  `snapToSquare`, `clampToGrid` and `showsName` (`packages/ui/src/floor-plan-geometry.ts:39-95`,
+  `:154-156`). `wt-floor-plan-canvas` follows a drag with listeners on `window`
+  (`packages/ui/src/components/wt-floor-plan-canvas.ts:534-611`). `wt-sheet` is a bar drawn in the
+  page's flow, docked by its parent (`packages/ui/src/components/wt-sheet.ts:7`), not an overlay.
+- The till re-reads the floor on tab select (`#onTabSelect`, `apps/till/src/till-app.ts:4979`) and on
+  the floor screen's `floor-refresh` event (`:5014-5027`, listener `:9026`); `#refreshFloor` assigns
+  whatever answer comes back, in any order. The station and expo screens already re-read every 15
+  seconds from their own `setInterval` (`till-station-screen.ts:55`, `:332`; `till-expo-screen.ts:63`).
+  The till's idle logout is fed by `#onInteraction` (`till-app.ts:1380`); whether a request
+  also counts was not checked, and the station screen's poll already runs beside it.
+- `wt-toast` closes itself after `duration` ms, or when its message or close button is pressed, and
+  pauses while hovered or focused (`packages/ui/src/components/wt-toast.ts:62`, `:94-101`, `:123-134`).
+
+### Slice 3 decisions (added at expansion)
+
+Each is the default this slice builds; the owner may override any at review. Each says what it costs
+if it is wrong.
+
+1. **A zone is drawn on the new map when any table the till lists in it has a today's row**
+   (`today !== null`); otherwise the floor screen draws the old canvas, tray and Edit plan as today.
+   Cost if wrong: none expected; a zone with a master plan always has rows once its first save ran.
+2. **In a planned zone, the map draws the tables with a place on today's plan; the list lists those
+   plus every table that must stay reachable** — one a party holds, one with a delivery on its way,
+   one needing clearing, even without a place, and a never-planned table (`today: null`, decision
+   17). Taken-off tables and free spares appear in neither. In map view the listed tables without a
+   place sit in the existing tray under the map ("Unplaced", `floor.unplaced`). Cost: a free spare
+   is out of reach until slice 4's Add a spare table.
+3. **Edit plan is hidden while a planned zone shows.** Its placement writes move the old columns,
+   which the new map does not read. Cost: none; slice 5 removes the editor.
+4. **The stand-in status set.** Fill, most urgent first: needs clearing; bill asked (a
+   `bill_requested` signal); seated (a party holds it, or a delivery is on its way); reserved (free,
+   with a booking today); free. Dot, at most one: forgotten (`timingBand` forgotten) before ready
+   (`readyToServe > 0`, which counts dishes the pass has sent too). A merge shows its most urgent
+   member's fill and dot. Cost: none lasting; A267 replaces the set.
+5. **The fills are ten new tokens in `packages/ui-core/src/tokens/colors.css`**,
+   `--wt-color-table-<fill>` and `--wt-color-on-table-<fill>` for `free`, `seated`, `bill`,
+   `clearing` and `reserved`, beside the calendar's day colours. The dots read
+   `--wt-color-success` (ready) and `--wt-color-danger` (forgotten) on a `--wt-color-surface` ring,
+   and every table's outline is `--wt-color-field-line`. Starting values are in Task 3.2a; its
+   contrast test decides. Cost: a retheme later, in one file.
+6. **The map's fill and dot names (`FloorMapFill`, `FloorMapDot`) live in `packages/ui`**, and the
+   till maps its table state onto them (`apps/till/src/state/floor-map.ts`). Cost: A267 renames
+   them in two places.
+7. **Gestures.** A touch or pen tap acts on release at once. A mouse click on a table waits 300 ms
+   for a second click; a double-click opens the details sheet instead. Two taps count as a double
+   tap within 300 ms and 24 px. A press held 500 ms, moving under 8 px, marks the table held, and
+   its release opens the details sheet: details open on release, not at 500 ms, so that slice 4 can
+   turn a hold into a drag. A press that moves 8 px or more before the hold pans the map, wherever
+   it started. Once two fingers have pinched, nothing else happens until every finger lifts.
+   Right-click, the ContextMenu key and Shift+F10 also open details (the keyboard's way; slice 4's
+   Join with… is in that sheet). Cost: mouse users wait 300 ms for a table to open.
+8. **The view.** The map fits the zone's crop when it first draws tables, when `fitKey` (the zone)
+   changes, on a double tap on empty space, and on a resize unless the person has panned or zoomed
+   since. A re-read keeps the view. Zoom runs from half to four times the fitted size; a pan stops
+   with the crop's centre at the map's edge. The mouse wheel pans; Ctrl+wheel, which is also what a
+   laptop trackpad's pinch sends, zooms ×2 per 100 of `deltaY` about the pointer. Focusing a table
+   outside the map pans it into view. There is no Fit button. Cost: a keyboard user cannot zoom.
+9. **Drawing.** No grid lines on the till's map. A merge is one button covering its members'
+   turned boxes, labelled with their names in number order joined by "+", its name shown when that
+   box's shorter side is 28 px or more; pressing it sends the first member's id (seating every
+   member is slice 4's, the plan's decision 18). Tables smaller than `--wt-tap-min` stay their true
+   size, as in the editor (slice 2 decision 12); the list is the tap-sized way in. Cost: a small
+   stool is hard to hit on a phone until zoomed.
+10. **The map's height on the floor screen is `65dvh`, never under six tap heights.** Cost: the look
+    pass may change one rule.
+11. **`wt-table-drag-end` is built here, and nothing listens until Task 4.4.** During a hold-drag
+    the table is drawn under the finger, snapped to whole squares; release sends
+    `{ tableId, x, y, targetId }` and the table is drawn back where `tables` puts it. Cost: a held
+    table that is dragged springs back with no message until slice 4.
+12. **The seat dialog's placeholder** is the table's seats for today ("6 seats"; a merge's
+    `joinSeats`), else the old `capacity` in a zone with no plan, else "Covers". It replaces the
+    current hint "Optional. Leave it empty if you don't know yet." wherever the dialog is used
+    (listed under "Behaviour this plan removes"); the label stays "Guests" and the field stays
+    optional and unmarked. Cost: the word "optional" is no longer said.
+13. **The 15-second re-read is the floor screen's**, only while a planned zone's map shows (not the
+    old map, not the list), and it asks through the existing `floor-refresh` event. The app drops a
+    table read answered after a newer one. Cost: a list view and the old map go on reading only on
+    tab select and after actions, as today.
+14. **The details sheet is a `wt-dialog`** (the till's dialogs all are; `wt-sheet` is an in-flow bar),
+    opened from the map and from the order screen's status pin. It saves nothing, so it takes no
+    draft scope and has no `*.unsaved.test.ts`. The list view's cards keep their details inline, as
+    today, and do not open it. Cost: none.
+15. **The flash notice is a `wt-toast`** (4 s) at the top of the order screen, shown when the order
+    screen draws a party whose table has dishes ready, a forgotten order or a bill asked for, and
+    again only when the party changes. Cost: where the order screen stays mounted (the canvas
+    layout's order card), reopening the same party shows no second notice.
+16. **The status pin and the notice live in one new till widget, `till-table-status`**, placed in the
+    order screen's `.head-actions` before the Tab button, so the 5,036-line order screen gains one
+    element. The pin is hidden when the order has no party or the floor read has no row for it.
+    Cost: none.
+17. **The look pass photographs from Vitest browser files that are never committed**, with fixtures,
+    as slice 2 decision 19 did.
+
+**Mutation runs.** As slice 2: each task that adds a `packages/ui` file runs
+`gtimeout 900 pnpm --filter @waitron/ui exec stryker run --mutate <file>` once, and a survivor gets
+an exact-value assertion. If it cannot start or runs out of time, say so in the commit message.
+
+**Fake timers.** Every browser test here that fakes time fakes only the timers it needs
+(`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })`, or `setInterval`/`clearInterval`
+for the re-read), as `packages/ui/src/components/wt-toast.test.ts:279` and
+`apps/till/src/screens/till-station-screen.test.ts:1839` do, so `requestAnimationFrame` stays
+real, and calls `vi.useRealTimers()` in `afterEach`. A case that waits for a resize or a dialog's
+close awaits a real animation frame (`await new Promise(requestAnimationFrame)`) or the dialog's
+`wt-close` event, never a sleep (`docs/developers/testing-guide.md:1055`, and the dialog-close
+rule after it). `gestures.ts` and `wt-floor-map.ts` schedule nothing with `requestAnimationFrame`.
+
+**Forms.** Nothing this slice draws saves anything: the details sheet, the status pin and the flash
+notice only show and send events, and the seat dialog keeps its draft scope and
+`seat-dialog.unsaved.test.ts` unchanged (only its hint changes). So A331's save rule
+(`draftScopeFor`, `saveActionState`, an early return, an `*.unsaved.test.ts` with #1422's reconnect
+case) applies to no form here; slice 4's Change seats for today is the first that will need it.
+
+**Pointer events** are dispatched as `wt-floor-plan-canvas.test.ts` dispatches them: `pointerdown`
+on the element pressed (`bubbles: true, composed: true`, a `pointerId`, `pointerType`,
+`clientX`/`clientY`, `button: 0`), then `pointermove`, `pointerup` and `pointercancel` on `window`.
+
+### Task 3.1: Gestures
+
+**Files:**
+- Create: `packages/ui/src/gestures.ts`, `packages/ui/src/gestures.test.ts`
+- Modify: `packages/ui/src/index.ts` (export beside the floor exports, `:44-99`)
+
+**Interfaces:**
+- Produces:
+
+```ts
+export const LONG_PRESS_MS = 500;
+export const DOUBLE_TAP_MS = 300;
+export const SLOP_PX = 8;
+export const DOUBLE_TAP_PX = 24;
+export interface GesturePoint { target: EventTarget | null; x: number; y: number; pointerType: string } // client px; target = composedPath()[0] of the pointerdown
+export interface GestureHandlers {
+  tap?(at: GesturePoint): void;
+  /** The second of two taps within DOUBLE_TAP_MS and DOUBLE_TAP_PX; sent instead of a second tap. */
+  doubleTap?(at: GesturePoint): void;
+  /** The press has stayed within SLOP_PX for LONG_PRESS_MS. */
+  holdStart?(at: GesturePoint): void;
+  /** A hold released without moving SLOP_PX. */
+  longPress?(at: GesturePoint): void;
+  /** A hold that then moved; dx, dy from where the press began. */
+  holdDrag?(at: GesturePoint & { dx: number; dy: number }): void;
+  holdDrop?(at: GesturePoint & { dx: number; dy: number }): void;
+  /** A press that moved SLOP_PX or more before the hold; dx, dy since the last call (the first call: since the press). */
+  pan?(by: { dx: number; dy: number }): void;
+  /** Two pointers: their distance's ratio since the last call, their midpoint now (client px), and how far it moved. */
+  pinch?(change: { ratio: number; x: number; y: number; dx: number; dy: number }): void;
+  /** A hold or drag ended without its own end: pointercancel, or a second pointer arriving. */
+  cancel?(): void;
+}
+export class Gestures {
+  constructor(host: HTMLElement, handlers: GestureHandlers);
+  /** True from a pointerdown until every pointer of the gesture lifts or cancels. */
+  get active(): boolean;
+  disconnect(): void;
+}
+```
+
+Behaviour: `pointerdown` on `host` starts tracking (a mouse's non-primary buttons start nothing);
+`pointermove`, `pointerup` and `pointercancel` are heard on `window` while a gesture is active, and
+removed when it ends. The hold is a `setTimeout(LONG_PRESS_MS)`; the double-tap window is a
+`setTimeout(DOUBLE_TAP_MS)` started by a tap, so a second tap while it is pending is a double tap.
+No clock is read, so fake timers drive both. A third pointer is ignored. `disconnect()` removes the
+host's listener, any window listeners, and both timers.
+
+- [ ] **Step 1: Write the failing tests** in `gestures.test.ts`. Host:
+  `mount('<div style="width: 600px; height: 300px"><button id="b">B</button></div>')`
+  (`packages/ui/src/test-helpers.ts:11`); handlers are `vi.fn()`s; points are client px.
+
+```ts
+it("a press released in place is a tap, at once", () => { /* touch down/up on #b → tap once with { target: b, pointerType: "touch" } and the release's x, y; no other handler */ });
+it("a second tap within 300 ms and 24 px is a double tap, not a tap", () => { /* tap; advance 299; tap 20 px away → tap once, doubleTap once */ });
+it("two taps 300 ms apart are two taps", () => { /* advance 300 between → tap twice, doubleTap never */ });
+it("two taps 25 px apart are two taps", () => { /* tap at (10, 10); tap at (35, 10) within 300 ms → tap twice, doubleTap never */ });
+it("a press held 500 ms marks the hold, and its release is a long-press, not a tap", () => {
+  /* advance 499 → holdStart not called; advance 1 → holdStart({ target: b }); up → longPress once; tap never */
+});
+it("moving 7 px still holds", () => { /* move +7, 0; advance 500 → holdStart; up → longPress */ });
+it("moving 8 px before the hold pans, from where the press began", () => {
+  /* move to +8, 0 → pan { dx: 8, dy: 0 }; to +30, +5 → pan { dx: 22, dy: 5 }; advance 500 → no holdStart; up → no tap, no longPress */
+});
+it("a hold that moves drags, measured from the press", () => {
+  /* hold; move +40, 0 → holdDrag { dx: 40, dy: 0, target: b }; up at +50, +10 → holdDrop { dx: 50, dy: 10 }; longPress never */
+});
+it("two pointers pinch about their midpoint", () => {
+  /* down 1 at (200, 150), down 2 at (300, 150); move 2 to (400, 150) → pinch { ratio: 2, x: 300, y: 150, dx: 50, dy: 0 } */
+});
+it("a second pointer during a hold cancels it", () => { /* hold #b; down 2 → cancel once; up both → no longPress, no tap */ });
+it("after a pinch nothing happens until every pointer lifts", () => { /* pinch; up 2; move 1 by 60 → no pan; up 1 → no tap; active false */ });
+it("a third pointer is ignored", () => { /* pinching with 1, 2; down 3 and move 3 → no further pinch */ });
+it("pointercancel ends the press", () => { /* down; pointercancel → cancel once; up → no tap; active false */ });
+it("a mouse's right button starts nothing", () => { /* mouse down/up with button 2 → no tap; active false throughout */ });
+it("another pointer's moves do not move a one-finger press", () => { /* down 1; move pointerId 9 by 50 → no pan */ });
+it("disconnect stops listening and clears the hold", () => { /* down; disconnect(); advance 500 → no holdStart; down/up → no tap */ });
+```
+
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/ui exec vitest run src/gestures.test.ts`.
+  Expected: the file fails to load; `./gestures.js` does not exist.
+- [ ] **Step 3: Implement** the state machine (idle → pressed → held | panning; pressed or held →
+  pinching on a second pointer; pinching → spent until every pointer lifts; any → idle on the last
+  up or cancel) and its export.
+- [ ] **Step 4: Run** the same command (PASS, read the `Tests` count); `pnpm --filter @waitron/ui typecheck`,
+  `pnpm --filter @waitron/ui lint`, `pnpm exec prettier --check packages/ui/src/gestures.ts packages/ui/src/gestures.test.ts packages/ui/src/index.ts`.
+- [ ] **Step 5: Mutation** — the bounded run on `src/gestures.ts`.
+- [ ] **Step 6: Commit** — e.g. "Floor map: a gesture recogniser that tells tap, double tap, hold,
+  hold-and-drag, pan and pinch apart (A429 slice 3)".
+
+### Task 3.2a: The table fill colours
+
+**Files:**
+- Modify: `packages/ui-core/src/tokens/colors.css` (all four blocks: the light default, the dark
+  preference, explicit light, explicit dark, each after `--wt-color-on-day-closed`),
+  `packages/ui-core/src/tokens/colors.test.ts` (a `describe.each` beside the calendar's,
+  `:325-366`)
+- Create: `packages/ui/src/floor-map-fills.ts`, `packages/ui/src/floor-map-fills.test.ts`
+- Modify: `packages/ui/src/index.ts`
+
+**Interfaces:**
+- Produces:
+
+```ts
+export type FloorMapFill = "free" | "seated" | "bill" | "clearing" | "reserved";
+export type FloorMapDot = "ready" | "forgotten";
+export const FLOOR_MAP_FILLS: readonly FloorMapFill[];
+/** `[data-fill="<fill>"]` paints background `--wt-color-table-<fill>` and colour `--wt-color-on-table-<fill>`. */
+export const floorMapFillStyles: CSSResult;
+```
+
+Starting values (fill / text), from the existing palette where one fits:
+
+| Fill | Light | Dark |
+| --- | --- | --- |
+| `free` | `#dff3e8` / `#16181d` | `#183626` / `#eceef2` |
+| `seated` | `#1f6feb` / `#ffffff` | `#4c8dff` / `#06101f` |
+| `bill` | `#7e3fb8` / `#ffffff` | `#c39bf0` / `#1d0b33` |
+| `clearing` | `#f5a623` / `#241500` | `#f5b34a` / `#241500` |
+| `reserved` | `#fde7c8` / `#16181d` | `#4a3a1c` / `#eceef2` |
+
+A node script on 2026-10-10 computed each pair's contrast with the formula `colors.test.ts:14-24`
+uses: 4.63 (`seated`, light) is the lowest. That is arithmetic on the hex values, not a run of the
+test; the test in Step 1 is the check.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```ts
+// colors.test.ts — describe.each(["light", "dark"])("table fill colours (%s)")
+test("each fill has its own text colour, readable on it at 4.5:1 or more", …); /* for each of the five, ratio(on, fill) ≥ 4.5 */
+test("the five fills are different colours", …);                                /* new Set(values).size === 5 */
+test("the dots are readable on the surface ring at 3:1 or more", …);            /* ratio(success, surface) and ratio(danger, surface) ≥ 3 */
+test("the OS preference gives them the same values as the explicit theme", …);  /* as the calendar's case at :355-366 */
+
+// floor-map-fills.test.ts — mount a div styled with floorMapFillStyles in a shadow root
+it("paints each fill from its tokens", async () => {
+  /* for each fill: host sets --wt-color-table-<fill> rgb(1, 2, 3) and --wt-color-on-table-<fill> rgb(4, 5, 6) →
+     [data-fill=<fill>] background-color rgb(1, 2, 3), color rgb(4, 5, 6) */
+});
+it("lists the five fills", () => { /* FLOOR_MAP_FILLS toEqual ["free", "seated", "bill", "clearing", "reserved"] */ });
+```
+
+- [ ] **Step 2: Run and watch them fail** — `pnpm --filter @waitron/ui-core exec vitest run src/tokens/colors.test.ts`
+  (the new cases read empty tokens and fail on `luminance`'s hex check) and
+  `pnpm --filter @waitron/ui exec vitest run src/floor-map-fills.test.ts` (fails to load).
+- [ ] **Step 3: Implement.** If a contrast case fails, change that value and say which in the commit.
+- [ ] **Step 4: Run** both commands, `pnpm exec vitest run scripts/style-token-names.test.ts`, both
+  packages' typecheck and lint, `prettier --check` on the changed `.ts` files (`colors.css` too).
+- [ ] **Step 5: Commit** — e.g. "Floor map: table colours for free, seated, bill asked, needs
+  clearing and reserved, in both themes (A429 slice 3)". (No mutation run: the new `packages/ui`
+  file is a style sheet and a list.)
+
+### Task 3.2b: `wt-floor-map` — drawing and fitting
+
+**Files:**
+- Create: `packages/ui/src/components/wt-floor-map.ts`, `packages/ui/src/components/wt-floor-map.test.ts`,
+  `packages/ui/src/components/wt-floor-map.a11y.test.ts`
+- Modify: `packages/ui/src/index.ts`, `packages/ui/demo/main.ts` (the workbench, beside
+  `wt-floor-plan-canvas`, `:30`, `:126`), `docs/developers/design-system.md` (a row in the
+  primitives table after `wt-sheet`, `:565`, and a paragraph after `wt-sheet`'s, `:589-594`)
+
+**Interfaces:**
+- Consumes: `PlanPlacement`, `cropToTables`, `fitScale`, `rotatedRect`, `bounds`, `showsName`
+  (Task 2.1); `FloorMapFill`, `FloorMapDot`, `floorMapFillStyles` (Task 3.2a).
+- Produces:
+
+```ts
+export interface FloorMapTable {
+  id: string; label: string; placement: PlanPlacement;
+  fill: FloorMapFill; dot: FloorMapDot | null;
+  joinId: string | null;
+  /** Read after the name: "Seated, 2 ready". A merge's members carry the same value. */
+  description: string;
+}
+export interface FloorMapCopy { label: string } // the tables' group name; English default "Tables"
+export interface FloorMapTap { tableId: string }
+export interface FloorMapDetails { tableId: string }                                        // Task 3.2c
+export interface FloorMapDrop { tableId: string; x: number; y: number; targetId: string | null } // Task 3.2d
+@customElement("wt-floor-map")
+export class WtFloorMap extends LitElement {
+  @property({ attribute: false }) tables: FloorMapTable[] = [];   // placed tables only
+  @property() fitKey = "";                                         // a change fits the view again
+  @property({ attribute: false }) copy: Partial<FloorMapCopy> = {};
+  /** `undefined` reads `prefers-reduced-motion` on every render; a test sets it. */
+  @property({ attribute: false }) reducedMotion?: boolean;
+}
+```
+
+Behaviour: the host is `display: block; position: relative; overflow: hidden; touch-action: none`
+on `--wt-color-surface`; its size is the parent's. The view is `{ scale, x, y }`: a grid point
+`(gx, gy)` is drawn at `(x + gx × scale, y + gy × scale)` px from the host's corner. Fitting sets
+`scale = fitScale(crop, size)` and centres the crop. The host's size comes from a `ResizeObserver`.
+Tables are grouped by `joinId` (no join: a group of one). Each group is one
+`<button type="button" part="table" data-table-id=<first member's id>>` placed at the union of its
+members' `rotatedRect`s and transparent itself (`pointer-events: none`), holding one
+`<span part="shape" data-fill data-shape>` per member (`pointer-events: auto`), sized
+`width × scale` by `height × scale` and turned `rotate(<rotation>deg)` about its centre, round shapes
+`border-radius: 50%`, every shape outlined 1 px `--wt-color-field-line`, painted by
+`floorMapFillStyles`. Members are ordered by `label` with `Intl.Collator(undefined, { numeric: true })`;
+the group's label is their labels joined by "+". The visible name (`part="name"`, centred, in the
+fill's text colour) shows only when `showsName(<the group's box>, scale)`. The accessible name is
+`<label>, <description>`. A group's dot (`part="dot" data-dot`) sits at the box's top-right, a
+`--wt-space-3` circle in `--wt-color-success` (ready) or `--wt-color-danger` (forgotten) with a 2 px
+`--wt-color-surface` ring; it flashes (a 1 s opacity animation) unless motion is reduced, with the
+same `@media (prefers-reduced-motion: reduce)` guard the floor's cards use
+(`till-floor-screen.ts:213-217`). The groups sit in a `role="group"` named `copy.label`. The view
+fits when tables are first drawn, when `fitKey` changes, and on every resize (Task 3.2d narrows
+that). Changing `tables` alone keeps the view.
+
+- [ ] **Step 1: Write the failing tests.** Host `<wt-floor-map style="width: 600px; height: 300px">`;
+  `t(id, label, placement, over?)` builds a free table with no dot, no join and description "Free".
+  The fitted view of one table at x 10, y 5, 8 × 4 is scale 37.5 (crop 12 × 8 in 600 × 300), drawn
+  at left 150, top 75, 300 × 150 px.
+
+```ts
+it("fits the zone's tables to the map when it first draws them", async () => { /* t1's [part=table] box relative to the host: { left: 150, top: 75, width: 300, height: 150 } */ });
+it("turns a table about its centre", async () => { /* rotation 90: the shape's transform is matrix(0, 1, -1, 0, 0, 0); the crop is now 8 × 12, scale 25, and the button's box 100 × 200 */ });
+it("draws a round table as a circle", async () => { /* shape "round": border-radius 50% */ });
+it("draws a merge as one button named with its tables in number order", async () => {
+  /* "10" at (8, 0) 8 × 8 and "4" at (0, 0) 8 × 8, both joinId "j1": one [part=table], two [part=shape], data-table-id is "4"'s id,
+     name text "4+10", aria-label "4+10, Free" */
+});
+it("hides a name drawn under 28 px and keeps it as the accessible name", async () => {
+  /* "B1" at (0, 0) 2 × 2 and "B2" at (36, 16) 3 × 3: crop 43 × 23 → scale 300/23 ≈ 13.04; B1 (26.1 px): no [part=name], aria-label "B1, Free"; B2 (39.1 px): name "B2" */
+});
+it("paints a table from its fill's tokens", async () => { /* fill "bill"; host sets --wt-color-table-bill rgb(1, 2, 3), --wt-color-on-table-bill rgb(4, 5, 6) → shape background rgb(1, 2, 3), name colour rgb(4, 5, 6) */ });
+it("outlines every table in the field-line colour", async () => { /* host sets --wt-color-field-line rgb(7, 8, 9) → shape border-color */ });
+it("shows one dot in its colour", async () => {
+  /* dot "ready", host --wt-color-success rgb(1, 1, 1) → [part=dot][data-dot=ready] background rgb(1, 1, 1); "forgotten" reads --wt-color-danger; null → no dot */
+});
+it("flashes the dot unless motion is reduced", async () => { /* reducedMotion false → animation-name not "none"; true → "none" */ });
+it("names the tables' group from its copy", async () => { /* default "Tables"; copy { label: "Mesas" } → role group named "Mesas" */ });
+it("keeps the view when the tables change", async () => { /* add an 8 × 4 table at (60, 5): t1 still 300 px wide at left 150 */ });
+it("fits again when fitKey changes", async () => { /* then fitKey "z2" → both tables fitted: crop 62 × 8, scale 600/62 → t1 width ≈ 77.4 (toBeCloseTo 1) */ });
+it("fits again when the map is resized", async () => { /* host width 300 px, await a real animation frame twice → scale 25: t1 200 × 100 */ });
+it("draws an empty group with no tables", async () => { /* tables [] → no [part=table]; no error */ });
+
+// wt-floor-map.a11y.test.ts — describe.each(["light", "dark"]), mountThemed as wt-floor-plan-canvas.a11y.test.ts:1-40
+test("one table in each fill", …); test("a ready dot and a forgotten dot", …); test("a merge, and a name too small to draw", …);
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.test.ts src/components/wt-floor-map.a11y.test.ts`.
+  Expected: both files fail to load.
+- [ ] **Step 3: Implement** (design-system.md → "Adding a primitive", `:3046`: `baseStyles` first,
+  `delegatesFocus`, tokens only), the workbench entry and the design-system row and paragraph (what
+  it draws, its three events, names below 28 px, the dot and reduced motion, that `fitKey` refits).
+  Before trusting the a11y file, drop the buttons' `aria-label` and watch it fail, then restore it.
+- [ ] **Step 4: Run** the same command, `pnpm --filter @waitron/ui exec vitest run src/no-hardcoded-chrome.test.ts`,
+  `pnpm exec vitest run scripts/style-token-names.test.ts`, typecheck, lint, `prettier --check`.
+- [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts`.
+- [ ] **Step 6: Commit** — e.g. "Floor map: a primitive that draws today's tables fitted to the
+  screen, with a colour and a dot each and merges as one shape (A429 slice 3)".
+
+### Task 3.2c: `wt-floor-map` — taps and details
+
+**Files:**
+- Modify: `packages/ui/src/components/wt-floor-map.ts`, its `.a11y.test.ts`, the design-system
+  paragraph from Task 3.2b
+- Create: `packages/ui/src/components/wt-floor-map.taps.test.ts`
+
+**Interfaces:**
+- Consumes: `Gestures`, `DOUBLE_TAP_MS` (Task 3.1).
+- Produces: `wt-table-tap` (`FloorMapTap`) and `wt-table-details` (`FloorMapDetails`), each a
+  `CustomEvent` with `bubbles: true, composed: true`.
+
+Behaviour (slice 3 decision 7): the map owns one `Gestures` on its host, made in
+`connectedCallback` and disconnected in `disconnectedCallback`. A gesture's target is a table when
+its composed path holds a `[part=table]` button; its id is that button's `data-table-id`.
+- `tap` on a table: touch and pen send `wt-table-tap` at once; a mouse waits `DOUBLE_TAP_MS` and
+  sends it unless a `doubleTap` on the same table came first, which sends `wt-table-details`.
+- `holdStart` on a table sets `data-held` on its button; `longPress` clears it and sends
+  `wt-table-details`; `cancel` clears it.
+- `contextmenu` on the map is always prevented; on a table, while no gesture is active (a mouse's
+  right button, the ContextMenu key, Shift+F10), it sends `wt-table-details`.
+- A `click` on a table with `detail === 0` (Enter or Space on a focused button) sends
+  `wt-table-tap`; a pointer's own click is ignored, since the gesture already acted.
+
+- [ ] **Step 1: Write the failing tests** in `wt-floor-map.taps.test.ts`, with Task 3.2b's host and
+  one table t1 (fitted at left 150, top 75, 300 × 150), points relative to the host, fake
+  `setTimeout`/`clearTimeout`:
+
+```ts
+it("a touch tap on a table asks to open it, at once", async () => { /* mountInShadowRoot; document hears wt-table-tap { tableId: "t1" }, bubbles, composed */ });
+it("a mouse click on a table waits for a second click", async () => { /* mouse down/up → nothing; advance 300 → wt-table-tap */ });
+it("a mouse double-click on a table asks for its details instead", async () => { /* two clicks 100 ms apart → wt-table-details { tableId: "t1" }; advance 300 → no wt-table-tap */ });
+it("a real mouse click opens a table once", async () => { /* userEvent.click on t1's shape (a real click, detail 1); advance 300 → exactly one wt-table-tap */ });
+it("a hold on a table marks it, and its release asks for details", async () => { /* advance 500 → t1 [data-held]; up → wt-table-details; no wt-table-tap; data-held gone */ });
+it("right-click, the ContextMenu key and Shift+F10 ask for details and stop the browser's menu", async () => {
+  /* dispatch a cancelable contextmenu on t1's shape → defaultPrevented true; wt-table-details { tableId: "t1" };
+     focus t1 and userEvent.keyboard("{Shift>}{F10}{/Shift}") → a second wt-table-details */
+});
+it("a contextmenu during a touch hold sends nothing more", async () => { /* touch down on t1, contextmenu at 400 ms → prevented; no wt-table-details until release */ });
+it("Enter on a focused table asks to open it", async () => { /* userEvent.keyboard("{Enter}") → wt-table-tap */ });
+it("a merge sends its first member's id", async () => { /* tap on "10"'s shape in the merge of 4 and 10 → { tableId: <4's id> } */ });
+it("a tap on empty space sends nothing", async () => { /* touch tap at (20, 20) → neither event */ });
+it("a second finger during a hold cancels it", async () => { /* hold t1; second pointer down → data-held gone; release both → no wt-table-details */ });
+// wt-floor-map.a11y.test.ts: add "a table held" in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.taps.test.ts src/components/wt-floor-map.test.ts src/components/wt-floor-map.a11y.test.ts`.
+  Expected: the new cases fail (no event is sent); Task 3.2b's cases pass.
+- [ ] **Step 3: Implement.** Then delete the `detail === 0` check and watch "a real mouse click
+  opens a table once" count two taps, then restore it.
+- [ ] **Step 4: Run** the same command and Task 3.2b's guards. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Floor map: tap a table to open it, hold or double-click it for its
+  details (A429 slice 3)". (The mutation run is Task 3.2d's, once the file is whole.)
+
+### Task 3.2d: `wt-floor-map` — pan, pinch, wheel and the held table's drag
+
+**Files:**
+- Modify: `packages/ui/src/components/wt-floor-map.ts`, the design-system paragraph from Task 3.2b
+- Create: `packages/ui/src/components/wt-floor-map.view.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3.2c's `Gestures`; `snapToSquare`, `clampToGrid` (Task 2.1).
+- Produces: `wt-table-drag-end` (`FloorMapDrop`), `bubbles: true, composed: true`.
+
+Behaviour (slice 3 decisions 8 and 11):
+- `pan` moves the view; `pinch` scales it about the midpoint (`x' = m − (m₀ − x) × ratio`, with `m₀`
+  the old midpoint and `m` the new one, both relative to the host); scale is clamped to
+  `[fit / 2, fit × 4]`, and then the view so that the crop's centre stays within the host.
+- `doubleTap` on empty space fits the view.
+- `wheel`: Ctrl held zooms by `2 ** (−deltaY / 100)` about the pointer, else pans by `−deltaX`,
+  `−deltaY`; prevented either way.
+- A pan, pinch or wheel marks the view touched; a resize then keeps it (narrowing Task 3.2b's
+  "every resize"), and a fit clears the mark.
+- `focusin` on a table whose box lies outside the host pans the least distance that brings it in.
+- `holdDrag` draws the held group moved by `snapToSquare(d, scale)` squares, its first member
+  clamped by `clampToGrid`; `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
+  and `targetId`: the `data-table-id` of the first other table under the release point
+  (`this.shadowRoot.elementsFromPoint`), else null; then the drawn place returns to `tables`'.
+  `cancel` drops a drawn drag.
+
+- [ ] **Step 1: Write the failing tests** in `wt-floor-map.view.test.ts`, with Task 3.2b's host and
+  fitted view (t1 at left 150, top 75, 300 × 150; a second table t2 at x 20, y 5, 4 × 4 where a case
+  needs one, the expected numbers worked out afresh for that crop), points relative to the host,
+  fake `setTimeout`/`clearTimeout`:
+
+```ts
+it("dragging empty space pans the map", async () => { /* touch at (20, 20), move to (120, 40) → t1 left 250, top 95 */ });
+it("a drag that starts on a table pans too, before the hold", async () => { /* down on t1, advance 100, move 20 px → panned 20; up → no wt-table-tap */ });
+it("a pan stops with the plan's centre at the map's edge", async () => { /* move by +1000, 0 → t1 left 450 */ });
+it("a double tap on empty space fits again", async () => { /* pan, then two taps at (20, 20) → t1 left 150 */ });
+it("a double tap on a table does not fit", async () => { /* pan +50; touch double tap on t1 → t1 left 200 still */ });
+it("pinching zooms about the fingers", async () => { /* (200, 150) and (300, 150), second to (400, 150) → t1 { left: 100, top: 0, width: 600, height: 300 } */ });
+it("zoom stops at half and at four times the fitted size", async () => { /* pinch to a tenth → t1 width 150; then far out → width 1200 */ });
+it("the wheel pans, and Ctrl+wheel zooms about the pointer", async () => {
+  /* wheel deltaY 100 → t1 top -25; refit; Ctrl+wheel deltaY -100 at (300, 150) → t1 { left: 0, top: 0, width: 600 }; each defaultPrevented */
+});
+it("a resize after a pan keeps the person's view, and one after a fit fits", async () => {
+  /* pan +50; host width 500, two real animation frames → t1 still 300 wide; double tap empty; host width 300, two frames → t1 200 wide */
+});
+it("focusing a table outside the map brings it into view", async () => { /* pan by -1000 (clamped); t1.focus() → t1's box within the host's */ });
+it("a hold then a drag draws the table under the finger in whole squares, and drops it", async () => {
+  /* hold t1, move +75, 0 → t1 left 225 (2 squares); up over empty → wt-table-drag-end { tableId: "t1", x: 12, y: 5, targetId: null }; then t1 left 150 */
+});
+it("a drop over another table names it", async () => { /* with t2 drawn: hold t1, move until the pointer is over t2's shape, release → targetId "t2" */ });
+it("a drag past the top or left stops at 0", async () => { /* only t at (1, 1) 8 × 4: hold, move -200, -200 → drop x 0, y 0 */ });
+it("a cancelled drag sends nothing and puts the table back", async () => { /* hold, move +75, pointercancel → no wt-table-drag-end; t1 left 150 */ });
+it("the drop event bubbles out of a shadow root", async () => { /* mountInShadowRoot; document hears wt-table-drag-end */ });
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.view.test.ts src/components/wt-floor-map.taps.test.ts src/components/wt-floor-map.test.ts`.
+  Expected: the new cases fail (nothing pans, no drop is sent); the others pass.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command, `src/components/wt-floor-map.a11y.test.ts` and Task 3.2b's
+  guards. Expected: pass.
+- [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts`.
+- [ ] **Step 6: Commit** — e.g. "Floor map: pinch, drag and the wheel to look around, and a held
+  table's drop (A429 slice 3)".
+
+### Task 3.3a: The till's stand-in statuses and map tables
+
+**Files:**
+- Create: `apps/till/src/state/floor-map.ts`, `apps/till/src/state/floor-map.test.ts`
+- Modify: `apps/till/src/i18n/strings.ts` (EN after `floor.open_station`, `:534`; ES in the same
+  place of the `es` block)
+
+**Interfaces:**
+- Consumes: `TableState` (`apps/till/src/api/client.ts:1861-1904`); `signalOf`
+  (`apps/till/src/state/table-signals.ts`); `FloorMapTable`, `FloorMapFill`, `FloorMapDot`
+  (Tasks 3.2a, 3.2b).
+- Produces:
+
+```ts
+export interface StandInStatus { fill: FloorMapFill; dot: FloorMapDot | null }
+export function standInStatus(table: TableState): StandInStatus;         // slice 3 decision 4
+export function combinedStatus(statuses: readonly StandInStatus[]): StandInStatus;
+export function statusWords(table: TableState, status: StandInStatus): string; // "Seated, 2 ready"
+export function pinText(table: TableState, status: StandInStatus): string;     // "2 ready", Task 3.5
+export function isPlannedZone(zoneTables: readonly TableState[]): boolean;      // decision 1
+export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[]; // placed, not taken off; a merge's members share one status and its words
+export function listedTables(zoneTables: readonly TableState[]): TableState[]; // decision 2
+export function seatsFor(table: TableState): number | null;                     // decision 12: joinSeats ?? seats; no today's row: capacity
+```
+
+Words (`statusWords` is the fill's word, then the dot's, joined by ", "): free `floor.free`;
+reserved `floor.reserved` and the time ("Reserved 20:30"); seated `floor.status_seated`; bill
+`floor.status_bill`; clearing `floor.needs_clearing`; dot ready "<n> " + `floor.ready`; forgotten
+`floor.forgotten`. `pinText` is the dot's words if there is a dot, else for seated with
+`pendingToServe > 0` "<n> " + `floor.to_serve`, else the fill's word.
+
+New strings (EN / ES): `floor.status_seated` "Seated" / "Ocupada"; `floor.status_bill` "Bill asked"
+/ "Pide la cuenta"; `floor.map_label` "Tables" / "Mesas" (Task 3.3b); `floor.seats` "{n} seats" /
+"{n} plazas" and `floor.seats_one` "1 seat" / "1 plaza" (Tasks 3.3c, 3.4).
+
+- [ ] **Step 1: Write the failing tests** (a `table(over)` fixture like
+  `till-floor-screen.test.ts:20-45`, with `today` set where a case needs it; `setLocale` restored in
+  `afterEach`):
+
+```ts
+it("a free table is free, a booked free one reserved", () => { /* { fill: "free", dot: null }; nextReservation { time: "20:30" } → "reserved" */ });
+it("a party or a delivery on its way makes it seated, even when booked", () => { /* state open-tab → "seated"; delivery-pending → "seated"; open-tab + reservation → "seated" */ });
+it("a bill asked for beats seated, and needs clearing beats both", () => { /* signals [bill_requested] → "bill"; condition needs_clearing + bill signal → "clearing" */ });
+it("a forgotten order's dot beats ready dishes'", () => { /* readyToServe 2 → "ready"; + timingBand forgotten → "forgotten"; timingBand overdue alone → null */ });
+it("a merge shows its most urgent member", () => { /* [seated/ready, free/null] → seated/ready; [bill/null, seated/forgotten] → bill/forgotten */ });
+it("says the status in words", () => {
+  /* "Free"; "Reserved 20:30"; seated + 2 ready → "Seated, 2 ready"; bill + forgotten → "Bill asked, Forgotten"; "Needs clearing"; es: "Ocupada, 2 listos" */
+});
+it("gives the pin its shortest word", () => { /* forgotten → "Forgotten"; ready 2 → "2 ready"; bill → "Bill asked"; seated, pendingToServe 3 → "3 to serve"; seated, nothing → "Seated" */ });
+it("calls a zone planned when any of its tables has a today's row", () => { /* [today null, today {…}] → true; all null → false; [] → false */ });
+it("maps placed tables, leaving out spares and taken-off ones", () => {
+  /* t1 placed; t2 placement null (spare); t3 takenOff → [t1] with { id, label, placement, fill, dot, joinId, description } toEqual */
+});
+it("gives a merge's members one status and one description", () => {
+  /* t4 seated with 2 ready, t5 free, both joinId "j1" → both fill "seated", dot "ready", description "Seated, 2 ready" */
+});
+it("lists what is on today's plan and what must stay reachable", () => {
+  /* placed free t1; free spare t2; taken-off t3; seated unplaced t4; needs-clearing unplaced t5; delivery-pending unplaced t6; never planned (today null) t7
+     → [t1, t4, t5, t6, t7] in the order given */
+});
+it("reads a table's seats for today, a merge's for the merge, and the old capacity without a plan", () => {
+  /* today.seats 6 → 6; joinSeats 10 → 10; today null, capacity 4 → 4; today.seats null → null */
+});
+```
+
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/till exec vitest run src/state/floor-map.test.ts`.
+  Expected: fails to load.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command, `pnpm --filter @waitron/till typecheck`,
+  `pnpm --filter @waitron/till lint`, `prettier --check` on the three files. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Till floor: the stand-in table statuses and which tables a planned
+  zone shows (A429 slice 3)".
+
+### Task 3.3b: The floor screen on the new map
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (render's zone filter and view choice,
+  `:633-656`; `#map`, `:727-752`; the Edit plan toggle, `:682-693`; the card's seat count,
+  `:899-905` and the clearing card's, `:873-877`; styles), `apps/till/src/screens/till-floor-screen.a11y.test.ts`,
+  `apps/till/src/screens/device-screens.phone-margin.test.ts` (one row in `screens`, `:73-135`)
+- Create: `apps/till/src/screens/till-floor-screen.map.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3.3a's functions; `wt-floor-map` and its `wt-table-tap` (Tasks 3.2b–3.2d).
+
+Behaviour: after the zone filter (`visible`, `:646-648`), when `isPlannedZone(visible)` the screen
+uses `listedTables(visible)` for the list, `mapTables(visible)` for the map, and the listed tables
+without a place for the tray; the view defaults to the map when the map has a table, else the list
+(as `:656`). The map is `<wt-floor-map data-floor-map .tables .fitKey=${activeKey ?? ""}
+.copy=${{ label: t("floor.map_label") }}>`, styled `height: 65dvh; min-height: calc(var(--wt-tap-min) * 6)`,
+with the tray below it drawn by the existing `#trayItem` in view mode only. `wt-table-tap` stops
+and runs `#openTable` on the table it names, as `#onCanvasOpen` does (`:543-548`), so a closed zone
+still refuses a free table and a table needing clearing still offers Mark cleared. Edit plan is
+not drawn while the active zone is planned. A planned table's list card shows `seatsFor(table)` in
+the place of `capacity`. A zone with no today's rows takes exactly today's path.
+
+- [ ] **Step 1: Write the failing tests** in `till-floor-screen.map.test.ts` (fixtures as
+  `till-floor-screen.test.ts:7-45`, plus `today(over)` building a placed `TableToday`):
+
+```ts
+it("draws a planned zone on the new map, not the old canvas", async () => {
+  /* t1 today placed → wt-floor-map present, no wt-floor-canvas; map.tables toEqual mapTables([t1]); map.fitKey "z1"; map.copy.label "Tables" */
+});
+it("keeps the old canvas for a zone with no today's rows", async () => { /* placed("t1") with today null → wt-floor-canvas, no wt-floor-map */ });
+it("a tap on a free table asks for its guests", async () => { /* dispatch wt-table-tap { tableId: "t1" } from the map → till-seat-dialog with tableLabel "1" */ });
+it("a tap on a seated table opens its order", async () => { /* open-table { tableId: "t1", seated: true } */ });
+it("a tap on a table needing clearing offers Mark cleared", async () => { /* [data-clear-dialog] open */ });
+it("a closed zone refuses the map's free table", async () => { /* as till-floor-screen.test.ts:928-940, through the new map */ });
+it("a tap naming a table the floor no longer has does nothing", async () => { /* no dialog, no event */ });
+it("leaves taken-off tables and free spares out of the map and the list", async () => { /* t2 spare, t3 taken off beside placed t1: map.tables ids ["t1"], no tray item for either; toggle to list: no [data-table] for either */ });
+it("puts a seated table with no place under the map, and in the list", async () => { /* tray [data-tray-table=t4]; list card t4 */ });
+it("lists a never-planned table of a planned zone", async () => { /* t7 today null beside planned t1 → list card t7; tray t7 */ });
+it("shows today's seats on a planned table's card", async () => { /* today.seats 6, capacity 4 → ".capacity" text "6 pax" */ });
+it("hides Edit plan while a planned zone shows", async () => {
+  /* canEdit; planned z1 active → no [data-edit-toggle]; select unplanned z2's tab → [data-edit-toggle] shown */
+});
+it("gives the map the active zone as its fitKey", async () => { /* two planned zones; select z2 → fitKey "z2" and z2's tables */ });
+it("opens on the list when a planned zone has nothing placed", async () => { /* only a seated unplaced table → list view */ });
+
+// device-screens.phone-margin.test.ts — a "floor with a map" row: a planned zone with one placed table, ".screen", TILL_SPACING
+// till-floor-screen.a11y.test.ts — "a planned zone's map" and "a planned zone's list" in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.map.test.ts src/screens/device-screens.phone-margin.test.ts src/screens/till-floor-screen.a11y.test.ts`.
+  Expected: the new file's cases fail (no `wt-floor-map`); the new phone-margin row passes already
+  or fails only once the map is drawn, and then must pass again by Step 4.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command plus every existing floor file
+  (`src/screens/till-floor-screen.test.ts src/screens/till-floor-screen.parties.test.ts src/screens/till-floor-screen.signals.test.ts src/screens/till-floor-screen.unsaved.test.ts`),
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/native-form-fields.test.ts`, the
+  till's typecheck and lint, `prettier --check`. Expected: pass, with no existing case changed; one
+  that needs changing is a STOP (the plan's header rule).
+- [ ] **Step 5: Commit** — e.g. "Till floor: a zone with a floor plan shows today's plan as a map
+  of coloured tables (A429 slice 3)".
+
+### Task 3.3c: The seats placeholder and the 15-second re-read
+
+**Files:**
+- Modify: `apps/till/src/widgets/seat-dialog.ts` (a `seats` property beside `tableLabel`, `:38`;
+  the hint, `:151`), `apps/till/src/widgets/seat-dialog.test.ts`,
+  `apps/till/src/screens/till-floor-screen.ts` (`#seatDialog`, `:824-835`; the re-read timer beside
+  the reminder timer, `:444-465`), `apps/till/src/till-app.ts` (`#refreshFloor`, `:5018-5027`, and
+  every assignment of `this.tables`: `:1323`, `:4939`, `:5022`, `:6980`, `:6982`),
+  `apps/till/src/till-app.test.ts` (beside the floor-refresh cases, `:6486-6526`),
+  `apps/till/src/i18n/strings.ts` (`seat.covers`; `seat.guest_count_hint` deleted, EN `:546` and ES
+  `:1679`, once nothing reads it)
+- Create: `apps/till/src/screens/till-floor-screen.refresh.test.ts`
+
+**Interfaces:**
+- Produces: `TillSeatDialog.seats: number | null` (default null); the floor screen sends
+  `floor-refresh` every 15 s while a planned zone's map shows.
+
+Behaviour: the dialog's hint is `countText(seats, "floor.seats", "floor.seats_one")` when `seats`
+is a number, else `t("seat.covers")` ("Covers" / "Cubiertos"). The floor passes
+`seatsFor(table)`. The floor's re-read is a `setInterval(15_000)` started in `updated` when the map
+view of a planned zone is drawn and cleared when it is not, and in `disconnectedCallback`; each tick
+sends `floor-refresh`, as the placement writes do (`:576-578`). In the app, every write of
+`this.tables` adds one to a `#tablesWritten` counter; `#refreshFloor` notes the counter before it
+asks and drops its answer when the counter moved meanwhile.
+
+The dialog keeps its draft scope and its `seat-dialog.unsaved.test.ts` as they are: only the hint
+changes, so A331's save rule is not reopened here.
+
+- [ ] **Step 1: Write the failing tests:**
+
+```ts
+// seat-dialog.test.ts
+it("shows the table's seats as the placeholder", async () => { /* seats 6 → native input placeholder "6 seats"; seats 1 → "1 seat"; es → "6 plazas" */ });
+it("says Covers when the table has no seats", async () => { /* seats null → "Covers"; es "Cubiertos" */ });
+
+// till-floor-screen.refresh.test.ts — fake setInterval/clearInterval
+it("gives the seat dialog today's seats, a merge's, or the old capacity", async () => { /* tap planned t1 (seats 6) → dialog.seats 6; merge member (joinSeats 10) → 10; unplanned zone, capacity 4 → 4 */ });
+it("asks for the floor every 15 s while a planned zone's map shows", async () => { /* advance 14_999 → 0 floor-refresh; +1 → 1; +15_000 → 2 */ });
+it("does not ask while the list shows, or for the old map", async () => { /* toggle to list → none in 30 s; an unplanned zone's map → none */ });
+it("starts again when the map comes back, and stops when the screen leaves", async () => { /* list → map → 1 after 15 s; remove the element → none; re-add → 1 after 15 s */ });
+
+// till-app.test.ts, as :6486
+it("drops a floor read answered after a newer one", async () => {
+  /* getTablesState: the first refresh deferred, the second resolves [tableB]; resolve the first with [tableA] → floor(el).tables toEqual [tableB] */
+});
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.test.ts src/screens/till-floor-screen.refresh.test.ts src/till-app.test.ts -t "seats|Covers|15 s|list shows|map comes back|newer one"`.
+  Expected: each new case fails (the old hint shows; no `floor-refresh` is sent; the late answer
+  wins).
+- [ ] **Step 3: Implement.** With the app case passing, delete the counter check in `#refreshFloor`
+  and watch it fail, then restore it.
+- [ ] **Step 4: Run** the three files without `-t`, `src/widgets/seat-dialog.unsaved.test.ts`,
+  `src/widgets/seat-dialog.a11y.test.ts`, `src/screens/till-floor-screen.map.test.ts`, the till's
+  typecheck and lint, `prettier --check`. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Till floor: the seat dialog suggests the table's seats, and a
+  floor plan map re-reads every 15 seconds (A429 slice 3)".
+
+### Task 3.4: The details sheet
+
+**Files:**
+- Create: `apps/till/src/widgets/table-details-sheet.ts` (`till-table-details-sheet`),
+  `apps/till/src/widgets/table-details-sheet.test.ts`, `apps/till/src/widgets/table-details-sheet.a11y.test.ts`,
+  `apps/till/src/screens/till-floor-screen.details.test.ts`
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (a `#details` state holding a table id and
+  heading; the sheet beside `#seatDialog` and `#clearDialog`, `:722`), `apps/till/src/i18n/strings.ts`
+
+**Interfaces:**
+- Consumes: `seatsFor` (Task 3.3a); `signalChips`, `signalChipStyles` (`apps/till/src/widgets/signal-chips.ts:20`, `:62`),
+  `renderFloorChips` (`packages/ui/src/floor-chips.ts:43`); `trackDialog`.
+- Produces:
+
+```ts
+@customElement("till-table-details-sheet")
+export class TillTableDetailsSheet extends LitElement {
+  @property({ attribute: false }) table: TableState | null = null; // null: closed
+  @property() heading = "";                                         // the name as drawn: "4+5", or the party's name on the order screen
+}
+// details-close: no detail, bubbles, composed — on Close, Escape and after Mark cleared
+// mark-cleared: { tableId }, bubbles, composed — the app's existing event (till-app.ts:9076)
+```
+
+Behaviour (spec §5, slice 3 decision 14): a `wt-dialog` with `trackDialog()`, open while `table` is
+set, headed `heading`. Lines, each only when it applies: today's seats ("6 seats"); the party's
+name when it differs from the table's (as `shownPartyName`, `till-floor-screen.ts:51-54`);
+"Guests: 4" (`floor.guests`); what is owed (`floor.details_owed`, the party's `outstanding`
+through `formatMoney`) or "Paid" (`floor.paid`) when nothing is; "Bills: 2" when more than one;
+kitchen progress, each count above zero joined by " · " ("3 to serve · 2 ready · 1 en route",
+`floor.to_serve`, `floor.ready`, `floor.en_route`); the unsent drafts (as `#unsent`, `:991-997`);
+the signal chips; "Reserved 20:30"; "2 to deliver" (`floor.pending_delivery`); "Free" when none of
+these apply. Footer: Close (`floor.details_close`, secondary) and, for a table needing clearing,
+Mark cleared (`floor.mark_cleared`, primary), which sends `mark-cleared` and then `details-close`.
+The floor screen opens it on the map's `wt-table-details`, with the heading of the map group the
+table belongs to, and closes it on `details-close`. It reads the table by id from `tables` on each
+render, so a re-read updates it, and a re-read that no longer has the table closes it.
+
+New strings (EN / ES): `floor.details_owed` "Owes {amount}" / "Debe {amount}"; `floor.details_close`
+"Close" / "Cerrar".
+
+- [ ] **Step 1: Write the failing tests:**
+
+```ts
+// table-details-sheet.test.ts — mountWidget, a fixed locale
+it("is closed with no table", async () => { /* wt-dialog open false */ });
+it("heads itself with the name it is given and shows today's seats", async () => { /* heading "4+5"; "6 seats" */ });
+it("shows a seated party: its name, guests, what it owes, its bills and its kitchen progress", async () => {
+  /* party name "Ana" (displayName ≠ label), "Guests: 4", "Owes " + formatMoney("47.50", currentLocale()), "Bills: 2",
+     pendingToServe 3, readyToServe 2, enRoute 1 → "3 to serve · 2 ready · 1 en route" */
+});
+it("says Paid when the party owes nothing", async () => { /* outstanding "0.00", no open tab */ });
+it("shows the signal chips, the booking and a delivery", async () => { /* a bill_requested chip [data-chip]; "Reserved 20:30"; "2 to deliver" */ });
+it("says Free for a free table with nothing on it", async () => { /* free, no booking, no seats → the only line is "Free"; no [data-mark-cleared] */ });
+it("offers Mark cleared only for a table needing clearing, and closes after it", async () => {
+  /* mountInShadowRoot-style host listener hears mark-cleared { tableId: "t1" } then details-close; a free table has no [data-mark-cleared] */
+});
+it("Close asks to close", async () => { /* details-close once */ });
+it("Escape asks to close", async () => { /* keyboard Escape; await the wt-dialog's wt-close event, then expect details-close */ });
+
+// till-floor-screen.details.test.ts
+it("opens the sheet on the map's request, headed as the map draws the table", async () => { /* wt-table-details { tableId: "t4" } on a merge of 4 and 5 → sheet.table.id "t4", heading "4+5" */ });
+it("a re-read updates the open sheet", async () => { /* set tables with t4's readyToServe 2 → sheet shows "2 ready" */ });
+it("a re-read without the table closes the sheet", async () => { /* open for t4; set tables without t4 → no open till-table-details-sheet (table null) */ });
+it("Mark cleared in the sheet reaches the app and closes the sheet", async () => { /* document hears mark-cleared { tableId }; sheet closed */ });
+
+// table-details-sheet.a11y.test.ts — describe.each(["light", "dark"]): a free table; a seated party with everything; a table needing clearing
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/till exec vitest run src/widgets/table-details-sheet.test.ts src/widgets/table-details-sheet.a11y.test.ts src/screens/till-floor-screen.details.test.ts`.
+  Expected: the files fail to load.
+- [ ] **Step 3: Implement.** Before trusting the a11y file, remove the dialog's heading and watch it
+  fail, then restore it.
+- [ ] **Step 4: Run** the same command, `src/screens/till-floor-screen.map.test.ts`, the till's
+  typecheck and lint, `prettier --check`. Expected: pass.
+- [ ] **Step 5: Commit** — e.g. "Till floor: hold a table, or double-click it, for its details
+  sheet (A429 slice 3)".
+
+### Task 3.5: The flash notice and the status pin
+
+**Files:**
+- Create: `apps/till/src/widgets/table-status.ts` (`till-table-status`),
+  `apps/till/src/widgets/table-status.test.ts`, `apps/till/src/widgets/table-status.a11y.test.ts`
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (`.head-actions`, markup
+  `:2549-2577`: the widget before the Tab button, given `.tables=${this.tables}` and
+  `.party=${this.party}`, props at `:1166-1168`), `apps/till/src/screens/till-table-order-screen.test.ts`
+  (one case), `apps/till/src/i18n/strings.ts`
+
+**Interfaces:**
+- Consumes: `standInStatus`, `combinedStatus`, `pinText` (Task 3.3a); `floorMapFillStyles`
+  (Task 3.2a); `till-table-details-sheet` (Task 3.4); `wt-toast`.
+- Produces:
+
+```ts
+@customElement("till-table-status")
+export class TillTableStatus extends LitElement {
+  @property({ attribute: false }) tables: TableState[] = [];
+  @property({ attribute: false }) party: TableParty | null = null;
+}
+```
+
+Behaviour (slice 3 decisions 15 and 16): the party's rows are the tables whose `party.id` is the
+party's, in `party.tableIds` order; with none, the widget draws nothing. The pin is a
+`<button class="status-pin" data-status-pin>` at least `--wt-tap-min` tall: a swatch
+(`<span data-fill=<fill>>` painted by `floorMapFillStyles`) and `pinText` of the first row with
+the combined status; its accessible name is `table.status_pin` with the text. Pressing it opens the
+details sheet for the first row, headed `party.displayName`. The flash notice is a
+`<wt-toast data-flash-notice tone="info" .duration=${4000}>` fixed to the top of the window
+(`position: fixed; inset-inline: var(--wt-space-3); top: var(--wt-space-3)`), whose message is,
+joined by " · ", what applies of: ready dishes (`countText(readyToServe, "table.flash_ready",
+"table.flash_ready_one")`), a forgotten order (`table.flash_forgotten`), a bill asked for
+(`floor.status_bill`). It is shown (`show()`) on the first render with a party that has any of them,
+and again only when `party.id` changes; the widget remembers the last party id it judged while
+connected.
+
+New strings (EN / ES): `table.flash_ready` "{n} ready to serve" / "{n} listos para servir";
+`table.flash_ready_one` "1 ready to serve" / "1 listo para servir"; `table.flash_forgotten`
+"Forgotten order" / "Pedido olvidado"; `table.flash_close` "Close" / "Cerrar";
+`table.status_pin` "Table details: {status}" / "Detalles de la mesa: {status}".
+
+- [ ] **Step 1: Write the failing tests** (fake `setTimeout`/`clearTimeout` where a case waits):
+
+```ts
+// table-status.test.ts
+it("draws nothing without a party or without its table", async () => { /* party null → empty; party with no row in tables → empty */ });
+it("pins the table's status in its colour and shortest word", async () => {
+  /* row seated, readyToServe 2 → pin text "2 ready", swatch data-fill "seated", aria-label "Table details: 2 ready" */
+});
+it("paints the pin's swatch from the fill's token", async () => { /* host sets --wt-color-table-seated rgb(1, 2, 3) → swatch background */ });
+it("the pin opens the details sheet, headed with the party's name", async () => { /* click → till-table-details-sheet table.id "t4", heading "4 + 5" */ });
+it("flashes what the waiter must see when the order opens", async () => {
+  /* readyToServe 2 and a bill_requested signal → wt-toast[data-flash-notice] open, message "2 ready to serve · Bill asked" */
+});
+it("says a forgotten order", async () => { /* timingBand forgotten → "Forgotten order" */ });
+it("flashes nothing when nothing is urgent", async () => { /* seated, nothing ready → toast not open */ });
+it("the notice goes on its own after 4 s", async () => { /* advance 3_999 → open; +1 → closed */ });
+it("the notice goes with a tap", async () => { /* click the toast's message button → closed */ });
+it("the notice blocks nothing", async () => {
+  /* while open: no dialog[open] in the widget; document.elementFromPoint at a button placed mid-page beside the widget returns that button */
+});
+it("does not flash again for the same party, and does for another", async () => {
+  /* close it; set party to a new object with the same id → not reopened; party with another id and an urgent row → open */
+});
+
+// till-table-order-screen.test.ts
+it("shows the table's status in its head actions", async () => { /* mount with tables [row of party p1] and party p1 → .head-actions till-table-status with .party p1 */ });
+
+// table-status.a11y.test.ts — describe.each(["light", "dark"]): the pin for each fill; the notice open; the sheet open from the pin
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/till exec vitest run src/widgets/table-status.test.ts src/widgets/table-status.a11y.test.ts`
+  and `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.test.ts -t "head actions"`.
+  Expected: the new files fail to load; the order-screen case finds no `till-table-status`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the three files without `-t`, `src/screens/till-table-order-screen.a11y.test.ts`,
+  `src/screens/device-screens.phone-margin.test.ts`, the till's typecheck and lint, `prettier --check`.
+  Expected: pass, no existing case changed.
+- [ ] **Step 5: Commit** — e.g. "Till order: a notice for dishes ready, a forgotten order or a bill
+  asked for, and a status pin that opens the table's details (A429 slice 3)".
+
+### Task 3.6: Look
+
+**Files:** none committed. Throwaway files `packages/ui/src/components/wt-floor-map.look.test.ts`
+and `apps/till/src/screens/till-floor-screen.look.test.ts` are written, run and deleted (slice 3
+decision 17). Screenshots go to `/Users/clintongormley/waitron-campaign/a429-3-shots/`, by that
+literal absolute path, or, if Vitest refuses a path outside the package, through the package's
+git-ignored `__screenshots__` folder and `cp`, then removed from the package (as Task 2.8).
+
+States, each in English and Spanish (`setLocale`), light and dark (`mountWidget`'s `theme`), on the
+handheld at 390 × 844 and the till at 1280 × 800 (`page.viewport`), named
+`<state>-<lang>-<theme>-<width>.png`: a planned zone like the demo seed's terrace (a dozen tables,
+two 2 × 2 fixed stools, one turned 45°) with every fill and both dots; a merge; the map zoomed in
+and panned; a table held; the list view of a planned zone with the tray; the seat dialog with
+"6 seats" and with "Covers"; the details sheet for a free table, a seated party with everything,
+and a table needing clearing; the order screen with its status pin and the flash notice showing.
+
+- [ ] **Step 1:** Write the throwaway files and run them
+  (`pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.look.test.ts`, and the
+  `packages/ui` one). Expected: `ls /Users/clintongormley/waitron-campaign/a429-3-shots/ | wc -l`
+  equals the count taken.
+- [ ] **Step 2:** Open each screenshot and look: a name on a token too small for it, a dot hidden by
+  a neighbour, fills hard to tell apart in either theme, the map too tall or too short beside the
+  zone tabs at 1280 or at 390, the tray crowding the map, the sheet's lines wrapping badly, the pin
+  pushing the Tab button off a 390 px row, the notice covering the order's first line, Spanish
+  longer than its space, product text that could be shorter (owner rule).
+- [ ] **Step 3:** Fix what the look found, each fix test-first in the task file it belongs to (a
+  failing assertion, then the change), and rerun that file.
+- [ ] **Step 4:** Delete the throwaway files and any screenshots left in the packages (`git status`
+  shows none), then run every slice 3 test file named above, the guards named above, and the three
+  packages' typecheck and lint.
+- [ ] **Step 5: Commit** the fixes, if any — e.g. "Till floor map: fixes from looking at it in both
+  languages, both themes, on a phone and a till (A429 slice 3)", the message listing what was looked
+  at and where the screenshots are.
+
+**Slice 3 done when:** the focused tests above pass; `/finish-branch` runs the full wave; CI is green
+on the head (`ui`'s and `ui-core`'s mutation floors run only weekly, so the per-file Stryker runs
+above are the check); design-system.md names `wt-floor-map`; the backlog's A429 entry says slice 3
+landed and what it left.
 
 ## Slice 4 — today's plan on the till (spec §6)
 
@@ -2459,7 +3372,8 @@ Branch `feat/floor-plan-today`, after slice 3.
   become one new party seated at both, through the seat dialog (seat the first, join the second); a move of a fixed table sent to any route is refused (Review focus 5). Split on a
   free merge deletes the join and restores the positions; with a party it runs `splitTable` and
   restores the split table's position.
-- **Task 4.4: Dragging on the map** — long-press-drag moves a movable table (snap on release), drop
+- **Task 4.4: Dragging on the map** — (the map's hold feedback and `wt-table-drag-end` are built in
+  Tasks 3.2c and 3.2d; this task listens to them) long-press-drag moves a movable table (snap on release), drop
   on another table joins (asks seats when there is no saved join, suggesting the sum), a fixed
   table's copy follows the finger and springs back with a linking line; a party at several fixed
   tables is drawn in one colour with a thin linking line and one label; `Join with…` in the
