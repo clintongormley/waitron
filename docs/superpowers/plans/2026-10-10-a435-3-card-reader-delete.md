@@ -83,6 +83,9 @@ Each line is the default that will be built. The owner may overrule any of them 
    Enable, Unpair, a second Delete and adopting it are refused `reader.unpair_in_progress`; an
    adoption whose provider list was requested before an Unpair or Delete dropped the reader there
    is refused `reader.not_listed`._
+   _2026-10-10, A435 step 3b: when (a) plans no provider call, the same transaction also makes the
+   delete's writes (`startCardReaderDelete`, `apps/server/src/card-reader-delete.ts`), with no
+   second rules read; only a reader unpaired at its provider still takes three transactions._
 2. **A provider that cannot unpair (Stripe) does not block the delete.** Stripe's seat declares
    `canUnpair: false` (`packages/payments-stripe/src/card-provider.ts:191`) and its `remove` makes
    no call (`:234-236`), and the Unpair route refuses it (`payments-api.ts:645-646`). Default: the
@@ -90,12 +93,14 @@ Each line is the default that will be built. The owner may overrule any of them 
    stays at Stripe, where discovery offers it as a new reader.
 3. **"The provider cannot be reached" has two forms.** A still-paired reader whose provider can
    unpair but has no stored credential is a refusal in the impact, reusing
-   `reader.provider_disconnected` (registered at `apps/server/src/errors.ts:226`). A provider call
+   `reader.provider_disconnected` (registered at `apps/server/src/errors.ts:226`)
+   (_2026-10-10: no longer in the impact; see decision 18's note._). A provider call
    that fails answers a new code, **`reader.unpair_failed`** `{ providerId }`, HTTP 502. **It
    leaves the reader switched off** (step (a)'s write, decision 1) and changes nothing else: no
    link removed, `unpaired_at` and `deleted_at` still null. Its dashboard message says so (Task
-   5). An `AppError` the seat throws passes through with its own code. The Unpair route keeps
-   answering `server.internal` 500 on a failed call, as its test pins
+   5). An `AppError` the seat throws passes through with its own code (_2026-10-10, A435 step 3b:
+   except `credentials.missing`, which the delete answers as `reader.provider_disconnected`._).
+   The Unpair route keeps answering `server.internal` 500 on a failed call, as its test pins
    (`apps/server/src/payments-api.test.ts:1043-1044`).
 4. **The provider is looked up only for a reader that is still paired** (`unpaired_at` null), so
    an already-unpaired reader is deleted without consulting its provider at all, as the spec says.
@@ -104,7 +109,8 @@ Each line is the default that will be built. The owner may overrule any of them 
    route already does, and cannot be deleted until that provider is installed.
 5. **Impact keys.** Refusals: `reader.payment_in_progress` (params `{ readerId }`, targets the
    devices whose payments are in progress) and `reader.provider_disconnected` (params
-   `{ providerId }`, no targets), in that order. Ends: `provider_pairing` (one target,
+   `{ providerId }`, no targets) (_2026-10-10: no longer in the impact; see decision 18's note._),
+   in that order. Ends: `provider_pairing` (one target,
    `{ id: providerId, name: providerId }`). Removes: `device_reader`, `device_reader_default`,
    `profile_reader`, `profile_reader_default`, `reader_holder`. The holder is under removes because
    the spec lists `card_reader_holders` under "Removed"; printers listed theirs under ends
@@ -147,6 +153,9 @@ Each line is the default that will be built. The owner may overrule any of them 
 14. **The open dialog does not re-read when a provider is connected or disconnected**:
     `tenant_credentials` is not a live resource (`apps/dashboard/src/api/live-queries.ts:80`). The
     delete recomputes it anyway.
+    _2026-10-10, A435 step 3b: it still does not re-read live, but a Delete refused
+    `reader.provider_disconnected` reads the impact again (`#confirmDelete`,
+    `apps/dashboard/src/screens/payments-screen.ts`)._
 15. **No configuration-transfer change.** The payments module exports only `payment_policy`
     (`packages/payments/src/configuration-transfer.ts:1-4`), so no reader, choice or profile list
     travels.
@@ -162,6 +171,11 @@ Each line is the default that will be built. The owner may overrule any of them 
     account, or Unpair while connected, makes it deletable; Disable still works meanwhile. The same
     holds while the provider rejects the stored key, since every call fails. **Open question for
     the owner**; the default stands until answered.
+    _2026-10-10, owner: overridden by
+    [2026-10-10-a435-3b-reader-delete-disconnected.md](2026-10-10-a435-3b-reader-delete-disconnected.md):
+    a disconnected account no longer refuses the delete; the reader is deleted in Waitron only
+    after the confirmation says it stays registered there. While the account is connected, a
+    SumUp unpair call that fails (a rejected key included) still answers `reader.unpair_failed`._
 19. **The DELETE route says at its site why it is split** across transactions and what a refusal
     after the unpair leaves behind (CLAUDE.md §3: "Splitting one logical change across
     transactions is a commented decision"). One line, in Task 3.

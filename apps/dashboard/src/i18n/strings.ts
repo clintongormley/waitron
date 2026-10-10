@@ -2061,8 +2061,9 @@ export const en = {
   "payments.delete_loading": "Checking what will change…",
   "payments.delete_paying": "Payment in progress on {names}",
   "payments.delete_paying_unnamed": "A payment is in progress",
-  "payments.delete_connect_first": "Connect {provider} first",
   "payments.delete_pairing": "Unpairs it from {provider}",
+  "payments.delete_kept_at_provider":
+    "{provider} isn't connected, so the reader stays registered at {provider}. Remove it there too.",
   "payments.delete_device_reader": "Chosen on {count} devices: {names}",
   "payments.delete_device_reader_one": "Chosen on 1 device: {names}",
   "payments.delete_device_default": "Default on {count} devices: {names}",
@@ -4715,8 +4716,9 @@ export const es: Record<StringKey, string> = {
   "payments.delete_loading": "Comprobando qué cambiará…",
   "payments.delete_paying": "Cobro en curso en {names}",
   "payments.delete_paying_unnamed": "Hay un cobro en curso",
-  "payments.delete_connect_first": "Conecta primero {provider}",
   "payments.delete_pairing": "Se desvinculará de {provider}",
+  "payments.delete_kept_at_provider":
+    "{provider} no está conectado, así que el lector sigue registrado en {provider}. Elimínalo también allí.",
   "payments.delete_device_reader": "Elegido en {count} dispositivos: {names}",
   "payments.delete_device_reader_one": "Elegido en 1 dispositivo: {names}",
   "payments.delete_device_default": "Predeterminado en {count} dispositivos: {names}",

@@ -86,6 +86,9 @@ deleted while its provider's account is disconnected.
 - **Query-flag precedent.** The course delete takes `?disable=true`. The server parses it with
   `queryFlag` (`apps/server/src/report-api.ts:85-89`, used at `management-api.ts:2253`), and the
   client builds it the same way (`client.ts:2931-2936`).
+  _2026-10-11: #1521 (`8f2af6f95`), in this branch's base, removed the course delete's
+  `?disable=true` and `removeCourse`, which decision 12 also cites; `queryFlag` is now used by
+  `orders-api.ts`, `report-api.ts` and this route._
 
 ## Decisions this plan makes
 
@@ -120,6 +123,9 @@ Each line is what will be built. The owner may overrule any of them.
    dashboard sends it only when the impact it is showing at the moment of the press holds a
    `provider_registration_kept` line. Without it, a disconnected still-paired reader is refused
    `reader.provider_disconnected` (409), exactly as today, with nothing written.
+   _2026-10-11, finish-branch review: `queryFlag` also accepts `false`, which the route reads as no
+   acceptance and answers as it does without the flag (409); only a value other than `true` or
+   `false` is refused 400._
 5. **A dialog opened while the provider was connected re-reads its impact when the delete answers
    `reader.provider_disconnected`.** It shows no message of its own. The dialog shows "Checking
    what will change…" with Delete quiet and disabled while it reads; the old impact's lines stay
@@ -152,7 +158,8 @@ Each line is what will be built. The owner may overrule any of them.
    provider (it reads only whether a credential is stored, `card-reader-delete.ts:75-83`). The
    owner's rule is that the confirmation says so before the press, so following it here would need
    a provider call in the impact read or a second confirmation after the failed press;
-   (b) re-entering the key on the Payments screen fixes it, and the delete then unpairs properly;
+   (b) disconnecting and connecting again with a working key fixes it (Disconnect needs every
+   SumUp reader switched off first), and the delete then unpairs properly;
    (c) today's code does not distinguish a rejected key from an outage: SumUp's client puts the
    HTTP status only in a plain `Error`'s message (`packages/payments-sumup/src/sumup-client.ts:110`
    for 5xx, `:282-283` for 4xx), which the route records as reason `unknown` (backlog: "A failed
@@ -1039,10 +1046,10 @@ from the backlog, the decision recorded, and the fiscal guards green unedited.
     the confirmation says it stays registered at the provider; an unpair that fails leaves the
     reader disabled but not deleted". Leave the rest of the paragraph.
   - Spec, under "Card readers", after the existing 2026-10-10 note:
-    `_2026-10-10 (A435 step 3b, owner): while the provider's account is not connected, a
-    still-paired reader is deleted in Waitron only, once the confirmation has said it stays
-    registered there; while it is connected, a SumUp unpair call that fails still answers
-    `reader.unpair_failed`. See [the step 3b plan](../plans/2026-10-10-a435-3b-reader-delete-disconnected.md)._`
+    `_2026-10-10 (A435 step 3b, owner): a reader still paired at a provider that can unpair it
+    (SumUp) is deleted in Waitron only while that provider's account is not connected, once the
+    confirmation has said it stays registered there; while it is connected, a SumUp unpair call
+    that fails still answers `reader.unpair_failed`. See [the step 3b plan](../plans/2026-10-10-a435-3b-reader-delete-disconnected.md)._`
   - A435-3 plan: under decision 18 add `_2026-10-10, owner: overridden by
     [2026-10-10-a435-3b-reader-delete-disconnected.md](2026-10-10-a435-3b-reader-delete-disconnected.md):
     a disconnected account no longer refuses the delete; the reader is deleted in Waitron only
@@ -1054,12 +1061,14 @@ from the backlog, the decision recorded, and the fiscal guards green unedited.
   area: "**A Stripe reader's delete confirmation does not say the reader stays registered at
   Stripe**, which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b."
   In `docs/backlog/payments.md` under `## Decisions and deliberate limits` add: "**A reader still
-  paired at its provider is deleted in Waitron only while that provider's account is not
-  connected** (owner, 2026-10-10), after the confirmation says it stays registered there. While
-  the account is connected, a SumUp unpair call that fails, a rejected key included, still answers
-  `reader.unpair_failed` and leaves the reader switched off: a rejected key is found only when
+  paired at a provider that can unpair it (SumUp) is deleted in Waitron only while that provider's
+  account is not connected** (owner, 2026-10-10), after the confirmation says it stays registered
+  there. While the account is connected, a SumUp unpair call that fails, a rejected key
+  included, still answers `reader.unpair_failed` and leaves the reader switched off: a rejected
+  key is found only when
   Delete is pressed, because the impact read calls no provider, so the confirmation could not say
-  so beforehand; re-entering the key fixes it and the delete then unpairs; and today's code does
+  so beforehand; disconnecting and connecting again with a working key fixes it (Disconnect needs
+  every SumUp reader switched off first), and the delete then unpairs; and today's code does
   not tell a rejected key from an outage (backlog: "A failed SumUp unpair is logged with reason
   `unknown`"). Plan:
   `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`." Keep the
@@ -1117,7 +1126,8 @@ name. Read each report's findings, not the wrapper's exit status. CI must select
 `@waitron/server` and `@waitron/dashboard` (read the `changes` job's outputs). The PR description
 lists "Intentional changes to existing checks" below, and gives the owner the FYI: the rejected-key
 case stays as built (decision 8, with its three reasons: a rejected key is found only on the press,
-because the impact read calls no provider; re-entering the key fixes it; today's code does not tell
+because the impact read calls no provider; disconnecting and connecting again with a working key
+fixes it, once every SumUp reader is switched off; today's code does not tell
 it from an outage); the notice sits under "What will end", which he can overrule in favour of a
 separate section that would touch the shared dialog and the printer and device copy (decision 1);
 a disconnect that lands during a delete now answers `reader.provider_disconnected` (decision 13);

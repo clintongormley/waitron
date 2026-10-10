@@ -10,6 +10,7 @@ import {
   tenants,
   withTransaction,
   workingOrders,
+  type Database,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -27,6 +28,7 @@ import {
 } from "@waitron/payments";
 import {
   AppError,
+  type DeleteImpact,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -207,12 +209,16 @@ function cfgOf(venue: Venue): TillConfig {
   };
 }
 
-function mountApp(venue: Venue, providers: readonly CardProviderContribution[] = PROVIDERS): Hono {
+function mountApp(
+  venue: Venue,
+  providers: readonly CardProviderContribution[] = PROVIDERS,
+  db: Database = suite.db,
+): Hono {
   const app = new Hono();
   mountPaymentsApi(
     app,
     {
-      db: suite.db,
+      db,
       ...saleDeps(),
       cfg: cfgOf(venue),
       ring: RING,
@@ -1789,6 +1795,25 @@ describe("reader delete", () => {
     send(app, "GET", `${base}/readers/${id}/delete-impact`, { cookie: venue.managerCookie });
   const deleteOf = (app: Hono, venue: Venue, id: string) =>
     send(app, "DELETE", `${base}/readers/${id}`, { cookie: venue.managerCookie });
+  const deleteAccepting = (app: Hono, venue: Venue, id: string) =>
+    send(app, "DELETE", `${base}/readers/${id}?acceptRegistrationKept=true`, {
+      cookie: venue.managerCookie,
+    });
+  const kept = {
+    key: "provider_registration_kept",
+    count: 1,
+    targets: [{ id: "stripe", name: "stripe" }],
+  };
+  /** Paired, then disabled and its provider disconnected: disconnect refuses while it is active. */
+  async function disconnectedReader(app: Hono, venue: Venue) {
+    const paired = await pairedReader(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    expect((await send(app, "POST", `${base}/readers/${paired.id}/disable`, opts)).status).toBe(
+      204,
+    );
+    expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
+    return paired;
+  }
 
   it("refuses a caller without payments.manage, a malformed id, an unknown id and the demo reader, changing nothing", async () => {
     const venue = await seedVenue();
@@ -1916,27 +1941,172 @@ describe("reader delete", () => {
     expect((await readerRow(id)).deletedAt).toBeNull();
   });
 
-  it("refuses reader.provider_disconnected for a still-paired reader once its provider is disconnected", async () => {
+  it("deletes a still-paired reader in Waitron only once its provider is disconnected, and only when the delete accepts the notice", async () => {
     const venue = await seedVenue();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
-    const { id } = await pairedReader(app, venue);
-    const opts = { cookie: venue.managerCookie };
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
-    expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
+    const { id } = await disconnectedReader(app, venue);
+    await linkReader(venue, id);
     const row = await readerRow(id);
+    const links = await linksOf(id);
 
-    const impact = await impactOf(app, venue, id);
-    expect(((await impact.json()) as { refusals: unknown }).refusals).toEqual([
-      { code: "reader.provider_disconnected", params: { providerId: "stripe" }, targets: [] },
-    ]);
-    const res = await deleteOf(app, venue, id);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({
+    const impact = (await (await impactOf(app, venue, id)).json()) as DeleteImpact;
+    expect(impact.refusals).toEqual([]);
+    expect(impact.ends).toEqual([kept]);
+
+    const refused = await deleteOf(app, venue, id);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
       error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
     });
     expect(removed).toEqual([]);
     expect(await readerRow(id)).toEqual(row);
+    expect(await linksOf(id)).toEqual(links);
+
+    const deleted = await deleteAccepting(app, venue, id);
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual(impact);
+    expect(removed).toEqual([]);
+    const after = await readerRow(id);
+    expect(after).toEqual({ ...row, active: false, deletedAt: after.deletedAt });
+    expect(after.deletedAt).not.toBeNull();
+    expect(after.unpairedAt).toBeNull();
+    expect(await linksOf(id)).toEqual({ chosen: [], listed: [], held: [] });
+  });
+
+  it("unpairs at the provider as normal when it was connected again after the notice was shown", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id, ref } = await disconnectedReader(app, venue);
+    expect(((await (await impactOf(app, venue, id)).json()) as DeleteImpact).ends).toEqual([kept]);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+
+    const res = await deleteAccepting(app, venue, id);
+
+    expect(res.status).toBe(200);
+    expect(removed).toEqual([ref]);
+    const row = await readerRow(id);
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.unpairedAt).not.toBeNull();
+  });
+
+  it("answers reader.unpair_failed when a connected provider's call fails, even with the notice accepted", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat(async () => {
+      throw new Error("sumup DELETE reader: HTTP 401");
+    });
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    const before = await readerRow(id);
+
+    const res = await deleteAccepting(app, venue, id);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.unpair_failed", params: { providerId: "stripe" } },
+    });
+    expect(removed).toHaveLength(1);
+    const after = await readerRow(id);
+    expect(after).toEqual({ ...before, active: false, disabledAt: after.disabledAt });
+    expect(after.disabledAt).not.toBeNull();
+    expect(after.deletedAt).toBeNull();
+    expect(after.unpairedAt).toBeNull();
+  });
+
+  it("refuses a malformed acceptance flag, changing nothing", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id } = await disconnectedReader(app, venue);
+    const row = await readerRow(id);
+
+    const res = await send(app, "DELETE", `${base}/readers/${id}?acceptRegistrationKept=yes`, {
+      cookie: venue.managerCookie,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "acceptRegistrationKept" } },
+    });
+    expect(removed).toEqual([]);
+    expect(await readerRow(id)).toEqual(row);
+  });
+
+  it("checks and deletes in one transaction when no provider is called, so a connect during the delete cannot answer reader.unpair_failed", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    // Runs `afterLock` once, after the next write lock the app's requests release.
+    let afterLock: (() => Promise<void>) | undefined;
+    const db = new Proxy(suite.db, {
+      get(target, prop) {
+        if (prop === "withWriteLock")
+          return async <T>(fn: () => Promise<T>): Promise<T> => {
+            const value = await target.withWriteLock(fn);
+            const hook = afterLock;
+            afterLock = undefined;
+            await hook?.();
+            return value;
+          };
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const app = mountApp(venue, [seat], db);
+    const { id } = await disconnectedReader(app, venue);
+    afterLock = async () => {
+      expect((await connectStripe(app, venue)).status).toBe(200);
+    };
+
+    const res = await deleteAccepting(app, venue, id);
+
+    expect(afterLock).toBeUndefined();
+    expect(res.status).toBe(200);
+    expect(removed).toEqual([]);
+    const row = await readerRow(id);
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.unpairedAt).toBeNull();
+  });
+
+  it("answers reader.provider_disconnected when the provider is disconnected after the reader was switched off, then deletes in Waitron only once accepted", async () => {
+    const venue = await seedVenue();
+    let first = true;
+    const { seat, removed } = unpairingSeat(async () => {
+      if (!first) return;
+      first = false;
+      // No reader of this provider is active now, so the disconnect is allowed.
+      expect(
+        (
+          await send(app, "POST", `${base}/providers/stripe/disconnect`, {
+            cookie: venue.managerCookie,
+          })
+        ).status,
+      ).toBe(204);
+      await withTransaction(suite.db, (tx) =>
+        getCredential(tx, RING, { purpose: stripeSeat.credentialPurpose }),
+      );
+    });
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    await linkReader(venue, id);
+    const links = await linksOf(id);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+    });
+    const row = await readerRow(id);
+    expect(row.active).toBe(false);
+    expect(row.unpairedAt).toBeNull();
+    expect(row.deletedAt).toBeNull();
+    expect(await linksOf(id)).toEqual(links);
+    expect(((await (await impactOf(app, venue, id)).json()) as DeleteImpact).ends).toEqual([kept]);
+
+    expect((await deleteAccepting(app, venue, id)).status).toBe(200);
+    expect(removed).toHaveLength(1);
+    expect((await readerRow(id)).deletedAt).not.toBeNull();
   });
 
   it("deletes a reader already unpaired through Unpair without the provider, even once disconnected", async () => {
@@ -2393,6 +2563,31 @@ describe("reader delete", () => {
         { ...vendorOf(deletedFirst), status: "added" },
         { ...vendorOf(liveFirst), status: "added" },
       ]);
+    });
+
+    it("deleted in Waitron only while disconnected, is offered by discovery as new once connected again", async () => {
+      const venue = await seedVenue();
+      let listed: string[] = [];
+      const spies = spySeat(() => listed);
+      const app = mountApp(venue, [spies.seat]);
+      const opts = { cookie: venue.managerCookie };
+      const { id, ref } = await disconnectedReader(app, venue);
+      expect((await deleteAccepting(app, venue, id)).status).toBe(200);
+      const row = await readerRow(id);
+      expect((await connectStripe(app, venue)).status).toBe(200);
+      listed = [ref];
+
+      const available = await send(app, "GET", `${base}/providers/stripe/available-readers`, opts);
+      expect(await available.json()).toEqual([{ ...vendorOf(ref), status: "available" }]);
+      const adopted = await send(app, "POST", `${base}/readers/adopt`, {
+        ...opts,
+        body: { providerId: "stripe", providerRef: ref, name: "Counter" },
+      });
+      expect(adopted.status).toBe(201);
+      expect(((await adopted.json()) as { id: string }).id).not.toBe(id);
+      expect(await readerRow(id)).toEqual(row);
+      expect(row.unpairedAt).toBeNull();
+      expect(spies.removed).toEqual([]);
     });
 
     it("lets a new pairing take its provider id, as a new record", async () => {

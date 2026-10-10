@@ -76,9 +76,11 @@ import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js"
 import {
   deleteCardReader,
   markCardReaderUnpaired,
-  prepareCardReaderDelete,
   readCardReaderDeleteImpact,
+  startCardReaderDelete,
+  type CardReaderDeleteOptions,
 } from "./card-reader-delete.js";
+import { queryFlag } from "./report-api.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -524,30 +526,41 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Three transactions, not one: a transaction holds the database's only write lock
-      // (`packages/store/src/write-queue.ts:5`, `packages/db/src/tenancy.ts:19`), so a provider call
-      // inside one would make every other write wait on the network. A refusal after the unpair
-      // leaves the reader unpaired and switched off, as Unpair would, and not deleted.
+      const options: CardReaderDeleteOptions = {
+        acceptRegistrationKept: queryFlag(
+          c.req.query("acceptRegistrationKept"),
+          "acceptRegistrationKept",
+        ),
+      };
+      // A reader its provider must unpair takes three transactions, not one: a transaction holds the
+      // database's only write lock (`packages/store/src/write-queue.ts:5`,
+      // `packages/db/src/tenancy.ts:19`), so a provider call inside one would make every other write
+      // wait on the network. A refusal after the unpair leaves the reader unpaired and switched off,
+      // as Unpair would, and not deleted. Every other delete checks and acts in one transaction.
       return holdingReader(id, async (hold) => {
-        const plan = await gated(sessionId, (tx) => {
+        const first = await gated(sessionId, (tx) => {
           hold();
-          return prepareCardReaderDelete(tx, deps.providers, id);
+          return startCardReaderDelete(tx, deps.providers, id, new Date(), options);
         });
-        if (plan.unpairAtProvider) {
-          const seat = cardProviderById(deps.providers, plan.provider);
-          try {
-            await removeAtProvider(seat, plan.providerRef);
-          } catch (error) {
-            if (isAppError(error)) throw error;
-            throw new AppError(
-              "reader.unpair_failed",
-              { providerId: plan.provider },
-              { reason: codeOf(error) },
-            );
-          }
-          const unpairedAt = nowIso();
-          await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
+        if (first.deleted !== undefined) return c.json(first.deleted);
+        const { plan } = first;
+        const seat = cardProviderById(deps.providers, plan.provider);
+        try {
+          await removeAtProvider(seat, plan.providerRef);
+        } catch (error) {
+          // A disconnect can land once no reader of this provider is active, which step (a) may
+          // have just made true.
+          if (isAppError(error) && error.code === "credentials.missing")
+            throw new AppError("reader.provider_disconnected", { providerId: plan.provider });
+          if (isAppError(error)) throw error;
+          throw new AppError(
+            "reader.unpair_failed",
+            { providerId: plan.provider },
+            { reason: codeOf(error) },
+          );
         }
+        const unpairedAt = nowIso();
+        await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
         return c.json(await gated(sessionId, (tx) => deleteCardReader(tx, deps.providers, id)));
       });
     }),

@@ -29,8 +29,15 @@ export type CardReaderDeletePlan = {
   impact: DeleteImpact;
   provider: string;
   providerRef: string;
-  /** Still paired at a provider whose seat can unpair: the delete unpairs it there first. */
+  /**
+   * Still paired at a connected provider whose seat can unpair: the delete unpairs it there first.
+   */
   unpairAtProvider: boolean;
+};
+
+export type CardReaderDeleteOptions = {
+  /** The confirmation showed that the reader stays registered at its unconnected provider. */
+  acceptRegistrationKept?: boolean;
 };
 
 type RefusalCode = "reader.payment_in_progress" | "reader.provider_disconnected";
@@ -45,11 +52,15 @@ function refused<C extends RefusalCode>(
   return { refusal: { code, params, targets }, error: new AppError(code, params) };
 }
 
-/** The impact read, step (a) and the delete all call this, so each acts on exactly what it reports. */
+/**
+ * The impact read, step (a) and the delete all call this. The impact read passes
+ * `acceptRegistrationKept` true, so it reports what a delete sending the flag would do.
+ */
 async function cardReaderDeleteRules(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
   id: string,
+  acceptRegistrationKept: boolean,
 ): Promise<{ plan: CardReaderDeletePlan; refusals: Refused[] }> {
   const [reader] = await tx
     .select({
@@ -71,16 +82,17 @@ async function cardReaderDeleteRules(
   // An already-unpaired reader is deleted without consulting its provider (spec), so the seat is
   // looked up only while it is still paired.
   const seat = reader.unpairedAt === null ? cardProviderById(seats, reader.provider) : undefined;
-  const unpairAtProvider = seat?.readers.canUnpair === true;
+  const canUnpair = seat?.readers.canUnpair === true;
   const connected =
-    seat === undefined ||
-    !unpairAtProvider ||
+    canUnpair &&
     (
       await tx
         .select({ purpose: tenantCredentials.purpose })
         .from(tenantCredentials)
         .where(eq(tenantCredentials.purpose, seat.credentialPurpose))
     ).length > 0;
+  const unpairAtProvider = canUnpair && connected;
+  const registrationKept = canUnpair && !connected;
 
   const refusals: Refused[] = [];
   if (busy.length > 0) {
@@ -91,7 +103,7 @@ async function cardReaderDeleteRules(
       refused("reader.payment_in_progress", { readerId: id }, distinctTargets(devicesPaying)),
     );
   }
-  if (!connected)
+  if (registrationKept && !acceptRegistrationKept)
     refusals.push(refused("reader.provider_disconnected", { providerId: reader.provider }, []));
 
   const choosing = await tx
@@ -133,9 +145,12 @@ async function cardReaderDeleteRules(
     listed
       .filter((row) => !defaultOnly || row.isDefault)
       .map(({ id: profileId, name }) => ({ id: profileId, name }));
+  const provider = [{ id: reader.provider, name: reader.provider }];
   const ends: DeleteImpactItem[] = unpairAtProvider
-    ? [named("provider_pairing", [{ id: reader.provider, name: reader.provider }])]
-    : [];
+    ? [named("provider_pairing", provider)]
+    : registrationKept
+      ? [named("provider_registration_kept", provider)]
+      : [];
   const removes: DeleteImpactItem[] = [
     named("device_reader", choosing),
     named("device_reader_default", inheriting),
@@ -164,19 +179,23 @@ async function unrefusedRules(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
   id: string,
+  acceptRegistrationKept: boolean,
 ): Promise<CardReaderDeletePlan> {
-  const { plan, refusals } = await cardReaderDeleteRules(tx, seats, id);
+  const { plan, refusals } = await cardReaderDeleteRules(tx, seats, id, acceptRegistrationKept);
   if (refusals[0] !== undefined) throw refusals[0].error;
   return plan;
 }
 
-/** What deleting the reader would refuse, end and remove now; `reader.not_found` once deleted. */
+/**
+ * What a delete confirmed from this impact would refuse, end and remove now; `reader.not_found`
+ * once deleted.
+ */
 export async function readCardReaderDeleteImpact(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
   id: string,
 ): Promise<DeleteImpact> {
-  return (await cardReaderDeleteRules(tx, seats, id)).plan.impact;
+  return (await cardReaderDeleteRules(tx, seats, id, true)).plan.impact;
 }
 
 /**
@@ -190,8 +209,9 @@ export async function prepareCardReaderDelete(
   seats: readonly CardProviderContribution[],
   id: string,
   now = new Date(),
+  options: CardReaderDeleteOptions = {},
 ): Promise<CardReaderDeletePlan> {
-  const plan = await unrefusedRules(tx, seats, id);
+  const plan = await unrefusedRules(tx, seats, id, options.acceptRegistrationKept === true);
   if (plan.unpairAtProvider) {
     await tx
       .update(cardReaders)
@@ -202,6 +222,23 @@ export async function prepareCardReaderDelete(
       .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
   }
   return plan;
+}
+
+/**
+ * Step (a), and the whole delete when no provider call is planned, on one transaction: returns
+ * `deleted` once deleted, or only the plan when the caller must unpair at the provider first.
+ */
+export async function startCardReaderDelete(
+  tx: Transaction,
+  seats: readonly CardProviderContribution[],
+  id: string,
+  now = new Date(),
+  options: CardReaderDeleteOptions = {},
+): Promise<{ plan: CardReaderDeletePlan; deleted?: DeleteImpact }> {
+  const plan = await prepareCardReaderDelete(tx, seats, id, now, options);
+  if (plan.unpairAtProvider) return { plan };
+  await removeCardReader(tx, id, now);
+  return { plan, deleted: plan.impact };
 }
 
 /** Unpair's local write: active false, disabled_at and unpaired_at = at, undeleted rows only. */
@@ -226,10 +263,17 @@ export async function deleteCardReader(
   seats: readonly CardProviderContribution[],
   id: string,
   now = new Date(),
+  options: CardReaderDeleteOptions = {},
 ): Promise<DeleteImpact> {
-  const plan = await unrefusedRules(tx, seats, id);
+  const plan = await unrefusedRules(tx, seats, id, options.acceptRegistrationKept === true);
   if (plan.unpairAtProvider)
     throw new AppError("reader.unpair_failed", { providerId: plan.provider });
+  await removeCardReader(tx, id, now);
+  return plan.impact;
+}
+
+/** The delete's writes, for a plan computed on `tx` that needs no unpair. */
+async function removeCardReader(tx: Transaction, id: string, now: Date): Promise<void> {
   await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.readerId, id));
   await tx.delete(deviceProfileCardReaders).where(eq(deviceProfileCardReaders.readerId, id));
   await tx.delete(cardReaderHolders).where(eq(cardReaderHolders.readerId, id));
@@ -241,5 +285,4 @@ export async function deleteCardReader(
       disabledAt: sql`coalesce(${cardReaders.disabledAt}, ${now.toISOString()})`,
     })
     .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
-  return plan.impact;
 }
