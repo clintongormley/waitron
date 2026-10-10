@@ -536,6 +536,9 @@ async function mealVenue(weekdays: readonly number[] = [1]): Promise<Venue> {
 }
 
 const mondayAt = (time: string) => new Date(`2026-10-05T${time}:00+02:00`);
+/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
+const ticketClock = (at: Date) =>
+  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 
 async function editMealLine(v: Venue, id: string, patch: { quantity?: string; note?: string }) {
   const read = await send(v, "GET", `/api/working-orders/${id}`);
@@ -1546,7 +1549,11 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     });
 
     expect(await printed(c.downstairs.printerId)).toEqual([
-      expect.stringMatching(/^Downstairs bar\n[^]*\n13:00\nGROUP 1\n1\.000 x Mojito\n$/),
+      expect.stringMatching(
+        new RegExp(
+          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("13:00"))}\\nGROUP 1\\n1\\.000 x Mojito\\n$`,
+        ),
+      ),
     ]);
 
     at(mondayAt("13:55"));
@@ -1568,7 +1575,11 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       firedAt: mondayAt("14:10").toISOString(),
     });
     expect((await printed(c.downstairs.printerId)).slice(before)).toEqual([
-      expect.stringMatching(/^Downstairs bar\n[^]*\n14:10\nGROUP 2\n1\.000 x Mojito\n$/),
+      expect.stringMatching(
+        new RegExp(
+          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("14:10"))}\\nGROUP 2\\n1\\.000 x Mojito\\n$`,
+        ),
+      ),
     ]);
     expect(await printed(c.upstairs.printerId)).toEqual([]);
   });
