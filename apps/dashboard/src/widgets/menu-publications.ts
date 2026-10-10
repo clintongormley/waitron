@@ -30,7 +30,7 @@ import type {
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
@@ -40,11 +40,6 @@ const STATE_KEYS: Record<Edition["state"], StringKey> = {
   cancelled: "menu_publications.state_cancelled",
   activated: "menu_publications.state_activated",
 };
-
-/** Fills `{key}` placeholders; each value is inserted once, never re-read as a placeholder. */
-function fill(key: StringKey, values: Record<string, string>): string {
-  return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
-}
 
 function screenLocale(): string {
   return currentLocale().startsWith("es") ? "es-ES" : "en-GB";

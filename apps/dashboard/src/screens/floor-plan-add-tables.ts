@@ -4,6 +4,7 @@ import {
   automaticNames,
   baseStyles,
   draftScopeFor,
+  focusFirstInvalid,
   leaveCoordinatorFor,
   saveActionState,
   type DraftScope,
@@ -17,14 +18,13 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { addTables, type FloorPlanDraft } from "./floor-plan-draft.js";
-import type { FloorPlanChange } from "./floor-plan-editor.js";
+import { wholeWithin } from "../widgets/form-fields.js";
+import { MAX_SEATS, addTables, sendChange, type FloorPlanDraft } from "./floor-plan-draft.js";
 
 const MAX_TABLES = 100;
-const MAX_SEATS = 999;
 
 interface AddForm {
   count: string;
@@ -40,11 +40,6 @@ interface AddErrors {
   count: string;
   seats: string;
   names: string[];
-}
-
-function wholeIn(value: string, min: number, max: number): number | null {
-  const n = Number(value);
-  return value.trim() === "" || !Number.isInteger(n) || n < min || n > max ? null : n;
 }
 
 const copyForm = (form: AddForm): AddForm => ({ ...form, names: [...form.names] });
@@ -159,7 +154,7 @@ export class FloorPlanAddTables extends LitElement {
     const form = this.addForm;
     if (form === null) return;
     const next = { ...form, ...patch };
-    const count = wholeIn(next.count, 1, MAX_TABLES);
+    const count = wholeWithin(next.count, 1, MAX_TABLES);
     if (count !== null && count !== next.names.length) {
       next.names = Array.from({ length: count }, (_, i) => next.names[i] ?? "");
     }
@@ -176,8 +171,8 @@ export class FloorPlanAddTables extends LitElement {
   }
 
   #errors(form: AddForm): AddErrors {
-    const count = wholeIn(form.count, 1, MAX_TABLES);
-    const seatsValid = form.seats.trim() === "" || wholeIn(form.seats, 0, MAX_SEATS) !== null;
+    const count = wholeWithin(form.count, 1, MAX_TABLES);
+    const seatsValid = form.seats.trim() === "" || wholeWithin(form.seats, 0, MAX_SEATS) !== null;
     const errors: AddErrors = {
       count: count === null ? t("floor_plan_editor.count_invalid") : "",
       seats: seatsValid ? "" : t("floor_plan_editor.seats_invalid"),
@@ -205,40 +200,36 @@ export class FloorPlanAddTables extends LitElement {
     if (form === null) return;
     if (this.#failing(this.#errors(form))) {
       this.addChecked = true;
+      void this.updateComplete.then(() => {
+        const modal = this.#modal();
+        if (modal !== null) void focusFirstInvalid(modal);
+      });
       return;
     }
-    const count = wholeIn(form.count, 1, MAX_TABLES)!;
+    const count = wholeWithin(form.count, 1, MAX_TABLES)!;
     const labels =
       form.naming === "custom"
         ? form.names.map((name) => name.trim())
         : this.#automatic(form, count);
-    const seats = form.seats.trim() === "" ? null : Number(form.seats);
+    const seats = form.seats.trim() === "" ? null : wholeWithin(form.seats, 0, MAX_SEATS);
     const draft = addTables(
       this.draft,
       labels.map((label) => ({ label, seats, fixed: form.fixed })),
       this.nextKey,
     );
-    this.dispatchEvent(
-      new CustomEvent<FloorPlanChange>("floor-plan-change", {
-        detail: { draft },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    sendChange(this, draft);
     this.#addScope?.commit(copyForm(form));
     this.#modal()?.closeAfter("saved");
     this.#closeAdd();
   }
 
   #hint(form: AddForm): string {
-    const count = wholeIn(form.count, 1, MAX_TABLES);
+    const count = wholeWithin(form.count, 1, MAX_TABLES);
     if (count === null) return "";
     const names = this.#automatic(form, count);
     return count === 1
       ? names[0]!
-      : t("floor_plan_editor.name_range")
-          .replace("{first}", names[0]!)
-          .replace("{last}", names.at(-1)!);
+      : fill("floor_plan_editor.name_range", { first: names[0]!, last: names.at(-1)! });
   }
 
   override render() {
@@ -313,7 +304,7 @@ export class FloorPlanAddTables extends LitElement {
                         html`<wt-input
                           name="table-name"
                           required
-                          label=${t("floor_plan_editor.name_n").replace("{n}", String(i + 1))}
+                          label=${fill("floor_plan_editor.name_n", { n: String(i + 1) })}
                           .value=${name}
                           .error=${shown?.names[i] ?? ""}
                           @wt-change=${(e: CustomEvent<{ value: string }>) =>

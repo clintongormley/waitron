@@ -1,4 +1,4 @@
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -18,7 +18,5 @@ export function bookedReason(params: Record<string, unknown>): string {
     month: "short",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))));
-  return t("floor_plan_editor.booked").replace(/\{(date|time)\}/g, (_, slot: string) =>
-    slot === "date" ? day : time,
-  );
+  return fill("floor_plan_editor.booked", { date: day, time });
 }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type { WtButton, WtModal } from "@waitron/ui";
+import type { WtButton, WtFormActions, WtModal } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-add-join.js";
 import type { FloorPlanAddJoin } from "./floor-plan-add-join.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -78,6 +78,8 @@ const field = (el: FloorPlanAddJoin, name: string) =>
   dialog(el).querySelector<Field>(`[name=${name}]`)!;
 const confirm = (el: FloorPlanAddJoin) =>
   dialog(el).querySelector<WtButton>("wt-button[data-action=join-confirm]")!;
+const formError = (el: FloorPlanAddJoin) =>
+  dialog(el).querySelector<WtFormActions>("wt-form-actions")!.error;
 
 it("opens closed until shown, headed Join and its table's name", async () => {
   const el = await mount();
@@ -131,24 +133,47 @@ it("seats alone do not enable Add", async () => {
   expect(confirm(el).variant).toBe("secondary");
 });
 
-it("a seat count out of range holds Add and says why", async () => {
+it("a seat count out of range says nothing until Add is pressed, then holds Add and says why", async () => {
   const el = await mount();
   const changes = listen(el);
   await show(el);
   await chooseOptions(field(el, "join-tables"), ["live:l9"]);
-  for (const seats of ["0", "1000", "1.5"]) {
+  await chooseOption(field(el, "join-seats"), "0");
+  await el.updateComplete;
+  expect(field(el, "join-seats").error).toBe("");
+  expect(formError(el)).toBe("");
+  expect(confirm(el).variant).toBe("primary");
+  expect(confirm(el).disabled).toBe(false);
+  confirm(el).click();
+  await el.updateComplete;
+  expect(changes).toEqual([]);
+  expect(dialog(el).open).toBe(true);
+  for (const seats of ["0", "1000", "1.5", "1e1", " 5"]) {
     await chooseOption(field(el, "join-seats"), seats);
     await el.updateComplete;
     expect(confirm(el).disabled).toBe(true);
     expect(field(el, "join-seats").error).toBe("Enter 1 to 999.");
+    expect(formError(el)).toBe("Correct the highlighted fields to continue.");
   }
-  confirm(el).click();
-  await el.updateComplete;
-  expect(changes).toEqual([]);
   await chooseOption(field(el, "join-seats"), "999");
   await el.updateComplete;
   expect(field(el, "join-seats").error).toBe("");
+  expect(formError(el)).toBe("");
   expect(confirm(el).disabled).toBe(false);
+});
+
+it("a refused Add moves focus to the first field it marks", async () => {
+  const el = await mount();
+  await show(el, "m2");
+  await chooseOptions(field(el, "join-tables"), ["m1"]);
+  await chooseOption(field(el, "join-seats"), "0");
+  await el.updateComplete;
+  confirm(el).click();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "join-tables"));
+  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await el.updateComplete;
+  confirm(el).click();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "join-seats"));
 });
 
 it("Add join offers the zone's other tables only", async () => {
@@ -196,15 +221,18 @@ it("holds Add with a reason when the tables are already joined, in any order", a
   await chooseOptions(field(el, "join-tables"), ["m1"]);
   await chooseOption(field(el, "join-seats"), "8");
   await el.updateComplete;
-  expect(field(el, "join-tables").error).toBe("Already joined.");
-  expect(confirm(el).disabled).toBe(true);
-  expect(confirm(el).variant).toBe("secondary");
+  expect(field(el, "join-tables").error).toBe("");
+  expect(confirm(el).disabled).toBe(false);
   confirm(el).click();
   await el.updateComplete;
   expect(changes).toEqual([]);
+  expect(field(el, "join-tables").error).toBe("Already joined.");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  expect(confirm(el).disabled).toBe(true);
   await chooseOptions(field(el, "join-tables"), ["m1", "live:l9"]);
   await el.updateComplete;
   expect(field(el, "join-tables").error).toBe("");
+  expect(formError(el)).toBe("");
   expect(confirm(el).disabled).toBe(false);
 });
 
@@ -213,8 +241,32 @@ it("says Already joined in Spanish", async () => {
   const el = await mount();
   await show(el);
   await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await chooseOption(field(el, "join-seats"), "6");
+  await el.updateComplete;
+  confirm(el).click();
   await el.updateComplete;
   expect(field(el, "join-tables").error).toBe("Ya están unidas.");
+  expect(formError(el)).toBe("Corrige los campos marcados para continuar.");
+});
+
+it("opens without messages after a refused Add was cancelled", async () => {
+  const el = await mount();
+  await show(el);
+  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await chooseOption(field(el, "join-seats"), "0");
+  await el.updateComplete;
+  confirm(el).click();
+  await el.updateComplete;
+  expect(formError(el)).not.toBe("");
+  dialog(el).querySelector<HTMLElement>("wt-button[data-action=join-cancel]")!.click();
+  await expect.poll(() => dialog(el).open).toBe(false);
+  await closeReportsDelivered();
+  await show(el);
+  await chooseOptions(field(el, "join-tables"), ["m2"]);
+  await chooseOption(field(el, "join-seats"), "0");
+  await el.updateComplete;
+  expect(field(el, "join-seats").error).toBe("");
+  expect(formError(el)).toBe("");
 });
 
 it("re-keys its table and chosen tables when the page re-keys its draft", async () => {

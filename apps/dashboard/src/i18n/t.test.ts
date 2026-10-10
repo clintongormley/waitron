@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { currentLocale, setLocale, subscribeLocale, t } from "./t.js";
+import { currentLocale, fill, setLocale, subscribeLocale, t } from "./t.js";
 import { catalogues, en, es } from "./strings.js";
 
 afterEach(() => {
@@ -73,4 +73,12 @@ it.each([
   ["es-ES", "Buscar"],
 ])("labels the Home preview search simply in %s", (locale, label) => {
   expect(t("home.search", locale)).toBe(label);
+});
+
+it("fill inserts each value as written, never reading it as a pattern or a placeholder", () => {
+  setLocale("en-GB");
+  expect(fill("floor_plan_editor.name_range", { first: "A$&B {last}", last: "$1 $$" })).toBe(
+    "A$&B {last} to $1 $$",
+  );
+  expect(fill("floor_plan_editor.name_range", { first: "X" })).toBe("X to {last}");
 });

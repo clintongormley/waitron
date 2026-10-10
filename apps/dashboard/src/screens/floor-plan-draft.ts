@@ -1,5 +1,9 @@
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
+import { t } from "../i18n/t.js";
+
+/** The most seats a table or a join may hold. */
+export const MAX_SEATS = 999;
 
 export interface DraftTable {
   key: string;
@@ -20,6 +24,26 @@ export interface DraftJoin {
 export interface FloorPlanDraft {
   tables: DraftTable[];
   joins: DraftJoin[];
+}
+
+/** A panel or dialog's new draft for the page; changes sharing a `mergeKey` make one undo step. */
+export interface FloorPlanChange {
+  draft: FloorPlanDraft;
+  mergeKey?: string;
+}
+
+export function sendChange(host: EventTarget, draft: FloorPlanDraft, mergeKey?: string): void {
+  host.dispatchEvent(
+    new CustomEvent<FloorPlanChange>("floor-plan-change", {
+      detail: mergeKey === undefined ? { draft } : { draft, mergeKey },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+export function tableName(table: Pick<DraftTable, "label"> | undefined): string {
+  return table?.label.trim() || t("floor_plan_editor.unnamed");
 }
 
 type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>;
@@ -64,12 +88,16 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
   };
 }
 
-/** After a save: each key the answer names becomes that master id, as key and id (decision 4). */
+export function rekeyWith(ids: Readonly<Record<string, string>>): (key: string) => string {
+  return (key) => (Object.hasOwn(ids, key) ? ids[key]! : key);
+}
+
+/** After a save: each key the answer names becomes that master id, as key and id. */
 export function rekeyDraft(
   draft: FloorPlanDraft,
   ids: Readonly<Record<string, string>>,
 ): FloorPlanDraft {
-  const rekey = (key: string): string => (Object.hasOwn(ids, key) ? ids[key]! : key);
+  const rekey = rekeyWith(ids);
   return {
     tables: draft.tables.map((t) =>
       Object.hasOwn(ids, t.key) ? { ...t, key: ids[t.key]!, id: ids[t.key]! } : t,

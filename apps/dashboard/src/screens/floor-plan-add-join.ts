@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
+  focusFirstInvalid,
   leaveCoordinatorFor,
   saveActionState,
   type DraftScope,
@@ -14,13 +15,19 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { addJoin, type FloorPlanDraft } from "./floor-plan-draft.js";
-import type { FloorPlanChange } from "./floor-plan-editor.js";
+import { wholeWithin } from "../widgets/form-fields.js";
+import {
+  MAX_SEATS,
+  addJoin,
+  rekeyWith,
+  sendChange,
+  tableName,
+  type FloorPlanDraft,
+} from "./floor-plan-draft.js";
 
 const MIN_SEATS = 1;
-const MAX_SEATS = 999;
 
 interface JoinForm {
   tableKey: string;
@@ -39,11 +46,16 @@ function sameForm(a: JoinForm, b: JoinForm): boolean {
   );
 }
 
-function seatsOf(value: string): number | null {
-  if (!/^\d+$/.test(value)) return null;
-  const n = Number(value);
-  return n < MIN_SEATS || n > MAX_SEATS ? null : n;
+interface JoinErrors {
+  tables: string;
+  seats: string;
 }
+
+const failing = (errors: JoinErrors): boolean => errors.tables !== "" || errors.seats !== "";
+
+/** Add waits, drawn quiet, until a table and the seats are chosen. */
+const complete = (form: JoinForm, present: readonly string[]): boolean =>
+  present.length > 0 && form.seats !== "";
 
 /** The editor's Add join dialog. The page owns it, outside the side panel, which is re-created
  *  when the page crosses its narrow width and would take an open dialog with it. */
@@ -70,6 +82,8 @@ export class FloorPlanAddJoin extends LitElement {
   @property({ attribute: false }) draftParent: object | undefined;
 
   @state() private form: JoinForm | null = null;
+  /** Set by a refused Add; from then on the dialog shows its problems as they are fixed. */
+  @state() private checked = false;
 
   readonly #id = {};
   #scope?: DraftScope<JoinForm>;
@@ -101,6 +115,7 @@ export class FloorPlanAddJoin extends LitElement {
 
   show(tableKey: string): void {
     if (this.form !== null) return;
+    this.checked = false;
     this.form = { tableKey, others: [], seats: "" };
   }
 
@@ -108,7 +123,7 @@ export class FloorPlanAddJoin extends LitElement {
   rekey(ids: Readonly<Record<string, string>>): void {
     const form = this.form;
     if (form === null) return;
-    const rekey = (key: string): string => (Object.hasOwn(ids, key) ? ids[key]! : key);
+    const rekey = rekeyWith(ids);
     this.form = { ...form, tableKey: rekey(form.tableKey), others: form.others.map(rekey) };
     this.#scope?.changed();
   }
@@ -117,6 +132,7 @@ export class FloorPlanAddJoin extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.form = null;
+    this.checked = false;
   }
 
   #modal(): WtModal | null {
@@ -140,17 +156,12 @@ export class FloorPlanAddJoin extends LitElement {
   #options(form: JoinForm): { value: string; label: string }[] {
     return this.draft.tables
       .filter((table) => table.key !== form.tableKey)
-      .map((table) => ({
-        value: table.key,
-        label: table.label.trim() || t("floor_plan_editor.unnamed"),
-      }));
+      .map((table) => ({ value: table.key, label: tableName(table) }));
   }
 
   #heading(form: JoinForm): string {
-    const name =
-      this.draft.tables.find((table) => table.key === form.tableKey)?.label.trim() ||
-      t("floor_plan_editor.unnamed");
-    return t("floor_plan_editor.join_heading").replace("{name}", () => name);
+    const name = tableName(this.draft.tables.find((table) => table.key === form.tableKey));
+    return fill("floor_plan_editor.join_heading", { name });
   }
 
   /** The chosen tables the draft still holds. */
@@ -158,23 +169,34 @@ export class FloorPlanAddJoin extends LitElement {
     return form.others.filter((key) => this.draft.tables.some((t) => t.key === key));
   }
 
-  #alreadyJoined(form: JoinForm): boolean {
-    const members = new Set([form.tableKey, ...this.#present(form)]);
-    return this.draft.joins.some(
+  #errors(form: JoinForm, present: readonly string[]): JoinErrors {
+    const members = new Set([form.tableKey, ...present]);
+    const joined = this.draft.joins.some(
       (join) =>
         join.tableKeys.length === members.size && join.tableKeys.every((key) => members.has(key)),
     );
-  }
-
-  #ready(form: JoinForm): boolean {
-    return (
-      this.#present(form).length > 0 && seatsOf(form.seats) !== null && !this.#alreadyJoined(form)
-    );
+    return {
+      tables: joined ? t("floor_plan_editor.already_joined") : "",
+      seats:
+        wholeWithin(form.seats, MIN_SEATS, MAX_SEATS) === null
+          ? t("floor_plan_editor.join_seats_invalid")
+          : "",
+    };
   }
 
   #add(): void {
     const form = this.form;
-    if (form === null || !this.#ready(form) || saveActionState(this.#scope).unchanged) return;
+    if (form === null || saveActionState(this.#scope).unchanged) return;
+    const present = this.#present(form);
+    if (!complete(form, present)) return;
+    if (failing(this.#errors(form, present))) {
+      this.checked = true;
+      void this.updateComplete.then(() => {
+        const modal = this.#modal();
+        if (modal !== null) void focusFirstInvalid(modal);
+      });
+      return;
+    }
     if (!this.draft.tables.some((t) => t.key === form.tableKey)) {
       this.#scope?.commit(copyForm(form));
       this.#modal()?.closeAfter("saved");
@@ -183,17 +205,11 @@ export class FloorPlanAddJoin extends LitElement {
     }
     const draft = addJoin(
       this.draft,
-      [form.tableKey, ...this.#present(form)],
-      seatsOf(form.seats)!,
+      [form.tableKey, ...present],
+      wholeWithin(form.seats, MIN_SEATS, MAX_SEATS)!,
       this.nextJoinKey(),
     );
-    this.dispatchEvent(
-      new CustomEvent<FloorPlanChange>("floor-plan-change", {
-        detail: { draft },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    sendChange(this, draft);
     this.#scope?.commit(copyForm(form));
     this.#modal()?.closeAfter("saved");
     this.#close();
@@ -201,14 +217,11 @@ export class FloorPlanAddJoin extends LitElement {
 
   override render() {
     const form = this.form;
+    const present = form === null ? [] : this.#present(form);
+    const shown = form !== null && this.checked ? this.#errors(form, present) : null;
+    const blocked = shown !== null && failing(shown);
     const action = saveActionState(this.#scope);
-    const ready = form !== null && this.#ready(form) && !action.unchanged;
-    const seatsError =
-      form !== null && form.seats !== "" && seatsOf(form.seats) === null
-        ? t("floor_plan_editor.join_seats_invalid")
-        : "";
-    const tablesError =
-      form !== null && this.#alreadyJoined(form) ? t("floor_plan_editor.already_joined") : "";
+    const able = form !== null && complete(form, present) && !action.unchanged;
     return html`<wt-modal
       data-dialog="add-join"
       size="standard"
@@ -230,8 +243,8 @@ export class FloorPlanAddJoin extends LitElement {
                 required
                 label=${t("floor_plan_editor.tables")}
                 .options=${this.#options(form)}
-                .values=${this.#present(form)}
-                .error=${tablesError}
+                .values=${present}
+                .error=${shown?.tables ?? ""}
                 @wt-change=${(e: CustomEvent<{ values: string[] }>) => {
                   e.stopPropagation();
                   this.#edit({ others: [...e.detail.values] });
@@ -244,7 +257,7 @@ export class FloorPlanAddJoin extends LitElement {
                 .min=${MIN_SEATS}
                 .max=${MAX_SEATS}
                 .value=${form.seats}
-                .error=${seatsError}
+                .error=${shown?.seats ?? ""}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => {
                   e.stopPropagation();
                   this.#edit({ seats: e.detail.value });
@@ -252,7 +265,7 @@ export class FloorPlanAddJoin extends LitElement {
               ></wt-number-stepper>
             </div>`
       }
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${blocked ? t("form.fix_fields") : ""}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -261,8 +274,8 @@ export class FloorPlanAddJoin extends LitElement {
           >${t("action.cancel")}</wt-button
         ><wt-button
           data-action="join-confirm"
-          variant=${ready ? action.variant : "secondary"}
-          ?disabled=${!ready}
+          variant=${able ? action.variant : "secondary"}
+          ?disabled=${!able || blocked}
           @click=${() => this.#add()}
           >${t("action.add")}</wt-button
         ></wt-form-actions

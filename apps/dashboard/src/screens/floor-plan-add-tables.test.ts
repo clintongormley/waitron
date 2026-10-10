@@ -292,3 +292,35 @@ it("opens afresh after an add", async () => {
   expect(addField(el, "table-count").value).toBe("1");
   expect(preview(el)).toBe("Terrace 12");
 });
+
+it("a refused Add moves focus to the first field it marks", async () => {
+  const el = await openAdd();
+  await setNames(el, ["Patio 1", "Terrace 2"]);
+  await pressAdd(el);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(nameFields(el)[1]);
+  await set(el, addField(el, "table-count"), "0");
+  await pressAdd(el);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(addField(el, "table-count"));
+});
+
+it("a count or seats written as other than plain digits is refused", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  for (const value of ["1e1", " 5", "0x2"]) {
+    await set(el, addField(el, "table-count"), value);
+    await pressAdd(el);
+    expect(addField(el, "table-count").error).toBe("Enter 1 to 100.");
+  }
+  await set(el, addField(el, "table-count"), "2");
+  await set(el, addField(el, "seats"), "1e1");
+  await pressAdd(el);
+  expect(addField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(changes).toEqual([]);
+});
+
+it("the preview shows a prefix holding $& as typed", async () => {
+  const el = await openAdd();
+  await set(el, addField(el, "prefix"), "A$&B");
+  await set(el, addField(el, "table-count"), "3");
+  expect(preview(el)).toBe("A$&B 1 to A$&B 3");
+});

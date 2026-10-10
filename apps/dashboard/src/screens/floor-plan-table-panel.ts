@@ -7,10 +7,12 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
+import { wholeWithin } from "../widgets/form-fields.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { PlanPlacement } from "../api/client.js";
 import {
+  MAX_SEATS,
   deleteTable,
   isAdoptable,
   patchTable,
@@ -28,7 +30,6 @@ import type {
   FloorPlanTypedField,
 } from "./floor-plan-editor.js";
 
-const MAX_SEATS = 999;
 const MIN_SIZE = 1;
 const MAX_SIZE = 99;
 const ROTATION_STEP = 15;
@@ -38,12 +39,6 @@ const ROTATIONS = Array.from({ length: TURN / ROTATION_STEP }, (_, i) => {
   const degrees = String(i * ROTATION_STEP);
   return { value: degrees, label: `${degrees}°` };
 });
-
-function wholeIn(value: string, min: number, max: number): number | null {
-  if (!/^\d+$/.test(value)) return null;
-  const n = Number(value);
-  return n < min || n > max ? null : n;
-}
 
 function value(event: CustomEvent<{ value: string }>): string {
   event.stopPropagation();
@@ -151,7 +146,7 @@ export class FloorPlanTablePanel extends LitElement {
   }
 
   #seats(value: string): void {
-    const seats = value === "" ? null : wholeIn(value, 0, MAX_SEATS);
+    const seats = value === "" ? null : wholeWithin(value, 0, MAX_SEATS);
     if (value !== "" && seats === null) {
       this.#refuse("seats", value, () => t("floor_plan_editor.seats_invalid"));
       return;
@@ -165,7 +160,7 @@ export class FloorPlanTablePanel extends LitElement {
   }
 
   #size(table: DraftTable, field: "width" | "height", value: string): void {
-    const size = wholeIn(value, MIN_SIZE, MAX_SIZE);
+    const size = wholeWithin(value, MIN_SIZE, MAX_SIZE);
     if (size === null) {
       this.#refuse(field, value, () => t("floor_plan_editor.size_invalid"));
       return;
@@ -206,12 +201,11 @@ export class FloorPlanTablePanel extends LitElement {
       .join(", ");
   }
 
-  /** Names go in last and through a function, so a name holding `{seats}` or `$&` stays as typed. */
   #joinText(tableKeys: string[], seats: number): string {
-    const names = this.#otherNames(tableKeys);
-    return t("floor_plan_editor.join_with")
-      .replace("{seats}", String(seats))
-      .replace("{tables}", () => names);
+    return fill("floor_plan_editor.join_with", {
+      seats: String(seats),
+      tables: this.#otherNames(tableKeys),
+    });
   }
 
   #joins() {

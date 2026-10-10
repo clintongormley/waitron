@@ -15,10 +15,14 @@ export interface FieldContext {
   error: (key: string) => string;
 }
 
-export function wholeWithin(text: string, minimum: number): number | null {
+export function wholeWithin(
+  text: string,
+  minimum: number,
+  maximum: number = MAX_MODIFIER_INTEGER,
+): number | null {
   if (!/^\d+$/.test(text)) return null;
   const value = Number(text);
-  return value >= minimum && value <= MAX_MODIFIER_INTEGER ? value : null;
+  return value >= minimum && value <= maximum ? value : null;
 }
 
 export const isModifierQuantity = (text: string) => wholeWithin(text, 1) !== null;
