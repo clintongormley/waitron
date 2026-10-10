@@ -127,7 +127,7 @@ import {
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { followersOf, readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import {
   createWatcher,
@@ -462,13 +462,10 @@ function optionalId(value: unknown, field: string): string | undefined {
 }
 
 /**
- * The shape of a floor-plan save; `checkZonePlanSave` checks the values. Accepts the read shape
- * back: a null id or live table is absent, and a master table's own live table is dropped.
+ * The shape of a floor-plan save; `checkZonePlanSave` checks the values. A null id or live table
+ * is absent, as the read shape sends them.
  */
-function parseZonePlanSave(
-  body: unknown,
-  liveOf: ReadonlyMap<string, string | null>,
-): ZonePlanSave {
+function parseZonePlanSave(body: unknown): ZonePlanSave {
   const refuse = (field: string): never => {
     throw new AppError("management.request_invalid", { field });
   };
@@ -487,10 +484,7 @@ function parseZonePlanSave(
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
       const id = optionalId(table.id, `${at}.id`);
-      let liveTableId = optionalId(table.liveTableId, `${at}.liveTableId`);
-      if (id !== undefined && liveTableId !== undefined && liveOf.get(id) === liveTableId) {
-        liveTableId = undefined;
-      }
+      const liveTableId = optionalId(table.liveTableId, `${at}.liveTableId`);
       return {
         ...(id === undefined ? {} : { id }),
         ...(liveTableId === undefined ? {} : { liveTableId }),
@@ -1830,15 +1824,20 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<unknown>(c);
+      const input = parseZonePlanSave(await readJsonBody<unknown>(c));
       const now = new Date();
       const saved = await withVenueAuth(deps, sessionId, async (tx) => {
-        const current = await readZonePlan(tx, cfg, id);
-        const liveOf = new Map(
-          current.tables.flatMap((t) => (t.id === null ? [] : [[t.id, t.liveTableId] as const])),
+        // The read shape sends each master table with its own live table; that one is not an adoption.
+        const own = await followersOf(
+          tx,
+          input.tables.flatMap((t) => (t.id === undefined ? [] : [t.id])),
         );
-        const input = parseZonePlanSave(body, liveOf);
-        return saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, input, now);
+        const tables = input.tables.map(({ liveTableId, ...table }) =>
+          table.id !== undefined && liveTableId === own.get(table.id)
+            ? table
+            : { ...table, ...(liveTableId === undefined ? {} : { liveTableId }) },
+        );
+        return saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, { ...input, tables }, now);
       });
       return c.json(saved);
     }),

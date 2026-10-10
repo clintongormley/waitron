@@ -82,7 +82,11 @@ async function mastersOf(tx: Transaction, planId: string) {
 }
 
 /** Live tables following any of `masterIds`, by master id. */
-async function followersOf(tx: Transaction, masterIds: string[]): Promise<Map<string, string>> {
+/** Each master table's live table, for the masters that have one. */
+export async function followersOf(
+  tx: Transaction,
+  masterIds: string[],
+): Promise<Map<string, string>> {
   if (masterIds.length === 0) return new Map();
   const rows = await tx
     .select({ id: diningTables.id, planTableId: diningTables.planTableId })

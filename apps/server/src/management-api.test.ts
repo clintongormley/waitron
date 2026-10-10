@@ -2263,7 +2263,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       .map((station) => station.id);
     const before = await listStations();
     for (const [cookie, status] of [
-      ["", 401],
+      [undefined, 401],
       [staffCookie, 403],
       [supervisorCookie, 403],
     ] as const) {
