@@ -21,6 +21,7 @@ import {
   MAX_ORDER_PAGE_SIZE,
   ORDER_STATUS_FILTERS,
   listOrderStaff,
+  isNumberSearch,
   listOrders,
   readOrderDetail,
   type OrderCursor,
@@ -43,7 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 const run = createErrorBoundary(STATUS, "orders.failed");
 
-const CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(.+)$/;
+const CURSOR = /^(?:(\d{1,16})_)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(.+)$/;
 const PAGE_SIZE = /^[1-9]\d{0,2}$/;
 const TEXT_MAX = 100;
 
@@ -56,11 +57,19 @@ function optionalText(raw: string | undefined, field: string): string | undefine
   return trimmed === "" ? undefined : trimmed;
 }
 
-function requireCursor(raw: string | undefined): OrderCursor | undefined {
+/** A ranked cursor belongs to a word search, and a word search takes only a ranked cursor. */
+function requireCursor(
+  raw: string | undefined,
+  search: string | undefined,
+): OrderCursor | undefined {
   if (raw === undefined) return undefined;
   const match = CURSOR.exec(raw);
-  if (match === null || !isUuid(match[2]!)) throw invalid("after");
-  return { at: match[1]!, id: match[2]!.toLowerCase() };
+  if (match === null || !isUuid(match[3]!)) throw invalid("after");
+  const words = search !== undefined && !isNumberSearch(search);
+  if (words !== (match[1] !== undefined)) throw invalid("after");
+  const cursor = { at: match[2]!, id: match[3]!.toLowerCase() };
+  // A number, never the text: SQLite sorts every number below every text.
+  return words ? { rank: Number(match[1]), ...cursor } : cursor;
 }
 
 /** Each refusal names the query field, so the screen can show it under that control. */
@@ -84,6 +93,7 @@ export function parseOrdersQuery(query: (name: string) => string | undefined): {
   const limit = query("limit");
   if (limit !== undefined && (!PAGE_SIZE.test(limit) || Number(limit) > MAX_ORDER_PAGE_SIZE))
     throw invalid("limit");
+  const search = optionalText(query("q"), "q");
   return {
     dates,
     filter: {
@@ -91,9 +101,9 @@ export function parseOrdersQuery(query: (name: string) => string | undefined): {
       credited: queryFlag(query("credited"), "credited"),
       staffId: staff?.toLowerCase(),
       table: optionalText(query("table"), "table"),
-      search: optionalText(query("q"), "q"),
+      search,
       limit: limit === undefined ? DEFAULT_ORDER_PAGE_SIZE : Number(limit),
-      after: requireCursor(query("after")),
+      after: requireCursor(query("after"), search),
     },
   };
 }
@@ -149,7 +159,10 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
       });
       return c.json({
         rows: answer.rows,
-        next: answer.next === null ? null : `${answer.next.at}_${answer.next.id}`,
+        next:
+          answer.next === null
+            ? null
+            : `${answer.next.rank === undefined ? "" : `${answer.next.rank}_`}${answer.next.at}_${answer.next.id}`,
         from: answer.range?.from ?? null,
         to: answer.range?.to ?? null,
       });

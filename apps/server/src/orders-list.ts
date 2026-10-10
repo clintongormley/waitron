@@ -47,6 +47,8 @@ export type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
 export const DEFAULT_ORDER_PAGE_SIZE = 50;
 export const MAX_ORDER_PAGE_SIZE = 200;
 export interface OrderCursor {
+  /** The row's search rank key; present exactly when the list is searched by words. */
+  rank?: number;
   at: string;
   id: string;
 }
@@ -200,10 +202,24 @@ interface RawRow extends Record<string, unknown> {
   status: OrderStatus;
   departed_at: string | null;
   credited: number;
+  search_rank?: number;
 }
 
-function likePattern(text: string): string {
-  return `%${text.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+const INVOICE_SEARCH = /^([^/\s]+)\s*\/\s*(\d{1,9})$/;
+const BARE_NUMBER = /^\d{1,9}$/;
+
+/** `A/12` or a bare number: searched as that number exactly, not as words. */
+export function isNumberSearch(search: string): boolean {
+  const trimmed = search.trim();
+  return INVOICE_SEARCH.test(trimmed) || BARE_NUMBER.test(trimmed);
+}
+
+/** The text a word search hands the matcher, untrimmed; undefined when the list is not searched by words. */
+function wordSearch(filter: OrderListFilter): string | undefined {
+  const { search } = filter;
+  return search === undefined || search.trim() === "" || isNumberSearch(search)
+    ? undefined
+    : search;
 }
 
 /**
@@ -211,24 +227,17 @@ function likePattern(text: string): string {
  * with that order number: the ticket shows the order number, and a bill sent under
  * ticket_then_pay has no invoice number yet.
  */
-function searchClause(search: string): SQL {
-  const invoice = /^([^/\s]+)\s*\/\s*(\d{1,9})$/.exec(search);
-  const bare = /^\d{1,9}$/.test(search) ? Number(search) : undefined;
-  if (invoice !== null || bare !== undefined) {
-    const number = invoice !== null ? Number(invoice[2]) : bare!;
-    const code = invoice !== null ? sql` and xs.code = ${invoice[1]} collate nocase` : sql``;
-    const byInvoice = sql`exists (select 1 from sales x join invoice_series xs on xs.id = x.series_id
-      where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id) and x.invoice_number = ${number}${code})`;
-    return bare === undefined
-      ? byInvoice
-      : sql`(${byInvoice} or (r.kind = 'bill' and r.order_number = ${bare}))`;
-  }
-  // LIKE folds ASCII letter case only; a non-ASCII letter matches in its own case.
-  const pattern = likePattern(search);
-  return sql`(r.party_name like ${pattern} escape '\\'
-    or r.delivery_label like ${pattern} escape '\\'
-    or exists (select 1 from party_tables pt join dining_tables dt on dt.id = pt.table_id
-               where pt.party_id = r.party_id and dt.label like ${pattern} escape '\\'))`;
+function numberClause(search: string): SQL {
+  const trimmed = search.trim();
+  const invoice = INVOICE_SEARCH.exec(trimmed);
+  const bare = BARE_NUMBER.test(trimmed) ? Number(trimmed) : undefined;
+  const number = invoice !== null ? Number(invoice[2]) : bare!;
+  const code = invoice !== null ? sql` and xs.code = ${invoice[1]} collate nocase` : sql``;
+  const byInvoice = sql`exists (select 1 from sales x join invoice_series xs on xs.id = x.series_id
+    where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id) and x.invoice_number = ${number}${code})`;
+  return bare === undefined
+    ? byInvoice
+    : sql`(${byInvoice} or (r.kind = 'bill' and r.order_number = ${bare}))`;
 }
 
 /** A bill credits its lines' staff; a billless sale credits the person who rang it. */
@@ -275,7 +284,10 @@ function filterClauses(filter: OrderListFilter): SQL[] {
     clauses.push(sql`exists (select 1 from sales c where c.corrects_sale_id = r.sale_id)`);
   if (filter.staffId !== undefined) clauses.push(staffClause(filter.staffId));
   if (filter.table !== undefined) clauses.push(tableClause(filter.table));
-  if (filter.search !== undefined) clauses.push(searchClause(filter.search));
+  const words = wordSearch(filter);
+  if (words !== undefined) clauses.push(sql`r.search_rank is not null`);
+  else if (filter.search !== undefined && isNumberSearch(filter.search))
+    clauses.push(numberClause(filter.search));
   if (filter.collectable === true) {
     clauses.push(sql`r.kind = 'bill'
       and (case when r.sale_id is not null
@@ -287,24 +299,46 @@ function filterClauses(filter: OrderListFilter): SQL[] {
   if (filter.orderIn !== undefined) clauses.push(filter.orderIn(sql`r.id`));
   if (filter.after !== undefined) {
     const { at, id } = filter.after;
-    clauses.push(sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`);
+    const newer = sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`;
+    if (words === undefined) clauses.push(newer);
+    else {
+      const { rank } = filter.after;
+      // Bound as a number: SQLite sorts every number below every text, so a text rank compares wrong.
+      if (typeof rank !== "number")
+        throw new AppError("management.request_invalid", { field: "after" });
+      clauses.push(sql`(r.search_rank > ${rank} or (r.search_rank = ${rank} and ${newer}))`);
+    }
   }
   return clauses;
 }
 
 /**
- * One page of rows, newest first by `at` then id. At most seven queries whatever the page holds:
- * the page, then the invoices' amounts due, payments before an invoice (two), credit-note numbers,
+ * One page of rows: closest match first when searched by words, then newest first by `at`, then
+ * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due, payments before an invoice (two), credit-note numbers,
  * tables and staff, each for the whole page and each skipped when the page has nothing to ask.
  */
 export function ordersPageSql(filter: OrderListFilter): SQL {
   const clauses = filterClauses(filter);
   const where = clauses.length === 0 ? sql`1` : sql.join(clauses, sql` and `);
-  return sql`
+  const words = wordSearch(filter);
+  if (words === undefined)
+    return sql`
     with r as (${rowsSql(filter)})
     select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
     from r where ${where}
     order by r.at desc, r.id desc
+    limit ${filter.limit + 1}`;
+  return sql`
+    with base as (${rowsSql(filter)}),
+    r as (
+      select base.*, waitron_search_rank(${words}, base.party_name, base.delivery_label,
+        (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
+         where pt.party_id = base.party_id)) as search_rank
+      from base
+    )
+    select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
+    from r where ${where}
+    order by r.search_rank, r.at desc, r.id desc
     limit ${filter.limit + 1}`;
 }
 
@@ -312,7 +346,14 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
   const { rows: read } = await tx.execute<RawRow>(ordersPageSql(filter));
   const raw = read.slice(0, filter.limit);
   const last = raw[filter.limit - 1];
-  const next = read.length > filter.limit ? { at: last!.at, id: last!.id } : null;
+  const next =
+    read.length > filter.limit
+      ? {
+          ...(wordSearch(filter) === undefined ? {} : { rank: Math.trunc(last!.search_rank!) }),
+          at: last!.at,
+          id: last!.id,
+        }
+      : null;
 
   const bills = raw.filter((row) => row.kind === "bill");
   const owing = bills.filter((row) => OWING.includes(row.status));
