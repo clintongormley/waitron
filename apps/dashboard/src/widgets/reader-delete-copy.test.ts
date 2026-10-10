@@ -22,7 +22,6 @@ type Language = {
   fixed: string[];
   paying: string;
   payingUnnamed: string;
-  disconnected: string;
   unknownRefusal: string;
   lines: [DeleteImpactItem, string][];
 };
@@ -43,10 +42,13 @@ const languages: Language[] = [
     ],
     paying: "Payment in progress on Handheld Ana, Bar till",
     payingUnnamed: "A payment is in progress",
-    disconnected: "Connect SumUp first",
     unknownRefusal: "That card reader no longer exists: Handheld Ana",
     lines: [
       [item("provider_pairing", [sumup]), "Unpairs it from SumUp"],
+      [
+        item("provider_registration_kept", [sumup]),
+        "SumUp isn't connected, so the reader stays registered at SumUp. Remove it there too.",
+      ],
       [item("device_reader", [bar, ana]), "Chosen on 2 devices: Bar till, Handheld Ana"],
       [item("device_reader"), "Chosen on 1 device: Handheld Ana"],
       [item("device_reader_default", [bar, ana]), "Default on 2 devices: Bar till, Handheld Ana"],
@@ -78,10 +80,13 @@ const languages: Language[] = [
     ],
     paying: "Cobro en curso en Handheld Ana, Bar till",
     payingUnnamed: "Hay un cobro en curso",
-    disconnected: "Conecta primero SumUp",
     unknownRefusal: "Ese lector de tarjetas ya no existe: Handheld Ana",
     lines: [
       [item("provider_pairing", [sumup]), "Se desvinculará de SumUp"],
+      [
+        item("provider_registration_kept", [sumup]),
+        "SumUp no está conectado, así que el lector sigue registrado en SumUp. Elimínalo también allí.",
+      ],
       [item("device_reader", [bar, ana]), "Elegido en 2 dispositivos: Bar till, Handheld Ana"],
       [item("device_reader"), "Elegido en 1 dispositivo: Handheld Ana"],
       [
@@ -125,7 +130,7 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     expect(readerDeleteCopy(providerName).item(each)).toBe(line);
   });
 
-  it("words each refusal, naming the devices paying and the provider by its name", () => {
+  it("words each refusal, naming the devices paying", () => {
     setLocale(language.locale);
     const copy = readerDeleteCopy(providerName);
     expect(
@@ -138,13 +143,6 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     expect(
       copy.refusal({ code: "reader.payment_in_progress", params: { readerId: "r1" }, targets: [] }),
     ).toBe(language.payingUnnamed);
-    expect(
-      copy.refusal({
-        code: "reader.provider_disconnected",
-        params: { providerId: "sumup" },
-        targets: [],
-      }),
-    ).toBe(language.disconnected);
     expect(copy.refusal({ code: "reader.not_found", params: {}, targets: [ana] })).toBe(
       language.unknownRefusal,
     );
@@ -158,6 +156,7 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     const copy = readerDeleteCopy(providerName);
     const keys = [
       "provider_pairing",
+      "provider_registration_kept",
       "device_reader",
       "device_reader_default",
       "profile_reader",
@@ -167,16 +166,19 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     const named = [{ id: "0b6e-uuid", name: "Named" }];
     const lines = [
       // A pairing's target is the provider, named by its id, never a uuid.
-      ...keys.map((key) => copy.item(item(key, key === "provider_pairing" ? [sumup] : named, 3))),
+      ...keys.map((key) =>
+        copy.item(
+          item(
+            key,
+            key === "provider_pairing" || key === "provider_registration_kept" ? [sumup] : named,
+            3,
+          ),
+        ),
+      ),
       copy.refusal({
         code: "reader.payment_in_progress",
         params: { readerId: "0b6e-uuid" },
         targets: named,
-      }),
-      copy.refusal({
-        code: "reader.provider_disconnected",
-        params: { providerId: "sumup" },
-        targets: [],
       }),
     ];
     for (const line of lines) {

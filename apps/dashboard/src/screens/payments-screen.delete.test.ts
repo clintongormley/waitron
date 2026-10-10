@@ -245,6 +245,69 @@ describe("Deleting a card reader", () => {
     expect(linesOf(el)).toEqual(["Unpairs it from Acme Pay"]);
   });
 
+  const keptImpact = impactOf("counter", "Counter", {
+    ends: [
+      { key: "provider_registration_kept", count: 1, targets: [{ id: "acme", name: "acme" }] },
+    ],
+  });
+
+  it("says a reader stays registered at an unconnected provider, by its display name, and Delete accepts that", async () => {
+    const api = client({ getReaderDeleteImpact: vi.fn().mockResolvedValue(keptImpact) });
+    const el = await mount(api);
+    await openDelete(el, "counter");
+    expect(linesOf(el)).toEqual([
+      "Acme Pay isn't connected, so the reader stays registered at Acme Pay. Remove it there too.",
+    ]);
+    expect(confirmOf(el).getAttribute("variant")).toBe("danger");
+    confirmOf(el).click();
+    await flush(el);
+    expect(api.deleteReader).toHaveBeenCalledExactlyOnceWith("counter", {
+      acceptRegistrationKept: true,
+    });
+  });
+
+  it("says in Spanish that a reader stays registered at an unconnected provider", async () => {
+    setLocale("es");
+    const el = await mount(
+      client({ getReaderDeleteImpact: vi.fn().mockResolvedValue(keptImpact) }),
+    );
+    await openDelete(el, "counter");
+    expect(linesOf(el)).toEqual([
+      "Acme Pay no está conectado, así que el lector sigue registrado en Acme Pay. Elimínalo también allí.",
+    ]);
+  });
+
+  it("a delete refused because the provider was disconnected after the dialog opened reads the impact again, then accepts the notice it shows", async () => {
+    const getReaderDeleteImpact = vi
+      .fn()
+      .mockResolvedValueOnce(counterImpact)
+      .mockResolvedValue(keptImpact);
+    const deleteReader = vi
+      .fn()
+      .mockRejectedValueOnce(coded("reader.provider_disconnected"))
+      .mockResolvedValue(keptImpact);
+    const el = await mount(client({ getReaderDeleteImpact, deleteReader }));
+    await openDelete(el, "counter");
+    expect(linesOf(el)).toEqual(["Unpairs it from Acme Pay"]);
+
+    confirmOf(el).click();
+    await flush(el);
+
+    expect(deleteReader).toHaveBeenNthCalledWith(1, "counter");
+    await vi.waitFor(() => expect(getReaderDeleteImpact).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(dialogOf(el)!.actionError).toBe("");
+    expect(linesOf(el)).toEqual([
+      "Acme Pay isn't connected, so the reader stays registered at Acme Pay. Remove it there too.",
+    ]);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+
+    confirmOf(el).click();
+    await flush(el);
+    expect(deleteReader).toHaveBeenNthCalledWith(2, "counter", { acceptRegistrationKept: true });
+  });
+
   it("a payment in progress is shown and keeps Delete disabled", async () => {
     const el = await mount(
       client({ getReaderDeleteImpact: vi.fn().mockResolvedValue(paying(counterImpact)) }),
@@ -394,8 +457,8 @@ describe("Deleting a card reader", () => {
       "Unpairing at the provider failed. The reader is disabled; try again.",
     );
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
-    // The delete's first transaction switched the reader off (`prepareCardReaderDelete`,
-    // apps/server/src/card-reader-delete.ts), which the change feed reports.
+    // The delete's first transaction switched the reader off before calling the provider
+    // (`startCardReaderDelete`, apps/server/src/card-reader-delete.ts); the change feed reports it.
     api.liveData!.invalidate([{ type: "card_readers", id: "counter" }]);
     await vi.waitFor(() =>
       expect(cell(el, "[data-test=reader-status-counter]")?.textContent).toBe("Disabled"),

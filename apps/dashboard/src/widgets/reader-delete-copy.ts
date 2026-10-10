@@ -35,6 +35,10 @@ export function readerDeleteCopy(providerName: (providerId: string) => string): 
       return fill("payments.delete_pairing", {
         provider: item.targets.map(({ id }) => providerName(id)).join(", "),
       });
+    if (key === "provider_registration_kept")
+      return fill("payments.delete_kept_at_provider", {
+        provider: item.targets.map(({ id }) => providerName(id)).join(", "),
+      });
     if (key === "reader_holder")
       return fill("payments.delete_holder", { names: names(item.targets) });
     const counted = Object.hasOwn(COUNTED, key) ? COUNTED[key] : undefined;
@@ -51,10 +55,6 @@ export function readerDeleteCopy(providerName: (providerId: string) => string): 
       return named
         ? fill("payments.delete_paying", { names: named })
         : t("payments.delete_paying_unnamed");
-    if (refusal.code === "reader.provider_disconnected")
-      return fill("payments.delete_connect_first", {
-        provider: providerName(String(refusal.params.providerId)),
-      });
     const message = codeMessage(refusal.code);
     return named ? `${message.replace(/\.$/, "")}: ${named}` : message;
   }

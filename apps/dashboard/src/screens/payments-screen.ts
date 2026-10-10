@@ -970,14 +970,23 @@ export class PaymentsScreen extends LitElement {
   async #confirmDelete(id: string): Promise<void> {
     if (id !== this.deleteTarget || this.deleteSubmitting) return;
     const generation = this.#deleteGeneration;
+    const kept = this.deleteImpact?.ends.some(({ key }) => key === "provider_registration_kept");
     this.deleteSubmitting = true;
     this.deleteActionError = "";
     try {
-      await this.api.deleteReader(id);
+      await (kept
+        ? this.api.deleteReader(id, { acceptRegistrationKept: true })
+        : this.api.deleteReader(id));
     } catch (error) {
       if (generation !== this.#deleteGeneration) return;
       this.deleteSubmitting = false;
       const code = codeOf(error);
+      // The provider was disconnected after this impact was read; the dialog does not see that
+      // live (`live-queries.ts`), so it reads again and shows the notice before the next press.
+      if (code === "reader.provider_disconnected") {
+        this.#retryImpact();
+        return;
+      }
       if (code !== "reader.not_found") {
         this.deleteActionError = codeMessage(code);
         return;

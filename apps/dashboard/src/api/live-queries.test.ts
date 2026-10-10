@@ -81,7 +81,12 @@ it("reads a card reader's delete impact passively after the first read, and send
   expect(fetchImpl.mock.calls[2]![0]).toBe("/management-api/payments/readers/r1");
   expect(fetchImpl.mock.calls[2]![1].method).toBe("DELETE");
   expect(new Headers(fetchImpl.mock.calls[2]![1].headers).has("x-waitron-live")).toBe(false);
-  expect(active).toHaveBeenCalledTimes(2);
+  expect(await api.deleteReader("r1", { acceptRegistrationKept: true })).toEqual(impact);
+  expect(fetchImpl.mock.calls[3]![0]).toBe(
+    "/management-api/payments/readers/r1?acceptRegistrationKept=true",
+  );
+  expect(fetchImpl.mock.calls[3]![1].method).toBe("DELETE");
+  expect(active).toHaveBeenCalledTimes(3);
 });
 
 it.each([

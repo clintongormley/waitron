@@ -3833,8 +3833,13 @@ export class DashboardApi {
     return this.#request(`/management-api/payments/readers/${id}/delete-impact`, "GET");
   }
 
-  deleteReader(id: string): Promise<DeleteImpact> {
-    return this.#request(`/management-api/payments/readers/${id}`, "DELETE");
+  /** With `acceptRegistrationKept`, the confirmation showed that the reader stays registered at
+   *  its provider, which is not connected. */
+  deleteReader(id: string, options?: { acceptRegistrationKept: true }): Promise<DeleteImpact> {
+    return this.#request(
+      `/management-api/payments/readers/${id}${options?.acceptRegistrationKept ? "?acceptRegistrationKept=true" : ""}`,
+      "DELETE",
+    );
   }
 
   getDeviceReader(id: string): Promise<{ readerId: string | null }> {

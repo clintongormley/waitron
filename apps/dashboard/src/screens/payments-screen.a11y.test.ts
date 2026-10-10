@@ -282,6 +282,30 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     },
   );
 
+  it.each(["en", "es-ES"] as const)(
+    "renders the delete dialog saying the reader stays registered at the provider accessibly (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { host, dialog } = await openReaderDelete(
+        stubApi({
+          getReaderDeleteImpact: vi.fn().mockResolvedValue({
+            ...deleteImpact(false),
+            ends: [
+              {
+                key: "provider_registration_kept",
+                count: 1,
+                targets: [{ id: "acme", name: "acme" }],
+              },
+            ],
+            removes: [],
+          }),
+        }),
+      );
+      expect(dialog.shadowRoot!.querySelectorAll("li")).toHaveLength(1);
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("renders the rename dialog with Save quiet, then with a change, accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",
