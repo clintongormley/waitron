@@ -135,6 +135,7 @@ export type { ClassificationEntry, SaleLineClassification } from "./sale-line-cl
 export { compareLabels, createLabelComparator } from "./compare-labels.js";
 export {
   compareSearchRanks,
+  foldCache,
   foldForSearch,
   searchBy,
   searchFor,

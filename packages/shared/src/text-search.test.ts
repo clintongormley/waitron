@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   compareSearchRanks,
+  foldCache,
   foldForSearch,
   searchBy,
   searchFor,
@@ -211,5 +212,27 @@ describe("searchBy", () => {
   });
   it("gives no item when only punctuation is typed", () => {
     expect(searchBy("&", drinks, (drink) => drink.name)).toEqual([]);
+  });
+});
+
+describe("foldCache", () => {
+  it("folds an item's text once while it is unchanged, and again once it changes", () => {
+    const fold = foldCache<{ id: string }>();
+    const item = { id: "a" };
+    const first = fold(item, "Café");
+    expect(first).toBe("cafe");
+    const folding = vi.spyOn(String.prototype, "normalize");
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    expect(fold(item, "Café")).toBe(first);
+    expect(folding).not.toHaveBeenCalled();
+    expect(fold(item, "Té")).toBe("te");
+    expect(folding).toHaveBeenCalledTimes(1);
+  });
+  it("keeps each item's text apart", () => {
+    const fold = foldCache<{ id: string }>();
+    expect(fold({ id: "a" }, "Café")).toBe("cafe");
+    expect(fold({ id: "b" }, "Té")).toBe("te");
   });
 });

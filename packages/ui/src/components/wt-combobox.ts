@@ -4,7 +4,7 @@ import { classMap } from "lit/directives/class-map.js";
 import { guard } from "lit/directives/guard.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
-import { foldForSearch, searchFor } from "@waitron/shared";
+import { foldCache, foldForSearch, searchFor } from "@waitron/shared";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
@@ -434,6 +434,12 @@ export class WtCombobox extends LitElement {
     return this.filter(this.options);
   }
 
+  private readonly foldCache = foldCache<ComboboxOption>();
+
+  private foldedText(option: ComboboxOption): string {
+    return this.foldCache(option, closedText(option));
+  }
+
   private filter(options: ComboboxOption[]): ComboboxOption[] {
     const search = searchFor(this.searchText);
     // Ranked inside each run of one group, so a group's heading is still drawn once.
@@ -444,7 +450,7 @@ export class WtCombobox extends LitElement {
       else runs.push([option]);
     }
     return runs.flatMap((run) =>
-      search(run.map((option) => [option, foldForSearch(closedText(option))] as const)),
+      search(run.map((option) => [option, this.foldedText(option)] as const)),
     );
   }
 
@@ -456,7 +462,7 @@ export class WtCombobox extends LitElement {
   private get showAddRow(): boolean {
     if (!this.allowAdd || !this.trimmedSearch) return false;
     const query = foldForSearch(this.trimmedSearch);
-    return !this.options.some((option) => foldForSearch(closedText(option)) === query);
+    return !this.options.some((option) => this.foldedText(option) === query);
   }
 
   /** Keyboard navigation counts the add row as the last row, after the filtered options. */

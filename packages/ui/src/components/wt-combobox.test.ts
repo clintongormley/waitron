@@ -266,6 +266,24 @@ test("the add row is not offered for a label that differs only in accents or cap
   expect(el.shadowRoot!.querySelector(".add")).not.toBeNull();
 });
 
+test("the search and the add row follow an option's new label, even on the same option object", async () => {
+  const cafe: ComboboxOption = { value: "cafe", label: "Café" };
+  const { el, search } = await openSearch([cafe, { value: "te", label: "Té" }]);
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.type(search, "cafe");
+  expect(optionLabels(el)).toEqual(["Café"]);
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+  cafe.label = "Cortado";
+  el.options = [...el.options];
+  await el.updateComplete;
+  expect(optionLabels(el)).toEqual(["Add 'cafe'"]);
+  await userEvent.clear(search);
+  await userEvent.type(search, "CORTADO");
+  expect(optionLabels(el)).toEqual(["Cortado"]);
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+});
+
 test("filtering is case-insensitive", async () => {
   const { el, trigger } = await mountWithOptions();
   await userEvent.click(trigger);

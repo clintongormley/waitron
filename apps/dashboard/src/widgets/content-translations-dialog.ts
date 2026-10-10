@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { foldForSearch, languageDisplayName, searchFor } from "@waitron/shared";
+import { foldCache, languageDisplayName, searchFor } from "@waitron/shared";
 import { tableNoMatches, QueryController } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import {
@@ -380,6 +380,7 @@ export class ContentTranslationsDialog extends LitElement {
     this.#choices.set(translationKey(row), choice);
     this.#applyReview();
   }
+  readonly #folded = foldCache<TranslationTarget>();
   #visible(): TranslationTarget[] {
     const rows = this.model?.rows ?? [];
     if (this.editedOnly) return rows.filter((row) => this.model!.isEdited(row));
@@ -390,7 +391,7 @@ export class ContentTranslationsDialog extends LitElement {
             (this.kinds.length === 0 || this.kinds.includes(row.kind)) &&
             (!this.why || row.reason === this.why),
         )
-        .map((row) => [row, foldForSearch(label(row))] as const),
+        .map((row) => [row, this.#folded(row, label(row))] as const),
     );
   }
   #showEdited(): void {

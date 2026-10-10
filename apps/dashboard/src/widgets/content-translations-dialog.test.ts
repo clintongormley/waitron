@@ -378,6 +378,32 @@ describe("staged translation dialog", () => {
     expect(await shownFor("&")).toEqual([]);
     expect(await shownFor("   ")).toEqual(["croqueta", "serrano", "pan"]);
   });
+  it("searches a row by its new name once a live read renames it", async () => {
+    let current = [target("pan", { name: "Pan" }), target("vino", { name: "Vino tinto" })];
+    const liveData = new LiveData();
+    const read = vi.fn(async () => result(current));
+    const { el } = await mount(current, { liveData, getContentTranslationTargets: read });
+    const table = q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!;
+    const shownFor = async (value: string) => {
+      q(el, '[name="search"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      await table.updateComplete;
+      return table.rows.map((row) => (row as TranslationTarget).id);
+    };
+    const held = table.rows[0];
+    expect((held as TranslationTarget).id).toBe("pan");
+    expect(await shownFor("jamon")).toEqual([]);
+    current = [target("pan", { name: "Pan con jamón" }), current[1]!];
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(async () => expect(await shownFor("jamon")).toEqual(["pan"]));
+    // The live read renamed the row it already held, so the search's folded text is for the same
+    // object as before.
+    expect(table.rows[0]).toBe(held);
+  });
+
   it("opens only the selected language with quiet unchanged Save and no default copied from staff", async () => {
     const { el, api } = await mount();
     expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toContain("Español");

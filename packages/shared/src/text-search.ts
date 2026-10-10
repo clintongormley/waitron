@@ -117,3 +117,15 @@ export function searchBy<T>(
   if (query.trim() === "") return [...items];
   return searchFor(query)(items.map((item) => [item, foldAll(textOf(item))] as const));
 }
+
+/** `foldForSearch`, remembered for each item until the text given for it changes. */
+export function foldCache<K extends object>(): (item: K, text: string) => string {
+  const held = new WeakMap<K, { text: string; folded: string }>();
+  return (item, text) => {
+    const known = held.get(item);
+    if (known?.text === text) return known.folded;
+    const folded = foldForSearch(text);
+    held.set(item, { text, folded });
+    return folded;
+  };
+}

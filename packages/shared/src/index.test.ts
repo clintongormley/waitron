@@ -14,6 +14,7 @@ import {
   deviceOrigin,
   draftLineMergeKey,
   firstCodeInCauseChain,
+  foldCache,
   formatEquipmentCode,
   divideDecimal,
   FALLBACK_LOCALE,
@@ -178,6 +179,7 @@ describe("package public surface (./index.js)", () => {
     ).toEqual(["b", "a"]);
     expect(textSearch(" ")).toBeUndefined();
     expect(searchBy("cafe", ["Té", "Café"], (name) => name)).toEqual(["Café"]);
+    expect(foldCache()({}, "Café")).toBe("cafe");
   });
 
   it("re-exports the equipment takeover rule", () => {
