@@ -58,8 +58,11 @@ export class Gestures {
   #pointerType!: string;
   #start!: Spot;
   #lastPan!: Spot;
+  #pinchA!: Spot;
+  #pinchB!: Spot;
   #lastSpan!: number;
-  #lastMid!: Spot;
+  #lastMidX!: number;
+  #lastMidY!: number;
   #holdTimer: ReturnType<typeof setTimeout> | undefined;
   #tapTimer: ReturnType<typeof setTimeout> | undefined;
   #lastTap!: Spot;
@@ -112,7 +115,11 @@ export class Gestures {
     this.#closeTapWindow();
     this.#pointers.set(e.pointerId, spot);
     this.#state = "pinching";
-    [this.#lastSpan, this.#lastMid] = this.#spanAndMid();
+    this.#pinchA = this.#pointers.get(this.#pressId)!;
+    this.#pinchB = spot;
+    this.#lastSpan = this.#span();
+    this.#lastMidX = (this.#pinchA.x + spot.x) / 2;
+    this.#lastMidY = (this.#pinchA.y + spot.y) / 2;
   };
 
   readonly #onWindow = (e: Event): void => {
@@ -152,22 +159,25 @@ export class Gestures {
       case "held":
         if (!moved) return;
         this.#state = "dragging";
-        this.#handlers.holdDrag?.({ ...this.#point(spot), dx, dy });
+        this.#drag(spot, dx, dy);
         return;
       case "dragging":
-        this.#handlers.holdDrag?.({ ...this.#point(spot), dx, dy });
+        this.#drag(spot, dx, dy);
         return;
       case "pinching": {
-        const [span, mid] = this.#spanAndMid();
+        const span = this.#span();
+        const x = (this.#pinchA.x + this.#pinchB.x) / 2;
+        const y = (this.#pinchA.y + this.#pinchB.y) / 2;
         this.#handlers.pinch?.({
           ratio: this.#lastSpan === 0 ? 1 : span / this.#lastSpan,
-          x: mid.x,
-          y: mid.y,
-          dx: mid.x - this.#lastMid.x,
-          dy: mid.y - this.#lastMid.y,
+          x,
+          y,
+          dx: x - this.#lastMidX,
+          dy: y - this.#lastMidY,
         });
         this.#lastSpan = span;
-        this.#lastMid = mid;
+        this.#lastMidX = x;
+        this.#lastMidY = y;
         return;
       }
     }
@@ -227,16 +237,27 @@ export class Gestures {
 
   #pan(spot: Spot): void {
     this.#handlers.pan?.({ dx: spot.x - this.#lastPan.x, dy: spot.y - this.#lastPan.y });
-    this.#lastPan = { x: spot.x, y: spot.y };
+    this.#lastPan.x = spot.x;
+    this.#lastPan.y = spot.y;
+  }
+
+  #drag(spot: Spot, dx: number, dy: number): void {
+    this.#handlers.holdDrag?.({
+      target: this.#target,
+      x: spot.x,
+      y: spot.y,
+      pointerType: this.#pointerType,
+      dx,
+      dy,
+    });
   }
 
   #point(spot: Spot): GesturePoint {
     return { target: this.#target, x: spot.x, y: spot.y, pointerType: this.#pointerType };
   }
 
-  #spanAndMid(): [number, Spot] {
-    const [a, b] = [...this.#pointers.values()] as [Spot, Spot];
-    return [Math.hypot(b.x - a.x, b.y - a.y), { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }];
+  #span(): number {
+    return Math.hypot(this.#pinchB.x - this.#pinchA.x, this.#pinchB.y - this.#pinchA.y);
   }
 
   #clearHold(): void {
