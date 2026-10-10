@@ -780,6 +780,7 @@ describe("an open table's order", () => {
     posY: null,
     shape: null,
     rotation: null,
+    today: null,
     signals: [],
     party: {
       id: "party-a",
