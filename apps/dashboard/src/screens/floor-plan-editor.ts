@@ -64,6 +64,13 @@ export type FloorPlanInvalid =
   | { key: string; field: FloorPlanTypedField; text: string; message: () => string }
   | { key: string; field: FloorPlanTypedField; text: null };
 
+/** What the leave guard compares: refused text standing in a field is a change the draft cannot
+ *  hold. */
+interface StagedPlan {
+  draft: FloorPlanDraft;
+  refusedText: boolean;
+}
+
 const HOME = "/manage";
 
 /** Below this width of the page itself, the side panel becomes a bottom sheet. */
@@ -305,7 +312,7 @@ export class FloorPlanEditor extends LitElement {
   #markedValue: unknown;
   #history: UndoHistory<FloorPlanDraft> | null = null;
   #opened: FloorPlanDraft | null = null;
-  #scope?: DraftScope<FloorPlanDraft>;
+  #scope?: DraftScope<StagedPlan>;
   readonly #scopeId = {};
 
   readonly #url = new UrlStateController(this, () => this.#route(), dashboardPath);
@@ -377,22 +384,22 @@ export class FloorPlanEditor extends LitElement {
 
   override willUpdate(): void {
     if (!this.isConnected || this.draft === null || this.#scope) return;
-    this.#scope = draftScopeFor<FloorPlanDraft>(this, {
+    this.#scope = draftScopeFor<StagedPlan>(this, {
       id: this.#scopeId,
       parent: this,
-      current: () => this.draft!,
+      current: () => ({ draft: this.draft!, refusedText: this.typedMarks.length > 0 }),
       snapshot: (value) => value,
-      equal: sameDraft,
+      equal: (a, b) => a.refusedText === b.refusedText && sameDraft(a.draft, b.draft),
       restore: (value) => {
-        this.draft = value;
-        this.#history?.reset(value);
+        this.draft = value.draft;
+        this.#history?.reset(value.draft);
         this.selected = null;
         this.refused = null;
         this.#clearMark();
         this.#setTyped([]);
       },
     }).scope;
-    this.#scope.commit(this.#opened!);
+    this.#commit(this.#opened!);
     this.#scope.changed();
   }
 
@@ -424,6 +431,10 @@ export class FloorPlanEditor extends LitElement {
     await canvas.updateComplete;
     const key = this.selected;
     if (this.#revealing && key !== null) canvas.reveal(key);
+  }
+
+  #commit(saved: FloorPlanDraft): void {
+    this.#scope?.commit({ draft: saved, refusedText: false });
   }
 
   #disposeScope(): void {
@@ -532,6 +543,7 @@ export class FloorPlanEditor extends LitElement {
     this.typedMarks = marks;
     if (marks.length > 0) this.message = this.#fixMessage();
     else if (this.mark === null && this.message?.fix) this.message = null;
+    this.#scope?.changed();
   }
 
   /** A table a check or a refusal points at; on a phone the sheet opens so its fields show. */
@@ -697,7 +709,7 @@ export class FloorPlanEditor extends LitElement {
     this.revision = answer.revision;
     this.outOfDate = false;
     this.#opened = saved;
-    this.#scope?.commit(saved);
+    this.#commit(saved);
     this.#history?.reset(current);
     this.draft = current;
     if (this.selected !== null) this.selected = rekey(this.selected);
@@ -747,7 +759,7 @@ export class FloorPlanEditor extends LitElement {
     this.plan = plan;
     this.revision = plan.revision;
     this.#opened = draft;
-    this.#scope?.commit(draft);
+    this.#commit(draft);
     this.#history?.reset(draft);
     this.draft = draft;
     if (this.selected !== null && !draft.tables.some((t) => t.key === this.selected)) {

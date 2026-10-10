@@ -1,4 +1,5 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import {
   leaveCoordinatorFor,
@@ -206,6 +207,33 @@ it("the browser's unload prompt holds a changed plan", async () => {
   await move(el);
   expect(unload()).toBe(true);
   await undo(el);
+  expect(unload()).toBe(false);
+});
+
+it("refused text standing in a field holds the plan, though the draft is unchanged", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(1280, 800);
+  onTestFinished(() => page.viewport(...before));
+  const { app } = await mount();
+  const el = editor(app);
+  canvasOf(el)!.dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
+  await panel.updateComplete;
+  const input = panel
+    .shadowRoot!.querySelector("[name=width]")!
+    .shadowRoot!.querySelector("input")!;
+  await userEvent.clear(input);
+  await userEvent.type(input, "8.");
+  await el.updateComplete;
+  expect(placed(el, "m1").width).toBe(8);
+  expect(unload()).toBe(true);
+  close(el);
+  await choose(app, "keep");
+  await userEvent.type(input, "{Backspace}");
+  await el.updateComplete;
   expect(unload()).toBe(false);
 });
 
