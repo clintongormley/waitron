@@ -812,6 +812,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * Works in both flat and tree mode; rowSelectable can leave individual rows without a box. */
   @property({ type: Boolean }) selectable = false;
   @property({ attribute: false }) rowSelectable: (row: Row) => boolean = () => true;
+  /** Domain eligibility for retained ticks; rowSelectable still controls visible checkboxes. */
+  @property({ attribute: false }) rowSelectionAllowed?: (row: Row) => boolean;
   @property({ attribute: false }) selected: readonly string[] = [];
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
@@ -1594,9 +1596,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
     keyedRows.forEach((row, index) => {
       selectable.set(this.rowKey(row, index), this.rowSelectable(row));
     });
+    let selected: string[];
+    if (this.rowSelectionAllowed) {
+      const allowed = new Map(
+        this.rows.map((row, index) => [this.rowKey(row, index), this.rowSelectionAllowed!(row)]),
+      );
+      keyedRows.forEach((row, index) => {
+        allowed.set(this.rowKey(row, index), this.rowSelectionAllowed!(row));
+      });
+      selected = next.filter(
+        (key) =>
+          allowed.get(key) === true &&
+          (this.selected.includes(key) || selectable.get(key) === true),
+      );
+    } else {
+      selected = next.filter((key) => selectable.get(key) !== false);
+    }
     this.dispatchEvent(
       new CustomEvent("wt-selection-change", {
-        detail: { selected: next.filter((key) => selectable.get(key) !== false) },
+        detail: { selected },
         bubbles: true,
         composed: true,
       }),

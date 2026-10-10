@@ -8689,3 +8689,74 @@ test("A461 opened search branches preserve child order and context", async () =>
   expect(el.isExpanded("coffee")).toBe(true);
   expect(context.get("context")).toEqual({ ancestorOnly: false, searchRoot: false });
 });
+
+test("A461 retaining a hidden tick uses domain eligibility", async () => {
+  const selected = vi.fn();
+  const el = await a461Table({
+    rows: [
+      ...a461Rows,
+      { id: "hidden", parent: null, name: "Tea" },
+      { id: "readonly", parent: null, name: "Read only" },
+    ],
+    searchTerm: "cake",
+    selectable: true,
+    selected: ["hidden", "readonly", "removed"],
+    rowSelectable: (row) => row.id !== "hidden",
+    rowSelectionAllowed: (row) => row.id !== "readonly",
+  });
+  el.addEventListener("wt-selection-change", selected);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+  expect(selected.mock.calls[0]![0].detail.selected).toEqual(["hidden", "cake"]);
+  expect(selected.mock.calls[0]![0].bubbles).toBe(true);
+  expect(selected.mock.calls[0]![0].composed).toBe(true);
+  el.rowSelectionAllowed = undefined;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+  expect(selected.mock.calls[1]![0].detail.selected).toEqual(["readonly", "removed", "cake"]);
+});
+
+test("A461 select all changes only rendered selectable rows", async () => {
+  const el = await a461Table({
+    rows: [...a461Rows, { id: "hidden", parent: null, name: "Tea" }],
+    selectable: true,
+    selected: ["hidden"],
+    rowSelectable: (row) => !["hidden", "iced", "drinks", "desserts"].includes(row.id),
+    rowSelectionAllowed: () => true,
+  });
+  const changes: string[][] = [];
+  el.addEventListener("wt-selection-change", ((event: CustomEvent<{ selected: string[] }>) => {
+    changes.push(event.detail.selected);
+    el.selected = event.detail.selected;
+  }) as EventListener);
+  const all = () => el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!;
+  expect(all().checked).toBe(false);
+  expect(all().indeterminate).toBe(false);
+  all().click();
+  await el.updateComplete;
+  expect(changes[0]).toEqual(["hidden", "coffee", "cake"]);
+  expect(all().checked).toBe(true);
+  all().click();
+  await el.updateComplete;
+  expect(changes[1]).toEqual(["hidden"]);
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  all().click();
+  await el.updateComplete;
+  expect(changes[2]).toEqual(["hidden", "coffee", "ice", "espresso", "ginger", "cake"]);
+  el.searchTerm = "nothing matches";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="select-all"]')).toBeNull();
+  expect(el.selected).toEqual(["hidden", "coffee", "ice", "espresso", "ginger", "cake"]);
+});
+
+test("A461 retaining selection never admits a newly ticked domain-ineligible row", async () => {
+  const el = await a461Table({
+    selectable: true,
+    searchTerm: "cake",
+    rowSelectionAllowed: () => false,
+  });
+  const selected = vi.fn();
+  el.addEventListener("wt-selection-change", selected);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
+  expect(selected.mock.calls[0]![0].detail.selected).toEqual([]);
+});
