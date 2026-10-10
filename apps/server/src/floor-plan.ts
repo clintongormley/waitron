@@ -13,7 +13,7 @@ import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
-import { placementColumns, placementOf, resetZone } from "./floor-today-store.js";
+import { placementColumns, placementOf, resetZone, spareLabels } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -371,16 +371,17 @@ export async function saveZonePlan(
     await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, deleted));
   }
 
-  // Two passes, so a swap or a rename onto a name another row is giving up never meets the
-  // (plan_id, label) unique key mid-way: each renamed row first takes its own id as its label.
+  // Each renamed table first steps aside under a spare name, so a swap or a rename onto a name
+  // another row is giving up never meets the unique (plan_id, label) key halfway.
   const masterOf = new Map(masters.map((m) => [m.id, m]));
-  for (const table of input.tables) {
-    if (table.id !== undefined && masterOf.get(table.id)!.label !== table.label.trim()) {
-      await tx
-        .update(floorPlanTables)
-        .set({ label: table.id })
-        .where(eq(floorPlanTables.id, table.id));
-    }
+  const spare = spareLabels(
+    input.tables.flatMap((t) =>
+      t.id !== undefined && masterOf.get(t.id)!.label !== t.label.trim() ? [t.id] : [],
+    ),
+    new Set([...masters.map((m) => m.label), ...input.tables.map((t) => t.label.trim())]),
+  );
+  for (const [id, label] of spare) {
+    await tx.update(floorPlanTables).set({ label }).where(eq(floorPlanTables.id, id));
   }
   const ids: Record<string, string> = {};
   for (const table of input.tables) {

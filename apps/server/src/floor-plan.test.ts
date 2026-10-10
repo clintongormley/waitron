@@ -837,6 +837,44 @@ describe("saveZonePlan", () => {
     });
   });
 
+  it("renames a table while another table is named exactly the renamed table's id", async () => {
+    const z = await zone();
+    const [a, renamed] = [fresh("Id A"), fresh("Id A2")];
+    const first = await save(z, { revision: 0, tables: [entry("a", a)], joins: [] });
+    const aId = first.ids.a!;
+    const second = await save(z, {
+      revision: 1,
+      tables: [entry("a", a, { id: aId }), entry("b", aId)],
+      joins: [],
+    });
+
+    await save(z, {
+      revision: 2,
+      tables: [entry("a", renamed, { id: aId }), entry("b", aId, { id: second.ids.b })],
+      joins: [],
+    });
+
+    expect(await labelsOf(z)).toEqual({ [aId]: renamed, [second.ids.b!]: aId });
+  });
+
+  it("renames a table while another table takes the renamed table's id as its new name", async () => {
+    const z = await zone();
+    const [a, b, renamed] = [fresh("Id B"), fresh("Id B2"), fresh("Id B3")];
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("a", a), entry("b", b)],
+      joins: [],
+    });
+
+    await save(z, {
+      revision: 1,
+      tables: [entry("b", ids.a!, { id: ids.b }), entry("a", renamed, { id: ids.a })],
+      joins: [],
+    });
+
+    expect(await labelsOf(z)).toEqual({ [ids.a!]: renamed, [ids.b!]: ids.a });
+  });
+
   it("writes nothing when a check refuses", async () => {
     const { z, result } = await firstSaved();
     const before = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));

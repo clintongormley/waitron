@@ -237,12 +237,21 @@ async function catchUpPass(
     if (!(await removeLiveTable(tx, cfg, removals, tableId, now))) kept.add(tableId);
   }
   for (const tableId of [...plan.hide, ...kept]) await hideTable(tx, tableId);
+  // Each renamed table first steps aside under a spare name, so a swap never meets the unique
+  // (location, label) key halfway.
   const labelOf = new Map(inZone.map((table) => [table.id, table.label]));
-  for (const { target, label } of plan.apply) {
-    if (label !== null && label !== labelOf.get(target.tableId!)) {
-      await setLabel(tx, target.tableId!, target.tableId!);
-    }
-  }
+  const renamed = plan.apply.filter(
+    ({ target, label }) => label !== null && label !== labelOf.get(target.tableId!),
+  );
+  const spare = spareLabels(
+    renamed.map(({ target }) => target.tableId!),
+    new Set([
+      ...venueTables.map((table) => table.label),
+      ...plan.apply.flatMap(({ label }) => (label === null ? [] : [label])),
+      ...plan.create.map((target) => target.label),
+    ]),
+  );
+  for (const [tableId, label] of spare) await setLabel(tx, tableId, label);
   const createdIds = new Map<Target, string>();
   for (const target of plan.create) {
     const [created] = await tx
@@ -308,6 +317,25 @@ async function hideTable(tx: Transaction, tableId: string): Promise<void> {
   await leaveMerges(tx, [tableId]);
   await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
   await tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, tableId));
+}
+
+/**
+ * A name for each of `ids` that is not in `avoid` and not given to another of `ids`. A label may be
+ * any string, a row id included, so an id alone is not a safe name to step aside under.
+ */
+export function spareLabels(
+  ids: readonly string[],
+  avoid: ReadonlySet<string>,
+): Map<string, string> {
+  const taken = new Set(avoid);
+  const spare = new Map<string, string>();
+  for (const id of ids) {
+    let label = id;
+    for (let n = 1; taken.has(label); n++) label = `${id} ${n}`;
+    taken.add(label);
+    spare.set(id, label);
+  }
+  return spare;
 }
 
 async function setLabel(tx: Transaction, tableId: string, label: string): Promise<void> {

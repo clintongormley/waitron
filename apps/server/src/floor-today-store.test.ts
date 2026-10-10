@@ -364,6 +364,22 @@ describe("building today's plan from a zone's master plan", () => {
     expect((await tableRow(v, t2)).label).toBe("Swap 1");
   });
 
+  it("renames a table while another table is named exactly the renamed table's id", async () => {
+    const z = await zone();
+    const t1 = await v.table("Id 1", z);
+    const t2 = await v.table(t1, z);
+    await masterOf(z, [
+      { label: "Id 1 renamed", live: t1 },
+      { label: t1, live: t2 },
+    ]);
+
+    await reset(z);
+
+    expect((await tableRow(v, t1)).label).toBe("Id 1 renamed");
+    expect((await tableRow(v, t2)).label).toBe(t1);
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
   it("brings back a table the master still has", async () => {
     const z = await zone();
     const t1 = await v.table("Back 1", z);
