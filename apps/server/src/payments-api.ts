@@ -5,7 +5,7 @@ import "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
+import { AppError, centsToDecimal, hasCode, isAppError, type DeleteImpact } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -78,7 +78,10 @@ import {
   markCardReaderUnpaired,
   prepareCardReaderDelete,
   readCardReaderDeleteImpact,
+  type CardReaderDeleteOptions,
+  type CardReaderDeletePlan,
 } from "./card-reader-delete.js";
+import { queryFlag } from "./report-api.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -524,30 +527,48 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Three transactions, not one: a transaction holds the database's only write lock
-      // (`packages/store/src/write-queue.ts:5`, `packages/db/src/tenancy.ts:19`), so a provider call
-      // inside one would make every other write wait on the network. A refusal after the unpair
-      // leaves the reader unpaired and switched off, as Unpair would, and not deleted.
+      const options: CardReaderDeleteOptions = {
+        acceptRegistrationKept: queryFlag(
+          c.req.query("acceptRegistrationKept"),
+          "acceptRegistrationKept",
+        ),
+      };
+      // A reader its provider must unpair takes three transactions, not one: a transaction holds the
+      // database's only write lock (`packages/store/src/write-queue.ts:5`,
+      // `packages/db/src/tenancy.ts:19`), so a provider call inside one would make every other write
+      // wait on the network. A refusal after the unpair leaves the reader unpaired and switched off,
+      // as Unpair would, and not deleted. Every other delete checks and acts in one transaction.
       return holdingReader(id, async (hold) => {
-        const plan = await gated(sessionId, (tx) => {
-          hold();
-          return prepareCardReaderDelete(tx, deps.providers, id);
-        });
-        if (plan.unpairAtProvider) {
-          const seat = cardProviderById(deps.providers, plan.provider);
-          try {
-            await removeAtProvider(seat, plan.providerRef);
-          } catch (error) {
-            if (isAppError(error)) throw error;
-            throw new AppError(
-              "reader.unpair_failed",
-              { providerId: plan.provider },
-              { reason: codeOf(error) },
-            );
-          }
-          const unpairedAt = nowIso();
-          await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
+        const first: { plan: CardReaderDeletePlan; deleted?: DeleteImpact } = await gated(
+          sessionId,
+          async (tx) => {
+            hold();
+            const plan = await prepareCardReaderDelete(tx, deps.providers, id, new Date(), options);
+            if (plan.unpairAtProvider) return { plan };
+            return {
+              plan,
+              deleted: await deleteCardReader(tx, deps.providers, id, new Date(), options),
+            };
+          },
+        );
+        if (first.deleted !== undefined) return c.json(first.deleted);
+        const { plan } = first;
+        const seat = cardProviderById(deps.providers, plan.provider);
+        try {
+          await removeAtProvider(seat, plan.providerRef);
+        } catch (error) {
+          // Step (a) switched the reader off, which lets a disconnect through before this call.
+          if (isAppError(error) && hasCode(error, "credentials.missing"))
+            throw new AppError("reader.provider_disconnected", { providerId: plan.provider });
+          if (isAppError(error)) throw error;
+          throw new AppError(
+            "reader.unpair_failed",
+            { providerId: plan.provider },
+            { reason: codeOf(error) },
+          );
         }
+        const unpairedAt = nowIso();
+        await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
         return c.json(await gated(sessionId, (tx) => deleteCardReader(tx, deps.providers, id)));
       });
     }),
