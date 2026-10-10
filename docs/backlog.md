@@ -1683,7 +1683,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`apps/server/src/device-api.ts:345-355`). Neither `selectDevicePrinter`
   (`packages/layouts/src/device-equipment.ts:307-310`) nor, for a card reader, `selectDeviceReader`
   (`packages/payments/src/device-readers.ts:265-273`) reads the device's `active`, so a Disable or
-  Delete committing between them can leave a printer or card reader choice or hold on the row.
+  Delete committing between them can leave a printer or card reader choice or hold for the device.
   Believed to predate A435 step 4 (the route came with W100, #1332). Left open by A435 step 4.
 
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
