@@ -481,7 +481,53 @@ it("holding Shift+F10 down asks for details once", async () => {
     cancelable: true,
   });
   button(el, "t1").dispatchEvent(repeat);
+  expect(repeat.defaultPrevented).toBe(true);
   expect(details).toEqual([{ tableId: "t1" }]);
+});
+
+it("holding Shift+F10 down through the platform asks for details once", async () => {
+  const el = await map([t1]);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{F10>4}{/F10}{/Shift}");
+  expect(details).toEqual([{ tableId: "t1" }]);
+});
+
+const repeatOf = (key: string, shiftKey = false) =>
+  new KeyboardEvent("keydown", {
+    key,
+    shiftKey,
+    repeat: true,
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+
+it("holding the ContextMenu key down keeps its repeats from the browser", async () => {
+  const el = await map([t1]);
+  const repeat = repeatOf("ContextMenu");
+  button(el, "t1").dispatchEvent(repeat);
+  expect(repeat.defaultPrevented).toBe(true);
+  expect(details).toEqual([]);
+});
+
+it("a repeated key off a table is left to the browser", async () => {
+  const el = await map([t1]);
+  const group = el.shadowRoot!.querySelector('[role="group"]')!;
+  const f10 = repeatOf("F10", true);
+  const menu = repeatOf("ContextMenu");
+  group.dispatchEvent(f10);
+  group.dispatchEvent(menu);
+  expect([f10.defaultPrevented, menu.defaultPrevented]).toEqual([false, false]);
+});
+
+it("a repeat of another key after Shift+F10 lets the next contextmenu through", async () => {
+  const el = await map([t1]);
+  shiftF10On(button(el, "t1"));
+  const a = repeatOf("a");
+  button(el, "t1").dispatchEvent(a);
+  expect(a.defaultPrevented).toBe(false);
+  contextMenuOn(button(el, "t1"));
+  expect(details).toEqual([{ tableId: "t1" }, { tableId: "t1" }]);
 });
 
 it("a Ctrl+click on a table asks for details, not to open it", async () => {

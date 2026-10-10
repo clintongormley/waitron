@@ -643,8 +643,9 @@ it. A press held 500 ms marks its table (`data-held`, outlined in `--wt-color-pr
 release sends `wt-table-details`; a drag's drop, a second finger or a cancelled pointer clears the
 mark and sends nothing. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
 `contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is
-handled on its first `keydown`, not its repeats, which the map prevents, and the next `contextmenu` is ignored unless a
-`keydown` or `pointerdown` comes first. The map stops the `click` or `contextmenu` it turns into one
+handled on its `keydown`, which the map prevents, and the next `contextmenu` is ignored unless a
+`keydown` or `pointerdown` comes first. On a table, a repeated `keydown` of Shift+F10 or of the
+ContextMenu key (the key held down) is prevented and sends nothing. The map stops the `click` or `contextmenu` it turns into one
 of its events and never stops a `pointerdown` or `keydown`. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
 rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`

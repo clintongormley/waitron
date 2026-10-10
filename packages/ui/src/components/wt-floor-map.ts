@@ -236,7 +236,6 @@ export class WtFloorMap extends LitElement {
       tap: this.#onTap,
       doubleTap: this.#onDoubleTap,
       holdStart: (at) => {
-        this.#clearHeld();
         this.#held = tableOf(at.target);
         this.#held?.setAttribute("data-held", "");
       },
@@ -320,10 +319,15 @@ export class WtFloorMap extends LitElement {
 
   /** Never stopped: the till's idle logout listens for keydown at its host. */
   readonly #onKeyDown = (e: KeyboardEvent): void => {
-    if (e.repeat) return;
-    this.#swallowContextMenu = false;
     const id = idOf(e.composedPath()[0]!);
-    if (e.key !== "F10" || !e.shiftKey || id === null) return;
+    const shiftF10 = e.key === "F10" && e.shiftKey;
+    // A repeat left unprevented opens the browser's menu again on Linux Chromium.
+    if (e.repeat && id !== null && (shiftF10 || e.key === "ContextMenu")) {
+      e.preventDefault();
+      return;
+    }
+    this.#swallowContextMenu = false;
+    if (!shiftF10 || id === null) return;
     e.preventDefault();
     this.#swallowContextMenu = true;
     this.#send("wt-table-details", id);
