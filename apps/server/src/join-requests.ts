@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -516,11 +516,12 @@ export async function acceptDeviceJoinRequest(
       locationId: joinRequests.locationId,
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
-  const [deleted] = await tx
-    .select({ id: devices.id })
+  const [existing] = await tx
+    .select({ id: devices.id, active: devices.active, deletedAt: devices.deletedAt })
     .from(devices)
-    .where(and(eq(devices.id, row.id), isNotNull(devices.deletedAt)));
-  if (deleted !== undefined) throw new AppError("join_request.not_found", {});
+    .where(eq(devices.id, row.id));
+  if (existing !== undefined && existing.deletedAt !== null)
+    throw new AppError("join_request.not_found", {});
 
   const { kitchenScreens, formFactor } = await resolveDeviceKitchenScreens(tx, cfg, {
     profileId: input.profileId,
@@ -533,15 +534,11 @@ export async function acceptDeviceJoinRequest(
       screens: kitchenScreens,
     });
 
-  const [disabled] = await tx
-    .select({ id: devices.id })
-    .from(devices)
-    .where(and(eq(devices.id, row.id), eq(devices.active, false)));
-  if (disabled !== undefined) {
+  if (existing !== undefined && !existing.active) {
     // An ACTIVE row with this id is left to the insert below, which refuses it.
     await updateDeviceSettings(
       tx,
-      disabled,
+      existing,
       { label: input.label, profileId: input.profileId },
       { active: true, tokenHash: row.tokenHash },
     );
