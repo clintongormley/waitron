@@ -57,7 +57,8 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
    - Strings: new `menus.section_count` "{count} sections" / `menus.section_count_one` "1 section";
      ES "{count} secciones" / "1 sección". Products reuse `folders.product_count` and
      `folders.product_count_one` (`apps/dashboard/src/i18n/strings.ts:130-131`, ES `:2650-2651`),
-     the same words the Products root uses. `menu_prices.section_count` (`strings.ts:2145`) is not
+     the same words the Products root uses. The plural helper `countOf` (`product-list.ts:82-87`,
+     private today) is exported and widened to take the new key, not copied. `menu_prices.section_count` (`strings.ts:2145`) is not
      reused: it has no singular form.
    - Like Products (`product-list.ts:250-253`), the count is visually hidden on a narrow table and
      still read out.
@@ -77,7 +78,12 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
    `product-list.ts:1272-1274`), counts after it in the muted small style, no expand arrow because
    it cannot close (`rowCollapsible` false, as `product-list.ts:1520`), and every member one full
    indent step further in (aria-level 1 for the root, 2 for top-level members). The old A337-era
-   row's "Menu: <name>" wording (`menus.menu_prefix`) is NOT used.
+   row's "Menu: <name>" wording (`menus.menu_prefix`) is NOT used. A long menu name wraps
+   (`overflow-wrap: anywhere` on the root name: the table wraps cell text only in locked columns,
+   `wt-data-table.ts:216-218`).
+   The root row is **never marked current** (no bold-underline, no `aria-current`): at the top
+   level, as today, no row is marked. The Name heading sits over the root's name, the first name
+   in the tree.
 4. **Drag and drop: the root row is not a drop target, and has no grip.** A release over it does
    nothing and no gap or "into" mark is drawn on it. Every place in the top level is already reached
    by dropping beside a top-level row (`#targetFor`'s "beside", `:524-526`), and a drop on a row
@@ -86,7 +92,8 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
    In Reorder mode the root row draws the invisible grip space (`gripSpace`, `:49-51`) so its name
    lines up. ArrowLeft on a top-level row's grip does nothing: `#moveOut` finds no section row for
    `"root"` (`:631`) and returns. Products' root takes drops because a product has one category to
-   file into; a menu's top level is an ordered list.
+   file into; a menu's top level is an ordered list. This departs from "the Products tree is the
+   model"; say so in the PR.
 5. **Selection, search and filter.** The root row never takes a box; Select all ticks members only;
    `shownSelectableKeys()` never lists it. It answers no search (`searchValue` `""`, as Products,
    `product-list.ts:1374`) and no Available filter option (filter value `[]`, as a section,
@@ -120,21 +127,30 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
    - **The Add products window breaks it** because the widget draws its own `wt-form-actions` at the
      end of its list, inside the modal's scrolling body (`section-add-products.ts:353-362`; the host's
      modal, `menus-screen.ts:3398-3448`). A shadow-root element cannot be slotted into the host's
-     footer. **Default: the widget lays itself out as a column that fills the window's body** —
-     filters at the top, the "Select all listed" row under them, the product list as the only part
-     that scrolls, and the count, its "none chosen" message, the host's refusal message and the
-     buttons fixed at the bottom with a divider above them (`--wt-color-border`, as the modal
-     footer's). The host's refusal paragraph (`data-test="add-products-error"`, `menus-screen.ts:3416-3422`)
-     moves INTO the widget through a new `message` slot, so it no longer pushes the column down;
-     it stays in the host's tree, so its styling and every `inModal(…, '[data-test="add-products-error"]')`
-     lookup keep working. The column takes `height: 100%` of the modal body, which the standard
-     modal holds at full window height whatever its content (`wt-modal.ts:21-22`;
-     design-system.md:1281-1282). If the browser test shows the percentage does not resolve,
-     fall back to `position: sticky; bottom: 0` on the bottom block, and say which was built.
-     Rejected: the widget drawing its own `wt-modal` the way `dashboard-add-to-menus` does
-     (`add-to-menus.ts:356-393`) — the right shape, but it moves the window's close, Escape and
-     unsaved-changes wiring (`#beforeProductsClose`, `menus-screen.ts:1706-1716`) and about a hundred
-     `add-products` lookups in `menus-screen.test.ts`; worth it only if the column look is refused.
+     footer. **Default: a sticky bottom block.** The count, its "none chosen" message, the host's
+     refusal message and the buttons sit in one block with `position: sticky; bottom: 0` inside
+     the modal's scrolling body. The whole body still scrolls (heading, filters and list), and the
+     block stays at the body's visible bottom. It carries a divider above it (`--wt-color-border`,
+     as the modal footer's) and the raised surface as its background
+     (`--wt-color-surface-raised`). The body keeps its 24px bottom padding below the block
+     (`wt-dialog.ts`, `.body { padding: var(--wt-space-5) }`; `wt-modal` overrides only the sides),
+     and list rows would show through it. So the block also covers that band: a bottom margin of
+     minus the body's padding, with the same padding inside it. The look decides the exact
+     arrangement.
+     The host's refusal paragraph (`data-test="add-products-error"`, `menus-screen.ts:3416-3422`)
+     moves INTO the widget through a new `message` slot, so it sits with the buttons. It stays in
+     the host's tree, so its styling and every `inModal(…, '[data-test="add-products-error"]')`
+     lookup keep working.
+     Rejected, measured by the plan's reviewer at 390×700: a column taking `height: 100%` of the
+     body. The body also holds the window's heading (`wt-dialog.ts:351-353`) and its top and bottom
+     padding, so the column overflowed (body content 683 against 650 visible) and the button's
+     bottom (684) fell below the body's visible bottom (675). With the sticky block, Add's bottom
+     stayed at 651 before and after scrolling the body to its end.
+     Also rejected: the widget drawing its own `wt-modal` the way `dashboard-add-to-menus` does
+     (`add-to-menus.ts:356-393`). It is the right shape, but it moves the window's close, Escape
+     and unsaved-changes wiring (`#beforeProductsClose`, `menus-screen.ts:1706-1716`) and about a
+     hundred `add-products` lookups in `menus-screen.test.ts`. It is worth doing only if the
+     sticky look is refused.
    - **Other `wt-modal` windows holding a list already pin their buttons** — no change, each named
      with its receipt: Add to menus (`add-to-menus.ts:370-371`, footer slot), the Structure tab's
      Move to section… (`menus-screen.ts`, `wt-modal data-test="move-selected"` with
@@ -148,7 +164,11 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
      throwaway test in `packages/ui` (Vitest browser mode, Playwright Chromium, viewport 390×700):
      a `wt-dialog` with a 1800px-tall body and a two-button `wt-form-actions` in its `footer` slot
      drew Save's bottom edge at 1857px, below the 700px window (the failing case I had stated
-     beforehand; the probe file was deleted). Its CSS gives the native dialog no column layout
+     beforehand; the probe file was deleted). The plan's reviewer found that the result depends on
+     where the opening focus lands. With only a tall block in the body, focus went to Cancel and
+     the dialog scrolled it into view (Save's bottom at 670). With an `<input>` first in the body,
+     Save's bottom was at 1977. The second case is the real one: a dialog whose first field is at
+     the top. Its CSS gives the native dialog no column layout
      (`wt-dialog.ts:53-97`), so the whole dialog scrolls, footer included. Dashboard `wt-dialog`s
      that hold a list a venue or the code can make long: the order detail's lines
      (`order-detail-dialog.ts:110-187`, Reprint in the footer), the allergen picker
@@ -187,63 +207,85 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
 
 ## Changed test checks (expected; each task reports its own)
 
+Each entry names the task that changes it: the one at whose commit it would otherwise go red.
+
 `apps/dashboard/src/widgets/menu-structure-table.test.ts`
-- `shown()` helper (`:166-169`): returns member rows only (drops `"root"`); a new case pins that
+- [Task 1] `shown()` helper (`:166-169`): returns member rows only (drops `"root"`); a new case pins that
   the root row is drawn first. Without this, 58 `shown(el)` lists would each gain `"root"`.
-- "draws the menu's members as the top-level rows, in menu order, with no row for the menu
+- [Task 1] "draws the menu's members as the top-level rows, in menu order, with no row for the menu
   itself" (`:208-234`): rewritten — the root row comes first at aria-level 1 with the menu's name,
   members at aria-level 2; it still asserts that no "Menu: Lunch Menu" text is drawn (the old row's
   wording) and that every top-level row's swatch sits in one column.
-- aria-level pins at `:211`, `:254`, `:2540`: one level deeper.
-- "names a new section's add Add section, in English and Spanish" (`:301-311`): reads
-  `new-section-top` in the root's ⋮ (table shadow root) instead of the toolbar.
-- "offers the top-level adds in the toolbar's Add ⋮ and on each place an owned section is shown"
-  (`:313-348`): the root row's ⋮ holds exactly the three adds; its `actions-root` check (`:347`)
-  flips from absent to present; the toolbar-slot, `icon="plus"` and `menus.add_to_menu` checks go.
-- "keeps a button the host puts in the toolbar's end after the Add ⋮" (`:350-362`): replaced by
-  "draws no plus in the toolbar; the host's toolbar-end content is all that is there".
-- "draws the Add ⋮ with the border and fill of the toolbar's icon buttons" (`:364-400`): deleted
-  (the button is gone).
-- "shows an empty menu as the table's empty box…" (`:689-729`): its last check (`:727`,
-  `toolbar-adds` present once rows arrive) becomes `actions-root` present.
-- "disables the toolbar's adds while busy…" (`:731-740`): the root ⋮'s adds.
-- "focuses a row's menu, or its nearest drawn ancestor's, or the toolbar's Add ⋮…" (`:742-762`):
-  `:755` and `:759` expect the root's ⋮.
-- "keeps every row's menu on a phone's screen" (`:777-800`): the row-menu count includes the
-  root's ⋮ (trim the fixture if nine rows do not fit 844px); the toolbar block goes.
-- "names only the members, with no name drawn for the menu itself" (`:810-818`): `root-name` is
-  drawn once, with the menu's name; member names unchanged.
-- `:1425` (`tbody tr[data-row-key]` count equals `DEEP_ROWS.length`): plus one for the root.
-- "starts every name one even step further in per level…" (`:868` onwards): extended so the root
-  is level 1 and the same step separates it from the top-level rows (this is the A337 complaint's
-  check); member levels shift by one.
-- "draws the menu's members as the top-level rows, even when a home is handed to it"
+- [Task 1] aria-level pins at `:211`, `:254`, `:2540`: one level deeper.
+- [Task 1] `:347` inside "offers the top-level adds in the toolbar's Add ⋮…": `actions-root` is
+  absent today and present from Task 1, so it flips there (the rest of that case is Task 3's).
+- [Task 1] "puts a real grip on every top-level row… and starts each name after the arrow and media
+  slots" (`:895-910`): a top-level name now starts one indent step further from its cell's left
+  edge (`2 * tap + gap + --wt-space-4`; the step is `depth × --wt-space-4`,
+  `wt-data-table.ts:751`).
+- [Task 1] "puts the Name heading over the first top-level name…" (`:962-976`) and "with reordering
+  off: … puts the Name heading over the first top-level name" (`:1417-1435`): the heading sits over
+  the root's name (the first name in the tree), compared with the root's `root-name` box.
+  `:1425`'s row count also gains the root.
+- [Task 1] "names only the members, with no name drawn for the menu itself" (`:810-818`):
+  `root-name` is drawn once, with the menu's name; member names unchanged.
+- [Task 1] "starts every name one even step further in per level…" (`:868` onwards): extended so
+  the root is level 1 and the same step separates it from the top-level rows (this is the A337
+  complaint's check); member levels shift by one.
+- [Task 1] "draws the menu's members as the top-level rows, even when a home is handed to it"
   (`:2534-2542`): level 2, root row present.
+- [Task 1] "keeps every row's menu on a phone's screen" (`:777-800`): the row-menu count includes
+  the root's ⋮ (trim the fixture if nine rows do not fit 844px), and the mount gets a long
+  `menuName` so the root's ⋮ is shown on screen beside a wrapping name. [Task 3] its toolbar block
+  goes.
+- [Task 3] "names a new section's add Add section, in English and Spanish" (`:301-311`): reads
+  `new-section-top` in the root's ⋮ (table shadow root) instead of the toolbar.
+- [Task 3] the rest of "offers the top-level adds in the toolbar's Add ⋮…" (`:313-346`): the root
+  row's ⋮ holds exactly the three adds; the toolbar-slot, `icon="plus"` and `menus.add_to_menu`
+  checks go.
+- [Task 3] "keeps a button the host puts in the toolbar's end after the Add ⋮" (`:350-362`):
+  replaced by "draws no plus in the toolbar; the host's toolbar-end content is all that is there".
+- [Task 3] "draws the Add ⋮ with the border and fill of the toolbar's icon buttons" (`:364-400`):
+  deleted (the button is gone).
+- [Task 3] "shows an empty menu as the table's empty box…" (`:689-729`): `:695` (`toolbar-adds`
+  absent) becomes "no `wt-row-actions` in the widget's own shadow root", so the final
+  `toolbar-adds` grep prints nothing; `:727` (`toolbar-adds` present once rows arrive) becomes
+  `actions-root` present in the table.
+- [Task 3] "disables the toolbar's adds while busy…" (`:731-740`): the root ⋮'s adds.
+- [Task 3] "focuses a row's menu, or its nearest drawn ancestor's, or the toolbar's Add ⋮…"
+  (`:742-762`): `:755` and `:759` expect the root's ⋮.
 
 `apps/dashboard/src/widgets/menu-structure-table.a11y.test.ts`
-- state "toolbar add menu open" (`:68`, `:118-126`) becomes "root menu open" (`actions-root`
-  opened in the table). The "no match" case (`:166-171`, keys `[]`) stays as is and now also proves
-  decision 5.
+- [Task 3] state "toolbar add menu open" (`:68`, `:118-126`) becomes "root menu open"
+  (`actions-root` opened in the table). The "no match" case (`:166-171`, keys `[]`) stays as is
+  and now also proves decision 5.
 
 `apps/dashboard/src/screens/menus-screen.test.ts`
-- `toolbarAdds()` helper (`:833-836`) becomes `rootAdds()`: the table's `[data-test="actions-root"]`.
-- `rowAction(el, "", …)` (`:838-861`): opens the root's ⋮ and picks `<action>-top` in the table.
-- `topLevelKeys()` (`:873-876`) and the inline `order()` in the keyboard-reorder case (`:2397`):
-  `aria-level="2"`.
-- `childKeys(el, "")` (`:878-886`): leaves out `"root"`.
-- "keeps the current list's Add actions in its own row's ⋮ and the top level's in the toolbar's
-  Add ⋮…" (`:2063-2077`): the root row's ⋮.
-- "creates a section at the menu's top level from the toolbar's Add ⋮, and gives focus back to
-  it" (`:2079-2104`): focus lands on the root's ⋮ inside the table.
-- "draws Reorder's Done after the toolbar's Add ⋮" (`:2106-2113`): deleted.
-- "draws the toolbar's plus with the same border as Reorder beside it" (`:4042-4057`): deleted.
-- The Structure search block's `shownKeys` pins (`:4189`, `:4194`): `"root"` first.
-- `focusedRowMenu()` (`:5213-5220`): the root row's ⋮ reads as `""`.
-- The phone row-menu case (`:5530-5549`): the toolbar block goes; the root's ⋮ is in the rows loop.
+- [Task 1] `topLevelKeys()` (`:873-876`) and the inline `order()` in the keyboard-reorder case
+  (`:2397`): `aria-level="2"`.
+- [Task 1] `childKeys(el, "")` (`:878-886`): leaves out `"root"`.
+- [Task 1] The Structure search block's `shownKeys` pins (`:4189`, `:4194`): `"root"` first.
+- [Task 1] `currentPlace()` and `currentKey()` doc comments (`:888-905`): the top level is still
+  marked by no row, but the wording "which no row stands for" becomes "which no row is marked
+  for" (the root row now stands for the menu but is never marked current). The code is unchanged.
+- [Task 3] `toolbarAdds()` helper (`:833-836`) becomes `rootAdds()`: the table's
+  `[data-test="actions-root"]`.
+- [Task 3] `rowAction(el, "", …)` (`:838-861`): opens the root's ⋮ and picks `<action>-top` in
+  the table.
+- [Task 3] "keeps the current list's Add actions in its own row's ⋮ and the top level's in the
+  toolbar's Add ⋮…" (`:2063-2077`): the root row's ⋮.
+- [Task 3] "creates a section at the menu's top level from the toolbar's Add ⋮, and gives focus
+  back to it" (`:2079-2104`): focus lands on the root's ⋮ inside the table.
+- [Task 3] "draws Reorder's Done after the toolbar's Add ⋮" (`:2106-2113`): deleted.
+- [Task 3] "draws the toolbar's plus with the same border as Reorder beside it" (`:4042-4057`):
+  deleted.
+- [Task 3] `focusedRowMenu()` (`:5213-5220`): the root row's ⋮ reads as `""`.
+- [Task 3] The phone row-menu case (`:5530-5549`): the toolbar block goes; the root's ⋮ is in the
+  rows loop.
 
 `apps/dashboard/src/widgets/menu-document-tree.test.ts`
-- "uses the Structure row's indentation, row height and swatch slot…" (`:182-250`): the extra
-  "outer" section (comment: "Structure has no menu row") goes; the Structure keys become
+- [Task 1] "uses the Structure row's indentation, row height and swatch slot…" (`:182-250`): the
+  extra "outer" section (comment: "Structure has no menu row") goes; the Structure keys become
   `drinks`, `drinks/beer`, `drinks/beer/mi`.
 
 Part 2 and Task 6 change no existing check unless a task reports one.
@@ -290,12 +332,16 @@ The toolbar "+" stays in this task, so the branch is green at its commit.
     released over the root row sends no `wt-member-move` / `wt-member-move-into` and marks no gap
     or "into" on it; ArrowLeft on `drag-m-burger` sends nothing and announces nothing;
   - empty menu: no root row, the empty box with its three adds (existing case, unchanged).
-  - Proof by deletion: put the root row into `#rowByKey` and watch the ArrowLeft and drop cases
-    fail; restore.
-- Update the row, level and search pins listed under "Changed test checks" for
-  `menu-structure-table.test.ts` (not the toolbar ones), the a11y "no match" stays, the
-  document-tree case, and `menus-screen.test.ts`'s `topLevelKeys`, `childKeys`, `:2397` and search
-  pins. Run each touched file in full.
+  - Controls in the other direction, in the same cases (putting the root into `#rowByKey` is NOT
+    a usable deletion: `#listHolds` and `#canHold` read `.node.ref`, so it crashes and does not
+    typecheck). The same pointer drag released over the middle of another top-level row's top half
+    DOES send a move. ArrowLeft on a grip inside a section DOES send `wt-member-move-into`. So the
+    quiet results above come from the root, not from a broken drag.
+  - the root's name never carries `aria-current` or the `current` part, at the top level or with a
+    section current; a long `menuName` (60 characters, no spaces) wraps inside the name column at
+    390 wide and the root's ⋮ stays on screen.
+- Name cell: the root name carries `overflow-wrap: anywhere` (decision 3).
+- Update every check tagged [Task 1] under "Changed test checks". Run each touched file in full.
 - Commit: "Menu Structure tab: a root row for the menu itself, holding the top-level adds (A453)".
 
 ## Task 2 — The root row's look: counts and colour (decisions 2, 3)
@@ -304,8 +350,9 @@ Files: `menu-structure-table.ts`, `menu-structure-table.test.ts`, `menu-structur
 `apps/dashboard/src/i18n/strings.ts`, `apps/dashboard/src/screens/menus-screen.ts` (pass
 `.menuColor`), `menus-screen.test.ts` (one case).
 
-- Counts: computed once per rows build from `this.nodes` (not per draw), as decision 2 says, and
-  drawn as `<span part="count" data-test="count-root">` after the bold name on the same line.
+- Counts: computed once per rows build from `this.nodes` (not per draw), as decision 2 says,
+  worded with `countOf` exported from `product-list.ts` (its key type widened to take
+  `menus.section_count`), and drawn as `<span part="count" data-test="count-root">` after the bold name on the same line.
   Styles copied from Products (`product-list.ts:228-253`): `margin-inline-start: var(--wt-space-2)`,
   muted, small, visually hidden when the table is `narrow` (import `visuallyHiddenStyles` from
   `@waitron/ui` as `product-list.ts:7` does).
@@ -324,14 +371,14 @@ Files: `menu-structure-table.ts`, `menu-structure-table.test.ts`, `menu-structur
   - at 390px wide the count is visually hidden (zero-size clip) but present in the row's text;
   - colour: `menuColor: "#aabbcc"` paints the chip `rgb(170, 187, 204)` and it is not a button;
     `null` draws no `color-root`, and the root's name still starts where it does with a colour;
-  - geometry (the A337 complaint): the root's leading frame and name start exactly one indent step
-    left of the top-level rows', the same step as between level 2 and 3 — extend "starts every
-    name one even step further in per level…" (`:868`), at 1280 and 390, reordering on and off;
+  - geometry (the A337 complaint): Task 1 extended "starts every name one even step further in per
+    level…" (`:868`) to the root; this task adds the coloured and uncoloured root to it, at 1280
+    and 390, reordering on and off, so the chip does not move the root's name;
   - a11y: one state with a coloured root and its counts, both themes;
   - host: `menus-screen.test.ts` — the mounted Lunch menu's root row shows the colour its
     structure's `root.color` holds. Then check whether saving a new colour in the menu's settings
     form refreshes the root chip without a reload; if it does not, the host reads the structure
-    again after `#saveMenu` (`menus-screen.ts:1361-1389`) and a test pins it.
+    again after `#saveMenu` (`menus-screen.ts:1362`) and a test pins it.
 - Strings: `menus.section_count`, `menus.section_count_one` in EN and ES.
 - Commit: "Menu Structure tab: the root row shows the menu's counts and colour (A453)".
 
@@ -347,8 +394,12 @@ Files: `menu-structure-table.ts`, `menu-structure-table.test.ts`, `menu-structur
     table; an empty menu still focuses `new-section-empty`;
   - host, `menus-screen.test.ts`: Add section from the root's ⋮, saved → focus is on the root's ⋮
     once the window closes and the menu is read again; the same for Include a menu and Add products
-    (one case each, or one `it.each`); Cancel from each → focus on the root's ⋮; removing selected
-    rows outside Select mode (`#removeSelected`, `menus-screen.ts:2667`, its focus hand-back at `:2688-2691`) → the root's ⋮.
+    (one case each, or one `it.each`); Cancel from each → focus on the root's ⋮. No case for
+    `#removeSelected`'s other branch (`menus-screen.ts:2688-2691`, `focusRowMenu("")`): it runs
+    only once `#keepSelectionOwned` has turned Select off, which happens only when the menu is
+    empty (`:2582-2587`). Then there is no root row, and the existing case "turns Select off and
+    puts focus on the empty box's first add when a bulk remove empties the menu"
+    (`menus-screen.test.ts:4540`) covers it.
 - Code: delete the toolbar `wt-row-actions` (`:1123-1131`) and its CSS (`:126-129`);
   `focusRowMenu`'s fallback (`:745-747`) becomes the root row's ⋮ in the table's shadow root, then
   `[data-test$="-empty"]` in the widget; update its doc comment. Delete `menus.add_to_menu` in EN
@@ -366,27 +417,36 @@ Files: `apps/dashboard/src/widgets/section-add-products.ts`, a new
 (`#renderAddProducts`, `:3398-3448`), `menus-screen.test.ts` (one case).
 
 - Tests first, the failing case stated before running: today the Add products button's bottom edge
-  is below the window and the modal body scrolls.
-  - `section-add-products.window.test.ts`: mount the widget inside `<wt-modal size="standard" open>`
-    exactly as the host does (Cancel in the `cancel` slot), with 200 products, at 390×700 and at
-    1280×844. Without scrolling anything: Cancel and Add products lie inside the window and inside
-    the dialog's box; the modal body needs no scrolling (`scrollHeight <= clientHeight + 1`); the
-    product list's own scroller does (`scrollHeight > clientHeight`). Scroll the list to its end:
-    the buttons have not moved. With a host message in the `message` slot and the "none chosen"
-    message showing: buttons still inside the window. With 3 products: buttons at the bottom of the
-    window (standard modals keep full height).
+  is below the window. The checks do not depend on the layout chosen:
+  - `section-add-products.window.test.ts`: mount the widget inside `<wt-modal size="standard" open
+    heading="Add products to Drinks">` exactly as the host does (heading included, Cancel in the
+    `cancel` slot), with 200 products, at 390×700 and at 1280×844. Cancel and Add products lie
+    inside the window AND inside the modal body's visible box (its `getBoundingClientRect()`):
+    (a) unscrolled; (b) after scrolling the body to its end (`body.scrollTop = body.scrollHeight`);
+    (c) with a host message in the `message` slot and the "none chosen" message showing, both
+    unscrolled and scrolled to the end. The last product row can be reached: after scrolling to
+    the end, its checkbox's bottom is at or above the block's top edge, so it is not hidden under
+    the block.
+  - With 3 products the buttons are inside the window too (state where they sit; no position is
+    pinned).
   - `menus-screen.test.ts`: at 390×700, a menu with 200 addable products, open Add products from
     the root row's ⋮ (`open-add-products-top`): Cancel and Add products are inside the window
     without scrolling. Tick two, add: the request is sent and focus returns to the root's ⋮.
   - a11y: the window state at 390×700 with 200 products and with the message, both themes.
-- Code: the widget becomes a column filling its container's height (`:host { display: flex;
-  flex-direction: column; height: 100%; min-height: 0 }`); filters and the "Select all listed" row
-  do not shrink; the list (a wrapper around the `ul` and the notices inside the fieldset) is the
-  only scroller (`flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain`); a bottom
-  block (`slot name="message"`, the none-chosen error, the count, `wt-form-actions`) does not
-  shrink and draws `border-top: 1px solid var(--wt-color-border)` with `padding-top:
-  var(--wt-space-3)`. Standalone (no bounded parent) the widget lays out as today, so its other
-  tests are untouched. Update the widget's doc comment to name the `message` slot.
+- Code (decision 8): one bottom block holding `<slot name="message">`, the none-chosen error, the
+  count and `wt-form-actions`, with `position: sticky; bottom: 0`, `background:
+  var(--wt-color-surface-raised)`, `border-top: 1px solid var(--wt-color-border)` and
+  `padding-top: var(--wt-space-3)`. It also covers the body's bottom padding band, so list rows do
+  not show through under it: a negative bottom margin equal to the body's padding
+  (`var(--wt-space-5)`) with matching bottom padding, or another arrangement the look settles on.
+  Say in the report which one.
+  Standalone (in a block that does not scroll), sticky does nothing. But the new wrapper's border
+  and padding stop the first child's top margin (`.error`, `.count`: `margin: var(--wt-space-2)
+  0`) from merging with the margin above it. Check the standalone spacing: today's numbers
+  against the new ones in one test or a recorded measurement. Then adjust the margins inside the
+  block so the gaps read as before or better, and include it in the look. The widget's other tests
+  should stay untouched; report any that move. Update the widget's doc comment to name the
+  `message` slot.
 - Host: the refusal paragraph gets `slot="message"` and moves inside `<dashboard-section-add-products>`;
   nothing else in the host changes.
 - Run `section-add-products.test.ts`, `.save-state.test.ts`, `.a11y.test.ts`,
@@ -414,13 +474,24 @@ cases, wherever the add-shortcut window is mounted in a modal), `apps/dashboard/
 Files: `packages/ui/src/components/wt-dialog.ts`, `wt-dialog.test.ts`, `wt-dialog.a11y.test.ts`,
 `wt-modal.ts`, `wt-modal.test.ts` (run; change only if a fold-in needs it).
 
-- Tests first, failing case stated: at 390×700, a `wt-dialog` with a 1800px body and
-  `wt-form-actions` in its footer draws Save below the window (the measurement above).
+- Tests first, failing case stated: at 390×700, a `wt-dialog` whose body starts with a focusable
+  field (`<wt-input>` or a plain `<input>`) above an 1800px block, with `wt-form-actions` in its
+  footer, draws Save below the window. The field is there on purpose. Opening focus lands on the
+  first focusable element. Without the field it lands on Cancel, and the browser scrolls the whole
+  dialog to show it, so Save sits in view today and the test would pass before the change. The
+  reviewer measured Save's bottom at 670 without the field and 1977 with it. Also assert the
+  dialog element itself does not scroll (`dialog.scrollHeight === dialog.clientHeight`), which
+  fails today in both arrangements.
   - "scrolls a long body while the footer stays visible and stationary" (mirror
     `wt-modal.test.ts:455`): Save and Cancel inside the window; the body scrolls; scrolling it to
     its end leaves the buttons where they were; the dialog element itself does not scroll.
-  - A short dialog is unchanged: its height still fits its content (compare with a heading and one
-    line before and after the change — record the numbers).
+  - A short dialog is unchanged: its height still fits its content. The reviewer measured a short
+    dialog at 213×205 both before and after the CSS below; pin the size relation (content-fitted,
+    no stretch), not those numbers.
+  - Content that grows after opening: open a short dialog, then append rows until it is taller
+    than the window, as the order detail's lines arrive after its read. The footer stays in view
+    and the body scrolls. If the body takes a tab stop while it overflows (see the a11y case), it
+    gains it then, and loses it again when the rows are removed.
   - A body message from footer actions (`formMessage`) is still scrolled into view inside the
     scrolling body when it changes (the existing "brings the message…" cases, run).
   - Token painting in a long dialog: the footer's divider reads `--wt-color-border`, the surface
@@ -432,17 +503,29 @@ Files: `packages/ui/src/components/wt-dialog.ts`, `wt-dialog.test.ts`, `wt-dialo
     a short dialog gains no extra tab stop.
 - Code: `dialog[open] { display: flex; flex-direction: column; overflow: hidden }`; `.body {
   min-height: 0; overflow: auto; overscroll-behavior: contain }` (it does not grow, so short
-  dialogs keep their height); `.footer { flex-shrink: 0 }`. The native modal dialog's own
-  max-height bounds it; if the long-body test shows otherwise, set `max-height: calc(100dvh - 2 *
-  var(--wt-space-5))` as `wt-modal` does. Remove from `wt-modal.ts` the rules that are now
+  dialogs keep their height); `.footer { flex-shrink: 0 }`. The native modal dialog's own height
+  limit bounds it: the reviewer applied this CSS and measured Save at 670 with the body scrolling
+  and the dialog not, so no `max-height` is added. Remove from `wt-modal.ts` the rules that are now
   inherited (`dialog[open]` flex, `.footer` flex-shrink, `overflow: hidden`), keeping its own
   height, width and `.body { flex: 1 }`.
-- Consumers: grep `<wt-dialog` in `apps` and `packages`; run the test files of the ones that hold
-  lists or measure dialog geometry (at least `apps/dashboard/src/widgets/order-detail-dialog.test.ts`,
-  `allergen-picker.test.ts`, `packages/ui/src/components/wt-data-table.test.ts`'s Customise cases,
-  and `grep -ln "scrollHeight\|scrollTop" apps/till/src apps/dashboard/src` files that open a
-  `wt-dialog`). `packages/ui/src/no-hardcoded-chrome.test.ts` and `scripts/style-token-names.test.ts`
-  from the root. CI runs the rest.
+- Consumers: about thirty till files open a `wt-dialog`, as do the dashboard and four other
+  packages. Run these locally (check free memory first; they are browser suites):
+  - dashboard: `apps/dashboard/src/widgets/order-detail-dialog.test.ts`, `allergen-picker.test.ts`,
+    and the files from `grep -ln "scrollHeight\|scrollTop" apps/dashboard/src` that open a
+    `wt-dialog`;
+  - `packages/ui/src/components/wt-data-table.test.ts` (its Customise cases);
+  - till, which also measures dialogs other than by scroll: `apps/till/src/widgets/find-bill-dialog.test.ts`,
+    `bill-choice-dialog.test.ts`, `reprint-language-dialog.test.ts`,
+    `apps/till/src/screens/till-device-chooser.test.ts`, every `apps/till/src/widgets/department-transfers*.a11y.test.ts`,
+    and the files from `grep -ln "scrollHeight\|scrollTop" apps/till/src` that open a `wt-dialog`;
+  - the focused suites of the dialogs in `packages/bookings` (`booking-form.ts`),
+    `packages/payments-stripe` (`stripe-add-reader.ts`), `packages/payments-sumup`
+    (`sumup-add-reader.ts`) and `packages/venue-service` (`opening-hours-screen.ts`);
+  - from the root: `packages/ui/src/no-hardcoded-chrome.test.ts` and `scripts/style-token-names.test.ts`.
+  CI runs the rest. Before calling the branch green, read the CI `changes` job's `code`, `scope`
+  and `packages` outputs on the head commit. They must show that the till, dashboard, ui,
+  bookings, payments-stripe, payments-sumup and venue-service suites ran. A scoped run that left
+  them out is no evidence.
 - Commit: "wt-dialog: a long dialog scrolls its body and keeps its footer in view (A453)".
 
 ## Task 7 — Documentation and backlog
@@ -460,8 +543,9 @@ Files: `packages/ui/src/components/wt-dialog.ts`, `wt-dialog.test.ts`, `wt-dialo
   - `wt-dialog` row `:553` and the `wt-modal` paragraph `:1288-1289`: a long dialog's body scrolls
     and its footer stays in view, for both (only if Task 6 landed).
   - Beside the `wt-modal` footer rule (`:1289-1297`): one sentence — a window whose body is one
-    long list (a section's Add products) scrolls the list and keeps its filters on top and its count
-    and buttons at the bottom.
+    long list (a section's Add products) keeps its count and buttons in a block stuck to the
+    bottom of the scrolling body (`position: sticky`), because the widget draws them itself and
+    cannot reach the footer slot.
 - `docs/backlog.md` and `docs/backlog/*.md`: no entry names A453, the toolbar "+" or pinned window
   buttons (grep `A453`, `toolbar`, `Add to this menu`, `pinned`, `scroll` on 2026-10-10 found
   none), so delete nothing. Add short entries only for points this branch leaves open: the
@@ -484,10 +568,18 @@ Screenshots in `~/waitron-campaign-b/a453-shots/`, each EN and ES, light and dar
 5. A search with a match, and one with none (the no-matches box) — EN light only, both widths.
 6. An empty menu (the box with three adds) — EN light only, both widths.
 7. The Add products window with 200 products, unscrolled and with the list scrolled to its end,
-   and with the refusal message showing; 390×700 and 1280×844.
+   and with the refusal message showing; 390×700 and 1280×844. Check that no list row shows
+   through the band under the sticky block, and that the gaps around the count and messages read
+   right. Also the widget at 3 products, so the block's spacing is seen when nothing scrolls.
 8. (Task 6) Products' Customise columns at 390×700; an order's detail with 30 lines at 390×700;
    the allergen picker at 390×500 — EN light and dark. Plus one short `wt-dialog` (a delete
-   confirm) to show it unchanged.
+   confirm) to show it unchanged. On the till at handheld size: one long dialog (Find a bill with
+   many open bills, or Held orders with many) and one short one (a bill choice), EN light and dark.
+9. A menu five levels deep at 390 wide. The phone indent stops after four levels
+   (`min(depth, 4)`, `wt-data-table.ts:755`), and the root now uses one of them, so the deepest
+   rows line up with their parents one level sooner than before. Say in the PR whether it still
+   reads.
+10. A menu with a 60-character name: the root's name wraps and its ⋮ stays in view, at 390.
 
 Compare 1 with the Products tree's All products row side by side and say in the PR how the two
 match and where they differ (colour button vs chip; filter behaviour).
@@ -496,13 +588,15 @@ match and where they differ (colour button vs chip; filter behaviour).
 
 - Every member key, test id and host path is unchanged; only top-level `parentKey` moved.
 - The root is in the table's rows but never in `#rowByKey`; no drag, keyboard move, selection or
-  Select all path can act on it (each has a test, and the ArrowLeft / drop proofs by deletion).
+  Select all path can act on it (each has a test, with a control showing the same gesture on a
+  member row does act).
 - The no-matches box still appears for a search and for a filter that match nothing.
 - Counts are distinct and include included menus' contents, in both languages, singular and plural.
 - No "Menu: <name>" wording and a full indent step between the root and the top level.
 - `grep -rn "toolbar-adds\|menus.add_to_menu"` prints nothing.
-- The Add products window's buttons are in view at 390×700 with 200 products, with the message
-  showing, and the widget's standalone layout is unchanged.
+- The Add products window's buttons are inside the window and its body's visible box at 390×700
+  with 200 products, unscrolled and scrolled to the end, with the message showing; nothing shows
+  through under the sticky block; the widget's standalone spacing was checked.
 - (Task 6) Short `wt-dialog`s are unchanged in height and tab order; long ones scroll their body;
   `wt-modal` behaves as before (its suite passes unchanged).
 - Every changed or deleted test check is listed with its reason.
