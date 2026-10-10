@@ -1,5 +1,10 @@
 # Delete hardware and venue setup, archive products for good (design)
 
+> **2026-10-10, A366 slice 4 Part B:** the station deletion inventory's authored hours and
+> configured-fallback rows are retired. Re-ground that future deletion step against the
+> retained daily state, routing periods and dish-retention field. See
+> [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours).
+
 Status: design, 2026-10-08, backlog A435. Written from `main` 49a80d770. Six pull requests, one per step in
 [Build order](#build-order); each gets its own plan.
 

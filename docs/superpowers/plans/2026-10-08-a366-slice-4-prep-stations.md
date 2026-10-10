@@ -1964,7 +1964,7 @@ slices 2–3 and Part A left them), `docs/developers/conventions-data.md` (`:402
 only if Part B removed its subject), `docs/backlog/kitchen.md` (`:84-92`, M), `docs/backlog/setup.md`
 (`:174-176`, M: station hours and an unreadable zone), `docs/backlog/service-periods.md`.
 
-- [ ] Read every claim about station hours, fallbacks, "When closed, work goes to", closing a
+- [x] Read every claim about station hours, fallbacks, "When closed, work goes to", closing a
   station and the Station hours page across `docs/developers/` and the backlog (`grep -rn -i "station hours\|fallback\|close for today\|manage/hours\|out of hours" docs/developers docs/backlog.md docs/backlog`),
   correct each, and commit `docs: prep stations have no hours (A366)`.
 

@@ -171,9 +171,7 @@ emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: M
 and creation/provisioning writers refuse a zone not on its country's list. A dropdown is needed
 only if a venue could ever need a zone other than
 its province's; for Spain the province decides. (Aside: a Canary venue cannot be set up yet — the
-pack marks the Canary tax territory unsupported.) Slice 3b's station opening hours ignore hours
-when the zone cannot be read, as a last defence
-([plan](../superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
+pack marks the Canary tax territory unsupported.)
 A261 step 7's approved plan separately permits a named-zone override before dated history;
 its editor validates named zones and refuses numeric offsets. Importing configuration into an
 existing venue retains its saved zone (`applyPreparedLocation`,

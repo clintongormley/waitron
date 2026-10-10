@@ -1333,7 +1333,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   Part B is in progress on its unlanded branch: station-hours and fallback retirement,
   daily closure notes, Disable and the worked-out station-times reader are implemented; their
-  Opening hours station view is implemented; final qualification and branch review remain.
+  Opening hours station view and prose audit are implemented; final qualification and branch
+  review remain.
   The owner approved person-only dashboard move audits on 2026-10-10.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
@@ -1386,16 +1387,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A rename refusal without a supplied name remains a database error, rather than returning an
   undefined name** — left open by A261-2d (#1274).
 
-- **The Hours page fixes its read window (yesterday plus a year) when it opens** — left open by the
-  reviews of A261 step 5 (Hours, #1298): a page left open for days keeps the old window until it is
-  reopened.
-
-- **For a non-default station with no hours, Hours says "No hours restriction" and Prep stations
-  says "Always open" (owner informed)** — left open by the reviews of A261 step 5 (Hours, #1298).
-
 - **Smaller notes from the Hours reviews** — left open by the reviews of A261 step 5 (Hours, #1298):
-  the calendar's day read repeats the subject precedence `resolveSubjects` holds and matches a cell
-  by id alone; one `hours-client.test.ts` case detaches in the same turn and cannot fail; …
+  the participant-failure route case checks the status but not the body's code; repeated-midnight
+  clock choices and narrow-calendar name wrapping still need checking; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-hours-reviews)
 
 - **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily

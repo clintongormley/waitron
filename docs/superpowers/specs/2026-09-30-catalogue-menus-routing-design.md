@@ -1,5 +1,11 @@
 # Product folders, menus that include menus, and prep station routing
 
+> **2026-10-10, A366 slice 4 Part B:** authored station hours and configured fallback chains
+> below are historical. Stations use daily closure destinations and the active default;
+> Opening hours shows their worked-out times without a station-hours editor. See
+> [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
+> and [the slice 4 plan](../plans/2026-10-08-a366-slice-4-prep-stations.md).
+
 > **2026-10-07 — A366:** §5.7 and §5.9 are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
 
 > **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.

@@ -1,5 +1,11 @@
 # Departments, service styles and opening hours
 
+> **2026-10-10, A366 slice 4 Part B:** authored station hours and configured fallback chains
+> below are historical. Stations use daily closure destinations and the active default;
+> Opening hours shows their worked-out times without a station-hours editor. See
+> [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
+> and [the slice 4 plan](../plans/2026-10-08-a366-slice-4-prep-stations.md).
+
 > **2026-10-10 — A366 slice 6 Part A:** the department page now chooses where orders start
 > separately from counter payment timing. The old four-value service-style proposals below
 > are historical; [the service-times design](2026-10-07-service-times-departments-and-stations-design.md)
