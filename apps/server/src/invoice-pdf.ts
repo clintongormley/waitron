@@ -20,6 +20,18 @@ export async function renderInvoicePdf(input: ReceiptDocumentInput): Promise<Buf
     for (const element of page.elements) {
       if (element.kind === "text") {
         pdf.fontSize(element.size).text(element.text, element.x, element.y, { lineBreak: false });
+      } else if (element.kind === "logo") {
+        const { raster } = element;
+        const pitch = element.width / raster.widthDots;
+        const stride = Math.ceil(raster.widthDots / 8);
+        for (let row = 0; row < raster.heightDots; row++) {
+          for (let col = 0; col < raster.widthDots; col++) {
+            if (raster.bits[row * stride + (col >> 3)]! & (0x80 >> (col & 7))) {
+              pdf.rect(element.x + col * pitch, element.y + row * pitch, pitch, pitch);
+            }
+          }
+        }
+        pdf.fill();
       } else {
         const pitch = element.size / (element.modules.length + 8);
         for (let row = 0; row < element.modules.length; row++) {

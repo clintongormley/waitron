@@ -1,3 +1,4 @@
+import type { ReceiptLogoRaster } from "@waitron/shared";
 import { invoiceFont } from "./invoice-font.js";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { qrModules } from "./qr-matrix.js";
@@ -17,7 +18,15 @@ type PageQr = {
   y: number;
   size: number;
 };
-export type InvoicePageElement = PageText | PageQr;
+type PageLogo = {
+  kind: "logo";
+  raster: ReceiptLogoRaster;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+export type InvoicePageElement = PageText | PageQr | PageLogo;
 export interface InvoicePage {
   elements: InvoicePageElement[];
 }
@@ -77,8 +86,25 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
       case "align":
         alignment = element.alignment;
         break;
-      case "logo":
+      case "logo": {
+        const raster = input.logo;
+        if (raster) {
+          const pitch = 72 / 203;
+          const logoWidth = raster.widthDots * pitch;
+          const logoHeight = raster.heightDots * pitch;
+          room(logoHeight + LINE_HEIGHT / 2);
+          pages.at(-1)!.elements.push({
+            kind: "logo",
+            raster,
+            x: (INVOICE_PAGE_WIDTH - logoWidth) / 2,
+            y,
+            width: logoWidth,
+            height: logoHeight,
+          });
+          y += logoHeight + LINE_HEIGHT / 2;
+        }
         break;
+      }
       case "break":
         y += LINE_HEIGHT / 2;
         break;

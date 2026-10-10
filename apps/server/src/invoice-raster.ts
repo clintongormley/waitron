@@ -35,7 +35,20 @@ export async function renderInvoiceRaster(
           x += position.xAdvance * size;
           y -= position.yAdvance * size;
         }
-      } else {
+      } else if (element.kind === "logo") {
+        const { raster } = element;
+        const pitch = element.width / raster.widthDots;
+        const stride = Math.ceil(raster.widthDots / 8);
+        for (let row = 0; row < raster.heightDots; row++) {
+          for (let col = 0; col < raster.widthDots; col++) {
+            if (raster.bits[row * stride + (col >> 3)]! & (0x80 >> (col & 7))) {
+              paths.push(
+                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}"/>`,
+              );
+            }
+          }
+        }
+      } else if (element.kind === "qr") {
         const pitch = element.size / (element.modules.length + 8);
         for (let row = 0; row < element.modules.length; row++) {
           for (let col = 0; col < element.modules.length; col++) {

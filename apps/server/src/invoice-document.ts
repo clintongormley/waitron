@@ -17,14 +17,17 @@ import {
   locationId,
   saleId as brandSaleId,
   thousandthsToDecimal,
+  receiptLogoSource,
+  resolveReceiptTrim,
 } from "@waitron/shared";
-import { getReceipt } from "@waitron/layouts";
+import { getPrintedReceipt } from "@waitron/layouts";
+import { readReceiptLanguage } from "@waitron/catalogue";
+import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import type { TillConfig } from "./till-config.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readBillTenderLines, readTenderBlock, receiptQr } from "./till-sale.js";
-import { readReceiptAddress } from "./venue-address.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 export async function readInvoiceDocument(
@@ -88,8 +91,33 @@ export async function readInvoiceDocument(
     nif: filed?.issuer?.taxId ?? taxpayer!.taxId,
     ...(sale.taxpayerDomicile === null ? {} : { domicile: sale.taxpayerDomicile }),
   };
-  const receipt = await getReceipt(tx);
+  const diagnostic = (event: {
+    operation: string;
+    code: string;
+    receiptId?: 1;
+    departmentId?: string;
+  }) => console.warn("receipt.optional_read_failed", event);
+  const venue = await getPrintedReceipt(tx, "80mm", diagnostic);
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
+  const current = await readReceiptLanguage(tx, saleCfg.locationId);
+  const languages = await readVenueReceiptLanguageRules(tx, saleCfg);
+  const department =
+    header?.departmentId == null
+      ? null
+      : await VENUE_SERVICE.readPrintedDepartmentReceipt(
+          tx,
+          {
+            ...saleCfg,
+            receiptLanguages: [...new Set([current.locale, ...languages.choices])],
+            receiptDiagnostic: diagnostic,
+          },
+          header.departmentId,
+          "80mm",
+        );
+  const authored = department?.receipt ?? null;
+  const receipt = resolveReceiptTrim(authored, venue.receipt, sale.locale, current.locale);
+  const logo =
+    receiptLogoSource(authored, venue.receipt) === "department" ? department!.logo : venue.logo;
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
   const issueDay = new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60_000)
     .toISOString()
@@ -98,8 +126,9 @@ export async function readInvoiceDocument(
     surface: "a4",
     issuer,
     receipt,
-    receiptHeader: header ?? undefined,
-    venueAddress: await readReceiptAddress(tx, saleCfg.locationId, receipt),
+    logo,
+    receiptHeader: header?.departmentId == null ? undefined : header,
+    venueAddress: [],
     invoiceLocale: sale.locale,
     namesLocale: sale.locale,
     simulated: cfg.practiceMode,

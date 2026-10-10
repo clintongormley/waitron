@@ -3,6 +3,7 @@ import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
+import { layoutInvoicePages } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 async function rendered(input: ReceiptDocumentInput = fixture) {
@@ -179,5 +180,69 @@ describe("A4 invoice PDF", () => {
     expect(pages[0]!.text).toContain("PRUEBA - SIN COBRO REAL");
     expect(pages[0]!.text).not.toContain("VERI*FACTU");
     expect(pages[0]!.qr).toBeNull();
+  });
+});
+
+describe("department A4 presentation", () => {
+  it("draws the stored mono logo centered and proportionate before the trading name and subtitle", async () => {
+    const input = {
+      ...fixture,
+      logo: { widthDots: 80, heightDots: 40, bits: new Uint8Array(400).fill(255) },
+      receiptHeader: { tradingName: "Recorded dining name", printTradingName: true },
+      receipt: { headerSubtitle: "Department subtitle" },
+      venueAddress: ["Optional current street must not print"],
+    };
+    const { pages } = await rendered(input);
+    const page = pages[0]!;
+    expect(page.text.indexOf("Recorded dining name")).toBeLessThan(
+      page.text.indexOf("Department subtitle"),
+    );
+    expect(page.text.indexOf("Department subtitle")).toBeLessThan(
+      page.text.indexOf("Charcutería La Buena SL"),
+    );
+    expect(page.text).not.toContain("Optional current street");
+    expect(page.text).toContain("Calle del domicilio fiscal original");
+    expect(page.qr?.data).toBe(fixture.result.qr);
+    const logo = layoutInvoicePages(input)[0]!.elements.find((element) => element.kind === "logo");
+    expect(logo).toBeDefined();
+    if (!logo || logo.kind !== "logo") throw new Error("Missing logo");
+    expect(logo.width).toBeCloseTo(28.37, 2);
+    expect(logo.height).toBeCloseTo(14.19, 2);
+    const dark: { x: number; y: number }[] = [];
+    for (let y = Math.floor(logo.y * 2); y < Math.ceil((logo.y + logo.height) * 2); y++)
+      for (let x = 520; x < 670; x++)
+        if (page.pixels.data[(y * page.pixels.width + x) * 4]! < 128) dark.push({ x, y });
+    expect(dark.length).toBeGreaterThan(1000);
+    const xs = dark.map((p) => p.x),
+      ys = dark.map((p) => p.y);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(page.viewport.width / 2, 0);
+    expect(
+      (Math.max(...xs) - Math.min(...xs) + 1) / (Math.max(...ys) - Math.min(...ys) + 1),
+    ).toBeCloseTo(2, 1);
+  });
+});
+
+describe("A4 optional address and logo controls", () => {
+  it.each(["Filed fiscal street", undefined])(
+    "omits current address with filed domicile %s",
+    async (domicile) => {
+      const { pages } = await rendered({
+        ...fixture,
+        venueAddress: ["Optional current street"],
+        receipt: {},
+        result: { ...fixture.result, issuer: { ...fixture.result.issuer!, domicile } },
+      });
+      expect(pages[0]!.text).not.toContain("Optional current street");
+      if (domicile) expect(pages[0]!.text).toContain("Filed fiscal street");
+      else expect(pages[0]!.text).not.toContain("Filed fiscal street");
+      expect(pages[0]!.qr?.data).toBe(fixture.result.qr);
+    },
+  );
+  it("has no logo element without a selected printable picture", () => {
+    expect(
+      layoutInvoicePages(fixture)
+        .flatMap((page) => page.elements)
+        .filter((element) => element.kind === "logo"),
+    ).toEqual([]);
   });
 });
