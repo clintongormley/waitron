@@ -155,7 +155,7 @@ import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
-import { joinMergeMembers, partyRevision } from "./floor-today-merges.js";
+import { holderOf, joinMergeMembers, partyRevision } from "./floor-today-merges.js";
 import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
@@ -832,7 +832,7 @@ function requireOtherTables(value: unknown, pathId: string): string[] {
   if (!Array.isArray(value)) throw invalid("withTableIds");
   const ids = value.map((item: unknown) => requireTargetTable(item, "withTableIds"));
   if (ids.includes(pathId.toLowerCase())) throw invalid("withTableIds");
-  return ids;
+  return [...new Set(ids)];
 }
 
 /**
@@ -2279,6 +2279,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
         if (withTableIds.length === 0) return seated;
         for (const otherId of withTableIds) {
+          if ((await holderOf(tx, otherId)) === seated.partyId) continue;
           await joinTables(tx, sendCfg, seated.partyId, otherId, {
             bills: "merge",
             expectedPartyRevision: await partyRevision(tx, seated.partyId),

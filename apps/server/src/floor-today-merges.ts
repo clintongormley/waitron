@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
   diningTables,
   floorPlanJoins,
@@ -93,7 +93,7 @@ export async function splitFreeMerge(
   await leaveMergesRestoring(tx, members);
 }
 
-/** Every member of `tableId`'s merge, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
+/** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]> {
   const [own] = await tx
     .select({ joinId: floorTodayJoinTables.joinId })
@@ -103,7 +103,8 @@ export async function mergeMembers(tx: Transaction, tableId: string): Promise<st
   const members = await tx
     .select({ tableId: floorTodayJoinTables.tableId })
     .from(floorTodayJoinTables)
-    .where(eq(floorTodayJoinTables.joinId, own.joinId));
+    .where(eq(floorTodayJoinTables.joinId, own.joinId))
+    .orderBy(asc(floorTodayJoinTables.tableId));
   return members.map((m) => m.tableId);
 }
 
@@ -132,11 +133,7 @@ export async function joinMergeMembers(
   operatorId: string,
 ): Promise<void> {
   for (const member of await mergeMembers(tx, tableId)) {
-    const [held] = await tx
-      .select({ id: partyTables.id })
-      .from(partyTables)
-      .where(and(eq(partyTables.tableId, member), isNull(partyTables.leftAt)));
-    if (held !== undefined) continue;
+    if ((await holderOf(tx, member)) !== null) continue;
     await joinTables(tx, cfg, partyId, member, {
       bills: "merge",
       expectedPartyRevision: await partyRevision(tx, partyId),
@@ -144,6 +141,15 @@ export async function joinMergeMembers(
       otherPartyId: null,
     });
   }
+}
+
+/** The party holding the table now, or null. Reads by id alone. */
+export async function holderOf(tx: Transaction, tableId: string): Promise<string | null> {
+  const [held] = await tx
+    .select({ partyId: partyTables.partyId })
+    .from(partyTables)
+    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
+  return held?.partyId ?? null;
 }
 
 /** The party's revision as it stands in the transaction now. */

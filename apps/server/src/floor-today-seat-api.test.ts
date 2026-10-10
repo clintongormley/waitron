@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, partyTables } from "@waitron/db";
+import { diningTables, floorTodayTables, locations, partyTables } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -75,7 +76,7 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
 /** The party the floor read shows at each table, in the order asked. */
 async function holders(...tableIds: string[]): Promise<(string | null)[]> {
   const answer = await app.request("/api/tables/state", { headers: { cookie } });
-  expect(answer.status).toBe(200);
+  expect(answer.status, await answer.clone().text()).toBe(200);
   const tables = (await answer.json()) as { id: string; party: { id: string } | null }[];
   return tableIds.map((id) => tables.find((t) => t.id === id)!.party?.id ?? null);
 }
@@ -136,7 +137,105 @@ describe("seating at a merge", () => {
   });
 });
 
+describe("seating at a merge, which table a refusal names", () => {
+  it("names the first member by id when two need clearing", async () => {
+    const { a, b, c } = await threeTables();
+    await merge(a, b, "right");
+    await merge(c, b, "left");
+    await needsClearing(b);
+    await needsClearing(c);
+    const [first] = [b, c].sort();
+
+    expect(await refusal(post(`/api/tables/${a}/seat`, { guestCount: 2 }))).toEqual({
+      status: 409,
+      body: { error: { code: "table.needs_clearing", params: { tableId: first } } },
+    });
+  });
+});
+
 describe("seating one party at several tables", () => {
+  it("seats at a fixed table and every member of a free merge named together", async () => {
+    const { table } = await plannedZone(v, [
+      { key: "f", place: { x: 0, y: 0 }, fixed: true },
+      { key: "b", place: { x: 20, y: 0 } },
+      { key: "c", place: { x: 40, y: 0 } },
+    ]);
+    const [f, b, c] = [table.f!, table.b!, table.c!];
+    await merge(b, c, "right");
+
+    const answer = await post(`/api/tables/${f}/seat`, { guestCount: 4, withTableIds: [b, c] });
+    expect(answer.status, await answer.clone().text()).toBe(200);
+    const { partyId } = (await answer.json()) as { partyId: string };
+
+    expect(await holders(f, b, c)).toEqual([partyId, partyId, partyId]);
+  });
+
+  it("accepts another table of the path table's own merge", async () => {
+    const { a, b } = await threeTables();
+    await merge(a, b, "right");
+
+    const answer = await post(`/api/tables/${a}/seat`, { guestCount: 2, withTableIds: [b] });
+    expect(answer.status, await answer.clone().text()).toBe(200);
+    const { partyId } = (await answer.json()) as { partyId: string };
+
+    expect(await holders(a, b)).toEqual([partyId, partyId]);
+    expect(await heldRows(b)).toBe(1);
+  });
+
+  it("accepts a table named twice", async () => {
+    const { a: f1, b: f2 } = await threeTables(true);
+
+    const answer = await post(`/api/tables/${f1}/seat`, { guestCount: 2, withTableIds: [f2, f2] });
+    expect(answer.status, await answer.clone().text()).toBe(200);
+    const { partyId } = (await answer.json()) as { partyId: string };
+
+    expect(await holders(f1, f2)).toEqual([partyId, partyId]);
+    expect(await heldRows(f2)).toBe(1);
+  });
+
+  it("refuses a table of another venue as not found, and seats nobody", async () => {
+    const { a: f1 } = await threeTables(true);
+    const elsewhere = randomUUID();
+    const id = randomUUID();
+    await inTx(v, async (tx) => {
+      await tx.insert(locations).values({
+        id: elsewhere,
+        name: "Other",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant",
+      });
+      await tx
+        .insert(diningTables)
+        .values({ id, locationId: elsewhere, label: `Elsewhere ${id.slice(0, 6)}` });
+      await tx.insert(floorTodayTables).values({
+        tableId: id,
+        seats: 4,
+        x: 0,
+        y: 0,
+        width: 8,
+        height: 8,
+        shape: "rect",
+        rotation: 0,
+      });
+    });
+
+    expect(
+      await refusal(post(`/api/tables/${f1}/seat`, { guestCount: 2, withTableIds: [id] })),
+    ).toEqual({
+      status: 404,
+      body: { error: { code: "table.not_found", params: { tableId: id } } },
+    });
+    expect(await heldRows(f1)).toBe(0);
+    expect(await heldRows(id)).toBe(0);
+
+    // A second location makes later floor reads in this file refuse `station.timing_missing`.
+    await inTx(v, async (tx) => {
+      await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, id));
+      await tx.delete(diningTables).where(eq(diningTables.id, id));
+      await tx.delete(locations).where(eq(locations.id, elsewhere));
+    });
+  });
+
   it("seats one party at two tables in one request", async () => {
     const { a: f1, b: f2 } = await threeTables(true);
 
