@@ -6,6 +6,7 @@ import type {
   AlertSource,
   FloorAnnotator,
   ModulePermission,
+  TableRemoval,
   VenueServiceContribution,
   WaitronModule,
 } from "@waitron/module";
@@ -21,6 +22,11 @@ export function enabledFloorAnnotators(
   modules: readonly WaitronModule[],
 ): readonly FloorAnnotator[] {
   return modules.flatMap((m) => (m.floorAnnotations ? [m.floorAnnotations] : []));
+}
+
+/** Every ENABLED module's table-removal seat: a disabled module's tables are not migrated. */
+export function enabledTableRemovals(modules: readonly WaitronModule[]): readonly TableRemoval[] {
+  return modules.flatMap((m) => (m.tableRemoval ? [m.tableRemoval] : []));
 }
 
 /** Every module's permission-seat contribution. Over ALL_MODULES, NOT the enabled set: a disabled
